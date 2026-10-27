@@ -1,0 +1,190 @@
+suite: conversion webhook
+templates:
+  - webhook/service.yaml
+  - webhook/certificate.yaml
+release:
+  name: ocm-k8s-toolkit
+  namespace: ocm-k8s-toolkit-system
+tests:
+  - it: renders nothing by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders no certificate when cert-manager is enabled without the webhook
+    set:
+      certManager.enable: true
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: renders the webhook service without cert-manager
+    set:
+      webhook.enable: true
+    asserts:
+      - hasDocuments:
+          count: 1
+        template: webhook/service.yaml
+      - isKind:
+          of: Service
+        template: webhook/service.yaml
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-webhook-service
+        template: webhook/service.yaml
+      - equal:
+          path: metadata.labels
+          value:
+            app.kubernetes.io/managed-by: Helm
+            app.kubernetes.io/name: ocm-k8s-toolkit
+            app.kubernetes.io/instance: ocm-k8s-toolkit
+            helm.sh/chart: chart-0.1.0
+        template: webhook/service.yaml
+      # No explicit type, so the Service is ClusterIP; the webhook must not be exposed outside the cluster.
+      - notExists:
+          path: spec.type
+        template: webhook/service.yaml
+      # targetPort must match the webhook-server containerPort in manager/manager.yaml.
+      - equal:
+          path: spec.ports
+          value:
+            - port: 443
+              protocol: TCP
+              targetPort: 9443
+        template: webhook/service.yaml
+      # Must match the pod labels in manager/manager.yaml or the Service has no endpoints.
+      - equal:
+          path: spec.selector
+          value:
+            app.kubernetes.io/name: ocm-k8s-toolkit
+            app.kubernetes.io/instance: ocm-k8s-toolkit
+            control-plane: controller-manager
+        template: webhook/service.yaml
+      - hasDocuments:
+          count: 0
+        template: webhook/certificate.yaml
+
+  - it: renders a self-signed issuer and certificate with webhook and cert-manager
+    set:
+      webhook.enable: true
+      certManager.enable: true
+    template: webhook/certificate.yaml
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isAPIVersion:
+          of: cert-manager.io/v1
+        documentIndex: 0
+      - isKind:
+          of: Issuer
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-selfsigned-issuer
+        documentIndex: 0
+      - equal:
+          path: spec.selfSigned
+          value: {}
+        documentIndex: 0
+      - isAPIVersion:
+          of: cert-manager.io/v1
+        documentIndex: 1
+      - isKind:
+          of: Certificate
+        documentIndex: 1
+      # The CRDs reference this name in their cert-manager.io/inject-ca-from annotation.
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-serving-cert
+        documentIndex: 1
+      # A namespaced Issuer, so the chart never needs cluster-wide cert-manager permissions.
+      - equal:
+          path: spec.issuerRef
+          value:
+            kind: Issuer
+            name: ocm-k8s-toolkit-selfsigned-issuer
+        documentIndex: 1
+      # Must match the default cert volume secretName in manager/manager.yaml.
+      - equal:
+          path: spec.secretName
+          value: ocm-k8s-toolkit-webhook-server-cert
+        documentIndex: 1
+
+  - it: derives every name and DNS name from the release and namespace
+    # The certificate's DNS names must resolve to the Service rendered next to it,
+    # so both have to follow the same release name, nameOverride and namespace.
+    release:
+      name: foo
+      namespace: other
+    set:
+      webhook.enable: true
+      certManager.enable: true
+      nameOverride: custom
+    asserts:
+      - equal:
+          path: metadata.name
+          value: foo-custom-webhook-service
+        template: webhook/service.yaml
+      - equal:
+          path: metadata.namespace
+          value: other
+        template: webhook/service.yaml
+      - equal:
+          path: spec.selector
+          value:
+            app.kubernetes.io/name: custom
+            app.kubernetes.io/instance: foo
+            control-plane: controller-manager
+        template: webhook/service.yaml
+      - equal:
+          path: metadata.name
+          value: foo-custom-selfsigned-issuer
+        template: webhook/certificate.yaml
+        documentIndex: 0
+      # Must move with the CRDs' cert-manager.io/inject-ca-from annotation.
+      - equal:
+          path: metadata.name
+          value: foo-custom-serving-cert
+        template: webhook/certificate.yaml
+        documentIndex: 1
+      - equal:
+          path: metadata.namespace
+          value: other
+        template: webhook/certificate.yaml
+        documentIndex: 0
+      - equal:
+          path: metadata.namespace
+          value: other
+        template: webhook/certificate.yaml
+        documentIndex: 1
+      - equal:
+          path: spec.dnsNames
+          value:
+            - foo-custom-webhook-service.other.svc
+            - foo-custom-webhook-service.other.svc.cluster.local
+        template: webhook/certificate.yaml
+        documentIndex: 1
+      - equal:
+          path: spec.issuerRef.name
+          value: foo-custom-selfsigned-issuer
+        template: webhook/certificate.yaml
+        documentIndex: 1
+      - equal:
+          path: spec.secretName
+          value: foo-custom-webhook-server-cert
+        template: webhook/certificate.yaml
+        documentIndex: 1
+
+  - it: ignores webhook.certSecret for the Certificate
+    # The manager mounts webhook.certSecret, but cert-manager still writes the default name.
+    # Pinned so a change here is a deliberate decision, not a side effect.
+    set:
+      webhook.enable: true
+      certManager.enable: true
+      webhook.certSecret: my-webhook-cert
+    template: webhook/certificate.yaml
+    asserts:
+      - equal:
+          path: spec.secretName
+          value: ocm-k8s-toolkit-webhook-server-cert
+        documentIndex: 1

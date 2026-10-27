@@ -1,0 +1,96 @@
+suite: custom resource definitions
+templates:
+  - crd/components.delivery.ocm.software.yaml
+  - crd/deployers.delivery.ocm.software.yaml
+  - crd/discoveries.delivery.ocm.software.yaml
+  - crd/namespaceddeployers.delivery.ocm.software.yaml
+  - crd/replications.delivery.ocm.software.yaml
+  - crd/repositories.delivery.ocm.software.yaml
+  - crd/resources.delivery.ocm.software.yaml
+release:
+  name: ocm-k8s-toolkit
+  namespace: ocm-k8s-toolkit-system
+tests:
+  - it: installs every CRD by default with the keep policy
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: CustomResourceDefinition
+      - equal:
+          path: metadata.annotations["helm.sh/resource-policy"]
+          value: keep
+      - notExists:
+          path: metadata.annotations["cert-manager.io/inject-ca-from"]
+      - notExists:
+          path: spec.conversion
+
+  - it: skips every CRD when crd.enable is false
+    set:
+      crd.enable: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: drops the keep policy when crd.keep is false
+    set:
+      crd.keep: false
+    asserts:
+      - notExists:
+          path: metadata.annotations["helm.sh/resource-policy"]
+
+  - it: wires the conversion webhook without cert-manager
+    set:
+      webhook.enable: true
+    asserts:
+      - equal:
+          path: spec.conversion
+          value:
+            strategy: Webhook
+            webhook:
+              clientConfig:
+                service:
+                  name: ocm-k8s-toolkit-webhook-service
+                  namespace: ocm-k8s-toolkit-system
+                  path: /convert
+              conversionReviewVersions:
+                - v1
+      - notExists:
+          path: metadata.annotations["cert-manager.io/inject-ca-from"]
+
+  - it: adds the cert-manager CA injection annotation with webhook and cert-manager
+    set:
+      webhook.enable: true
+      certManager.enable: true
+    asserts:
+      - equal:
+          path: metadata.annotations["cert-manager.io/inject-ca-from"]
+          value: ocm-k8s-toolkit-system/ocm-k8s-toolkit-serving-cert
+
+  - it: does not inject the CA when only cert-manager is enabled
+    set:
+      certManager.enable: true
+    asserts:
+      - notExists:
+          path: metadata.annotations["cert-manager.io/inject-ca-from"]
+      - notExists:
+          path: spec.conversion
+
+  - it: derives the CA injection source and conversion service from the release and namespace
+    release:
+      name: foo
+      namespace: other
+    set:
+      nameOverride: custom
+      webhook.enable: true
+      certManager.enable: true
+    asserts:
+      - equal:
+          path: metadata.annotations["cert-manager.io/inject-ca-from"]
+          value: other/foo-custom-serving-cert
+      - equal:
+          path: spec.conversion.webhook.clientConfig.service.name
+          value: foo-custom-webhook-service
+      - equal:
+          path: spec.conversion.webhook.clientConfig.service.namespace
+          value: other

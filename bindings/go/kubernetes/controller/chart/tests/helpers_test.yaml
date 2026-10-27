@@ -1,0 +1,65 @@
+suite: naming helpers
+templates:
+  - rbac/controller-manager.yaml
+release:
+  name: ocm-k8s-toolkit
+  namespace: ocm-k8s-toolkit-system
+tests:
+  - it: uses the release name alone when it contains the chart name
+    release:
+      name: my-ocm-k8s-toolkit-prod
+    asserts:
+      - equal:
+          path: metadata.name
+          value: my-ocm-k8s-toolkit-prod-controller-manager
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: ocm-k8s-toolkit
+
+  - it: prefixes the release name when it does not contain the chart name
+    release:
+      name: foo
+    asserts:
+      - equal:
+          path: metadata.name
+          value: foo-ocm-k8s-toolkit-controller-manager
+      - equal:
+          path: metadata.labels["app.kubernetes.io/instance"]
+          value: foo
+
+  - it: applies nameOverride to the name label and resource names
+    release:
+      name: foo
+    set:
+      nameOverride: custom
+    asserts:
+      - equal:
+          path: metadata.labels["app.kubernetes.io/name"]
+          value: custom
+      - equal:
+          path: metadata.name
+          value: foo-custom-controller-manager
+
+  - it: applies fullnameOverride to resource names
+    set:
+      fullnameOverride: short
+    asserts:
+      - equal:
+          path: metadata.name
+          value: short-controller-manager
+
+  - it: truncates long names to 63 characters and keeps the suffix
+    set:
+      fullnameOverride: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+    asserts:
+      - equal:
+          path: metadata.name
+          value: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-controller-manager
+
+  - it: drops a dash left at the truncation point so the name has no double dash
+    set:
+      fullnameOverride: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-bbbbbbbbbbbbbbbbbbbb
+    asserts:
+      - equal:
+          path: metadata.name
+          value: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-controller-manager

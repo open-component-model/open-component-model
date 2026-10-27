@@ -1,0 +1,155 @@
+suite: manager network policy
+templates:
+  - manager/networkpolicy.yaml
+release:
+  name: ocm-k8s-toolkit
+  namespace: ocm-k8s-toolkit-system
+tests:
+  - it: is not rendered by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: is not rendered when the networkPolicy key is absent
+    # Simulates helm upgrade --reuse-values from a release that predates the key.
+    set:
+      manager.networkPolicy: null
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: admits only the health-probe port by default
+    set:
+      manager.networkPolicy.enabled: true
+    asserts:
+      - isKind:
+          of: NetworkPolicy
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-controller-manager
+      - equal:
+          path: spec.policyTypes
+          value: [Ingress, Egress]
+      - equal:
+          path: spec.podSelector.matchLabels
+          value:
+            app.kubernetes.io/name: ocm-k8s-toolkit
+            app.kubernetes.io/instance: ocm-k8s-toolkit
+            control-plane: controller-manager
+      # The whole rule, not just its ports: a "from" selector here would block kubelet probes.
+      - equal:
+          path: spec.ingress
+          value:
+            - ports:
+                - port: 8081
+                  protocol: TCP
+
+  - it: follows the pod labels of the Deployment under nameOverride and a different release name
+    # Must equal spec.template.metadata.labels in manager/manager.yaml; a policy that selects no pod protects nothing.
+    release:
+      name: foo
+    set:
+      nameOverride: custom
+      manager.networkPolicy.enabled: true
+    asserts:
+      - equal:
+          path: metadata.name
+          value: foo-custom-controller-manager
+      - equal:
+          path: spec.podSelector.matchLabels
+          value:
+            app.kubernetes.io/name: custom
+            app.kubernetes.io/instance: foo
+            control-plane: controller-manager
+
+  - it: admits the metrics and webhook ports when both are enabled
+    set:
+      manager.networkPolicy.enabled: true
+      manager.metricsServer.bindAddress: ":8443"
+      webhook.enable: true
+    asserts:
+      - equal:
+          path: spec.ingress[0].ports
+          value:
+            - port: 8081
+              protocol: TCP
+            - port: 8443
+              protocol: TCP
+            - port: 9443
+              protocol: TCP
+
+  - it: takes the port from bind addresses that carry a host part
+    set:
+      manager.networkPolicy.enabled: true
+      manager.healthProbe.bindAddress: "127.0.0.1:9081"
+      manager.metricsServer.bindAddress: "0.0.0.0:8443"
+    asserts:
+      - equal:
+          path: spec.ingress[0].ports
+          value:
+            - port: 9081
+              protocol: TCP
+            - port: 8443
+              protocol: TCP
+
+  - it: falls back to 8081 for an empty health address and admits no metrics port for an empty metrics address
+    # Mirrors manager.yaml: empty health address -> ":8081"; empty metrics address -> flag dropped -> manager default "0" (off).
+    set:
+      manager.networkPolicy.enabled: true
+      manager.healthProbe.bindAddress: ""
+      manager.metricsServer.bindAddress: ""
+    asserts:
+      - equal:
+          path: spec.ingress[0].ports
+          value:
+            - port: 8081
+              protocol: TCP
+
+  - it: allows DNS and HTTPS egress by default
+    set:
+      manager.networkPolicy.enabled: true
+    asserts:
+      - equal:
+          path: spec.egress
+          value:
+            - ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP
+            - ports:
+                - port: 443
+                  protocol: TCP
+                - port: 6443
+                  protocol: TCP
+
+  - it: appends custom ingress rules after the default rule
+    set:
+      manager.networkPolicy.enabled: true
+      manager.networkPolicy.ingress:
+        - from:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: monitoring
+    asserts:
+      - lengthEqual:
+          path: spec.ingress
+          count: 2
+      - equal:
+          path: spec.ingress[1].from[0].namespaceSelector.matchLabels["kubernetes.io/metadata.name"]
+          value: monitoring
+
+  - it: replaces default egress with custom rules
+    set:
+      manager.networkPolicy.enabled: true
+      manager.networkPolicy.egress:
+        - ports:
+            - port: 5000
+              protocol: TCP
+    asserts:
+      - equal:
+          path: spec.egress
+          value:
+            - ports:
+                - port: 5000
+                  protocol: TCP

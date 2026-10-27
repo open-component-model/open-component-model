@@ -1,0 +1,510 @@
+suite: rbac
+release:
+  name: ocm-k8s-toolkit
+  namespace: ocm-k8s-toolkit-system
+tests:
+  - it: renders the controller service account in the release namespace
+    templates:
+      - rbac/controller-manager.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ServiceAccount
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-controller-manager
+      - equal:
+          path: metadata.namespace
+          value: ocm-k8s-toolkit-system
+      # The manager pod needs the token mounted to reach the API server.
+      - notExists:
+          path: automountServiceAccountToken
+
+  - it: binds every role to the service account the chart renders
+    # Non-default release name and namespace so a hardcoded subject fails.
+    release:
+      name: foo
+      namespace: other-ns
+    templates:
+      - rbac/controller-manager.yaml
+      - rbac/manager-rolebinding.yaml
+      - rbac/leader-election-rolebinding.yaml
+      - rbac/namespaceddeployer-impersonation-role.yaml
+    asserts:
+      - equal:
+          path: metadata.name
+          value: foo-ocm-k8s-toolkit-controller-manager
+        template: rbac/controller-manager.yaml
+      - equal:
+          path: metadata.namespace
+          value: other-ns
+        template: rbac/controller-manager.yaml
+      - equal:
+          path: subjects
+          value:
+            - kind: ServiceAccount
+              name: foo-ocm-k8s-toolkit-controller-manager
+              namespace: other-ns
+        template: rbac/manager-rolebinding.yaml
+      - equal:
+          path: subjects
+          value:
+            - kind: ServiceAccount
+              name: foo-ocm-k8s-toolkit-controller-manager
+              namespace: other-ns
+        template: rbac/leader-election-rolebinding.yaml
+      - equal:
+          path: subjects
+          value:
+            - kind: ServiceAccount
+              name: foo-ocm-k8s-toolkit-controller-manager
+              namespace: other-ns
+        template: rbac/namespaceddeployer-impersonation-role.yaml
+        documentIndex: 1
+
+  - it: binds the manager role to the controller service account
+    templates:
+      - rbac/manager-role.yaml
+      - rbac/manager-rolebinding.yaml
+    asserts:
+      - isKind:
+          of: ClusterRole
+        template: rbac/manager-role.yaml
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-manager-role
+        template: rbac/manager-role.yaml
+      - isKind:
+          of: ClusterRoleBinding
+        template: rbac/manager-rolebinding.yaml
+      - equal:
+          path: roleRef
+          value:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: ocm-k8s-toolkit-manager-role
+        template: rbac/manager-rolebinding.yaml
+      - equal:
+          path: subjects
+          value:
+            - kind: ServiceAccount
+              name: ocm-k8s-toolkit-controller-manager
+              namespace: ocm-k8s-toolkit-system
+        template: rbac/manager-rolebinding.yaml
+
+  - it: binds the leader-election role in the release namespace
+    templates:
+      - rbac/leader-election-role.yaml
+      - rbac/leader-election-rolebinding.yaml
+    asserts:
+      - isKind:
+          of: Role
+        template: rbac/leader-election-role.yaml
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-leader-election-role
+        template: rbac/leader-election-role.yaml
+      - equal:
+          path: metadata.namespace
+          value: ocm-k8s-toolkit-system
+        template: rbac/leader-election-role.yaml
+      # controller-runtime locks on coordination.k8s.io/leases (no LeaderElectionResourceLock override in cmd/main.go).
+      - contains:
+          path: rules
+          content:
+            apiGroups: [coordination.k8s.io]
+            resources: [leases]
+            verbs: [get, list, watch, create, update, patch, delete]
+        template: rbac/leader-election-role.yaml
+      - contains:
+          path: rules
+          content:
+            apiGroups: [""]
+            resources: [events]
+            verbs: [create, patch]
+        template: rbac/leader-election-role.yaml
+      - isKind:
+          of: RoleBinding
+        template: rbac/leader-election-rolebinding.yaml
+      - equal:
+          path: metadata.namespace
+          value: ocm-k8s-toolkit-system
+        template: rbac/leader-election-rolebinding.yaml
+      - equal:
+          path: roleRef
+          value:
+            apiGroup: rbac.authorization.k8s.io
+            kind: Role
+            name: ocm-k8s-toolkit-leader-election-role
+        template: rbac/leader-election-rolebinding.yaml
+      - equal:
+          path: subjects
+          value:
+            - kind: ServiceAccount
+              name: ocm-k8s-toolkit-controller-manager
+              namespace: ocm-k8s-toolkit-system
+        template: rbac/leader-election-rolebinding.yaml
+
+  - it: grants impersonation to the controller for the NamespacedDeployer by default
+    templates:
+      - rbac/namespaceddeployer-impersonation-role.yaml
+    asserts:
+      - hasDocuments:
+          count: 2
+      - isKind:
+          of: ClusterRole
+        documentIndex: 0
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-namespaceddeployer-impersonation-role
+        documentIndex: 0
+      - equal:
+          path: rules
+          value:
+            - apiGroups: [""]
+              resources: [serviceaccounts]
+              verbs: [impersonate]
+        documentIndex: 0
+      - isKind:
+          of: ClusterRoleBinding
+        documentIndex: 1
+      - equal:
+          path: roleRef
+          value:
+            apiGroup: rbac.authorization.k8s.io
+            kind: ClusterRole
+            name: ocm-k8s-toolkit-namespaceddeployer-impersonation-role
+        documentIndex: 1
+      - equal:
+          path: subjects
+          value:
+            - kind: ServiceAccount
+              name: ocm-k8s-toolkit-controller-manager
+              namespace: ocm-k8s-toolkit-system
+        documentIndex: 1
+
+  - it: drops the impersonation role when the NamespacedDeployer is disabled
+    templates:
+      - rbac/namespaceddeployer-impersonation-role.yaml
+    set:
+      manager.namespacedDeployer.enabled: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: keeps the impersonation role when the namespacedDeployer key is absent
+    # Simulates helm upgrade --reuse-values from a release that predates the key.
+    templates:
+      - rbac/namespaceddeployer-impersonation-role.yaml
+    set:
+      manager.namespacedDeployer: null
+    asserts:
+      - hasDocuments:
+          count: 2
+
+  - it: aggregates OCM permissions into the built-in roles by default
+    templates:
+      - rbac/aggregate-to-edit-role.yaml
+      - rbac/aggregate-to-view-role.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ClusterRole
+      # Without these labels the roles are inert.
+      - equal:
+          path: metadata.labels["rbac.authorization.k8s.io/aggregate-to-admin"]
+          value: "true"
+      - equal:
+          path: metadata.labels["rbac.authorization.k8s.io/aggregate-to-edit"]
+          value: "true"
+      - equal:
+          path: metadata.labels["rbac.authorization.k8s.io/aggregate-to-view"]
+          value: "true"
+        template: rbac/aggregate-to-view-role.yaml
+      - notExists:
+          path: metadata.labels["rbac.authorization.k8s.io/aggregate-to-view"]
+        template: rbac/aggregate-to-edit-role.yaml
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-aggregate-to-edit
+        template: rbac/aggregate-to-edit-role.yaml
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-aggregate-to-view
+        template: rbac/aggregate-to-view-role.yaml
+      # Every CRD kind must be listed; a missing one silently drops out of admin/edit/view.
+      - equal:
+          path: rules
+          value:
+            - apiGroups: [delivery.ocm.software]
+              resources: [components, deployers, discoveries, namespaceddeployers, replications, repositories, resources]
+              verbs: [create, delete, deletecollection, patch, update]
+        template: rbac/aggregate-to-edit-role.yaml
+      - equal:
+          path: rules
+          value:
+            - apiGroups: [delivery.ocm.software]
+              resources: [components, deployers, discoveries, namespaceddeployers, replications, repositories, resources]
+              verbs: [get, list, watch]
+            - apiGroups: [delivery.ocm.software]
+              resources: [components/status, deployers/status, namespaceddeployers/status, discoveries/status, replications/status, repositories/status, resources/status]
+              verbs: [get, list, watch]
+        template: rbac/aggregate-to-view-role.yaml
+
+  - it: skips aggregation when rbacHelpers.aggregateToDefaultRoles is false
+    templates:
+      - rbac/aggregate-to-edit-role.yaml
+      - rbac/aggregate-to-view-role.yaml
+    set:
+      rbacHelpers.aggregateToDefaultRoles: false
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: skips the editor and viewer helper roles by default
+    templates:
+      - rbac/component-editor-role.yaml
+      - rbac/component-viewer-role.yaml
+      - rbac/deployer-editor-role.yaml
+      - rbac/deployer-viewer-role.yaml
+      - rbac/discovery-editor-role.yaml
+      - rbac/discovery-viewer-role.yaml
+      - rbac/namespaceddeployer-editor-role.yaml
+      - rbac/namespaceddeployer-viewer-role.yaml
+      - rbac/replication-editor-role.yaml
+      - rbac/replication-viewer-role.yaml
+      - rbac/repository-editor-role.yaml
+      - rbac/repository-viewer-role.yaml
+      - rbac/resource-editor-role.yaml
+      - rbac/resource-viewer-role.yaml
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: installs an editor helper role per CRD kind when rbacHelpers.enable is true
+    templates:
+      - rbac/component-editor-role.yaml
+      - rbac/deployer-editor-role.yaml
+      - rbac/discovery-editor-role.yaml
+      - rbac/namespaceddeployer-editor-role.yaml
+      - rbac/replication-editor-role.yaml
+      - rbac/repository-editor-role.yaml
+      - rbac/resource-editor-role.yaml
+    set:
+      rbacHelpers.enable: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ClusterRole
+      - lengthEqual:
+          path: rules
+          count: 2
+      - equal:
+          path: rules[0].apiGroups
+          value: [delivery.ocm.software]
+      - equal:
+          path: rules[0].verbs
+          value: [create, delete, get, list, patch, update, watch]
+      - equal:
+          path: rules[1].verbs
+          value: [get]
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-component-editor-role
+        template: rbac/component-editor-role.yaml
+      - equal:
+          path: rules[0].resources
+          value: [components]
+        template: rbac/component-editor-role.yaml
+      - equal:
+          path: rules[1].resources
+          value: [components/status]
+        template: rbac/component-editor-role.yaml
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-deployer-editor-role
+        template: rbac/deployer-editor-role.yaml
+      - equal:
+          path: rules[0].resources
+          value: [deployers]
+        template: rbac/deployer-editor-role.yaml
+      - equal:
+          path: rules[1].resources
+          value: [deployers/status]
+        template: rbac/deployer-editor-role.yaml
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-discovery-editor-role
+        template: rbac/discovery-editor-role.yaml
+      - equal:
+          path: rules[0].resources
+          value: [discoveries]
+        template: rbac/discovery-editor-role.yaml
+      - equal:
+          path: rules[1].resources
+          value: [discoveries/status]
+        template: rbac/discovery-editor-role.yaml
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-namespaceddeployer-editor-role
+        template: rbac/namespaceddeployer-editor-role.yaml
+      - equal:
+          path: rules[0].resources
+          value: [namespaceddeployers]
+        template: rbac/namespaceddeployer-editor-role.yaml
+      - equal:
+          path: rules[1].resources
+          value: [namespaceddeployers/status]
+        template: rbac/namespaceddeployer-editor-role.yaml
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-replication-editor-role
+        template: rbac/replication-editor-role.yaml
+      - equal:
+          path: rules[0].resources
+          value: [replications]
+        template: rbac/replication-editor-role.yaml
+      - equal:
+          path: rules[1].resources
+          value: [replications/status]
+        template: rbac/replication-editor-role.yaml
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-repository-editor-role
+        template: rbac/repository-editor-role.yaml
+      - equal:
+          path: rules[0].resources
+          value: [repositories]
+        template: rbac/repository-editor-role.yaml
+      - equal:
+          path: rules[1].resources
+          value: [repositories/status]
+        template: rbac/repository-editor-role.yaml
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-resource-editor-role
+        template: rbac/resource-editor-role.yaml
+      - equal:
+          path: rules[0].resources
+          value: [resources]
+        template: rbac/resource-editor-role.yaml
+      - equal:
+          path: rules[1].resources
+          value: [resources/status]
+        template: rbac/resource-editor-role.yaml
+
+  - it: installs a viewer helper role per CRD kind when rbacHelpers.enable is true
+    templates:
+      - rbac/component-viewer-role.yaml
+      - rbac/deployer-viewer-role.yaml
+      - rbac/discovery-viewer-role.yaml
+      - rbac/namespaceddeployer-viewer-role.yaml
+      - rbac/replication-viewer-role.yaml
+      - rbac/repository-viewer-role.yaml
+      - rbac/resource-viewer-role.yaml
+    set:
+      rbacHelpers.enable: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ClusterRole
+      - lengthEqual:
+          path: rules
+          count: 2
+      - equal:
+          path: rules[0].apiGroups
+          value: [delivery.ocm.software]
+      - equal:
+          path: rules[0].verbs
+          value: [get, list, watch]
+      - equal:
+          path: rules[1].verbs
+          value: [get]
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-component-viewer-role
+        template: rbac/component-viewer-role.yaml
+      - equal:
+          path: rules[0].resources
+          value: [components]
+        template: rbac/component-viewer-role.yaml
+      - equal:
+          path: rules[1].resources
+          value: [components/status]
+        template: rbac/component-viewer-role.yaml
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-deployer-viewer-role
+        template: rbac/deployer-viewer-role.yaml
+      - equal:
+          path: rules[0].resources
+          value: [deployers]
+        template: rbac/deployer-viewer-role.yaml
+      - equal:
+          path: rules[1].resources
+          value: [deployers/status]
+        template: rbac/deployer-viewer-role.yaml
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-discovery-viewer-role
+        template: rbac/discovery-viewer-role.yaml
+      - equal:
+          path: rules[0].resources
+          value: [discoveries]
+        template: rbac/discovery-viewer-role.yaml
+      - equal:
+          path: rules[1].resources
+          value: [discoveries/status]
+        template: rbac/discovery-viewer-role.yaml
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-namespaceddeployer-viewer-role
+        template: rbac/namespaceddeployer-viewer-role.yaml
+      - equal:
+          path: rules[0].resources
+          value: [namespaceddeployers]
+        template: rbac/namespaceddeployer-viewer-role.yaml
+      - equal:
+          path: rules[1].resources
+          value: [namespaceddeployers/status]
+        template: rbac/namespaceddeployer-viewer-role.yaml
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-replication-viewer-role
+        template: rbac/replication-viewer-role.yaml
+      - equal:
+          path: rules[0].resources
+          value: [replications]
+        template: rbac/replication-viewer-role.yaml
+      - equal:
+          path: rules[1].resources
+          value: [replications/status]
+        template: rbac/replication-viewer-role.yaml
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-repository-viewer-role
+        template: rbac/repository-viewer-role.yaml
+      - equal:
+          path: rules[0].resources
+          value: [repositories]
+        template: rbac/repository-viewer-role.yaml
+      - equal:
+          path: rules[1].resources
+          value: [repositories/status]
+        template: rbac/repository-viewer-role.yaml
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-resource-viewer-role
+        template: rbac/resource-viewer-role.yaml
+      - equal:
+          path: rules[0].resources
+          value: [resources]
+        template: rbac/resource-viewer-role.yaml
+      - equal:
+          path: rules[1].resources
+          value: [resources/status]
+        template: rbac/resource-viewer-role.yaml

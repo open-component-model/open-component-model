@@ -24,6 +24,8 @@ vars:
     sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "${YQ_VERSION:-v4.49.2}"'
   REGISTRY_IMAGE_VERSION:
     sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "$REGISTRY_IMAGE_VERSION"'
+  HELM_UNITTEST_VERSION:
+    sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "$HELM_UNITTEST_VERSION"'
 
   CONTAINER_TOOL: '{{.CONTAINER_TOOL | default "docker"}}'
   LOCALBIN: '{{.TASKFILE_DIR}}/bin'
@@ -276,14 +278,20 @@ tasks:
     desc: "Lint the Helm chart"
     cmd: 'helm lint chart/'
 
+  helm/unittest:
+    desc: "Run the helm-unittest suites in chart/tests"
+    deps: [helm-unittest-plugin]
+    cmd: 'helm unittest -f "tests/**/*_test.yaml" chart/'
+
   helm/validate:
-    desc: "Validate the Helm chart (regenerate, then lint, template, and verify CRDs/RBAC/schema/docs are in sync)"
+    desc: "Validate the Helm chart (regenerate, then lint, unit-test, template, and verify CRDs/RBAC/schema/docs are in sync)"
     silent: true
     cmds:
       - task: helm/generate
       - task: helm/schema
       - task: helm/docs
       - task: helm/lint
+      - task: helm/unittest
       - task: helm/template
       - |
         status=$(git status --porcelain)
@@ -424,3 +432,14 @@ tasks:
       fi
     status:
       - helm plugin list | grep -q "schema"
+
+  helm-unittest-plugin:
+    internal: true
+    silent: true
+    desc: "Install the helm-unittest plugin at the version pinned in .env if not present"
+    cmd: |
+      if ! helm plugin list | grep -q "^unittest"; then
+        helm plugin install https://github.com/helm-unittest/helm-unittest.git --version {{.HELM_UNITTEST_VERSION}} --verify=false
+      fi
+    status:
+      - helm plugin list | grep -q "^unittest"

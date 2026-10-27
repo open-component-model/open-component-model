@@ -1,0 +1,101 @@
+suite: prometheus service monitor
+templates:
+  - monitoring/servicemonitor.yaml
+release:
+  name: ocm-k8s-toolkit
+  namespace: ocm-k8s-toolkit-system
+tests:
+  - it: is not rendered by default
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: scrapes the controller over https without verifying the cert when prometheus is enabled
+    set:
+      prometheus.enable: true
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: ServiceMonitor
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-controller-manager-metrics-monitor
+      - equal:
+          path: metadata.namespace
+          value: ocm-k8s-toolkit-system
+      - equal:
+          path: metadata.labels
+          value:
+            app.kubernetes.io/managed-by: Helm
+            app.kubernetes.io/name: ocm-k8s-toolkit
+            app.kubernetes.io/instance: ocm-k8s-toolkit
+            helm.sh/chart: chart-0.1.0
+            control-plane: controller-manager
+      # The selector must keep matching the labels of the metrics Service it targets.
+      - equal:
+          path: spec.selector.matchLabels
+          value:
+            app.kubernetes.io/name: ocm-k8s-toolkit
+            control-plane: controller-manager
+      # No namespaceSelector: Prometheus only looks in the release namespace.
+      - notExists:
+          path: spec.namespaceSelector
+      - equal:
+          path: spec.endpoints
+          value:
+            - path: /metrics
+              port: https
+              scheme: https
+              bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+              tlsConfig:
+                insecureSkipVerify: true
+
+  - it: verifies TLS against the cert-manager secret when cert-manager is enabled
+    set:
+      prometheus.enable: true
+      certManager.enable: true
+    asserts:
+      - equal:
+          path: spec.endpoints
+          value:
+            - path: /metrics
+              port: https
+              scheme: https
+              bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+              tlsConfig:
+                serverName: ocm-k8s-toolkit-controller-manager-metrics-service.ocm-k8s-toolkit-system.svc
+                insecureSkipVerify: false
+                ca:
+                  secret:
+                    name: metrics-server-cert
+                    key: ca.crt
+                cert:
+                  secret:
+                    name: metrics-server-cert
+                    key: tls.crt
+                keySecret:
+                  name: metrics-server-cert
+                  key: tls.key
+
+  - it: follows nameOverride and the release namespace in the name, selector and serverName
+    release:
+      name: ocm-k8s-toolkit
+      namespace: other-ns
+    set:
+      prometheus.enable: true
+      certManager.enable: true
+      nameOverride: custom
+    asserts:
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-custom-controller-manager-metrics-monitor
+      - equal:
+          path: metadata.namespace
+          value: other-ns
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: custom
+      - equal:
+          path: spec.endpoints[0].tlsConfig.serverName
+          value: ocm-k8s-toolkit-custom-controller-manager-metrics-service.other-ns.svc
