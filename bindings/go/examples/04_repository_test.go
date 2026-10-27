@@ -4,7 +4,7 @@
 //   - Creating a CTF-backed (Common Transport Format) repository
 //   - Storing and retrieving component versions
 //   - Listing all versions of a component
-//   - Adding blob resources and sources to component versions
+//   - Adding blob resources to component versions
 //   - Retrieving resources by identity
 //
 // This is where blobs and descriptors come together. A repository stores
@@ -16,7 +16,6 @@ package examples
 
 import (
 	"bytes"
-	"io"
 	"os"
 	"testing"
 
@@ -184,65 +183,4 @@ func TestExample_AddAndGetLocalResource(t *testing.T) {
 	var buf bytes.Buffer
 	r.NoError(blob.Copy(&buf, readBlob))
 	r.Equal(content, buf.Bytes())
-}
-
-// TestExample_AddAndGetLocalSource demonstrates adding a source artifact to a
-// component version and retrieving it.
-func TestExample_AddAndGetLocalSource(t *testing.T) {
-	r := require.New(t)
-	ctx := t.Context()
-	repo := newTestRepo(t)
-
-	component := "acme.org/source-app"
-	version := "1.0.0"
-	content := []byte("source archive content")
-
-	src := &descriptor.Source{
-		ElementMeta: descriptor.ElementMeta{
-			ObjectMeta: descriptor.ObjectMeta{
-				Name:    "my-source",
-				Version: "1.0.0",
-			},
-		},
-		Type: "git",
-		Access: &v2.LocalBlob{
-			LocalReference: digest.FromBytes(content).String(),
-			MediaType:      "application/x-tar",
-		},
-	}
-
-	desc := &descriptor.Descriptor{
-		Meta: descriptor.Meta{Version: "v2"},
-		Component: descriptor.Component{
-			Provider: descriptor.Provider{Name: "acme.org"},
-			ComponentMeta: descriptor.ComponentMeta{
-				ObjectMeta: descriptor.ObjectMeta{Name: component, Version: version},
-			},
-			Sources: []descriptor.Source{*src},
-		},
-	}
-
-	// Upload the source blob.
-	b := inmemory.New(bytes.NewReader(content))
-	newSrc, err := repo.AddLocalSource(ctx, component, version, src, b)
-	r.NoError(err)
-	desc.Component.Sources[0] = *newSrc
-
-	// Store the component version.
-	r.NoError(repo.AddComponentVersion(ctx, desc))
-
-	// Retrieve the source by identity.
-	readBlob, _, err := repo.GetLocalSource(ctx, component, version, map[string]string{
-		"name":    "my-source",
-		"version": "1.0.0",
-	})
-	r.NoError(err)
-
-	rc, err := readBlob.ReadCloser()
-	r.NoError(err)
-	defer rc.Close()
-
-	data, err := io.ReadAll(rc)
-	r.NoError(err)
-	r.Equal(content, data)
 }
