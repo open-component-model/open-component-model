@@ -203,9 +203,9 @@ func (c *BlobCache) populate(ctx context.Context, dgst digest.Digest, size int64
 // Concurrent Fetches for the same digest are collapsed via
 // singleflight into a single upstream.Fetch; every caller receives an
 // independent reader over identical bytes. Under [RemotePolicyAlways]
-// each caller that received a shared result still checks its own
-// upstream via Exists, so callers with different credentials cannot
-// borrow each other's access.
+// each caller first checks its own upstream via Exists, before it reads
+// the cache or joins a fetch, so callers with different credentials
+// cannot borrow or break each other's access.
 func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 	if c == nil || !c.Accept(target) {
 		return upstream.Fetch(ctx, target)
@@ -218,11 +218,14 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage,
 		return upstream.Fetch(ctx, target)
 	}
 
-	f, err := c.cached(ctx, upstream, target)
-	if err != nil {
-		return nil, err
+	// Prove access first, then serve content after digest verification.
+	if c.opts.RemotePolicy == RemotePolicyAlways {
+		if err := c.verifyRemoteAccess(ctx, upstream, target); err != nil {
+			return nil, err
+		}
 	}
-	if f != nil {
+
+	if f := c.cached(ctx, target); f != nil {
 		return f, nil
 	}
 
@@ -250,11 +253,7 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage,
 		// whose lookup above missed just before the previous flight
 		// populated the cache, but whose DoChan arrives after that flight
 		// returned, would otherwise start a second upstream fetch.
-		f, err := c.cached(fetchCtx, upstream, target)
-		if err != nil {
-			return nil, err
-		}
-		if f != nil {
+		if f := c.cached(fetchCtx, target); f != nil {
 			data, rerr := io.ReadAll(f)
 			_ = f.Close()
 			if rerr == nil {
@@ -291,40 +290,28 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage,
 		if res.Shared {
 			c.logger.DebugContext(ctx, "blobcache: singleflight: result shared across concurrent callers",
 				slog.String("digest", target.Digest.String()))
-			// if shared, we need to make sure that the caller has access
-			if c.opts.RemotePolicy == RemotePolicyAlways {
-				if err := c.verifyRemoteAccess(ctx, upstream, target); err != nil {
-					return nil, err
-				}
-			}
 		}
 		return io.NopCloser(bytes.NewReader(res.Val.([]byte))), nil
 	}
 }
 
-// cached returns an open file for target if it is in the cache and,
-// under [RemotePolicyAlways], upstream confirms access. A nil file
-// with a nil error is a miss; a failing local lookup is logged and
-// reported as a miss so the caller falls through to upstream.
-func (c *BlobCache) cached(ctx context.Context, upstream content.ReadOnlyStorage, target ociImageSpecV1.Descriptor) (*os.File, error) {
+// cached returns an open file for target if it is in the cache, or nil
+// on a miss. A failing local lookup is logged and reported as a miss so
+// the caller falls through to upstream. Remote access must already be
+// verified by the caller.
+func (c *BlobCache) cached(ctx context.Context, target ociImageSpecV1.Descriptor) *os.File {
 	f, hit, err := c.Get(target.Digest)
 	if err != nil {
 		c.logger.DebugContext(ctx, "blobcache: get failed, falling through",
 			slog.String("digest", target.Digest.String()), slog.String("err", err.Error()))
-		return nil, nil
+		return nil
 	}
 	if !hit {
-		return nil, nil
-	}
-	if c.opts.RemotePolicy == RemotePolicyAlways {
-		if err := c.verifyRemoteAccess(ctx, upstream, target); err != nil {
-			_ = f.Close()
-			return nil, err
-		}
+		return nil
 	}
 	c.logger.DebugContext(ctx, "blobcache: hit",
 		slog.String("digest", target.Digest.String()), slog.Int64("size", target.Size))
-	return f, nil
+	return f
 }
 
 // verifyRemoteAccess checks whether upstream can access target.

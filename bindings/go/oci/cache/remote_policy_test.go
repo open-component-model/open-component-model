@@ -69,7 +69,7 @@ func TestBlobCache_Always_ExistsCalledOnHit(t *testing.T) {
 	assert.Equal(t, manifest, readAllAndClose(t, rc2))
 
 	assert.EqualValues(t, 1, base.fetches.Load(), "fetches")
-	assert.EqualValues(t, 1, base.exists.Load(), "exists must be called on cache hit with Always")
+	assert.EqualValues(t, 2, base.exists.Load(), "exists must be called on every fetch with Always")
 }
 
 func TestBlobCache_Always_ExistsDeniedReturnsError(t *testing.T) {
@@ -87,10 +87,10 @@ func TestBlobCache_Always_ExistsDeniedReturnsError(t *testing.T) {
 	_, err = c.Fetch(t.Context(), base, desc)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "remote does not contain")
-	assert.EqualValues(t, 1, base.exists.Load())
+	assert.EqualValues(t, 2, base.exists.Load())
 }
 
-func TestBlobCache_Always_SharedFlightChecksEachCaller(t *testing.T) {
+func TestBlobCache_Always_DeniedCallerDoesNotJoinFlight(t *testing.T) {
 	r := require.New(t)
 	c := newTestCache(t, Options{RemotePolicy: RemotePolicyAlways})
 	base := newFakeReadOnly()
@@ -103,31 +103,21 @@ func TestBlobCache_Always_SharedFlightChecksEachCaller(t *testing.T) {
 	go func() {
 		rc, err := c.Fetch(t.Context(), allowed, desc)
 		if err == nil {
-			_ = readAllAndClose(t, rc)
+			assert.Equal(t, manifest, readAllAndClose(t, rc))
 		}
 		allowedErr <- err
 	}()
 	allowed.waitBlocked(t, 1)
 
-	deniedErr := make(chan error, 1)
-	go func() {
-		rc, err := c.Fetch(t.Context(), denied, desc)
-		if err == nil {
-			_ = rc.Close()
-		}
-		deniedErr <- err
-	}()
-	// singleflight exposes no join signal. A late joiner hits the disk cache and is denied there,
-	// so the sleep can only weaken the regression check, never flake the test.
-	time.Sleep(100 * time.Millisecond)
-	close(allowed.release)
-
-	r.NoError(<-allowedErr)
-	err := <-deniedErr
-	r.Error(err)
-	r.Contains(err.Error(), "remote does not contain or allow access")
-	r.EqualValues(1, base.fetches.Load(), "the denied caller must not trigger a second upstream fetch")
+	// The denied caller must be rejected while the allowed caller's fetch is still in flight.
+	_, err := c.Fetch(t.Context(), denied, desc)
+	r.ErrorContains(err, "remote does not contain or allow access")
 	r.EqualValues(1, denied.exists.Load(), "the denied caller must check its own upstream")
+	r.Zero(denied.fetches.Load(), "the denied caller must not fetch")
+
+	close(allowed.release)
+	r.NoError(<-allowedErr)
+	r.EqualValues(1, base.fetches.Load())
 }
 
 // ---- ReferenceCache remote policy ----
