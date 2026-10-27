@@ -727,13 +727,13 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 
 	// The layer is fetched on every read with the context of this call, so the blob holds
 	// no open stream and callers need not release it.
-	return ociblob.NewDescriptorBlob(func() (io.ReadCloser, error) {
+	return ociblob.NewDescriptorBlob(blob.ReadOnlyBlobFunc(func() (io.ReadCloser, error) {
 		data, err := store.Fetch(ctx, artifact)
 		if err != nil {
 			return nil, fmt.Errorf("fetch layer: %w", err)
 		}
 		return data, nil
-	}, artifact), nil
+	}), artifact), nil
 }
 
 func (repo *Repository) getStore(ctx context.Context, component string, version string) (ref string, store spec.Store, err error) {

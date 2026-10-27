@@ -8,14 +8,12 @@ import (
 	"testing"
 
 	"github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ctfspec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
@@ -119,12 +117,14 @@ func testTransferCTFLocalBlobToCTFLocalBlob(t *testing.T, sameArchive bool) {
 	r.Equal(content, data)
 }
 
-type trackingReader struct {
-	io.Reader
+// closingBlob is a source blob that owns a resource, such as the temporary file behind a
+// downloaded resource, and must be closed by its holder.
+type closingBlob struct {
+	blob.ReadOnlyBlob
 	closed bool
 }
 
-func (r *trackingReader) Close() error { r.closed = true; return nil }
+func (b *closingBlob) Close() error { b.closed = true; return nil }
 
 // failingTargetRepository serves a fixed local blob and rejects every add before reading it.
 type failingTargetRepository struct {
@@ -150,19 +150,15 @@ func (p *staticRepositoryProvider) GetComponentVersionRepository(context.Context
 	return p.repo, nil
 }
 
-// TestTransferLocalBlob_ReleasesSourceOnTargetFailure checks that no source stream is left
-// open when the target fails before consuming it.
+// TestTransferLocalBlob_ReleasesSourceOnTargetFailure checks that a source blob owning a
+// resource is closed when the target fails before consuming it.
 func TestTransferLocalBlob_ReleasesSourceOnTargetFailure(t *testing.T) {
 	r := require.New(t)
 	data := []byte("source body")
-	var source *trackingReader
-	open := func() (io.ReadCloser, error) {
-		source = &trackingReader{Reader: bytes.NewReader(data)}
-		return source, nil
-	}
+	source := &closingBlob{ReadOnlyBlob: inmemory.New(bytes.NewReader(data))}
 	d := digest.FromBytes(data)
 	repo := &failingTargetRepository{
-		content: ociblob.NewDescriptorBlob(open, ocispec.Descriptor{Digest: d, Size: int64(len(data)), MediaType: "text/plain"}),
+		content: source,
 		resource: &descriptor.Resource{
 			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "payload", Version: "1.0.0"}},
 			Type:        "plainText",
@@ -191,5 +187,5 @@ func TestTransferLocalBlob_ReleasesSourceOnTargetFailure(t *testing.T) {
 		},
 	})
 	r.ErrorContains(err, "target unavailable")
-	r.True(source == nil || source.closed, "a source stream opened for a target that fails before reading it must be closed")
+	r.True(source.closed, "source blob must be closed when the target fails before reading it")
 }
