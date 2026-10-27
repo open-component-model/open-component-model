@@ -576,6 +576,33 @@ tests:
             - mountPath: /tmp
               name: tmp
 
+  - it: declares the metrics container port when the metrics server is enabled
+    # monitoring/service.yaml targets this port by name, so the number must follow the bind address.
+    set:
+      manager.metricsServer.bindAddress: "0.0.0.0:8443"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports
+          value:
+            - containerPort: 8443
+              name: metrics
+              protocol: TCP
+
+  - it: lists the metrics port before the webhook port when both are enabled
+    set:
+      manager.metricsServer.bindAddress: ":8443"
+      webhook.enable: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports
+          value:
+            - containerPort: 8443
+              name: metrics
+              protocol: TCP
+            - containerPort: 9443
+              name: webhook-server
+              protocol: TCP
+
   - it: adds the webhook port, mount and volume when the webhook is enabled
     set:
       webhook.enable: true

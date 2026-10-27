@@ -1,18 +1,80 @@
-suite: prometheus service monitor
+suite: prometheus metrics
 templates:
+  - monitoring/service.yaml
   - monitoring/servicemonitor.yaml
 release:
   name: ocm-k8s-toolkit
   namespace: ocm-k8s-toolkit-system
 tests:
-  - it: is not rendered by default
+  - it: renders nothing by default
     asserts:
       - hasDocuments:
           count: 0
 
-  - it: scrapes the controller over https without verifying the cert when prometheus is enabled
+  - it: renders nothing when metrics are enabled but prometheus is not
+    # The endpoint is reachable inside the pod only; prometheus.enable is what adds a Service.
+    set:
+      manager.metricsServer.bindAddress: ":8443"
+    asserts:
+      - hasDocuments:
+          count: 0
+
+  - it: fails when prometheus is enabled but metrics are disabled
+    # A ServiceMonitor without a metrics endpoint scrapes nothing; fail loudly instead.
     set:
       prometheus.enable: true
+    template: monitoring/servicemonitor.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: requires manager.metricsServer.bindAddress
+
+  - it: renders a metrics Service that targets the named container port
+    set:
+      prometheus.enable: true
+      manager.metricsServer.bindAddress: ":8443"
+    template: monitoring/service.yaml
+    asserts:
+      - hasDocuments:
+          count: 1
+      - isKind:
+          of: Service
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-controller-manager-metrics-service
+      - equal:
+          path: metadata.namespace
+          value: ocm-k8s-toolkit-system
+      - equal:
+          path: metadata.labels
+          value:
+            app.kubernetes.io/managed-by: Helm
+            app.kubernetes.io/name: ocm-k8s-toolkit
+            app.kubernetes.io/instance: ocm-k8s-toolkit
+            helm.sh/chart: chart-0.1.0
+            control-plane: controller-manager
+      - notExists:
+          path: spec.type
+      # targetPort by name: the Deployment declares "metrics" when the bind address is set, see manager_test.yaml.
+      - equal:
+          path: spec.ports
+          value:
+            - name: metrics
+              port: 8443
+              protocol: TCP
+              targetPort: metrics
+      # Must match the pod labels in manager/manager.yaml.
+      - equal:
+          path: spec.selector
+          value:
+            app.kubernetes.io/name: ocm-k8s-toolkit
+            app.kubernetes.io/instance: ocm-k8s-toolkit
+            control-plane: controller-manager
+
+  - it: scrapes the metrics Service over plain http by default
+    set:
+      prometheus.enable: true
+      manager.metricsServer.bindAddress: ":8443"
+    template: monitoring/servicemonitor.yaml
     asserts:
       - hasDocuments:
           count: 1
@@ -32,11 +94,12 @@ tests:
             app.kubernetes.io/instance: ocm-k8s-toolkit
             helm.sh/chart: chart-0.1.0
             control-plane: controller-manager
-      # The selector must keep matching the labels of the metrics Service it targets.
+      # Must match metadata.labels of monitoring/service.yaml.
       - equal:
           path: spec.selector.matchLabels
           value:
             app.kubernetes.io/name: ocm-k8s-toolkit
+            app.kubernetes.io/instance: ocm-k8s-toolkit
             control-plane: controller-manager
       # No namespaceSelector: Prometheus only looks in the release namespace.
       - notExists:
@@ -45,57 +108,71 @@ tests:
           path: spec.endpoints
           value:
             - path: /metrics
-              port: https
-              scheme: https
-              bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
-              tlsConfig:
-                insecureSkipVerify: true
+              port: metrics
 
-  - it: verifies TLS against the cert-manager secret when cert-manager is enabled
+  - it: scrapes over https without verification when the metrics server is secure
+    # The manager serves a self-generated certificate; there is no CA to pin.
     set:
       prometheus.enable: true
-      certManager.enable: true
+      manager.metricsServer.bindAddress: ":8443"
+      manager.metricsServer.secure: true
+    template: monitoring/servicemonitor.yaml
     asserts:
       - equal:
           path: spec.endpoints
           value:
             - path: /metrics
-              port: https
+              port: metrics
               scheme: https
-              bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
               tlsConfig:
-                serverName: ocm-k8s-toolkit-controller-manager-metrics-service.ocm-k8s-toolkit-system.svc
-                insecureSkipVerify: false
-                ca:
-                  secret:
-                    name: metrics-server-cert
-                    key: ca.crt
-                cert:
-                  secret:
-                    name: metrics-server-cert
-                    key: tls.crt
-                keySecret:
-                  name: metrics-server-cert
-                  key: tls.key
+                insecureSkipVerify: true
 
-  - it: follows nameOverride and the release namespace in the name, selector and serverName
-    release:
-      name: ocm-k8s-toolkit
-      namespace: other-ns
+  - it: takes the port from a bind address with a host part
     set:
       prometheus.enable: true
-      certManager.enable: true
+      manager.metricsServer.bindAddress: "0.0.0.0:9100"
+    template: monitoring/service.yaml
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 9100
+
+  - it: follows nameOverride and the release namespace in names and selectors
+    release:
+      name: foo
+      namespace: other
+    set:
+      prometheus.enable: true
+      manager.metricsServer.bindAddress: ":8443"
       nameOverride: custom
     asserts:
       - equal:
           path: metadata.name
-          value: ocm-k8s-toolkit-custom-controller-manager-metrics-monitor
+          value: foo-custom-controller-manager-metrics-service
+        template: monitoring/service.yaml
       - equal:
           path: metadata.namespace
-          value: other-ns
+          value: other
+        template: monitoring/service.yaml
       - equal:
-          path: spec.selector.matchLabels["app.kubernetes.io/name"]
-          value: custom
+          path: spec.selector
+          value:
+            app.kubernetes.io/name: custom
+            app.kubernetes.io/instance: foo
+            control-plane: controller-manager
+        template: monitoring/service.yaml
       - equal:
-          path: spec.endpoints[0].tlsConfig.serverName
-          value: ocm-k8s-toolkit-custom-controller-manager-metrics-service.other-ns.svc
+          path: metadata.name
+          value: foo-custom-controller-manager-metrics-monitor
+        template: monitoring/servicemonitor.yaml
+      - equal:
+          path: metadata.namespace
+          value: other
+        template: monitoring/servicemonitor.yaml
+      - equal:
+          path: spec.selector.matchLabels
+          value:
+            app.kubernetes.io/name: custom
+            app.kubernetes.io/instance: foo
+            control-plane: controller-manager
+        template: monitoring/servicemonitor.yaml
