@@ -1,6 +1,6 @@
 ---
 title: "Add Git Repositories"
-description: "Add a Git repository to a component version as a resource, as a source, and as an embedded snapshot, then download it back."
+description: "Add a Git repository to a component version as a resource and as an embedded snapshot, then download it back."
 weight: 60
 toc: true
 hasMermaid: true
@@ -10,14 +10,14 @@ aliases:
 ---
 
 OCM can add the files of a Git commit to a component version. This works with any Git server, such as GitHub, GitLab,
-Gitea, Azure DevOps or your own server, over HTTPS or SSH. This tutorial adds one repository as a resource, as a source
+Gitea, Azure DevOps or your own server, over HTTPS or SSH. This tutorial adds one repository as a referenced resource
 and as an embedded snapshot, builds a component version, and downloads the files back.
 
 ## What You'll Learn
 
 By the end of this tutorial, you will:
 
-- Reference a repository as a resource and as a source with the `Git/v1` access type
+- Reference a repository as a resource with the `Git/v1` access type
 - Embed a repository snapshot in the component version with the `Git/v1` input type
 - Understand how OCM pins a branch to a commit and protects it with a digest
 - Configure credentials for a private repository
@@ -61,7 +61,7 @@ repository.
 
 ### Create the component constructor
 
-Create `component-constructor.yaml` with three entries for the same repository:
+Create `component-constructor.yaml` with two resources for the same repository:
 
 ```bash
 cat > component-constructor.yaml << 'EOF'
@@ -88,22 +88,18 @@ components:
           type: Git/v1
           repository: https://github.com/octocat/Hello-World.git
           commit: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d
-    sources:
-      # The source code the component was built from. Sources are never pinned, so set the commit.
-      - name: hello-world-source
-        type: git
-        version: 1.0.0
-        access:
-          type: Git/v1
-          repository: https://github.com/octocat/Hello-World.git
-          ref: refs/heads/master
-          commit: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d
 EOF
 ```
 
 `ref` accepts a branch or tag name (`master`, `v1.0.0`) or a full ref (`refs/heads/master`, `refs/tags/v1.0.0`).
 `commit` must be the full 40-character SHA. When both are set, the commit wins, and the ref is only information for
 the reader.
+
+{{< callout context="caution" title="Do not use sources" icon="outline/alert-triangle" >}}
+Component `sources` are deprecated. They carry no digest, so neither the component version digest nor a signature
+covers their content. Declare repository content, including the code a component was built from, as resources.
+See [Migrate from Sources to Resources]({{< relref "docs/changelog/migrate-from-sources.md" >}}).
+{{< /callout >}}
 
 {{< /step >}}
 
@@ -118,16 +114,12 @@ ocm add cv
 {{< details "Expected output" >}}
 
 ```text
-level=WARN msg="source content is recorded without a digest and is not verifiable; declare the artifact as a resource if content validation is needed"
  COMPONENT                 │ VERSION │ PROVIDER
 ───────────────────────────┼─────────┼──────────
  github.com/acme.org/myapp │ 1.0.0   │ acme.org
 ```
 
 {{< /details >}}
-
-The warning is expected. A source carries no digest, so OCM cannot check later that its content is unchanged. Use a
-resource when you need that check.
 
 {{< /step >}}
 
@@ -139,7 +131,7 @@ resource when you need that check.
 ocm get cv ./transport-archive//github.com/acme.org/myapp:1.0.0 -o yaml
 ```
 
-{{< details "Expected output (resources and sources)" >}}
+{{< details "Expected output (resources)" >}}
 
 ```yaml
 resources:
@@ -167,15 +159,6 @@ resources:
   name: hello-world-snapshot
   relation: local
   type: directoryTree
-  version: 1.0.0
-sources:
-- access:
-    commit: 7fd1a60b01f91b314f59955a4e4d4e80d8edf11d
-    ref: refs/heads/master
-    repository: https://github.com/octocat/Hello-World.git
-    type: Git/v1
-  name: hello-world-source
-  type: git
   version: 1.0.0
 ```
 
@@ -291,7 +274,6 @@ all attributes.
 
 - The `Git/v1` access type references a commit; the `Git/v1` input type embeds it.
 - A resource with only a `ref` is pinned to a commit and gets a digest when you build the component version.
-- A source is never pinned and has no digest, so give it a `commit`.
 - The archive is deterministic, so access and input give the same digest for the same commit.
 - Credentials match a `Git` consumer identity derived from the repository URL.
 

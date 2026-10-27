@@ -29,7 +29,9 @@ match: >-
   target.type == "OCIRepository"
   && (resource.access.isType(["OCIImage", "Helm", "relativeOciReference"])
     || (resource.access.isType("LocalBlob")
-      && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType)
+      && has(resource.access.mediaType)
+      && (isOCIManifest(resource.access.mediaType)
+        || isArtifactSetMediaType(resource.access.mediaType))
       && has(resource.access.referenceName)))
 ```
 
@@ -39,15 +41,20 @@ The OCI uploader selects, on OCI registry targets only:
 | --------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `OCIImage` (all aliases)                | always                                                                 | `resource.access.toOCI().repository` + tag. E.g. `ghcr.io/org/image:v1` → `org/image:v1` (registry and digest dropped).                                     |
 | `Helm`                                  | always                                                                 | Helm repository URL path + chart name, tagged with version. E.g. `https://stefanprodan.github.io/podinfo`, chart `podinfo:6.5.0` → `podinfo/podinfo:6.5.0`. |
-| `LocalBlob`                             | the media type is an OCI manifest and the access has a `referenceName` | `resource.access.referenceName` verbatim (whatever it contains, including host/port/digest). E.g. `ghcr.io/org/image:v1` → `ghcr.io/org/image:v1`.          |
+| `LocalBlob`                             | `isOCIManifest` or `isArtifactSetMediaType`; has `referenceName`       | `resource.access.referenceName` verbatim (whatever it contains, including host/port/digest). E.g. `ghcr.io/org/image:v1` → `ghcr.io/org/image:v1`.          |
 | `relativeOciReference` (both spellings) | always                                                                 | `resource.access.reference` verbatim (a registry-relative repository path, tag/digest preserved). E.g. `ocm/value:v2.0` → `ocm/value:v2.0`.                 |
 | anything else (Wget, S3, GitHub, …)     | never                                                                  | —                                                                                                                                                           |
 
 This is exactly the scope of the deprecated `--upload-as ociArtifact`. An explicit
 `match` may select only resources the OCI uploader can upload: OCI images, Helm
-charts, and local blobs holding an OCI manifest. Selecting anything else fails
-the transfer with `oci uploader cannot upload access type …` or `… not an OCI
-manifest`.
+charts, and local blobs holding an OCI manifest/index or a legacy OCM artifact
+set. Accepted media types are listed under
+[`isOCIManifest`]({{< relref "docs/reference/configuration/transfer-configuration/cel-expressions.md#isocimanifest" >}})
+and
+[`isArtifactSetMediaType`]({{< relref "docs/reference/configuration/transfer-configuration/cel-expressions.md#isartifactsetmediatype" >}}).
+Selecting anything else fails the transfer with
+`oci uploader cannot upload access type …` or
+`… not an OCI manifest or artifact set`.
 
 ## `imageReference`
 
@@ -88,7 +95,8 @@ starts with the same target prefix,
         : (resource.access.helmChart.contains(":") ? ":" + resource.access.helmChart.split(":")[1] : ""))}
   ```
 
-- **Local blob** holding an OCI manifest: `access.referenceName` verbatim
+- **Local blob** holding an OCI manifest/index or a legacy OCM artifact set:
+  `access.referenceName` verbatim
   (whatever it contains, including host/port/digest). E.g. `ghcr.io/org/image:v1`
   → `<target>/ghcr.io/org/image:v1`.
 
@@ -131,7 +139,12 @@ default `match` also selects OCI images and Helm charts, which have no
 
 ```yaml
 - type: oci.uploader.transfer.config.ocm.software/v1alpha1
-  match: resource.access.isType("LocalBlob") && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType) && has(resource.access.referenceName)
+  match: >-
+    resource.access.isType("LocalBlob")
+    && has(resource.access.mediaType)
+    && (isOCIManifest(resource.access.mediaType)
+      || isArtifactSetMediaType(resource.access.mediaType))
+    && has(resource.access.referenceName)
   imageReference: '${"ghcr.io/mirror/" + resource.access.referenceName}'
 ```
 

@@ -245,12 +245,8 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 	// if additional ocmconfigs are defined by the targetRepositroy.
 	configs = append(configs, targetRepository.GetEffectiveOCMConfig()...)
 
-	// Persist the effective config immediately so the deferred patch keeps it even if a later step fails.
-	if !equality.Semantic.DeepEqual(replication.Status.EffectiveOCMConfig, configs) {
-		replication.Status.EffectiveOCMConfig = configs
-
-		return ctrl.Result{}, fmt.Errorf("effective ocm config changed")
-	}
+	// The deferred status patch persists it, even if a later step fails.
+	replication.Status.EffectiveOCMConfig = configs
 
 	sourceDigest := component.Status.Component.Digest.Value
 	replication.Status.Component = component.Status.Component.DeepCopy()

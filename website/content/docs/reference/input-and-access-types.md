@@ -454,7 +454,7 @@ only supports HTTP/HTTPS-based chart repositories.
 
 {{< callout context="caution" >}}
 `GitHub/v1` is **deprecated** and will be removed in a future release. Use
-[`Git/v1`]({{< relref "docs/reference/input-and-access-types.md#gitv1-access" >}}) for new resources and sources. `ocm add componentversion` prints a
+[`Git/v1`]({{< relref "docs/reference/input-and-access-types.md#gitv1-access" >}}) for new resources. `ocm add componentversion` prints a
 warning when a constructor uses `GitHub/v1`. Existing component versions keep
 working, and a published resource must keep its type: see
 [`Git/v1` or `GitHub/v1`?]({{< relref "docs/reference/input-and-access-types.md#gitv1-or-githubv1" >}}).
@@ -467,8 +467,7 @@ REST API. Also usable unversioned as `GitHub`. Legacy aliases: `github`, `github
 {{< schema-renderer url="/schemas/bindings/go/access/github/v1/GitHub.schema.json" >}}
 
 At least one of `commit` or `ref` must be set. A resource may be authored with only a
-`ref`; its `commit` is pinned later during digest processing. A source is never pinned, so
-give it a `commit`.
+`ref`; its `commit` is pinned later during digest processing.
 
 **Example**
 
@@ -484,8 +483,9 @@ resources:
       commit: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2
 ```
 
-The same access works under `sources:`, where it stays a remote reference: sources carry no
-digest and no copy mode embeds them.
+Do not declare this access under `sources:`. Sources are deprecated: they carry no digest, so
+their content is not protected by the component version digest or a signature. Use a resource; see
+[Migrate from Sources to Resources]({{< relref "docs/changelog/migrate-from-sources.md" >}}).
 
 {{< callout context="note" >}}
 Any `repoUrl` host other than `github.com` is treated as GitHub Enterprise, with the REST API
@@ -507,7 +507,7 @@ Bitbucket and self-hosted servers, over HTTPS or SSH.
 {{< schema-renderer url="/schemas/bindings/go/access/git/v1/Git.schema.json" >}}
 
 At least one of `commit` or `ref` must be set. A resource may have only a `ref`. OCM adds the `commit` during digest
-processing. A source never goes through digest processing, so set its `commit` yourself.
+processing.
 
 **Example**
 
@@ -524,8 +524,9 @@ resources:
       commit: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2
 ```
 
-The same access works under `sources:`. A source always stays a remote reference. It has no digest, and a transfer
-never copies it into the component version.
+Do not declare this access under `sources:`. Sources are deprecated: they carry no digest, so their content is not
+protected by the component version digest or a signature. Use a resource; see
+[Migrate from Sources to Resources]({{< relref "docs/changelog/migrate-from-sources.md" >}}).
 
 #### Supported URL forms {#git-url-forms}
 

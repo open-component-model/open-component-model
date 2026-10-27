@@ -36,8 +36,14 @@ A component version contains three kinds of elements:
 | Element        | Purpose                                              | Examples                          |
 |----------------|------------------------------------------------------|-----------------------------------|
 | **Resources**  | The deliverables — what gets deployed                | OCI images, Helm charts, binaries |
-| **Sources**    | Where resources were built from                      | Git repositories, source archives |
+| **Sources**    | Where resources were built from (deprecated)         | Git repositories, source archives |
 | **References** | Dependencies on other component versions             | Shared libraries, base components |
+
+{{< callout context="caution" title="Sources are deprecated" icon="outline/alert-triangle" >}}
+Sources carry no digest, so neither the component version digest nor a signature covers their content, and it can be
+replaced without detection. Declare this content as resources instead; see
+[Migrate from Sources to Resources]({{< relref "docs/changelog/migrate-from-sources.md" >}}).
+{{< /callout >}}
 
 All of these are described in a single **Component Descriptor** — a YAML document that serves as the manifest for the component version. For the full structure and field reference, see [Component Descriptor Reference]({{< relref "docs/reference/component-descriptor.md" >}}).
 

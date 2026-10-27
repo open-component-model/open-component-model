@@ -164,7 +164,13 @@ func (t *HTTPStreamingTransformer) Transform(ctx context.Context, step runtime.T
 		if errors.As(err, &urlErr) {
 			urlErr.URL = safeURL.String()
 		}
-		return nil, fmt.Errorf("failed uploading to %s: %w", safeURL.String(), err)
+		err = fmt.Errorf("failed uploading to %s: %w", safeURL.String(), err)
+		if !isIdempotent(method) {
+			// The server may have processed the request before the connection
+			// failed; re-running the transformation could upload twice.
+			err = &nonIdempotentUploadError{err: err}
+		}
+		return nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -271,3 +277,22 @@ func targetContentType(tw wgetaccessv1.Wget, srcBlob blob.ReadOnlyBlob) string {
 	}
 	return ""
 }
+
+// isIdempotent reports whether repeating a request with method has the same
+// effect as sending it once (RFC 9110, section 9.2.2). Methods are matched
+// case-insensitively so a lowercase "post" is not mistaken for idempotent.
+func isIdempotent(method string) bool {
+	switch strings.ToUpper(method) {
+	case http.MethodGet, http.MethodHead, http.MethodPut, http.MethodDelete, http.MethodOptions, http.MethodTrace:
+		return true
+	}
+	return false
+}
+
+// nonIdempotentUploadError marks a failed non-idempotent upload as permanent
+// for the transformation graph runtime (see graph runtime.PermanentError).
+type nonIdempotentUploadError struct{ err error }
+
+func (e *nonIdempotentUploadError) Error() string   { return e.err.Error() }
+func (e *nonIdempotentUploadError) Unwrap() error   { return e.err }
+func (e *nonIdempotentUploadError) Permanent() bool { return true }

@@ -17,13 +17,13 @@ tutorial. Keep this guide for resources that are already published with `GitHub/
 ## Goal
 
 Add a [GitHub repository archive](https://docs.github.com/en/rest/repos/contents?apiVersion=2026-03-10#download-a-repository-archive-tar)
-to a component version, either as a resource or as a source, using the
+to a component version as a resource, using the
 [`GitHub/v1` access type]({{< relref "docs/reference/input-and-access-types.md#githubv1" >}}).
 The access stores the repository URL and a commit; the archive stays on GitHub until something asks for it. 
 
 ## You'll end up with
 
-- A component version in a local transport archive, with the GitHub archive declared as a resource or as a source
+- A component version in a local transport archive, with the GitHub archive declared as a resource
 - A resource pinned to a commit and carrying a digest over the archive at that commit — even if you wrote only a `ref`
 - That archive downloaded back out, to confirm the round trip works
 
@@ -139,32 +139,6 @@ a commit you already know, or whatever the branch or tag points at right now.
 {{< /callout >}}
 
 {{< /tab >}}
-{{< tab "Source" >}}
-
-```bash
-cat > component-constructor.yaml << 'EOF'
-components:
-  - name: github.com/acme.org/myapp
-    version: 1.0.0
-    provider:
-      name: acme.org
-    sources:
-      - name: ocm-sources
-        type: directoryTree
-        version: 1.0.0
-        access:
-          type: GitHub/v1
-          repoUrl: https://github.com/open-component-model/open-component-model
-          commit: b4bb4e880aa5c159366db7cc2ae800e1ee14dbda
-EOF
-```
-
-{{< callout context="caution" >}}
-A source must carry a `commit`. A `ref` is accepted, but only resources get pinned — nothing rewrites a source, so it
-would keep pointing wherever the branch moves to.
-{{< /callout >}}
-
-{{< /tab >}}
 {{< /tabs >}}
 
 {{< /step >}}
@@ -246,22 +220,6 @@ The access is recorded as written, and the resource gained a digest over the arc
 
 The resolved `commit` now sits alongside the `ref`, with the same digest as the pinned variant. The `ref` is kept for
 provenance; from here on the `commit` is what OCM reads.
-
-{{< /tab >}}
-{{< tab "Source" >}}
-
-```yaml
-    sources:
-    - access:
-        commit: b4bb4e880aa5c159366db7cc2ae800e1ee14dbda
-        repoUrl: https://github.com/open-component-model/open-component-model
-        type: GitHub/v1
-      name: ocm-sources
-      type: directoryTree
-      version: 1.0.0
-```
-
-No `digest` and no `relation`: a source is a pointer, so there is nothing recorded to verify it against later.
 
 {{< /tab >}}
 {{< /tabs >}}

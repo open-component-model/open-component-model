@@ -810,7 +810,7 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 		return ociImageSpecV1.Descriptor{}, nil, err
 	}
 
-	ociStore, err := tar.ReadOCILayout(ctx, b)
+	ociStore, err := tar.ReadOCILayout(slogcontext.With(ctx, slog.String("target", access.ImageReference)), b)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to read OCI layout: %w", err)
 	}
