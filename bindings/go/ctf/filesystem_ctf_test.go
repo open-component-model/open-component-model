@@ -399,3 +399,76 @@ func TestFileSystemCTF_SaveBlob_KeepsExistingBlobOnFailedVerification(t *testing
 	r.NoError(err)
 	r.Len(entries, 1, "the staged file must be removed")
 }
+
+func TestFileSystemCTF_SaveBlobStreaming(t *testing.T) {
+	content := []byte("streamed content")
+	want := digest.FromBytes(content)
+	wantSHA512 := digest.SHA512.FromBytes(content)
+
+	tests := []struct {
+		name           string
+		preexisting    bool
+		expectedDigest digest.Digest
+		expectedSize   int64
+		wantDigest     digest.Digest
+		wantErr        string
+	}{
+		{name: "unknown digest and size", expectedSize: blob.SizeUnknown, wantDigest: want},
+		{name: "expected digest matches", expectedDigest: want, expectedSize: blob.SizeUnknown, wantDigest: want},
+		{name: "expected digest and size match", expectedDigest: want, expectedSize: int64(len(content)), wantDigest: want},
+		{name: "expected digest mismatches", expectedDigest: digest.FromString("other"), expectedSize: blob.SizeUnknown, wantErr: "does not match expected digest"},
+		{name: "expected size too large", expectedSize: int64(len(content) + 1), wantErr: "does not match expected size"},
+		{name: "expected size too small", expectedSize: int64(len(content) - 1), wantErr: "does not match expected size"},
+		{name: "already stored, expected digest", preexisting: true, expectedDigest: want, expectedSize: blob.SizeUnknown, wantDigest: want},
+		{name: "already stored, unknown digest", preexisting: true, expectedSize: blob.SizeUnknown, wantDigest: want},
+		{name: "already stored, expected size mismatches", preexisting: true, expectedDigest: want, expectedSize: int64(len(content) + 1), wantErr: "does not match expected size"},
+		{name: "sha512 expected digest", expectedDigest: wantSHA512, expectedSize: blob.SizeUnknown, wantDigest: wantSHA512},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			dir := t.TempDir()
+			archive, err := ctf.OpenCTFFromOSPath(dir, ctf.O_RDWR)
+			r.NoError(err)
+			var streaming ctf.StreamingBlobStore = archive
+
+			if tc.preexisting {
+				r.NoError(archive.SaveBlob(t.Context(), inmemory.New(bytes.NewReader(content))))
+			}
+
+			dig, n, err := streaming.SaveBlobStreaming(t.Context(), bytes.NewReader(content), tc.expectedDigest, tc.expectedSize)
+
+			entries, readErr := os.ReadDir(filepath.Join(dir, ctf.BlobsDirectoryName))
+			if !os.IsNotExist(readErr) {
+				r.NoError(readErr)
+			}
+			var names []string
+			for _, e := range entries {
+				names = append(names, e.Name())
+			}
+
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				if tc.preexisting {
+					r.Equal([]string{"sha256." + want.Encoded()}, names, "the stored blob must be kept and nothing staged left")
+				} else {
+					r.Empty(names, "nothing must be stored on failed verification")
+				}
+				return
+			}
+			r.NoError(err)
+			r.Equal(tc.wantDigest, dig)
+			r.Equal(int64(len(content)), n)
+			r.Equal([]string{tc.wantDigest.Algorithm().String() + "." + tc.wantDigest.Encoded()}, names)
+
+			stored, err := archive.GetBlob(t.Context(), dig.String())
+			r.NoError(err)
+			rc, err := stored.ReadCloser()
+			r.NoError(err)
+			t.Cleanup(func() { _ = rc.Close() })
+			data, err := io.ReadAll(rc)
+			r.NoError(err)
+			r.Equal(content, data)
+		})
+	}
+}

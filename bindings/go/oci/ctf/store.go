@@ -23,6 +23,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
+	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 )
@@ -98,6 +99,8 @@ type repository struct {
 	repo    string
 	mu      *sync.RWMutex
 }
+
+var _ remotestore.StreamingPusher = (*repository)(nil)
 
 // Fetch retrieves a blob from the CTF archive based on its descriptor.
 // Returns an io.ReadCloser for the blob content or an error if the blob cannot be found.
@@ -184,6 +187,34 @@ func (s *repository) Push(ctx context.Context, expected ociImageSpecV1.Descripto
 	}
 
 	return s.pushManifest(ctx, expected, data)
+}
+
+// PushStreaming implements remotestore.StreamingPusher: it stores a blob whose digest
+// and/or size is unknown by staging it in a file in the CTF that is renamed to its
+// content address once both are computed and verified, so the blob is never buffered
+// in memory. Manifests are not streamed, as their subject must be inspected (see Push).
+func (s *repository) PushStreaming(ctx context.Context, partial ociImageSpecV1.Descriptor, data io.Reader) (ociImageSpecV1.Descriptor, error) {
+	streaming, ok := s.archive.(ctf.StreamingBlobStore)
+	if !ok {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("ctf %T cannot store blobs of unknown digest or size: %w", s.archive, remotestore.ErrStreamingUnavailable)
+	}
+	if introspection.IsOCICompliantMediaType(partial.MediaType) {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("manifest %s cannot be streamed: %w", partial.MediaType, remotestore.ErrStreamingUnavailable)
+	}
+	size := partial.Size
+	if size == 0 {
+		// Same convention as RemoteStore.PushStreaming: zero on a partial descriptor is unknown.
+		size = blob.SizeUnknown
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	dig, n, err := streaming.SaveBlobStreaming(ctx, data, partial.Digest, size)
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("unable to save streamed blob of media type %s: %w", partial.MediaType, err)
+	}
+	return ociImageSpecV1.Descriptor{MediaType: partial.MediaType, Digest: dig, Size: n}, nil
 }
 
 // pushManifest is the manifest branch of Push.

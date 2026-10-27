@@ -5,9 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+
+	"github.com/opencontainers/go-digest"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -104,6 +107,16 @@ type ReadOnlyBlobStore interface {
 	ListBlobs(ctx context.Context) ([]string, error)
 	// GetBlob returns the blob with the specified digest.
 	GetBlob(ctx context.Context, digest string) (blob.ReadOnlyBlob, error)
+}
+
+// StreamingBlobStore is implemented by blob stores that can save content whose digest
+// and/or size is not known before it is read.
+type StreamingBlobStore interface {
+	// SaveBlobStreaming stores data under its content digest and returns that digest and
+	// the number of bytes read. A non-empty expectedDigest selects the digest algorithm and
+	// must match the content; an expectedSize >= 0 must match the byte count. Nothing is
+	// stored if reading or verification fails.
+	SaveBlobStreaming(ctx context.Context, data io.Reader, expectedDigest digest.Digest, expectedSize int64) (digest.Digest, int64, error)
 }
 
 // OpenCTF opens a CTF using the provided options.

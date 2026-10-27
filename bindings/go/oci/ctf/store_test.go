@@ -20,6 +20,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/ctf"
 	v1 "ocm.software/open-component-model/bindings/go/ctf/index/v1"
 	"ocm.software/open-component-model/bindings/go/oci"
+	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
 )
 
@@ -146,6 +147,48 @@ func TestPush(t *testing.T) {
 		exists, err := store.Exists(ctx, desc)
 		require.NoError(t, err)
 		assert.True(t, exists)
+	})
+}
+
+func TestPushStreaming(t *testing.T) {
+	ctx := t.Context()
+	content := []byte("streamed layer")
+
+	newStore := func(t *testing.T) *repository {
+		t.Helper()
+		store, err := NewFromCTF(setupTestCTF(t)).StoreForReference(ctx, "test-repo:test-tag")
+		require.NoError(t, err)
+		return store.(*repository)
+	}
+
+	t.Run("layer", func(t *testing.T) {
+		r := require.New(t)
+		store := newStore(t)
+
+		desc, err := store.PushStreaming(ctx, ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"}, bytes.NewReader(content))
+		r.NoError(err)
+		r.Equal(ociImageSpecV1.Descriptor{
+			MediaType: "application/octet-stream",
+			Digest:    digest.FromBytes(content),
+			Size:      int64(len(content)),
+		}, desc)
+
+		rc, err := store.Fetch(ctx, desc)
+		r.NoError(err)
+		t.Cleanup(func() { _ = rc.Close() })
+		data, err := io.ReadAll(rc)
+		r.NoError(err)
+		r.Equal(content, data)
+	})
+
+	t.Run("manifest is not streamed", func(t *testing.T) {
+		r := require.New(t)
+		store := newStore(t)
+
+		data := bytes.NewReader(content)
+		_, err := store.PushStreaming(ctx, ociImageSpecV1.Descriptor{MediaType: ociImageSpecV1.MediaTypeImageManifest}, data)
+		r.ErrorIs(err, remotestore.ErrStreamingUnavailable)
+		r.Equal(len(content), data.Len(), "content must not be consumed")
 	})
 }
 
