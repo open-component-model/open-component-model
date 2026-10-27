@@ -325,7 +325,7 @@ func TestFileSystemCTF_SaveBlob_ErrorCases(t *testing.T) {
 				size:   blob.SizeUnknown,
 				reader: io.NopCloser(bytes.NewReader([]byte("content"))),
 			},
-			wantErr: "blob did not report a digest after its content was read",
+			wantErr: "blob does not have a digest that can be used to save it",
 		},
 		{
 			name: "read error",
@@ -398,11 +398,15 @@ func TestFileSystemCTF_SaveBlob_KeepsExistingBlobOnFailedVerification(t *testing
 }
 
 // lateDigestBlob reports its digest only once its content has been read to the end,
-// like a blob that computes its digest while it is streamed.
+// like a blob that computes its digest while it is streamed. It records being asked
+// for its digest before its reader was closed, which could make a buffering blob load
+// its whole content into memory.
 type lateDigestBlob struct {
-	content  []byte
-	closeErr error
-	digest   digest.Digest
+	content    []byte
+	closeErr   error
+	digest     digest.Digest
+	closed     bool
+	askedEarly bool
 }
 
 func (b *lateDigestBlob) ReadCloser() (io.ReadCloser, error) {
@@ -410,6 +414,9 @@ func (b *lateDigestBlob) ReadCloser() (io.ReadCloser, error) {
 }
 
 func (b *lateDigestBlob) Digest() (string, bool) {
+	if !b.closed {
+		b.askedEarly = true
+	}
 	return b.digest.String(), b.digest != ""
 }
 
@@ -426,7 +433,10 @@ func (r *lateDigestReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func (r *lateDigestReader) Close() error { return r.blob.closeErr }
+func (r *lateDigestReader) Close() error {
+	r.blob.closed = true
+	return r.blob.closeErr
+}
 
 func TestFileSystemCTF_SaveBlob_DigestReportedAfterRead(t *testing.T) {
 	content := []byte("streamed content")
@@ -455,7 +465,9 @@ func TestFileSystemCTF_SaveBlob_DigestReportedAfterRead(t *testing.T) {
 				r.NoError(archive.SaveBlob(t.Context(), inmemory.New(bytes.NewReader(content))))
 			}
 
-			err = archive.SaveBlob(t.Context(), &lateDigestBlob{content: content, closeErr: tc.closeErr})
+			b := &lateDigestBlob{content: content, closeErr: tc.closeErr}
+			err = archive.SaveBlob(t.Context(), b)
+			r.False(b.askedEarly, "the digest must only be asked for after the content was read and closed")
 			if tc.wantErr != "" {
 				r.ErrorContains(err, tc.wantErr)
 			} else {

@@ -58,17 +58,11 @@ func (b *digestingBlob) ReadCloser() (io.ReadCloser, error) {
 }
 
 // Digest reports the digest of the content once it has been read in full and verified.
-// An expected digest is reported up front: ctf.SaveBlob then writes to that address
-// directly (or keeps an existing blob), and the content is still verified when it is
-// read and closed, before anything is published.
 func (b *digestingBlob) Digest() (string, bool) {
-	if b.complete {
-		return b.digester.Digest().String(), true
+	if !b.complete {
+		return "", false
 	}
-	if b.expectedDigest != "" {
-		return b.expectedDigest.String(), true
-	}
-	return "", false
+	return b.digester.Digest().String(), true
 }
 
 // Size reports the length of the content once it has been read in full and verified.

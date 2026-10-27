@@ -289,54 +289,29 @@ func (c *FileSystemCTF) ListBlobs(_ context.Context) (digests []string, err erro
 	return digests, nil
 }
 
-// SaveBlob stores b under its digest in BlobsDirectoryName. An already stored blob is
-// never replaced; its content is still read and verified.
+// SaveBlob stores b under its digest in BlobsDirectoryName without buffering it in memory.
 //
-// b must be blob.DigestAware. If it reports its digest before being read, the content is
-// written to that address. Otherwise the content is staged in a temporary file and b must
-// report the digest once its content has been read in full and closed (e.g. because it
-// computes the digest while being read); only then is the staged file renamed to its
-// content address. Either way the content is never buffered in memory.
+// The content is always staged in a temporary file first, and b is asked for its digest
+// only once its content has been read in full and closed: asking earlier could make b
+// buffer its content to compute the digest. b may thus compute its digest while being
+// read. Closing can fail when the content does not match the digest (e.g. a verifying
+// reader); then nothing is stored.
+//
+// Blobs are content-addressed, so an already stored blob holds the same content and is
+// kept, dropping the staged copy. Not replacing it also means a blob is never renamed
+// over while a reader may hold it open: readers do not lock against writers for the
+// whole read, and renaming over an open file fails on Windows.
 func (c *FileSystemCTF) SaveBlob(ctx context.Context, b blob.ReadOnlyBlob) (err error) {
 	digestable, ok := b.(blob.DigestAware)
 	if !ok {
 		return errors.New("blob does not have a digest that can be used to save it")
 	}
 
-	// path is empty while the digest is only reported after the content is read.
-	var path string
-	if dig, known := digestable.Digest(); known {
-		file, err := ToBlobFileName(dig)
-		if err != nil {
-			return err
-		}
-		path = filepath.Join(BlobsDirectoryName, file)
-	}
-
-	// Blobs are content-addressed, so an existing blob already holds this content and is
-	// kept. The content is still read and verified, as callers rely on it being consumed.
-	// Not replacing it also means a blob is never renamed over while a reader may hold it
-	// open: readers do not lock against writers for the whole read, and renaming over an
-	// open file fails on Windows.
-	exists := path != "" && c.fileExists(path)
-
-	size := blob.SizeUnknown
-	if sizeable, ok := b.(blob.SizeAware); ok {
-		size = sizeable.Size()
-	}
-
 	data, err := b.ReadCloser()
 	if err != nil {
 		return fmt.Errorf("unable to read blob: %w", err)
 	}
-	// Closing data can fail when the content does not match its digest (e.g. a verifying
-	// reader). It is closed before the staged content is published, so unverified content
-	// is never stored under its digest.
 	closed := false
-	closeData := func() error {
-		closed = true
-		return data.Close()
-	}
 	defer func() {
 		if !closed {
 			err = errors.Join(err, data.Close())
@@ -348,35 +323,63 @@ func (c *FileSystemCTF) SaveBlob(ctx context.Context, b blob.ReadOnlyBlob) (err 
 		return fmt.Errorf("unable to create context reader: %w", err)
 	}
 
-	if exists {
-		if _, err := io.Copy(io.Discard, ctxRead); err != nil {
-			return fmt.Errorf("unable to read content: %w", err)
-		}
-		return closeData()
-	}
-	if path != "" {
-		return c.writeFile(path, ctxRead, size, closeData)
-	}
-	// The size is passed as unknown so the content is read to its end: b may only
-	// report its digest once it has seen all of it.
-	return c.stageAndPublish(BlobsDirectoryName, ".upload.*", ctxRead, blob.SizeUnknown, func() (string, error) {
-		if err := closeData(); err != nil {
+	// blobPath asks b for its digest, which is only done once b was read and closed.
+	blobPath := func() (string, error) {
+		closed = true
+		if err := data.Close(); err != nil {
 			return "", err
 		}
 		dig, known := digestable.Digest()
 		if !known {
-			return "", errors.New("blob did not report a digest after its content was read")
+			return "", errors.New("blob does not have a digest that can be used to save it")
 		}
 		file, err := ToBlobFileName(dig)
 		if err != nil {
 			return "", err
 		}
-		path := filepath.Join(BlobsDirectoryName, file)
+		return filepath.Join(BlobsDirectoryName, file), nil
+	}
+
+	// A CTF that cannot stage can still "save" a blob it already stores: the content is
+	// read and verified, and nothing is written.
+	if stageErr := c.canStage(); stageErr != nil {
+		if _, err := io.Copy(io.Discard, ctxRead); err != nil {
+			return fmt.Errorf("unable to read content: %w", err)
+		}
+		path, err := blobPath()
+		if err != nil {
+			return err
+		}
+		if !c.fileExists(path) {
+			return stageErr
+		}
+		return nil
+	}
+
+	// The size is passed as unknown so the content is read to its end, whatever size b
+	// may report: b can only vouch for its digest once it has seen all of it.
+	return c.stageAndPublish(BlobsDirectoryName, ".upload.*", ctxRead, blob.SizeUnknown, func() (string, error) {
+		path, err := blobPath()
+		if err != nil {
+			return "", err
+		}
 		if c.fileExists(path) {
 			return "", nil
 		}
 		return path, nil
 	})
+}
+
+// canStage reports why content cannot be staged and published in the CTF, if it cannot.
+func (c *FileSystemCTF) canStage() error {
+	osFS, ok := c.fs.(*filesystem.RootFileSystem)
+	if !ok {
+		return fmt.Errorf("atomic writes not supported on non-OS filesystem: %T", c.fs)
+	}
+	if osFS.ReadOnly() {
+		return fmt.Errorf("unable to save blob: %w", filesystem.ErrReadOnly)
+	}
+	return nil
 }
 
 // fileExists reports whether name exists; it is false when the filesystem cannot stat.

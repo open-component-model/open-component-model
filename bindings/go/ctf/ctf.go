@@ -93,8 +93,8 @@ type ReadOnlyIndexStore interface {
 // BlobStore provides access to the blobs of a CTF.
 type BlobStore interface {
 	ReadOnlyBlobStore
-	// SaveBlob saves the blob to the CTF. The blob must be blob.DigestAware; it may report
-	// its digest only after its content has been read and closed.
+	// SaveBlob saves the blob to the CTF. The blob must be blob.DigestAware; its digest is
+	// only asked for after its content has been read and closed.
 	SaveBlob(ctx context.Context, blob blob.ReadOnlyBlob) (err error)
 	// DeleteBlob deletes the blob with the specified digest from the CTF.
 	DeleteBlob(ctx context.Context, digest string) (err error)
