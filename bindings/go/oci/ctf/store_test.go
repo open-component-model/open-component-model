@@ -152,41 +152,81 @@ func TestPush(t *testing.T) {
 
 func TestPushStreaming(t *testing.T) {
 	ctx := t.Context()
+	const mediaType = "application/octet-stream"
 	content := []byte("streamed layer")
+	want := digest.FromBytes(content)
+	wantSHA512 := digest.SHA512.FromBytes(content)
 
-	newStore := func(t *testing.T) *repository {
-		t.Helper()
-		store, err := NewFromCTF(setupTestCTF(t)).StoreForReference(ctx, "test-repo:test-tag")
-		require.NoError(t, err)
-		return store.(*repository)
+	tests := []struct {
+		name        string
+		preexisting bool
+		partial     ociImageSpecV1.Descriptor
+		wantDigest  digest.Digest
+		wantErr     string
+	}{
+		{name: "unknown digest and size", wantDigest: want},
+		{name: "expected digest matches", partial: ociImageSpecV1.Descriptor{Digest: want}, wantDigest: want},
+		{name: "expected digest and size match", partial: ociImageSpecV1.Descriptor{Digest: want, Size: int64(len(content))}, wantDigest: want},
+		{name: "sha512 expected digest", partial: ociImageSpecV1.Descriptor{Digest: wantSHA512}, wantDigest: wantSHA512},
+		{name: "expected digest mismatches", partial: ociImageSpecV1.Descriptor{Digest: digest.FromString("other")}, wantErr: "does not match expected digest"},
+		{name: "expected size too large", partial: ociImageSpecV1.Descriptor{Size: int64(len(content) + 1)}, wantErr: "does not match expected size"},
+		{name: "expected size too small", partial: ociImageSpecV1.Descriptor{Size: int64(len(content) - 1)}, wantErr: "does not match expected size"},
+		{name: "already stored, unknown digest", preexisting: true, wantDigest: want},
+		{name: "already stored, expected digest", preexisting: true, partial: ociImageSpecV1.Descriptor{Digest: want}, wantDigest: want},
+		{name: "already stored, expected size mismatches", preexisting: true, partial: ociImageSpecV1.Descriptor{Digest: want, Size: int64(len(content) + 1)}, wantErr: "does not match expected size"},
 	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			archive := setupTestCTF(t)
+			store, err := NewFromCTF(archive).StoreForReference(ctx, "test-repo:test-tag")
+			r.NoError(err)
+			if tc.preexisting {
+				r.NoError(archive.SaveBlob(ctx, inmemory.New(bytes.NewReader(content))))
+			}
 
-	t.Run("layer", func(t *testing.T) {
-		r := require.New(t)
-		store := newStore(t)
+			tc.partial.MediaType = mediaType
+			desc, err := store.(*repository).PushStreaming(ctx, tc.partial, bytes.NewReader(content))
 
-		desc, err := store.PushStreaming(ctx, ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"}, bytes.NewReader(content))
-		r.NoError(err)
-		r.Equal(ociImageSpecV1.Descriptor{
-			MediaType: "application/octet-stream",
-			Digest:    digest.FromBytes(content),
-			Size:      int64(len(content)),
-		}, desc)
+			var wantBlobs []string
+			if tc.preexisting {
+				wantBlobs = []string{want.String()}
+			}
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+			} else {
+				r.NoError(err)
+				r.Equal(ociImageSpecV1.Descriptor{MediaType: mediaType, Digest: tc.wantDigest, Size: int64(len(content))}, desc)
+				wantBlobs = []string{tc.wantDigest.String()}
+			}
+			blobs, err := archive.ListBlobs(ctx)
+			if wantBlobs == nil {
+				// The blobs directory may not even exist when nothing was stored.
+				r.Empty(blobs)
+				return
+			}
+			r.NoError(err)
+			r.Equal(wantBlobs, blobs, "only the content-addressed blob may remain, no staged file")
 
-		rc, err := store.Fetch(ctx, desc)
-		r.NoError(err)
-		t.Cleanup(func() { _ = rc.Close() })
-		data, err := io.ReadAll(rc)
-		r.NoError(err)
-		r.Equal(content, data)
-	})
+			if tc.wantErr != "" {
+				return
+			}
+			rc, err := store.Fetch(ctx, desc)
+			r.NoError(err)
+			t.Cleanup(func() { _ = rc.Close() })
+			data, err := io.ReadAll(rc)
+			r.NoError(err)
+			r.Equal(content, data)
+		})
+	}
 
 	t.Run("manifest is not streamed", func(t *testing.T) {
 		r := require.New(t)
-		store := newStore(t)
+		store, err := NewFromCTF(setupTestCTF(t)).StoreForReference(ctx, "test-repo:test-tag")
+		r.NoError(err)
 
 		data := bytes.NewReader(content)
-		_, err := store.PushStreaming(ctx, ociImageSpecV1.Descriptor{MediaType: ociImageSpecV1.MediaTypeImageManifest}, data)
+		_, err = store.(*repository).PushStreaming(ctx, ociImageSpecV1.Descriptor{MediaType: ociImageSpecV1.MediaTypeImageManifest}, data)
 		r.ErrorIs(err, remotestore.ErrStreamingUnavailable)
 		r.Equal(len(content), data.Len(), "content must not be consumed")
 	})

@@ -311,24 +311,21 @@ func (m *mockBlob) ReadCloser() (io.ReadCloser, error) {
 func TestFileSystemCTF_SaveBlob_ErrorCases(t *testing.T) {
 	tests := []struct {
 		name    string
-		blob    *mockBlob
+		blob    blob.ReadOnlyBlob
 		wantErr string
 	}{
 		{
-			name: "blob not digest aware",
-			blob: &mockBlob{
-				digest: "",
-				known:  false,
-			},
+			name:    "blob not digest aware",
+			blob:    struct{ blob.ReadOnlyBlob }{},
 			wantErr: "blob does not have a digest that can be used to save it",
 		},
 		{
-			name: "digest not known",
+			name: "digest not reported after read",
 			blob: &mockBlob{
-				digest: "sha256:123",
-				known:  false,
+				size:   blob.SizeUnknown,
+				reader: io.NopCloser(bytes.NewReader([]byte("content"))),
 			},
-			wantErr: "blob does not have a digest that can be used to save it",
+			wantErr: "blob did not report a digest after its content was read",
 		},
 		{
 			name: "read error",
@@ -400,29 +397,53 @@ func TestFileSystemCTF_SaveBlob_KeepsExistingBlobOnFailedVerification(t *testing
 	r.Len(entries, 1, "the staged file must be removed")
 }
 
-func TestFileSystemCTF_SaveBlobStreaming(t *testing.T) {
+// lateDigestBlob reports its digest only once its content has been read to the end,
+// like a blob that computes its digest while it is streamed.
+type lateDigestBlob struct {
+	content  []byte
+	closeErr error
+	digest   digest.Digest
+}
+
+func (b *lateDigestBlob) ReadCloser() (io.ReadCloser, error) {
+	return &lateDigestReader{blob: b, r: bytes.NewReader(b.content)}, nil
+}
+
+func (b *lateDigestBlob) Digest() (string, bool) {
+	return b.digest.String(), b.digest != ""
+}
+
+type lateDigestReader struct {
+	blob *lateDigestBlob
+	r    *bytes.Reader
+}
+
+func (r *lateDigestReader) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	if err == io.EOF {
+		r.blob.digest = digest.FromBytes(r.blob.content)
+	}
+	return n, err
+}
+
+func (r *lateDigestReader) Close() error { return r.blob.closeErr }
+
+func TestFileSystemCTF_SaveBlob_DigestReportedAfterRead(t *testing.T) {
 	content := []byte("streamed content")
 	want := digest.FromBytes(content)
-	wantSHA512 := digest.SHA512.FromBytes(content)
+	wantFile := "sha256." + want.Encoded()
 
 	tests := []struct {
-		name           string
-		preexisting    bool
-		expectedDigest digest.Digest
-		expectedSize   int64
-		wantDigest     digest.Digest
-		wantErr        string
+		name        string
+		preexisting bool
+		closeErr    error
+		wantErr     string
+		wantFiles   []string
 	}{
-		{name: "unknown digest and size", expectedSize: blob.SizeUnknown, wantDigest: want},
-		{name: "expected digest matches", expectedDigest: want, expectedSize: blob.SizeUnknown, wantDigest: want},
-		{name: "expected digest and size match", expectedDigest: want, expectedSize: int64(len(content)), wantDigest: want},
-		{name: "expected digest mismatches", expectedDigest: digest.FromString("other"), expectedSize: blob.SizeUnknown, wantErr: "does not match expected digest"},
-		{name: "expected size too large", expectedSize: int64(len(content) + 1), wantErr: "does not match expected size"},
-		{name: "expected size too small", expectedSize: int64(len(content) - 1), wantErr: "does not match expected size"},
-		{name: "already stored, expected digest", preexisting: true, expectedDigest: want, expectedSize: blob.SizeUnknown, wantDigest: want},
-		{name: "already stored, unknown digest", preexisting: true, expectedSize: blob.SizeUnknown, wantDigest: want},
-		{name: "already stored, expected size mismatches", preexisting: true, expectedDigest: want, expectedSize: int64(len(content) + 1), wantErr: "does not match expected size"},
-		{name: "sha512 expected digest", expectedDigest: wantSHA512, expectedSize: blob.SizeUnknown, wantDigest: wantSHA512},
+		{name: "stored under the reported digest", wantFiles: []string{wantFile}},
+		{name: "already stored blob is kept", preexisting: true, wantFiles: []string{wantFile}},
+		{name: "failed close stores nothing", closeErr: fmt.Errorf("digest mismatch"), wantErr: "digest mismatch"},
+		{name: "failed close keeps stored blob", preexisting: true, closeErr: fmt.Errorf("digest mismatch"), wantErr: "digest mismatch", wantFiles: []string{wantFile}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -430,38 +451,29 @@ func TestFileSystemCTF_SaveBlobStreaming(t *testing.T) {
 			dir := t.TempDir()
 			archive, err := ctf.OpenCTFFromOSPath(dir, ctf.O_RDWR)
 			r.NoError(err)
-			var streaming ctf.StreamingBlobStore = archive
-
 			if tc.preexisting {
 				r.NoError(archive.SaveBlob(t.Context(), inmemory.New(bytes.NewReader(content))))
 			}
 
-			dig, n, err := streaming.SaveBlobStreaming(t.Context(), bytes.NewReader(content), tc.expectedDigest, tc.expectedSize)
-
-			entries, readErr := os.ReadDir(filepath.Join(dir, ctf.BlobsDirectoryName))
-			if !os.IsNotExist(readErr) {
-				r.NoError(readErr)
+			err = archive.SaveBlob(t.Context(), &lateDigestBlob{content: content, closeErr: tc.closeErr})
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+			} else {
+				r.NoError(err)
 			}
+
+			entries, err := os.ReadDir(filepath.Join(dir, ctf.BlobsDirectoryName))
+			r.NoError(err)
 			var names []string
 			for _, e := range entries {
 				names = append(names, e.Name())
 			}
+			r.Equal(tc.wantFiles, names, "only the content-addressed blob may remain, no staged file")
 
-			if tc.wantErr != "" {
-				r.ErrorContains(err, tc.wantErr)
-				if tc.preexisting {
-					r.Equal([]string{"sha256." + want.Encoded()}, names, "the stored blob must be kept and nothing staged left")
-				} else {
-					r.Empty(names, "nothing must be stored on failed verification")
-				}
+			if tc.wantFiles == nil {
 				return
 			}
-			r.NoError(err)
-			r.Equal(tc.wantDigest, dig)
-			r.Equal(int64(len(content)), n)
-			r.Equal([]string{tc.wantDigest.Algorithm().String() + "." + tc.wantDigest.Encoded()}, names)
-
-			stored, err := archive.GetBlob(t.Context(), dig.String())
+			stored, err := archive.GetBlob(t.Context(), want.String())
 			r.NoError(err)
 			rc, err := stored.ReadCloser()
 			r.NoError(err)

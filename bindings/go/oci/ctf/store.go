@@ -190,14 +190,11 @@ func (s *repository) Push(ctx context.Context, expected ociImageSpecV1.Descripto
 }
 
 // PushStreaming implements remotestore.StreamingPusher: it stores a blob whose digest
-// and/or size is unknown by staging it in a file in the CTF that is renamed to its
-// content address once both are computed and verified, so the blob is never buffered
-// in memory. Manifests are not streamed, as their subject must be inspected (see Push).
+// and/or size is unknown through ctf.SaveBlob with a blob that computes both while it is
+// read, so the CTF stages the content in a file and renames it to its content address
+// once both are known and verified; the blob is never buffered in memory. Manifests are
+// not streamed, as their subject must be inspected (see Push).
 func (s *repository) PushStreaming(ctx context.Context, partial ociImageSpecV1.Descriptor, data io.Reader) (ociImageSpecV1.Descriptor, error) {
-	streaming, ok := s.archive.(ctf.StreamingBlobStore)
-	if !ok {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("ctf %T cannot store blobs of unknown digest or size: %w", s.archive, remotestore.ErrStreamingUnavailable)
-	}
 	if introspection.IsOCICompliantMediaType(partial.MediaType) {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("manifest %s cannot be streamed: %w", partial.MediaType, remotestore.ErrStreamingUnavailable)
 	}
@@ -206,15 +203,19 @@ func (s *repository) PushStreaming(ctx context.Context, partial ociImageSpecV1.D
 		// Same convention as RemoteStore.PushStreaming: zero on a partial descriptor is unknown.
 		size = blob.SizeUnknown
 	}
+	b, err := newDigestingBlob(data, partial.Digest, size)
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, err
+	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	dig, n, err := streaming.SaveBlobStreaming(ctx, data, partial.Digest, size)
-	if err != nil {
+	if err := s.archive.SaveBlob(ctx, b); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("unable to save streamed blob of media type %s: %w", partial.MediaType, err)
 	}
-	return ociImageSpecV1.Descriptor{MediaType: partial.MediaType, Digest: dig, Size: n}, nil
+	dig, _ := b.Digest()
+	return ociImageSpecV1.Descriptor{MediaType: partial.MediaType, Digest: digest.Digest(dig), Size: b.Size()}, nil
 }
 
 // pushManifest is the manifest branch of Push.
