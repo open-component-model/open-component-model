@@ -1,6 +1,6 @@
 ---
 title: "Resource Repositories"
-description: "Why OCM separates resource storage from component version storage and how resource repositories work."
+description: "Why OCM separates resource storage from component version storage, and how resource repositories work alongside component repositories."
 weight: 11
 toc: true
 hasMermaid: true

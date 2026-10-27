@@ -189,7 +189,7 @@
         },
         "srcRefs": {
           "type": "array",
-          "description": "SourceRefs defines a list of source names.\nThese entries reference the sources defined in the\ncomponent.sources.",
+          "description": "SourceRefs defines a list of source names.\nThese entries reference the sources defined in the\ncomponent.sources. SourceRefs are deprecated along with sources: link the\nresource with the ocm.software/artifact-references label instead.",
           "items": {
             "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.descriptor.v2.SourceRef"
           }
