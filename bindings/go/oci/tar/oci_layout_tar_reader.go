@@ -8,12 +8,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 
 	"github.com/nlepage/go-tarfs"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	slogcontext "github.com/veqryn/slog-context"
 	"oras.land/oras-go/v2/content/oci"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/ctf"
 )
 
 // CloseableReadOnlyStore wraps an oci.ReadOnlyStore and provides a Close method.
@@ -36,7 +39,16 @@ func (s *CloseableReadOnlyStore) Close() error {
 // It returns a CloseableReadOnlyStore that can be used to access the OCI layout.
 // The caller is responsible for closing the store.
 // The Read method is size-aware and will limit the reader to the size of the blob if known.
-func ReadOCILayout(ctx context.Context, b blob.ReadOnlyBlob) (*CloseableReadOnlyStore, error) {
+//
+// Blobs with a legacy artifact set media type (see ctf.IsArtifactSetMediaType) are
+// read through ctf.ArtifactSet.OCILayoutFS instead of being converted.
+func ReadOCILayout(ctx context.Context, b blob.ReadOnlyBlob) (_ *CloseableReadOnlyStore, err error) {
+	if mediaTypeAware, ok := b.(blob.MediaTypeAware); ok {
+		if mediaType, known := mediaTypeAware.MediaType(); known && ctf.IsArtifactSetMediaType(mediaType) {
+			return readArtifactSet(ctx, b, mediaType)
+		}
+	}
+
 	var header [2]byte
 
 	var closer func() error
@@ -46,6 +58,11 @@ func ReadOCILayout(ctx context.Context, b blob.ReadOnlyBlob) (*CloseableReadOnly
 		return nil, fmt.Errorf("failed to create reader: %w", err)
 	}
 	closer = src.Close
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, closer())
+		}
+	}()
 
 	size := blob.SizeUnknown
 	if srcSizeAware, ok := src.(blob.SizeAware); ok {
@@ -107,6 +124,26 @@ func ReadOCILayout(ctx context.Context, b blob.ReadOnlyBlob) (*CloseableReadOnly
 		ReadOnlyStore: store,
 		close:         closer,
 		Index:         idx,
+	}, nil
+}
+
+func readArtifactSet(ctx context.Context, b blob.ReadOnlyBlob, mediaType string) (*CloseableReadOnlyStore, error) {
+	artifactSet, err := ctf.NewArtifactSetFromBlob(b)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read artifact set: %w", err)
+	}
+	slogcontext.Warn(ctx, "reading legacy artifact set as OCI layout",
+		slog.String("mediaType", mediaType), slog.String("format", artifactSet.Format().String()))
+
+	store, err := oci.NewFromFS(ctx, artifactSet.OCILayoutFS())
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("failed to create OCI store from artifact set: %w", err), artifactSet.Close())
+	}
+
+	return &CloseableReadOnlyStore{
+		ReadOnlyStore: store,
+		close:         artifactSet.Close,
+		Index:         artifactSet.GetIndex(),
 	}, nil
 }
 
