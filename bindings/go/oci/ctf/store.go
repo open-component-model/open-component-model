@@ -1,7 +1,6 @@
 package ctf
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -18,6 +17,7 @@ import (
 	"oras.land/oras-go/v2/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/direct"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	v1 "ocm.software/open-component-model/bindings/go/ctf/index/v1"
 	"ocm.software/open-component-model/bindings/go/oci"
@@ -177,7 +177,7 @@ func (s *repository) Push(ctx context.Context, expected ociImageSpecV1.Descripto
 	defer s.mu.Unlock()
 
 	if !introspection.IsOCICompliantMediaType(expected.MediaType) {
-		if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(io.NopCloser(data), expected)); err != nil {
+		if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(direct.New(data), expected)); err != nil {
 			return fmt.Errorf("unable to save blob for descriptor %v: %w", expected, err)
 		}
 		return nil
@@ -197,7 +197,7 @@ func (s *repository) pushManifest(ctx context.Context, expected ociImageSpecV1.D
 	if err != nil {
 		return fmt.Errorf("unable to read manifest content for descriptor %v: %w", expected, err)
 	}
-	if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(io.NopCloser(bytes.NewReader(manifestJSON)), expected)); err != nil {
+	if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(direct.NewFromBytes(manifestJSON), expected)); err != nil {
 		return fmt.Errorf("unable to save blob for descriptor %v: %w", expected, err)
 	}
 
