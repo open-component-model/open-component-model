@@ -29,7 +29,6 @@ task tidy                    # go mod tidy across all modules
 task tools:lint              # golangci-lint on all modules
 task tools:lint -- --fix     # auto-fix lint findings
 task bindings/go/cli:build   # build ocm CLI into bindings/go/cli/tmp/bin/ocm
-task bindings/go:test/wine -- -run TestFoo   # unit tests as windows binaries under Wine (WINE=<path> if not on PATH)
 ```
 
 Controller e2e (own flow): `task bindings/go/kubernetes/controller:test/e2e -- --focus=<scenario>` (Ginkgo CLI, 4 parallel processes; `--procs=1` for serial), with Kind setup/teardown under the same `test/e2e/*` tasks.
@@ -115,7 +114,7 @@ Coupled files — editing one without the other breaks CI or behavior:
 
 - Renovate manages updates. Manual add: `go get <module>@<version> && task tidy`.
 - CI selects work by path filter (`dorny/paths-filter`), not module discovery: unit + integration tests run when `bindings/go`, the shared task plumbing, or `ci.yml` changes; lint runs for the changed module, or all modules when `golangci.yml` / `.env` / `ci.yml` changes. Full suite on `main`. PR title must be a valid Conventional Commit. Multi-arch builds: CLI for linux/darwin/windows, controller for linux, each amd64/arm64.
-- Unit tests run on Linux, and natively on Windows on pushes to `main` only — not on PRs; check locally with `task bindings/go:test/wine` (`run_unit_tests` matrix in `ci.yml`, same `task bindings/go:test`; on Windows the controller is excluded: Linux-only, and envtest doesn't compile for windows). Write OS-neutral code and tests: `filepath` for OS paths, `path` for tar/fs.FS/embed names, `filesystem.URIFromFilePath`/`FilePathFromURI` for `file://` URIs, and close every file/blob before its directory is removed (Windows can't delete open files).
+- Unit tests run on Linux, and natively on Windows on pushes to `main` only — not on PRs (`run_unit_tests` matrix in `ci.yml`, same `task bindings/go:test`; on Windows the controller is excluded: Linux-only, and envtest doesn't compile for windows). Write OS-neutral code and tests: `filepath` for OS paths, `path` for tar/fs.FS/embed names, `filesystem.URIFromFilePath`/`FilePathFromURI` for `file://` URIs, and close every file/blob before its directory is removed (Windows can't delete open files).
 
 ## Debugging
 
