@@ -16,9 +16,12 @@ import (
 type Metadata struct {
 	// Digest of the content. Empty if unknown; the digest is then not verified.
 	Digest digest.Digest
-	// Size of the content in bytes, or blob.SizeUnknown if unknown; the size is then not verified.
+	// Size of the content in bytes, or blob.SizeUnknown to take the size the
+	// source reports, if any. Content is verified against the size the blob
+	// reports; an unknown size is not verified.
 	Size int64
-	// MediaType of the content. Empty if unknown.
+	// MediaType of the content. Empty to take the media type the source
+	// reports, if any.
 	MediaType string
 }
 
@@ -30,14 +33,15 @@ var (
 )
 
 // Blob reports digest, size and media type from Metadata and verifies the content
-// read from its source against them.
+// read from its source against them. Size and media type left unknown in the
+// Metadata are asked from the source each time, so a source that learns them
+// lazily is not forced to do so up front.
 //
 // The blob holds no open resources: every ReadCloser opens fresh content from the
 // source, so it can be read repeatedly and needs no Close as long as the source
 // does not either (e.g. a [blob.ReadOnlyBlobFunc] that opens a stream on demand).
 //
-// The metadata is fixed at construction, so content is always verified against
-// what the blob reports.
+// Content is always verified against what the blob reports.
 type Blob struct {
 	src  blob.ReadOnlyBlob
 	meta Metadata
@@ -65,7 +69,7 @@ func (b *Blob) ReadCloser() (io.ReadCloser, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open blob content: %w", err)
 	}
-	return &reader{base: rc, digester: digester, expected: expected, size: b.meta.Size}, nil
+	return &reader{base: rc, digester: digester, expected: expected, size: b.Size()}, nil
 }
 
 // Digest returns the expected digest, if known.
@@ -73,14 +77,28 @@ func (b *Blob) Digest() (string, bool) {
 	return b.meta.Digest.String(), b.meta.Digest != ""
 }
 
-// Size returns the expected size, or blob.SizeUnknown.
+// Size returns the expected size: the one from the Metadata, otherwise the one
+// the source reports, otherwise blob.SizeUnknown.
 func (b *Blob) Size() int64 {
-	return b.meta.Size
+	if b.meta.Size != blob.SizeUnknown {
+		return b.meta.Size
+	}
+	if sizeAware, ok := b.src.(blob.SizeAware); ok {
+		return sizeAware.Size()
+	}
+	return blob.SizeUnknown
 }
 
-// MediaType returns the media type, if known.
+// MediaType returns the media type from the Metadata, otherwise the one the
+// source reports, if known.
 func (b *Blob) MediaType() (string, bool) {
-	return b.meta.MediaType, b.meta.MediaType != ""
+	if b.meta.MediaType != "" {
+		return b.meta.MediaType, true
+	}
+	if mediaTypeAware, ok := b.src.(blob.MediaTypeAware); ok {
+		return mediaTypeAware.MediaType()
+	}
+	return "", false
 }
 
 // reader counts and hashes everything read through it and compares the result
