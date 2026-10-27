@@ -75,6 +75,15 @@
       ],
     },
     {
+      // GitHub Actions version bumps (patch/minor/major) follow the same weekly
+      // cadence as the digest pins above; without this only digest-only
+      // re-pins were scheduled and version bumps landed any day of the week.
+      matchManagers: ['github-actions'],
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ],
+    },
+    {
       // Actual Go toolchain version bumps (go.mod `toolchain go1.X.Y`, setup-go,
       // golang image tags). The go.mod `go 1.X` directive is deliberately NOT
       // bumped here. See the depType 'golang' rule at the end of packageRules.
