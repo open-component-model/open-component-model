@@ -128,18 +128,6 @@ func TestBlob(t *testing.T) {
 		}
 	})
 
-	t.Run("a precalculated digest replaces the verified digest", func(t *testing.T) {
-		r := require.New(t)
-		other := []byte("other content of same size")
-		b := verified.New(&opener{content: other}, verified.Metadata{Digest: meta.Digest, Size: int64(len(other))})
-		b.SetPrecalculatedDigest(digest.FromBytes(other).String())
-		rc, err := b.ReadCloser()
-		r.NoError(err)
-		_, err = io.ReadAll(rc)
-		r.NoError(err)
-		r.NoError(rc.Close())
-	})
-
 	t.Run("an invalid digest fails before opening the content", func(t *testing.T) {
 		r := require.New(t)
 		src := &opener{content: data}

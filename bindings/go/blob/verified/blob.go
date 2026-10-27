@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sync/atomic"
 
 	"github.com/opencontainers/go-digest"
 
@@ -24,11 +23,10 @@ type Metadata struct {
 }
 
 var (
-	_ blob.ReadOnlyBlob          = (*Blob)(nil)
-	_ blob.SizeAware             = (*Blob)(nil)
-	_ blob.DigestAware           = (*Blob)(nil)
-	_ blob.DigestPrecalculatable = (*Blob)(nil)
-	_ blob.MediaTypeAware        = (*Blob)(nil)
+	_ blob.ReadOnlyBlob   = (*Blob)(nil)
+	_ blob.SizeAware      = (*Blob)(nil)
+	_ blob.DigestAware    = (*Blob)(nil)
+	_ blob.MediaTypeAware = (*Blob)(nil)
 )
 
 // Blob reports digest, size and media type from Metadata and verifies the content
@@ -37,18 +35,17 @@ var (
 // The blob holds no open resources: every ReadCloser opens fresh content from the
 // source, so it can be read repeatedly and needs no Close as long as the source
 // does not either (e.g. a [blob.ReadOnlyBlobFunc] that opens a stream on demand).
+//
+// The metadata is fixed at construction, so content is always verified against
+// what the blob reports.
 type Blob struct {
-	src       blob.ReadOnlyBlob
-	digest    atomic.Pointer[digest.Digest]
-	size      int64
-	mediaType string
+	src  blob.ReadOnlyBlob
+	meta Metadata
 }
 
 // New returns a Blob reading from src and verifying it against meta.
 func New(src blob.ReadOnlyBlob, meta Metadata) *Blob {
-	b := &Blob{src: src, size: meta.Size, mediaType: meta.MediaType}
-	b.digest.Store(&meta.Digest)
-	return b
+	return &Blob{src: src, meta: meta}
 }
 
 // ReadCloser opens the content of the source. The returned reader fails once the
@@ -56,7 +53,7 @@ func New(src blob.ReadOnlyBlob, meta Metadata) *Blob {
 // exceeds the expected size, and from Close in any case, including a partial read.
 // Close always closes the source reader, also when verification fails.
 func (b *Blob) ReadCloser() (io.ReadCloser, error) {
-	expected := *b.digest.Load()
+	expected := b.meta.Digest
 	var digester digest.Digester
 	if expected != "" {
 		if err := expected.Validate(); err != nil {
@@ -68,34 +65,22 @@ func (b *Blob) ReadCloser() (io.ReadCloser, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open blob content: %w", err)
 	}
-	return &reader{base: rc, digester: digester, expected: expected, size: b.size}, nil
+	return &reader{base: rc, digester: digester, expected: expected, size: b.meta.Size}, nil
 }
 
 // Digest returns the expected digest, if known.
 func (b *Blob) Digest() (string, bool) {
-	d := *b.digest.Load()
-	return d.String(), d != ""
-}
-
-// HasPrecalculatedDigest reports whether the digest is known.
-func (b *Blob) HasPrecalculatedDigest() bool {
-	return *b.digest.Load() != ""
-}
-
-// SetPrecalculatedDigest replaces the digest that is reported and verified.
-func (b *Blob) SetPrecalculatedDigest(d string) {
-	dig := digest.Digest(d)
-	b.digest.Store(&dig)
+	return b.meta.Digest.String(), b.meta.Digest != ""
 }
 
 // Size returns the expected size, or blob.SizeUnknown.
 func (b *Blob) Size() int64 {
-	return b.size
+	return b.meta.Size
 }
 
 // MediaType returns the media type, if known.
 func (b *Blob) MediaType() (string, bool) {
-	return b.mediaType, b.mediaType != ""
+	return b.meta.MediaType, b.meta.MediaType != ""
 }
 
 // reader counts and hashes everything read through it and compares the result
