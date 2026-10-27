@@ -1,6 +1,6 @@
 ---
 title: "Add Git Repositories"
-description: "Add a Git repository to a component version as a resource and as an embedded snapshot, then download it back."
+description: "Add a Git repository to a component version as a referenced resource and as an embedded snapshot, then download the files back."
 weight: 60
 toc: true
 hasMermaid: true

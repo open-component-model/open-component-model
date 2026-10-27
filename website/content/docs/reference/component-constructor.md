@@ -1,6 +1,6 @@
 ---
 title: Component Constructor
-description: "Reference documentation for the OCM Component Constructor format (v1, JSON Schema 2020-12)."
+description: "Reference documentation for the OCM Component Constructor format (v1, JSON Schema 2020-12): all fields, input types, and examples."
 weight: 1
 toc: false
 aliases:

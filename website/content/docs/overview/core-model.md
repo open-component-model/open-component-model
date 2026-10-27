@@ -1,6 +1,6 @@
 ---
 title: "The OCM Core Model"
-description: "Understand the fundamental building blocks of the Open Component Model."
+description: "Understand the fundamental building blocks of the Open Component Model: component versions, descriptors, resources, and references."
 icon: "🧩"
 weight: 13
 toc: true
