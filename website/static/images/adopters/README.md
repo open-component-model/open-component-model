@@ -103,7 +103,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 ### SAP
 
 - **File:** `sap-color.svg`
-- **Source:** Wikimedia Commons (`File:SAP_2011_logo.svg`)
+- **Source:** <https://commons.wikimedia.org/wiki/File:SAP_2011_logo.svg>
 - **Fetched:** 2026-10-26
 - **Licence:** Public domain (PD-textlogo / simple shapes)
 - **Trademark owner:** SAP SE
@@ -111,7 +111,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 ### BWI (BWI GmbH)
 
 - **File:** `bwi-color.svg`
-- **Source:** Wikimedia Commons
+- **Source:** <https://commons.wikimedia.org/wiki/File:BWI_IT-Dienstleistungsunternehmen_Logo.svg>
 - **Fetched:** 2026-10-26
 - **Licence:** Public domain (PD-textlogo)
 - **Trademark owner:** BWI GmbH
@@ -119,7 +119,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 ### SAP NS2 (SAP National Security Services)
 
 - **File:** `sap-ns2.png` (raster, 900×500)
-- **Source:** getlogovector.com
+- **Source:** <https://getlogovector.com/sap-ns2-logo-vector-svg/>
 - **Fetched:** 2026-10-26
 - **Licence:** Editorial use only (no explicit licence found)
 - **Trademark owner:** SAP National Security Services, Inc.
@@ -127,7 +127,8 @@ ever need to make to an SVG; everything else stays as downloaded.
 ### Gardener
 
 - **File:** `gardener-color.svg`
-- **Source:** GitHub `neonephos/artwork` repo
+- **Source:** <https://github.com/neonephos/artwork/blob/main/projects/gardener/brand/gardener-color.svg>
+- **Trademark owner:** NeoNephos Foundation
 - **Fetched:** 2026-10-26
 - **Licence:** NeoNephos trademark usage guidelines
 - **Notes:** viewBox cropped from `0 0 595.3 170.1` to `46 0 502 170.1` to
@@ -136,7 +137,8 @@ ever need to make to an SVG; everything else stays as downloaded.
 ### Konfidence
 
 - **File:** `konfidence-dark.svg`
-- **Source:** konfidence.cloud
+- **Source:** <https://konfidence.cloud>
+- **Trademark owner:** SAP SE / Konfidence project
 - **Fetched:** 2026-10-26
 - **Licence:** Editorial use (no explicit licence)
 - **Notes:** viewBox cropped from `0 0 3440 400` to `78 0 3283 400` to
@@ -145,7 +147,8 @@ ever need to make to an SVG; everything else stays as downloaded.
 ### Kyma
 
 - **File:** `kyma-light.svg` / `kyma-dark.svg` (icon + label lockup built from `kyma-color.svg`)
-- **Source:** kyma-project.io
+- **Source:** <https://kyma-project.io/assets/logos/>
+- **Trademark owner:** SAP SE / Kyma project
 - **Fetched:** 2026-10-26
 - **Licence:** Editorial use (no explicit licence)
 - **Notes:** viewBox cropped from `0 0 150 60` to `0 0 126 60` to remove
@@ -154,7 +157,8 @@ ever need to make to an SVG; everything else stays as downloaded.
 ### Open Control Plane (OCP)
 
 - **File:** `ocp-light.svg` / `ocp-dark.svg` (icon + label lockup built from `ocp-color.svg`)
-- **Source:** open-control-plane.io
+- **Source:** <https://open-control-plane.io>
+- **Trademark owner:** NeoNephos Foundation
 - **Fetched:** 2026-10-26
 - **Licence:** NeoNephos trademark usage guidelines
 - **Notes:** `ocp-dark.svg` remaps the original dark blues to lighter tones for
