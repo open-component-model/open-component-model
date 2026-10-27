@@ -37,23 +37,9 @@ configurations:
         versionConstraint: ">=1.0.0 <2.0.0"
 ```
 
-## Config Schema
+## Schema
 
-The resolver configuration is defined by the `resolvers.config.ocm.software/v1alpha1` type in
-the [OCM specification](https://github.com/open-component-model/open-component-model/tree/main/bindings/go/configuration/resolvers/v1alpha1/spec).
-
-| Field       | Type   | Required | Description                                       |
-|-------------|--------|----------|---------------------------------------------------|
-| `type`      | string | Yes      | Must be `resolvers.config.ocm.software/v1alpha1`. |
-| `resolvers` | array  | No       | List of resolver entries.                         |
-
-### Resolver Entry Schema
-
-| Field                  | Type   | Required | Description                                                                                       |
-|------------------------|--------|----------|---------------------------------------------------------------------------------------------------|
-| `repository`           | object | Yes      | An OCM repository specification (must include a `type` field).                                    |
-| `componentNamePattern` | string | No       | Glob pattern for matching component names. If omitted, the resolver matches all components.       |
-| `versionConstraint`    | string | No       | Semver constraint for matching component versions. If omitted, the resolver matches all versions. |
+{{< schema-renderer url="/schemas/bindings/go/configuration/resolvers/v1alpha1/Config.schema.json" >}}
 
 ## Repository Types
 

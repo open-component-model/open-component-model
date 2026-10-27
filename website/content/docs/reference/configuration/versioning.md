@@ -47,24 +47,9 @@ To confirm which schemes are active for an invocation, print the effective merge
 ocm get config
 ```
 
-## Config Schema
+## Schema
 
-| Field     | Type   | Required | Description                                          |
-|-----------|--------|----------|------------------------------------------------------|
-| `type`    | string | Yes      | Must be `versioning.config.ocm.software/v1alpha1`.   |
-| `schemes` | array  | No       | Ordered list of version schemes. First match wins.   |
-
-### Scheme Entry Schema
-
-| Field              | Type   | Required          | Description                                                                                             |
-|--------------------|--------|-------------------|---------------------------------------------------------------------------------------------------------|
-| `name`             | string | No                | Optional label for a pattern scheme, used in diagnostics. Omit for a builtin (it has its own name).     |
-| `builtin`          | string | No                | Named built-in scheme (see catalog); mutually exclusive with `pattern`/`comparisonGroups`.              |
-| `pattern`          | string | Unless `builtin`  | Go (RE2) regular expression a version must match for the scheme to claim it. Use named capture groups.  |
-| `comparisonGroups` | array  | No                | Named capture groups from `pattern` used to order versions, most significant first. Empty = lexical.    |
-
-Numeric capture groups are compared as integers (so `22.10` sorts after `22.04`, and `1900` after `1838`); non-numeric
-groups compare lexically.
+{{< schema-renderer url="/schemas/bindings/go/configuration/versioning/v1alpha1/Config.schema.json" >}}
 
 ## Built-in Scheme Catalog
 
