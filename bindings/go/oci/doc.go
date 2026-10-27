@@ -39,7 +39,7 @@
 //     Resources are managed through multiple types:
 //     - LocalBlob: For temporary storage of resources
 //     - ResourceBlob: For resource-specific operations (a blob described by an OCM resource)
-//     - DescriptorBlob: For OCI descriptor management (a blob described by an OCI descriptor)
+//     - NewDescriptorBlob: For OCI descriptor management (a verified blob described by an OCI descriptor)
 //
 // Core Interfaces:
 //
