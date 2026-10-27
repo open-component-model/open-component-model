@@ -2,7 +2,6 @@ package ctf
 
 import (
 	"archive/tar"
-	"bytes"
 	"compress/gzip"
 	"context"
 	"errors"
@@ -220,9 +219,7 @@ func ArchiveTARToWriter(ctx context.Context, ctf CTF, writer io.Writer, format F
 		return fmt.Errorf("unable to list blobs: %w", err)
 	}
 
-	copyBuffer := make([]byte, blob.DefaultArchiveBlobBufferSize) // shared buffer for all data to avoid allocs.
-
-	if err := archiveIndex(ctx, ctf, tarWriter, copyBuffer); err != nil {
+	if err := archiveIndex(ctx, ctf, tarWriter); err != nil {
 		return fmt.Errorf("unable to archive index: %w", err)
 	}
 	for _, digest := range blobs {
@@ -239,7 +236,7 @@ func ArchiveTARToWriter(ctx context.Context, ctf CTF, writer io.Writer, format F
 			return err
 		}
 		name := filepath.Join(BlobsDirectoryName, file)
-		if err := blob.ArchiveBlob(name, size.Size(), digest, b, tarWriter, copyBuffer); err != nil {
+		if err := blob.ArchiveBlob(name, size.Size(), digest, b, tarWriter); err != nil {
 			return err
 		}
 	}
@@ -247,7 +244,7 @@ func ArchiveTARToWriter(ctx context.Context, ctf CTF, writer io.Writer, format F
 	return nil
 }
 
-func archiveIndex(ctx context.Context, ctf CTF, tarWriter *tar.Writer, buf []byte) (err error) {
+func archiveIndex(ctx context.Context, ctf CTF, tarWriter *tar.Writer) (err error) {
 	idx, err := ctf.GetIndex(ctx)
 	if err != nil {
 		return fmt.Errorf("unable to get index: %w", err)
@@ -263,7 +260,7 @@ func archiveIndex(ctx context.Context, ctf CTF, tarWriter *tar.Writer, buf []byt
 	}); err != nil {
 		return fmt.Errorf("unable to write index header: %w", err)
 	}
-	if _, err := io.CopyBuffer(tarWriter, bytes.NewReader(rawIdx), buf); err != nil {
+	if _, err := tarWriter.Write(rawIdx); err != nil {
 		return fmt.Errorf("unable to write index: %w", err)
 	}
 	return nil

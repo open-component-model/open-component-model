@@ -6,24 +6,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sync"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 )
-
-const DefaultFileIOBufferSize = 1 << 20 // 1 MiB
-
-// ioBufPool is a pool of byte buffers that can be reused for copying content
-// between i/o relevant data, such as files.
-var ioBufPool = sync.Pool{
-	New: func() interface{} {
-		// the buffer size should be larger than or equal to 128 KiB
-		// for performance considerations.
-		// we choose 1 MiB here so there will be less disk I/O.
-		buffer := make([]byte, DefaultFileIOBufferSize)
-		return &buffer
-	},
-}
 
 // CopyBlobToOSPath copies the content of a blob.ReadOnlyBlob to a local path on the operating system's filesystem.
 // The file is created with 0600 if it does not exist (os.O_CREATE) and truncated if it does (os.O_TRUNC).
@@ -31,7 +16,7 @@ var ioBufPool = sync.Pool{
 // or on Close, the written regular file is truncated to zero and path is removed if it is a regular file itself,
 // so no rejected content is left behind. A symlink at path is kept and its target is left empty.
 // Content already written to a named pipe or device cannot be retracted.
-// It uses a buffered I/O operation to improve performance, leveraing the internal ioBufPool.
+// The content is copied with blob.CopyReader.
 func CopyBlobToOSPath(blob blob.ReadOnlyBlob, path string) error {
 	data, err := blob.ReadCloser()
 	if err != nil {
@@ -58,9 +43,7 @@ func CopyBlobToOSPath(blob blob.ReadOnlyBlob, path string) error {
 }
 
 func copyBuffered(dst io.Writer, src io.Reader) error {
-	buf := ioBufPool.Get().(*[]byte)
-	defer ioBufPool.Put(buf)
-	if _, err := io.CopyBuffer(dst, src, *buf); err != nil {
+	if _, err := blob.CopyReader(dst, src); err != nil {
 		return fmt.Errorf("failed to copy resource data: %w", err)
 	}
 	return nil

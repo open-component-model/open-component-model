@@ -109,16 +109,18 @@ func (b *Blob) ReadCloser() (io.ReadCloser, error) {
 
 // compress compresses the data from the reader with the specified compression method and writes it to the writer.
 func compress(reader io.ReadCloser, writer *io.PipeWriter, method Method) {
-	var compressed io.WriteCloser
+	var compressed *gzip.Writer
 	switch method {
 	case MethodGzip:
 		fallthrough
 	default:
-		compressed = gzip.NewWriter(writer)
+		compressed = GetGzipWriter(writer)
 	}
 
-	_, err := io.Copy(compressed, reader)
-	writer.CloseWithError(errors.Join(err, compressed.Close(), reader.Close()))
+	_, err := blob.CopyReader(compressed, reader)
+	closeErr := compressed.Close()
+	PutGzipWriter(compressed)
+	writer.CloseWithError(errors.Join(err, closeErr, reader.Close()))
 }
 
 // Decompress creates a decompressed version of the given blob if it is compressed.

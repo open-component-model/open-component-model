@@ -20,6 +20,7 @@ import (
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/errdef"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
 )
 
@@ -243,8 +244,9 @@ func (s *OCILayoutWriter) Push(ctx context.Context, expected ociImageSpecV1.Desc
 	dataOffset := offset + int64(len(headerBytes))
 	verify := content.NewVerifyReader(data, expected)
 
-	written, err := copyToWriterAt(s.buf, verify, dataOffset, expected.Size)
-	if err != nil {
+	// A short read is not fatal here: verify.Verify rejects content shorter than expected.
+	written, err := blob.CopyReaderN(io.NewOffsetWriter(s.buf, dataOffset), verify, expected.Size)
+	if err != nil && !errors.Is(err, io.EOF) {
 		return fmt.Errorf("failed to write content to scratch buffer: %w", err)
 	}
 	if err := verify.Verify(); err != nil {
@@ -375,39 +377,6 @@ func (s *OCILayoutWriter) updateIndex() error {
 var zeroPad [512]byte
 
 var _ content.Pusher = &OCILayoutWriter{}
-
-// copyBufPool reuses 32KB byte slices for copyToWriterAt.
-var copyBufPool = sync.Pool{
-	New: func() any {
-		b := make([]byte, 32*1024)
-		return &b
-	},
-}
-
-// copyToWriterAt copies up to size bytes from r into w starting at the given offset,
-// using a pooled buffer to avoid per-call allocations.
-func copyToWriterAt(w io.WriterAt, r io.Reader, offset, size int64) (int64, error) {
-	bufp := copyBufPool.Get().(*[]byte)
-	defer copyBufPool.Put(bufp)
-	buf := *bufp
-	var total int64
-	for total < size {
-		n, err := r.Read(buf[:min(int64(len(buf)), size-total)])
-		if n > 0 {
-			if _, ew := w.WriteAt(buf[:n], offset+total); ew != nil {
-				return total, ew
-			}
-			total += int64(n)
-		}
-		if err != nil {
-			if err == io.EOF {
-				return total, nil
-			}
-			return total, err
-		}
-	}
-	return total, nil
-}
 
 // headerBufPool reuses bytes.Buffer instances for tar header serialization.
 var headerBufPool = sync.Pool{

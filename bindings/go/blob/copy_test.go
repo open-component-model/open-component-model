@@ -1,0 +1,84 @@
+package blob_test
+
+import (
+	"bytes"
+	"io"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
+	"ocm.software/open-component-model/bindings/go/blob"
+)
+
+func TestCopyReader(t *testing.T) {
+	data := strings.Repeat("0123456789abcdef", 64*1024) // 1 MiB
+
+	t.Run("into file from non-file reader", func(t *testing.T) {
+		r := require.New(t)
+		f, err := os.CreateTemp(t.TempDir(), "")
+		r.NoError(err)
+		t.Cleanup(func() { r.NoError(f.Close()) })
+
+		n, err := blob.CopyReader(f, struct{ io.Reader }{strings.NewReader(data)})
+		r.NoError(err)
+		r.Equal(int64(len(data)), n)
+		got, err := os.ReadFile(f.Name())
+		r.NoError(err)
+		r.Equal(data, string(got))
+	})
+
+	t.Run("file to file", func(t *testing.T) {
+		r := require.New(t)
+		dir := t.TempDir()
+		r.NoError(os.WriteFile(dir+"/src", []byte(data), 0o600))
+		src, err := os.Open(dir + "/src")
+		r.NoError(err)
+		t.Cleanup(func() { r.NoError(src.Close()) })
+		dst, err := os.Create(dir + "/dst")
+		r.NoError(err)
+		t.Cleanup(func() { r.NoError(dst.Close()) })
+
+		n, err := blob.CopyReader(dst, src)
+		r.NoError(err)
+		r.Equal(int64(len(data)), n)
+		got, err := os.ReadFile(dst.Name())
+		r.NoError(err)
+		r.Equal(data, string(got))
+	})
+}
+
+func TestCopyReaderN(t *testing.T) {
+	tests := []struct {
+		name     string
+		src      string
+		n        int64
+		wantN    int64
+		wantErr  error
+		wantOut  string
+		wantRest string
+	}{
+		{name: "short source", src: "abc", n: 5, wantN: 3, wantErr: io.EOF, wantOut: "abc"},
+		{name: "exact n leaves remainder unread", src: "abcdef", n: 4, wantN: 4, wantOut: "abcd", wantRest: "ef"},
+		{name: "zero", src: "abc", n: 0, wantN: 0, wantRest: "abc"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			src := strings.NewReader(tt.src)
+			var buf bytes.Buffer
+			n, err := blob.CopyReaderN(&buf, src, tt.n)
+			r.Equal(tt.wantN, n)
+			if tt.wantErr != nil {
+				r.ErrorIs(err, tt.wantErr)
+			} else {
+				r.NoError(err)
+			}
+			r.Equal(tt.wantOut, buf.String())
+			rest, err := io.ReadAll(src)
+			r.NoError(err)
+			r.Equal(tt.wantRest, string(rest))
+		})
+	}
+}
