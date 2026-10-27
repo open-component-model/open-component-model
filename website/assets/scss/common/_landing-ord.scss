@@ -669,6 +669,11 @@ html[data-bs-theme="light"] .neonephos-logo--light {
     // Grid-gap contributes 24px between rows; add ~1.5rem extra top, ~3rem bottom for breathing room.
     margin-top: 1.5rem;
     margin-bottom: 3rem;
+    // The parent .lp-home .container rule switches to flex-direction: row at ≥974px for the hero.
+    // This section needs the column layout at every viewport so the title sits above the band.
+    flex-direction: column;
+    align-items: stretch;
+    text-align: left;
 
     .adopters-title {
         font-size: 0.875rem;
@@ -688,7 +693,8 @@ html[data-bs-theme="light"] .neonephos-logo--light {
         mask-image: linear-gradient(to right, transparent, black 1.5%, black 98.5%, transparent);
         -webkit-mask-image: linear-gradient(to right, transparent, black 1.5%, black 98.5%, transparent);
 
-        &:hover .ocm-marquee-track {
+        &:hover .ocm-marquee-track,
+        &:focus-within .ocm-marquee-track {
             animation-play-state: paused;
         }
     }
