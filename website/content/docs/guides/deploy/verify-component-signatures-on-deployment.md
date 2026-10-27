@@ -172,10 +172,8 @@ The Secret is looked up in the `Component`'s own namespace unless the reference 
 this `Component` inherits it and verifies the same signature.
 {{< /callout >}}
 
-{{< callout context="caution" title="Own ocmConfig replaces the inherited one" icon="outline/alert-triangle" >}}
-An object inherits the configuration of its parent only when it sets no `ocmConfig` itself.
-As soon as it lists any entry, for example a credentials Secret, the inherited configuration is dropped,
-including the verification settings. To keep them, also reference the parent object in `ocmConfig`.
+{{< callout context="caution" title="Ensure component version verification" icon="outline/alert-triangle" >}}
+Specifying a different `ocmConfig` in an object referencing the `Component` (e.g. a `Resource`) drops the inherited config including the verifier configuration. As a result, the component version won't be verified again! To keep the verifier configuration and enforce component version verification, reference the parent objects, too.
 {{< /callout >}}
 
 {{< /step >}}
