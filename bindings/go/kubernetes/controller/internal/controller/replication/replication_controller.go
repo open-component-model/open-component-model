@@ -6,13 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/go-logr/logr"
-	"golang.org/x/time/rate"
 	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -98,10 +95,7 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 		).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: concurrency,
-			RateLimiter: workqueue.NewTypedMaxOfRateLimiter(
-				workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](5*time.Millisecond, 5*time.Minute),
-				&workqueue.TypedBucketRateLimiter[reconcile.Request]{Limiter: rate.NewLimiter(10, 100)},
-			),
+			RateLimiter:             r.RateLimit.Limiter(),
 		}).
 		Complete(r)
 }
@@ -239,12 +233,8 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 	// if additional ocmconfigs are defined by the targetRepositroy.
 	configs = append(configs, targetRepository.GetEffectiveOCMConfig()...)
 
-	// Persist the effective config immediately so the deferred patch keeps it even if a later step fails.
-	if !equality.Semantic.DeepEqual(replication.Status.EffectiveOCMConfig, configs) {
-		replication.Status.EffectiveOCMConfig = configs
-
-		return ctrl.Result{}, fmt.Errorf("effective ocm config changed")
-	}
+	// The deferred status patch persists it, even if a later step fails.
+	replication.Status.EffectiveOCMConfig = configs
 
 	sourceDigest := component.Status.Component.Digest.Value
 	replication.Status.Component = component.Status.Component.DeepCopy()

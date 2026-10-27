@@ -1,6 +1,6 @@
 ---
 title: "Verify Component Signatures on Deployment"
-description: "Configure the OCM controller to verify component version signatures on reconciliation."
+description: "Configure the OCM controller to verify component version signatures on reconciliation, ensuring only trusted components are deployed."
 weight: 70
 toc: true
 aliases:

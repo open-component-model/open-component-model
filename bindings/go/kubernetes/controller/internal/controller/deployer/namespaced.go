@@ -13,9 +13,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/rest"
+	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -330,17 +332,24 @@ func setNamespacedDeployerAnnotation(obj client.Object, deployer deliveryv1alpha
 // NamespacedDeployer is found through its annotation.
 func (r *Reconciler) childEventHandler(mgr ctrl.Manager) handler.EventHandler {
 	if !r.Namespaced {
-		return handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), r.newObject(), handler.OnlyControllerOwner())
+		return ignoreCreate{handler.EnqueueRequestForOwner(mgr.GetScheme(), mgr.GetRESTMapper(), r.newObject(), handler.OnlyControllerOwner())}
 	}
 
-	return handler.EnqueueRequestsFromMapFunc(func(_ context.Context, obj client.Object) []reconcile.Request {
+	return ignoreCreate{handler.EnqueueRequestsFromMapFunc(func(_ context.Context, obj client.Object) []reconcile.Request {
 		namespace, name, ok := strings.Cut(obj.GetAnnotations()[namespacedDeployerAnnotation], "/")
 		if !ok {
 			return nil
 		}
 
 		return []reconcile.Request{{NamespacedName: client.ObjectKey{Namespace: namespace, Name: name}}}
-	})
+	})}
+}
+
+// ignoreCreate drops create events of deployed objects. The deployer created them in the reconcile that is still
+// running, so reacting would only repeat the same apply again.
+type ignoreCreate struct{ handler.EventHandler }
+
+func (ignoreCreate) Create(context.Context, event.CreateEvent, workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 }
 
 // validateConfigNamespaces rejects configuration references outside the namespace of a NamespacedDeployer, so

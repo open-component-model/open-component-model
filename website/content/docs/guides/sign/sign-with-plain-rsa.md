@@ -1,6 +1,6 @@
 ---
 title: "Sign with Plain RSA"
-description: "Learn to cryptographically sign a component version and verify its authenticity."
+description: "Cryptographically sign a component version with a plain RSA private key and verify its authenticity using the corresponding public key."
 weight: 50
 toc: true
 aliases:

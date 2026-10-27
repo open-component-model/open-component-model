@@ -1,6 +1,6 @@
 ---
 title: Kubernetes Controllers
-description: "Learn about the OCM controllers and their capabilities."
+description: "Learn about the OCM Kubernetes controllers: what they do, how they interact, and how they automate component delivery into a cluster."
 icon: "🏁"
 weight: 6
 toc: true

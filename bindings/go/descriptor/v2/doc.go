@@ -9,7 +9,7 @@
 //			 repositoryContexts
 //			 provider
 //			 resources
-//			 sources
+//			 sources # deprecated: no digest, not covered by signatures; use resources (https://ocm.software/docs/changelog/migrate-from-sources/)
 //			 componentReferences
 //	  signatures: {} # optional
 //
@@ -41,15 +41,6 @@
 //			  hashAlgorithm: SHA-256
 //			  normalisationAlgorithm: ociArtifactDigest/v1
 //			  value: efa2b9980ca2de65dc5a0c8cc05638b1a4b4ce8f6972dc08d0e805e5563ba5bb
-//		sources:
-//		  - name: ocm
-//			type: git
-//			version: v0.0.1
-//			access:
-//			  commit: 727513969553bfcc603e1c0ae1a75d79e4132b58
-//			  ref: refs/tags/v0.0.1
-//			  repoUrl: github.com/open-component-model/open-component-model
-//			  type: gitHub
 //		componentReferences:
 //		  - name: prometheus
 //			version: v1.0.0

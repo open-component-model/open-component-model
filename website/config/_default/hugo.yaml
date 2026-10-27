@@ -19,7 +19,7 @@ defaultContentLanguageInSubdir: false
 editPage: false
 lastMod: false
 defaultContentVersionInSubdir: false
-defaultContentVersion: '0.19'
+defaultContentVersion: '0.21'
 pagination:
   pagerSize: 10
 params:
@@ -87,28 +87,28 @@ imaging:
 versions:
   main:
     weight: 1
-  '0.19':
+  '0.21':
     weight: 2
-  '0.17':
+  '0.19':
     weight: 3
-  '0.16':
+  '0.17':
     weight: 4
-  '0.15':
+  '0.16':
     weight: 5
-  '0.14':
+  '0.15':
     weight: 6
-  '0.13':
+  '0.14':
     weight: 7
-  '0.12':
+  '0.13':
     weight: 8
-  '0.11':
+  '0.12':
     weight: 9
-  '0.10':
+  '0.11':
     weight: 10
-  '0.9':
+  '0.10':
     weight: 11
   legacy:
-    weight: 12
+    weight: 13
 services:
   rss:
     limit: 20

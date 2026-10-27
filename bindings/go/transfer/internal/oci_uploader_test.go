@@ -354,7 +354,7 @@ func TestBuildGraphDefinition_OCIUploader(t *testing.T) {
 			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.OCIUploaderConfig{
 				Match: `resource.access.isType("LocalBlob")`,
 			}},
-			wantErr: "not an OCI manifest",
+			wantErr: "not an OCI manifest or artifact set",
 		},
 		{
 			name:     "a match that does not compile fails the build",

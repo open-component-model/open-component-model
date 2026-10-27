@@ -28,6 +28,8 @@ type BaseReconciler struct {
 
 	Scheme           *runtime.Scheme
 	NewPluginManager PluginManagerFunc
+	// RateLimit configures the controller's workqueue rate limiter.
+	RateLimit RateLimit
 }
 
 func (r *BaseReconciler) GetClient() ctrl.Client {

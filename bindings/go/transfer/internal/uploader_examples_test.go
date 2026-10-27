@@ -202,7 +202,9 @@ configurations:
     match: >-
       target.type == "OCIRepository"
       && resource.access.isType("LocalBlob")
-      && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType)
+      && has(resource.access.mediaType)
+      && (isOCIManifest(resource.access.mediaType)
+        || isArtifactSetMediaType(resource.access.mediaType))
       && has(resource.access.referenceName)
     imageReference: |-
 %s
@@ -229,7 +231,7 @@ configurations:
 			},
 		},
 		{
-			name: "E4 OCI-manifest local blobs only",
+			name: "E4 OCI-manifest and artifact-set local blobs only",
 			configYAML: `
 type: generic.config.ocm.software/v1
 configurations:
@@ -237,7 +239,9 @@ configurations:
     match: >-
       target.type == "OCIRepository"
       && resource.access.isType("LocalBlob")
-      && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType)
+      && has(resource.access.mediaType)
+      && (isOCIManifest(resource.access.mediaType)
+        || isArtifactSetMediaType(resource.access.mediaType))
       && has(resource.access.referenceName)
 `,
 			target: oci,
@@ -346,7 +350,7 @@ configurations:
 			wantErr:   "oci uploader cannot upload access type Wget/v1",
 		},
 		{
-			name: "E9 selected local blob that is not an OCI manifest",
+			name: "E9 selected local blob that is not an OCI manifest or artifact set",
 			configYAML: `
 type: generic.config.ocm.software/v1
 configurations:
@@ -355,7 +359,7 @@ configurations:
 `,
 			target:    oci,
 			resources: []string{"notes"},
-			wantErr:   "not an OCI manifest",
+			wantErr:   "not an OCI manifest or artifact set",
 		},
 		{
 			name: "E9 match that does not compile",

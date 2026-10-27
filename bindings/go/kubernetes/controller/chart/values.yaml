@@ -12,7 +12,7 @@ manager:
     # -- Controller image repository
     repository: ghcr.io/open-component-model/kubernetes/controller
     # -- Controller image tag
-    tag: latest@sha256:c82d83be136dba208d287dfd8bd1bdd5d380de61f1b1a2c6e9f3d3f50e90a4db
+    tag: latest@sha256:31080f0528b5893778d598e9d605189858a4d5d3463a5b938127a5563638478f
     # -- Image pull policy
     pullPolicy: IfNotPresent
   ## Cluster-scoped Deployer
@@ -32,6 +32,54 @@ manager:
     resource: 4
     # -- Number of active workers per enabled deployer controller (Deployer and NamespacedDeployer)
     deployer: 4
+  ## Resolver settings
+  resolver:
+    # -- Number of active resolver workers
+    workerCount: 10
+    # -- Maximum work items in queue for component version resolution
+    workerQueueLength: 1000
+    # -- Buffer size for each subscriber's event channel. Larger values reduce dropped resolution events under load. Monitor resolver_event_channel_drops_total metric.
+    subscriberBufferSize: 100
+    # -- The time-to-live (TTL) for the resolver cache entries in minutes. Setting TTL to less than 30 minutes is discouraged in productive use as it can lead to unintended performance issues.
+    cacheTTL: 30
+  ## Workqueue rate limiter of every controller.
+  ## New objects pass through it once, and so do retries after an error.
+  rateLimiter:
+    repository:
+      # -- (float) Requeues per second the Repository controller admits once its burst is used up. A float greater than 0, e.g. 0.1.
+      qps: 10 # @schema type:[number, string]
+      # -- Requeues the Repository controller admits at once before qps applies. Must be at least 1.
+      burst: 100 # @schema minimum:1
+    component:
+      # -- (float) Requeues per second the Component controller admits once its burst is used up. A float greater than 0, e.g. 0.1.
+      qps: 10 # @schema type:[number, string]
+      # -- Requeues the Component controller admits at once before qps applies. Must be at least 1.
+      burst: 100 # @schema minimum:1
+    resource:
+      # -- (float) Requeues per second the Resource controller admits once its burst is used up. A float greater than 0, e.g. 0.1.
+      qps: 10 # @schema type:[number, string]
+      # -- Requeues the Resource controller admits at once before qps applies. Must be at least 1.
+      burst: 100 # @schema minimum:1
+    replication:
+      # -- (float) Requeues per second the Replication controller admits once its burst is used up. A float greater than 0, e.g. 0.1.
+      qps: 10 # @schema type:[number, string]
+      # -- Requeues the Replication controller admits at once before qps applies. Must be at least 1.
+      burst: 100 # @schema minimum:1
+    discovery:
+      # -- (float) Requeues per second the Discovery controller admits once its burst is used up. A float greater than 0, e.g. 0.1.
+      qps: 10 # @schema type:[number, string]
+      # -- Requeues the Discovery controller admits at once before qps applies. Must be at least 1.
+      burst: 100 # @schema minimum:1
+    deployer:
+      # -- (float) Requeues per second the Deployer controller admits once its burst is used up. A float greater than 0, e.g. 0.1.
+      qps: 10 # @schema type:[number, string]
+      # -- Requeues the Deployer controller admits at once before qps applies. Must be at least 1.
+      burst: 100 # @schema minimum:1
+    namespacedDeployer:
+      # -- (float) Requeues per second the NamespacedDeployer controller admits once its burst is used up. A float greater than 0, e.g. 0.1.
+      qps: 10 # @schema type:[number, string]
+      # -- Requeues the NamespacedDeployer controller admits at once before qps applies. Must be at least 1.
+      burst: 100 # @schema minimum:1
   ## Cache settings
   cache:
     # -- Maximum size of the deployer download object LRU cache
