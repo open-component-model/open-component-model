@@ -42,7 +42,7 @@ manager:
   ## New objects pass through it once, and so do retries after an error.
   rateLimiter:
     # -- Requeues per second a controller admits once the burst is used up. Must be at least 1.
-    qps: 10 # @schema minimum:1
+    qps: 10 # @schema minimum:1;type:number
     # -- Requeues a controller admits at once before qps applies. Must be at least 1.
     burst: 100 # @schema minimum:1
   ## Cache settings

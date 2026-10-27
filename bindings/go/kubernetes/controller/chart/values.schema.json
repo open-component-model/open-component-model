@@ -193,7 +193,7 @@
                             "minimum": 1
                         },
                         "qps": {
-                            "type": "integer",
+                            "type": "number",
                             "minimum": 1
                         }
                     }
