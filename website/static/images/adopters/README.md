@@ -111,7 +111,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 ### BWI (BWI GmbH)
 
 - **File:** `bwi-color.svg`
-- **Source:** <https://commons.wikimedia.org/wiki/File:BWI_IT-Dienstleistungsunternehmen_Logo.svg>
+- **Source:** <https://de.wikipedia.org/wiki/BWI_GmbH> (logo downloaded via Wikimedia Commons; no stable Commons file page found)
 - **Fetched:** 2026-10-26
 - **Licence:** Public domain (PD-textlogo)
 - **Trademark owner:** BWI GmbH
@@ -127,7 +127,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 ### Gardener
 
 - **File:** `gardener-color.svg`
-- **Source:** <https://github.com/neonephos/artwork/blob/main/projects/gardener/brand/gardener-color.svg>
+- **Source:** <https://github.com/gardener/gardener/blob/master/logo/gardener.svg>
 - **Trademark owner:** NeoNephos Foundation
 - **Fetched:** 2026-10-26
 - **Licence:** NeoNephos trademark usage guidelines
@@ -147,7 +147,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 ### Kyma
 
 - **File:** `kyma-light.svg` / `kyma-dark.svg` (icon + label lockup built from `kyma-color.svg`)
-- **Source:** <https://kyma-project.io/assets/logos/>
+- **Source:** <https://kyma-project.io/assets/logo_icon.svg>
 - **Trademark owner:** SAP SE / Kyma project
 - **Fetched:** 2026-10-26
 - **Licence:** Editorial use (no explicit licence)
