@@ -43,7 +43,7 @@ There is no single ladder. These are the SIG-specific entry points; for the gene
 - **Project-wide channels:** [ocm.software/community](https://ocm.software/community).
 - **OCM Community Call and TSC meeting:** [How We Work](https://ocm.software/community/how-we-work/).
 
-SIG Runtime meets inside the OCM Community Call. Recordings and transcripts are listed in the [Community Call History](../README.md#community-call-history).
+The SIG Runtime meetings take place as part of the OCM Community Call. Recordings and transcripts are available in the [Community Call History](../README.md#community-call-history).
 
 ## Becoming a Maintainer or Voting Member
 
