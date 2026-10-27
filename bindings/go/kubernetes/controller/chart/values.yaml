@@ -183,7 +183,7 @@ crd:
 webhook:
   # -- Enable conversion webhook for CRD version conversion
   enable: false
-  # -- Secret name for webhook TLS certificates (when not using cert-manager, create this secret manually)
+  # -- Secret name for the webhook TLS certificate. With cert-manager the Certificate writes into it; without cert-manager, create it manually. Empty uses the chart default name.
   certSecret: ""
 ## Cert-manager integration
 certManager:

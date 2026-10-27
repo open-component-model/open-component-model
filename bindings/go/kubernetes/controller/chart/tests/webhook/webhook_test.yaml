@@ -175,9 +175,8 @@ tests:
         template: webhook/certificate.yaml
         documentIndex: 1
 
-  - it: ignores webhook.certSecret for the Certificate
-    # The manager mounts webhook.certSecret, but cert-manager still writes the default name.
-    # Pinned so a change here is a deliberate decision, not a side effect.
+  - it: writes the Certificate into webhook.certSecret when set
+    # Must match the cert volume the manager mounts for the same value, see manager_test.yaml.
     set:
       webhook.enable: true
       certManager.enable: true
@@ -186,5 +185,5 @@ tests:
     asserts:
       - equal:
           path: spec.secretName
-          value: ocm-k8s-toolkit-webhook-server-cert
+          value: my-webhook-cert
         documentIndex: 1
