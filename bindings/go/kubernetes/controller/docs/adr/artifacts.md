@@ -280,10 +280,12 @@ Cons:
 
 # Links
 
-* Epic [#75](https://github.com/open-component-model/ocm-k8s-toolkit/issues/75)
-* Issue [#90](https://github.com/open-component-model/ocm-k8s-toolkit/issues/90)
+The tracking issues lived in the archived, non-public `ocm-k8s-toolkit` repository:
 
-[artifact-definition]: https://github.com/openfluxcd/artifact/blob/d9db932260eb5f847737bcae3589b653398780ae/api/v1alpha1/artifact_types.go#L30
+* Epic `ocm-k8s-toolkit#75` (Set up Single Layer OCI Artifacts)
+* Issue `ocm-k8s-toolkit#90` (Create ADR for Single Layer OCI Artifacts)
+
+[artifact-definition]: https://pkg.go.dev/github.com/openfluxcd/artifact@v0.1.1/api/v1alpha1#ArtifactSpec
 [fluxcd-rfc]: https://github.com/fluxcd/flux2/discussions/5058
 [snapshot-definition]: https://github.com/open-component-model/ocm-controller/blob/8588071a05532abd28916931963f88b16622e44d/api/v1alpha1/snapshot_types.go#L22
 [ocm-controller-v1-architecture]: https://github.com/open-component-model/ocm-controller/blob/8588071a05532abd28916931963f88b16622e44d/docs/architecture.md
@@ -291,12 +293,12 @@ Cons:
 [snapshot-spec]: https://github.com/open-component-model/ocm-controller/blob/8588071a05532abd28916931963f88b16622e44d/api/v1alpha1/snapshot_types.go#L22
 
 [snapshot-status]: https://github.com/open-component-model/ocm-controller/blob/8588071a05532abd28916931963f88b16622e44d/api/v1alpha1/snapshot_types.go#L35
-[artifact-spec]: https://github.com/openfluxcd/artifact/blob/d9db932260eb5f847737bcae3589b653398780ae/api/v1alpha1/artifact_types.go#L30
-[artifact-status]: https://github.com/openfluxcd/artifact/blob/d9db932260eb5f847737bcae3589b653398780ae/api/v1alpha1/artifact_types.go#L62
+[artifact-spec]: https://pkg.go.dev/github.com/openfluxcd/artifact@v0.1.1/api/v1alpha1#ArtifactSpec
+[artifact-status]: https://pkg.go.dev/github.com/openfluxcd/artifact@v0.1.1/api/v1alpha1#ArtifactStatus
 [go-containerregistry-digest]: https://github.com/google/go-containerregistry/blob/6bce25ecf0297c1aa9072bc665b5cf58d53e1c54/pkg/v1/manifest.go#L47
 [snapshot-version-ref]: https://github.com/open-component-model/ocm-controller/blob/8588071a05532abd28916931963f88b16622e44d/controllers/resource_controller.go#L212
 [snapshot-create-identity]: https://github.com/open-component-model/ocm-controller/blob/8588071a05532abd28916931963f88b16622e44d/controllers/resource_controller.go#L287
-[artifact-digest-verify-ref]: https://github.com/openfluxcd/controller-manager/blob/d83030b764ab4f143d4b9a815227ad3cdfd9433f/storage/storage.go#L478
+[artifact-digest-verify-ref]: https://pkg.go.dev/github.com/openfluxcd/controller-manager@v0.1.2/storage#Storage.VerifyArtifact
 [oci-repository-type]: https://github.com/fluxcd/source-controller/blob/529eee0ed1afc6063acd9750aa598d90ae3399ed/api/v1beta2/ocirepository_types.go#L296
-[controller-manager-storage]: https://github.com/openfluxcd/controller-manager/blob/d83030b764ab4f143d4b9a815227ad3cdfd9433f/storage/storage.go
+[controller-manager-storage]: https://pkg.go.dev/github.com/openfluxcd/controller-manager@v0.1.2/storage
 

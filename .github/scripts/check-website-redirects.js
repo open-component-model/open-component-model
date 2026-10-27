@@ -129,10 +129,17 @@ export function collectAliases(docsDir) {
 
 /**
  * Read the `defaultContentVersion` from `website/config/_default/hugo.yaml`
- * and return the corresponding git tag name (`website/v<version>.1`).
+ * and return the corresponding git tag name.
+ *
+ * `defaultContentVersion` is a `<major>.<minor>` string (e.g. `0.21`). The
+ * released website tag carries a patch component (`website/v0.21.0`), and the
+ * patch number is not fixed — a `0.19` line shipped `website/v0.19.1`, while
+ * `0.21` only has `website/v0.21.0`. So resolve the highest-patch tag that
+ * actually exists for the configured version instead of assuming a fixed
+ * suffix.
  *
  * @param {string} repoRoot
- * @returns {string}  e.g. "website/v0.19.1"
+ * @returns {string}  e.g. "website/v0.21.0"
  */
 export function baseTag(repoRoot) {
   const hugoYaml = readFileSync(
@@ -146,7 +153,27 @@ export function baseTag(repoRoot) {
       "Could not read defaultContentVersion from website/config/_default/hugo.yaml",
     );
   }
-  return `website/v${version}.1`;
+
+  const prefix = `website/v${version}.`;
+  const tags = execSync(`git tag --list "${prefix}*"`, { cwd: repoRoot })
+    .toString()
+    .trim()
+    .split("\n")
+    .filter(Boolean);
+
+  const patches = tags
+    .map((t) => Number(t.slice(prefix.length)))
+    .filter((n) => Number.isInteger(n) && n >= 0)
+    .sort((a, b) => b - a);
+
+  if (patches.length === 0) {
+    throw new Error(
+      `No git tag matching "${prefix}*" found for defaultContentVersion "${version}". ` +
+        "Ensure the released website tag is fetched (fetch-depth: 0).",
+    );
+  }
+
+  return `${prefix}${patches[0]}`;
 }
 
 /**

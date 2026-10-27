@@ -10,6 +10,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"log/slog"
@@ -20,6 +21,7 @@ import (
 	"github.com/digitorus/timestamp"
 	"github.com/stretchr/testify/require"
 
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -191,6 +193,42 @@ func TestVerifyTSATimestamp_ResolvesRootsByTSAURLLabel(t *testing.T) {
 				hostnames = append(hostnames, id["hostname"])
 			}
 			r.Equal(tc.wantHostnames, hostnames)
+		})
+	}
+}
+
+func TestLoadVerifierConfig(t *testing.T) {
+	sigstoreVerifierConfig := `{"type":"generic.config.ocm.software/v1","configurations":[{
+		"type":"signing.config.ocm.software/v1alpha1",
+		"verifier":{"type":"SigstoreVerificationConfiguration/v1alpha1","certificateOIDCIssuer":"https://issuer.example","certificateIdentity":"signer@example.com"}}]}`
+	signature := func(algorithm, mediaType string) descruntime.Signature {
+		return descruntime.Signature{Name: "default", Signature: descruntime.SignatureInfo{Algorithm: algorithm, MediaType: mediaType}}
+	}
+
+	tests := []struct {
+		name      string
+		config    string
+		signature descruntime.Signature
+		wantType  string
+	}{
+		{name: "RSASSA-PSS without config uses RSA verifier", signature: signature("RSASSA-PSS", "application/vnd.ocm.signature.rsa.pss"), wantType: "RSASigningConfiguration"},
+		{name: "RSASSA-PKCS1-V1_5 without config uses RSA verifier", signature: signature("RSASSA-PKCS1-V1_5", "application/vnd.ocm.signature.rsa"), wantType: "RSASigningConfiguration"},
+		{name: "Sigstore without config uses Sigstore verifier", signature: signature("Sigstore/v1alpha1", "application/vnd.dev.sigstore.bundle.v0.3+json"), wantType: "SigstoreVerificationConfiguration/v1alpha1"},
+		{name: "legacy sigstore without config uses Sigstore verifier", signature: signature("sigstore", "application/vnd.dev.sigstore.bundle.v0.3+json"), wantType: "SigstoreVerificationConfiguration/v1alpha1"},
+		{name: "configured verifier wins over the signature algorithm", config: sigstoreVerifierConfig, signature: signature("RSASSA-PSS", "application/vnd.ocm.signature.rsa.pss"), wantType: "SigstoreVerificationConfiguration/v1alpha1"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			var cfg *genericv1.Config
+			if tc.config != "" {
+				cfg = &genericv1.Config{}
+				r.NoError(json.Unmarshal([]byte(tc.config), cfg))
+			}
+
+			spec, err := loadVerifierConfig(cfg, tc.signature, slog.Default())
+			r.NoError(err)
+			r.Equal(tc.wantType, spec.GetType().String())
 		})
 	}
 }
