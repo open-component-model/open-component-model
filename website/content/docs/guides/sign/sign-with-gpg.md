@@ -1,6 +1,6 @@
 ---
 title: "Sign with GPG"
-description: "Learn to cryptographically sign a component version with a GPG key and verify its authenticity."
+description: "Learn to cryptographically sign a component version with a GPG key, then verify its authenticity using the signer's exported public key."
 weight: 70
 toc: true
 aliases:

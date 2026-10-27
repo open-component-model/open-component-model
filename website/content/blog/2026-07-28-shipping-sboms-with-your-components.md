@@ -1,6 +1,6 @@
 ---
 title: "Shipping SBOMs with Your Components"
-description: "A proof of concept for transporting Software Bills of Materials alongside OCM components: linking, discovering, and orchestrating SBOMs so a whole component version could be scanned in one command."
+description: "A proof of concept for transporting SBOMs alongside OCM components: linking, discovering, and orchestrating them so a whole version can be scanned."
 date: 2026-07-28T10:00:00+02:00
 contributors: []
 tags: ["supply-chain", "sbom", "security", "cli"]

@@ -94,7 +94,7 @@ func extractTARToFilesystemCTF(reader *tar.Reader, ctf *FileSystemCTF) (err erro
 		}
 		switch header.Typeflag {
 		case tar.TypeReg:
-			if err := ctf.writeFile(header.Name, reader, header.Size, nil); err != nil {
+			if err := ctf.writeFile(header.Name, reader, header.Size); err != nil {
 				return fmt.Errorf("unable to write file: %w", err)
 			}
 		case tar.TypeDir:
