@@ -1,6 +1,6 @@
 ---
 title: Repository
-description: "API reference for the Repository custom resource (delivery.ocm.software/v1alpha1)"
+description: "API reference for the Repository custom resource (delivery.ocm.software/v1alpha1): spec, credentials reference, status, and conditions."
 weight: 1
 toc: false
 aliases:

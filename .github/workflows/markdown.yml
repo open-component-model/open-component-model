@@ -6,6 +6,8 @@ on:
       - main
     paths:
       - '**/*.md'
+      - 'website/config/**'
+      - 'website/layouts/**'
       - '.github/workflows/markdown.yml'
       - '.github/config/linkspector-all.yaml'
       - '.github/config/linkspector-changed.yaml'
@@ -17,6 +19,8 @@ on:
       - website/**
     paths:
       - '**/*.md'
+      - 'website/config/**'
+      - 'website/layouts/**'
       - '.github/workflows/markdown.yml'
       - '.github/config/linkspector-all.yaml'
       - '.github/config/linkspector-changed.yaml'

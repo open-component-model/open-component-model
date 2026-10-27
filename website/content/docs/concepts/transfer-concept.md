@@ -87,6 +87,17 @@ By-value Git transfer requires a full commit hash in the access specification. T
 
 Without a local blob uploader, external Git access remains a reference to the original repository. A constructor resource using the `git` input type is already stored as a local blob and follows normal local-blob transfer behavior. Transfer does not push commits or upload content to Git repositories.
 
+### Sources
+
+Component sources are deprecated. They carry no digest, so their content cannot be verified after a copy:
+
+- A source that refers to external content (for example a `Git/v1` access) is never transferred. Transfer copies its
+  descriptor entry as is and logs a warning; the content stays at the original location.
+- A source stored as a local blob (built from an `input`) cannot be transferred. Transfer fails before uploading
+  anything, because the target would reference a blob it does not have.
+
+See [Migrate from Sources to Resources]({{< relref "docs/changelog/migrate-from-sources.md" >}}).
+
 ## Localization
 
 When resources are copied with a local blob uploader, the component descriptor access coordinates are updated to point to the target registry. However, deployment instructions **embedded inside** resources are not modified. For example, a Helm chart's `values.yaml` may still reference `registry-a.example.com/app:1.0` even after the image has been copied to the target registry. Resources are transferred byte-for-byte to preserve digest integrity, so these internal references remain unchanged.

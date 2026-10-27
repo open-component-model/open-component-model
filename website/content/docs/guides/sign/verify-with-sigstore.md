@@ -1,6 +1,6 @@
 ---
 title: "Verify Sigstore (Keyless)"
-description: "Verify a keyless Sigstore-signed component version by declaring the OIDC identity you trust."
+description: "Verify a keyless Sigstore-signed component version by declaring the OIDC identity you trust: issuer, subject, and workflow identity."
 weight: 120
 toc: true
 aliases:
