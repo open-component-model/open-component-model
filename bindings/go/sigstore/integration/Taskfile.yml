@@ -87,6 +87,16 @@ tasks:
           fi
       - |
         curl -fLo /tmp/setup-kind.sh "{{.SCAFFOLDING_URL}}/setup-kind.sh"
+        # Patch setup-kind.sh: it patches configmap/config-network (validated by the Knative
+        # webhook) once, before Knative is up, so on a slow cluster the webhook call fails with
+        # "connection refused". A rollout wait is not enough: the pod reports Ready before its
+        # Service routes to it. Retry the patch like the script already does for the later
+        # config-features/-defaults/-autoscaler patches. Remove once upstream fixes the script.
+        tmp=$(mktemp) && sed \
+          -e 's@^kubectl patch configmap/config-network@while ! kubectl patch configmap/config-network@' \
+          -e 's@\(ingress\.class":"kourier.*\)$@\1; do echo Waiting for webhook to be up.; sleep 2; done@' \
+          /tmp/setup-kind.sh > "$tmp" && mv "$tmp" /tmp/setup-kind.sh
+        grep -q '^while ! kubectl patch configmap/config-network' /tmp/setup-kind.sh && grep -q 'ingress\.class.*; do echo Waiting for webhook' /tmp/setup-kind.sh || { echo "setup-kind.sh webhook-retry patch did not apply; upstream script changed" >&2; exit 1; }
         chmod u+x /tmp/setup-kind.sh
         cd /tmp && ./setup-kind.sh
       - |

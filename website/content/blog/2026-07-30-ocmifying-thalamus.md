@@ -1,6 +1,6 @@
 ---
 title: "Creating an OCM Component for a non-trivial Application"
-description: "This post has detailed explanation about how to modernize a non-trivial application as large as Thalamus. Thalamus has over 80 images it needed to localize and a deployment that involved more than 11 components."
+description: "How to modernize a non-trivial application like Thalamus with OCM: localizing over 80 images and a deployment spanning more than 11 components."
 date: 2026-07-30T10:00:00+02:00
 contributors: []
 tags: ["ocm", "thalamus", "component"]

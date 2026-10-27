@@ -216,6 +216,31 @@ func MergeTLSConfig(dst, src *TLSConfig) TLSConfig {
 	return out
 }
 
+// ProtocolConfig holds HTTP protocol selection settings.
+// All fields are pointers; nil means "use default".
+//
+// +k8s:deepcopy-gen=true
+type ProtocolConfig struct {
+	// DisableHTTP2 restricts the client to HTTP/1.1. By default HTTP/2 is
+	// negotiated via TLS ALPN, which multiplexes every concurrent request to a
+	// host over one TCP connection: a single connection loss or GOAWAY then
+	// affects all in-flight transfers at once. With HTTP/1.1 each concurrent
+	// request uses its own connection, at the cost of more TLS handshakes.
+	DisableHTTP2 *bool `json:"disableHTTP2,omitempty"`
+}
+
+// MergeProtocolConfig merges src into dst. Non-nil fields in src override dst.
+func MergeProtocolConfig(dst, src *ProtocolConfig) ProtocolConfig {
+	out := ProtocolConfig{}
+	if dst != nil {
+		out = *dst
+	}
+	if src != nil && src.DisableHTTP2 != nil {
+		out.DisableHTTP2 = src.DisableHTTP2
+	}
+	return out
+}
+
 // RetryConfig holds HTTP client retry settings.
 // All fields are pointers; nil means "use default".
 //
@@ -303,6 +328,10 @@ type HostConfig struct {
 	// Fields set here override the corresponding top-level TLS value.
 	TLSConfig `json:",inline"`
 
+	// ProtocolConfig overrides protocol selection for this host.
+	// Fields set here override the corresponding top-level value.
+	ProtocolConfig `json:",inline"`
+
 	// Retry overrides the global retry policy for this host.
 	// Fields set here override the corresponding top-level retry value.
 	Retry *RetryConfig `json:"retry,omitempty"`
@@ -338,6 +367,9 @@ type Config struct {
 	// InsecureSkipVerify disables certificate verification globally; use only for
 	// development/testing with self-signed certificates.
 	TLSConfig `json:",inline"`
+
+	// ProtocolConfig configures HTTP protocol selection, e.g. forcing HTTP/1.1.
+	ProtocolConfig `json:",inline"`
 
 	// Retry configures retry behavior for transient failures.
 	// Nil uses the library default policy (5 retries, exponential backoff
@@ -405,18 +437,20 @@ func (c *Config) ResolveHost(host string) HostConfig {
 
 	var timeout *TimeoutConfig
 	var tls *TLSConfig
+	var protocol *ProtocolConfig
 	var retry *RetryConfig
 	for _, key := range HostKeys(host) {
 		if hc := c.Hosts[key]; hc != nil {
-			timeout, tls, retry = &hc.TimeoutConfig, &hc.TLSConfig, hc.Retry
+			timeout, tls, protocol, retry = &hc.TimeoutConfig, &hc.TLSConfig, &hc.ProtocolConfig, hc.Retry
 			break
 		}
 	}
 
 	return HostConfig{
-		TimeoutConfig: MergeTimeoutConfig(&c.TimeoutConfig, timeout),
-		TLSConfig:     MergeTLSConfig(&c.TLSConfig, tls),
-		Retry:         MergeRetryConfig(c.Retry, retry),
+		TimeoutConfig:  MergeTimeoutConfig(&c.TimeoutConfig, timeout),
+		TLSConfig:      MergeTLSConfig(&c.TLSConfig, tls),
+		ProtocolConfig: MergeProtocolConfig(&c.ProtocolConfig, protocol),
+		Retry:          MergeRetryConfig(c.Retry, retry),
 	}
 }
 
@@ -487,6 +521,7 @@ func Merge(configs ...*Config) *Config {
 		}
 		merged.TimeoutConfig = MergeTimeoutConfig(&merged.TimeoutConfig, &c.TimeoutConfig)
 		merged.TLSConfig = MergeTLSConfig(&merged.TLSConfig, &c.TLSConfig)
+		merged.ProtocolConfig = MergeProtocolConfig(&merged.ProtocolConfig, &c.ProtocolConfig)
 		merged.Retry = MergeRetryConfig(merged.Retry, c.Retry)
 
 		if len(c.Hosts) > 0 {

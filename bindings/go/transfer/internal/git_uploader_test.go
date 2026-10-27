@@ -112,10 +112,14 @@ func TestBuildGraphDefinition_GitUploader(t *testing.T) {
 			wantTypes: []runtime.Type{ociv1alpha1.OCIAddComponentVersionV1alpha1},
 		},
 		{
-			name:     "a Git access without a pinned commit fails the build",
-			resource: gitResource(""),
-			uploader: &transferv1alpha1.GitUploaderConfig{Repository: "https://git.target.example/repo.git", Ref: "refs/heads/main"},
-			wantErr:  "no pinned commit",
+			name:      "a Git access without a pinned commit uploads with the ref unpinned",
+			resource:  gitResource(""),
+			uploader:  &transferv1alpha1.GitUploaderConfig{Repository: "https://git.target.example/repo.git", Ref: "refs/heads/main"},
+			wantTypes: getAdd(gitv1alpha1.GetGitResourceV1alpha1),
+			wantAccess: map[string]string{
+				"repository": "https://git.target.example/repo.git",
+				"ref":        "refs/heads/main",
+			},
 		},
 		{
 			name:     "a configured short ref fails the build",

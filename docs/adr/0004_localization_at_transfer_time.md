@@ -350,7 +350,7 @@ mappings:
 
 Furthermore, the transformation might change the original image from `ghcr.io/open-component-model/image:v1.0.0` to `ghcr.io/new-org/image:v1.0.0`, so there is an implicit dependency on the original image during transfer.
 
-To solve this problem, we have adopted the Common Expression Language (CEL) as a way to express these dependencies, heavily inspired and almost parallel implemented to [KRO](https://kro.run/docs/concepts/resource-group-definitions). The CEL expression is evaluated at runtime, allowing the orchestrator to resolve the correct value based on the current context in the transfer specification.
+To solve this problem, we have adopted the Common Expression Language (CEL) as a way to express these dependencies, heavily inspired and almost parallel implemented to [KRO](https://kro.run/docs/concepts/rgd/overview/). The CEL expression is evaluated at runtime, allowing the orchestrator to resolve the correct value based on the current context in the transfer specification.
 
 > We want to heavily shoutout the KRO team for their amazing work on this. The Apache 2.0 CEL Expression Parsing is based almost 1:1 on the KRO implementation and we are happy to share our learnings and improvements with the KRO team. We stand on the shoulders of giants, and without their work on the CEL parsing we would likely never have achieved this dynamic localization.
 

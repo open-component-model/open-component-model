@@ -1,6 +1,6 @@
 ---
 title: "Getting Started"
-description: "Learn how to use OCM through hands-on tutorials that guide you step-by-step."
+description: "Learn how to use OCM through hands-on guides: install the CLI, create a component version, and deploy a Helm chart step by step."
 icon: "🚀"
 weight: 20
 sidebar:

@@ -1,6 +1,6 @@
 ---
 title: "Go Bindings: One Module, One Release"
-description: "The OCM Go bindings libraries move from 30+ independently versioned modules to a single monolithic module — simpler development, simpler consumption, same modularity."
+description: "The OCM Go bindings move from 30+ independently versioned modules to one monolithic module for simpler development and consumption, with the same modularity."
 date: 2026-08-14T10:00:00+02:00
 contributors: []
 tags: ["ocm", "release", "go", "bindings", "developer-experience"]

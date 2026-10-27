@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strings"
 
 	"ocm.software/open-component-model/bindings/go/dag"
 	dagsync "ocm.software/open-component-model/bindings/go/dag/sync"
@@ -163,7 +164,7 @@ func BuildGraphDefinition(
 
 	// Phase 2: walk the discovered DAG and generate transformation nodes per (component, target) pair.
 	err := g.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
-		return fillGraphDefinitionWithPrefetchedComponents(ctx, d, targetMap, tgd, uploaders)
+		return fillGraphDefinitionWithPrefetchedComponents(ctx, d, targetMap, tgd, uploaders, cfg.UnmatchedResourcePolicy.Normalize())
 	})
 	if err != nil {
 		return nil, err
@@ -212,6 +213,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 	targetMap map[string][]runtime.Typed,
 	tgd *transformv1alpha1.TransformationGraphDefinition,
 	uploaders []transferv1alpha1.UploaderConfig,
+	policy transferv1alpha1.UnmatchedResourcePolicy,
 ) error {
 	slog.DebugContext(ctx, "building transformations for discovered components",
 		"components", len(d.Vertices))
@@ -248,6 +250,9 @@ func fillGraphDefinitionWithPrefetchedComponents(
 			"component", component, "version", version,
 			"targets", len(targets),
 			"resources", len(v2desc.Component.Resources))
+		if err := checkSources(ctx, v2desc); err != nil {
+			return err
+		}
 
 		for targetIdx, target := range targets {
 			id := baseID
@@ -260,7 +265,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 				"targetIndex", targetIdx, "targetType", fmt.Sprintf("%T", target),
 				"transformID", id)
 
-			resourceTransformIDs, fileRefs, err := processResources(ctx, v2desc, baseID, id, val, tgd, target, uploaders, uploaderUsed)
+			resourceTransformIDs, fileRefs, err := processResources(ctx, v2desc, baseID, id, val, tgd, target, uploaders, uploaderUsed, policy)
 			if err != nil {
 				return err
 			}
@@ -281,7 +286,8 @@ func fillGraphDefinitionWithPrefetchedComponents(
 
 // processResources iterates over resources in a v2 descriptor and creates the appropriate
 // transformations: the first uploader whose match selects a resource handles it. A resource no uploader selects follows the baseline: a local blob
-// is copied as a local blob, anything else stays by reference (no transformation).
+// is copied as a local blob, anything else stays by reference (no transformation). policy
+// decides whether such resources are only logged or fail the build (see unmatchedResources.report).
 // It returns CEL spec-field expressions for all Get transformations that buffer content to disk.
 func processResources(
 	ctx context.Context,
@@ -293,9 +299,15 @@ func processResources(
 	toSpec runtime.Typed,
 	uploaders []transferv1alpha1.UploaderConfig,
 	uploaderUsed []bool,
+	policy transferv1alpha1.UnmatchedResourcePolicy,
 ) (map[int]string, []string, error) {
-	component := val.Descriptor.Component.Name
-	version := val.Descriptor.Component.Version
+	unmatched := unmatchedResources{
+		policy:              policy,
+		uploadersConfigured: len(uploaders) > 0,
+		component:           val.Descriptor.Component.Name,
+		version:             val.Descriptor.Component.Version,
+		target:              targetName(toSpec),
+	}
 	resourceTransformIDs := make(map[int]string)
 	var fileExpressions []string
 	env := &uploaderEnv{baseID: baseID, node: tgd.Environment.Data[baseID]}
@@ -344,7 +356,7 @@ func processResources(
 				case *transferv1alpha1.GitUploaderConfig:
 					exprs, err = processGitUploader(ctx, resource, access, cfg, aliases, env, id, val, tgd, resourceTransformIDs, i)
 				case *transferv1alpha1.LocalBlobUploaderConfig:
-					exprs, err = processResource(resource, access, id, val, tgd, toSpec, resourceTransformIDs, i)
+					exprs, err = processResource(ctx, resource, access, id, val, tgd, toSpec, resourceTransformIDs, i)
 				case *transferv1alpha1.ArtifactoryUploaderConfig:
 					err = processRepositoryUploader(resource, access, uploadv1alpha1.ArtifactoryUploadV1alpha1, cfg.URL, cfg.Repository, cfg.Path, baseID, id, val, tgd, resourceTransformIDs, i)
 				case *transferv1alpha1.NexusUploaderConfig:
@@ -368,18 +380,20 @@ func processResources(
 		if handled {
 			continue
 		}
-		if !isLocalByValue(access) {
-			slog.DebugContext(ctx, "no uploader selects resource, keeping it by reference",
-				"component", component, "version", version,
-				"resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
+		byValue := isLocalByValue(access)
+		unmatched.add(resource, byValue)
+		if !byValue {
 			continue
 		}
 
-		exprs, err := processResource(resource, access, id, val, tgd, toSpec, resourceTransformIDs, i)
+		exprs, err := processResource(ctx, resource, access, id, val, tgd, toSpec, resourceTransformIDs, i)
 		if err != nil {
 			return nil, nil, err
 		}
 		fileExpressions = append(fileExpressions, exprs...)
+	}
+	if err := unmatched.report(ctx); err != nil {
+		return nil, nil, err
 	}
 	return resourceTransformIDs, fileExpressions, nil
 }
@@ -398,7 +412,7 @@ func isLocalByValue(access runtime.Typed) bool {
 // the baseline (local blobs) and a selected local blob uploader.
 // It returns CEL spec-field expressions for the file buffers produced, referencing consumer spec
 // fields (not producer outputs) so the DAG edge points from consumer to the cleanup node.
-func processResource(resource descriptorv2.Resource, access runtime.Typed, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) ([]string, error) {
+func processResource(ctx context.Context, resource descriptorv2.Resource, access runtime.Typed, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) ([]string, error) {
 	resourceIdentity := resource.ToIdentity()
 	resourceID := identityToTransformationID(resourceIdentity)
 	addResourceID := fmt.Sprintf("%sAdd%s", id, resourceID)
@@ -451,7 +465,7 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *gitv1.Git:
-		if err := processGit(resource, acc, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
+		if err := processGit(ctx, resource, acc, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
 			return nil, fmt.Errorf("cannot process Git resource: %w", err)
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
@@ -478,6 +492,69 @@ func warnUnusedUploaders(ctx context.Context, uploaders []transferv1alpha1.Uploa
 			"index", idx,
 			"match", u.EffectiveMatch())
 	}
+}
+
+// unmatchedResource is a resource no uploader selects; byValue tells whether its baseline
+// copies it as a local blob or keeps it by reference.
+type unmatchedResource struct {
+	resource descriptorv2.Resource
+	byValue  bool
+}
+
+// unmatchedResources collects the resources of one component version that no uploader
+// selects for a target, so policy is applied once to all of them instead of per resource.
+type unmatchedResources struct {
+	policy              transferv1alpha1.UnmatchedResourcePolicy
+	uploadersConfigured bool
+	component, version  string
+	// target is reported because uploader matches can depend on it.
+	target    string
+	resources []unmatchedResource
+}
+
+func (u *unmatchedResources) add(resource descriptorv2.Resource, byValue bool) {
+	u.resources = append(u.resources, unmatchedResource{resource: resource, byValue: byValue})
+}
+
+// report applies policy to the collected resources. Fail returns one error naming every
+// resource, regardless of whether uploaders are configured; Warn logs a warning per resource
+// only when uploaders are configured, since without any every resource follows the baseline
+// by design.
+func (u *unmatchedResources) report(ctx context.Context) error {
+	if len(u.resources) == 0 {
+		return nil
+	}
+	if u.policy == transferv1alpha1.UnmatchedResourcePolicyFail {
+		reason := "no uploader selects them"
+		if !u.uploadersConfigured {
+			reason = "no uploader is configured"
+		}
+		descs := make([]string, len(u.resources))
+		for i, r := range u.resources {
+			descs[i] = fmt.Sprintf("%s (access type %s)", r.resource.ToIdentity(), r.resource.Access.Type)
+		}
+		return fmt.Errorf("resources of component %s:%s are not handled by any uploader for target %s: %s (unmatchedResourcePolicy is %s): %s",
+			u.component, u.version, u.target, reason, u.policy, strings.Join(descs, ", "))
+	}
+
+	level := slog.LevelDebug
+	if u.policy == transferv1alpha1.UnmatchedResourcePolicyWarn && u.uploadersConfigured {
+		level = slog.LevelWarn
+	}
+	if !slog.Default().Enabled(ctx, level) {
+		return nil
+	}
+	for _, r := range u.resources {
+		baseline := "reference"
+		if r.byValue {
+			baseline = "localBlob"
+		}
+		slog.Log(ctx, level, "no uploader selects resource; falling back to the baseline",
+			"component", u.component, "version", u.version,
+			"resource", r.resource.ToIdentity().String(), "accessType", r.resource.Access.Type.String(),
+			"target", u.target, "baseline", baseline)
+	}
+	return nil
 }
 
 // helmFileExpressions returns the CEL spec-field expressions of the file buffers a Helm
@@ -602,4 +679,28 @@ func setListField[T any](componentMap map[string]any, field, id string, list []T
 	default:
 		componentMap[field] = fmt.Sprintf("${environment.%s.component.%s}", id, field)
 	}
+}
+
+// checkSources warns that sources are copied as plain references, and fails for sources
+// stored as local blobs: transfer does not copy their content, so the target would
+// reference a blob it does not have.
+func checkSources(ctx context.Context, v2desc *descriptorv2.Descriptor) error {
+	if len(v2desc.Component.Sources) == 0 {
+		return nil
+	}
+	var local []string
+	for _, src := range v2desc.Component.Sources {
+		if src.Access != nil && descriptorv2.IsLocalBlob(src.Access) {
+			local = append(local, src.Name+":"+src.Version)
+		}
+	}
+	if len(local) > 0 {
+		return fmt.Errorf("component version %s:%s has sources stored as local blobs, which cannot be transferred: %q; "+
+			"sources are deprecated, declare this content as resources instead",
+			v2desc.Component.Name, v2desc.Component.Version, local)
+	}
+	slog.WarnContext(ctx, "sources are unsafe and cannot be transferred as they lack a digest; copying their references as is",
+		"component", v2desc.Component.Name, "version", v2desc.Component.Version,
+		"sources", len(v2desc.Component.Sources))
+	return nil
 }
