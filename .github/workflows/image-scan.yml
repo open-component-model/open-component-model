@@ -259,6 +259,7 @@ jobs:
       # Trivy's Dockerfile checks; Kubescape ignores them.
       - name: Render chart
         run: |
+          mkdir -p tmp/chart-scan
           helm template ocm-k8s-toolkit bindings/go/kubernetes/controller/chart \
             --namespace ocm-k8s-toolkit-system --set manager.networkPolicy.enabled=true \
             --output-dir tmp/chart
@@ -279,6 +280,22 @@ jobs:
           scan-ref: tmp/chart
           trivyignores: .github/benchmarks/trivyignore.yaml
           exit-code: '1'
+          format: json
+          output: tmp/chart-scan/trivy.json
+
+      # Trivy's JSON lists only failed checks; accepted findings are dropped.
+      - name: CIS Kubernetes Benchmark summary
+        if: ${{ !cancelled() }}
+        run: |
+          report=tmp/chart-scan/trivy.json
+          [[ -s "$report" ]] || { echo "::error::Trivy wrote no report for the chart"; exit 1; }
+          jq -r '[.Results[]? | .Target as $t | .Misconfigurations[]? | . + {Target: $t}] as $failed
+            | "### ☸️ CIS Kubernetes Benchmark: controller chart and image build files (Trivy config)\n",
+              "\([.Results[]?.MisconfSummary.Successes // 0] | add // 0) checks passed, \($failed | length) failed in \([.Results[]?] | length) files. Accepted findings: `.github/benchmarks/trivyignore.yaml`.",
+              if $failed == [] then empty
+              else "\n| File | Line | ID | Severity | Title | Message |\n| --- | --- | --- | --- | --- | --- |",
+                ($failed[] | "| \(.Target) | \(.CauseMetadata.StartLine // "") | \(.ID) | \(.Severity) | \(.Title | gsub("\\|"; "\\|")) | \(.Message | gsub("\\|"; "\\|") | gsub("\n"; " ")) |")
+              end' "$report" >> "$GITHUB_STEP_SUMMARY"
 
       # Kubescape fails on an empty input, but its thresholds count controls
       # covered by an exception as failed, so the open ones are selected here.
@@ -287,8 +304,29 @@ jobs:
         run: |
           docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/work" -w /work "$KUBESCAPE_IMAGE" \
             scan framework nsa,mitre tmp/chart --exceptions .github/benchmarks/kubescape-exceptions.json \
-            --format pretty-printer,json --output tmp/kubescape
-          open="$(jq -r '.results[] | .resourceID as $r | .controls[]
-            | select(.status.status == "failed" and .status.subStatus != "w/exceptions")
-            | "::error::\(.controlID) \(.name) fails on \($r)"' tmp/kubescape.json)"
+            --format pretty-printer,json --output tmp/chart-scan/kubescape
+          report=tmp/chart-scan/kubescape.json
+          # Resource IDs chain the objects a control relates (path=<n>/api=<group>/<ns>/<Kind>/<name>/...);
+          # only Kind/name pairs are kept.
+          failed="$(jq -c '[.results[] | (.resourceID | [scan("(?:^|/)([A-Z][A-Za-z]+)/([^/]+)") | join("/")] | join(" → ")) as $r
+            | .controls[] | select(.status.status == "failed")
+            | {resource: $r, id: .controlID, name, accepted: (.status.subStatus == "w/exceptions")}]' "$report")"
+          jq -r --argjson failed "$failed" '"### 🛡️ NSA/CISA and MITRE: controller chart (Kubescape)\n",
+            (.summaryDetails.frameworks[]? | "- \(.name): compliance score \(.complianceScore * 100 | round / 100)%"),
+            "\n\([$failed[] | select(.accepted | not)] | length) open, \([$failed[] | select(.accepted)] | length) accepted (`.github/benchmarks/kubescape-exceptions.json`) control failures.",
+            if $failed == [] then empty
+            else "\n| Control | Name | Resource | Status |\n| --- | --- | --- | --- |",
+              ($failed | sort_by(.accepted, .id)[] | "| \(.id) | \(.name) | \(.resource) | \(if .accepted then "accepted" else "❌ open" end) |")
+            end' "$report" >> "$GITHUB_STEP_SUMMARY"
+          open="$(jq -r '.[] | select(.accepted | not) | "::error::\(.id) \(.name) fails on \(.resource)"' <<< "$failed")"
           [[ -z "$open" ]] || { echo "$open"; exit 1; }
+
+      - name: Upload reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: chart-scan
+          path: |
+            tmp/chart-scan/
+            tmp/chart/
+          if-no-files-found: ignore
