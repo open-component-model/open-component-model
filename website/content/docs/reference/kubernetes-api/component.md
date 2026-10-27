@@ -1,6 +1,6 @@
 ---
 title: Component
-description: "API reference for the Component custom resource (delivery.ocm.software/v1alpha1)"
+description: "API reference for the Component custom resource (delivery.ocm.software/v1alpha1): spec, status, conditions, and configuration options."
 weight: 2
 toc: false
 aliases:

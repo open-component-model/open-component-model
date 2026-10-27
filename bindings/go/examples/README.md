@@ -11,7 +11,7 @@ Every example is a **runnable Go test** — read the code, run it, modify it.
 | Step | File                                               | Topic                        | What You'll Learn                                                                                    |
 |------|:---------------------------------------------------|------------------------------|------------------------------------------------------------------------------------------------------|
 | 1    | [`01_blob_test.go`](01_blob_test.go)               | **Binary Data (Blobs)**      | In-memory and filesystem blobs, metadata, copying with digest verification                           |
-| 2    | [`02_descriptor_test.go`](02_descriptor_test.go)   | **Component Descriptors**    | Building descriptors with resources, sources, references, labels, and identity                       |
+| 2    | [`02_descriptor_test.go`](02_descriptor_test.go)   | **Component Descriptors**    | Building descriptors with resources, references, labels, and identity                                |
 | 3    | [`03_credentials_test.go`](03_credentials_test.go) | **Credential Resolution**    | Static credential resolvers, identity-based lookup                                                   |
 | 4    | [`04_repository_test.go`](04_repository_test.go)   | **Repositories**             | CTF-backed storage, component version CRUD, resource upload and retrieval                            |
 | 5    | [`05_signing_test.go`](05_signing_test.go)         | **Signing & Verification**   | Digests, RSA signing (plain and PEM), tamper detection, wrong-key detection                          |
@@ -50,7 +50,7 @@ task bindings/go/examples:test
                            │
                     ┌──────▼──────┐
                     │ 2. Descrip- │  Metadata model:
-                    │    tors     │  resources, sources, refs
+                    │    tors     │  resources, refs
                     └──────┬──────┘
                            │
                 ┌──────────┼──────────┐
