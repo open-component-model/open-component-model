@@ -61,7 +61,12 @@
       // cadence as the digest pins below; without this only digest-only
       // re-pins were scheduled and version bumps landed any day of the week.
       // Kept above 'Digest pins' (general before specific).
+      // separateMinorPatch is off so minor and patch bumps share the group
+      // below. It lives here, not there: rules with matchUpdateTypes are only
+      // evaluated after the update type is known, too late for this option.
+      // Majors are unaffected (they stay separate via separateMultipleMajor).
       matchManagers: ['github-actions'],
+      separateMinorPatch: false,
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ],
