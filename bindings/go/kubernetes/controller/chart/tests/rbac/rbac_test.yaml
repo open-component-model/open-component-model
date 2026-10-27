@@ -109,20 +109,17 @@ tests:
           path: metadata.namespace
           value: ocm-k8s-toolkit-system
         template: rbac/leader-election-role.yaml
-      # controller-runtime locks on coordination.k8s.io/leases (no LeaderElectionResourceLock override in cmd/main.go).
-      - contains:
+      # Exactly leases and events: controller-runtime locks on coordination.k8s.io/leases
+      # (no LeaderElectionResourceLock override in cmd/main.go), so nothing else belongs here.
+      - equal:
           path: rules
-          content:
-            apiGroups: [coordination.k8s.io]
-            resources: [leases]
-            verbs: [get, list, watch, create, update, patch, delete]
-        template: rbac/leader-election-role.yaml
-      - contains:
-          path: rules
-          content:
-            apiGroups: [""]
-            resources: [events]
-            verbs: [create, patch]
+          value:
+            - apiGroups: [coordination.k8s.io]
+              resources: [leases]
+              verbs: [get, list, watch, create, update, patch, delete]
+            - apiGroups: [""]
+              resources: [events]
+              verbs: [create, patch]
         template: rbac/leader-election-role.yaml
       - isKind:
           of: RoleBinding
