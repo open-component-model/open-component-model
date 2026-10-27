@@ -17,6 +17,7 @@
     align-content: start; /* prevent grid rows from stretching vertically; keep constant spacing between sections even on tall viewports */
     background: var(--lp-c-bg);
     min-height: 100vh;
+    min-width: 0; /* grid default is auto = widest content; without it the whole section overflows on narrow viewports */
     gap: 24px;
     padding-top: var(--nav-height);
     padding-left: var(--nav-pad-x) !important;
@@ -31,6 +32,7 @@
         text-align: center;
         gap: clamp(40px, 4vw, 64px);
         width: 100%;
+        min-width: 0;
         max-width: 1400px;
     }
 
@@ -649,5 +651,101 @@ html[data-bs-theme="light"] .neonephos-logo--light {
         background: var(--lp-c-bg) !important;
         color: var(--lp-c-text-2) !important;
         border-top-color: var(--lp-c-divider);
+    }
+}
+/* ============================================
+   Adopter Logo Marquee
+   ============================================ */
+/*
+   Layout discipline:
+   - Template adds <div class="container container--adopters"> as a SIBLING of the cards grid
+     (same .lp-home > .container pattern). It inherits Bootstrap .container padding only.
+   - No overrides of .lp-home, header, .ocm-card-grid, or .section-title — pure new classes.
+   - Title and marquee band sit flush with the cards' container edge on both axes.
+*/
+// Specificity: `.lp-home .container--adopters` (0,2,0) must beat `.lp-home .container` (0,2,0, earlier) which
+// sets `margin: 0 auto`. Plain `.container--adopters` (0,1,0) would lose and zero out our margins.
+.lp-home .container--adopters {
+    // Grid-gap contributes 24px between rows; add ~1.5rem extra top, ~3rem bottom for breathing room.
+    margin-top: 1.5rem;
+    margin-bottom: 3rem;
+
+    .adopters-title {
+        font-size: 0.875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--lp-c-text-2, #98989f);
+        text-align: left;
+        margin: 0 0 0.75rem 0;
+    }
+
+    .ocm-marquee {
+        overflow: hidden;
+        position: relative;
+        min-width: 0; /* flex child of .container--adopters; without this its max-content child forces it wide */
+        width: 100%;
+        mask-image: linear-gradient(to right, transparent, black 1.5%, black 98.5%, transparent);
+        -webkit-mask-image: linear-gradient(to right, transparent, black 1.5%, black 98.5%, transparent);
+
+        &:hover .ocm-marquee-track {
+            animation-play-state: paused;
+        }
+    }
+}
+
+.ocm-marquee-track {
+    display: flex;
+    align-items: center;
+    gap: 48px;
+    padding-right: 48px; /* trailing gap so the duplicated sequence wraps seamlessly with the same visual spacing */
+    width: max-content;
+    animation: ocm-marquee-scroll 60s linear infinite;
+}
+
+@keyframes ocm-marquee-scroll {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-50%); }
+}
+
+.ocm-marquee-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    height: 44px;
+
+    // Uniform rendered height for every logo; width follows each asset's aspect ratio.
+    // `max-width` is a safety cap so absurdly wide source SVGs (e.g. 8:1 banners) can't blow
+    // past the gap rhythm — `object-fit: contain` then letterboxes instead of stretching.
+    img {
+        height: 44px;
+        width: auto;
+        max-width: 280px;
+        object-fit: contain;
+        opacity: 0.85;
+    }
+
+    img.logo-light { display: inline-block; }
+    img.logo-dark  { display: none; }
+
+    &:hover img {
+        opacity: 1;
+    }
+}
+
+// Theme toggle: Doks uses [data-bs-theme], not prefers-color-scheme
+[data-bs-theme="dark"] .ocm-marquee-item {
+    img.logo-light { display: none; }
+    img.logo-dark  { display: inline-block; }
+}
+
+// Reduce motion preference
+@media (prefers-reduced-motion: reduce) {
+    .ocm-marquee-track { animation: none; }
+    .container--adopters .ocm-marquee {
+        mask-image: none;
+        -webkit-mask-image: none;
+        overflow-x: auto;
     }
 }
