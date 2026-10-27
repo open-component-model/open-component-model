@@ -53,22 +53,28 @@ universal file, without edits.
 
 ### How to add a new adopter
 
-Logos are used **as-is**, straight from the organisation's website or brand
-page. Do not edit, crop, recolour, or normalise the files. If a file looks
-wrong in the marquee, pick a different source file rather than patching this
-one.
+Logos must have their artwork touching (or within 2–3 px of) all four edges of
+the SVG viewBox. A viewBox with significant empty space around the artwork
+pushes the visual gaps between logos out of rhythm. This is the only edit you
+ever need to make to an SVG; everything else stays as downloaded.
 
-1. **Get the logo.** Download the official SVG (preferred) or PNG, usually from
-   the adopter's press/brand page or their GitHub org's artwork repository.
+1. **Get the logo.** Download the official SVG (preferred) or PNG from the
+   adopter's press/brand page or their GitHub org's artwork repository.
 
-2. **Dark mode check.** Many logos work in both light and dark theme as a single
-   file (any logo with strong colour and no near-black or near-white text does).
-   If the logo only works on one theme, get the official variant for the other
-   theme from the same source. Put light-only assets as `<org>-light.svg`,
-   dark-only assets as `<org>-dark.svg`, and universally usable ones as
-   `<org>-color.svg`.
+2. **Normalise the viewBox (SVG only).** Open the file in a text editor and
+   find the root `<svg viewBox="x y w h">`. Load the file in Inkscape (or a
+   browser + DevTools canvas trick) to find the tight bounding box of the
+   artwork. Set `x` and `y` to the artwork's top-left corner, `w` and `h` to
+   the artwork's width and height. Keep at most 2–3 SVG units of breathing room
+   on each side. Do NOT change any path or shape data. For PNGs skip this step.
 
-3. **Register in `website/content/_index.md`.** Example:
+3. **Dark mode check.** Many logos work in both light and dark theme as a
+   single file (any logo with strong colour and no near-black or near-white text
+   does). If the logo only works on one theme, get the official variant for the
+   other theme from the same source. Name light-only assets `<org>-light.svg`,
+   dark-only assets `<org>-dark.svg`, universally usable ones `<org>-color.svg`.
+
+4. **Register in `website/content/_index.md`.** Example:
 
    ```yaml
    adopters:
@@ -81,17 +87,16 @@ one.
    One file for both themes: point `logo_light` and `logo_dark` at the same
    file. Two variants: point each at its own file. No size or spacing keys
    exist; the CSS handles sizing (uniform height, width by aspect ratio) and
-   spacing (fixed gap) by itself.
+   spacing (fixed gap) automatically.
 
-4. **Record provenance.** Append a section `### <Organisation>` at the bottom
+5. **Record provenance.** Append a section `### <Organisation>` at the bottom
    of this file with: File, Source URL, Fetched (date), Licence, Trademark
-   owner. If the file needed any adjustment beyond a plain download (should be
-   rare), note it there.
+   owner. If the file needed a viewBox normalisation, note it there.
 
-5. **Verify.** Run `npm run dev` and open <http://localhost:1313/main/>. Toggle
-   light/dark theme in the header and check the logo shows up at the same
-   height as the others with even spacing on both themes, plus on a narrow
-   (~390 px) viewport.
+6. **Verify.** Run `npm run dev` and open <http://localhost:1313/main/>. Toggle
+   light/dark theme and confirm the logo appears at the same height as the
+   others with visually even spacing, on both themes and on a narrow (~390 px)
+   viewport.
 
 ---
 
@@ -125,7 +130,8 @@ one.
 - **Source:** GitHub `neonephos/artwork` repo
 - **Fetched:** 2026-10-26
 - **Licence:** NeoNephos trademark usage guidelines
-- **Trademark owner:** NeoNephos Foundation
+- **Notes:** viewBox cropped from `0 0 595.3 170.1` to `46 0 502 170.1` to
+  remove ~24 px of internal padding on each side. No path data changed.
 
 ### Konfidence
 
@@ -133,7 +139,8 @@ one.
 - **Source:** konfidence.cloud
 - **Fetched:** 2026-10-26
 - **Licence:** Editorial use (no explicit licence)
-- **Trademark owner:** SAP SE / Konfidence project
+- **Notes:** viewBox cropped from `0 0 3440 400` to `78 0 3283 400` to
+  remove ~80 px of internal padding on each side. No path data changed.
 
 ### Kyma
 
@@ -141,7 +148,8 @@ one.
 - **Source:** kyma-project.io
 - **Fetched:** 2026-10-26
 - **Licence:** Editorial use (no explicit licence)
-- **Trademark owner:** SAP SE / Kyma project
+- **Notes:** viewBox cropped from `0 0 150 60` to `0 0 126 60` to remove
+  ~24 px of internal padding on the right side. No path data changed.
 
 ### Open Control Plane (OCP)
 
@@ -149,8 +157,10 @@ one.
 - **Source:** open-control-plane.io
 - **Fetched:** 2026-10-26
 - **Licence:** NeoNephos trademark usage guidelines
-- **Trademark owner:** NeoNephos Foundation
-- **Note:** `ocp-dark.svg` remaps the original dark blues to lighter tones for dark-mode visibility; stroke colour switched from `#221f20` to `#f5f5f7`.
+- **Notes:** `ocp-dark.svg` remaps the original dark blues to lighter tones for
+  dark-mode visibility; stroke colour switched from `#221f20` to `#f5f5f7`.
+  viewBox cropped from `0 0 350 60` to `0 0 284 60` on both files to remove
+  ~67 px of internal padding on the right side. No path data changed.
 
 ### Platform Mesh
 
@@ -175,7 +185,10 @@ one.
 - **Fetched:** 2026-10-26
 - **Licence:** Editorial use (official brand asset in project repo)
 - **Trademark owner:** STACKIT GmbH & Co. KG
-- **Note:** Dark variant derived from the official light SVG by replacing the fill colour with white.
+- **Notes:** Dark variant derived from the official light SVG by replacing the
+  fill colour with white. viewBox cropped from
+  `0 0 1612.0708246 546.8535461` to `111 0 1385 546.8535461` on both files to
+  remove ~21 px of internal padding on each side. No path data changed.
 
 ### IronCore
 
