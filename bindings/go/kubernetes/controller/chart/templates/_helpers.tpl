@@ -24,14 +24,6 @@ The name, by default, is ocm-k8s-toolkit. It can be overwritten by nameOverride 
 {{- end }}
 
 {{/*
-Namespace for generated references.
-Always uses the Helm release namespace.
-*/}}
-{{- define "ocm-k8s-toolkit.namespaceName" -}}
-{{- .Release.Namespace }}
-{{- end }}
-
-{{/*
 Resource name with proper truncation for Kubernetes 63-character limit.
 Takes a dict with:
   - .suffix: Resource name suffix (e.g., "metrics", "webhook")
