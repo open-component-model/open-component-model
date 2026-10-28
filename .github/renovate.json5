@@ -82,6 +82,26 @@
       groupSlug: 'github-actions',
     },
     {
+      // npm bumps (website/ and .github/scripts/) used to open a PR per
+      // package on any day of the week. Same split as for the Actions above:
+      // separateMinorPatch is off here because the group rule below carries
+      // matchUpdateTypes and is evaluated too late for that option.
+      matchManagers: ['npm'],
+      separateMinorPatch: false,
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ],
+    },
+    {
+      // Batch non-breaking npm bumps into one weekly PR. Majors stay out and
+      // get their own PR (separateMultipleMajor) to be reviewed and reverted
+      // alone.
+      matchManagers: ['npm'],
+      matchUpdateTypes: ['minor', 'patch'],
+      groupName: 'npm dependencies',
+      groupSlug: 'npm-deps',
+    },
+    {
       // Collapse digest-only re-pins (same tag, new SHA) for Actions and
       // Docker base images into one weekly PR, regardless of image name
       // or file location. gomod is excluded so Go module digests keep
