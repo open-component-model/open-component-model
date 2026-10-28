@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -143,6 +144,9 @@ func OpenCTF(ctx context.Context, opts OpenCTFOptions) (CTF, error) {
 		if errors.Is(err, os.ErrNotExist) && opts.Flag&O_CREATE != 0 {
 			return OpenCTFFromOSPath(tmp, opts.Flag)
 		}
+		if err != nil {
+			return nil, fmt.Errorf("unable to extract ctf archive: %w", err)
+		}
 		return ctf, nil
 	default:
 		return nil, ErrUnsupportedFormat
@@ -171,6 +175,14 @@ func OpenCTFByFileExtension(ctx context.Context, opts OpenCTFOptions) (CTF, File
 	archive, err := OpenCTF(ctx, opts)
 	if err != nil {
 		return nil, FormatUnknown, fmt.Errorf("failed to open CTF: %w", err)
+	}
+	if fileSystemArchive, ok := archive.(*FileSystemCTF); ok {
+		fileSystem := fileSystemArchive.FS()
+		if _, err := fs.Stat(fileSystem, "component-descriptor.yaml"); err == nil {
+			if _, indexErr := fs.Stat(fileSystem, v1.ArtifactIndexFileName); errors.Is(indexErr, fs.ErrNotExist) {
+				return nil, FormatUnknown, fmt.Errorf("component archive %q is not supported", opts.Path)
+			}
+		}
 	}
 
 	return archive, discovered, nil
