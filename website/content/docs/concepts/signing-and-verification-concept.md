@@ -56,8 +56,16 @@ OCM uses a two-layer approach to ensure consistent and reproducible digests:
 
 Before hashing, the component descriptor is normalized into a canonical form, eliminating any ambiguities
 that could cause the same logical descriptor to produce different digests. The default normalization
-algorithm ([`jsonNormalisation/v4alpha1`](https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/04-algorithms/component-descriptor-normalization-algorithms.md#normalization-algorithms)) defines exactly how this canonical form is derived, ensuring
+algorithm ([`jsonNormalisation/v4alpha3`](https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/04-algorithms/component-descriptor-normalization-algorithms.md#normalization-algorithms)) defines exactly how this canonical form is derived, ensuring
 identical component descriptors always yield the same digest.
+
+Digests computed with older algorithms keep verifying: `jsonNormalisation/v4alpha1`, `jsonNormalisation/v4alpha2`,
+the legacy `jsonNormalisation/v3` (computed as `jsonNormalisation/v4alpha2`, which reproduces it byte for byte), and
+`jsonNormalisation/v1`, which can only be verified, never used for new signatures or component reference digests.
+Some of them cover less of the descriptor: `jsonNormalisation/v1` does not cover sources, and `jsonNormalisation/v4alpha1`
+does not cover label versions. Anyone who can write the descriptor can change these fields without such a digest
+noticing, so OCM logs a warning whenever it trusts one (a signature, a digest pin or a component reference digest).
+Re-sign the component version, or rebuild the referencing component version, to move to the default.
 
 This entire approach relies on the fact that **content digests** are preserved across transfers.
 Each resource's digest is computed from its actual content (not from where it is stored),
@@ -92,7 +100,7 @@ references:
     version: 1.0.0
     digest:
       hashAlgorithm: SHA-256
-      normalisationAlgorithm: jsonNormalisation/v4alpha1
+      normalisationAlgorithm: jsonNormalisation/v4alpha3
       value: 01c211f5c9cfd7c40e5b84d66a2fb7d19cb0...
 ```
 
@@ -156,7 +164,7 @@ signatures:
   - name: default
     digest:
       hashAlgorithm: SHA-256
-      normalisationAlgorithm: jsonNormalisation/v4alpha1
+      normalisationAlgorithm: jsonNormalisation/v4alpha3
       value: 91dd197868907487e62872695db1fa7b397fde300bcbae23e24abc188fb147ad
     signature:
       algorithm: RSASSA-PSS
@@ -174,7 +182,7 @@ signatures:
   - name: acme-release-signing
     digest:
       hashAlgorithm: SHA-256
-      normalisationAlgorithm: jsonNormalisation/v4alpha1
+      normalisationAlgorithm: jsonNormalisation/v4alpha3
       value: abc123...
     signature:
       algorithm: RSASSA-PSS
@@ -196,16 +204,16 @@ notation, optionally prefixed with a normalization algorithm (`/` written as `.`
 ```text
 ghcr.io/acme//acme.org/helloworld@sha256:<oci-digest>
 ghcr.io/acme//acme.org/helloworld:1.0.0@sha256:<oci-digest>
-ghcr.io/acme//acme.org/helloworld:1.0.0@jsonNormalisation.v4alpha1+sha256:<normalized-descriptor-digest>
+ghcr.io/acme//acme.org/helloworld:1.0.0@jsonNormalisation.v4alpha3+sha256:<normalized-descriptor-digest>
 ```
 
 `ocm get`, `ocm download`, `ocm verify`, `ocm sign` and `ocm transfer` fail if the component version they read does not
 match the pin, and `ocm download` verifies the downloaded content against the resource digests of the pinned
 descriptor. Both forms accept `sha256` and `sha512`.
 
-| | OCI digest `sha256:<hex>` | Normalized pin `jsonNormalisation.v4alpha1+sha256:<hex>` |
+| | OCI digest `sha256:<hex>` | Normalized pin `jsonNormalisation.v4alpha3+sha256:<hex>` |
 | --- | --- | --- |
-| Identifies | the OCI image index or manifest the component version is stored as, which is what its version tag resolves to | the descriptor normalized with `jsonNormalisation/v4alpha1` (see [Normalization and Digest Calculation](#normalization-and-digest-calculation)) |
+| Identifies | the OCI image index or manifest the component version is stored as, which is what its version tag resolves to | the descriptor normalized with `jsonNormalisation/v4alpha3` (see [Normalization and Digest Calculation](#normalization-and-digest-calculation)) |
 | Covers | the stored artifact graph: descriptor (including access information, all labels and signatures) and all local blobs | what signatures cover: no access information, no labels excluded from signing |
 | How it is checked | the component version is read from the artifact with that digest, never through the version tag; every node read is verified against its digest | the descriptor read through the version tag is normalized and hashed |
 | Version in the reference | optional; if given, the artifact must hold that version | required |

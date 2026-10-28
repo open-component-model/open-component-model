@@ -294,7 +294,7 @@ ocm sign cv ghcr.io/<your-namespace>//github.com/acme.org/helloworld:1.0.0 \
 ```text
 digest:
   hashAlgorithm: SHA-256
-  normalisationAlgorithm: jsonNormalisation/v4alpha1
+  normalisationAlgorithm: jsonNormalisation/v4alpha3
   value: 4e376182b3d535143e8e009b1e467df3a5b0c1f912c71ae432200654c355606f
 name: default
 signature:
@@ -305,7 +305,7 @@ signature:
     ...
     -----END PGP SIGNATURE-----
 
-time=... level=INFO msg="signed successfully" name=default digest=4e376182b3d535143e8e009b1e467df3a5b0c1f912c71ae432200654c355606f hashAlgorithm=SHA-256 normalisationAlgorithm=jsonNormalisation/v4alpha1
+time=... level=INFO msg="signed successfully" name=default digest=4e376182b3d535143e8e009b1e467df3a5b0c1f912c71ae432200654c355606f hashAlgorithm=SHA-256 normalisationAlgorithm=jsonNormalisation/v4alpha3
 ```
 
 </details>
