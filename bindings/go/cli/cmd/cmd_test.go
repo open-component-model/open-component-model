@@ -1838,6 +1838,18 @@ configurations:
 	r.Contains(logs.String(), "jsonNormalisation/v4alpha3",
 		"signing without --normalisation must default to v4alpha3")
 
+	// --normalisation only offers signable algorithms: the verify-only v1 and
+	// the legacy v3 alias are rejected while parsing the flag.
+	for _, algo := range []string{"jsonNormalisation/v1", "jsonNormalisation/v3"} {
+		_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+			reference,
+			"--signature", signatureName,
+			"--normalisation", algo,
+			"--config", ocmConfigFilePath),
+		)
+		r.ErrorContains(err, "expected one of", "%s must not be signable", algo)
+	}
+
 	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
 		reference,
 		"--signature", signatureName,

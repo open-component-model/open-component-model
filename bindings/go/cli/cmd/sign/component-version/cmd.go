@@ -275,7 +275,7 @@ sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --s
 	cmd.Flags().String(FlagSignature, DefaultSignatureName, "name of the signature to create or update. defaults to \"default\"")
 	cmd.Flags().String(FlagSignerSpec, "", fmt.Sprintf("DEPRECATED: no longer supported, configure the signer in the OCM configuration instead (%s, field \"signer\")", signingConfigType))
 	cmd.Flags().Bool(FlagDryRun, false, "compute signature but do not persist it to the repository")
-	cmd.Flags().String(FlagNormalisationAlgorithm, signing.DefaultNormalisationAlgorithm, fmt.Sprintf("normalisation algorithm to use for new signatures (default %s, which signs label.version and filters reference labels signing-only; jsonNormalisation/v1 is legacy and verify-only, rejected for signing; v4alpha1 (drops label.version, reference labels unfiltered) and v4alpha2 (keeps label.version, reference labels unfiltered, = legacy v3) remain signable but are discouraged and warn)", signing.DefaultNormalisationAlgorithm))
+	enum.Var(cmd.Flags(), FlagNormalisationAlgorithm, signing.SignableNormalisationAlgorithms(), "normalisation algorithm of the new signature")
 	cmd.Flags().String(FlagHashAlgorithm, crypto.SHA256.String(), "hash algorithm to use (SHA256, SHA512)")
 	cmd.Flags().Bool(FlagForce, false, "overwrite existing signatures under the same name")
 	cmd.Flags().Bool(FlagTSA, false, fmt.Sprintf("request an RFC 3161 timestamp from a TSA server (default: %s); not supported for Sigstore signers", DefaultTSAURL))
@@ -393,11 +393,10 @@ func SignComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	// digest
-	normalisationAlgorithm := cmd.Flag(FlagNormalisationAlgorithm).Value.String()
-	if err := signing.EnsureSignable(normalisationAlgorithm); err != nil {
-		return fmt.Errorf("cannot sign component version: %w", err)
+	normalisationAlgorithm, err := signableNormalisation(ctx, cmd, logger)
+	if err != nil {
+		return err
 	}
-	signing.WarnDiscouragedNormalisation(ctx, logger, normalisationAlgorithm)
 	unsignedDigest, err := signing.GenerateDigest(
 		ctx, desc, logger,
 		normalisationAlgorithm,
@@ -496,6 +495,20 @@ func loadSignerConfig(config *genericv1.Config, signatureName string, logger *sl
 	logger.Info("no signer configured, using default", "algorithm", spec.SignatureAlgorithm, "encodingPolicy", spec.SignatureEncodingPolicy)
 	_, _ = v1alpha1.Scheme.DefaultType(spec)
 	return spec, nil
+}
+
+// signableNormalisation returns the --normalisation algorithm, checked at the
+// signing boundary and warned about if it is not the default.
+func signableNormalisation(ctx context.Context, cmd *cobra.Command, logger *slog.Logger) (string, error) {
+	normalisationAlgorithm, err := enum.Get(cmd.Flags(), FlagNormalisationAlgorithm)
+	if err != nil {
+		return "", fmt.Errorf("getting normalisation flag failed: %w", err)
+	}
+	if err := signing.EnsureSignable(normalisationAlgorithm); err != nil {
+		return "", fmt.Errorf("cannot sign component version: %w", err)
+	}
+	signing.WarnDiscouragedNormalisation(ctx, logger, normalisationAlgorithm)
+	return normalisationAlgorithm, nil
 }
 
 func printSignature(cmd *cobra.Command, sig descruntime.Signature) error {

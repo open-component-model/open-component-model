@@ -100,6 +100,16 @@ func TestEnsureSignable_OnlyV1Rejected(t *testing.T) {
 	r.Equal(v4alpha3.Algorithm, DefaultNormalisationAlgorithm, "the signing default must be v4alpha3")
 }
 
+// SignableNormalisationAlgorithms is what signing entry points offer: the
+// default first, every entry signable, no verify-only algorithm or alias.
+func TestSignableNormalisationAlgorithms(t *testing.T) {
+	r := require.New(t)
+	r.Equal([]string{v4alpha3.Algorithm, v4alpha2.Algorithm, v4alpha1.Algorithm}, SignableNormalisationAlgorithms())
+	for _, algo := range SignableNormalisationAlgorithms() {
+		r.NoError(EnsureSignable(algo), algo)
+	}
+}
+
 // TestWarnDiscouragedNormalisation checks the signing boundary warns when a new
 // signature is minted with a non-default normalisation algorithm, and stays
 // silent for the default v4alpha3.

@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/algorithms"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha2"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
 
@@ -95,6 +97,14 @@ func VerifyDigestMatchesDescriptor(
 	algorithms.WarnUncovered(ctx, logger, signature.Digest.NormalisationAlgorithm,
 		"component", desc.Component.Name, "version", desc.Component.Version)
 	return nil
+}
+
+// SignableNormalisationAlgorithms returns the normalisation algorithms a
+// signing entry point offers for new signatures, DefaultNormalisationAlgorithm
+// first. It excludes the verify-only jsonNormalisation/v1 and the legacy
+// jsonNormalisation/v3 alias (sign with v4alpha2 instead).
+func SignableNormalisationAlgorithms() []string {
+	return []string{DefaultNormalisationAlgorithm, v4alpha2.Algorithm, v4alpha1.Algorithm}
 }
 
 // EnsureSignable is the signing boundary for the verify-only policy: it reports
