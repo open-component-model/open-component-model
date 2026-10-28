@@ -2,8 +2,7 @@
 
 Logos in this directory power the *Adopted by* marquee on the OCM landing page.
 Each logo is shown with permission of the respective trademark owner and
-identifies an organisation that uses OCM. Everything below this section of the
-README is maintainer internal; only the next section is public.
+identifies an organisation that uses OCM.
 
 ## Trademark attribution
 
@@ -28,10 +27,6 @@ contact the respective owner.
 | IronCore         | NeoNephos Foundation                 |
 | EverBright       | EverBright GmbH                      |
 
-"Open Component Model" and the OCM logo are assets of the Open Component Model
-project, governed by the NeoNephos Foundation's trademark policy:
-<https://linuxfoundation.eu/policies/trademark-policy>.
-
 If you own a mark shown here and want it corrected or removed, open an issue at
 <https://github.com/open-component-model/open-component-model/issues>.
 
@@ -47,10 +42,7 @@ the permission state of the mark:
 
 - `Permission: granted (implicit)` covers organisations inside the NeoNephos
   Foundation or run by SAP (SAP, SAP NS2, Gardener, Kyma, Platform Mesh,
-  OpenControlPlane, IronCore, Konfidence). The OCM project is itself a
-  NeoNephos project staffed by SAP employees, so sibling-project and SAP marks
-  are used under the Foundation's trademark usage guidelines without a
-  per-mark email.
+  OpenControlPlane, IronCore, Konfidence).
 - `Permission: requested (pending)` means we have reached out to the trademark
   owner for an explicit OK. The logo stays in this state until the owner
   confirms.
