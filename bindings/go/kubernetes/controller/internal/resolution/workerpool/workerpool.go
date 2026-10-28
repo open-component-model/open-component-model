@@ -516,17 +516,10 @@ func compareDigest(ctx context.Context, desc *descriptor.Descriptor, digest *v2.
 	logger.Info("verifying integrity with provided digest",
 		"component", desc.Component.Name, "version", desc.Component.Version)
 
-	digestDesc, err := signing.GenerateDigest(ctx, desc, slog.New(logr.ToSlogHandler(logger)),
-		digest.NormalisationAlgorithm, digest.HashAlgorithm)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate digest for component version %s:%s: %w",
-			desc.Component.Name, desc.Component.Version, err)
-	}
-
-	if digestDesc.Value != digest.Value {
-		return nil, fmt.Errorf("digest mismatch (%s/%s) for component version %s:%s: expected %s, got %s",
-			digest.NormalisationAlgorithm, digest.HashAlgorithm, desc.Component.Name, desc.Component.Version,
-			digest.Value, digestDesc.Value)
+	expected := descriptor.Signature{Digest: *descriptor.ConvertFromV2Digest(digest)}
+	if err := signing.VerifyDigestMatchesDescriptor(ctx, desc, expected, slog.New(logr.ToSlogHandler(logger))); err != nil {
+		return nil, fmt.Errorf("verifying digest (%s/%s) of component version %s:%s failed: %w",
+			digest.NormalisationAlgorithm, digest.HashAlgorithm, desc.Component.Name, desc.Component.Version, err)
 	}
 
 	return desc, nil
