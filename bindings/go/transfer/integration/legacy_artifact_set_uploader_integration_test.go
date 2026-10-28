@@ -175,6 +175,129 @@ func transferLegacyArtifactSetCTFToOCI(t *testing.T, legacyMediaType, manifestTy
 	r.Equal(root.Digest, artifacts[0].Digest)
 }
 
+// Test_Integration_TransferDockerArtifactSetLocalBlob_OCIToOCI transfers a docker
+// artifact-set local blob between two OCI registries. Unlike a CTF source, adding the
+// blob to an OCI source repository unpacks the artifact set into the source registry
+// (pack.ResourceLocalBlobOCILayout -> CopyOCILayoutWithIndex -> ReadOCILayout), so the
+// docker manifest round-trips through a registry on both the source and target side.
+// The main-artifact digest must survive unchanged (no docker->OCI conversion).
+func Test_Integration_TransferDockerArtifactSetLocalBlob_OCIToOCI(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctx := t.Context()
+
+	const (
+		componentName    = "example.com/acme/component"
+		componentVersion = "v1.0.5"
+		resourceName     = "webhooks-server"
+		referenceName    = "acme/components/example.com/acme/component/images/webhooks-server:v1.0.5"
+		dockerMediaType  = "application/vnd.docker.distribution.manifest.list.v2+tar+gzip"
+		dockerManifest   = "application/vnd.docker.distribution.manifest.v2+json"
+		dockerList       = "application/vnd.docker.distribution.manifest.list.v2+json"
+	)
+
+	sourceAddr, sourceUser, sourcePwd := startRegistry(t)
+	targetAddr, targetUser, targetPwd := startRegistry(t)
+
+	archive, root := legacyOCIIndexArtifactSet(t, dockerManifest, dockerList)
+
+	// Confirm the fixture is a genuine legacy artifact set, not an OCI layout with a
+	// docker media type stamped on.
+	set, err := ctf.NewArtifactSetFromBlob(inmemory.New(bytes.NewReader(archive), inmemory.WithMediaType(dockerMediaType)))
+	r.NoError(err)
+	r.Equal(ctf.ArtifactSetFormatLegacyOCI, set.Format())
+	r.NoError(set.Close())
+
+	// Build the source as an OCI component repository and add the artifact set as a
+	// local blob. This unpacks it into the source registry via the pack path.
+	sourceResolver, err := urlresolver.New(
+		urlresolver.WithBaseURL(sourceAddr),
+		urlresolver.WithPlainHTTP(true),
+		urlresolver.WithBaseClient(createAuthClient(sourceAddr, sourceUser, sourcePwd)),
+	)
+	r.NoError(err)
+	sourceRepo, err := oci.NewRepository(oci.WithResolver(sourceResolver), oci.WithTempDir(t.TempDir()))
+	r.NoError(err)
+
+	resource, err := sourceRepo.AddLocalResource(ctx, componentName, componentVersion, &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: resourceName, Version: componentVersion}},
+		Type:        "ociImage",
+		Relation:    descriptor.LocalRelation,
+		Access: &descriptorv2.LocalBlob{
+			Type:          runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion),
+			MediaType:     dockerMediaType,
+			ReferenceName: referenceName,
+		},
+	}, inmemory.New(bytes.NewReader(archive), inmemory.WithMediaType(dockerMediaType)))
+	r.NoError(err)
+	resource.Digest = &descriptor.Digest{
+		HashAlgorithm:          "SHA-256",
+		NormalisationAlgorithm: "ociArtifactDigest/v1",
+		Value:                  root.Digest.Encoded(),
+	}
+	r.NoError(sourceRepo.AddComponentVersion(ctx, &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: componentVersion}},
+			Provider:      descriptor.Provider{Name: "acme"},
+			Resources:     []descriptor.Resource{*resource},
+		},
+	}))
+
+	sourceSpec := &ocirepospec.Repository{
+		Type:    runtime.NewVersionedType(ocirepospec.Type, ocirepospec.Version),
+		BaseUrl: "http://" + sourceAddr,
+	}
+	targetSpec := &ocirepospec.Repository{
+		Type:    runtime.NewVersionedType(ocirepospec.Type, ocirepospec.Version),
+		BaseUrl: "http://" + targetAddr,
+	}
+	definition, err := transfer.BuildGraphDefinition(ctx, &transferv1alpha1.Config{}, []transferv1alpha1.UploaderConfig{
+		&transferv1alpha1.OCIUploaderConfig{},
+		&transferv1alpha1.LocalBlobUploaderConfig{},
+	}, transfer.Mapping{
+		Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+		Target:     targetSpec,
+		Resolver:   transfer.NewRepositoryResolver(sourceRepo, sourceSpec),
+	})
+	r.NoError(err)
+
+	credentials := newCredResolver(t,
+		registryCreds{sourceAddr, sourceUser, sourcePwd},
+		registryCreds{targetAddr, targetUser, targetPwd},
+	)
+	builder := transfer.NewDefaultBuilder(
+		provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir())),
+		ociresource.NewResourceRepository(nil),
+		credentials,
+	)
+	graph, err := builder.BuildAndCheck(definition)
+	r.NoError(err)
+	r.NoError(graph.Process(ctx))
+
+	targetResolver, err := urlresolver.New(
+		urlresolver.WithBaseURL(targetAddr),
+		urlresolver.WithPlainHTTP(true),
+		urlresolver.WithBaseClient(createAuthClient(targetAddr, targetUser, targetPwd)),
+	)
+	r.NoError(err)
+	targetRepo, err := oci.NewRepository(oci.WithResolver(targetResolver), oci.WithTempDir(t.TempDir()))
+	r.NoError(err)
+
+	got, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
+	r.NoError(err)
+	r.Len(got.Component.Resources, 1)
+
+	downloaded, err := targetRepo.DownloadResource(ctx, &got.Component.Resources[0])
+	r.NoError(err)
+	layout, err := ocitar.ReadOCILayout(ctx, downloaded)
+	r.NoError(err)
+	t.Cleanup(func() { r.NoError(layout.Close()) })
+	artifacts := layout.MainArtifacts(ctx)
+	r.Len(artifacts, 1)
+	r.Equal(root.Digest, artifacts[0].Digest, "main artifact digest must not change across the OCI->OCI transfer")
+}
+
 // Test_Integration_TransferDockerArtifactSetLocalBlob_CTFToCTF covers the other half
 // of the customer scenario: transferring a docker artifact-set local blob as a local
 // blob (no OCI uploader). The CTF->CTF path copies the blob verbatim, so the stored
