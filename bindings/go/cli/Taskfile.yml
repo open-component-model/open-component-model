@@ -2,7 +2,6 @@ version: '3'
 
 vars:
   IMAGE_TOOL: docker
-  INTEGRATION_TEST_IDENTIFIER: 'Integration'
   CLI_DOCUMENTATION_MODE: "markdown"
   CLI_DOCUMENTATION_DIRECTORY: tmp/docs
   PROVIDER: ocm.software
@@ -19,11 +18,11 @@ vars:
 tasks:
   test:
     cmds:
-      - go test -skip '{{ .INTEGRATION_TEST_IDENTIFIER }}' ./... {{.CLI_ARGS}}
+      - go test $(go list ./... | grep -v -e '/integration$' -e '/integration/') {{.CLI_ARGS}}
 
   test/integration:
     cmds:
-      - go test -run '{{ .INTEGRATION_TEST_IDENTIFIER }}' ./integration/... {{.CLI_ARGS}}
+      - go test ./integration/... {{.CLI_ARGS}}
 
   install:
     desc: "Install the CLI"

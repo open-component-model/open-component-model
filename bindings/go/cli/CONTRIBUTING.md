@@ -132,7 +132,7 @@ The build embeds version information via `-ldflags`. The version defaults to a t
 ## Testing
 
 ```bash
-# Unit tests (skips functions with "Integration" in the name)
+# Unit tests
 task bindings/go/cli:test
 
 # Integration tests (requires Docker)
@@ -140,7 +140,8 @@ task bindings/go/cli:test/integration
 ```
 
 Integration tests exercise end-to-end workflows (transfer, signing, plugin registry) against real OCI registries spun
-up via [testcontainers](https://golang.testcontainers.org/). They live in `integration/`.
+up via [testcontainers](https://golang.testcontainers.org/). They live in `integration/`, which the unit test task
+excludes; see the [Go bindings contributing guide](../CONTRIBUTING.md#running-integration-tests).
 
 For testing conventions (table-driven tests, `require.New(t)`, `t.Context()`, naming), see the testing section in the
 [coding patterns guide](../../../docs/coding-patterns.md).

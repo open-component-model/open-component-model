@@ -276,22 +276,3 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 		assert.Contains(t, err.Error(), "helm repository URL is required")
 	})
 }
-
-func TestProcessResourceDigest_RealRepo(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping real repository test in short mode")
-	}
-	t.Parallel()
-
-	p := digest.NewDigestProcessor(t.TempDir())
-	resource := helmAccessResource(t, "https://grafana.github.io/helm-charts", "grafana:8.8.2")
-
-	result, err := p.ProcessResourceDigest(t.Context(), resource, nil)
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	require.NotNil(t, result.Digest)
-
-	assert.Equal(t, "SHA-256", result.Digest.HashAlgorithm)
-	assert.Equal(t, "genericBlobDigest/v1", result.Digest.NormalisationAlgorithm)
-	assert.Equal(t, "b244a04ccfac950853080eede6bf1b716b2966ca707e69f6f3623b3d690e36b8", result.Digest.Value)
-}

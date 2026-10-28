@@ -28,17 +28,14 @@ comments explaining the "why" alongside the code.
 ## Running the Examples
 
 ```bash
-# Run all examples (except OCI tests that need Docker)
-cd bindings/go/examples && go test -short -v ./...
-
-# Run all examples including OCI registry tests
+# Run all examples (step 6 needs Docker and skips without it)
 cd bindings/go/examples && go test -v ./...
 
 # Run a single example
 cd bindings/go/examples && go test -run TestExample_InMemoryBlob -v
 
 # Run via task
-task bindings/go/examples:test
+task bindings/go:test/integration GROUP=containers
 ```
 
 ## Concept Map

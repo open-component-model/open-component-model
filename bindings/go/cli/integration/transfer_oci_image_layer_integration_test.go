@@ -29,10 +29,6 @@ import (
 // and downloads the layer from the target. The layer arrives as a local blob holding the
 // raw layer bytes.
 func Test_Integration_Transfer_OCIImageLayer(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
-
 	ctx := t.Context()
 	r := require.New(t)
 	t.Parallel()

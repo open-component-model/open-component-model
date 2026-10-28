@@ -17,6 +17,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testenv"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -44,6 +45,7 @@ func Test_Integration_TransferS3Resource_LocalBlobUploader(t *testing.T) {
 
 	// 1. Serve the resource content from a RustFS bucket.
 	const s3AccessKey, s3SecretKey = "ocm-test", "ocm-test-secret"
+	testenv.Require(t, testenv.Docker)
 	container, err := testcontainers.Run(ctx, "rustfs/rustfs:1.0.0-rc.6",
 		testcontainers.WithExposedPorts("9000/tcp"),
 		testcontainers.WithEnv(map[string]string{"RUSTFS_ACCESS_KEY": s3AccessKey, "RUSTFS_SECRET_KEY": s3SecretKey}),

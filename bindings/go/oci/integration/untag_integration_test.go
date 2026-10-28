@@ -19,6 +19,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/ctf"
+	"ocm.software/open-component-model/bindings/go/internal/testenv"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 )
@@ -79,6 +80,7 @@ func Test_Integration_RemoteRegistry_Untag(t *testing.T) {
 	password := generateRandomPassword(t, passwordLength)
 	htpasswd := generateHtpasswd(t, testUsername, password)
 
+	testenv.Require(t, testenv.Docker)
 	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
 		registry.WithHtpasswd(htpasswd),
 		testcontainers.WithEnv(map[string]string{

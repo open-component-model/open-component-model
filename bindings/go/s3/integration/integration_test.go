@@ -22,6 +22,7 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/testenv"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/repository"
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
@@ -40,6 +41,7 @@ func startRustFS(t *testing.T, ctx context.Context) string {
 	t.Helper()
 	r := require.New(t)
 
+	testenv.Require(t, testenv.Docker)
 	container, err := testcontainers.Run(ctx, rustfsImage,
 		testcontainers.WithExposedPorts("9000/tcp"),
 		testcontainers.WithEnv(map[string]string{"RUSTFS_ACCESS_KEY": rustfsAccessKey, "RUSTFS_SECRET_KEY": rustfsSecretKey}),

@@ -493,9 +493,6 @@ components:
 
 func Test_Integration_HelmTransformer(t *testing.T) {
 	t.Run("upload and download helm chart", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("skipping test in short mode")
-		}
 		r := require.New(t)
 
 		root := getRepoRootBasedOnGit(t)

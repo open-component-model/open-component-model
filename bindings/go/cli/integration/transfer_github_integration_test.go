@@ -63,10 +63,6 @@ func readLocalResource(t *testing.T, ctx context.Context, repo repository.Compon
 // passes — to lift the anonymous 60/hour cap; the transfer downloads the full
 // source archive.
 func Test_Integration_Transfer_GitHub(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
-
 	ctx := t.Context()
 	r := require.New(t)
 	t.Parallel()

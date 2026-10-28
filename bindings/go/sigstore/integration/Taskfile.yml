@@ -1,7 +1,6 @@
 version: '3'
 
 vars:
-  INTEGRATION_TEST_IDENTIFIER: 'Integration'
   COSIGN_VERSION:
     sh: . ../signing/handler/internal/.env && echo "$COSIGN_VERSION"
   COSIGN_CHECKSUMS_SHA256:
@@ -11,7 +10,6 @@ vars:
   # Absolute paths rooted via TASKFILE_DIR to make any call path (taskfiles in root,
   # bindings/go, or this one) work identically.
   SIGSTORE_ENV_FILE: '{{.TASKFILE_DIR}}/tmp/sigstore-env.sh'
-  SIGSTORE_SETUP_LOG: '{{.TASKFILE_DIR}}/tmp/setup.log'
   SIGSTORE_ENV_DIR: '{{.TASKFILE_DIR}}/tmp/sigstore'
   SIGSTORE_BIN_DIR: '{{.TASKFILE_DIR}}/tmp/bin'
   SIGSTORE_BRIDGE_PORT: '8080'
@@ -209,40 +207,14 @@ tasks:
     desc: "Provision the sigstore scaffolding cluster and write the sourceable env file."
     deps: [scaffolding:env, cosign:install]
 
-  setup:quiet:
-    desc: "Run setup with its output in tmp/setup.log, printed only on failure."
-    internal: true
-    cmds:
-      - |
-        mkdir -p "$(dirname "{{.SIGSTORE_SETUP_LOG}}")"
-        if task -d '{{.TASKFILE_DIR}}' setup > "{{.SIGSTORE_SETUP_LOG}}" 2>&1; then
-          echo "sigstore scaffolding ready (log: {{.SIGSTORE_SETUP_LOG}})"
-        else
-          echo "sigstore scaffolding setup failed:" >&2
-          cat "{{.SIGSTORE_SETUP_LOG}}" >&2
-          exit 1
-        fi
-
-  exec:
-    desc: "Provision the scaffolding cluster, then run the command after -- in the caller's directory with cosign on PATH and the sigstore env sourced."
-    deps: [setup:quiet]
-    dir: '{{.USER_WORKING_DIR}}'
+  test/integration:
+    desc: "Provision the scaffolding cluster, then run the sigstore integration tests against it."
+    deps: [setup]
     cmds:
       - |
         export PATH="{{.SIGSTORE_BIN_DIR}}:$PATH"
         . "{{.SIGSTORE_ENV_FILE}}"
-        {{.CLI_ARGS}}
-
-  test/integration:
-    desc: "Run only the sigstore integration tests against a scaffolding cluster."
-    # Convenience target for local development
-    deps: [setup]
-    set: [errexit]
-    cmds:
-      - |
-        export PATH="{{.SIGSTORE_BIN_DIR}}:$PATH"
-        . {{.SIGSTORE_ENV_FILE}}
-        go test -count=1 -run "{{.INTEGRATION_TEST_IDENTIFIER}}" -timeout 180s ./...
+        go test -count=1 -timeout 180s ./... {{.CLI_ARGS}}
 
   scaffolding:teardown:
     desc: "Delete kind cluster and clean up"

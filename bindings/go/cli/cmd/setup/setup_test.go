@@ -538,7 +538,7 @@ func TestAddFilesystemConfigToCentralConfig(t *testing.T) {
 	}
 }
 
-func TestFilesystemConfigIntegration(t *testing.T) {
+func TestFilesystemConfig_CommandContext(t *testing.T) {
 	r := require.New(t)
 
 	// Create a temporary directory for testing

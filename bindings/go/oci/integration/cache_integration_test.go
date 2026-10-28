@@ -17,6 +17,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/modules/registry"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testenv"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -104,6 +105,7 @@ func startProxiedRegistry(t *testing.T, ctx context.Context) (string, *registryC
 	t.Helper()
 	r := require.New(t)
 
+	testenv.Require(t, testenv.Docker)
 	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
 		testcontainers.WithEnv(map[string]string{
 			"REGISTRY_VALIDATION_DISABLED": "true",

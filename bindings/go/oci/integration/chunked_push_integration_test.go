@@ -19,6 +19,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testenv"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	"ocm.software/open-component-model/bindings/go/oci/internal/pack"
@@ -33,15 +34,13 @@ import (
 // PUT), for both a known-digest Push and an unknown-digest streaming push, and
 // that the content round-trips.
 func Test_Integration_OCIRepository_ChunkedPush(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping chunked push integration test in short mode")
-	}
 	t.Parallel()
 	r := require.New(t)
 	ctx := t.Context()
 
 	password := generateRandomPassword(t, passwordLength)
 	htpasswd := generateHtpasswd(t, testUsername, password)
+	testenv.Require(t, testenv.Docker)
 	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
 		registry.WithHtpasswd(htpasswd),
 		testcontainers.WithEnv(map[string]string{"REGISTRY_VALIDATION_DISABLED": "true"}),
@@ -183,15 +182,13 @@ func (b *streamOnlyBlob) MediaType() (string, bool)          { return b.mediaTyp
 // buffering implementation would deadlock (and time out) because it reads the
 // entire blob before issuing any network request.
 func Test_Integration_OCIRepository_StreamingDoesNotBuffer(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping streaming no-buffer integration test in short mode")
-	}
 	t.Parallel()
 	r := require.New(t)
 	ctx := t.Context()
 
 	password := generateRandomPassword(t, passwordLength)
 	htpasswd := generateHtpasswd(t, testUsername, password)
+	testenv.Require(t, testenv.Docker)
 	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
 		registry.WithHtpasswd(htpasswd),
 		testcontainers.WithEnv(map[string]string{"REGISTRY_VALIDATION_DISABLED": "true"}),
@@ -304,15 +301,13 @@ func Test_Integration_OCIRepository_StreamingDoesNotBuffer(t *testing.T) {
 //	endpoint. A chunked-protocol failure before the first byte is consumed falls
 //	back to the monolithic push so no registry regresses.
 func Test_Integration_OCIRepository_AddComponentVersion_Streaming(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping add-cv streaming integration test in short mode")
-	}
 	t.Parallel()
 	r := require.New(t)
 	ctx := t.Context()
 
 	password := generateRandomPassword(t, passwordLength)
 	htpasswd := generateHtpasswd(t, testUsername, password)
+	testenv.Require(t, testenv.Docker)
 	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
 		registry.WithHtpasswd(htpasswd),
 		testcontainers.WithEnv(map[string]string{"REGISTRY_VALIDATION_DISABLED": "true"}),

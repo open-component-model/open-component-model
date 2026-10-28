@@ -27,7 +27,7 @@ import (
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
-func TestIntegration_MultipleConfigSources(t *testing.T) {
+func TestSetup_MultipleConfigSources(t *testing.T) {
 	ctx := t.Context()
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -119,7 +119,7 @@ func TestIntegration_MultipleConfigSources(t *testing.T) {
 	assert.Len(t, cfg.Config.Configurations, 2, "should have loaded 2 configurations (credentials + resolvers)")
 }
 
-func TestIntegration_ErrorHandling(t *testing.T) {
+func TestSetup_ErrorHandling(t *testing.T) {
 	ctx := t.Context()
 	logger := logr.Discard()
 
@@ -238,8 +238,8 @@ func (p *simpleOCIPlugin) GetComponentVersionRepository(
 	}, nil
 }
 
-// TestIntegration_ResolverProvider tests the new path matcher resolver provider functionality.
-func TestIntegration_ResolverProvider(t *testing.T) {
+// TestSetup_ResolverProvider tests the new path matcher resolver provider functionality.
+func TestSetup_ResolverProvider(t *testing.T) {
 	ctx := t.Context()
 	logger := logr.Discard()
 

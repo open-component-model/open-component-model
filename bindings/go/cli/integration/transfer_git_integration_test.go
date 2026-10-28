@@ -171,10 +171,6 @@ func assertGitArchiveREADME(t *testing.T, data []byte, want string) {
 // A repository snapshot has no OCI-artifact representation, so it can only travel
 // as a local blob, and its digest is the digest of the exact archive bytes.
 func Test_Integration_Transfer_Git(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
-
 	ctx := t.Context()
 	r := require.New(t)
 	t.Parallel()

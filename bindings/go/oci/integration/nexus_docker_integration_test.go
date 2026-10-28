@@ -10,9 +10,6 @@ import (
 // Test_Integration_OCIRepository_NexusDockerRepository checks whether a Nexus Repository 3
 // hosted repository of format docker accepts OCM component versions through its registry v2 API.
 func Test_Integration_OCIRepository_NexusDockerRepository(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Nexus docker repository integration test in short mode")
-	}
 	t.Parallel()
 	r := require.New(t)
 	ctx := t.Context()

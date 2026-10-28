@@ -17,6 +17,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testenv"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
@@ -36,9 +37,6 @@ const (
 // the fix; the ownership subtest confirms referrer attach works end-to-end on
 // Nexus (which serves the Referrers API, so redeploy-disabled never bites).
 func Test_Integration_Nexus_RedeployDisabled(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Nexus integration test in short mode")
-	}
 	t.Parallel()
 	ctx := t.Context()
 
@@ -146,6 +144,7 @@ func startNexusDockerHosted(t *testing.T, ctx context.Context) (*urlresolver.Cac
 	t.Helper()
 	r := require.New(t)
 
+	testenv.Require(t, testenv.Docker)
 	container, err := testcontainers.Run(ctx, nexusImage,
 		testcontainers.WithExposedPorts("8081/tcp", nexusDockerConnector),
 		testcontainers.WithEnv(map[string]string{

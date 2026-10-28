@@ -169,7 +169,7 @@ func TestDuration_RoundTrip(t *testing.T) {
 	}
 }
 
-func TestDuration_JSONStructIntegration(t *testing.T) {
+func TestDuration_JSONStruct(t *testing.T) {
 	r := require.New(t)
 	type wrapper struct {
 		Timeout Duration `json:"timeout"`

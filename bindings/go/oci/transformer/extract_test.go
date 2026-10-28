@@ -90,7 +90,7 @@ func TestTransformer_getDefaultFilename(t *testing.T) {
 	}
 }
 
-func TestTransformerIntegration(t *testing.T) {
+func TestTransformer_TransformBlob_HelmLayout(t *testing.T) {
 	ctx := t.Context()
 	r := require.New(t)
 

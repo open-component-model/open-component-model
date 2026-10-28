@@ -14,6 +14,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testenv"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ocmoci "ocm.software/open-component-model/bindings/go/oci/spec/access"
@@ -35,6 +36,7 @@ func Test_Integration_RelativeOCIReference_Read(t *testing.T) {
 	password := generateRandomPassword(t, passwordLength)
 	htpasswd := generateHtpasswd(t, testUsername, password)
 
+	testenv.Require(t, testenv.Docker)
 	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
 		registry.WithHtpasswd(htpasswd),
 		testcontainers.WithEnv(map[string]string{"REGISTRY_VALIDATION_DISABLED": "true"}),

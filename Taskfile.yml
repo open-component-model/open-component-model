@@ -12,14 +12,14 @@ includes:
     optional: true
     taskfile: ./conformance/scenarios/compatibility/Taskfile.yml
     dir: ./conformance/scenarios/compatibility
-  # bindings/go is a single Go module. Unit tests are run via `bindings/go:test`,
-  # integration tests via `bindings/go:test/integration`.
+  # bindings/go is a single Go module. Unit tests are run via `bindings/go:test`, integration tests
+  # (<area>/integration packages, run per group) via `bindings/go:test/integration`.
   bindings/go:
     optional: true
     taskfile: ./bindings/go/Taskfile.yml
     dir: ./bindings/go
-  # The sigstore include provides the scaffolding cluster lifecycle used by
-  # `bindings/go:test/integration` and for local development convenience.
+  # The sigstore include provides the scaffolding cluster lifecycle that the sigstore
+  # integration tests need (CI provisions it in a dedicated step) and local convenience tasks.
   bindings/go/sigstore/integration:
     optional: true
     taskfile: ./bindings/go/sigstore/integration/Taskfile.yml

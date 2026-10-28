@@ -22,6 +22,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testenv"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	credidentity "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
@@ -44,6 +45,7 @@ func startRegistry(t *testing.T) (address, user, password string) {
 	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
 
+	testenv.Require(t, testenv.Docker)
 	container, err := registry.Run(ctx, distributionRegistryImage,
 		registry.WithHtpasswd(htpasswd),
 		testcontainers.WithEnv(map[string]string{

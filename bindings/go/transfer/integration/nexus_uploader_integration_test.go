@@ -23,6 +23,7 @@ import (
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
 	helmaccessv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	helmidentityv1 "ocm.software/open-component-model/bindings/go/helm/spec/identity/v1"
+	"ocm.software/open-component-model/bindings/go/internal/testenv"
 	ctfrepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
@@ -235,6 +236,7 @@ func startNexus(t *testing.T) (baseURL, adminPassword string) {
 	r := require.New(t)
 	ctx := t.Context()
 
+	testenv.Require(t, testenv.Docker)
 	container, err := testcontainers.Run(ctx, nexusImage,
 		testcontainers.WithExposedPorts("8081/tcp"),
 		testcontainers.WithEnv(map[string]string{
