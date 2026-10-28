@@ -61,14 +61,14 @@ func Resolve(normalisationAlgorithm string) (string, bool) {
 	return normalisationAlgorithm, false
 }
 
-// Hash resolves a hash algorithm name to SHA-256 or SHA-512. Case and dashes
-// are ignored: OCM writes "SHA-256"/"SHA-512", older descriptors carry
-// "sha256"/"sha512", and both must keep verifying.
+// Hash resolves a hash algorithm name to SHA-256 or SHA-512. Case is ignored
+// and the dash is optional: OCM writes "SHA-256"/"SHA-512", older descriptors
+// carry "sha256"/"sha512", and both must keep verifying.
 func Hash(name string) (crypto.Hash, error) {
-	switch strings.ToUpper(strings.ReplaceAll(name, "-", "")) {
-	case "SHA256":
+	switch strings.ToUpper(name) {
+	case "SHA-256", "SHA256":
 		return crypto.SHA256, nil
-	case "SHA512":
+	case "SHA-512", "SHA512":
 		return crypto.SHA512, nil
 	default:
 		return 0, fmt.Errorf("%w %q: only SHA-256 and SHA-512 are supported", ErrUnsupportedHash, name)
@@ -81,11 +81,10 @@ func Hash(name string) (crypto.Hash, error) {
 // name.
 func Digest(desc *descruntime.Descriptor, normalisationAlgorithm, hashAlgorithm string) (*descruntime.Digest, error) {
 	normalisationAlgorithm, _ = Resolve(normalisationAlgorithm)
-	sum, err := sum(desc, normalisationAlgorithm, hashAlgorithm)
+	sum, hash, err := sum(desc, normalisationAlgorithm, hashAlgorithm)
 	if err != nil {
 		return nil, err
 	}
-	hash, _ := Hash(hashAlgorithm)
 	return &descruntime.Digest{
 		HashAlgorithm:          hash.String(),
 		NormalisationAlgorithm: normalisationAlgorithm,
@@ -99,7 +98,7 @@ func Digest(desc *descruntime.Descriptor, normalisationAlgorithm, hashAlgorithm 
 // ErrDigestMismatch.
 func Verify(desc *descruntime.Descriptor, expected descruntime.Digest) error {
 	normalisationAlgorithm, _ := Resolve(expected.NormalisationAlgorithm)
-	fresh, err := sum(desc, normalisationAlgorithm, expected.HashAlgorithm)
+	fresh, _, err := sum(desc, normalisationAlgorithm, expected.HashAlgorithm)
 	if err != nil {
 		return err
 	}
@@ -109,14 +108,14 @@ func Verify(desc *descruntime.Descriptor, expected descruntime.Digest) error {
 	return nil
 }
 
-func sum(desc *descruntime.Descriptor, normalisationAlgorithm, hashAlgorithm string) ([]byte, error) {
+func sum(desc *descruntime.Descriptor, normalisationAlgorithm, hashAlgorithm string) ([]byte, crypto.Hash, error) {
 	normalised, err := normalisation.Normalise(desc, normalisationAlgorithm)
 	if err != nil {
-		return nil, fmt.Errorf("normalising component version failed: %w", err)
+		return nil, 0, fmt.Errorf("normalising component version failed: %w", err)
 	}
 	hash, err := Hash(hashAlgorithm)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	// Use the implementations directly instead of hash.New: crypto.Hash.New
 	// panics unless some package in the binary links the implementation.
@@ -125,7 +124,7 @@ func sum(desc *descruntime.Descriptor, normalisationAlgorithm, hashAlgorithm str
 		h = sha512.New()
 	}
 	if _, err := h.Write(normalised); err != nil {
-		return nil, fmt.Errorf("hashing component version failed: %w", err)
+		return nil, 0, fmt.Errorf("hashing component version failed: %w", err)
 	}
-	return h.Sum(nil), nil
+	return h.Sum(nil), hash, nil
 }
