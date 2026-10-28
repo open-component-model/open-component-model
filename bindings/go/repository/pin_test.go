@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"bytes"
 	"crypto"
 	"log/slog"
 	"strings"
@@ -103,4 +104,39 @@ func TestVerifyNormalizedPin_V1(t *testing.T) {
 	wrong, err := ParseDigestPin("jsonNormalisation.v1+sha256:" + strings.Repeat("00", 32))
 	r.NoError(err)
 	r.ErrorContains(verifyNormalizedPin(ctx, desc, wrong), "does not match pinned digest")
+}
+
+// A normalized pin under a normalisation that leaves fields uncovered must
+// warn on a match: the pin does not detect changes to those fields.
+func TestVerifyNormalizedPin_WarnsUncovered(t *testing.T) {
+	r := require.New(t)
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	desc := &descruntime.Descriptor{
+		Component: descruntime.Component{
+			ComponentMeta: descruntime.ComponentMeta{
+				ObjectMeta: descruntime.ObjectMeta{Name: "acme.org/test", Version: "1.0.0"},
+			},
+			Provider: descruntime.Provider{Name: "acme"},
+		},
+	}
+	for algo, uncovered := range map[string]string{
+		jsonv1.Algorithm:                      "sources",
+		v4alpha1.Algorithm:                    "label.version",
+		signing.DefaultNormalisationAlgorithm: "",
+	} {
+		logs.Reset()
+		generated, err := signing.GenerateDigest(t.Context(), desc, slog.New(slog.DiscardHandler), algo, crypto.SHA256.String())
+		r.NoError(err)
+		r.NoError(verifyNormalizedPin(t.Context(), desc, generated))
+		if uncovered == "" {
+			r.Empty(logs.String(), algo)
+			continue
+		}
+		r.Contains(logs.String(), "uncovered="+uncovered, algo)
+		r.Contains(logs.String(), "component=acme.org/test", algo)
+	}
 }

@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/algorithms"
-	jsonv1 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
 
@@ -82,6 +81,7 @@ func DigestHashAlgorithmsEnforced() bool {
 //  4. Hash the normalised descriptor.
 //  5. Decode the digest value from the signature.
 //  6. Compare the freshly computed digest against the signature digest.
+//  7. Warn if the matched digest leaves descriptor fields uncovered.
 func VerifyDigestMatchesDescriptor(
 	ctx context.Context,
 	desc *descruntime.Descriptor,
@@ -89,7 +89,12 @@ func VerifyDigestMatchesDescriptor(
 	logger *slog.Logger,
 ) error {
 	signature.Digest.NormalisationAlgorithm = ensureNormalisationAlgo(ctx, signature.Digest.NormalisationAlgorithm, logger)
-	return algorithms.Verify(desc, signature.Digest)
+	if err := algorithms.Verify(desc, signature.Digest); err != nil {
+		return err
+	}
+	algorithms.WarnUncovered(ctx, logger, signature.Digest.NormalisationAlgorithm,
+		"component", desc.Component.Name, "version", desc.Component.Version)
+	return nil
 }
 
 // EnsureSignable is the signing boundary for the verify-only policy: it reports
@@ -101,28 +106,26 @@ func VerifyDigestMatchesDescriptor(
 // this, so verifying existing v1 signatures, pins and reference digests keeps
 // working. Any signing entry point must call it before producing a signature.
 func EnsureSignable(normalisationAlgorithm string) error {
-	//nolint:staticcheck // intentionally references the deprecated verify-only v1 algorithm in order to reject it for signing
-	if normalisationAlgorithm == jsonv1.Algorithm {
+	if algorithms.VerifyOnly(normalisationAlgorithm) {
 		return fmt.Errorf("%w: %q", ErrSigningUnsupported, normalisationAlgorithm)
 	}
 	return nil
 }
 
 // WarnDiscouragedNormalisation logs a warning when a new signature is minted
-// with a normalisation algorithm other than the current default
-// (DefaultNormalisationAlgorithm, v4alpha3). The v4 alphas stay signable for
-// backward compatibility, but v4alpha1 does not cover label.version and
-// v4alpha2 (= legacy v3) leaves reference labels unfiltered, so v4alpha3 is
-// recommended for new signatures. It is a no-op for the default algorithm.
+// with a normalisation algorithm other than DefaultNormalisationAlgorithm. The
+// v4 alphas stay signable for backward compatibility, but v4alpha1 does not
+// cover label.version and v4alpha2 (= legacy v3) leaves reference labels
+// unfiltered. It is a no-op for the default algorithm.
 func WarnDiscouragedNormalisation(ctx context.Context, logger *slog.Logger, normalisationAlgorithm string) {
 	if normalisationAlgorithm == DefaultNormalisationAlgorithm {
 		return
 	}
-	logger.WarnContext(ctx,
-		"signing with a non-default normalisation algorithm: v4alpha1 does not cover label.version and v4alpha2 (= legacy v3) leaves reference labels unfiltered; v4alpha3 is recommended for new signatures",
-		"algorithm", normalisationAlgorithm,
-		"recommended", DefaultNormalisationAlgorithm,
-	)
+	attrs := []any{"algorithm", normalisationAlgorithm, "recommended", DefaultNormalisationAlgorithm}
+	if fields := algorithms.Uncovered(normalisationAlgorithm); fields != "" {
+		attrs = append(attrs, "uncovered", fields)
+	}
+	logger.WarnContext(ctx, "signing with a non-default normalisation algorithm, use the recommended one for new signatures", attrs...)
 }
 
 // GenerateDigest computes a new digest for a descriptor with the given

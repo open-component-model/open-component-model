@@ -1200,6 +1200,7 @@ func TestBuildGraphDefinition_DockerManifestLocalBlob_FallsBackToLocalBlobWithou
 // for each such reference, so users rebuild with a current CLI; a default-only
 // tree must not.
 func TestBuildGraphDefinition_WarnsAboutNonDefaultReferenceDigests(t *testing.T) {
+	r := require.New(t)
 	var logs bytes.Buffer
 	previous := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
@@ -1230,11 +1231,12 @@ func TestBuildGraphDefinition_WarnsAboutNonDefaultReferenceDigests(t *testing.T)
 	}
 
 	transfer(t, signing.DefaultNormalisationAlgorithm)
-	require.NotContains(t, logs.String(), warning, "a tree with only default reference digests must not warn")
+	r.NotContains(logs.String(), warning, "a tree with only default reference digests must not warn")
 
 	transfer(t, v4alpha1.Algorithm)
-	assert.Equal(t, 1, strings.Count(logs.String(), warning), "a v4alpha1 reference digest must warn once")
-	assert.Contains(t, logs.String(), "normalisationAlgorithm="+v4alpha1.Algorithm)
+	r.Equal(1, strings.Count(logs.String(), warning), "a v4alpha1 reference digest must warn once")
+	r.Contains(logs.String(), "normalisationAlgorithm="+v4alpha1.Algorithm)
+	r.Contains(logs.String(), "uncovered=label.version", "trusting a v4alpha1 reference digest must name what it does not cover")
 }
 
 // Transfer never adds or rewrites reference digests: an existing digest is only

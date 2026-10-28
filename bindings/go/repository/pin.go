@@ -11,6 +11,7 @@ import (
 
 	"github.com/opencontainers/go-digest"
 
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/algorithms"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
 )
@@ -179,6 +180,7 @@ func verifyNormalizedPin(ctx context.Context, desc *descriptor.Descriptor, pin *
 		return fmt.Errorf("component version %s:%s does not match pinned digest %s: resolved digest is %s",
 			component, version, FormatDigestPin(pin), FormatDigestPin(resolved))
 	}
+	algorithms.WarnUncovered(ctx, slog.Default(), pin.NormalisationAlgorithm, "component", component, "version", version, "pin", FormatDigestPin(pin))
 	return nil
 }
 
