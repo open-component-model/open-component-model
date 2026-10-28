@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"slices"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2"
@@ -101,7 +102,7 @@ type CopyOCILayoutWithIndexOptions struct {
 
 // CopyOCILayoutWithIndex reads an OCI layout tarball from src, picks the
 // layout's top-level manifest or index via [pickTopLevelDescriptor], and copies
-// its full graph into dst via [oras.ExtendedCopyGraph], including referrers.
+// its full graph into dst via [CopyGraphWithRoot].
 //
 // Returns the descriptor of the root that was copied.
 func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.ReadOnlyBlob, opts CopyOCILayoutWithIndexOptions) (top ociImageSpecV1.Descriptor, err error) {
@@ -117,11 +118,27 @@ func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.R
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, err
 	}
+	return CopyGraphWithRoot(ctx, dst, ociStore, index, opts)
+}
+
+// CopyGraphWithRoot copies the graph rooted at root from src into dst via
+// [oras.ExtendedCopyGraph], including referrers. [CopyOCILayoutWithIndexOptions.MutateParentFunc]
+// runs once against root before any write.
+//
+// Returns the (possibly mutated) root that was copied.
+func CopyGraphWithRoot(ctx context.Context, dst content.Storage, src content.ReadOnlyGraphStorage, root ociImageSpecV1.Descriptor, opts CopyOCILayoutWithIndexOptions) (ociImageSpecV1.Descriptor, error) {
 	// We call the mutateParentFunc here instead of directly in FindSuccessors
 	// as the FindSuccessors path is only reached if there is a referrer in the
-	// source layout.
+	// source. It may mutate Annotations and Platform, which root shares with
+	// the caller.
+	root.Annotations = maps.Clone(root.Annotations)
+	if root.Platform != nil {
+		platform := *root.Platform
+		platform.OSFeatures = slices.Clone(platform.OSFeatures)
+		root.Platform = &platform
+	}
 	if opts.MutateParentFunc != nil {
-		if err := opts.MutateParentFunc(&index); err != nil {
+		if err := opts.MutateParentFunc(&root); err != nil {
 			return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to mutate top level descriptor before copy: %w", err)
 		}
 	}
@@ -145,18 +162,18 @@ func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.R
 			return nil, err
 		}
 		for i := range successors {
-			if successors[i].Digest == index.Digest {
-				successors[i] = index
+			if successors[i].Digest == root.Digest {
+				successors[i] = root
 			}
 		}
 		return successors, nil
 	}
 
-	if err := oras.ExtendedCopyGraph(ctx, ociStore, dst, index, extendedCopyOpts); err != nil {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to copy graph for index from oci layout %v: %w", index, err)
+	if err := oras.ExtendedCopyGraph(ctx, src, dst, root, extendedCopyOpts); err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to copy graph rooted at %v: %w", root, err)
 	}
 
-	return index, nil
+	return root, nil
 }
 
 // pickTopLevelDescriptor works out which manifest in the layout was requested,
