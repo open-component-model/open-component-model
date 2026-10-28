@@ -19,18 +19,31 @@ import (
 
 // ---- Options validation ----
 
-func TestOptions_DefaultPolicyIsAlways(t *testing.T) {
-	assert.Equal(t, RemotePolicyAlways, Defaults().RemotePolicy)
+func TestOptions_DefaultPolicyIsIfNotPresent(t *testing.T) {
+	assert.Equal(t, RemotePolicyIfNotPresent, Defaults().RemotePolicy)
+}
+
+func TestOptions_DefaultLimitsPerCache(t *testing.T) {
+	r := require.New(t)
+
+	blobs, err := NewBlobCache(Options{Dir: t.TempDir()})
+	r.NoError(err)
+	r.Equal(DefaultBlobMaxEntries, blobs.opts.MaxEntries)
+	r.EqualValues(DefaultMaxBlobSize, blobs.MaxBlobSize())
+
+	refs, err := NewReferenceCache(Options{Dir: t.TempDir()})
+	r.NoError(err)
+	r.Equal(DefaultReferenceMaxEntries, refs.opts.MaxEntries)
 }
 
 func TestOptions_ExplicitAlwaysAccepted(t *testing.T) {
-	opts, err := Options{Dir: t.TempDir(), RemotePolicy: RemotePolicyAlways}.applyDefaults()
+	opts, err := Options{Dir: t.TempDir(), RemotePolicy: RemotePolicyAlways}.applyDefaults(DefaultBlobMaxEntries)
 	require.NoError(t, err)
 	assert.Equal(t, RemotePolicyAlways, opts.RemotePolicy)
 }
 
 func TestOptions_InvalidPolicyRejected(t *testing.T) {
-	_, err := Options{Dir: t.TempDir(), RemotePolicy: "Never"}.applyDefaults()
+	_, err := Options{Dir: t.TempDir(), RemotePolicy: "Never"}.applyDefaults(DefaultBlobMaxEntries)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported RemotePolicy")
 }

@@ -119,7 +119,7 @@ type referenceKey struct {
 // process restart. Malformed snapshots are logged and treated as
 // empty.
 func NewReferenceCache(opts Options) (*ReferenceCache, error) {
-	opts, err := opts.applyDefaults()
+	opts, err := opts.applyDefaults(DefaultReferenceMaxEntries)
 	if err != nil {
 		return nil, err
 	}

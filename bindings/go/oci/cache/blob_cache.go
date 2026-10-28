@@ -59,7 +59,7 @@ type BlobCache struct {
 // so the same Dir can also host a [ReferenceCache] (which writes
 // `<Dir>/refs/<sha256(namespace)>.json`) without collisions.
 func NewBlobCache(opts Options) (*BlobCache, error) {
-	opts, err := opts.applyDefaults()
+	opts, err := opts.applyDefaults(DefaultBlobMaxEntries)
 	if err != nil {
 		return nil, err
 	}
