@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -77,7 +78,7 @@ resources:
 			"--skip-validation",
 		))
 		require.NoError(t, err)
-		got, err := os.ReadFile(filepath.Join(outDir, "my-plugin"))
+		got, err := os.ReadFile(filepath.Join(outDir, pluginFileName("my-plugin")))
 		require.NoError(t, err)
 		require.Equal(t, string(contentAMD64), string(got))
 	})
@@ -92,7 +93,7 @@ resources:
 			"--skip-validation",
 		))
 		require.NoError(t, err)
-		got, err := os.ReadFile(filepath.Join(outDir, "my-plugin"))
+		got, err := os.ReadFile(filepath.Join(outDir, pluginFileName("my-plugin")))
 		require.NoError(t, err)
 		require.Equal(t, string(contentARM64), string(got))
 	})
@@ -162,4 +163,11 @@ resources:
 	))
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "found multiple resources matching identity")
+}
+
+func pluginFileName(name string) string {
+	if runtime.GOOS == "windows" {
+		return name + ".exe"
+	}
+	return name
 }

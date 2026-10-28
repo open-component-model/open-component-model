@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"os"
 	"path/filepath"
 
@@ -57,11 +56,9 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 		provSpec  *filesystem.Blob
 	)
 
-	var chartPath string
-	if p, err := url.Parse(transformation.Spec.ChartFile.URI); err != nil {
+	chartPath, err := filesystem.FilePathFromURI(transformation.Spec.ChartFile.URI)
+	if err != nil {
 		return nil, fmt.Errorf("invalid chart file URI: %w", err)
-	} else {
-		chartPath = p.Path
 	}
 	fs, err := filesystem.NewFS(filepath.Dir(chartPath), os.O_RDONLY)
 	if err != nil {
@@ -71,11 +68,9 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 	chartSpec = filesystem.NewFileBlob(fs, filepath.Base(chartPath))
 
 	if transformation.Spec.ProvFile != nil && transformation.Spec.ProvFile.URI != "" {
-		var provPath string
-		if p, err := url.Parse(transformation.Spec.ProvFile.URI); err != nil {
+		provPath, err := filesystem.FilePathFromURI(transformation.Spec.ProvFile.URI)
+		if err != nil {
 			return nil, fmt.Errorf("invalid prov file URI: %w", err)
-		} else {
-			provPath = p.Path
 		}
 		fs, err := filesystem.NewFS(filepath.Dir(provPath), os.O_RDONLY)
 		if err != nil {

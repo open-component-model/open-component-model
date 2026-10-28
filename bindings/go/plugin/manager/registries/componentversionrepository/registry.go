@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"sync"
 
 	ocmrepositoryv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
@@ -18,7 +17,7 @@ import (
 type constructedPlugin struct {
 	Plugin ocmrepositoryv1.ReadWriteOCMRepositoryPluginContract[runtime.Typed]
 
-	cmd *exec.Cmd
+	process plugins.Process
 }
 
 // RepositoryRegistry holds all plugins that implement capabilities corresponding to RepositoryPlugin operations.
@@ -85,17 +84,16 @@ func (r *RepositoryRegistry) GetComponentVersionRepositoryScheme() *runtime.Sche
 // Ensure RepositoryRegistry implements ComponentVersionRepositoryProvider interface
 var _ repository.ComponentVersionRepositoryProvider = (*RepositoryRegistry)(nil)
 
-// Shutdown will loop through all _STARTED_ plugins and will send an Interrupt signal to them.
-// All plugins should handle interrupt signals gracefully. For Go, this is done automatically by
+// Shutdown will loop through all _STARTED_ plugins and will interrupt them.
+// All plugins should handle interrupts gracefully. For Go, this is done automatically by
 // the plugin SDK.
 func (r *RepositoryRegistry) Shutdown(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var errs error
 	for _, p := range r.constructedPlugins {
-		// The plugins should handle the Interrupt signal for shutdowns.
 		// TODO(Skarlso): Use context to wait for the plugin to actually shut down.
-		if perr := p.cmd.Process.Signal(os.Interrupt); perr != nil && !errors.Is(perr, os.ErrProcessDone) {
+		if perr := p.process.Interrupt(ctx); perr != nil && !errors.Is(perr, os.ErrProcessDone) {
 			errs = errors.Join(errs, perr)
 		}
 	}
@@ -144,8 +142,8 @@ func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *mt
 
 	repoPlugin := NewComponentVersionRepositoryPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, r.capabilities[plugin.ID])
 	r.constructedPlugins[plugin.ID] = &constructedPlugin{
-		Plugin: repoPlugin,
-		cmd:    plugin.Cmd,
+		Plugin:  repoPlugin,
+		process: plugins.NewProcess(plugin, client, loc),
 	}
 
 	// wrap the untyped internal plugin into a typed representation.

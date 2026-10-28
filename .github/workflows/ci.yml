@@ -259,10 +259,21 @@ jobs:
           check_retries: true
 
   run_unit_tests:
-    name: "Unit Tests"
+    name: "Unit Tests (${{ matrix.goos }})"
     needs: changes
-    runs-on: ubuntu-26.04-arm
+    runs-on: ${{ matrix.runner }}
     if: ${{ needs.changes.outputs.run_go == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # The CLI ships windows binaries that cli.yml only cross-compiles, so
+        # OS-specific paths (file paths, plugin processes, sockets) need a native run.
+        # Windows runners are billed at a premium, so that run is limited to pushes to main.
+        include: ${{ fromJSON(github.event_name == 'push' && '[{"runner":"ubuntu-26.04-arm","goos":"linux","goarch":"arm64"},{"runner":"windows-latest","goos":"windows","goarch":"amd64","exe":".exe"}]' || '[{"runner":"ubuntu-26.04-arm","goos":"linux","goarch":"arm64"}]') }}
+    defaults:
+      run:
+        # Task resolves grep/mkdir/mv from PATH; on Windows Git Bash provides them.
+        shell: bash
     steps:
       - name: Install Task
         uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
@@ -279,10 +290,22 @@ jobs:
         with:
           go-version-file: '${{ github.workspace }}/bindings/go/go.mod'
           cache-dependency-path: '${{ github.workspace }}/bindings/go/go.sum'
+      - name: Build and smoke test CLI
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          EXE: ${{ matrix.exe }}
+        run: |
+          task bindings/go/cli:build/single GOOS="$GOOS" GOARCH="$GOARCH"
+          bin="bindings/go/cli/tmp/bin/ocm-$GOOS-$GOARCH"
+          # Windows only executes files with an .exe extension.
+          cp "$bin" "bindings/go/cli/tmp/bin/ocm$EXE"
+          "bindings/go/cli/tmp/bin/ocm$EXE" version
       - name: Run Tests
         run: task bindings/go:test
       - name: Coverage summary and threshold
-        if: always()
+        # The floor is calibrated on Linux, which also covers the controller.
+        if: ${{ always() && matrix.goos == 'linux' }}
         working-directory: bindings/go
         run: |
           if [ ! -f output/coverage.unit.out ]; then
