@@ -11,6 +11,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -40,6 +41,38 @@ func TestGetBlobFromPath_SingleFile(t *testing.T) {
 	content, err := io.ReadAll(reader)
 	r.NoError(err)
 	r.Equal(testContent, string(content))
+
+	// Single files are stat- and digest-aware without buffering the content.
+	r.Implements((*blob.SizeAware)(nil), b)
+	r.Equal(int64(len(testContent)), b.(blob.SizeAware).Size())
+	r.Implements((*blob.DigestAware)(nil), b)
+	dig, ok := b.(blob.DigestAware).Digest()
+	r.True(ok)
+	r.Equal(digest.FromString(testContent).String(), dig)
+}
+
+// A symlink to a file outside its own directory is followed, as os.Stat does.
+func TestGetBlobFromPath_SingleFileSymlinkOutsideParent(t *testing.T) {
+	r := require.New(t)
+
+	tmpDir := t.TempDir()
+	createTestFile(t, filepath.Join(tmpDir, "data"), "target.txt", "linked content")
+	linkDir := filepath.Join(tmpDir, "links")
+	r.NoError(os.MkdirAll(linkDir, 0o755))
+	link := filepath.Join(linkDir, "link.txt")
+	if err := os.Symlink(filepath.Join("..", "data", "target.txt"), link); err != nil {
+		t.Skipf("symlink creation failed (may not be supported on this system): %v", err)
+	}
+
+	b, err := filesystem.GetBlobFromPath(t.Context(), "links/link.txt", filesystem.DirOptions{WorkingDir: tmpDir})
+	r.NoError(err)
+
+	reader, err := b.ReadCloser()
+	r.NoError(err)
+	defer func() { r.NoError(reader.Close()) }()
+	content, err := io.ReadAll(reader)
+	r.NoError(err)
+	r.Equal("linked content", string(content))
 }
 
 func TestGetBlobFromPath_SimpleDirectory(t *testing.T) {
