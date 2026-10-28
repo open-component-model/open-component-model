@@ -2112,13 +2112,18 @@ func TestRepository_DownloadResourceOCIImageLayer(t *testing.T) {
 		r.Equal("application/octet-stream", mediaType, "an empty media type must not overwrite the default")
 	})
 
-	t.Run("a size that does not match the blob is rejected", func(t *testing.T) {
+	t.Run("a size that does not match the blob is rejected on read", func(t *testing.T) {
 		r := require.New(t)
 		wrongSize := res.DeepCopy()
 		wrongSize.Access.(*v1.OCIImageLayer).Size = int64(len(testdata)) + 1
 
-		_, err := repo.DownloadResource(ctx, wrongSize)
-		r.ErrorContains(err, "the descriptor declares")
+		downloaded, err := repo.DownloadResource(ctx, wrongSize)
+		r.NoError(err)
+		reader, err := downloaded.ReadCloser()
+		r.NoError(err)
+		_, err = io.ReadAll(reader)
+		r.ErrorContains(err, "size mismatch")
+		r.Error(reader.Close())
 	})
 
 	t.Run("a layer cannot be streamed", func(t *testing.T) {
