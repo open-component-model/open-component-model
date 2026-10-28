@@ -116,6 +116,9 @@ commit_parsers = [
     { message = "^fix\\(docs.*\\)", group = "<!-- 8 -->📚 Documentation" },
     { message = "^docs", group = "<!-- 8 -->📚 Documentation" },
     { message = "^fix", group = "<!-- 1 -->🐛 Bug Fixes" },
+    { message = "^perf", group = "<!-- 3 -->⚡ Performance" },
+    { message = "^refactor", group = "<!-- 4 -->🚜 Refactor" },
+    { message = "^test", group = "<!-- 5 -->🧪 Testing" },
     { message = "^revert", group = "<!-- 6 -->⏪ Reverts" },
     { message = "^chore|^ci|chore\\(ci.*\\)|fix\\(ci.*\\)", group = "<!-- 7 -->⚙️ Miscellaneous Tasks" },
 ]
