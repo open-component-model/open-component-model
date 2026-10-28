@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/internal/gzippool"
 )
 
 const (
@@ -114,12 +115,12 @@ func compress(reader io.ReadCloser, writer *io.PipeWriter, method Method) {
 	case MethodGzip:
 		fallthrough
 	default:
-		compressed = GetGzipWriter(writer)
+		compressed = gzippool.Get(writer)
 	}
 
 	_, err := blob.CopyReader(compressed, reader)
 	closeErr := compressed.Close()
-	PutGzipWriter(compressed)
+	gzippool.Put(compressed)
 	writer.CloseWithError(errors.Join(err, closeErr, reader.Close()))
 }
 

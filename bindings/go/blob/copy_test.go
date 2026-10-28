@@ -26,22 +26,28 @@ func (r *readSizeRecorder) Read(p []byte) (int, error) {
 func TestCopyReader(t *testing.T) {
 	data := strings.Repeat("0123456789abcdef", 64*1024) // 1 MiB
 
-	t.Run("into file from non-file reader uses the copy buffer", func(t *testing.T) {
-		r := require.New(t)
-		f, err := os.CreateTemp(t.TempDir(), "")
-		r.NoError(err)
-		t.Cleanup(func() { r.NoError(f.Close()) })
+	// *os.File.ReadFrom's generic fallback would read through its own 32 KiB buffer
+	// instead of the pooled copy buffer, also when promoted through embedding.
+	for name, wrap := range map[string]func(*os.File) io.Writer{
+		"*os.File":          func(f *os.File) io.Writer { return f },
+		"type embedding it": func(f *os.File) io.Writer { return struct{ *os.File }{f} },
+	} {
+		t.Run("into "+name+" from non-file reader uses the copy buffer", func(t *testing.T) {
+			r := require.New(t)
+			f, err := os.CreateTemp(t.TempDir(), "")
+			r.NoError(err)
+			t.Cleanup(func() { r.NoError(f.Close()) })
 
-		src := &readSizeRecorder{Reader: strings.NewReader(data)}
-		n, err := blob.CopyReader(f, src)
-		r.NoError(err)
-		r.Equal(int64(len(data)), n)
-		// *os.File.ReadFrom's generic fallback would read through its own 32 KiB buffer instead.
-		r.Equal(blob.DefaultArchiveBlobBufferSize, src.maxRead)
-		got, err := os.ReadFile(f.Name())
-		r.NoError(err)
-		r.Equal(data, string(got))
-	})
+			src := &readSizeRecorder{Reader: strings.NewReader(data)}
+			n, err := blob.CopyReader(wrap(f), src)
+			r.NoError(err)
+			r.Equal(int64(len(data)), n)
+			r.Equal(blob.DefaultArchiveBlobBufferSize, src.maxRead)
+			got, err := os.ReadFile(f.Name())
+			r.NoError(err)
+			r.Equal(data, string(got))
+		})
+	}
 
 	t.Run("file to file", func(t *testing.T) {
 		r := require.New(t)
@@ -60,6 +66,22 @@ func TestCopyReader(t *testing.T) {
 		got, err := os.ReadFile(dst.Name())
 		r.NoError(err)
 		r.Equal(data, string(got))
+
+		t.Run("limited", func(t *testing.T) {
+			r := require.New(t)
+			_, err := src.Seek(0, io.SeekStart)
+			r.NoError(err)
+			r.NoError(dst.Truncate(0))
+			_, err = dst.Seek(0, io.SeekStart)
+			r.NoError(err)
+
+			n, err := blob.CopyReaderN(dst, src, 100)
+			r.NoError(err)
+			r.Equal(int64(100), n)
+			got, err := os.ReadFile(dst.Name())
+			r.NoError(err)
+			r.Equal(data[:100], string(got))
+		})
 	})
 }
 

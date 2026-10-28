@@ -13,8 +13,8 @@ import (
 	"oras.land/oras-go/v2/content"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/compression"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/internal/gzippool"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 )
@@ -53,10 +53,10 @@ func copyToOCILayoutInMemoryAsync(ctx context.Context, src content.ReadOnlyGraph
 		w.CloseWithError(err)
 	}()
 
-	zippedBuf := compression.GetGzipWriter(w)
+	zippedBuf := gzippool.Get(w)
 	defer func() {
 		err = errors.Join(err, zippedBuf.Close())
-		compression.PutGzipWriter(zippedBuf)
+		gzippool.Put(zippedBuf)
 	}()
 
 	// Create an OCI layout writer over the gzip stream.

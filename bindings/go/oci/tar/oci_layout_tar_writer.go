@@ -197,7 +197,12 @@ func (s *OCILayoutWriter) Close() (closeErr error) {
 	if _, err := s.buf.Seek(0, io.SeekStart); err != nil {
 		return fmt.Errorf("failed to seek scratch buffer: %w", err)
 	}
-	if _, err := io.Copy(s.output, s.buf); err != nil {
+	// Unwrap the temp file so an *os.File output can use copy_file_range.
+	var scratch io.Reader = s.buf
+	if rc, ok := s.buf.(*removingCloser); ok {
+		scratch = rc.File
+	}
+	if _, err := blob.CopyReader(s.output, scratch); err != nil {
 		return fmt.Errorf("failed to copy scratch buffer to output: %w", err)
 	}
 
@@ -244,9 +249,10 @@ func (s *OCILayoutWriter) Push(ctx context.Context, expected ociImageSpecV1.Desc
 	dataOffset := offset + int64(len(headerBytes))
 	verify := content.NewVerifyReader(data, expected)
 
-	// A short read is not fatal here: verify.Verify rejects content shorter than expected.
+	// Short content surfaces here as io.ErrUnexpectedEOF from the VerifyReader;
+	// trailing data and digest mismatches surface from Verify below.
 	written, err := blob.CopyReaderN(io.NewOffsetWriter(s.buf, dataOffset), verify, expected.Size)
-	if err != nil && !errors.Is(err, io.EOF) {
+	if err != nil {
 		return fmt.Errorf("failed to write content to scratch buffer: %w", err)
 	}
 	if err := verify.Verify(); err != nil {
