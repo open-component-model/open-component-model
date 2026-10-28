@@ -6,11 +6,12 @@
 // Create a [Resolver] during controller setup using [NewResolver].
 //
 //	resolver := resolution.NewResolver(logger)
+//	ociCaches := setup.NewOCICaches(tempDir) // one per process, closed on shutdown
 //
 // To fetch a component version, call [Resolver.GetComponentVersion] with [Options] and a [Verification]:
 //
 //	cfg, err := configuration.LoadConfigurations(ctx, client, namespace, ocmConfigs)
-//	pm, err := setup.NewPluginManager(ctx, cfg.Config, logger)
+//	pm, err := setup.NewPluginManager(ctx, cfg.Config, logger, setup.WithOCICaches(ociCaches))
 //	opts := &resolution.Options{
 //	    RepositorySpec: repoSpec,
 //	    Configuration:  cfg,

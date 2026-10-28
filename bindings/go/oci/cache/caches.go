@@ -82,6 +82,10 @@ func (c *Caches) Blob() *BlobCache {
 		return nil
 	}
 	c.blobInit.Do(func() { c.blob = c.newBlobCache() })
+	// Close may have run since the check above and closed the cache.
+	if c.closed.Load() {
+		return nil
+	}
 	return c.blob
 }
 
@@ -141,7 +145,7 @@ func (c *Caches) Reference(identity *identityv1.OCIRegistryIdentity) *ReferenceC
 	}
 	scope := RepositoryKey(identity)
 	if v, ok := c.references.Load(scope); ok {
-		return v.(*ReferenceCache)
+		return c.openReference(v)
 	}
 
 	v, err, _ := c.referenceInit.Do(scope, func() (any, error) {
@@ -175,7 +179,12 @@ func (c *Caches) Reference(identity *identityv1.OCIRegistryIdentity) *ReferenceC
 			slog.String("err", err.Error()))
 		return nil
 	}
-	if v == nil {
+	return c.openReference(v)
+}
+
+// openReference hides a reference cache that Close closed after Reference checked closed.
+func (c *Caches) openReference(v any) *ReferenceCache {
+	if v == nil || c.closed.Load() {
 		return nil
 	}
 	return v.(*ReferenceCache)

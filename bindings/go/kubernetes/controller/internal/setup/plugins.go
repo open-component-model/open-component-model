@@ -50,8 +50,8 @@ func WithTempDir(dir string) PluginOption {
 	}
 }
 
-// WithOCICaches shares the OCI caches between plugin managers. The caches own their directory,
-// so per-request plugin managers must not each build their own.
+// WithOCICaches shares the OCI caches between plugin managers. Without it, OCI caching is disabled,
+// because the caches own their directory and per-request plugin managers must not each build their own.
 func WithOCICaches(caches *ocicache.Caches) PluginOption {
 	return func(o *PluginOptions) {
 		o.OCICaches = caches
@@ -83,20 +83,18 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 		fsCfg.TempFolder = &options.TempDir
 	}
 
-	ociCaches := options.OCICaches
-	if ociCaches == nil {
-		ociCaches = NewOCICaches(options.TempDir)
-	}
-
 	pm := manager.NewPluginManager(ctx)
 
-	repositoryProvider := provider.NewComponentVersionRepositoryProvider(
+	providerOpts := []provider.Option{
 		provider.WithScheme(ocirepository.Scheme),
 		provider.WithUserAgent(creator),
 		provider.WithTempDir(options.TempDir),
 		provider.WithHTTPConfig(httpCfg),
-		provider.WithCaches(ociCaches),
-	)
+	}
+	if options.OCICaches != nil {
+		providerOpts = append(providerOpts, provider.WithCaches(options.OCICaches))
+	}
+	repositoryProvider := provider.NewComponentVersionRepositoryProvider(providerOpts...)
 
 	signingHandler, err := handler.New(signingv1alpha1.Scheme, true)
 	if err != nil {

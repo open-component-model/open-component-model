@@ -81,10 +81,6 @@ func main() {
 		resourceConcurrency       int
 		deployerConcurrency       int
 		replicationConcurrency    int
-		resolverWorkerCount       int
-		resolverWorkerQueueLength int
-		resolverSubscriberBuffer  int
-		resolverCacheTTL          int
 		// The qps values are strings because Helm's --set turns fractions into strings.
 		repositoryRateLimit            ocm.RateLimit
 		repositoryRateLimitQPS         string
@@ -129,15 +125,6 @@ func main() {
 			"(Deployer and NamespacedDeployer each get their own).")
 	flag.IntVar(&replicationConcurrency, "replication-controller-concurrency", 4, //nolint:mnd // no magic number
 		"The replication controller concurrency. This is the number of active replication controller workers that can be kept alive.")
-	flag.IntVar(&resolverWorkerCount, "resolver-worker-count", 10, //nolint:mnd // no magic number
-		"This is the number of active resolver workers.")
-	flag.IntVar(&resolverWorkerQueueLength, "resolver-worker-queue-length", 1000, //nolint:mnd // no magic number
-		"The maximum number of work items in the queue for the workers to pick up component versions to resolve from.")
-	flag.IntVar(&resolverSubscriberBuffer, "resolver-subscriber-buffer-size", 100, //nolint:mnd // no magic number
-		"The buffer size for each subscriber's event channel. A larger buffer reduces the probability of dropped resolution events under load. "+
-			"Tune upward if the resolver_event_channel_drops_total metric is non-zero.")
-	flag.IntVar(&resolverCacheTTL, "resolver-cache-ttl", 30, //nolint:mnd // no magic number
-		"The time-to-live (TTL) for the resolver cache entries in minutes. Setting TTL to less than 30 minutes is discouraged in productive use as it can lead to unintended performance issues.")
 	flag.StringVar(&repositoryRateLimitQPS, "repository-controller-rate-limit-qps", strconv.Itoa(ocm.DefaultRateLimitQPS),
 		"Requeues per second the Repository controller admits once its burst is used up. Must be a float greater than 0, e.g. 0.1.")
 	flag.IntVar(&repositoryRateLimit.Burst, "repository-controller-rate-limit-burst", ocm.DefaultRateLimitBurst,
