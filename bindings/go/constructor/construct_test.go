@@ -20,6 +20,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/algorithms"
+	jsonv1 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v1"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha2"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha3"
@@ -1000,8 +1001,9 @@ func TestProcessReference_DigestAlgorithmSelection(t *testing.T) {
 	r.NoError(err)
 	r.Equal(v4alpha3.Algorithm, got.Digest.NormalisationAlgorithm)
 
-	// A pinned digest is verified under its own recorded algorithms and kept as
-	// is, never rewritten to the default.
+	// A pinned digest is verified under its own recorded algorithms and kept,
+	// never rewritten to the default. Only its spelling is canonicalised
+	// (lowercase hex, SHA-256/SHA-512), so every verifier accepts it.
 	mustDigest := func(norm, hash string) *constructorruntime.Digest {
 		d, err := algorithms.Digest(child, norm, hash)
 		r.NoError(err)
@@ -1011,19 +1013,32 @@ func TestProcessReference_DigestAlgorithmSelection(t *testing.T) {
 	r.NotEqual(got.Digest.Value, a1.Value, "v4alpha1 and v4alpha3 must differ for this child or the test proves nothing")
 	a2 := mustDigest(v4alpha2.Algorithm, crypto.SHA256.String())
 	legacyV3 := &constructorruntime.Digest{HashAlgorithm: a2.HashAlgorithm, NormalisationAlgorithm: algorithms.LegacyV3, Value: a2.Value}
-	legacyHashName := &constructorruntime.Digest{HashAlgorithm: "sha256", NormalisationAlgorithm: a1.NormalisationAlgorithm, Value: a1.Value}
+	sha512 := mustDigest(v4alpha3.Algorithm, crypto.SHA512.String())
 
-	for name, pinned := range map[string]*constructorruntime.Digest{
-		"v4alpha1":         a1,
-		"legacy v3 alias":  legacyV3,
-		"sha512":           mustDigest(v4alpha3.Algorithm, crypto.SHA512.String()),
-		"legacy hash name": legacyHashName,
+	for name, tt := range map[string]struct{ pinned, want *constructorruntime.Digest }{
+		"v4alpha1":        {pinned: a1, want: a1},
+		"v4alpha2":        {pinned: a2, want: a2},
+		"legacy v3 alias": {pinned: legacyV3, want: legacyV3},
+		"sha512":          {pinned: sha512, want: sha512},
+		"legacy hash name": {
+			pinned: &constructorruntime.Digest{HashAlgorithm: "sha256", NormalisationAlgorithm: a1.NormalisationAlgorithm, Value: a1.Value},
+			want:   a1,
+		},
+		"uppercase hex": {
+			pinned: &constructorruntime.Digest{HashAlgorithm: a1.HashAlgorithm, NormalisationAlgorithm: a1.NormalisationAlgorithm, Value: strings.ToUpper(a1.Value)},
+			want:   a1,
+		},
 	} {
-		gotPinned, err := c.processReference(t.Context(), mkRef(pinned), child)
+		gotPinned, err := c.processReference(t.Context(), mkRef(tt.pinned), child)
 		r.NoError(err, name)
-		r.Equal(descriptor.Digest{HashAlgorithm: pinned.HashAlgorithm, NormalisationAlgorithm: pinned.NormalisationAlgorithm, Value: pinned.Value}, gotPinned.Digest,
-			"%s: pinned digest must be kept as is", name)
+		r.Equal(descriptor.Digest{HashAlgorithm: tt.want.HashAlgorithm, NormalisationAlgorithm: tt.want.NormalisationAlgorithm, Value: tt.want.Value}, gotPinned.Digest,
+			"%s: pinned digest must be kept, canonically spelled", name)
 	}
+
+	// The verify-only jsonNormalisation/v1 must not be recorded in a new
+	// descriptor, even when it matches.
+	_, err = c.processReference(t.Context(), mkRef(mustDigest(jsonv1.Algorithm, crypto.SHA256.String())), child)
+	r.ErrorIs(err, ErrVerifyOnlyReferenceDigest)
 
 	// A pinned digest whose value does not match the referenced component fails.
 	_, err = c.processReference(t.Context(), mkRef(&constructorruntime.Digest{
@@ -1038,6 +1053,7 @@ func TestProcessReference_DigestAlgorithmSelection(t *testing.T) {
 // for each such reference, so users rebuild with a current CLI; a default-only
 // tree must not.
 func TestConstructWarnsAboutNonDefaultReferenceDigests(t *testing.T) {
+	r := require.New(t)
 	var logs bytes.Buffer
 	previous := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
@@ -1076,16 +1092,17 @@ components:
 			leaf = d
 		}
 	}
-	require.NotNil(t, leaf)
-	require.NotContains(t, logs.String(), warning, "a tree with only default reference digests must not warn")
+	r.NotNil(leaf)
+	r.NotContains(logs.String(), warning, "a tree with only default reference digests must not warn")
 
 	a1, err := algorithms.Digest(leaf, v4alpha1.Algorithm, crypto.SHA256.String())
-	require.NoError(t, err)
+	r.NoError(err)
 	construct(t, `        digest:
           hashAlgorithm: `+a1.HashAlgorithm+`
           normalisationAlgorithm: `+a1.NormalisationAlgorithm+`
           value: `+a1.Value+`
 `)
-	assert.Equal(t, 1, strings.Count(logs.String(), warning), "a pinned v4alpha1 reference must warn once")
-	assert.Contains(t, logs.String(), "normalisationAlgorithm="+v4alpha1.Algorithm)
+	r.Equal(1, strings.Count(logs.String(), warning), "a pinned v4alpha1 reference must warn once")
+	r.Contains(logs.String(), "normalisationAlgorithm="+v4alpha1.Algorithm)
+	r.Contains(logs.String(), "uncovered=label.version", "a pinned v4alpha1 reference must name what it does not cover")
 }

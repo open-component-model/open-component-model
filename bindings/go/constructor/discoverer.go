@@ -59,11 +59,7 @@ func (d *resolverAndDiscoverer) Discover(ctx context.Context, component *Constru
 			children[index] = ref.ToComponentIdentity().String()
 			// A reference without a digest is minted with the default.
 			if ref.Digest != nil {
-				algorithms.WarnNonDefaultReferenceDigest(ctx, log.Base(), descriptor.Digest{
-					HashAlgorithm:          ref.Digest.HashAlgorithm,
-					NormalisationAlgorithm: ref.Digest.NormalisationAlgorithm,
-					Value:                  ref.Digest.Value,
-				}, "component", component.ConstructorComponent.ToIdentity().String(), "reference", ref.ToIdentity().String())
+				algorithms.WarnNonDefaultReferenceDigest(ctx, log.Base(), constructor.ConvertToDescriptorReference(&ref).Digest, "component", component.ConstructorComponent.ToIdentity().String(), "reference", ref.ToIdentity().String())
 			}
 		}
 		return children, nil

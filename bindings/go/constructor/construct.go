@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime"
+	"strings"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
@@ -31,6 +32,11 @@ var ErrShouldSkipConstruction = errors.New("should skip construction")
 
 // ErrDigestMismatch is returned when a provided digest does not match the calculated digest.
 var ErrDigestMismatch = errors.New("digest mismatch")
+
+// ErrVerifyOnlyReferenceDigest is returned when a reference pins its digest with a
+// verify-only normalisation algorithm, which must not be recorded in a new
+// component version.
+var ErrVerifyOnlyReferenceDigest = errors.New("reference digest uses a verify-only normalisation algorithm")
 
 const AttributeDescriptor string = "constructor/descriptor"
 
@@ -694,19 +700,19 @@ func (c *DefaultConstructor) processReference(ctx context.Context, reference *co
 	ref := constructor.ConvertToDescriptorReference(reference)
 
 	// A reference that already carries a digest is verified under its own
-	// recorded normalisation and hash algorithms and kept as is, so a pinned
-	// v4alpha1 (or legacy v3, or SHA-512) reference is not rewritten to the
-	// default. A reference without a digest is minted with the current default
-	// (algorithms.Default), so a parent signed with the default covers the
-	// child's versioned signing labels.
+	// recorded normalisation and hash algorithms and kept, so a pinned v4alpha1
+	// (or legacy v3, or SHA-512) reference is not rewritten to the default. Only
+	// its spelling is canonicalised, so verifiers that compare exact hash names
+	// or hex case accept it too. A reference without a digest is minted with
+	// the current default (algorithms.Default).
 	if reference.Digest != nil {
-		if reference.Digest.HashAlgorithm == "" || reference.Digest.NormalisationAlgorithm == "" || reference.Digest.Value == "" {
+		pinned := ref.Digest
+		if pinned.HashAlgorithm == "" || pinned.NormalisationAlgorithm == "" || pinned.Value == "" {
 			return nil, fmt.Errorf("reference %q has an incomplete digest: all of hashAlgorithm, normalisationAlgorithm, and value must be set", reference.ToIdentity())
 		}
-		pinned := descriptor.Digest{
-			HashAlgorithm:          reference.Digest.HashAlgorithm,
-			NormalisationAlgorithm: reference.Digest.NormalisationAlgorithm,
-			Value:                  reference.Digest.Value,
+		if algorithms.VerifyOnly(pinned.NormalisationAlgorithm) {
+			return nil, fmt.Errorf("%w: reference %q pins its digest with %s: remove the digest to compute one with %s",
+				ErrVerifyOnlyReferenceDigest, reference.ToIdentity(), pinned.NormalisationAlgorithm, algorithms.Default)
 		}
 		if err := algorithms.Verify(referencedComponent, pinned); err != nil {
 			if errors.Is(err, algorithms.ErrDigestMismatch) {
@@ -715,8 +721,11 @@ func (c *DefaultConstructor) processReference(ctx context.Context, reference *co
 			}
 			return nil, fmt.Errorf("error verifying digest of referenced component %q: %w", reference.ToIdentity(), err)
 		}
-		logger.Debug("digest verification successful", "expected", pinned.Value)
-		ref.Digest = pinned
+		algorithms.WarnUncovered(ctx, logger, pinned.NormalisationAlgorithm, "reference", reference.ToIdentity().String())
+		hash, _ := algorithms.Hash(pinned.HashAlgorithm)
+		ref.Digest.HashAlgorithm = hash.String()
+		ref.Digest.Value = strings.ToLower(pinned.Value)
+		logger.Debug("digest verification successful", "expected", ref.Digest.Value)
 		return ref, nil
 	}
 
