@@ -50,6 +50,21 @@ func TestNewArtifactSetFromBlob_Compression(t *testing.T) {
 	}
 }
 
+func TestIsArtifactSetMediaType(t *testing.T) {
+	for mt, want := range map[string]bool{
+		"application/vnd.oci.image.manifest.v1" + ctf.SynthesizedBlobFormatSuffix:                true,
+		"application/vnd.oci.image.index.v1" + ctf.SynthesizedBlobFormatSuffix:                   true,
+		"application/vnd.docker.distribution.manifest.v2" + ctf.SynthesizedBlobFormatSuffix:      true,
+		"application/vnd.docker.distribution.manifest.list.v2" + ctf.SynthesizedBlobFormatSuffix: true,
+		"application/vnd.docker.distribution.manifest.v2+json":                                   false,
+		"application/vnd.oci.image.manifest.v1+json":                                             false,
+	} {
+		t.Run(mt, func(t *testing.T) {
+			require.Equal(t, want, ctf.IsArtifactSetMediaType(mt))
+		})
+	}
+}
+
 func TestNewArtifactSetFromBlob_IncompleteIndexEntry(t *testing.T) {
 	r := require.New(t)
 	manifestData := []byte(`{"schemaVersion":2,"config":{},"layers":[]}`)

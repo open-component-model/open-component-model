@@ -157,7 +157,9 @@ func (m *mockResourceRepositoryProvider) GetResourceRepository(ctx context.Conte
 type mockInputMethod struct {
 	processedResource *descriptor.Resource
 	processedBlob     blob.ReadOnlyBlob
-	capturedCreds     runtime.Typed
+	// mu guards capturedCreds: resources of one component are processed concurrently.
+	mu            sync.Mutex
+	capturedCreds runtime.Typed
 }
 
 func (m *mockInputMethod) GetInputMethodScheme() *runtime.Scheme {
@@ -171,7 +173,9 @@ func (m *mockInputMethod) GetResourceCredentialConsumerIdentity(ctx context.Cont
 }
 
 func (m *mockInputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, creds runtime.Typed) (*ResourceInputMethodResult, error) {
+	m.mu.Lock()
 	m.capturedCreds = creds
+	m.mu.Unlock()
 	if m.processedResource != nil {
 		return &ResourceInputMethodResult{
 			ProcessedResource: m.processedResource,
