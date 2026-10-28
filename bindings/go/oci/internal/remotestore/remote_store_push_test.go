@@ -107,9 +107,17 @@ func (reg *chunkedRegistry) handler() http.HandlerFunc {
 
 		case r.Method == http.MethodPut:
 			// Close chunked session; body may carry a final chunk (unused here).
+			// Like a registry, verify the content against the declared digest.
 			reg.mu.Lock()
 			reg.uploaded = append(reg.uploaded, body...)
+			uploaded := reg.uploaded
 			reg.mu.Unlock()
+			if dig, err := digest.Parse(r.URL.Query().Get("digest")); err != nil || dig.Algorithm().FromBytes(uploaded) != dig {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = io.WriteString(w, `{"errors":[{"code":"DIGEST_INVALID","message":"provided digest did not match uploaded content"}]}`)
+				return
+			}
 			w.Header().Set("Location", r.URL.Path)
 			w.WriteHeader(http.StatusCreated)
 
@@ -492,8 +500,8 @@ func TestRemoteStore_PushStreaming_KnownDigestUnknownSize(t *testing.T) {
 }
 
 func TestRemoteStore_PushStreaming_DigestMismatchErrors(t *testing.T) {
-	// A claimed digest that does not match the streamed bytes must fail rather
-	// than close the session under a false identifier.
+	// A claimed digest that does not match the streamed bytes is not hashed
+	// client-side: the registry rejects closing the session under it.
 	reg := newChunkedRegistry(t)
 	srv := httptest.NewServer(reg.handler())
 	t.Cleanup(srv.Close)
@@ -505,10 +513,7 @@ func TestRemoteStore_PushStreaming_DigestMismatchErrors(t *testing.T) {
 	_, err := store.PushStreaming(t.Context(),
 		ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: wrong},
 		bytes.NewReader(data))
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "does not match declared digest")
-	// The session must not be closed with the wrong digest.
-	require.NotContains(t, reg.methods(), http.MethodPut)
+	require.ErrorContains(t, err, "digest invalid")
 }
 
 func TestRemoteStore_PushStreaming_UnavailableWhenChunkingDisabled(t *testing.T) {
@@ -560,9 +565,8 @@ func TestRemoteStore_Push_InvokesHandleWarning(t *testing.T) {
 }
 
 // TestRemoteStore_Push_ChunkedNonSHA256Digest verifies that a chunked push of a
-// blob declared with a non-sha256 digest computes the running digest with the
-// declared algorithm and closes the session under that same digest, rather than
-// hashing with sha256 and failing resolveFinalDigest with a mismatch.
+// blob declared with a non-sha256 digest advertises the declared algorithm and
+// closes the session under that same digest.
 func TestRemoteStore_Push_ChunkedNonSHA256Digest(t *testing.T) {
 	r := require.New(t)
 

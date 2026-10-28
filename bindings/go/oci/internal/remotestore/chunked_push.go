@@ -125,7 +125,8 @@ func (r *RemoteStore) PushStreaming(ctx context.Context, partial ociImageSpecV1.
 // chunkedUpload holds the mutable state of one chunked upload session: the
 // current push location (updated after each PATCH), how many bytes have been
 // streamed, whether any byte has been consumed (after which no monolithic
-// fallback is possible), and the running digest of the streamed content.
+// fallback is possible), and the running digest of the streamed content, which
+// is nil when the digest is declared up front.
 type chunkedUpload struct {
 	location *url.URL
 	chunk    int64
@@ -140,9 +141,9 @@ type chunkedUpload struct {
 // When fallback is non-nil it is invoked for any failure that occurs before the
 // first byte is consumed (so no registry regresses); once a chunk has been
 // sent, an io.Reader cannot be rewound, so later failures return a wrapped
-// error and best-effort cancel the session. When knownDigest is set it is
-// verified against the streamed content and used to close the session; when
-// empty the digest is computed from the stream.
+// error and best-effort cancel the session. When knownDigest is set the session
+// is closed with it and the registry verifies the content against it, as for
+// the monolithic push; when empty the digest is computed from the stream.
 func (r *RemoteStore) pushChunked(
 	ctx context.Context,
 	mediaType string,
@@ -167,10 +168,9 @@ func (r *RemoteStore) pushChunked(
 		return ociImageSpecV1.Descriptor{}, err
 	}
 
-	finalDigest, err := resolveFinalDigest(up.digester.Digest(), knownDigest)
-	if err != nil {
-		r.cancelUpload(ctx, up.location)
-		return ociImageSpecV1.Descriptor{}, err
+	finalDigest := knownDigest
+	if up.digester != nil {
+		finalDigest = up.digester.Digest()
 	}
 
 	if knownSize != blob.SizeUnknown && knownSize >= 0 && up.offset != knownSize {
@@ -199,24 +199,10 @@ func fallbackOrUnavailable(fallback func() error, cause error) (ociImageSpecV1.D
 	return ociImageSpecV1.Descriptor{}, fmt.Errorf("%w: %w", ErrStreamingUnavailable, cause)
 }
 
-// resolveFinalDigest picks the digest used to close the session: the computed
-// digest when none was declared, or the declared digest after verifying it
-// matches the streamed content (closing under a mismatching claim would push
-// corrupt content under a false identifier).
-func resolveFinalDigest(computed, known digest.Digest) (digest.Digest, error) {
-	if known == "" {
-		return computed, nil
-	}
-	if computed != known {
-		return "", fmt.Errorf("chunked blob push: content digest %s does not match declared digest %s", computed, known)
-	}
-	return known, nil
-}
-
 // openUploadSession performs the POST that starts a blob upload and returns the
-// initialised session state. Its digester matches knownDigest's algorithm (the
-// canonical algorithm when no digest is declared), and a non-sha256 knownDigest
-// additionally advertises that algorithm via the digest-algorithm query
+// initialised session state. Without knownDigest the session hashes the content
+// with the canonical algorithm; a non-sha256 knownDigest advertises its
+// algorithm via the digest-algorithm query
 // parameter. The returned chunkedUpload has its chunk size raised to any
 // registry-advertised OCI-Chunk-Min-Length. Both the configured chunk size and
 // the advertised minimum are bounded by MaxChunkSize so the PATCH buffer stays
@@ -226,19 +212,15 @@ func (r *RemoteStore) openUploadSession(ctx context.Context, knownDigest digest.
 		return nil, fmt.Errorf("chunked blob push: configured chunk size %d exceeds the maximum supported chunk size %d", r.ChunkSize, MaxChunkSize)
 	}
 	uploads := r.endpoint(path.Join("/v2", r.Reference.Repository, "blobs", "uploads") + "/")
-	// The running digest must use the declared algorithm; otherwise the
-	// computed digest could never match knownDigest for non-sha256 blobs.
-	algo := digest.Canonical
-	if knownDigest != "" {
-		algo = knownDigest.Algorithm()
-		if !algo.Available() {
-			return nil, fmt.Errorf("chunked blob push: digest algorithm %q is not available", algo)
-		}
-		if algo != digest.SHA256 {
-			q := uploads.Query()
-			q.Set("digest-algorithm", string(algo))
-			uploads.RawQuery = q.Encode()
-		}
+	var digester digest.Digester
+	if knownDigest == "" {
+		digester = digest.Canonical.Digester()
+	} else if algo := knownDigest.Algorithm(); !algo.Available() {
+		return nil, fmt.Errorf("chunked blob push: digest algorithm %q is not available", algo)
+	} else if algo != digest.SHA256 {
+		q := uploads.Query()
+		q.Set("digest-algorithm", string(algo))
+		uploads.RawQuery = q.Encode()
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, uploads.String(), http.NoBody)
 	if err != nil {
@@ -264,7 +246,7 @@ func (r *RemoteStore) openUploadSession(ctx context.Context, knownDigest digest.
 		}
 		chunk = minLen
 	}
-	return &chunkedUpload{location: location, chunk: chunk, digester: algo.Digester()}, nil
+	return &chunkedUpload{location: location, chunk: chunk, digester: digester}, nil
 }
 
 // uploadChunks streams content in PATCH requests of up.chunk bytes, updating the
@@ -273,7 +255,10 @@ func (r *RemoteStore) openUploadSession(ctx context.Context, knownDigest digest.
 // cannot be rewound, so failures cancel the session rather than falling back to
 // the monolithic push.
 func (r *RemoteStore) uploadChunks(ctx context.Context, up *chunkedUpload, content io.Reader) error {
-	hasher := up.digester.Hash()
+	hasher := io.Discard
+	if up.digester != nil {
+		hasher = up.digester.Hash()
+	}
 	buf := getChunkBuffer(up.chunk)
 	defer func() { buf.release() }()
 	for {
