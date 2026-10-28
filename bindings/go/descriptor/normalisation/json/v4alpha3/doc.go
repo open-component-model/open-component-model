@@ -11,12 +11,12 @@
 //     cc-utils and jsonNormalisation/v1 all sign it. v4alpha3 re-converges with
 //     that intent. This closes a gap, not a new policy: a label is still signed
 //     only when it sets signing: true (opt-in is unchanged).
-//   - reference labels are filtered like every other label position. v4alpha1
-//     keyed the reference rule "references" while the descriptor JSON key is
-//     componentReferences, so it never matched and non-signing reference labels
-//     were signed; v4alpha3 applies the full signing-only label rule under the
-//     correct key. This deliberately diverges from legacy v3, which had the same
-//     key bug and emitted reference labels unfiltered.
+//   - reference labels are filtered signing-only like every other label
+//     position. Legacy v3 keyed its reference rule "references" while the
+//     descriptor JSON key is componentReferences, so the rule never matched
+//     and every reference label was signed; v4alpha2 reproduces that, and
+//     v4alpha1 only strips label.version from reference labels. v4alpha3
+//     applies the full signing-only label rule under the correct key.
 //
 // Because these change the signed bytes, v4alpha3 is a separate registered
 // algorithm; v4alpha1 stays frozen so existing signatures keep verifying.

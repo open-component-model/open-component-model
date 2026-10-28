@@ -19,7 +19,7 @@ var testdata embed.FS
 
 // TestConformance pins v4alpha2 against the same real legacy jsonNormalisation/v3
 // descriptor fixtures used by v4alpha1. Because v4alpha2 is the v3 alias target
-// (signing.LegacyNormalisationAlgo resolves here), its output must reproduce the
+// (algorithms.LegacyV3 resolves here), its output must reproduce the
 // recorded v3 oracle byte-for-byte. The 01 fixture carries only non-signing
 // labels and no reference labels, so v4alpha1, v4alpha2 and v3 all agree — this
 // locks that the alias target stays faithful to a real-world v3 component.

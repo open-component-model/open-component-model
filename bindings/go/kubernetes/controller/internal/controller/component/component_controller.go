@@ -336,14 +336,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		}
 	}
 
-	// Pin the status digest to an explicit algorithm rather than the moving
-	// jsonNormalisation/v3 alias (signing.LegacyNormalisationAlgo), which now
-	// resolves to v4alpha2 instead of v4alpha1. Using the alias would silently
-	// shift Status.Component.Digest from v4alpha1 to v4alpha2 on upgrade for
-	// components with versioned labels, making the replication controller
-	// re-transfer once. v4alpha1 keeps the status digest deterministic and
-	// unchanged across the upgrade; this digest is used only for internal change
-	// detection, not for signatures.
+	// The status digest only detects changes (replication re-transfers on a new
+	// value), it is never a signature. A fixed algorithm keeps it stable across
+	// releases; changing it would re-transfer every replicated component once.
 	digestSpec, err := signing.GenerateDigest(ctx, desc, slog.New(logr.ToSlogHandler(logger)), v4alpha1.Algorithm, crypto.SHA256.String())
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
