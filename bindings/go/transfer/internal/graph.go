@@ -250,6 +250,9 @@ func fillGraphDefinitionWithPrefetchedComponents(
 			"component", component, "version", version,
 			"targets", len(targets),
 			"resources", len(v2desc.Component.Resources))
+		if err := checkSources(ctx, v2desc); err != nil {
+			return err
+		}
 
 		for targetIdx, target := range targets {
 			id := baseID
@@ -676,4 +679,28 @@ func setListField[T any](componentMap map[string]any, field, id string, list []T
 	default:
 		componentMap[field] = fmt.Sprintf("${environment.%s.component.%s}", id, field)
 	}
+}
+
+// checkSources warns that sources are copied as plain references, and fails for sources
+// stored as local blobs: transfer does not copy their content, so the target would
+// reference a blob it does not have.
+func checkSources(ctx context.Context, v2desc *descriptorv2.Descriptor) error {
+	if len(v2desc.Component.Sources) == 0 {
+		return nil
+	}
+	var local []string
+	for _, src := range v2desc.Component.Sources {
+		if src.Access != nil && descriptorv2.IsLocalBlob(src.Access) {
+			local = append(local, src.Name+":"+src.Version)
+		}
+	}
+	if len(local) > 0 {
+		return fmt.Errorf("component version %s:%s has sources stored as local blobs, which cannot be transferred: %q; "+
+			"sources are deprecated, declare this content as resources instead",
+			v2desc.Component.Name, v2desc.Component.Version, local)
+	}
+	slog.WarnContext(ctx, "sources are unsafe and cannot be transferred as they lack a digest; copying their references as is",
+		"component", v2desc.Component.Name, "version", v2desc.Component.Version,
+		"sources", len(v2desc.Component.Sources))
+	return nil
 }

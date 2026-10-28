@@ -805,3 +805,19 @@ type mockMediaTypeAwareBlob struct {
 func (m *mockMediaTypeAwareBlob) MediaType() (string, bool) {
 	return m.mediaType, m.mediaType != ""
 }
+
+func TestArtifactBlob_HasPrecalculatedDigestFromDescriptorBlob(t *testing.T) {
+	r := require.New(t)
+	data := []byte("descriptor content")
+	src := blob.ReadOnlyBlobFunc(func() (io.ReadCloser, error) {
+		t.Fatal("content must not be read to know its digest")
+		return nil, nil
+	})
+	inner := ociblob.NewDescriptorBlob(src, ociImageSpecV1.Descriptor{Digest: digest.FromBytes(data), Size: int64(len(data))})
+	ab, err := ociblob.NewArtifactBlob(&descriptor.Resource{}, inner)
+	r.NoError(err)
+	r.True(ab.HasPrecalculatedDigest())
+	dig, ok := ab.Digest()
+	r.True(ok)
+	r.Equal(digest.FromBytes(data).String(), dig)
+}

@@ -1,6 +1,6 @@
 ---
 title: Deploy a Helm Chart with Crossplane and GitOps
-description: "Bootstrap a Helm chart deployment with OCM and Crossplane, composing GitOps deployer objects (Flux or Argo CD) directly from an XRD and Composition for repeatable localized installs."
+description: "Bootstrap a Helm chart deployment with OCM and Crossplane: compose GitOps deployer objects from an XRD and Composition for repeatable localized installs."
 weight: 55
 toc: true
 aliases:

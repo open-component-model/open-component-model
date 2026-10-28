@@ -1,6 +1,6 @@
 ---
 title: "Kubernetes Deployer"
-description: "Understand how the OCM Deployer reconciles OCM resources into a Kubernetes cluster using ApplySet semantics."
+description: "Understand how the OCM Deployer reconciles OCM resources into a Kubernetes cluster using ApplySet semantics and controller patterns."
 weight: 7
 toc: true
 hasMermaid: true

@@ -1,6 +1,6 @@
 ---
 title: "Changelog"
-description: "Release history for Open Component Model, with per-version notes and migration guidance for breaking changes."
+description: "Release history for Open Component Model, with per-version notes and migration guidance for configuration and API breaking changes."
 icon: "📓"
 weight: 70
 toc: true
