@@ -69,7 +69,7 @@ func TestBlobCache_Always_ExistsCalledOnHit(t *testing.T) {
 	assert.Equal(t, manifest, readAllAndClose(t, rc2))
 
 	assert.EqualValues(t, 1, base.fetches.Load(), "fetches")
-	assert.EqualValues(t, 2, base.exists.Load(), "exists must be called on every fetch with Always")
+	assert.EqualValues(t, 1, base.exists.Load(), "the miss proves access through its own fetch, only the hit calls exists")
 }
 
 func TestBlobCache_Always_ExistsDeniedReturnsError(t *testing.T) {
@@ -87,10 +87,10 @@ func TestBlobCache_Always_ExistsDeniedReturnsError(t *testing.T) {
 	_, err = c.Fetch(t.Context(), base, desc)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "remote does not contain")
-	assert.EqualValues(t, 2, base.exists.Load())
+	assert.EqualValues(t, 1, base.exists.Load())
 }
 
-func TestBlobCache_Always_DeniedCallerDoesNotJoinFlight(t *testing.T) {
+func TestBlobCache_Always_MissesAreNotCollapsed(t *testing.T) {
 	r := require.New(t)
 	c := newTestCache(t, Options{RemotePolicy: RemotePolicyAlways})
 	base := newFakeReadOnly()
@@ -109,15 +109,16 @@ func TestBlobCache_Always_DeniedCallerDoesNotJoinFlight(t *testing.T) {
 	}()
 	allowed.waitBlocked(t, 1)
 
-	// The denied caller must be rejected while the allowed caller's fetch is still in flight.
+	// The denied caller fails on its own fetch while the allowed caller's fetch is still in flight.
 	_, err := c.Fetch(t.Context(), denied, desc)
-	r.ErrorContains(err, "remote does not contain or allow access")
-	r.EqualValues(1, denied.exists.Load(), "the denied caller must check its own upstream")
-	r.Zero(denied.fetches.Load(), "the denied caller must not fetch")
+	r.Error(err)
+	r.EqualValues(1, denied.fetches.Load(), "the denied caller must fetch with its own upstream")
+	r.Zero(denied.exists.Load())
 
 	close(allowed.release)
 	r.NoError(<-allowedErr)
 	r.EqualValues(1, base.fetches.Load())
+	r.Zero(base.exists.Load(), "a miss proves access through its own fetch")
 }
 
 // ---- ReferenceCache remote policy ----

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
@@ -36,8 +38,8 @@ const blobCacheMaxEntries = 10_000
 type PluginOptions struct {
 	// TempDir used to write temporary files into.
 	TempDir string
-	// OCICaches are the OCI caches shared by every plugin manager of the process.
-	OCICaches *ocicache.Caches
+	// BlobCache is the OCI blob cache shared by every plugin manager of the process.
+	BlobCache *ocicache.BlobCache
 }
 
 // PluginOption configures [NewPluginManager].
@@ -50,20 +52,25 @@ func WithTempDir(dir string) PluginOption {
 	}
 }
 
-// WithOCICaches shares the OCI caches between plugin managers. Without it, OCI caching is disabled,
-// because the caches own their directory and per-request plugin managers must not each build their own.
-func WithOCICaches(caches *ocicache.Caches) PluginOption {
+// WithBlobCache shares the OCI blob cache between plugin managers. Without it, OCI caching is disabled,
+// because the cache owns its directory and per-request plugin managers must not each build their own.
+func WithBlobCache(bc *ocicache.BlobCache) PluginOption {
 	return func(o *PluginOptions) {
-		o.OCICaches = caches
+		o.BlobCache = bc
 	}
 }
 
-// NewOCICaches creates the OCI caches to pass to [WithOCICaches].
-func NewOCICaches(tempDir string) *ocicache.Caches {
-	blobs := &ocicache.Options{RemotePolicy: ocicache.RemotePolicyAlways, MaxEntries: blobCacheMaxEntries}
-	references := &ocicache.Options{RemotePolicy: ocicache.RemotePolicyAlways}
-
-	return ocicache.NewCaches(tempDir, blobs, references)
+// NewBlobCache creates the blob cache to pass to [WithBlobCache]. There is no reference cache:
+// under RemotePolicyAlways it never serves a hit, so it would only cost disk writes.
+func NewBlobCache(tempDir string) (*ocicache.BlobCache, error) {
+	if tempDir == "" {
+		tempDir = os.TempDir()
+	}
+	return ocicache.NewBlobCache(ocicache.Options{
+		Dir:          filepath.Join(tempDir, "ocm-oci-cas"),
+		RemotePolicy: ocicache.RemotePolicyAlways,
+		MaxEntries:   blobCacheMaxEntries,
+	})
 }
 
 // NewPluginManager build a per-request plugin manager.
@@ -91,8 +98,8 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 		provider.WithTempDir(options.TempDir),
 		provider.WithHTTPConfig(httpCfg),
 	}
-	if options.OCICaches != nil {
-		providerOpts = append(providerOpts, provider.WithCaches(options.OCICaches))
+	if options.BlobCache != nil {
+		providerOpts = append(providerOpts, provider.WithBlobCache(options.BlobCache))
 	}
 	repositoryProvider := provider.NewComponentVersionRepositoryProvider(providerOpts...)
 
