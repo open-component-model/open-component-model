@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"sync/atomic"
 	"testing"
 
 	. "ocm.software/open-component-model/bindings/go/oci/internal/pack"
@@ -1023,21 +1024,22 @@ func TestPackingRejectsInvalidOCILayoutDigest(t *testing.T) {
 			r.ErrorContains(err, testCase.wantError)
 			r.Same(resourceDigest, resource.Digest)
 			if testCase.wantNoPush {
-				r.Zero(store.pushes)
+				r.Zero(store.pushes.Load())
 				r.Same(access, resource.Access)
 			}
 		})
 	}
 }
 
+// countingStorage counts Push calls; oras copies graph nodes concurrently.
 type countingStorage struct {
 	content.Storage
-	pushes  int
+	pushes  atomic.Int64
 	pushErr error
 }
 
 func (store *countingStorage) Push(ctx context.Context, desc ociImageSpecV1.Descriptor, reader io.Reader) error {
-	store.pushes++
+	store.pushes.Add(1)
 	if store.pushErr != nil {
 		return store.pushErr
 	}
@@ -1378,7 +1380,7 @@ func TestResourceLocalBlobOCILayer_SkipsExistingBlob(t *testing.T) {
 				r.NoError(err)
 
 				desc, err := ResourceLocalBlobOCILayer(t.Context(), store, resourceBlob, &v2.LocalBlob{MediaType: mediaType}, newOpts())
-				r.Equal(tc.wantPushes, store.pushes)
+				r.EqualValues(tc.wantPushes, store.pushes.Load())
 				if tc.wantErr != "" {
 					r.ErrorContains(err, tc.wantErr)
 					r.ErrorIs(err, tc.pushErr)
