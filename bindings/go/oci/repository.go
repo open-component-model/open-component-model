@@ -1037,7 +1037,7 @@ func (repo *Repository) downloadLayer(ctx context.Context, layer *accessv1.OCIIm
 	if err != nil {
 		return nil, err
 	}
-	return fetchLayer(ctx, src, layerDescriptor(layer))
+	return fetchLayer(ctx, src, layerDescriptor(layer)), nil
 }
 
 // targetOCIImageAccess converts an upload target access into an OCI image access.
