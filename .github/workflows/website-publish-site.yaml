@@ -9,19 +9,47 @@ on:
     paths:
       - 'website/**'
       - '.github/workflows/website-publish-site.yaml'
-      # Paths that are relevant for tracking changes on `main` version.
+      # Paths relevant for the `main` version dev build. This list MUST cover
+      # every BINDING_MOUNTS source dir in website/scripts/register-docs-version.js;
+      # the register-docs-version unit tests fail if a mount is not triggered here.
       # CRDs are generated from api/v1alpha1 at build time via controller-gen.
+      - 'bindings/go/blob/filesystem/spec/access/v1alpha1/schemas/**'
       - 'bindings/go/cli/docs/reference/**'
+      - 'bindings/go/configuration/checksum/http/v1alpha1/spec/schemas/**'
+      - 'bindings/go/configuration/resolvers/v1alpha1/spec/schemas/**'
+      - 'bindings/go/configuration/versioning/v1alpha1/spec/schemas/**'
       - 'bindings/go/constructor/spec/v1/resources/**'
       - 'bindings/go/credentials/spec/config/v1/schemas/**'
       - 'bindings/go/descriptor/v2/resources/**'
+      - 'bindings/go/descriptor/v2/schemas/**'
+      - 'bindings/go/git/spec/access/v1/schemas/**'
+      - 'bindings/go/git/spec/credentials/v1/schemas/**'
+      - 'bindings/go/git/spec/input/v1/schemas/**'
+      - 'bindings/go/github/spec/access/v1/schemas/**'
+      - 'bindings/go/github/spec/credentials/v1/schemas/**'
       - 'bindings/go/gpg/spec/credentials/v1alpha1/schemas/**'
+      - 'bindings/go/helm/spec/access/v1/schemas/**'
       - 'bindings/go/helm/spec/credentials/v1/schemas/**'
+      - 'bindings/go/helm/spec/input/v1/schemas/**'
       - 'bindings/go/http/spec/config/v1alpha1/schemas/**'
+      - 'bindings/go/input/dir/spec/v1/schemas/**'
+      - 'bindings/go/input/file/spec/v1/schemas/**'
+      - 'bindings/go/input/utf8/spec/v1/schemas/**'
+      - 'bindings/go/kubernetes/controller/api/v1alpha1/**'
+      - 'bindings/go/oci/spec/access/v1/schemas/**'
       - 'bindings/go/oci/spec/credentials/v1/schemas/**'
       - 'bindings/go/rsa/spec/credentials/v1/schemas/**'
-      - 'bindings/go/sigstore/spec/credentials/**'
-      - 'bindings/go/kubernetes/controller/api/v1alpha1/**'
+      - 'bindings/go/s3/spec/access/v2/schemas/**'
+      - 'bindings/go/s3/spec/credentials/v1/schemas/**'
+      - 'bindings/go/s3/spec/input/v2/schemas/**'
+      - 'bindings/go/signing/tsa/spec/credentials/v1alpha1/schemas/**'
+      - 'bindings/go/sigstore/spec/credentials/oidcidentitytoken/v1alpha1/schemas/**'
+      - 'bindings/go/sigstore/spec/credentials/trustedroot/v1alpha1/schemas/**'
+      - 'bindings/go/transfer/v1alpha1/spec/schemas/**'
+      - 'bindings/go/wget/spec/access/v1/schemas/**'
+      - 'bindings/go/wget/spec/credentials/v1/schemas/**'
+      - 'bindings/go/wget/spec/input/v1/schemas/**'
+      - 'bindings/go/wget/transformation/spec/v1alpha1/schemas/**'
 
 permissions:
   contents: read

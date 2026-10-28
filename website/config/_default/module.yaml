@@ -2,6 +2,8 @@
 # This file is partially auto-generated. Comments may be lost on regeneration.
 #
 # Static mounts (data, layouts, i18n, archetypes, assets, static) are fixed.
+# The 'main'-version binding schema mounts are auto-generated from the single
+# BINDING_MOUNTS table (syncMainBindingMounts); edit that table, not this file.
 # Per-version imports are auto-generated at the end.
 #
 # Unversioned top-level content mounts (blog, community, governance) list
@@ -166,6 +168,12 @@ mounts:
       matrix:
         versions:
           - main
+  - source: ../bindings/go/kubernetes/controller/config/crd/bases
+    target: static/main/schemas/kubernetes/controller
+    sites:
+      matrix:
+        versions:
+          - main
   - source: ../bindings/go/constructor/spec/v1/resources
     target: static/main/schemas/bindings/go/constructor
     sites:
@@ -174,6 +182,12 @@ mounts:
           - main
   - source: ../bindings/go/descriptor/v2/resources
     target: static/main/schemas/bindings/go/descriptor/v2
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/github/spec/credentials/v1/schemas
+    target: static/main/schemas/bindings/go/credentials/github/v1
     sites:
       matrix:
         versions:
@@ -192,18 +206,6 @@ mounts:
           - main
   - source: ../bindings/go/helm/spec/credentials/v1/schemas
     target: static/main/schemas/bindings/go/credentials/helm/v1
-    sites:
-      matrix:
-        versions:
-          - main
-  - source: ../bindings/go/github/spec/credentials/v1/schemas
-    target: static/main/schemas/bindings/go/credentials/github/v1
-    sites:
-      matrix:
-        versions:
-          - main
-  - source: ../bindings/go/git/spec/credentials/v1/schemas
-    target: static/main/schemas/bindings/go/credentials/git/v1
     sites:
       matrix:
         versions:
@@ -228,12 +230,6 @@ mounts:
           - main
   - source: ../bindings/go/sigstore/spec/credentials/trustedroot/v1alpha1/schemas
     target: static/main/schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1
-    sites:
-      matrix:
-        versions:
-          - main
-  - source: ../bindings/go/signing/tsa/spec/credentials/v1alpha1/schemas
-    target: static/main/schemas/bindings/go/credentials/tsa/v1alpha1
     sites:
       matrix:
         versions:
@@ -268,8 +264,8 @@ mounts:
       matrix:
         versions:
           - main
-  - source: ../bindings/go/s3/spec/credentials/v1/schemas
-    target: static/main/schemas/bindings/go/credentials/s3/v1
+  - source: ../bindings/go/git/spec/credentials/v1/schemas
+    target: static/main/schemas/bindings/go/credentials/git/v1
     sites:
       matrix:
         versions:
@@ -364,6 +360,12 @@ mounts:
       matrix:
         versions:
           - main
+  - source: ../bindings/go/s3/spec/credentials/v1/schemas
+    target: static/main/schemas/bindings/go/credentials/s3/v1
+    sites:
+      matrix:
+        versions:
+          - main
   - source: ../bindings/go/configuration/resolvers/v1alpha1/spec/schemas
     target: static/main/schemas/bindings/go/configuration/resolvers/v1alpha1
     sites:
@@ -376,8 +378,8 @@ mounts:
       matrix:
         versions:
           - main
-  - source: ../bindings/go/kubernetes/controller/config/crd/bases
-    target: static/main/schemas/kubernetes/controller
+  - source: ../bindings/go/signing/tsa/spec/credentials/v1alpha1/schemas
+    target: static/main/schemas/bindings/go/credentials/tsa/v1alpha1
     sites:
       matrix:
         versions:

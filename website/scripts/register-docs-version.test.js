@@ -4,7 +4,10 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags, syncUnversionedMountVersions, MONOLITHIC_BINDINGS_MODULE, BINDING_SCHEMA_MOUNTS } = require("./register-docs-version");
+const fs = require("node:fs");
+const path = require("node:path");
+const yaml = require("js-yaml");
+const { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags, syncUnversionedMountVersions, syncMainBindingMounts, MONOLITHIC_BINDINGS_MODULE, BINDING_SCHEMA_MOUNTS, MAIN_EXTRA_MOUNTS } = require("./register-docs-version");
 
 const MODULE_PREFIX = "ocm.software/open-component-model";
 
@@ -890,4 +893,120 @@ test("syncUnversionedMountVersions: sorts semver descending regardless of input 
     syncUnversionedMountVersions(parsed, { added: "0.16" });
     const m = parsed.mounts.find((x) => x.source === "content/community");
     assert.deepEqual(m.sites.matrix.versions, ["main", "0.16", "0.15", "0.14", "0.9", "legacy"]);
+});
+
+// syncMainBindingMounts - regenerates the `main` dev-build schema mounts from
+// BINDING_MOUNTS so the single table is the sole source of truth. See
+// register-docs-version.js for rationale.
+
+const FIXED_MAIN_MOUNTS = [
+    { source: "data", target: "data" },
+    { source: "content", target: "content", sites: { matrix: { versions: ["main"] } } },
+    { source: "content/blog", target: "content/blog", sites: { matrix: { versions: ["main", "0.21", "legacy"] } } }
+];
+
+function mainMountFixture(extraGenerated = []) {
+    return { mounts: [...FIXED_MAIN_MOUNTS.map((m) => ({ ...m })), ...extraGenerated] };
+}
+
+// A generated schema mount looks like what syncMainBindingMounts emits.
+function genMount(source, target) {
+    return { source, target, sites: { matrix: { versions: ["main"] } } };
+}
+
+test("syncMainBindingMounts: emits one mount per BINDING_MOUNTS row plus MAIN_EXTRA_MOUNTS", () => {
+    const parsed = mainMountFixture();
+    syncMainBindingMounts(parsed);
+    const generated = parsed.mounts.filter(
+        (m) => m?.sites?.matrix?.versions?.length === 1 &&
+            m.sites.matrix.versions[0] === "main" &&
+            (m.target.startsWith("static/main/schemas/bindings/go/") || MAIN_EXTRA_MOUNTS.some((e) => e.target === m.target))
+    );
+    assert.equal(generated.length, MAIN_EXTRA_MOUNTS.length + BINDING_SCHEMA_MOUNTS.length);
+});
+
+test("syncMainBindingMounts: schema mount source/target derive from pkg+source and target", () => {
+    const parsed = mainMountFixture();
+    syncMainBindingMounts(parsed);
+    const row = BINDING_SCHEMA_MOUNTS.find((m) => m.pkg === "constructor");
+    const emitted = parsed.mounts.find((m) => m.target === `static/main/${row.target}`);
+    assert.ok(emitted, "constructor schema mount present");
+    assert.equal(emitted.source, `../bindings/go/${row.pkg}/${row.source}`);
+    assert.deepEqual(emitted.sites.matrix.versions, ["main"]);
+});
+
+test("syncMainBindingMounts: ignores since/sinceMonolith gating (main tracks working tree)", () => {
+    const parsed = mainMountFixture();
+    syncMainBindingMounts(parsed);
+    const targets = new Set(parsed.mounts.map((m) => m.target));
+    // A sinceMonolith row and a since-gated row both land in main.
+    const mono = BINDING_SCHEMA_MOUNTS.find((m) => m.sinceMonolith);
+    const gated = BINDING_SCHEMA_MOUNTS.find((m) => m.since);
+    assert.ok(targets.has(`static/main/${mono.target}`), "sinceMonolith row emitted for main");
+    assert.ok(targets.has(`static/main/${gated.target}`), "since-gated row emitted for main");
+});
+
+test("syncMainBindingMounts: preserves fixed (non-generated) mounts untouched", () => {
+    const parsed = mainMountFixture();
+    const fixedBefore = JSON.stringify(FIXED_MAIN_MOUNTS);
+    syncMainBindingMounts(parsed);
+    const fixedAfter = JSON.stringify(
+        parsed.mounts.filter((m) =>
+            FIXED_MAIN_MOUNTS.some((f) => f.source === m.source && f.target === m.target))
+    );
+    assert.equal(fixedAfter, fixedBefore);
+});
+
+test("syncMainBindingMounts: replaces stale generated mounts instead of appending", () => {
+    // A drifted entry that no longer exists in BINDING_MOUNTS must be dropped.
+    const stale = genMount("../bindings/go/removed/spec/schemas", "static/main/schemas/bindings/go/removed/v1");
+    const parsed = mainMountFixture([stale]);
+    syncMainBindingMounts(parsed);
+    assert.ok(!parsed.mounts.some((m) => m.target === stale.target), "stale generated mount removed");
+});
+
+test("syncMainBindingMounts: is idempotent", () => {
+    const parsed = mainMountFixture();
+    assert.equal(syncMainBindingMounts(parsed), true, "first run changes empty fixture");
+    const after = JSON.stringify(parsed.mounts);
+    assert.equal(syncMainBindingMounts(parsed), false, "second run reports no change");
+    assert.equal(JSON.stringify(parsed.mounts), after, "second run leaves mounts identical");
+});
+
+test("syncMainBindingMounts: no-op on missing mounts array", () => {
+    assert.equal(syncMainBindingMounts({}), false);
+    assert.equal(syncMainBindingMounts(null), false);
+});
+
+// --- committed module.yaml and workflow stay in sync with BINDING_MOUNTS ---
+
+test("module.yaml main mounts match BINDING_MOUNTS (committed file is regenerated)", () => {
+    const parsed = yaml.load(fs.readFileSync(path.join(__dirname, "..", "config", "_default", "module.yaml"), "utf-8"));
+    const generatedTargets = new Set(
+        parsed.mounts
+            .filter((m) => m?.sites?.matrix?.versions?.length === 1 && m.sites.matrix.versions[0] === "main" &&
+                m.target.startsWith("static/main/schemas/bindings/go/"))
+            .map((m) => m.target)
+    );
+    for (const row of BINDING_SCHEMA_MOUNTS) {
+        assert.ok(generatedTargets.has(`static/main/${row.target}`),
+            `module.yaml missing main mount for ${row.pkg}/${row.source}; run register-docs-version to regenerate`);
+    }
+    assert.equal(generatedTargets.size, BINDING_SCHEMA_MOUNTS.length,
+        "module.yaml has stale main binding mounts not in BINDING_MOUNTS");
+});
+
+test("website-publish-site.yaml paths cover every BINDING_MOUNTS source dir", () => {
+    const wf = fs.readFileSync(
+        path.join(__dirname, "..", "..", ".github", "workflows", "website-publish-site.yaml"), "utf-8");
+    const parsed = yaml.load(wf);
+    // `on` parses as boolean true key in YAML 1.1; read raw push paths.
+    const paths = parsed?.true?.push?.paths || parsed?.on?.push?.paths || [];
+    const globs = paths.map((p) => p.replace(/\/\*\*$/, "").replace(/\/$/, ""));
+    const covered = (dir) => globs.some((g) => dir === g || dir.startsWith(`${g}/`));
+    for (const row of BINDING_SCHEMA_MOUNTS) {
+        const dir = `bindings/go/${row.pkg}/${row.source}`;
+        assert.ok(covered(dir),
+            `website-publish-site.yaml paths do not trigger on ${dir}; add a covering glob`);
+    }
 });

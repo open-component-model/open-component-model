@@ -38,6 +38,8 @@ const MODULE_HEADER = `# Hugo Module Configuration
 # This file is partially auto-generated. Comments may be lost on regeneration.
 #
 # Static mounts (data, layouts, i18n, archetypes, assets, static) are fixed.
+# The 'main'-version binding schema mounts are auto-generated from the single
+# BINDING_MOUNTS table (syncMainBindingMounts); edit that table, not this file.
 # Per-version imports are auto-generated at the end.
 #
 # Unversioned top-level content mounts (blog, community, governance) list
@@ -330,9 +332,68 @@ const BINDING_MOUNTS = [
     { pkg: "blob/filesystem", source: "spec/access/v1alpha1/schemas", target: "schemas/bindings/go/access/file/v1alpha1", since: "0.18" },
     { pkg: "wget", source: "spec/access/v1/schemas", target: "schemas/bindings/go/access/wget/v1", since: "0.18" },
     { pkg: "s3", source: "spec/access/v2/schemas", target: "schemas/bindings/go/access/s3/v2", since: "0.18" },
+    { pkg: "s3", source: "spec/credentials/v1/schemas", target: "schemas/bindings/go/credentials/s3/v1", since: "0.18" },
     { pkg: "configuration/resolvers", source: "v1alpha1/spec/schemas", target: "schemas/bindings/go/configuration/resolvers/v1alpha1", sinceMonolith: true },
-    { pkg: "configuration/versioning", source: "v1alpha1/spec/schemas", target: "schemas/bindings/go/configuration/versioning/v1alpha1", sinceMonolith: true }
+    { pkg: "configuration/versioning", source: "v1alpha1/spec/schemas", target: "schemas/bindings/go/configuration/versioning/v1alpha1", sinceMonolith: true },
+    { pkg: "signing/tsa", source: "spec/credentials/v1alpha1/schemas", target: "schemas/bindings/go/credentials/tsa/v1alpha1", since: "0.21" }
 ];
+
+// The non-schema `main` dev-build mounts. Unlike BINDING_MOUNTS these are not
+// JSON-schema directories: cli reference docs render as content, and the
+// controller CRDs are generated into static schemas. They only exist for the
+// `main` version (released versions resolve them from the monolithic module's
+// import, see bindingSchemaImports), so they are emitted by
+// syncMainBindingMounts alongside the schema mounts.
+const MAIN_EXTRA_MOUNTS = [
+    { source: "../bindings/go/cli/docs/reference", target: "content/docs/reference/ocm-cli" },
+    { source: "../bindings/go/kubernetes/controller/config/crd/bases", target: "static/main/schemas/kubernetes/controller" }
+];
+
+// Marker comment tags are not available in YAML after a round-trip, so the
+// generated `main` binding mounts are identified structurally: a mount whose
+// sites matrix is exactly [main] and whose target lives under the generated
+// schema tree (or is one of the MAIN_EXTRA_MOUNTS targets). Fixed mounts
+// (data/layouts/content/blog/community/governance/changelog/fonts/...) never
+// match and are preserved untouched.
+const MAIN_EXTRA_TARGETS = new Set(MAIN_EXTRA_MOUNTS.map((m) => m.target));
+
+function isGeneratedMainBindingMount(mount) {
+    const versions = mount?.sites?.matrix?.versions;
+    if (!Array.isArray(versions) || versions.length !== 1 || versions[0] !== "main") {
+        return false;
+    }
+    return (
+        MAIN_EXTRA_TARGETS.has(mount.target) ||
+        (typeof mount.target === "string" && mount.target.startsWith("static/main/schemas/bindings/go/"))
+    );
+}
+
+// Rebuild the `main` version binding mounts from BINDING_MOUNTS (+ the two
+// non-schema MAIN_EXTRA_MOUNTS). `main` always tracks the working tree, so
+// every row applies regardless of `since`/`sinceMonolith` gating (those gates
+// only exclude schema dirs absent from older release tags). The existing
+// generated block is dropped and replaced in place, so the single BINDING_MOUNTS
+// table is the sole source of truth for dev-build schema mounts.
+function syncMainBindingMounts(parsed) {
+    if (!parsed || !Array.isArray(parsed.mounts)) {
+        return false;
+    }
+    const previousGenerated = parsed.mounts.filter(isGeneratedMainBindingMount);
+    const kept = parsed.mounts.filter((m) => !isGeneratedMainBindingMount(m));
+    const generated = [
+        ...MAIN_EXTRA_MOUNTS,
+        ...BINDING_MOUNTS.map((m) => ({
+            source: `../bindings/go/${m.pkg}/${m.source}`,
+            target: `static/main/${m.target}`
+        }))
+    ].map((m) => ({
+        source: m.source,
+        target: m.target,
+        sites: { matrix: { versions: ["main"] } }
+    }));
+    parsed.mounts = [...kept, ...generated];
+    return JSON.stringify(previousGenerated) !== JSON.stringify(generated);
+}
 
 // Return the bindings schema imports for a version. The layout is auto-detected
 // from `deps`: a release whose CLI go.mod requires the monolithic module gets a
@@ -709,6 +770,12 @@ async function updateModuleConfig(version, fullVersion, cliGomod, { retiredVersi
 
     syncUnversionedMountVersions(parsed, { added: addedVersion, retired: retiredVersion });
 
+    // Regenerate the `main` dev-build schema mounts from BINDING_MOUNTS so the
+    // single table drives both released imports and the working-tree mounts.
+    if (syncMainBindingMounts(parsed)) {
+        console.log("module.yaml: regenerated 'main' binding mounts from BINDING_MOUNTS.");
+    }
+
     await fsp.writeFile(MODULE_CONFIG, MODULE_HEADER + dumpYaml(parsed), "utf-8");
 }
 
@@ -733,4 +800,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags, resolveGoModVersions, syncUnversionedMountVersions, CLI_DERIVED_MODULES, MONOLITHIC_BINDINGS_MODULE, BINDING_SCHEMA_MOUNTS: BINDING_MOUNTS };
+module.exports = { parseArguments, hasAnyImportForVersion, hasAllImportsForVersion, buildModuleBlocks, compareSemver, assignVersionWeights, retireOldestVersion, updateImportTags, resolveGoModVersions, syncUnversionedMountVersions, syncMainBindingMounts, CLI_DERIVED_MODULES, MONOLITHIC_BINDINGS_MODULE, BINDING_SCHEMA_MOUNTS: BINDING_MOUNTS, MAIN_EXTRA_MOUNTS };
