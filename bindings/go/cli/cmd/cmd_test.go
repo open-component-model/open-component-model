@@ -960,7 +960,7 @@ resources:
 		r.NoError(blob.Copy(&buf, blb))
 		r.Equal("foobar", buf.String(), "expected resource content to match test file content")
 
-		t.Run("expect failure on existing component version", func(t *testing.T) {
+		t.Run("expect failure on invalid semver in constructor", func(t *testing.T) {
 			constructorYAML = fmt.Sprintf(`
 name: ocm.software/examples-01
 version: invalid_1.0.0
@@ -985,16 +985,17 @@ resources:
 			_, err := test.OCM(t, test.WithArgs("add", "cv",
 				"--constructor", constructorYAMLFilePath,
 				"--repository", archiveFilePath,
-				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
 			), test.WithErrorOutput(logs), test.WithOutput(result))
 
 			r.Error(err, "expected error on invalid component version semver")
 		})
 
-		t.Run("expect failure on invalid semver in constructor", func(t *testing.T) {
+		// The abort policy is deprecated but still honoured until it is removed.
+		t.Run("expect failure on existing component version with abort-and-fail", func(t *testing.T) {
 			_, err := test.OCM(t, test.WithArgs("add", "cv",
 				"--constructor", constructorYAMLFilePath,
 				"--repository", archiveFilePath,
+				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyAbortAndFail),
 			), test.WithErrorOutput(logs))
 
 			r.Error(err, "expected error on adding existing component version")
@@ -1005,7 +1006,7 @@ resources:
 			r.NotEmpty(entries, "expected log entries to be present")
 		})
 
-		t.Run("expect success on replace strategy", func(t *testing.T) {
+		t.Run("expect existing component version to be replaced by default", func(t *testing.T) {
 			constructorYAML = fmt.Sprintf(`
 name: ocm.software/examples-01
 version: 1.0.0
@@ -1030,10 +1031,9 @@ resources:
 			_, err := test.OCM(t, test.WithArgs("add", "cv",
 				"--constructor", constructorYAMLFilePath,
 				"--repository", archiveFilePath,
-				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
 			), test.WithErrorOutput(logs), test.WithOutput(result))
 
-			r.NoError(err, "could not construct component version", "replace strategy should allow an existing component version to be replaced")
+			r.NoError(err, "could not construct component version", "an existing component version is replaced by default")
 
 			entries, err := logs.List()
 			r.NoError(err, "failed to list log entries")
@@ -1093,7 +1093,6 @@ resources:
 				"--constructor", constructorYAMLFilePath,
 				"--repository", archiveFilePath,
 				"--working-directory", tmp,
-				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
 			), test.WithErrorOutput(logs))
 
 			r.Equal(new(tmp), ocmctx.FromContext(cmd.Context()).FilesystemConfig().WorkingDirectory, "expected working directory to be set in ocm context automatically")
@@ -1181,7 +1180,6 @@ components:
 			"--repository", archiveFilePath,
 			"--working-directory", tmp,
 			"--config", legacyResolverConfigYAMLFilePath,
-			"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
 			"--external-component-version-copy-policy", string(componentversion.ExternalComponentVersionCopyPolicyCopyOrFail),
 		), test.WithErrorOutput(logs))
 
@@ -1297,7 +1295,6 @@ components:
 			"--repository", archiveFilePath,
 			"--working-directory", tmp,
 			"--config", resolverConfigYAMLFilePath,
-			"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
 			"--external-component-version-copy-policy", string(componentversion.ExternalComponentVersionCopyPolicyCopyOrFail),
 		), test.WithErrorOutput(logs))
 
