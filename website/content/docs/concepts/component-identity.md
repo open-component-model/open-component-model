@@ -1,8 +1,8 @@
 ---
 title: "Component Identity"
-description: "How OCM identifies components, versions, and artifacts — from naming to descriptors."
+description: "How OCM identifies components, versions, and artifacts, from naming conventions and repository references to component descriptors."
 icon: "🪪"
-weight: 1
+weight: 2
 toc: true
 ---
 
@@ -19,7 +19,7 @@ A **component** is a logical unit of software — a frontend, a database, an aut
 Each component version is an immutable snapshot that contains:
 
 - **Resources**: the deliverables (OCI images, Helm charts, binaries, configuration files).
-- **Sources**: the inputs from which resources were built (git repositories, source archives).
+- **Sources** (deprecated): the inputs from which resources were built (git repositories, source archives). Sources carry no digest, so neither the component version digest nor a signature covers their content. Declare such content as resources instead; see [Migrate from Sources to Resources]({{< relref "docs/changelog/migrate-from-sources.md" >}}).
 - **References**: dependencies on other component versions.
 
 A component version is always described by a [component descriptor](#the-component-descriptor) — a YAML document that lists every element and how to access it.
@@ -122,7 +122,7 @@ The general pattern is:
 
 ## The Component Descriptor
 
-The component descriptor is a YAML document that fully describes a component version. It is the central data structure in OCM. It lists three kinds of elements — **resources** (deliverables like images and charts), **sources** (inputs like git repos), and **references** (dependencies on other component versions). Each element carries identity fields (`name`, optional `extraIdentity`), a type, and an access specification. Labels can be attached to the component or any element as extensible key-value metadata.
+The component descriptor is a YAML document that fully describes a component version. It is the central data structure in OCM. It lists three kinds of elements — **resources** (deliverables like images and charts), **sources** (inputs like git repos; deprecated, because they carry no digest — use resources instead, see [Migrate from Sources to Resources]({{< relref "docs/changelog/migrate-from-sources.md" >}})), and **references** (dependencies on other component versions). Each element carries identity fields (`name`, optional `extraIdentity`), a type, and an access specification. Labels can be attached to the component or any element as extensible key-value metadata.
 
 For the full structure and field reference, see [Component Descriptor Reference]({{< relref "docs/reference/component-descriptor.md" >}}).
 
@@ -162,15 +162,15 @@ Component versions can be cryptographically signed to ensure integrity and prove
 - **Access specifications are excluded** from the digest because they change when artifacts are transported to a new location — this is what makes location independence possible.
 - **Multiple signatures** are supported, allowing different parties to independently attest to a component version.
 
-For hands-on signing instructions, see [Sign Component Versions]({{< relref "sign-component-version.md" >}}).
+For hands-on signing instructions, see [Sign Component Versions]({{< relref "docs/guides/sign/_index.md" >}}).
 
 ## Next Steps
 
-- [Create Component Versions]({{< relref "docs/getting-started/create-component-version.md" >}}) — build component versions with the OCM CLI.
+- [Getting Started: Create Component Versions]({{< relref "docs/getting-started/create-component-version.md" >}}) - build component versions with the OCM CLI.
 
 ## Related Documentation
 
-- [The OCM Core Model]({{< relref "docs/overview/core-model.md" >}}): high-level introduction to OCM's building blocks.
-- [Resource Repositories]({{< relref "docs/concepts/resource-repositories.md" >}}): how access types map to storage backends for downloading and uploading resources.
-- [Component Descriptor Reference]({{< relref "docs/reference/component-descriptor.md" >}}): field-by-field reference for the component descriptor.
-- [OCM Specification](https://github.com/open-component-model/ocm-spec): the formal specification of the Open Component Model.
+- [Overview: The OCM Core Model]({{< relref "docs/overview/core-model.md" >}}) - high-level introduction to OCM's building blocks.
+- [Concept: Resource Repositories]({{< relref "docs/concepts/resource-repositories.md" >}}) - how access types map to storage backends for downloading and uploading resources.
+- [Reference: Component Descriptor Reference]({{< relref "docs/reference/component-descriptor.md" >}}) - field-by-field reference for the component descriptor.
+- [OCM Specification](https://github.com/open-component-model/ocm-spec) - the formal specification of the Open Component Model.

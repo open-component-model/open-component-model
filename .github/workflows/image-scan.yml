@@ -1,0 +1,220 @@
+name: Image scan
+
+# Reusable: pipeline.yml scans the CLI (default, slim) and controller images it
+# built, per architecture: with Trivy and govulncheck's OpenVEX (findings warn;
+# a broken scan fails), against the DISA GPOS SRG as tailored in .github/stig,
+# and against the CIS Docker Benchmark (dockle). STIG and CIS findings fail.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "The ref to check out the scan configuration from. Defaults to the current ref."
+        type: string
+        required: false
+      cli_artifact:
+        description: "Artifact with the CLI OCI images (oci/cli.tar and oci/cli-slim.tar)."
+        type: string
+        required: true
+      controller_artifact:
+        description: "Artifact with the controller OCI image (controller.tar)."
+        type: string
+        required: true
+    outputs:
+      vex_artifact_prefix:
+        description: "Prefix of the per-architecture OpenVEX artifacts <prefix>-<arch> (arm64, amd64), each with the ocm.openvex.json its images were scanned with."
+        value: ${{ jobs.vex.outputs.vex_artifact_prefix }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
+jobs:
+  vex:
+    name: OpenVEX
+    uses: $/.github/workflows/govulncheck.yml
+    with:
+      ref: ${{ inputs.ref }}
+
+  scan:
+    name: ${{ matrix.image }} (${{ matrix.arch }})
+    needs: vex
+    runs-on: ubuntu-26.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [cli, cli-slim, controller]
+        arch: [arm64, amd64]
+        # containerfile: its digest-pinned "certs" stage is the expected source
+        # of the image's CA bundle.
+        include:
+          - image: cli
+            artifact: ${{ inputs.cli_artifact }}
+            oci_tar: oci/cli.tar
+            containerfile: bindings/go/cli/Containerfile
+          - image: cli-slim
+            artifact: ${{ inputs.cli_artifact }}
+            oci_tar: oci/cli-slim.tar
+            containerfile: bindings/go/cli/Containerfile
+          - image: controller
+            artifact: ${{ inputs.controller_artifact }}
+            oci_tar: controller.tar
+            containerfile: bindings/go/kubernetes/controller/Dockerfile
+    env:
+      IMAGE: ${{ matrix.image }}
+      ARCH: ${{ matrix.arch }}
+      CONTAINERFILE: ${{ matrix.containerfile }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          sparse-checkout: |
+            .github/stig
+            .env
+            ${{ matrix.containerfile }}
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Load .env
+        run: grep -E '^(TRIVY_VERSION|OPENSCAP_IMAGE|DOCKLE_IMAGE)=' .env >> "$GITHUB_ENV"
+
+      - name: Download image artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: ${{ matrix.artifact }}
+          path: tmp/artifact
+
+      - name: Download OpenVEX
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: ${{ needs.vex.outputs.vex_artifact_prefix }}-${{ matrix.arch }}
+          path: tmp/vex
+
+      # Trivy scans the first manifest of a layout and ignores --platform, so the
+      # layout's index is narrowed to this architecture. Nothing is loaded into
+      # the docker daemon and nothing runs the image, so amd64 is scanned on the
+      # arm64 runner too.
+      - name: Extract image layout
+        env:
+          OCI_TAR: ${{ matrix.oci_tar }}
+        run: |
+          blob() { echo "tmp/layout/blobs/${1/://}"; }
+          mkdir -p tmp/layout
+          tar -xf "tmp/artifact/${OCI_TAR}" -C tmp/layout
+          jq --arg arch "$ARCH" '.manifests |= map(select(.platform.os == "linux" and .platform.architecture == $arch))' \
+            "$(blob "$(jq -r '.manifests[0].digest' tmp/layout/index.json)")" > tmp/index.json
+          mv tmp/index.json tmp/layout/index.json
+          manifest="$(blob "$(jq -r '.manifests[0].digest' tmp/layout/index.json)")"
+
+          # dockle reads only docker-archive tarballs: the layout plus a docker
+          # manifest.json pointing at the same blobs.
+          jq '[{Config: ("blobs/" + (.config.digest | sub(":"; "/"))), RepoTags: ["ocm-scan:\($ENV.IMAGE)-\($ENV.ARCH)"],
+            Layers: [.layers[].digest | "blobs/" + sub(":"; "/")]}]' "$manifest" > tmp/manifest.json
+          tar -C tmp/layout -cf tmp/image.tar .
+          tar -C tmp -rf tmp/image.tar manifest.json
+
+          # Root filesystem for the STIG scan and the provenance checks. Extracting
+          # as root keeps ownership and setuid/setgid bits. The images are scratch
+          # plus COPY, so their layers stack without whiteouts; fail if that changes.
+          mkdir -p tmp/rootfs
+          for layer in $(jq -r '.layers[].digest' "$manifest"); do
+            sudo tar -xpf "$(blob "$layer")" -C tmp/rootfs
+          done
+          if sudo find tmp/rootfs -name '.wh.*' | grep -q .; then
+            echo "::error::image has whiteout layers; extract them with a tool that applies them"; exit 1
+          fi
+
+      # Nothing goes to code scanning: Dependabot alerts stay the only alert surface.
+      - name: Vulnerability scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_VEX: tmp/vex/ocm.openvex.json
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          input: tmp/layout
+          scanners: vuln
+          exit-code: '0'
+          format: json
+          output: trivy.json
+
+      - name: Vulnerability scan summary
+        id: vulns
+        run: |
+          jq -r '"count=\([.Results[]?.Vulnerabilities[]?] | length)"' trivy.json >> "$GITHUB_OUTPUT"
+          jq -r '"### 🔎 Vulnerability scan: \($ENV.IMAGE) (linux/\($ENV.ARCH))\n",
+            if [.Results[]?.Vulnerabilities[]?] == [] then "No vulnerabilities beyond those the OpenVEX document marks as not_affected."
+            else "Not ruled out by the OpenVEX document: for the OCM binary, govulncheck found the code reachable or does not know the advisory; for cosign, its attested OpenVEX does not cover it.\n\n| Binary | ID | Severity | Package | Installed | Fixed | Title |\n| --- | --- | --- | --- | --- | --- | --- |",
+              (.Results[]? | .Target as $t | .Vulnerabilities[]? | "| \($t) | \(.VulnerabilityID) | \(.Severity) | \(.PkgName) | \(.InstalledVersion) | \(.FixedVersion // "") | \(.Title // "" | gsub("\\|"; "\\|")) |")
+            end' trivy.json >> "$GITHUB_STEP_SUMMARY"
+
+      - name: No vulnerabilities (see job summary)
+        if: steps.vulns.outputs.count != '0'
+        continue-on-error: true
+        run: exit 1
+
+      # DISA GPOS SRG as tailored in .github/stig, plus OCM's supplement for the
+      # deselected rules, evaluated offline on the image's root filesystem.
+      # Fails on any failed rule of either evaluation.
+      - name: STIG scan (DISA GPOS SRG)
+        if: ${{ !cancelled() }}
+        run: |
+          mkdir -p stig
+          docker run --rm -u 0:0 -e IMAGE -e OSCAP_PROBE_ROOT=/rootfs \
+            -v "$PWD/tmp/rootfs:/rootfs:ro" -v "$PWD/.github/stig:/stig:ro" -v "$PWD/stig:/out" \
+            --entrypoint /bin/sh "$OPENSCAP_IMAGE" -euc '
+              rc=0
+              oscap xccdf eval \
+                --tailoring-file /stig/tailoring.xml --profile xccdf_software.ocm_profile_gpos-container \
+                --results /out/gpos-results.xml --report /out/gpos-report.html \
+                /usr/share/xml/scap/ssg/content/ssg-chainguard-gpos-ds.xml || rc=$?
+              oscap xccdf eval --profile "xccdf_software.ocm_profile_${IMAGE}" \
+                --results /out/ocm-results.xml --report /out/ocm-report.html \
+                /stig/ocm-supplement-xccdf.xml || rc=$?
+              exit "$rc"'
+
+      # The supplement's checks that OVAL cannot do: OVAL reads no binaries and
+      # no values from outside the scanned root filesystem.
+      - name: Image provenance (FIPS module, CA bundle)
+        if: ${{ !cancelled() }}
+        run: |
+          fail=0
+          # Every executable in the image (the supplement limits them to the
+          # declared ones), by its Go build information as `go version -m` shows it.
+          bins="$(sudo find tmp/rootfs -type f -perm /111)"
+          [[ -n "$bins" ]] || { echo "::error::image contains no executable"; exit 1; }
+          while IFS= read -r bin; do
+            path="${bin#tmp/rootfs}"
+            grep -aqP '^build\tGOFIPS140=v\S+$' "$bin" ||
+              { echo "::error::$path is not built with GOFIPS140=v<version>"; fail=1; }
+            grep -aqP '^build\tDefaultGODEBUG=(.*,)?fips140=(on|only)(,|$)' "$bin" ||
+              { echo "::error::$path does not default to fips140=on"; fail=1; }
+          done <<< "$bins"
+
+          base="$(sed -nE 's/^FROM .* (ghcr\.io\/gardenlinux\/\S+@sha256:[0-9a-f]{64}) AS certs$/\1/p' "$CONTAINERFILE")"
+          [[ -n "$base" ]] || { echo "::error::no digest-pinned Garden Linux certs stage in $CONTAINERFILE"; exit 1; }
+          docker run --rm --platform "linux/$(docker version -f '{{.Server.Arch}}')" --entrypoint cat "$base" \
+            /etc/ssl/certs/ca-certificates.crt > tmp/base-ca.crt
+          cmp -s tmp/rootfs/etc/ssl/certs/ca-certificates.crt tmp/base-ca.crt ||
+            { echo "::error::CA bundle differs from the one in $base"; fail=1; }
+          exit "$fail"
+
+      # CIS Docker Benchmark section 4. Fails on WARN and FATAL; INFO (content
+      # trust, HEALTHCHECK) and SKIP (no /etc/passwd in scratch) do not fail.
+      - name: CIS Docker Benchmark (dockle)
+        if: ${{ !cancelled() }}
+        run: |
+          docker run --rm -v "$PWD/tmp/image.tar:/image.tar:ro" "$DOCKLE_IMAGE" \
+            --exit-code 1 --exit-level warn --input /image.tar
+
+      - name: Upload reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: image-scan-${{ matrix.image }}-${{ matrix.arch }}
+          path: |
+            trivy.json
+            stig/
+          if-no-files-found: ignore

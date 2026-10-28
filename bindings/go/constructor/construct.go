@@ -319,7 +319,7 @@ func ProcessConflictStrategy(ctx context.Context, repo TargetRepository, compone
 			logger.DebugContext(ctx, "no existing component version found in target repository, continuing with construction", "component", component.Name, "version", component.Version)
 		}
 	case ComponentVersionConflictReplace:
-		logger.WarnContext(ctx, "REPLACING component version in target repository, old component version will no longer be available if it was present before.")
+		logger.DebugContext(ctx, "REPLACING component version in target repository, old component version will no longer be available if it was present before.")
 	}
 	return nil, nil
 }
@@ -462,7 +462,7 @@ func (c *DefaultConstructor) processResource(ctx context.Context, targetRepo Tar
 
 	if c.opts.ComponentVersionConflictPolicy == ComponentVersionConflictReplace &&
 		resource.Options.OwnershipPolicy != constructor.OwnershipPolicyAlways {
-		logger.WarnContext(ctx, "replace requested with ownership policy other than Always; any pre-existing ownership referrer attached to this resource by a prior add will remain",
+		logger.DebugContext(ctx, "replace requested with ownership policy other than Always; any pre-existing ownership referrer attached to this resource by a prior add will remain",
 			"ownership_policy", resource.Options.OwnershipPolicy)
 	}
 

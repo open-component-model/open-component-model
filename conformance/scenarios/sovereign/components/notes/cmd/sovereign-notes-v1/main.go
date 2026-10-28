@@ -19,6 +19,8 @@ import (
 	_ "github.com/lib/pq"
 
 	"github.com/gorilla/mux"
+	"github.com/open-component-model/open-component-model/conformance/scenarios/sovereign/components/notes/internal/dbwait"
+	"github.com/open-component-model/open-component-model/conformance/scenarios/sovereign/components/notes/internal/httpserver"
 )
 
 // Note represents a note in the system (v1.0.0 — no title field).
@@ -57,7 +59,7 @@ func main() {
 		log.Fatal("Failed to connect to database:", err)
 	}
 
-	if err := db.PingContext(context.Background()); err != nil {
+	if err := dbwait.Ping(context.Background(), db, 5*time.Minute, 2*time.Second); err != nil {
 		log.Fatal("Failed to ping database:", err)
 	}
 
@@ -94,8 +96,8 @@ func main() {
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
-	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		log.Fatal("Server failed to start:", err) //nolint:gocritic // db connections can fail here if we panic, but we dont mind for a demo
+	if err := httpserver.Run(srv, 10*time.Second); err != nil {
+		log.Fatal("Server failed:", err) //nolint:gocritic // db connections can fail here if we panic, but we dont mind for a demo
 	}
 }
 

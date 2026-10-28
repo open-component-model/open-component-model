@@ -1,8 +1,10 @@
 ---
 title: Repository
-description: "API reference for the Repository custom resource (delivery.ocm.software/v1alpha1)"
+description: "API reference for the Repository custom resource (delivery.ocm.software/v1alpha1): spec, credentials reference, status, and conditions."
 weight: 1
 toc: false
+aliases:
+  - /docs/reference/kubernetes-api/repository/
 ---
 
 A **Repository** represents an OCM repository (for example, an OCI registry) that

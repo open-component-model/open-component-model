@@ -29,6 +29,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/signing"
 	"ocm.software/open-component-model/bindings/go/signing/tsa"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/signing/v1alpha1/spec"
+	sigstorev1alpha1 "ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
 )
 
 const (
@@ -65,14 +66,15 @@ func New() *cobra.Command {
 - Fetch component version 
 - Normalise descriptor (algorithm from signature)
 - Recompute hash and compare with signature digest
-- Verify signature (verifier from the OCM configuration, default RSASSA-PSS verifier)
+- Verify signature (verifier from the OCM configuration, otherwise derived from the signature algorithm)
 
 ## Behavior
 
 - --signature selects a single signature by name; without it, every signature on the descriptor is verified
 - Credentials are resolved per signature under that signature's name, so every signature needs its own consumer entry
 - Signatures are verified concurrently (--concurrency-limit); the command exits non-zero on the first failure
-- Default verifier: RSASSA-PSS, resolves the public key from credentials in .ocmconfig
+- Without a configured verifier, the signature algorithm selects the default: RSA signatures (RSASSA-PSS, RSASSA-PKCS1-V1_5) use the RSA verifier, which resolves the public key from credentials in .ocmconfig
+- Sigstore signatures default to a Sigstore verifier that accepts any signer identity and issuer and logs a warning: the bundle, certificate chain and transparency log are checked, but not who signed. Configure a SigstoreVerificationConfiguration/v1alpha1 verifier with identity constraints to pin the signer
 - The verifier is configured in the OCM configuration (%[4]s), not on the command line
 - An entry with a "signature" field only applies to that signature, one without applies to all
 - The verifier is resolved per signature, so a component carrying several signatures can be verified with a different handler for each
@@ -148,7 +150,9 @@ verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0
 #
 # The verifier selects the verification handler and configures it.
 # It does NOT contain credentials - public keys and trust material are always
-# resolved via .ocmconfig credentials. If omitted, defaults to RSASSA-PSS.
+# resolved via .ocmconfig credentials. If omitted, the signature algorithm selects
+# the verifier: RSA signatures use the RSA verifier, Sigstore signatures a Sigstore
+# verifier that accepts any signer identity (with a warning).
 # Add a "signature" field to scope an entry to the signature of that name
 # (see the per-signature example below); without it the entry applies to all.
 
@@ -403,7 +407,7 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 			// The verifier is resolved per signature so that a component version
 			// carrying several signatures can be verified with a different handler
 			// for each of them.
-			verifierSpec, err := loadVerifierConfig(config, signature.Name, logger)
+			verifierSpec, err := loadVerifierConfig(config, signature, logger)
 			if err != nil {
 				return err
 			}
@@ -462,20 +466,35 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 }
 
 // loadVerifierConfig resolves the verifier configuration for the given signature
-// from the central OCM configuration, falling back to RSASSA-PSS if none is
-// configured.
-func loadVerifierConfig(config *genericv1.Config, signatureName string, logger *slog.Logger) (runtime.Typed, error) {
-	signingConfig, err := signingv1alpha1.LookupConfigForSignature(config, signatureName)
+// from the central OCM configuration. Without one, the verifier is derived from
+// the algorithm the signature declares.
+func loadVerifierConfig(config *genericv1.Config, signature descruntime.Signature, logger *slog.Logger) (runtime.Typed, error) {
+	signingConfig, err := signingv1alpha1.LookupConfigForSignature(config, signature.Name)
 	if err != nil {
 		return nil, fmt.Errorf("getting signing configuration failed: %w", err)
 	}
 	if signingConfig != nil && signingConfig.Verifier != nil {
-		logger.Debug("using verifier from configuration", "type", signingConfig.Verifier.GetType(), "signature", signatureName)
+		logger.Debug("using verifier from configuration", "type", signingConfig.Verifier.GetType(), "signature", signature.Name)
 		return signingConfig.Verifier, nil
 	}
 
+	switch sigstorev1alpha1.SignatureAlgorithm(signature.Signature.Algorithm) {
+	case sigstorev1alpha1.AlgorithmSigstoreV1Alpha1, sigstorev1alpha1.AlgorithmSigstoreLegacy:
+		// Without configured constraints any Fulcio-issued identity is accepted: the
+		// bundle is still checked cryptographically, but not bound to a signer.
+		spec := &sigstorev1alpha1.VerifyConfig{
+			Type:                        runtime.NewVersionedType(sigstorev1alpha1.VerifyConfigType, sigstorev1alpha1.Version),
+			CertificateOIDCIssuerRegexp: ".*",
+			CertificateIdentityRegexp:   ".*",
+		}
+		logger.Warn("no verifier configured, using default Sigstore verifier that accepts ANY signer identity and issuer; "+
+			"configure a "+spec.Type.String()+" verifier with certificateOIDCIssuer and certificateIdentity to pin the signer",
+			"signature", signature.Name, "algorithm", signature.Signature.Algorithm)
+		return spec, nil
+	}
+
 	spec := &v1alpha1.Config{}
-	logger.Info("no verifier configured, using default RSASSA-PSS", "signature", signatureName)
+	logger.Info("no verifier configured, using default RSA verifier", "signature", signature.Name, "algorithm", signature.Signature.Algorithm)
 	_, _ = v1alpha1.Scheme.DefaultType(spec)
 	return spec, nil
 }

@@ -1,8 +1,10 @@
 ---
 title: Deployer
-description: "API reference for the Deployer custom resource (delivery.ocm.software/v1alpha1)"
+description: "API reference for the Deployer custom resource (delivery.ocm.software/v1alpha1): spec, target configuration, status, and conditions."
 weight: 4
 toc: false
+aliases:
+  - /docs/reference/kubernetes-api/deployer/
 ---
 
 A **Deployer** is a cluster-scoped resource that deploys OCM resources into the

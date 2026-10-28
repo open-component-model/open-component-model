@@ -1,7 +1,6 @@
 package filesystem
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -109,12 +108,11 @@ func (f *Blob) Digest() (string, bool) {
 	defer func() {
 		_ = data.Close()
 	}()
-	var buf bytes.Buffer
-	d, err := digest.FromReader(io.TeeReader(data, &buf))
-	if err != nil {
+	digester := digest.Canonical.Digester()
+	if _, err := blob.CopyReader(digester.Hash(), data); err != nil {
 		return "", false
 	}
-	return d.String(), true
+	return digester.Digest().String(), true
 }
 
 // MediaType returns the media type of the blob if known.

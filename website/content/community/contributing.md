@@ -1,6 +1,6 @@
 ---
 title: "Contributing to OCM"
-description: "How to contribute to the Open Component Model project"
+description: "How to contribute to the Open Component Model project: opening issues, submitting pull requests, and following the code of conduct."
 slug: "contributing"
 toc: true
 weight: 3

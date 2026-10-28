@@ -6,7 +6,9 @@ import (
 	"crypto/tls"
 	"flag"
 	"log/slog"
+	"math"
 	"os"
+	"strconv"
 	"time"
 
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -84,8 +86,23 @@ func main() {
 		resolverWorkerQueueLength int
 		resolverSubscriberBuffer  int
 		resolverCacheTTL          int
-		enableDeployer            bool
-		enableNamespacedDeployer  bool
+		// The qps values are strings because Helm's --set turns fractions into strings.
+		repositoryRateLimit            ocm.RateLimit
+		repositoryRateLimitQPS         string
+		componentRateLimit             ocm.RateLimit
+		componentRateLimitQPS          string
+		resourceRateLimit              ocm.RateLimit
+		resourceRateLimitQPS           string
+		replicationRateLimit           ocm.RateLimit
+		replicationRateLimitQPS        string
+		discoveryRateLimit             ocm.RateLimit
+		discoveryRateLimitQPS          string
+		deployerRateLimit              ocm.RateLimit
+		deployerRateLimitQPS           string
+		namespacedDeployerRateLimit    ocm.RateLimit
+		namespacedDeployerRateLimitQPS string
+		enableDeployer                 bool
+		enableNamespacedDeployer       bool
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metric endpoint binds to. "+
@@ -117,6 +134,34 @@ func main() {
 			"Tune upward if the resolver_event_channel_drops_total metric is non-zero.")
 	flag.IntVar(&resolverCacheTTL, "resolver-cache-ttl", 30, //nolint:mnd // no magic number
 		"The time-to-live (TTL) for the resolver cache entries in minutes. Setting TTL to less than 30 minutes is discouraged in productive use as it can lead to unintended performance issues.")
+	flag.StringVar(&repositoryRateLimitQPS, "repository-controller-rate-limit-qps", strconv.Itoa(ocm.DefaultRateLimitQPS),
+		"Requeues per second the Repository controller admits once its burst is used up. Must be a float greater than 0, e.g. 0.1.")
+	flag.IntVar(&repositoryRateLimit.Burst, "repository-controller-rate-limit-burst", ocm.DefaultRateLimitBurst,
+		"Requeues the Repository controller admits at once before its qps applies. Must be at least 1.")
+	flag.StringVar(&componentRateLimitQPS, "component-controller-rate-limit-qps", strconv.Itoa(ocm.DefaultRateLimitQPS),
+		"Requeues per second the Component controller admits once its burst is used up. Must be a float greater than 0, e.g. 0.1.")
+	flag.IntVar(&componentRateLimit.Burst, "component-controller-rate-limit-burst", ocm.DefaultRateLimitBurst,
+		"Requeues the Component controller admits at once before its qps applies. Must be at least 1.")
+	flag.StringVar(&resourceRateLimitQPS, "resource-controller-rate-limit-qps", strconv.Itoa(ocm.DefaultRateLimitQPS),
+		"Requeues per second the Resource controller admits once its burst is used up. Must be a float greater than 0, e.g. 0.1.")
+	flag.IntVar(&resourceRateLimit.Burst, "resource-controller-rate-limit-burst", ocm.DefaultRateLimitBurst,
+		"Requeues the Resource controller admits at once before its qps applies. Must be at least 1.")
+	flag.StringVar(&replicationRateLimitQPS, "replication-controller-rate-limit-qps", strconv.Itoa(ocm.DefaultRateLimitQPS),
+		"Requeues per second the Replication controller admits once its burst is used up. Must be a float greater than 0, e.g. 0.1.")
+	flag.IntVar(&replicationRateLimit.Burst, "replication-controller-rate-limit-burst", ocm.DefaultRateLimitBurst,
+		"Requeues the Replication controller admits at once before its qps applies. Must be at least 1.")
+	flag.StringVar(&discoveryRateLimitQPS, "discovery-controller-rate-limit-qps", strconv.Itoa(ocm.DefaultRateLimitQPS),
+		"Requeues per second the Discovery controller admits once its burst is used up. Must be a float greater than 0, e.g. 0.1.")
+	flag.IntVar(&discoveryRateLimit.Burst, "discovery-controller-rate-limit-burst", ocm.DefaultRateLimitBurst,
+		"Requeues the Discovery controller admits at once before its qps applies. Must be at least 1.")
+	flag.StringVar(&deployerRateLimitQPS, "deployer-controller-rate-limit-qps", strconv.Itoa(ocm.DefaultRateLimitQPS),
+		"Requeues per second the Deployer controller admits once its burst is used up. Must be a float greater than 0, e.g. 0.1.")
+	flag.IntVar(&deployerRateLimit.Burst, "deployer-controller-rate-limit-burst", ocm.DefaultRateLimitBurst,
+		"Requeues the Deployer controller admits at once before its qps applies. Must be at least 1.")
+	flag.StringVar(&namespacedDeployerRateLimitQPS, "namespaced-deployer-controller-rate-limit-qps", strconv.Itoa(ocm.DefaultRateLimitQPS),
+		"Requeues per second the NamespacedDeployer controller admits once its burst is used up. Must be a float greater than 0, e.g. 0.1.")
+	flag.IntVar(&namespacedDeployerRateLimit.Burst, "namespaced-deployer-controller-rate-limit-burst", ocm.DefaultRateLimitBurst,
+		"Requeues the NamespacedDeployer controller admits at once before its qps applies. Must be at least 1.")
 
 	flag.BoolVar(&enableDeployer, "enable-deployer", true,
 		"Run the controller for the cluster-scoped Deployer.")
@@ -160,6 +205,32 @@ func main() {
 	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	// A qps of 0 would stop a controller for good once its burst is used up.
+	parseRateLimit := func(controller, qps string, burst int) float64 {
+		flagName := controller + "-controller-rate-limit-qps"
+		value, err := strconv.ParseFloat(qps, 64)
+		if err != nil || math.IsNaN(value) {
+			setupLog.Error(err, "invalid flag value", "flag", flagName, "value", qps, "reason", "must be a valid float")
+			os.Exit(1)
+		}
+		if value <= 0 {
+			setupLog.Error(nil, "invalid flag value", "flag", flagName, "value", qps, "reason", "must be > 0")
+			os.Exit(1)
+		}
+		if burst < 1 {
+			setupLog.Error(nil, "invalid flag value", "flag", controller+"-controller-rate-limit-burst", "value", burst, "reason", "must be >= 1")
+			os.Exit(1)
+		}
+		return value
+	}
+	repositoryRateLimit.QPS = parseRateLimit("repository", repositoryRateLimitQPS, repositoryRateLimit.Burst)
+	componentRateLimit.QPS = parseRateLimit("component", componentRateLimitQPS, componentRateLimit.Burst)
+	resourceRateLimit.QPS = parseRateLimit("resource", resourceRateLimitQPS, resourceRateLimit.Burst)
+	replicationRateLimit.QPS = parseRateLimit("replication", replicationRateLimitQPS, replicationRateLimit.Burst)
+	discoveryRateLimit.QPS = parseRateLimit("discovery", discoveryRateLimitQPS, discoveryRateLimit.Burst)
+	deployerRateLimit.QPS = parseRateLimit("deployer", deployerRateLimitQPS, deployerRateLimit.Burst)
+	namespacedDeployerRateLimit.QPS = parseRateLimit("namespaced-deployer", namespacedDeployerRateLimitQPS, namespacedDeployerRateLimit.Burst)
 	setupLog.Info("FIPS 140-3 mode", "enabled", fips140.Enabled(), "module", fips140.Version())
 
 	ctx := context.Background()
@@ -259,6 +330,7 @@ func main() {
 			Scheme:           mgr.GetScheme(),
 			EventRecorder:    eventsRecorder,
 			NewPluginManager: newPluginManager,
+			RateLimit:        repositoryRateLimit,
 		},
 		Resolver: resolver,
 	}).SetupWithManager(ctx, mgr); err != nil {
@@ -271,6 +343,7 @@ func main() {
 			Scheme:           mgr.GetScheme(),
 			EventRecorder:    eventsRecorder,
 			NewPluginManager: newPluginManager,
+			RateLimit:        componentRateLimit,
 		},
 		Resolver: resolver,
 	}).SetupWithManager(ctx, mgr); err != nil {
@@ -284,6 +357,7 @@ func main() {
 			Scheme:           mgr.GetScheme(),
 			EventRecorder:    eventsRecorder,
 			NewPluginManager: newPluginManager,
+			RateLimit:        resourceRateLimit,
 		},
 		Resolver: resolver,
 	}).SetupWithManager(ctx, mgr, resourceConcurrency); err != nil {
@@ -297,6 +371,7 @@ func main() {
 			Scheme:           mgr.GetScheme(),
 			EventRecorder:    eventsRecorder,
 			NewPluginManager: newPluginManager,
+			RateLimit:        replicationRateLimit,
 		},
 		Resolver:         resolver,
 		RepositoryScheme: ocirepository.Scheme,
@@ -311,6 +386,7 @@ func main() {
 			Scheme:           mgr.GetScheme(),
 			EventRecorder:    eventsRecorder,
 			NewPluginManager: newPluginManager,
+			RateLimit:        discoveryRateLimit,
 		},
 	}).SetupWithManager(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Discovery")
@@ -322,11 +398,12 @@ func main() {
 	})
 	for _, d := range []struct {
 		kind       string
+		rateLimit  ocm.RateLimit
 		enabled    bool
 		namespaced bool
 	}{
-		{kind: v1alpha1.KindDeployer, enabled: enableDeployer},
-		{kind: v1alpha1.KindNamespacedDeployer, enabled: enableNamespacedDeployer, namespaced: true},
+		{kind: v1alpha1.KindDeployer, rateLimit: deployerRateLimit, enabled: enableDeployer},
+		{kind: v1alpha1.KindNamespacedDeployer, rateLimit: namespacedDeployerRateLimit, enabled: enableNamespacedDeployer, namespaced: true},
 	} {
 		if !d.enabled {
 			setupLog.Info("controller disabled", "controller", d.kind)
@@ -338,6 +415,7 @@ func main() {
 				Scheme:           mgr.GetScheme(),
 				EventRecorder:    eventsRecorder,
 				NewPluginManager: newPluginManager,
+				RateLimit:        d.rateLimit,
 			},
 			Namespaced:           d.namespaced,
 			DownloadCache:        downloadCache,

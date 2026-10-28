@@ -1,7 +1,7 @@
 ---
 title: "Transfer and Transport"
 description: "Understand how OCM moves component versions between repositories while preserving identity, integrity, and signatures."
-weight: 2
+weight: 14
 toc: true
 hasMermaid: true
 ---
@@ -39,13 +39,13 @@ For details on CTF structure and how to create component versions in a CTF archi
 
 ## Resource Handling: References vs. Copies
 
-By default, `ocm transfer` copies only the component descriptor (metadata). Resource artifacts such as container images or Helm charts stay in their original location, and the component descriptor references them by their original access coordinates.
+By default, `ocm transfer` always copies local blobs — content that was embedded in the component version during `ocm add` or a prior transfer — by value. Resource artifacts that are external references (such as OCI images or Helm charts accessed by their original registry coordinates) stay at their original location; the component descriptor references them by their original access coordinates.
 
-With a local blob uploader configuration (a `localblob.uploader.transfer.config.ocm.software/v1alpha1` entry in your OCM configuration, for example `.ocmconfig` in the working directory), transfer creates a self-contained copy: all resource artifacts are downloaded from the source and uploaded to the target. This is essential for air-gapped scenarios where the target environment cannot reach the original artifact locations.
+With a local blob uploader configuration (a `localblob.uploader.transfer.config.ocm.software/v1alpha1` entry in your OCM configuration, for example `.ocmconfig` in the working directory), transfer also pulls external-reference resources and uploads them to the target, creating a fully self-contained copy. This is essential for air-gapped scenarios where the target environment cannot reach the original artifact locations.
 
 ```mermaid
 flowchart TB
-    subgraph metadataOnly["Metadata Only (default)"]
+    subgraph metadataOnly["External Refs by Reference (default)"]
         direction TB
         subgraph T1["Target Registry"]
             T1CD["Component Descriptor"]
@@ -86,6 +86,17 @@ Resources with `Git/v1` access reference a snapshot of a Git repository. With a 
 By-value Git transfer requires a full commit hash in the access specification. This prevents a moving branch or tag from changing the transferred content. When creating a component version, Git digest processing resolves ref-only access to a pinned commit; if both `ref` and `commit` are present, the commit takes precedence.
 
 Without a local blob uploader, external Git access remains a reference to the original repository. A constructor resource using the `git` input type is already stored as a local blob and follows normal local-blob transfer behavior. Transfer does not push commits or upload content to Git repositories.
+
+### Sources
+
+Component sources are deprecated. They carry no digest, so their content cannot be verified after a copy:
+
+- A source that refers to external content (for example a `Git/v1` access) is never transferred. Transfer copies its
+  descriptor entry as is and logs a warning; the content stays at the original location.
+- A source stored as a local blob (built from an `input`) cannot be transferred. Transfer fails before uploading
+  anything, because the target would reference a blob it does not have.
+
+See [Migrate from Sources to Resources]({{< relref "docs/changelog/migrate-from-sources.md" >}}).
 
 ## Localization
 
@@ -148,13 +159,13 @@ The [sovereign conformance scenario](https://github.com/open-component-model/ope
 
 ## Next Steps
 
-- [Create and Examine Component Versions]({{< relref "docs/getting-started/create-component-version.md" >}}) - Create component versions and store them in CTF archives
-- [How-To: Transfer Components Across an Air Gap]({{< relref "docs/how-to/air-gap-transfer.md" >}}) - Step-by-step guide for air-gapped transfer workflows
+- [Getting Started: Create and Examine Component Versions]({{< relref "docs/getting-started/create-component-version.md" >}}) - Create component versions and store them in CTF archives
+- [Guides: Transfer Components Across an Air Gap]({{< relref "docs/guides/transfer/air-gap-transfer.md" >}}) - Step-by-step guide for air-gapped transfer workflows
 
 ## Related Documentation
 
-- [Tutorial: Signing and Verification]({{< relref "docs/tutorials/signing/plain.md" >}}) - Sign and verify component versions
-- [Tutorial: Working with OCI]({{< relref "docs/tutorials/working-with-oci" >}}) - Embed OCI images and access them natively after transfer
+- [Guides: Signing and Verification]({{< relref "docs/guides/sign/sign-with-plain-rsa.md" >}}) - Sign and verify component versions
+- [Guides: Working with OCI]({{< relref "docs/guides/pack/add-oci-artifacts.md" >}}) - Embed OCI images and access them natively after transfer
 - [Concept: OCM Controllers]({{< relref "docs/concepts/ocm-controllers.md" >}}) - Kubernetes controllers for deploying and transferring OCM components
-- [Reference: Transfer Configuration]({{< relref "docs/reference/transfer-configuration/_index.md" >}}) - Configure transfer settings and custom uploaders
-- [Tutorial: Configure Custom Uploads During Transfer]({{< relref "docs/tutorials/configure-custom-uploads.md" >}}) - Route resources to a custom upload target during transfer
+- [Reference: Transfer Configuration]({{< relref "docs/reference/configuration/transfer-configuration/_index.md" >}}) - Configure transfer settings and custom uploaders
+- [Guides: Configure Custom Uploads During Transfer]({{< relref "docs/guides/transfer/upload-to-custom-target.md" >}}) - Route resources to a custom upload target during transfer

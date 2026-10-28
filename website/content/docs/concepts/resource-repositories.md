@@ -1,7 +1,7 @@
 ---
 title: "Resource Repositories"
-description: "Why OCM separates resource storage from component version storage and how resource repositories work."
-weight: 5
+description: "Why OCM separates resource storage from component version storage, and how resource repositories work alongside component repositories."
+weight: 11
 toc: true
 hasMermaid: true
 ---
@@ -25,7 +25,7 @@ This separation exists for practical reasons:
   these differences, so each needs its own implementation.
 - **Credentials differ per backend.** Accessing an OCI registry requires OCI credentials. Accessing a Helm repository
   requires Helm-style credentials. Resource repositories resolve the correct
-  [credential consumer identity]({{< relref "docs/reference/credential-consumer-identities.md" >}}) for each backend,
+  [credential consumer identity]({{< relref "docs/reference/configuration/credential-consumer-identities.md" >}}) for each backend,
   integrating with OCM's [credential system]({{< relref "docs/concepts/credential-system.md" >}}).
 
 ```mermaid
@@ -91,16 +91,16 @@ repositories make self-contained, air-gappable transfers possible.
 
 ## What's Next?
 
-- [Reference: Resource Repositories]({{< relref "docs/reference/resource-repositories.md" >}}): complete technical
+- [Reference: Resource Repositories]({{< relref "docs/reference/resource-repositories.md" >}}) - complete technical
   reference for each built-in resource repository
-- [Reference: Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}): access type
+- [Reference: Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}) - access type
   specifications that resource repositories handle
 
 ## Related Documentation
 
-- [Concept: Credential System]({{< relref "docs/concepts/credential-system.md" >}}): how credentials are resolved for
+- [Concept: Credential System]({{< relref "docs/concepts/credential-system.md" >}}) - how credentials are resolved for
   resource access
-- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}): how resource repositories
+- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) - how resource repositories
   enable artifact transfer
-- [Concept: Plugin System]({{< relref "docs/concepts/plugin-system.md" >}}): how to extend OCM with custom resource
+- [Concept: Plugin System]({{< relref "docs/concepts/plugin-system.md" >}}) - how to extend OCM with custom resource
   repository plugins

@@ -57,6 +57,51 @@
       automerge: true,
     },
     {
+      // GitHub Actions version bumps (patch/minor/major) follow the same weekly
+      // cadence as the digest pins below; without this only digest-only
+      // re-pins were scheduled and version bumps landed any day of the week.
+      // Kept above 'Digest pins' (general before specific).
+      // separateMinorPatch is off so minor and patch bumps share the group
+      // below. It lives here, not there: rules with matchUpdateTypes are only
+      // evaluated after the update type is known, too late for this option.
+      // Majors are unaffected (they stay separate via separateMultipleMajor).
+      matchManagers: ['github-actions'],
+      separateMinorPatch: false,
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ],
+    },
+    {
+      // Batch non-breaking Action bumps into one weekly PR. Majors are left out
+      // on purpose: they get their own PR (separateMultipleMajor) so a breaking
+      // change can be reviewed and reverted on its own. Digest-only updates are
+      // disjoint from these types and stay in 'Digest pins' below.
+      matchManagers: ['github-actions'],
+      matchUpdateTypes: ['minor', 'patch'],
+      groupName: 'GitHub Actions',
+      groupSlug: 'github-actions',
+    },
+    {
+      // npm bumps (website/ and .github/scripts/) used to open a PR per
+      // package on any day of the week. Same split as for the Actions above:
+      // separateMinorPatch is off here because the group rule below carries
+      // matchUpdateTypes and is evaluated too late for that option.
+      matchManagers: ['npm'],
+      separateMinorPatch: false,
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ],
+    },
+    {
+      // Batch non-breaking npm bumps into one weekly PR. Majors stay out and
+      // get their own PR (separateMultipleMajor) to be reviewed and reverted
+      // alone.
+      matchManagers: ['npm'],
+      matchUpdateTypes: ['minor', 'patch'],
+      groupName: 'npm dependencies',
+      groupSlug: 'npm-deps',
+    },
+    {
       // Collapse digest-only re-pins (same tag, new SHA) for Actions and
       // Docker base images into one weekly PR, regardless of image name
       // or file location. gomod is excluded so Go module digests keep
@@ -378,6 +423,17 @@
       matchStrings: [
         '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>open-component-model/cosign)\\s+COSIGN_VERSION=(?<currentValue>v\\d+\\.\\d+\\.\\d+\\+ocm\\.\\d+)\\s+COSIGN_CHECKSUMS_SHA256=(?<currentDigest>[0-9a-f]{64})',
       ],
+    },
+    {
+      // Digest-pinned images in .env files, e.g. OPENSCAP_IMAGE (tag@sha256:...).
+      customType: 'regex',
+      managerFilePatterns: [
+        '/(^|/)\\.env(\\.local)?$/',
+      ],
+      matchStrings: [
+        '# renovate: datasource=docker depName=(?<depName>\\S+)\\s+\\w+_IMAGE=\\S+?:(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})',
+      ],
+      datasourceTemplate: 'docker',
     },
     {
       // Automatic version bump for GO_VERSION, NPM_VERSION and NODE_VERSION in Netlify.

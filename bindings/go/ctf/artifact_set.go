@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"path/filepath"
+	"path"
 
 	"github.com/nlepage/go-tarfs"
 	"github.com/opencontainers/go-digest"
@@ -20,36 +20,58 @@ import (
 )
 
 // ArtifactSetFormat is the format of an ArtifactSet.
-// It describes the layout and characteristics of the artifact set, as in old OCM there can be multiple
-// versions stored.
+// The OCM library (https://github.com/open-component-model/ocm, package
+// api/oci/extensions/repositories/artifactset) writes artifact sets in one of three
+// structure formats, all of which are supported for reading. In every format, each
+// index entry carries the mediaType and size of the referenced manifest or index;
+// NewArtifactSetIndex rejects entries without either.
 type ArtifactSetFormat int
 
 const (
-	// ArtifactSetFormatLegacyOCI is the previous OCI format adopted by the legacy OCM library.
+	// ArtifactSetFormatLegacyOCI corresponds to the OCM library format "oci/v1",
+	// the default since OCM library v0.1.0. Every artifact set the OCM library
+	// synthesizes for local blobs (e.g. from ociArtifact, dockermulti or docker
+	// inputs, or OCI resources transferred by value) has this format.
 	// Characteristics:
-	// - index stored as [ociimagespec.ImageIndexFile], but with schemaVersion 2 and optional mediaTypes
+	// - index stored as [ociimagespec.ImageIndexFile]
+	// - [ociimagespec.ImageLayoutFile] present
 	// - blobs stored as flat files in the blobs directory (blobs/algo.encoded)
-	// - can have encoded OCI Image Layout
 	ArtifactSetFormatLegacyOCI ArtifactSetFormat = iota
-	// ArtifactSetFormatOCM is the old OCM format adopted by the OCM library.
+	// ArtifactSetFormatOCM corresponds to the OCM library format "ocm/v1". It was never
+	// the default; the OCM library only writes it on request. Pre-release versions (up to
+	// late 2022, including v0.0.0) wrote the same layout with the index named
+	// "artefact-descriptor.json", which is not supported.
 	// Characteristics:
-	// - index stored as ArtifactSetDescriptorFileName, but with schemaVersion 2 and without mediaTypes
+	// - index stored as ArtifactSetDescriptorFileName
+	// - no [ociimagespec.ImageLayoutFile]
 	// - blobs stored as flat files in the blobs directory (blobs/algo.encoded)
 	ArtifactSetFormatOCM
 
-	// ArtifactSetFormatOCI is a new OCI format adopted by the OCM library after the reference library rework.
+	// ArtifactSetFormatOCI corresponds to the OCM library format "oci/v1+compliant",
+	// added in OCM library v0.36 and only written by downloads with --oci-layout. It
+	// reaches a component version only if such a download is added as a local blob
+	// with an artifact set media type.
 	// Characteristics:
-	// - index stored as [ociimagespec.ImageIndexFile], with schemaVersion 2 and mediaTypes
+	// - index stored as [ociimagespec.ImageIndexFile]
+	// - [ociimagespec.ImageLayoutFile] present
 	// - blobs stored as files in the blobs directory by algorithm (blobs/algo/encoded)
-	// - must include an OCI Image Layout file.
 	//
-	// This is effectively the same format as a distribution spec OCI Image Layout.
-	// If one must use an artifact set, it is recommended that it be stored in this format.
-	//
-	// Note that when working with ocm CLI / library < 0.35, you will likely encounter either
-	// ArtifactSetFormatOCM, or ArtifactSetFormatLegacyOCI.
+	// This is effectively an OCI Image Layout.
 	ArtifactSetFormatOCI
 )
+
+func (f ArtifactSetFormat) String() string {
+	switch f {
+	case ArtifactSetFormatLegacyOCI:
+		return "LegacyOCI"
+	case ArtifactSetFormatOCM:
+		return "OCM"
+	case ArtifactSetFormatOCI:
+		return "OCI"
+	default:
+		return fmt.Sprintf("ArtifactSetFormat(%d)", int(f))
+	}
+}
 
 // ArtifactSetDescriptorFileName is the file name for artifact index if the artifact set is created
 // with ArtifactSetFormatOCM.
@@ -142,22 +164,25 @@ func NewArtifactSetFromBlob(b blob.ReadOnlyBlob) (*ArtifactSet, error) {
 		return nil, fmt.Errorf("unable to open blob: %w", err)
 	}
 
-	// Read the first 512 bytes (Tar header size)
-	buf := make([]byte, 512)
-	n, err := raw.Read(buf)
-	if err != nil {
-		return nil, err
+	// Read the first two bytes for gzip detection and replay them afterwards.
+	var header [2]byte
+	n, err := io.ReadFull(raw, header[:])
+	if err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return nil, errors.Join(fmt.Errorf("unable to read blob: %w", err), raw.Close())
 	}
-
-	var reader io.Reader = raw
+	reader := io.MultiReader(bytes.NewReader(header[:n]), raw)
+	if sizeAware, ok := b.(blob.SizeAware); ok {
+		if size := sizeAware.Size(); size > blob.SizeUnknown {
+			reader = io.LimitReader(reader, size)
+		}
+	}
 
 	closeFn := raw.Close
 	// Check for Gzip magic number (0x1F, 0x8B)
-	if n >= 2 && buf[0] == 0x1F && buf[1] == 0x8B {
-		multiReader := io.MultiReader(bytes.NewReader(buf), raw)
-		gzipReader, err := gzip.NewReader(multiReader)
+	if n == 2 && header[0] == 0x1F && header[1] == 0x8B {
+		gzipReader, err := gzip.NewReader(reader)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create gzip reader: %w", err)
+			return nil, errors.Join(fmt.Errorf("failed to create gzip reader: %w", err), raw.Close())
 		}
 		closeFn = func() error {
 			return errors.Join(gzipReader.Close(), raw.Close())
@@ -167,13 +192,13 @@ func NewArtifactSetFromBlob(b blob.ReadOnlyBlob) (*ArtifactSet, error) {
 
 	fs, err := tarfs.New(reader)
 	if err != nil {
-		return nil, fmt.Errorf("unable to create tarfs: %w", err)
+		return nil, errors.Join(fmt.Errorf("unable to create tarfs: %w", err), closeFn())
 	}
 	fileSystem := fs.(fileSystem)
 
 	idx, err := NewArtifactSetIndex(fs)
 	if err != nil {
-		return nil, fmt.Errorf("unable to read index.json: %w", err)
+		return nil, errors.Join(fmt.Errorf("unable to read index.json: %w", err), closeFn())
 	}
 
 	return &ArtifactSet{
@@ -266,7 +291,7 @@ func ConvertToOCIImageLayout(ctx context.Context, as *ArtifactSet, writer io.Wri
 		}
 
 		if err := tw.WriteHeader(&tar.Header{
-			Name: filepath.Join(BlobsDirectoryName, dig.Algorithm().String(), dig.Encoded()),
+			Name: path.Join(BlobsDirectoryName, dig.Algorithm().String(), dig.Encoded()),
 			Size: bsizeAware.Size(),
 		}); err != nil {
 			return fmt.Errorf("unable to write header for blob %s: %w", b, err)
@@ -276,7 +301,8 @@ func ConvertToOCIImageLayout(ctx context.Context, as *ArtifactSet, writer io.Wri
 		if err != nil {
 			return fmt.Errorf("unable to read blob %s: %w", b, err)
 		}
-		if _, err := io.Copy(tw, rc); err != nil {
+		_, copyErr := blob.CopyReader(tw, rc)
+		if err := errors.Join(copyErr, rc.Close()); err != nil {
 			return fmt.Errorf("unable to copy blob %s: %w", b, err)
 		}
 	}
@@ -315,11 +341,11 @@ func (a *ArtifactSet) ListBlobs(ctx context.Context) (digests []string, err erro
 	case ArtifactSetFormatOCI:
 		for _, entry := range dir {
 			if entry.IsDir() {
-				algoDir, err := a.fs.ReadDir(filepath.Join(BlobsDirectoryName, entry.Name()))
+				algoDir, err := a.fs.ReadDir(path.Join(BlobsDirectoryName, entry.Name()))
 				if err != nil {
 					return nil, fmt.Errorf("unable to list blobs: %w", err)
 				}
-				algo := filepath.Base(entry.Name())
+				algo := path.Base(entry.Name())
 				for _, entry := range algoDir {
 					if entry.Type().IsRegular() {
 						digests = append(digests, algo+":"+entry.Name())
@@ -358,17 +384,9 @@ var (
 )
 
 func newArtifactBlob(fs fileSystem, dig string, format ArtifactSetFormat) (blob.ReadOnlyBlob, error) {
-	var name string
-	switch format {
-	case ArtifactSetFormatOCM, ArtifactSetFormatLegacyOCI:
-		file, err := ToBlobFileName(dig)
-		if err != nil {
-			return nil, err
-		}
-		name = filepath.Join(BlobsDirectoryName, file)
-	case ArtifactSetFormatOCI:
-		dig := digest.Digest(dig)
-		name = filepath.Join(BlobsDirectoryName, dig.Algorithm().String(), dig.Encoded())
+	name, err := artifactSetBlobPath(dig, format)
+	if err != nil {
+		return nil, err
 	}
 
 	f, err := fs.Stat(name)
@@ -381,6 +399,23 @@ func newArtifactBlob(fs fileSystem, dig string, format ArtifactSetFormat) (blob.
 		digest: dig,
 		size:   f.Size(),
 	}, nil
+}
+
+// artifactSetBlobPath returns the path of the blob with the given digest within
+// an artifact set of the given format.
+func artifactSetBlobPath(dig string, format ArtifactSetFormat) (string, error) {
+	if format == ArtifactSetFormatOCI {
+		d, err := digest.Parse(dig)
+		if err != nil {
+			return "", fmt.Errorf("invalid digest %q: %w", dig, err)
+		}
+		return path.Join(BlobsDirectoryName, d.Algorithm().String(), d.Encoded()), nil
+	}
+	file, err := ToBlobFileName(dig)
+	if err != nil {
+		return "", err
+	}
+	return path.Join(BlobsDirectoryName, file), nil
 }
 
 func (a *ArtifactBlob) Size() (size int64) {
@@ -402,6 +437,8 @@ type ArtifactSetIndex struct {
 	Format ArtifactSetFormat
 }
 
+// NewArtifactSetIndex reads the index of an artifact set and determines its format.
+// It fails if an index entry has no media type or size.
 func NewArtifactSetIndex(filesystem fs.FS) (*ArtifactSetIndex, error) {
 	var format ArtifactSetFormat
 	base, err := decodeIndexFromFS(filesystem, ociimagespec.ImageIndexFile)
@@ -417,6 +454,18 @@ func NewArtifactSetIndex(filesystem fs.FS) (*ArtifactSetIndex, error) {
 		format = determineArtifactSetOCIFormat(filesystem)
 	}
 
+	// Without a media type, OCI tooling cannot walk the graph below the entry, and
+	// without a size it cannot verify the entry. Every OCM library version records
+	// both, so a missing one means a corrupt set.
+	for _, manifest := range base.Manifests {
+		if manifest.MediaType == "" {
+			return nil, fmt.Errorf("artifact set index entry %s has no media type", manifest.Digest)
+		}
+		if manifest.Size <= 0 {
+			return nil, fmt.Errorf("artifact set index entry %s has no size", manifest.Digest)
+		}
+	}
+
 	return &ArtifactSetIndex{
 		Index:  *base,
 		Format: format,
@@ -430,7 +479,7 @@ func determineArtifactSetOCIFormat(filesystem fs.FS) ArtifactSetFormat {
 	} {
 		// the subdirectory for algos is unique to new generation blob directories and we can deduce the
 		// new OCI artifact set format from that.
-		if algoDir, err := filesystem.Open(filepath.Join(BlobsDirectoryName, algo.String())); err == nil {
+		if algoDir, err := filesystem.Open(path.Join(BlobsDirectoryName, algo.String())); err == nil {
 			_ = algoDir.Close()
 			return ArtifactSetFormatOCI
 		}

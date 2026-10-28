@@ -29,14 +29,15 @@ Verify component version(s) inside an OCM repository based on signatures.
 - Fetch component version 
 - Normalise descriptor (algorithm from signature)
 - Recompute hash and compare with signature digest
-- Verify signature (verifier from the OCM configuration, default RSASSA-PSS verifier)
+- Verify signature (verifier from the OCM configuration, otherwise derived from the signature algorithm)
 
 ## Behavior
 
 - --signature selects a single signature by name; without it, every signature on the descriptor is verified
 - Credentials are resolved per signature under that signature's name, so every signature needs its own consumer entry
 - Signatures are verified concurrently (--concurrency-limit); the command exits non-zero on the first failure
-- Default verifier: RSASSA-PSS, resolves the public key from credentials in .ocmconfig
+- Without a configured verifier, the signature algorithm selects the default: RSA signatures (RSASSA-PSS, RSASSA-PKCS1-V1_5) use the RSA verifier, which resolves the public key from credentials in .ocmconfig
+- Sigstore signatures default to a Sigstore verifier that accepts any signer identity and issuer and logs a warning: the bundle, certificate chain and transparency log are checked, but not who signed. Configure a SigstoreVerificationConfiguration/v1alpha1 verifier with identity constraints to pin the signer
 - The verifier is configured in the OCM configuration (signing.config.ocm.software/v1alpha1), not on the command line
 - An entry with a "signature" field only applies to that signature, one without applies to all
 - The verifier is resolved per signature, so a component carrying several signatures can be verified with a different handler for each
@@ -113,7 +114,9 @@ verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0
 #
 # The verifier selects the verification handler and configures it.
 # It does NOT contain credentials - public keys and trust material are always
-# resolved via .ocmconfig credentials. If omitted, defaults to RSASSA-PSS.
+# resolved via .ocmconfig credentials. If omitted, the signature algorithm selects
+# the verifier: RSA signatures use the RSA verifier, Sigstore signatures a Sigstore
+# verifier that accepts any signer identity (with a warning).
 # Add a "signature" field to scope an entry to the signature of that name
 # (see the per-signature example below); without it the entry applies to all.
 

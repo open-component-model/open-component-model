@@ -20,7 +20,8 @@ It supports optional transformation of the resource using a registered transform
 
 If no transformer is specified, the resource is written directly in its original format.
 
-Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.
+Every access type with a built-in resource repository works natively without any plugin,
+with optional credential resolution. Plugins extend OCM with support for additional, custom access types.
 
 When --output is not provided, the output filename is the resource name.
 
