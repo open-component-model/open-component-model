@@ -14,18 +14,18 @@ contact the respective owner.
 
 | Mark             | Owner                                |
 |------------------|--------------------------------------|
-| SAP              | SAP SE                               |
 | BWI              | BWI GmbH                             |
-| SAP NS2          | SAP National Security Services, Inc. |
+| EverBright       | EverBright GmbH                      |
 | Gardener         | NeoNephos Foundation                 |
+| IronCore         | NeoNephos Foundation                 |
 | Konfidence       | SAP SE / Konfidence project          |
 | Kyma             | SAP SE / Kyma project                |
 | OpenControlPlane | NeoNephos Foundation                 |
 | Platform Mesh    | NeoNephos Foundation                 |
-| T-Systems        | T-Systems International GmbH         |
+| SAP              | SAP SE                               |
+| SAP NS2          | SAP National Security Services, Inc. |
 | STACKIT          | STACKIT GmbH & Co. KG                |
-| IronCore         | NeoNephos Foundation                 |
-| EverBright       | EverBright GmbH                      |
+| T-Systems        | T-Systems International GmbH         |
 
 If you own a mark shown here and want it corrected or removed, open an issue at
 <https://github.com/open-component-model/open-component-model/issues>.
@@ -106,15 +106,6 @@ ever need to make to an SVG; everything else stays as downloaded.
 
 ---
 
-### SAP
-
-- **File:** `sap-color.svg`
-- **Source:** <https://commons.wikimedia.org/wiki/File:SAP_2011_logo.svg>
-- **Fetched:** 2026-10-26
-- **Licence:** Public domain (PD-textlogo / simple shapes)
-- **Trademark owner:** SAP SE
-- **Permission:** granted (implicit)
-
 ### BWI (BWI GmbH)
 
 - **File:** `bwi-color.svg`
@@ -124,14 +115,16 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Trademark owner:** BWI GmbH
 - **Permission:** requested (pending)
 
-### SAP NS2 (SAP National Security Services)
 
-- **File:** `sap-ns2.png` (raster, 900×500)
-- **Source:** <https://getlogovector.com/sap-ns2-logo-vector-svg/>
+### EverBright
+
+- **File:** `everbright-light.svg` (dark text on light) and `everbright-dark.svg` (white on dark)
+- **Source:** everbright-it.de header asset
 - **Fetched:** 2026-10-26
-- **Licence:** Editorial use only (no explicit licence found)
-- **Trademark owner:** SAP National Security Services, Inc.
-- **Permission:** granted (implicit)
+- **Licence:** Editorial use (no explicit licence; file is the site's own header logo)
+- **Trademark owner:** EverBright GmbH (per Impressum on everbright-it.de)
+- **Permission:** granted (explicit)
+
 
 ### Gardener
 
@@ -144,6 +137,17 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Notes:** viewBox cropped from `0 0 595.3 170.1` to `46 0 502 170.1` to
   remove ~24 px of internal padding on each side. No path data changed.
 
+
+### IronCore
+
+- **File:** `ironcore-light.svg` / `ironcore-dark.svg` (icon + label lockup built from `ironcore-color.svg`)
+- **Source:** GitHub `ironcore-dev/ironcore` repo (`docs/assets/`)
+- **Fetched:** 2026-10-26
+- **Licence:** NeoNephos trademark usage guidelines
+- **Trademark owner:** NeoNephos Foundation
+- **Permission:** granted (implicit)
+
+
 ### Konfidence
 
 - **File:** `konfidence-dark.svg`
@@ -155,6 +159,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Notes:** viewBox cropped from `0 0 3440 400` to `78 0 3283 400` to
   remove ~80 px of internal padding on each side. No path data changed.
 
+
 ### Kyma
 
 - **File:** `kyma-light.svg` / `kyma-dark.svg` (icon + label lockup built from `kyma-color.svg`)
@@ -165,6 +170,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Licence:** Editorial use (no explicit licence)
 - **Notes:** viewBox cropped from `0 0 150 60` to `0 0 126 60` to remove
   ~24 px of internal padding on the right side. No path data changed.
+
 
 ### Open Control Plane (OCP)
 
@@ -179,6 +185,7 @@ ever need to make to an SVG; everything else stays as downloaded.
   viewBox cropped from `0 0 350 60` to `0 0 284 60` on both files to remove
   ~67 px of internal padding on the right side. No path data changed.
 
+
 ### Platform Mesh
 
 - **File:** `platform-mesh-color.svg` / `platform-mesh-dark.svg`
@@ -188,14 +195,26 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Trademark owner:** NeoNephos Foundation
 - **Permission:** granted (implicit)
 
-### T-Systems
 
-- **File:** `t-systems-light.svg` (magenta `#e20074` on light) and `t-systems-dark.svg` (white on dark)
-- **Source:** Wikimedia Commons (`File:T-Systems Logo 2024.svg`)
-- **Fetched:** 2026-10-27
-- **Licence:** Public domain (PD-textlogo)
-- **Trademark owner:** T-Systems International GmbH
-- **Permission:** requested (pending)
+### SAP
+
+- **File:** `sap-color.svg`
+- **Source:** <https://commons.wikimedia.org/wiki/File:SAP_2011_logo.svg>
+- **Fetched:** 2026-10-26
+- **Licence:** Public domain (PD-textlogo / simple shapes)
+- **Trademark owner:** SAP SE
+- **Permission:** granted (implicit)
+
+
+### SAP NS2 (SAP National Security Services)
+
+- **File:** `sap-ns2.png` (raster, 900×500)
+- **Source:** <https://getlogovector.com/sap-ns2-logo-vector-svg/>
+- **Fetched:** 2026-10-26
+- **Licence:** Editorial use only (no explicit licence found)
+- **Trademark owner:** SAP National Security Services, Inc.
+- **Permission:** granted (implicit)
+
 
 ### STACKIT
 
@@ -210,20 +229,12 @@ ever need to make to an SVG; everything else stays as downloaded.
   `0 0 1612.0708246 546.8535461` to `111 0 1385 546.8535461` on both files to
   remove ~21 px of internal padding on each side. No path data changed.
 
-### IronCore
 
-- **File:** `ironcore-light.svg` / `ironcore-dark.svg` (icon + label lockup built from `ironcore-color.svg`)
-- **Source:** GitHub `ironcore-dev/ironcore` repo (`docs/assets/`)
-- **Fetched:** 2026-10-26
-- **Licence:** NeoNephos trademark usage guidelines
-- **Trademark owner:** NeoNephos Foundation
-- **Permission:** granted (implicit)
+### T-Systems
 
-### EverBright
-
-- **File:** `everbright-light.svg` (dark text on light) and `everbright-dark.svg` (white on dark)
-- **Source:** everbright-it.de header asset
-- **Fetched:** 2026-10-26
-- **Licence:** Editorial use (no explicit licence; file is the site's own header logo)
-- **Trademark owner:** EverBright GmbH (per Impressum on everbright-it.de)
+- **File:** `t-systems-light.svg` (magenta `#e20074` on light) and `t-systems-dark.svg` (white on dark)
+- **Source:** Wikimedia Commons (`File:T-Systems Logo 2024.svg`)
+- **Fetched:** 2026-10-27
+- **Licence:** Public domain (PD-textlogo)
+- **Trademark owner:** T-Systems International GmbH
 - **Permission:** requested (pending)
