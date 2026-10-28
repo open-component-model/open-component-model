@@ -6,7 +6,7 @@ OCM is an open standard for describing software artifacts and lifecycle metadata
 
 ## Meetings
 
-> We'll host public monthly steering meetings, links and dates to be announced.
+The TSC meets publicly every month, on the first Wednesday at 1pm UTC+2, scheduled through the [LFX calendar](https://zoom-lfx.platform.linuxfoundation.org/meetings/open-component-model?view=month).
 
 Meeting Notes can be found in the [./meeting-notes](./meeting-notes/) folder.
 
