@@ -84,8 +84,12 @@ const SynthesizedBlobFormatSuffix = "+tar+gzip"
 var recognizedArtifactSetMediaTypes = map[string]bool{
 	"application/vnd.oci.image.manifest.v1" + SynthesizedBlobFormatSuffix: true,
 	"application/vnd.oci.image.index.v1" + SynthesizedBlobFormatSuffix:    true,
-	// TODO(jakobmoellerdev): technically docker image types could be an artifact set too, but
-	//   in the new world its probably not worth supporting as docker has started support for OCI too.
+	// Docker image types are artifact sets too: the OCM library synthesizes them for
+	// docker/dockermulti inputs and OCI resources whose manifests use the docker
+	// media types. Reading and uploading them must preserve the manifest digest, so
+	// they are read as-is (no docker->OCI conversion), same as the OCI variants above.
+	"application/vnd.docker.distribution.manifest.v2" + SynthesizedBlobFormatSuffix:      true,
+	"application/vnd.docker.distribution.manifest.list.v2" + SynthesizedBlobFormatSuffix: true,
 }
 
 // IsArtifactSetMediaType gives confirmation that the given media type is likely containing
