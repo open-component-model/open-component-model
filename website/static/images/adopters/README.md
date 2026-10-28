@@ -122,7 +122,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Fetched:** 2026-10-26
 - **Licence:** Editorial use (no explicit licence; file is the site's own header logo)
 - **Trademark owner:** EverBright GmbH (per Impressum on everbright-it.de)
-- **Permission:** granted (explicit)
+- **Permission:** granted (explicit) — confirmed 2026-10-28
 
 ### Gardener
 
