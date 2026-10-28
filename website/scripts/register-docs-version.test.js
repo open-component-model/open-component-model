@@ -61,6 +61,17 @@ test("parseArguments: invalid version throws", () => {
     assert.throws(() => parseArguments(["1.2"]), /Invalid version/);
 });
 
+test("parseArguments: --sync-mounts needs no version and skips version checks", () => {
+    const result = parseArguments(["--sync-mounts"]);
+    assert.equal(result.syncMounts, true);
+    assert.equal(result.version, undefined);
+    assert.equal(result.cliGomod, undefined);
+});
+
+test("parseArguments: --sync-mounts with a stray version throws", () => {
+    assert.throws(() => parseArguments(["--sync-mounts", "1.2.0"]), /takes no version/);
+});
+
 test("parseArguments: unknown flag throws", () => {
     assert.throws(() => parseArguments(["1.2.3", "--unknown"]), /Unknown flag/);
 });

@@ -150,11 +150,23 @@ function parseArguments(args) {
                 throw new Error("--cli-gomod requires a path argument");
             }
             flags.cliGomod = args[++i];
+        } else if (args[i] === "--sync-mounts") {
+            flags.syncMounts = true;
         } else if (args[i].startsWith("--")) {
             throw new Error(`Unknown flag: ${args[i]}`);
         } else {
             positionals.push(args[i].trim());
         }
+    }
+
+    // --sync-mounts only regenerates the `main` binding mounts from the
+    // BINDING_MOUNTS table. It needs neither a version nor a go.mod, so it
+    // short-circuits all version validation below.
+    if (flags.syncMounts) {
+        if (positionals.length > 0) {
+            throw new Error("--sync-mounts takes no version argument.");
+        }
+        return { syncMounts: true };
     }
 
     if (positionals.length === 0) {
@@ -779,10 +791,30 @@ async function updateModuleConfig(version, fullVersion, cliGomod, { retiredVersi
     await fsp.writeFile(MODULE_CONFIG, MODULE_HEADER + dumpYaml(parsed), "utf-8");
 }
 
+// Regenerate only the `main` binding mounts from BINDING_MOUNTS and write
+// module.yaml. Standalone entrypoint for `--sync-mounts`: lets a contributor
+// who added a BINDING_MOUNTS row refresh module.yaml without running a full
+// version registration (which needs a release version and its go.mod).
+async function syncMountsOnly() {
+    const content = await fsp.readFile(MODULE_CONFIG, "utf-8").catch((e) => fail(`Read module.yaml: ${e.message}`));
+    const parsed = yaml.load(content) || {};
+    const changed = syncMainBindingMounts(parsed);
+    await fsp.writeFile(MODULE_CONFIG, MODULE_HEADER + dumpYaml(parsed), "utf-8");
+    console.log(changed
+        ? "module.yaml: regenerated 'main' binding mounts from BINDING_MOUNTS."
+        : "module.yaml: 'main' binding mounts already up to date.");
+}
+
 // Main
 async function main() {
-    const { version, fullVersion, cliGomod } = parseArguments(process.argv.slice(2));
+    const args = parseArguments(process.argv.slice(2));
 
+    if (args.syncMounts) {
+        await syncMountsOnly();
+        return;
+    }
+
+    const { version, fullVersion, cliGomod } = args;
     if (!cliGomod) {
         fail("--cli-gomod <path> is required. Provide the path to the CLI go.mod for the release being versioned.");
     }
