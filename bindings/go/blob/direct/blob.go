@@ -33,8 +33,10 @@ func NewFromBuffer(buffer *bytes.Buffer, unsafe bool, opts ...DirectBlobOption) 
 //
 // See New for more details on how the Blob is constructed.
 func NewFromBytes(data []byte, opts ...DirectBlobOption) *Blob {
-	return New(bytes.NewReader(data),
+	b := New(bytes.NewReader(data),
 		append([]DirectBlobOption{WithSize(int64(len(data)))}, opts...)...)
+	b.data = data
+	return b
 }
 
 // New constructs a Blob from a [io.Reader] source, applying any DirectBlobOption values.
@@ -94,6 +96,10 @@ func New(src io.Reader, opts ...DirectBlobOption) *Blob {
 type Blob struct {
 	// base for creating io.SectionReader instances
 	reader io.Reader
+	// data is set for byte-backed blobs so ReadCloser can hand out a fresh
+	// bytes.Reader, which keeps io.WriterTo (single Write in io.Copy) that
+	// io.SectionReader lacks.
+	data []byte
 	// a serialized blob access to the reader in case the Reader does not support io.ReaderAt.
 	// In this case, it is not safe to call ReadCloser() multiple times without serializing access to the reader.
 	serial func() blob.ReadOnlyBlob
@@ -117,6 +123,17 @@ func (b *Blob) Size() int64 {
 // If the source supports io.ReaderAt, the returned reader also implements
 // io.ReaderAt and io.Seeker, so consumers can access it randomly without buffering.
 func (b *Blob) ReadCloser() (io.ReadCloser, error) {
+	if b.data != nil {
+		size, err := b.size()
+		if err != nil {
+			return nil, err
+		}
+		data := b.data
+		if size >= 0 && size < int64(len(data)) {
+			data = data[:size]
+		}
+		return bytesReadCloser{bytes.NewReader(data)}, nil
+	}
 	if readerAt, ok := b.reader.(io.ReaderAt); ok {
 		size, err := b.size()
 		if err != nil {
@@ -137,6 +154,13 @@ type sectionReadCloser struct {
 }
 
 func (sectionReadCloser) Close() error { return nil }
+
+// bytesReadCloser is a no-op closer that keeps io.WriterTo, io.ReaderAt and io.Seeker of bytes.Reader visible.
+type bytesReadCloser struct {
+	*bytes.Reader
+}
+
+func (bytesReadCloser) Close() error { return nil }
 
 // SetMediaType updates the MIME type of the blob.
 func (b *Blob) SetMediaType(s string) {

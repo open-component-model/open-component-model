@@ -440,3 +440,26 @@ func TestReadCloser_PreservesRandomAccess(t *testing.T) {
 		})
 	}
 }
+
+func TestNewFromBytesReadCloserSupportsWriterTo(t *testing.T) {
+	r := require.New(t)
+	data := []byte("hello world")
+	for name, b := range map[string]*Blob{
+		"bytes":          NewFromBytes(data),
+		"buffer":         NewFromBuffer(bytes.NewBuffer(data), false),
+		"size truncated": NewFromBytes(data, WithSize(5)),
+	} {
+		t.Run(name, func(t *testing.T) {
+			rc, err := b.ReadCloser()
+			r.NoError(err)
+			t.Cleanup(func() { r.NoError(rc.Close()) })
+			wt, ok := rc.(io.WriterTo)
+			r.True(ok, "byte-backed ReadCloser must implement io.WriterTo")
+			var out bytes.Buffer
+			n, err := wt.WriteTo(&out)
+			r.NoError(err)
+			r.Equal(b.Size(), n)
+			r.Equal(data[:n], out.Bytes())
+		})
+	}
+}
