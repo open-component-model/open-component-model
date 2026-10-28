@@ -2,7 +2,6 @@ package download
 
 import (
 	"archive/tar"
-	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -24,6 +23,7 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/storer"
 	"github.com/opencontainers/go-digest"
 
+	"ocm.software/open-component-model/bindings/go/blob/compression/gzippool"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 )
 
@@ -58,7 +58,7 @@ func archive(ctx context.Context, repo *git.Repository, selected *object.Commit,
 
 	digester := digest.Canonical.Digester()
 	limited := &limitedWriter{Writer: file, limit: opts.MaxArchiveSize}
-	gz := gzip.NewWriter(io.MultiWriter(limited, digester.Hash()))
+	gz := gzippool.Get(io.MultiWriter(limited, digester.Hash()))
 	tw := tar.NewWriter(gz)
 	err = filesystem.WriteTar(ctx, carrierFS{files: treeFS{tree: tree}, git: filepath.Join(storage, gitDir)}, tw, filesystem.DirOptions{
 		Reproducible:         true,
@@ -67,6 +67,7 @@ func archive(ctx context.Context, repo *git.Repository, selected *object.Commit,
 		OmitDirTrailingSlash: true,
 	})
 	err = errors.Join(err, tw.Close(), gz.Close(), file.Close())
+	gzippool.Put(gz)
 	if err != nil {
 		return nil, "", fmt.Errorf("cannot create git archive: %w", err)
 	}

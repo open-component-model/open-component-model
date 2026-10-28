@@ -217,7 +217,6 @@ function publishComponent(core, repository, constructorPath) {
 
     runOcmCommand(core, [
         "add cv",
-        "--component-version-conflict-policy replace",
         `--config "/.ocmconfig"`,
         `--repository "${repository}"`,
         `--constructor "./plugin-registry-constructor.yaml"`,
