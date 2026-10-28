@@ -311,22 +311,19 @@ func (m *mockBlob) ReadCloser() (io.ReadCloser, error) {
 func TestFileSystemCTF_SaveBlob_ErrorCases(t *testing.T) {
 	tests := []struct {
 		name    string
-		blob    *mockBlob
+		blob    blob.ReadOnlyBlob
 		wantErr string
 	}{
 		{
-			name: "blob not digest aware",
-			blob: &mockBlob{
-				digest: "",
-				known:  false,
-			},
+			name:    "blob not digest aware",
+			blob:    struct{ blob.ReadOnlyBlob }{},
 			wantErr: "blob does not have a digest that can be used to save it",
 		},
 		{
-			name: "digest not known",
+			name: "digest not reported after read",
 			blob: &mockBlob{
-				digest: "sha256:123",
-				known:  false,
+				size:   blob.SizeUnknown,
+				reader: io.NopCloser(bytes.NewReader([]byte("content"))),
 			},
 			wantErr: "blob does not have a digest that can be used to save it",
 		},
@@ -398,4 +395,104 @@ func TestFileSystemCTF_SaveBlob_KeepsExistingBlobOnFailedVerification(t *testing
 	entries, err := os.ReadDir(filepath.Join(dir, ctf.BlobsDirectoryName))
 	r.NoError(err)
 	r.Len(entries, 1, "the staged file must be removed")
+}
+
+// lateDigestBlob reports its digest only once its content has been read to the end,
+// like a blob that computes its digest while it is streamed. It records being asked
+// for its digest before its reader was closed, which could make a buffering blob load
+// its whole content into memory.
+type lateDigestBlob struct {
+	content    []byte
+	closeErr   error
+	digest     digest.Digest
+	closed     bool
+	askedEarly bool
+}
+
+func (b *lateDigestBlob) ReadCloser() (io.ReadCloser, error) {
+	return &lateDigestReader{blob: b, r: bytes.NewReader(b.content)}, nil
+}
+
+func (b *lateDigestBlob) Digest() (string, bool) {
+	if !b.closed {
+		b.askedEarly = true
+	}
+	return b.digest.String(), b.digest != ""
+}
+
+type lateDigestReader struct {
+	blob *lateDigestBlob
+	r    *bytes.Reader
+}
+
+func (r *lateDigestReader) Read(p []byte) (int, error) {
+	n, err := r.r.Read(p)
+	if err == io.EOF {
+		r.blob.digest = digest.FromBytes(r.blob.content)
+	}
+	return n, err
+}
+
+func (r *lateDigestReader) Close() error {
+	r.blob.closed = true
+	return r.blob.closeErr
+}
+
+func TestFileSystemCTF_SaveBlob_DigestReportedAfterRead(t *testing.T) {
+	content := []byte("streamed content")
+	want := digest.FromBytes(content)
+	wantFile := "sha256." + want.Encoded()
+
+	tests := []struct {
+		name        string
+		preexisting bool
+		closeErr    error
+		wantErr     string
+		wantFiles   []string
+	}{
+		{name: "stored under the reported digest", wantFiles: []string{wantFile}},
+		{name: "already stored blob is kept", preexisting: true, wantFiles: []string{wantFile}},
+		{name: "failed close stores nothing", closeErr: fmt.Errorf("digest mismatch"), wantErr: "digest mismatch"},
+		{name: "failed close keeps stored blob", preexisting: true, closeErr: fmt.Errorf("digest mismatch"), wantErr: "digest mismatch", wantFiles: []string{wantFile}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			dir := t.TempDir()
+			archive, err := ctf.OpenCTFFromOSPath(dir, ctf.O_RDWR)
+			r.NoError(err)
+			if tc.preexisting {
+				r.NoError(archive.SaveBlob(t.Context(), inmemory.New(bytes.NewReader(content))))
+			}
+
+			b := &lateDigestBlob{content: content, closeErr: tc.closeErr}
+			err = archive.SaveBlob(t.Context(), b)
+			r.False(b.askedEarly, "the digest must only be asked for after the content was read and closed")
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+			} else {
+				r.NoError(err)
+			}
+
+			entries, err := os.ReadDir(filepath.Join(dir, ctf.BlobsDirectoryName))
+			r.NoError(err)
+			var names []string
+			for _, e := range entries {
+				names = append(names, e.Name())
+			}
+			r.Equal(tc.wantFiles, names, "only the content-addressed blob may remain, no staged file")
+
+			if tc.wantFiles == nil {
+				return
+			}
+			stored, err := archive.GetBlob(t.Context(), want.String())
+			r.NoError(err)
+			rc, err := stored.ReadCloser()
+			r.NoError(err)
+			t.Cleanup(func() { _ = rc.Close() })
+			data, err := io.ReadAll(rc)
+			r.NoError(err)
+			r.Equal(content, data)
+		})
+	}
 }
