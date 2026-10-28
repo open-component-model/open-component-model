@@ -262,9 +262,8 @@ func TestGetV1FileBlob_FileNotFound(t *testing.T) {
 
 	// Get blob should fail
 	b, err := file.GetV1FileBlob(fileSpec, tempDir)
-	r.Error(err)
+	r.ErrorIs(err, os.ErrNotExist)
 	r.Nil(b)
-	r.Contains(err.Error(), "failed to open path")
 }
 
 func TestGetV1FileBlob_EmptyPath(t *testing.T) {

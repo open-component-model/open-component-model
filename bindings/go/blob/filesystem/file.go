@@ -87,7 +87,8 @@ func EnsurePathInWorkingDirectory(path, workingDirectory string) (string, error)
 }
 
 // resolveInWorkingDirectory returns the absolute working directory and path relative to it,
-// after checking with os.OpenInRoot that path opens without escaping the working directory.
+// after checking that path resolves without escaping the working directory.
+// It stats instead of opening, so it neither blocks on a FIFO nor needs read permission.
 func resolveInWorkingDirectory(path, workingDirectory string) (root, rel string, err error) {
 	root, err = filepath.Abs(workingDirectory)
 	if err != nil {
@@ -102,12 +103,8 @@ func resolveInWorkingDirectory(path, workingDirectory string) (root, rel string,
 	}
 	rel = filepath.Clean(rel)
 
-	resolved, err := os.OpenInRoot(root, rel)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to open path %q in root %q: %w", rel, root, err)
-	}
-	if err := resolved.Close(); err != nil {
-		return "", "", fmt.Errorf("failed to close path validation handle for %q in root %q: %w", rel, root, err)
+	if _, err := workingDirFS(root).Stat(rel); err != nil {
+		return "", "", fmt.Errorf("failed to stat path %q in root %q: %w", rel, root, err)
 	}
 	return root, rel, nil
 }
