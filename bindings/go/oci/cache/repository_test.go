@@ -16,6 +16,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote"
 
 	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
+	"ocm.software/open-component-model/bindings/go/oci/spec"
 )
 
 func TestRepository_Fetch_DelegatesToBlobCache(t *testing.T) {
@@ -96,41 +97,41 @@ func TestRepository_Unwrap_ReturnsEmbedded(t *testing.T) {
 }
 
 func TestProxyRepository_NilCachesReturnBase(t *testing.T) {
-	inner := &remotestore.RemoteStore{Repository: &remote.Repository{}}
+	inner := &remote.Repository{}
 	got := ProxyRepository(inner, nil, nil)
 	assert.Same(t, inner, got)
 }
 
 func TestProxyRepository_BlobCacheOnlyWraps(t *testing.T) {
-	inner := &remotestore.RemoteStore{Repository: &remote.Repository{}}
+	inner := &remote.Repository{}
 	c := newTestCache(t, Options{})
 	got := ProxyRepository(inner, c, nil)
 	wrapped, ok := got.(*Repository)
 	require.True(t, ok)
-	assert.Same(t, inner, wrapped.RemoteStore)
+	assert.Same(t, inner, wrapped.Repository)
 	assert.Same(t, c, wrapped.BlobCache)
 	assert.Nil(t, wrapped.ReferenceCache)
 }
 
 func TestProxyRepository_ReferenceCacheOnlyWraps(t *testing.T) {
-	inner := &remotestore.RemoteStore{Repository: &remote.Repository{}}
+	inner := &remote.Repository{}
 	rc := newTestRefCache(t, Options{})
 	got := ProxyRepository(inner, nil, rc)
 	wrapped, ok := got.(*Repository)
 	require.True(t, ok)
-	assert.Same(t, inner, wrapped.RemoteStore)
+	assert.Same(t, inner, wrapped.Repository)
 	assert.Nil(t, wrapped.BlobCache)
 	assert.Same(t, rc, wrapped.ReferenceCache)
 }
 
 func TestProxyRepository_BothCachesWrap(t *testing.T) {
-	inner := &remotestore.RemoteStore{Repository: &remote.Repository{}}
+	inner := &remote.Repository{}
 	c := newTestCache(t, Options{})
 	rc := newTestRefCache(t, Options{})
 	got := ProxyRepository(inner, c, rc)
 	wrapped, ok := got.(*Repository)
 	require.True(t, ok)
-	assert.Same(t, inner, wrapped.RemoteStore)
+	assert.Same(t, inner, wrapped.Repository)
 	assert.Same(t, c, wrapped.BlobCache)
 	assert.Same(t, rc, wrapped.ReferenceCache)
 }
@@ -146,7 +147,7 @@ func plainHTTPRepo(t *testing.T, srv *httptest.Server) *remote.Repository {
 	return repo
 }
 
-func TestProxyRepository_KeepsStreamingChunkedPush(t *testing.T) {
+func TestRepository_KeepsStreamingChunkedPush(t *testing.T) {
 	r := require.New(t)
 
 	var mu sync.Mutex
@@ -167,7 +168,10 @@ func TestProxyRepository_KeepsStreamingChunkedPush(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	store := ProxyRepository(&remotestore.RemoteStore{Repository: plainHTTPRepo(t, srv), ChunkSize: 4}, newTestCache(t, Options{}), nil)
+	var store spec.Store = &Repository{
+		RemoteStore: &remotestore.RemoteStore{Repository: plainHTTPRepo(t, srv), ChunkSize: 4},
+		BlobCache:   newTestCache(t, Options{}),
+	}
 	pusher, ok := store.(remotestore.StreamingPusher)
 	r.True(ok, "the cache decorator must keep streaming push")
 

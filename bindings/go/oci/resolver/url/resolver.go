@@ -159,7 +159,7 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 	}
 
 	if remoteStore, ok := resolver.getFromCache(key); ok {
-		return cache.ProxyRepository(remoteStore, resolver.blobCache.Load(), resolver.referenceCache.Load()), nil
+		return resolver.proxy(remoteStore), nil
 	}
 
 	repo := &remote.Repository{
@@ -189,7 +189,18 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 	}
 	resolver.addToCache(key, store)
 
-	return cache.ProxyRepository(store, resolver.blobCache.Load(), resolver.referenceCache.Load()), nil
+	return resolver.proxy(store), nil
+}
+
+// proxy decorates store with the resolver's caches, if any. It embeds the
+// store itself rather than its *remote.Repository so chunked Push and
+// PushStreaming stay available behind the caches.
+func (resolver *CachingResolver) proxy(store *remotestore.RemoteStore) spec.Store {
+	blob, refs := resolver.blobCache.Load(), resolver.referenceCache.Load()
+	if blob == nil && refs == nil {
+		return store
+	}
+	return &cache.Repository{RemoteStore: store, BlobCache: blob, ReferenceCache: refs}
 }
 
 func (resolver *CachingResolver) addToCache(reference string, store *remotestore.RemoteStore) {

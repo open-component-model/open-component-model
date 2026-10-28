@@ -6,6 +6,7 @@ import (
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/content"
+	"oras.land/oras-go/v2/registry/remote"
 
 	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
@@ -104,13 +105,13 @@ func (r *Repository) Tag(ctx context.Context, desc ociImageSpecV1.Descriptor, re
 	return nil
 }
 
-// ProxyRepository proxies the given store with the configured caches
-// when at least one is non-nil; otherwise it returns store unchanged
+// ProxyRepository proxies the given repo with the configured caches
+// when at least one is non-nil; otherwise it returns repo unchanged
 // so the cache decorator only appears in the type chain when there
-// is something to cache.
-func ProxyRepository(store *remotestore.RemoteStore, blob *BlobCache, refs *ReferenceCache) spec.Store {
+// is something to cache. The decorated repo pushes blobs monolithically.
+func ProxyRepository(repo *remote.Repository, blob *BlobCache, refs *ReferenceCache) spec.Store {
 	if blob == nil && refs == nil {
-		return store
+		return repo
 	}
-	return &Repository{RemoteStore: store, BlobCache: blob, ReferenceCache: refs}
+	return &Repository{RemoteStore: &remotestore.RemoteStore{Repository: repo}, BlobCache: blob, ReferenceCache: refs}
 }

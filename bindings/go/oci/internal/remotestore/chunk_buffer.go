@@ -3,6 +3,7 @@ package remotestore
 import (
 	"bytes"
 	"io"
+	"net/http"
 	"sync"
 	"sync/atomic"
 )
@@ -52,16 +53,35 @@ func (b *chunkBuffer) release() {
 // body returns a request body over the first n bytes that is tracked until closed.
 func (b *chunkBuffer) body(n int) io.ReadCloser {
 	b.open.Add(1)
-	return &chunkBody{Reader: bytes.NewReader(b.data[:n]), buf: b}
+	return &chunkBody{reader: bytes.NewReader(b.data[:n]), buf: b}
 }
 
+// chunkBody is a request body over a chunkBuffer. Read and Close are mutually
+// exclusive because the transport may close the body from another goroutine
+// while a read is still in flight (e.g. HTTP/2 on cancellation); the buffer must
+// only become reusable once no read can touch it anymore.
 type chunkBody struct {
-	*bytes.Reader
-	buf  *chunkBuffer
-	once sync.Once
+	mu     sync.Mutex
+	reader *bytes.Reader
+	buf    *chunkBuffer
+	closed bool
+}
+
+func (c *chunkBody) Read(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return 0, http.ErrBodyReadAfterClose
+	}
+	return c.reader.Read(p)
 }
 
 func (c *chunkBody) Close() error {
-	c.once.Do(func() { c.buf.open.Add(-1) })
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.closed {
+		c.closed = true
+		c.buf.open.Add(-1)
+	}
 	return nil
 }

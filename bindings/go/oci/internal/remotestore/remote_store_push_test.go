@@ -235,6 +235,21 @@ func TestRemoteStore_Push_ChunkedDoesNotOverwriteUnclosedBodies(t *testing.T) {
 	r.Equal(data, sent)
 }
 
+func TestChunkBody_ReadAfterCloseDoesNotSeeReusedBuffer(t *testing.T) {
+	r := require.New(t)
+
+	buf := &chunkBuffer{data: []byte("aaaa")}
+	body := buf.body(len(buf.data))
+	r.NoError(body.Close())
+	r.False(buf.inUse())
+	// The buffer is reusable now; a straggling read must not see its next contents.
+	copy(buf.data, "bbbb")
+
+	n, err := body.Read(make([]byte, 4))
+	r.Zero(n)
+	r.ErrorIs(err, http.ErrBodyReadAfterClose)
+}
+
 func TestRemoteStore_Push_FallbackToMonolithicOnPOSTRejection(t *testing.T) {
 	// A registry that 404s the first uploads POST (chunked attempt) then serves
 	// the monolithic POST-then-PUT flow. The chunked path fails before any byte
