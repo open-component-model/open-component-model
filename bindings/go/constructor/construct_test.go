@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"crypto"
 	"io"
+	"log/slog"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -1030,4 +1032,60 @@ func TestProcessReference_DigestAlgorithmSelection(t *testing.T) {
 		Value:                  a2.Value,
 	}), child)
 	r.ErrorIs(err, ErrDigestMismatch)
+}
+
+// A constructed tree whose reference digests are not all the default must warn
+// for each such reference, so users rebuild with a current CLI; a default-only
+// tree must not.
+func TestConstructWarnsAboutNonDefaultReferenceDigests(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	construct := func(t *testing.T, pin string) []*descriptor.Descriptor {
+		t.Helper()
+		yamlData := `
+components:
+  - name: ocm.software/leaf
+    version: 1.0.0
+    provider:
+      name: ocm.software
+  - name: ocm.software/parent
+    version: 1.0.0
+    provider:
+      name: ocm.software
+    componentReferences:
+      - name: leaf
+        version: 1.0.0
+        componentName: ocm.software/leaf
+` + pin
+		var spec constructorv1.ComponentConstructor
+		require.NoError(t, yaml.Unmarshal([]byte(yamlData), &spec))
+		c := NewDefaultConstructor(constructorruntime.ConvertToRuntimeConstructor(&spec), Options{
+			TargetRepositoryProvider: &mockTargetRepositoryProvider{repo: newMockTargetRepository()},
+		})
+		require.NoError(t, c.Construct(t.Context()))
+		return collectDescriptors(t, c.GetGraph())
+	}
+	const warning = "component reference does not use the current normalisation algorithm"
+
+	var leaf *descriptor.Descriptor
+	for _, d := range construct(t, "") {
+		if d.Component.Name == "ocm.software/leaf" {
+			leaf = d
+		}
+	}
+	require.NotNil(t, leaf)
+	require.NotContains(t, logs.String(), warning, "a tree with only default reference digests must not warn")
+
+	a1, err := algorithms.Digest(leaf, v4alpha1.Algorithm, crypto.SHA256.String())
+	require.NoError(t, err)
+	construct(t, `        digest:
+          hashAlgorithm: `+a1.HashAlgorithm+`
+          normalisationAlgorithm: `+a1.NormalisationAlgorithm+`
+          value: `+a1.Value+`
+`)
+	assert.Equal(t, 1, strings.Count(logs.String(), warning), "a pinned v4alpha1 reference must warn once")
+	assert.Contains(t, logs.String(), "normalisationAlgorithm="+v4alpha1.Algorithm)
 }

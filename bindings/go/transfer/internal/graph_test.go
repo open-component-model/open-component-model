@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"fmt"
@@ -1192,4 +1193,45 @@ func TestBuildGraphDefinition_DockerManifestLocalBlob_FallsBackToLocalBlobWithou
 
 	require.Len(t, tgd.Transformations, 2)
 	assert.Equal(t, ociv1alpha1.TransferOCILocalBlobToOCILocalBlobV1alpha1, tgd.Transformations[0].Type)
+}
+
+// A transferred tree whose reference digests are not all the default must warn
+// for each such reference, so users rebuild with a current CLI; a default-only
+// tree must not.
+func TestBuildGraphDefinition_WarnsAboutNonDefaultReferenceDigests(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	const warning = "component reference does not use the current normalisation algorithm"
+
+	child := testDescriptor("ocm.software/child", "1.0.0", nil, nil)
+	transfer := func(t *testing.T, normalisationAlgorithm string) {
+		t.Helper()
+		dig, err := signing.GenerateDigest(t.Context(), child, slog.New(slog.DiscardHandler), normalisationAlgorithm, crypto.SHA256.String())
+		require.NoError(t, err)
+		parent := testDescriptor("ocm.software/parent", "1.0.0", nil, []descriptor.Reference{{
+			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "child", Version: "1.0.0"}},
+			Component:   "ocm.software/child",
+			Digest:      *dig,
+		}})
+		source := testOCIRepo("ghcr.io/source")
+		resolver := testMultiResolver(map[string]struct {
+			spec runtime.Typed
+			desc *descriptor.Descriptor
+		}{
+			"ocm.software/parent:1.0.0": {spec: source, desc: parent},
+			"ocm.software/child:1.0.0":  {spec: source, desc: child},
+		})
+		roots := testTransferRoots("ocm.software/parent", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
+		_, err = BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{Recursive: transferv1alpha1.RecursiveInfinite}, nil)
+		require.NoError(t, err)
+	}
+
+	transfer(t, signing.DefaultNormalisationAlgorithm)
+	require.NotContains(t, logs.String(), warning, "a tree with only default reference digests must not warn")
+
+	transfer(t, v4alpha1.Algorithm)
+	assert.Equal(t, 1, strings.Count(logs.String(), warning), "a v4alpha1 reference digest must warn once")
+	assert.Contains(t, logs.String(), "normalisationAlgorithm="+v4alpha1.Algorithm)
 }

@@ -1,7 +1,9 @@
 package algorithms_test
 
 import (
+	"bytes"
 	"crypto"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -175,4 +177,25 @@ func TestVerify(t *testing.T) {
 		err := algorithms.Verify(desc, descruntime.Digest{HashAlgorithm: a1.HashAlgorithm, NormalisationAlgorithm: a1.NormalisationAlgorithm, Value: "not-hex"})
 		r.ErrorIs(err, algorithms.ErrDigestMismatch)
 	})
+}
+
+func TestWarnNonDefaultReferenceDigest(t *testing.T) {
+	warnFor := func(d descruntime.Digest) string {
+		var buf bytes.Buffer
+		logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+		algorithms.WarnNonDefaultReferenceDigest(t.Context(), logger, d, "reference", "child")
+		return buf.String()
+	}
+	r := require.New(t)
+
+	r.Empty(warnFor(descruntime.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: v4alpha3, Value: "aa"}), "the default must not warn")
+
+	out := warnFor(descruntime.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: v4alpha1, Value: "bb"})
+	r.Contains(out, "level=WARN")
+	r.Contains(out, "reference=child", "caller attributes identify the reference")
+	r.Contains(out, "normalisationAlgorithm="+v4alpha1)
+	r.Contains(out, "recommended="+v4alpha3)
+
+	r.Contains(warnFor(descruntime.Digest{}), "normalisationAlgorithm="+algorithms.NoReferenceDigest, "a missing digest warns too")
+	r.Contains(warnFor(descruntime.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: algorithms.LegacyV3, Value: "cc"}), "normalisationAlgorithm="+algorithms.LegacyV3, "the legacy alias is reported as written")
 }
