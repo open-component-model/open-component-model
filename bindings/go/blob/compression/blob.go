@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/internal/gzippool"
+	"ocm.software/open-component-model/bindings/go/blob/compression/gzippool"
 )
 
 const (

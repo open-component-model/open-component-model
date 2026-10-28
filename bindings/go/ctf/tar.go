@@ -15,9 +15,9 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/compression/gzippool"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/ctf/index/v1"
-	"ocm.software/open-component-model/bindings/go/internal/gzippool"
 )
 
 // ExtractTAR extracts a CTF from a file at the given path and writes it to the given base directory.
