@@ -2,6 +2,7 @@ package constructor
 
 import (
 	"bytes"
+	"crypto"
 	"io"
 	"slices"
 	"testing"
@@ -16,7 +17,9 @@ import (
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/algorithms"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha2"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha3"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -689,7 +692,7 @@ components:
 		t.Helper()
 		referenced := descMap[referencedComponentName]
 		require.NotNil(t, referenced)
-		digest, err := calculateDigest(referenced, v4alpha3.Algorithm)
+		digest, err := calculateDigest(referenced)
 		require.NoError(t, err)
 		return *digest
 	}
@@ -995,25 +998,36 @@ func TestProcessReference_DigestAlgorithmSelection(t *testing.T) {
 	r.NoError(err)
 	r.Equal(v4alpha3.Algorithm, got.Digest.NormalisationAlgorithm)
 
-	// A reference pinned with a valid v4alpha1 digest is verified under v4alpha1
-	// and kept as v4alpha1 (not rewritten to the default).
-	v1dig, err := calculateDigest(child, v4alpha1.Algorithm)
-	r.NoError(err)
-	r.NotEqual(got.Digest.Value, v1dig.Value, "v4alpha1 and v4alpha3 must differ for this child or the test proves nothing")
-	gotPinned, err := c.processReference(t.Context(), mkRef(&constructorruntime.Digest{
-		HashAlgorithm:          v1dig.HashAlgorithm,
-		NormalisationAlgorithm: v4alpha1.Algorithm,
-		Value:                  v1dig.Value,
-	}), child)
-	r.NoError(err)
-	r.Equal(v4alpha1.Algorithm, gotPinned.Digest.NormalisationAlgorithm, "pinned v4alpha1 reference must keep its algorithm")
-	r.Equal(v1dig.Value, gotPinned.Digest.Value)
+	// A pinned digest is verified under its own recorded algorithms and kept as
+	// is, never rewritten to the default.
+	mustDigest := func(norm, hash string) *constructorruntime.Digest {
+		d, err := algorithms.Digest(child, norm, hash)
+		r.NoError(err)
+		return &constructorruntime.Digest{HashAlgorithm: d.HashAlgorithm, NormalisationAlgorithm: d.NormalisationAlgorithm, Value: d.Value}
+	}
+	a1 := mustDigest(v4alpha1.Algorithm, crypto.SHA256.String())
+	r.NotEqual(got.Digest.Value, a1.Value, "v4alpha1 and v4alpha3 must differ for this child or the test proves nothing")
+	a2 := mustDigest(v4alpha2.Algorithm, crypto.SHA256.String())
+	legacyV3 := &constructorruntime.Digest{HashAlgorithm: a2.HashAlgorithm, NormalisationAlgorithm: algorithms.LegacyV3, Value: a2.Value}
+	legacyHashName := &constructorruntime.Digest{HashAlgorithm: "sha256", NormalisationAlgorithm: a1.NormalisationAlgorithm, Value: a1.Value}
+
+	for name, pinned := range map[string]*constructorruntime.Digest{
+		"v4alpha1":         a1,
+		"legacy v3 alias":  legacyV3,
+		"sha512":           mustDigest(v4alpha3.Algorithm, crypto.SHA512.String()),
+		"legacy hash name": legacyHashName,
+	} {
+		gotPinned, err := c.processReference(t.Context(), mkRef(pinned), child)
+		r.NoError(err, name)
+		r.Equal(descriptor.Digest{HashAlgorithm: pinned.HashAlgorithm, NormalisationAlgorithm: pinned.NormalisationAlgorithm, Value: pinned.Value}, gotPinned.Digest,
+			"%s: pinned digest must be kept as is", name)
+	}
 
 	// A pinned digest whose value does not match the referenced component fails.
 	_, err = c.processReference(t.Context(), mkRef(&constructorruntime.Digest{
-		HashAlgorithm:          v1dig.HashAlgorithm,
-		NormalisationAlgorithm: v4alpha1.Algorithm,
-		Value:                  "deadbeef",
+		HashAlgorithm:          a1.HashAlgorithm,
+		NormalisationAlgorithm: a1.NormalisationAlgorithm,
+		Value:                  a2.Value,
 	}), child)
 	r.ErrorIs(err, ErrDigestMismatch)
 }

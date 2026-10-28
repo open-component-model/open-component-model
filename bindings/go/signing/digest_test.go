@@ -21,6 +21,11 @@ func TestGetSupportedHash(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, crypto.SHA256, h)
 
+	// Older descriptors spell the hash "sha256"; it must resolve like "SHA-256".
+	h, err = GetSupportedHash("sha256")
+	require.NoError(t, err)
+	assert.Equal(t, crypto.SHA256, h)
+
 	_, err = GetSupportedHash("unknown-hash")
 	assert.Error(t, err)
 }
@@ -250,7 +255,7 @@ func TestVerifyDigestMatchesDescriptor_InvalidHex(t *testing.T) {
 
 	err := VerifyDigestMatchesDescriptor(ctx, d, sig, logger)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "decoding digest from signature failed")
+	assert.Contains(t, err.Error(), "digest mismatch")
 }
 
 func TestVerifyDigestMatchesDescriptor_UnsupportedHash(t *testing.T) {
@@ -285,4 +290,20 @@ func TestVerifyDigestMatchesDescriptor_LegacyNormalisation(t *testing.T) {
 	sig := descruntime.Signature{Name: "s4", Digest: *dg}
 
 	require.NoError(t, VerifyDigestMatchesDescriptor(ctx, d, sig, logger))
+}
+
+// A digest written with the legacy hash name "sha256" passes IsSafelyDigestible,
+// so verification (transfer, verify, controller) must accept it too.
+func TestVerifyDigestMatchesDescriptor_LegacyHashName(t *testing.T) {
+	logger := slog.New(slog.DiscardHandler)
+	ctx := context.Background()
+
+	d := &descruntime.Descriptor{Component: descruntime.Component{ComponentMeta: descruntime.ComponentMeta{ObjectMeta: descruntime.ObjectMeta{Name: "legacy-hash"}}, Provider: descruntime.Provider{Name: "p"}}}
+
+	dg, err := GenerateDigest(ctx, d, logger, v4alpha1.Algorithm, crypto.SHA256.String())
+	require.NoError(t, err)
+
+	dg.HashAlgorithm = "sha256"
+	require.NoError(t, IsSafelyDigestible(&descruntime.Component{References: []descruntime.Reference{{Digest: *dg}}}))
+	require.NoError(t, VerifyDigestMatchesDescriptor(ctx, d, descruntime.Signature{Name: "s5", Digest: *dg}, logger))
 }

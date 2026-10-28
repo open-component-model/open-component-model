@@ -9,7 +9,7 @@ import (
 
 // Algorithm is the registered name for this normalisation algorithm. It is the
 // faithful re-implementation of legacy jsonNormalisation/v3 and the target the
-// "jsonNormalisation/v3" alias resolves to (see signing.LegacyNormalisationAlgo).
+// "jsonNormalisation/v3" alias resolves to (see algorithms.LegacyV3).
 //
 // It is v4alpha1's JCS field selection with a single correction: label.version
 // is signed again (v4alpha1 dropped it). That makes v4alpha2 byte-identical to

@@ -1,42 +1,28 @@
 package signing
 
 import (
-	"bytes"
 	"context"
 	"crypto"
 	"crypto/fips140"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 
-	_ "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
-
-	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/algorithms"
 	jsonv1 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v1"
-	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha2"
-	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha3"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
 
 const (
 	// DefaultNormalisationAlgorithm is the normalisation used for new signatures
 	// when a caller does not specify one (e.g. the `ocm sign` --normalisation
-	// flag default). It is the single source of truth for that default.
-	DefaultNormalisationAlgorithm = v4alpha3.Algorithm
+	// flag default), see algorithms.Default.
+	DefaultNormalisationAlgorithm = algorithms.Default
 	// LegacyNormalisationAlgo identifies the deprecated v3 JSON normalisation
-	// algorithm. Calls using this value are transparently mapped to
-	// v4alpha2.Algorithm with a warning (see ensureNormalisationAlgo).
-	//
-	// It maps to v4alpha2 — NOT to DefaultNormalisationAlgorithm (v4alpha3).
-	// v4alpha2 is the faithful v3 re-implementation: it keeps label.version and
-	// emits reference labels unfiltered, so it reproduces legacy v3 bytes exactly.
-	// Mapping v3 to v4alpha1 (which drops label.version) breaks verification of v3
-	// signatures over versioned labels; mapping it to v4alpha3 (which filters
-	// reference labels signing-only) breaks verification of v3 signatures that
-	// carry reference labels. Only v4alpha2 is byte-compatible with v3.
-	LegacyNormalisationAlgo = "jsonNormalisation/v3"
+	// algorithm. Calls using this value are transparently mapped to v4alpha2
+	// with a warning (see ensureNormalisationAlgo and algorithms.LegacyV3).
+	LegacyNormalisationAlgo = algorithms.LegacyV3
 	// AccessTypeNone is the access type for resources without access.
 	// It is used to prevent meaningless digest claims.
 	AccessTypeNone = "None"
@@ -103,32 +89,7 @@ func VerifyDigestMatchesDescriptor(
 	logger *slog.Logger,
 ) error {
 	signature.Digest.NormalisationAlgorithm = ensureNormalisationAlgo(ctx, signature.Digest.NormalisationAlgorithm, logger)
-
-	normalised, err := normalisation.Normalise(desc, signature.Digest.NormalisationAlgorithm)
-	if err != nil {
-		return fmt.Errorf("normalising component version failed: %w", err)
-	}
-
-	hash, err := GetSupportedHash(signature.Digest.HashAlgorithm)
-	if err != nil {
-		return err
-	}
-
-	h := hash.New()
-	if _, err := h.Write(normalised); err != nil {
-		return fmt.Errorf("hashing component version failed: %w", err)
-	}
-	freshDigest := h.Sum(nil)
-
-	digestFromSignature, err := hex.DecodeString(signature.Digest.Value)
-	if err != nil {
-		return fmt.Errorf("decoding digest from signature failed: %w", err)
-	}
-
-	if !bytes.Equal(freshDigest, digestFromSignature) {
-		return fmt.Errorf("digest mismatch: descriptor %x vs signature %x", freshDigest, digestFromSignature)
-	}
-	return nil
+	return algorithms.Verify(desc, signature.Digest)
 }
 
 // EnsureSignable is the signing boundary for the verify-only policy: it reports
@@ -188,28 +149,7 @@ func GenerateDigest(
 	hashAlgorithm string,
 ) (*descruntime.Digest, error) {
 	normalisationAlgorithm = ensureNormalisationAlgo(ctx, normalisationAlgorithm, logger)
-
-	normalised, err := normalisation.Normalise(desc, normalisationAlgorithm)
-	if err != nil {
-		return nil, fmt.Errorf("normalising component version failed: %w", err)
-	}
-
-	hash, err := GetSupportedHash(hashAlgorithm)
-	if err != nil {
-		return nil, err
-	}
-
-	h := hash.New()
-	if _, err := h.Write(normalised); err != nil {
-		return nil, fmt.Errorf("hashing component version failed: %w", err)
-	}
-	freshDigest := h.Sum(nil)
-
-	return &descruntime.Digest{
-		HashAlgorithm:          hash.String(),
-		NormalisationAlgorithm: normalisationAlgorithm,
-		Value:                  hex.EncodeToString(freshDigest),
-	}, nil
+	return algorithms.Digest(desc, normalisationAlgorithm, hashAlgorithm)
 }
 
 // IsSafelyDigestible validates that a component’s references and resources
@@ -290,12 +230,8 @@ func ValidateDigestHashAlgorithms(cd *descruntime.Component) error {
 // reproduces when verifying them (LegacyHashAlgorithm). They must keep
 // verifying, so the comparison ignores case and dashes.
 func isApprovedDigestHash(name string) bool {
-	switch strings.ToUpper(strings.ReplaceAll(name, "-", "")) {
-	case "SHA256", "SHA512":
-		return true
-	default:
-		return false
-	}
+	_, err := algorithms.Hash(name)
+	return err == nil
 }
 
 // isExcludedFromSignature reports whether a resource digest is the explicit
@@ -317,31 +253,19 @@ func hasUsableAccess(res descruntime.Resource) bool {
 // v4alpha2 reproduces legacy jsonNormalisation/v3 byte-for-byte, so existing v3
 // (and old ocm v1 style) signatures keep verifying.
 func ensureNormalisationAlgo(ctx context.Context, algo string, logger *slog.Logger) string {
-	if algo == LegacyNormalisationAlgo {
+	resolved, aliased := algorithms.Resolve(algo)
+	if aliased {
 		logger.WarnContext(ctx,
 			"legacy normalisation algorithm detected, using v4alpha2",
-			"legacy", LegacyNormalisationAlgo,
-			"new", v4alpha2.Algorithm,
+			"legacy", algo,
+			"new", resolved,
 		)
-		return v4alpha2.Algorithm
 	}
-	return algo
+	return resolved
 }
 
-// supportedHashes lists supported hashing algorithms keyed by their identifier
-var supportedHashes = map[string]crypto.Hash{
-	crypto.SHA256.String(): crypto.SHA256,
-	crypto.SHA512.String(): crypto.SHA512,
-}
-
-// GetSupportedHash looks up a crypto.Hash from its string identifier.
-// Returns an error if the identifier is not in supportedHashes.
+// GetSupportedHash looks up a crypto.Hash from its string identifier,
+// see algorithms.Hash.
 func GetSupportedHash(name string) (crypto.Hash, error) {
-	n := strings.ToUpper(name)
-	h, ok := supportedHashes[n]
-	if !ok {
-		return 0, fmt.Errorf("unsupported hash algorithm %q (use: %q)", n, supportedHashes)
-	}
-
-	return h, nil
+	return algorithms.Hash(name)
 }
