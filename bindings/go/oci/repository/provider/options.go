@@ -45,6 +45,10 @@ type Options struct {
 	// sane defaults — only Dir is auto-derived from TempDir when left
 	// empty. Leave nil to disable reference caching entirely.
 	ReferenceCacheOptions *cache.Options
+
+	// BlobCache, when non-nil, is used instead of building a blob cache from
+	// BlobCacheOptions, so callers that create many providers can share one.
+	BlobCache *cache.BlobCache
 }
 
 type Option func(*Options)
@@ -92,6 +96,14 @@ func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 func WithBlobCacheOptions(opts *cache.Options) Option {
 	return func(o *Options) {
 		o.BlobCacheOptions = opts
+	}
+}
+
+// WithBlobCache makes the provider use bc instead of building its own blob cache.
+// It takes precedence over [WithBlobCacheOptions]. The caller owns bc.
+func WithBlobCache(bc *cache.BlobCache) Option {
+	return func(o *Options) {
+		o.BlobCache = bc
 	}
 }
 

@@ -141,6 +141,9 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 	// closure can read its final field values. sync.OnceValue guarantees
 	// the constructor runs at most once across all callers.
 	prov.sharedBlobCache = sync.OnceValue(prov.newSharedBlobCache)
+	if options.BlobCache != nil {
+		prov.sharedBlobCache = func() *cache.BlobCache { return options.BlobCache }
+	}
 	return prov
 }
 
@@ -211,10 +214,8 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 		}
 
 		var resolverOpts []urlresolver.Option
-		if b.blobCacheOpts != nil {
-			if bc := b.getOrCreateBlobCache(); bc != nil {
-				resolverOpts = append(resolverOpts, urlresolver.WithBlobCache(bc))
-			}
+		if bc := b.getOrCreateBlobCache(); bc != nil {
+			resolverOpts = append(resolverOpts, urlresolver.WithBlobCache(bc))
 		}
 		if b.referenceCacheOpts != nil {
 			if rc := b.getOrCreateReferenceCache(identity); rc != nil {
@@ -274,6 +275,9 @@ func (b *CachingComponentVersionRepositoryProvider) getOrCreateBlobCache() *cach
 // blob cache; wired through [sync.OnceValue] in
 // [NewComponentVersionRepositoryProvider].
 func (b *CachingComponentVersionRepositoryProvider) newSharedBlobCache() *cache.BlobCache {
+	if b.blobCacheOpts == nil {
+		return nil
+	}
 	opts := *b.blobCacheOpts
 	if opts.Dir == "" {
 		base := b.tempDir
