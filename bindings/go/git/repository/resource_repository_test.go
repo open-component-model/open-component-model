@@ -252,7 +252,7 @@ func newRepository(t *testing.T) repositoryFixture {
 	work := t.TempDir()
 	repo, err := git.PlainInit(work, false)
 	r.NoError(err)
-	// go-git reads the global Git config; a host commit.gpgSign must not sign fixtures.
+	// go-git reads the global Git config; a host commit.gpgSign or tag.gpgSign must not sign fixtures.
 	cfg, err := repo.Config()
 	r.NoError(err)
 	cfg.Commit.GpgSign = config.OptBoolFalse
@@ -280,6 +280,10 @@ func newRepository(t *testing.T) repositoryFixture {
 	path := filepath.Join(t.TempDir(), "fixture.git")
 	bare, err := git.PlainClone(path, &git.CloneOptions{URL: work, Bare: true})
 	r.NoError(err)
+	bareCfg, err := bare.Config()
+	r.NoError(err)
+	bareCfg.Tag.GpgSign = config.OptBoolFalse
+	r.NoError(bare.SetConfig(bareCfg))
 
 	_, err = bare.CreateTag("annotated", first, &git.CreateTagOptions{Tagger: signature, Message: "release\n"})
 	r.NoError(err)
