@@ -1315,6 +1315,64 @@ func TestRepository_DownloadResource_VerifiesOCIArtifactDigest(t *testing.T) {
 	r.ErrorContains(err, "OCI artifact digest mismatch")
 }
 
+func TestRepository_GetLocalResource_RelativeOCIReference_VerifiesResourceDigest(t *testing.T) {
+	const component, version = "acme.org/compo", "v1.0.0"
+
+	for name, tc := range map[string]struct {
+		value   func(root digest.Digest) string
+		wantErr string
+	}{
+		"matching root": {value: func(root digest.Digest) string { return root.Encoded() }},
+		"wrong root": {
+			value:   func(digest.Digest) string { return digest.FromString("other").Encoded() },
+			wantErr: "OCI artifact digest mismatch",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := require.New(t)
+			ctx := t.Context()
+			fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+			r.NoError(err)
+			store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+			repo := Repository(t, ocictf.WithCTF(store))
+
+			manifest := stageOCIImage(t, ctx, store, "ctf.ocm.software/ocm/value:v2.0", []byte("relative payload"))
+			desc := &descriptor.Descriptor{
+				Meta: descriptor.Meta{Version: "v2"},
+				Component: descriptor.Component{
+					Provider: descriptor.Provider{Name: "test-provider"},
+					ComponentMeta: descriptor.ComponentMeta{
+						ObjectMeta: descriptor.ObjectMeta{Name: component, Version: version},
+					},
+					Resources: []descriptor.Resource{{
+						Relation:    descriptor.LocalRelation,
+						ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "image", Version: version}},
+						Type:        "ociImage",
+						Access: &v1.RelativeOCIReference{
+							Type:      runtime.NewUnversionedType(v1.RelativeOCIReferenceType),
+							Reference: "ocm/value:v2.0",
+						},
+						Digest: &descriptor.Digest{
+							HashAlgorithm:          "SHA-256",
+							NormalisationAlgorithm: descriptor.OCIArtifactDigestV1,
+							Value:                  tc.value(manifest.Digest),
+						},
+					}},
+				},
+			}
+			r.NoError(repo.AddComponentVersion(ctx, desc))
+
+			blb, _, err := repo.GetLocalResource(ctx, component, version, runtime.Identity{"name": "image"})
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				return
+			}
+			r.NoError(err)
+			requireLayoutContainsManifest(t, ctx, blb, manifest)
+		})
+	}
+}
+
 func TestRepository_ListComponentVersions(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()
@@ -2241,6 +2299,47 @@ func TestRepository_DownloadResourceOCIImageLayer(t *testing.T) {
 		_, err = io.ReadAll(reader)
 		r.ErrorContains(err, "size mismatch")
 		r.Error(reader.Close())
+	})
+
+	t.Run("the resource digest binds the layer", func(t *testing.T) {
+		withDigest := func(value string) *descriptor.Resource {
+			bound := res.DeepCopy()
+			bound.Digest = &descriptor.Digest{
+				HashAlgorithm:          "SHA-256",
+				NormalisationAlgorithm: descriptor.GenericBlobDigestV1,
+				Value:                  value,
+			}
+			return bound
+		}
+
+		t.Run("a matching digest reads back", func(t *testing.T) {
+			r := require.New(t)
+			downloaded, err := repo.DownloadResource(t.Context(), withDigest(dig.Encoded()))
+			r.NoError(err)
+			rc, err := downloaded.ReadCloser()
+			r.NoError(err)
+			data, err := io.ReadAll(rc)
+			r.NoError(err)
+			r.NoError(rc.Close())
+			r.Equal(testdata, data)
+		})
+
+		t.Run("a wrong digest fails", func(t *testing.T) {
+			r := require.New(t)
+			_, err := repo.DownloadResource(t.Context(), withDigest(digest.FromString("other").Encoded()))
+			r.ErrorContains(err, "digest mismatch")
+		})
+
+		t.Run("a wrong digest fails before fetching", func(t *testing.T) {
+			r := require.New(t)
+			absent := withDigest(digest.FromString("other").Encoded())
+			absentDig := digest.FromString("absent")
+			layer := absent.Access.(*v1.OCIImageLayer)
+			layer.Reference = "test-registry/test-layer@" + absentDig.String()
+			layer.Digest = absentDig
+			_, err := repo.DownloadResource(t.Context(), absent)
+			r.ErrorContains(err, "digest mismatch")
+		})
 	})
 
 	t.Run("a layer cannot be streamed", func(t *testing.T) {

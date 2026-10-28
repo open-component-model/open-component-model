@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -114,7 +115,8 @@ func (c *componentVersionRepositoryWrapper) GetLocalResource(ctx context.Context
 
 	convert := descriptor.ConvertFromV2Resources([]descriptorv2.Resource{*response.Resource})
 
-	verified, err := integrity.Verify(ctx, convert[0].Digest, rBlob)
+	verified, err := integrity.Verify(ctx, convert[0].Digest, rBlob,
+		integrity.WithLogAttrs(slog.Any("resource", convert[0].ToIdentity())))
 	if err != nil {
 		return nil, nil, fmt.Errorf("local resource %q: %w", convert[0].Name, err)
 	}

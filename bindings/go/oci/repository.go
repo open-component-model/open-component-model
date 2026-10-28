@@ -684,7 +684,7 @@ func (repo *Repository) getRelativeOCIReference(ctx context.Context, reference s
 		return nil, err
 	}
 	if res != nil {
-		if err := integrity.VerifyOCIArtifact(ctx, res.Digest, stream.Root().Digest); err != nil {
+		if err := integrity.VerifyOCIArtifact(ctx, res.Digest, stream.Root().Digest, resourceLogAttrs(res)); err != nil {
 			return nil, fmt.Errorf("local resource %q: %w", res.Name, err)
 		}
 	}
@@ -712,7 +712,7 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 	// graphs read the store directly; the layout tar is only built when read.
 	if index != nil && introspection.IsOCICompliantManifest(artifact) {
 		if res != nil {
-			if err := integrity.VerifyOCIArtifact(ctx, res.Digest, artifact.Digest); err != nil {
+			if err := integrity.VerifyOCIArtifact(ctx, res.Digest, artifact.Digest, resourceLogAttrs(res)); err != nil {
 				return nil, fmt.Errorf("local resource %q: %w", res.Name, err)
 			}
 		}
@@ -743,7 +743,7 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 	if res == nil {
 		return layer, nil
 	}
-	verified, err := integrity.Verify(ctx, res.Digest, layer, integrity.WithArtifactVerifier(tar.LayoutVerifier{}))
+	verified, err := integrity.Verify(ctx, res.Digest, layer, integrity.WithArtifactVerifier(tar.LayoutVerifier{}), resourceLogAttrs(res))
 	if err != nil {
 		return nil, fmt.Errorf("local resource %q: %w", res.Name, err)
 	}
@@ -1044,12 +1044,24 @@ func (repo *Repository) download(ctx context.Context, access runtime.Typed, res 
 		return nil, fmt.Errorf("error converting resource access: %w", err)
 	}
 	if layer, ok := typed.(*accessv1.OCIImageLayer); ok {
+		if res != nil {
+			// A generic digest of the layer's algorithm must equal the layer digest; fail before fetching.
+			if alg, ok := integrity.PrecomputeAlgorithm(res.Digest); ok && alg == layer.Digest.Algorithm() {
+				want, err := integrity.ParseDigest(res.Digest)
+				if err != nil {
+					return nil, fmt.Errorf("resource %q: %w", res.Name, err)
+				}
+				if want != layer.Digest {
+					return nil, fmt.Errorf("resource %q: digest mismatch: expected %s, got %s", res.Name, want, layer.Digest)
+				}
+			}
+		}
 		b, err := repo.downloadLayer(ctx, layer)
 		if err != nil || res == nil {
 			return b, err
 		}
 		// fetchLayer verified the content against the layer digest while loading it.
-		verified, err := integrity.VerifyPrecomputed(ctx, res.Digest, layer.Digest, b, integrity.WithArtifactVerifier(tar.LayoutVerifier{}))
+		verified, err := integrity.VerifyPrecomputed(ctx, res.Digest, layer.Digest, b, integrity.WithArtifactVerifier(tar.LayoutVerifier{}), resourceLogAttrs(res))
 		if err != nil {
 			return nil, fmt.Errorf("resource %q: %w", res.Name, err)
 		}
@@ -1060,11 +1072,15 @@ func (repo *Repository) download(ctx context.Context, access runtime.Typed, res 
 		return nil, err
 	}
 	if res != nil {
-		if err := integrity.VerifyOCIArtifact(ctx, res.Digest, stream.Root().Digest); err != nil {
+		if err := integrity.VerifyOCIArtifact(ctx, res.Digest, stream.Root().Digest, resourceLogAttrs(res)); err != nil {
 			return nil, fmt.Errorf("resource %q: %w", res.Name, err)
 		}
 	}
 	return stream.Materialize(ctx)
+}
+
+func resourceLogAttrs(res *descriptor.Resource) integrity.Option {
+	return integrity.WithLogAttrs(slog.Any("resource", res.ToIdentity()))
 }
 
 func (repo *Repository) downloadLayer(ctx context.Context, layer *accessv1.OCIImageLayer) (blob.ReadOnlyBlob, error) {

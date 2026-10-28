@@ -37,6 +37,8 @@ type Result struct {
 	Ref string
 	// Digest covers the final compressed archive bytes.
 	Digest digest.Digest
+	// Path is the file backing Blob; owned by the caller.
+	Path string
 }
 
 // Download resolves one snapshot of the repository and archives it with its history.
@@ -55,7 +57,7 @@ func Download(ctx context.Context, access *accessv1.Git, creds runtime.Typed, op
 		if err != nil {
 			return err
 		}
-		result = &Result{Blob: b, Commit: selected.Hash.String(), Ref: ref.String(), Digest: archiveDigest}
+		result = &Result{Blob: b, Commit: selected.Hash.String(), Ref: ref.String(), Digest: archiveDigest, Path: archivePath}
 		return nil
 	})
 	if err != nil && archivePath != "" {

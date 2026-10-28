@@ -44,7 +44,7 @@ func gzippedTar(t *testing.T, entries ...tarEntry) []byte {
 
 // verifyLayout reads archive through a LayoutVerifier like a consumer copying it would.
 func verifyLayout(archive []byte, root digest.Digest) error {
-	rc := LayoutVerifier{}.Verify(io.NopCloser(bytes.NewReader(archive)), root)
+	rc := LayoutVerifier{}.Verify(io.NopCloser(bytes.NewReader(archive)), root, -1)
 	_, err := io.ReadAll(rc)
 	return errors.Join(err, rc.Close())
 }
@@ -169,7 +169,7 @@ func TestLayoutVerifier_RefusesTamperedLayouts(t *testing.T) {
 		{
 			name:    "missing manifest",
 			entries: []tarEntry{layoutFile, blobEntry(config, configData), blobEntry(layer, layerData), index(nil)},
-			wantErr: "referenced by the artifact graph is missing",
+			wantErr: "listed in the index cannot be inspected",
 		},
 		{
 			name:    "duplicate entry",
@@ -223,7 +223,7 @@ func TestLayoutVerifier_CloseCompletesVerification(t *testing.T) {
 	archive := readAllBlob(t, b)
 
 	readPartially := func(root digest.Digest) error {
-		rc := LayoutVerifier{}.Verify(io.NopCloser(bytes.NewReader(archive)), root)
+		rc := LayoutVerifier{}.Verify(io.NopCloser(bytes.NewReader(archive)), root, int64(len(archive)))
 		_, err := io.ReadFull(rc, make([]byte, 10))
 		require.NoError(t, err)
 		return rc.Close()
@@ -233,4 +233,97 @@ func TestLayoutVerifier_CloseCompletesVerification(t *testing.T) {
 	r.NoError(readPartially(manifest.Digest))
 	r.ErrorContains(readPartially(digest.FromString("other")), "layout main artifact is",
 		"closing a partially read layout must still verify it")
+}
+
+func TestLayoutVerifier_RefusesRootsConsumersWouldNotPick(t *testing.T) {
+	configData := []byte(`{}`)
+	config := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageConfig, configData)
+	layerData := []byte("layer")
+	layer := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, layerData)
+	manifestWith := func(layers ...ociImageSpecV1.Descriptor) (ociImageSpecV1.Descriptor, []byte) {
+		data, err := json.Marshal(ociImageSpecV1.Manifest{
+			Versioned: specs.Versioned{SchemaVersion: 2},
+			MediaType: ociImageSpecV1.MediaTypeImageManifest,
+			Config:    config,
+			Layers:    layers,
+		})
+		require.NoError(t, err)
+		return content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, data), data
+	}
+	blobEntry := func(desc ociImageSpecV1.Descriptor, data []byte) tarEntry {
+		return tarEntry{name: "blobs/" + desc.Digest.Algorithm().String() + "/" + desc.Digest.Encoded(), data: data}
+	}
+	indexOf := func(manifests ...ociImageSpecV1.Descriptor) tarEntry {
+		data, err := json.Marshal(ociImageSpecV1.Index{Versioned: specs.Versioned{SchemaVersion: 2}, Manifests: manifests})
+		require.NoError(t, err)
+		return tarEntry{name: ociImageSpecV1.ImageIndexFile, data: data}
+	}
+
+	root, rootData := manifestWith(layer)
+	named := root
+	named.Annotations = map[string]string{ociImageSpecV1.AnnotationRefName: "v1"}
+
+	t.Run("an artifact holding the root as a layer", func(t *testing.T) {
+		r := require.New(t)
+		wrapper, wrapperData := manifestWith(root)
+		archive := gzippedTar(t,
+			blobEntry(config, configData), blobEntry(layer, layerData),
+			blobEntry(root, rootData), blobEntry(wrapper, wrapperData),
+			indexOf(named, wrapper),
+		)
+		r.ErrorContains(verifyLayout(archive, root.Digest), "layout main artifact is "+wrapper.Digest.String())
+	})
+
+	t.Run("a listed manifest too large to inspect", func(t *testing.T) {
+		r := require.New(t)
+		oversizedData := bytes.Repeat([]byte{'x'}, int(maxLayoutManifestSize)+1)
+		oversized := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, oversizedData)
+		archive := gzippedTar(t,
+			blobEntry(config, configData), blobEntry(layer, layerData),
+			blobEntry(root, rootData), blobEntry(oversized, oversizedData),
+			indexOf(named, oversized),
+		)
+		r.ErrorContains(verifyLayout(archive, root.Digest),
+			"layout manifest "+oversized.Digest.String()+" listed in the index cannot be inspected")
+	})
+}
+
+func TestLayoutVerifier_VerifiesAtSize(t *testing.T) {
+	src := memory.New()
+	layer := pushBytes(t, src, "application/octet-stream", []byte("layer"))
+	manifest, err := oras.PackManifest(t.Context(), src, oras.PackManifestVersion1_1, "application/artifact",
+		oras.PackManifestOptions{Layers: []ociImageSpecV1.Descriptor{layer}})
+	require.NoError(t, err)
+	b, err := CopyToOCILayoutInMemory(t.Context(), src, manifest, CopyToOCILayoutOptions{TempDir: t.TempDir()})
+	require.NoError(t, err)
+	archive := readAllBlob(t, b)
+	size := int64(len(archive))
+
+	t.Run("a valid layout read to its size", func(t *testing.T) {
+		r := require.New(t)
+		rc := LayoutVerifier{}.Verify(io.NopCloser(bytes.NewReader(archive)), manifest.Digest, size)
+		data, err := io.ReadAll(io.LimitReader(rc, size))
+		r.NoError(err)
+		r.Equal(archive, data)
+		n, err := rc.Read(make([]byte, 1))
+		r.Zero(n)
+		r.ErrorIs(err, io.EOF)
+		r.NoError(rc.Close())
+	})
+
+	t.Run("a wrong root fails the read reaching the size", func(t *testing.T) {
+		r := require.New(t)
+		rc := LayoutVerifier{}.Verify(io.NopCloser(bytes.NewReader(archive)), digest.FromString("other"), size)
+		_, err := io.ReadAll(io.LimitReader(rc, size))
+		r.ErrorContains(err, "layout main artifact is")
+		r.Error(rc.Close())
+	})
+
+	t.Run("more bytes than the size", func(t *testing.T) {
+		r := require.New(t)
+		rc := LayoutVerifier{}.Verify(io.NopCloser(bytes.NewReader(archive)), manifest.Digest, size-1)
+		_, err := io.ReadAll(rc)
+		r.ErrorContains(err, "exceeds its size")
+		r.Error(rc.Close())
+	})
 }

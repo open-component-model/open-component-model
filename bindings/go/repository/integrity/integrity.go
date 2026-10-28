@@ -40,12 +40,22 @@ type ArtifactVerifier interface {
 	// Accepts reports whether content of mediaType is an archive this verifier can introspect.
 	Accepts(mediaType string) bool
 	// Verify returns rc wrapped so that reading it to its end (or closing it) verifies that the
-	// archive's main artifact has digest root and is complete.
-	Verify(rc io.ReadCloser, root digest.Digest) io.ReadCloser
+	// archive's main artifact has digest root and is complete. size is the byte size of the
+	// archive, or [blob.SizeUnknown]; when known, the read reaching it reports the result.
+	Verify(rc io.ReadCloser, root digest.Digest, size int64) io.ReadCloser
 }
 
 type options struct {
 	artifacts ArtifactVerifier
+	logAttrs  []slog.Attr
+}
+
+func newOptions(opts []Option) options {
+	var o options
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return o
 }
 
 // Option configures verification.
@@ -56,6 +66,14 @@ type Option func(*options)
 func WithArtifactVerifier(v ArtifactVerifier) Option {
 	return func(o *options) {
 		o.artifacts = v
+	}
+}
+
+// WithLogAttrs adds attrs (such as the identity of the resource) to what is logged
+// when content is used without verification.
+func WithLogAttrs(attrs ...slog.Attr) Option {
+	return func(o *options) {
+		o.logAttrs = append(o.logAttrs, attrs...)
 	}
 }
 
@@ -83,7 +101,7 @@ func Verify(ctx context.Context, expected *descriptor.Digest, content blob.ReadO
 
 	switch k {
 	case kindNone:
-		logUnverified(ctx, expected)
+		logUnverified(ctx, expected, newOptions(opts).logAttrs)
 		return content, nil
 	case kindArtifact:
 		verifying, err := newArtifactBlob(content, want, opts)
@@ -132,7 +150,7 @@ func VerifyContent(ctx context.Context, expected *descriptor.Digest, content blo
 	var verifying blob.ReadOnlyBlob
 	switch k {
 	case kindNone:
-		logUnverified(ctx, expected)
+		logUnverified(ctx, expected, newOptions(opts).logAttrs)
 		return nil
 	case kindArtifact:
 		if verifying, err = newArtifactBlob(content, want, opts); err != nil {
@@ -156,13 +174,13 @@ func VerifyContent(ctx context.Context, expected *descriptor.Digest, content blo
 //
 // genericBlobDigest/v1 is accepted as well, because it historically labelled the root
 // digests of OCI artifacts.
-func VerifyOCIArtifact(ctx context.Context, expected *descriptor.Digest, root digest.Digest) error {
+func VerifyOCIArtifact(ctx context.Context, expected *descriptor.Digest, root digest.Digest, opts ...Option) error {
 	want, err := ParseDigest(expected)
 	if err != nil {
 		return err
 	}
 	if want == "" {
-		logUnverified(ctx, expected)
+		logUnverified(ctx, expected, newOptions(opts).logAttrs)
 		return nil
 	}
 
@@ -208,10 +226,7 @@ func classify(expected *descriptor.Digest) (kind, digest.Digest, error) {
 }
 
 func newArtifactBlob(content blob.ReadOnlyBlob, root digest.Digest, opts []Option) (*artifactBlob, error) {
-	var o options
-	for _, opt := range opts {
-		opt(&o)
-	}
+	o := newOptions(opts)
 
 	var mediaType string
 	if aware, ok := content.(blob.MediaTypeAware); ok {
@@ -225,13 +240,13 @@ func newArtifactBlob(content blob.ReadOnlyBlob, root digest.Digest, opts []Optio
 	return &artifactBlob{base: content, root: root, verifier: o.artifacts}, nil
 }
 
-func logUnverified(ctx context.Context, expected *descriptor.Digest) {
+func logUnverified(ctx context.Context, expected *descriptor.Digest, attrs []slog.Attr) {
 	if expected != nil && (strings.EqualFold(expected.HashAlgorithm, descriptor.NoDigest) ||
 		strings.EqualFold(expected.NormalisationAlgorithm, descriptor.ExcludeFromSignature)) {
-		slog.DebugContext(ctx, "content is excluded from signature, it is used without verification")
+		slog.LogAttrs(ctx, slog.LevelDebug, "content is excluded from signature, it is used without verification", attrs...)
 		return
 	}
-	slog.WarnContext(ctx, "no digest recorded for the content, it is used without verification")
+	slog.LogAttrs(ctx, slog.LevelWarn, "no digest recorded for the content, it is used without verification", attrs...)
 }
 
 func unsupportedNormalisation(normalisation string) error {

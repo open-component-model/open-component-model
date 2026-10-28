@@ -74,7 +74,7 @@ func (b *artifactBlob) ReadCloser() (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	return b.verifier.Verify(rc, b.root), nil
+	return b.verifier.Verify(rc, b.root, sizeOf(b.base)), nil
 }
 
 func (b *artifactBlob) Digest() (string, bool) {

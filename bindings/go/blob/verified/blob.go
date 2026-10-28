@@ -152,6 +152,13 @@ func (r *reader) Read(p []byte) (int, error) {
 	if r.size != blob.SizeUnknown && r.read > r.size {
 		return n, r.verify()
 	}
+	// Readers handed the exact size (io.CopyN) never see EOF, so report a mismatch
+	// as soon as the expected size is complete.
+	if r.size != blob.SizeUnknown && r.read == r.size && n > 0 {
+		if mismatch := r.verify(); mismatch != nil {
+			return n, mismatch
+		}
+	}
 	if errors.Is(err, io.EOF) {
 		r.eof = true
 		if mismatch := r.verify(); mismatch != nil {

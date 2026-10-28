@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -53,7 +54,8 @@ func (r *resourcePluginConverter) DownloadResource(ctx context.Context, resource
 		return nil, fmt.Errorf("failed to create blob data: %w", err)
 	}
 
-	verified, err := integrity.Verify(ctx, resource.Digest, rBlob)
+	verified, err := integrity.Verify(ctx, resource.Digest, rBlob,
+		integrity.WithLogAttrs(slog.Any("resource", resource.ToIdentity())))
 	if err != nil {
 		return nil, fmt.Errorf("resource %q: %w", resource.Name, err)
 	}

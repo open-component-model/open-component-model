@@ -109,12 +109,13 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return nil, err
 	}
 
-	b, err := integrity.VerifyPrecomputed(ctx, resource.Digest, result.Digest, result.Blob)
+	b, err := integrity.VerifyPrecomputed(ctx, resource.Digest, result.Digest, result.Blob,
+		integrity.WithLogAttrs(slog.Any("resource", resource.ToIdentity())))
 	if err != nil {
 		if rmErr := os.Remove(result.Path); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
 			slog.WarnContext(ctx, "error removing downloaded s3 object that failed verification", "file", result.Path, "err", rmErr)
 		}
-		return nil, err
+		return nil, fmt.Errorf("resource %q: %w", resource.Name, err)
 	}
 	return b, nil
 }

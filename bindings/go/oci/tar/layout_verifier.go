@@ -49,9 +49,16 @@ func (LayoutVerifier) Accepts(mediaType string) bool {
 // Verify returns rc wrapped so that it serves the archive unchanged and fails, once
 // the archive is read to its end, if it does not hold the artifact root. Closing the
 // reader before its end reads the rest of the archive to complete the verification.
-func (LayoutVerifier) Verify(rc io.ReadCloser, root digest.Digest) io.ReadCloser {
+// size is the byte size of the archive or [blob.SizeUnknown]; when known, the read
+// that reaches it already reports the verification result, so consumers reading
+// exactly size bytes see a failure before they close.
+func (LayoutVerifier) Verify(rc io.ReadCloser, root digest.Digest, size int64) io.ReadCloser {
+	return newLayoutVerifier(rc, root, size)
+}
+
+func newLayoutVerifier(rc io.ReadCloser, root digest.Digest, size int64) *layoutVerifier {
 	pr, pw := io.Pipe()
-	v := &layoutVerifier{base: rc, pw: pw, result: make(chan error, 1)}
+	v := &layoutVerifier{base: rc, pw: pw, size: size, result: make(chan error, 1)}
 	go func() {
 		err := inspectLayout(pr, root)
 		_ = pr.CloseWithError(err)
@@ -66,6 +73,10 @@ type layoutVerifier struct {
 	base   io.ReadCloser
 	pw     *io.PipeWriter
 	result chan error
+	// size is the expected archive size, or negative if unknown.
+	size int64
+	// read counts the bytes read from base.
+	read int64
 
 	// err is sticky: the first failure of reading or verifying.
 	err error
@@ -86,6 +97,13 @@ func (v *layoutVerifier) Read(p []byte) (int, error) {
 	}
 
 	n, err := v.base.Read(p)
+	v.read += int64(n)
+	if v.size >= 0 && v.read > v.size {
+		v.err = fmt.Errorf("layout exceeds its size of %d bytes", v.size)
+		_ = v.pw.CloseWithError(v.err)
+		_ = v.collect()
+		return n, v.err
+	}
 	if n > 0 {
 		if _, writeErr := v.pw.Write(p[:n]); writeErr != nil {
 			// the inspector gave up on the archive, it reports why.
@@ -95,6 +113,15 @@ func (v *layoutVerifier) Read(p []byte) (int, error) {
 			}
 			return n, v.err
 		}
+	}
+	if err == nil && v.size >= 0 && v.read == v.size {
+		// The archive is complete at size; base is not read further but closed in Close.
+		_ = v.pw.Close()
+		if v.err = v.collect(); v.err != nil {
+			return n, v.err
+		}
+		v.eof = true
+		return n, nil
 	}
 
 	switch {
@@ -289,6 +316,18 @@ func (ins *layoutInspection) verify(ctx context.Context, root digest.Digest) err
 	if top.Digest != root {
 		return fmt.Errorf("layout main artifact is %s, expected %s", top.Digest, root)
 	}
+	// Consumers may pick the main artifact through TopLevelArtifacts rather than
+	// selectRoot; both must agree, or a consumer could unpack an unverified artifact.
+	for _, manifest := range idx.Manifests {
+		if isManifestMediaType(manifest.MediaType) {
+			if _, ok := ins.retained[manifest.Digest]; !ok {
+				return fmt.Errorf("layout manifest %s listed in the index cannot be inspected", manifest.Digest)
+			}
+		}
+	}
+	if top := TopLevelArtifacts(ctx, ins.retained, idx.Manifests); len(top) == 1 && top[0].Digest != root {
+		return fmt.Errorf("layout main artifact is %s, expected %s", top[0].Digest, root)
+	}
 	if main := idx.Annotations[annotationMainArtifact]; main != "" && main != root.String() {
 		return fmt.Errorf("layout annotation %s names %s, expected %s", annotationMainArtifact, main, root)
 	}
@@ -324,6 +363,15 @@ func (ins *layoutInspection) verify(ctx context.Context, root digest.Digest) err
 func isManifest(data []byte) bool {
 	var versioned specs.Versioned
 	return json.Unmarshal(data, &versioned) == nil && versioned.SchemaVersion == 2
+}
+
+func isManifestMediaType(mediaType string) bool {
+	switch mediaType {
+	case ociImageSpecV1.MediaTypeImageManifest, ociImageSpecV1.MediaTypeImageIndex,
+		mediaTypeDockerManifest, mediaTypeDockerManifestList:
+		return true
+	}
+	return false
 }
 
 // retainedFetcher serves the manifests and indexes retained from a layout.

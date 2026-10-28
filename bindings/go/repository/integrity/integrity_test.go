@@ -1,8 +1,10 @@
 package integrity
 
 import (
+	"bytes"
 	"errors"
 	"io"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -40,12 +42,13 @@ func (s *sourceBlob) Close() error {
 type fakeArtifactVerifier struct {
 	accepts bool
 	root    digest.Digest
+	size    int64
 }
 
 func (f *fakeArtifactVerifier) Accepts(string) bool { return f.accepts }
 
-func (f *fakeArtifactVerifier) Verify(rc io.ReadCloser, root digest.Digest) io.ReadCloser {
-	f.root = root
+func (f *fakeArtifactVerifier) Verify(rc io.ReadCloser, root digest.Digest, size int64) io.ReadCloser {
+	f.root, f.size = root, size
 	return rc
 }
 
@@ -112,6 +115,44 @@ func TestVerify_WithoutDigest(t *testing.T) {
 			r.NoError(VerifyContent(t.Context(), expected, src))
 			r.NoError(VerifyOCIArtifact(t.Context(), expected, digest.FromString("any")))
 			r.Zero(src.opened)
+		})
+	}
+}
+
+func TestVerify_LogsAttrsOfUnverifiedContent(t *testing.T) {
+	var logged bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	for name, call := range map[string]func(*descriptor.Digest, Option) error{
+		"Verify": func(d *descriptor.Digest, opt Option) error {
+			_, err := Verify(t.Context(), d, &sourceBlob{content: content}, opt)
+			return err
+		},
+		"VerifyPrecomputed": func(d *descriptor.Digest, opt Option) error {
+			_, err := VerifyPrecomputed(t.Context(), d, "", &sourceBlob{content: content}, opt)
+			return err
+		},
+		"VerifyContent": func(d *descriptor.Digest, opt Option) error {
+			return VerifyContent(t.Context(), d, &sourceBlob{content: content}, opt)
+		},
+		"VerifyOCIArtifact": func(d *descriptor.Digest, opt Option) error {
+			return VerifyOCIArtifact(t.Context(), d, digest.FromString("any"), opt)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := require.New(t)
+
+			logged.Reset()
+			r.NoError(call(nil, WithLogAttrs(slog.String("resource", "missing"))))
+			r.Contains(logged.String(), "no digest recorded")
+			r.Contains(logged.String(), "resource=missing")
+
+			logged.Reset()
+			r.NoError(call(descriptor.NewExcludeFromSignatureDigest(), WithLogAttrs(slog.String("resource", "excluded"))))
+			r.Contains(logged.String(), "excluded from signature")
+			r.Contains(logged.String(), "resource=excluded")
 		})
 	}
 }
@@ -302,6 +343,7 @@ func TestVerify_OCIArtifactDigest(t *testing.T) {
 		r.NoError(err)
 		r.Equal(content, data)
 		r.Equal(root, verifier.root)
+		r.Equal(blob.SizeUnknown, verifier.size, "a base that does not know its size passes SizeUnknown")
 	})
 }
 

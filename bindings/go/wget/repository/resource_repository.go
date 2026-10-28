@@ -135,7 +135,12 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return nil, err
 	}
 	// The body streams, so the content is bound to the resource digest when it is read.
-	return integrity.Verify(ctx, resource.Digest, b)
+	verified, err := integrity.Verify(ctx, resource.Digest, b,
+		integrity.WithLogAttrs(slog.Any("resource", resource.ToIdentity())))
+	if err != nil {
+		return nil, fmt.Errorf("resource %q from %q: %w", resource.Name, url, err)
+	}
+	return verified, nil
 }
 
 // download prepares the resource download and returns the streaming blob plus

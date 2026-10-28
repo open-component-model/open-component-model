@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -121,7 +122,15 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, res *descript
 		return nil, err
 	}
 
-	return integrity.VerifyPrecomputed(ctx, res.Digest, result.Digest, result.Blob)
+	b, err := integrity.VerifyPrecomputed(ctx, res.Digest, result.Digest, result.Blob,
+		integrity.WithLogAttrs(slog.Any("resource", res.ToIdentity())))
+	if err != nil {
+		if rmErr := os.Remove(result.Path); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
+			slog.WarnContext(ctx, "error removing downloaded git archive that failed verification", "file", result.Path, "err", rmErr)
+		}
+		return nil, fmt.Errorf("resource %q: %w", res.Name, err)
+	}
+	return b, nil
 }
 
 func (r *ResourceRepository) download(ctx context.Context, spec *accessv1.Git, creds runtime.Typed, tempDir string) (*download.Result, error) {

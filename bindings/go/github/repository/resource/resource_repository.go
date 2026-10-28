@@ -151,7 +151,12 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 			}
 		}
 	}
-	return integrity.VerifyPrecomputed(ctx, resource.Digest, computed, archive)
+	verified, err := integrity.VerifyPrecomputed(ctx, resource.Digest, computed, archive,
+		integrity.WithLogAttrs(slog.Any("resource", resource.ToIdentity())))
+	if err != nil {
+		return nil, fmt.Errorf("resource %q: %w", resource.Name, err)
+	}
+	return verified, nil
 }
 
 // DownloadArchive downloads the archive of the commit pinned in gitHub without verifying it

@@ -162,7 +162,8 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 
 	// A pinned chart is bound through its manifest; otherwise the digest must describe the .tgz.
 	if pin == "" {
-		if err := integrity.VerifyContent(ctx, resource.Digest, result.ChartBlob); err != nil {
+		if err := integrity.VerifyContent(ctx, resource.Digest, result.ChartBlob,
+			integrity.WithLogAttrs(slog.Any("resource", resource.ToIdentity()))); err != nil {
 			return nil, fmt.Errorf("helm chart %q does not match the digest of resource %q: %w", helmURL, resource.Name, err)
 		}
 	}
