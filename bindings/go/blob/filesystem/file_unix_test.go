@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 )
 
@@ -177,4 +178,81 @@ func Test_GetBlobInWorkingDirectory(t *testing.T) {
 			r.Equal("test data", string(data))
 		})
 	}
+}
+
+// A symlink to a file in another directory is followed, like os.Open.
+func TestGetBlobFromOSPathFollowsSymlinkOutOfParent(t *testing.T) {
+	r := require.New(t)
+	tempDir := t.TempDir()
+	r.NoError(os.Mkdir(filepath.Join(tempDir, "a"), 0o700))
+	r.NoError(os.Mkdir(filepath.Join(tempDir, "b"), 0o700))
+	r.NoError(os.WriteFile(filepath.Join(tempDir, "b", "f"), []byte("data"), 0o600))
+	link := filepath.Join(tempDir, "a", "link")
+	r.NoError(os.Symlink(filepath.Join("..", "b", "f"), link))
+
+	b, err := filesystem.GetBlobFromOSPath(link)
+	r.NoError(err)
+	r.Equal(int64(len("data")), b.Size())
+	reader, err := b.ReadCloser()
+	r.NoError(err)
+	t.Cleanup(func() { _ = reader.Close() })
+	data, err := io.ReadAll(reader)
+	r.NoError(err)
+	r.Equal("data", string(data))
+}
+
+// Symlinks are confined to the working directory, not to the file's parent directory,
+// and confinement holds on every read, not only when the blob is created.
+func TestGetBlobInWorkingDirectorySymlinks(t *testing.T) {
+	setup := func(t *testing.T) (workDir, outside string) {
+		t.Helper()
+		r := require.New(t)
+		workDir = t.TempDir()
+		r.NoError(os.Mkdir(filepath.Join(workDir, "a"), 0o700))
+		r.NoError(os.Mkdir(filepath.Join(workDir, "b"), 0o700))
+		r.NoError(os.WriteFile(filepath.Join(workDir, "b", "f"), []byte("inside"), 0o600))
+		outside = filepath.Join(t.TempDir(), "secret")
+		r.NoError(os.WriteFile(outside, []byte("outside"), 0o600))
+		return workDir, outside
+	}
+
+	t.Run("link leaving parent but staying in working directory is read", func(t *testing.T) {
+		r := require.New(t)
+		workDir, _ := setup(t)
+		r.NoError(os.Symlink(filepath.Join("..", "b", "f"), filepath.Join(workDir, "a", "link")))
+
+		b, err := filesystem.GetBlobInWorkingDirectory(filepath.Join("a", "link"), workDir)
+		r.NoError(err)
+		r.Equal(int64(len("inside")), b.Size())
+		reader, err := b.ReadCloser()
+		r.NoError(err)
+		t.Cleanup(func() { _ = reader.Close() })
+		data, err := io.ReadAll(reader)
+		r.NoError(err)
+		r.Equal("inside", string(data))
+	})
+
+	t.Run("link escaping working directory is rejected on creation", func(t *testing.T) {
+		r := require.New(t)
+		workDir, outside := setup(t)
+		r.NoError(os.Symlink(outside, filepath.Join(workDir, "a", "link")))
+
+		_, err := filesystem.GetBlobInWorkingDirectory(filepath.Join("a", "link"), workDir)
+		r.Error(err)
+	})
+
+	t.Run("file swapped for escaping link after creation is rejected on read", func(t *testing.T) {
+		r := require.New(t)
+		workDir, outside := setup(t)
+		file := filepath.Join(workDir, "b", "f")
+
+		b, err := filesystem.GetBlobInWorkingDirectory(file, workDir)
+		r.NoError(err)
+		r.NoError(os.Remove(file))
+		r.NoError(os.Symlink(outside, file))
+
+		_, err = b.ReadCloser()
+		r.Error(err)
+		r.Equal(blob.SizeUnknown, b.Size())
+	})
 }
