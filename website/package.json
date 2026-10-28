@@ -39,7 +39,7 @@
     "@thulite/inline-svg": "^1.2.2",
     "@thulite/seo": "^2.4.3",
     "mermaid": "^12.0.0",
-    "preact": "^10.29.0",
+    "preact": "^11.0.0",
     "thulite": "^3.0.0"
   },
   "devDependencies": {
