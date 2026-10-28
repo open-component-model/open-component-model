@@ -115,7 +115,6 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Trademark owner:** BWI GmbH
 - **Permission:** requested (pending)
 
-
 ### EverBright
 
 - **File:** `everbright-light.svg` (dark text on light) and `everbright-dark.svg` (white on dark)
@@ -124,7 +123,6 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Licence:** Editorial use (no explicit licence; file is the site's own header logo)
 - **Trademark owner:** EverBright GmbH (per Impressum on everbright-it.de)
 - **Permission:** granted (explicit)
-
 
 ### Gardener
 
@@ -137,7 +135,6 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Notes:** viewBox cropped from `0 0 595.3 170.1` to `46 0 502 170.1` to
   remove ~24 px of internal padding on each side. No path data changed.
 
-
 ### IronCore
 
 - **File:** `ironcore-light.svg` / `ironcore-dark.svg` (icon + label lockup built from `ironcore-color.svg`)
@@ -146,7 +143,6 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Licence:** NeoNephos trademark usage guidelines
 - **Trademark owner:** NeoNephos Foundation
 - **Permission:** granted (implicit)
-
 
 ### Konfidence
 
@@ -159,7 +155,6 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Notes:** viewBox cropped from `0 0 3440 400` to `78 0 3283 400` to
   remove ~80 px of internal padding on each side. No path data changed.
 
-
 ### Kyma
 
 - **File:** `kyma-light.svg` / `kyma-dark.svg` (icon + label lockup built from `kyma-color.svg`)
@@ -170,7 +165,6 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Licence:** Editorial use (no explicit licence)
 - **Notes:** viewBox cropped from `0 0 150 60` to `0 0 126 60` to remove
   ~24 px of internal padding on the right side. No path data changed.
-
 
 ### Open Control Plane (OCP)
 
@@ -185,7 +179,6 @@ ever need to make to an SVG; everything else stays as downloaded.
   viewBox cropped from `0 0 350 60` to `0 0 284 60` on both files to remove
   ~67 px of internal padding on the right side. No path data changed.
 
-
 ### Platform Mesh
 
 - **File:** `platform-mesh-color.svg` / `platform-mesh-dark.svg`
@@ -194,7 +187,6 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Licence:** NeoNephos trademark usage guidelines
 - **Trademark owner:** NeoNephos Foundation
 - **Permission:** granted (implicit)
-
 
 ### SAP
 
@@ -205,7 +197,6 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Trademark owner:** SAP SE
 - **Permission:** granted (implicit)
 
-
 ### SAP NS2 (SAP National Security Services)
 
 - **File:** `sap-ns2.png` (raster, 900×500)
@@ -214,7 +205,6 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Licence:** Editorial use only (no explicit licence found)
 - **Trademark owner:** SAP National Security Services, Inc.
 - **Permission:** granted (implicit)
-
 
 ### STACKIT
 
@@ -228,7 +218,6 @@ ever need to make to an SVG; everything else stays as downloaded.
   fill colour with white. viewBox cropped from
   `0 0 1612.0708246 546.8535461` to `111 0 1385 546.8535461` on both files to
   remove ~21 px of internal padding on each side. No path data changed.
-
 
 ### T-Systems
 
