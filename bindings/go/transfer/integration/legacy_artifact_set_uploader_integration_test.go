@@ -31,18 +31,49 @@ import (
 
 func Test_Integration_TransferLegacyOCIIndexArtifactSet_CTFToOCI(t *testing.T) {
 	t.Parallel()
+
+	for _, tc := range []struct {
+		name            string
+		legacyMediaType string
+		manifestType    string
+		indexType       string
+	}{
+		{
+			name:            "oci",
+			legacyMediaType: "application/vnd.oci.image.index.v1+tar+gzip",
+			manifestType:    ocispecv1.MediaTypeImageManifest,
+			indexType:       ocispecv1.MediaTypeImageIndex,
+		},
+		{
+			// Customer components carry docker media types, e.g. landscaper images
+			// synthesized from docker inputs. The digest must survive the transfer
+			// unchanged, i.e. no docker->OCI manifest conversion.
+			name:            "docker",
+			legacyMediaType: "application/vnd.docker.distribution.manifest.list.v2+tar+gzip",
+			manifestType:    "application/vnd.docker.distribution.manifest.v2+json",
+			indexType:       "application/vnd.docker.distribution.manifest.list.v2+json",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			transferLegacyArtifactSetCTFToOCI(t, tc.legacyMediaType, tc.manifestType, tc.indexType)
+		})
+	}
+}
+
+func transferLegacyArtifactSetCTFToOCI(t *testing.T, legacyMediaType, manifestType, indexType string) {
+	t.Helper()
 	r := require.New(t)
 	ctx := t.Context()
 
 	registryAddr, user, password := startRegistry(t)
-	archive, root := legacyOCIIndexArtifactSet(t)
+	archive, root := legacyOCIIndexArtifactSet(t, manifestType, indexType)
 
 	const (
 		componentName    = "github.com/openmcp-project/landscaper"
 		componentVersion = "v1.0.5"
 		resourceName     = "landscaper-webhooks-server"
 		referenceName    = "openmcp-project/components/github.com/openmcp-project/landscaper/images/landscaper-webhooks-server:v1.0.5"
-		legacyMediaType  = "application/vnd.oci.image.index.v1+tar+gzip"
 	)
 	artifactSet, err := ctf.NewArtifactSetFromBlob(inmemory.New(bytes.NewReader(archive), inmemory.WithMediaType(legacyMediaType)))
 	r.NoError(err)
@@ -144,7 +175,7 @@ func Test_Integration_TransferLegacyOCIIndexArtifactSet_CTFToOCI(t *testing.T) {
 	r.Equal(root.Digest, artifacts[0].Digest)
 }
 
-func legacyOCIIndexArtifactSet(t *testing.T) ([]byte, ocispecv1.Descriptor) {
+func legacyOCIIndexArtifactSet(t *testing.T, manifestType, indexType string) ([]byte, ocispecv1.Descriptor) {
 	t.Helper()
 	r := require.New(t)
 
@@ -154,20 +185,20 @@ func legacyOCIIndexArtifactSet(t *testing.T) ([]byte, ocispecv1.Descriptor) {
 	config := content.NewDescriptorFromBytes(ocispecv1.MediaTypeImageConfig, configData)
 	manifestData, err := json.Marshal(ocispecv1.Manifest{
 		Versioned: specs.Versioned{SchemaVersion: 2},
-		MediaType: ocispecv1.MediaTypeImageManifest,
+		MediaType: manifestType,
 		Config:    config,
 		Layers:    []ocispecv1.Descriptor{layer},
 	})
 	r.NoError(err)
-	manifest := content.NewDescriptorFromBytes(ocispecv1.MediaTypeImageManifest, manifestData)
+	manifest := content.NewDescriptorFromBytes(manifestType, manifestData)
 
 	indexData, err := json.Marshal(ocispecv1.Index{
 		Versioned: specs.Versioned{SchemaVersion: 2},
-		MediaType: ocispecv1.MediaTypeImageIndex,
+		MediaType: indexType,
 		Manifests: []ocispecv1.Descriptor{manifest},
 	})
 	r.NoError(err)
-	root := content.NewDescriptorFromBytes(ocispecv1.MediaTypeImageIndex, indexData)
+	root := content.NewDescriptorFromBytes(indexType, indexData)
 	root.Annotations = map[string]string{ocispecv1.AnnotationRefName: "v1.0.5"}
 
 	artifactSetIndex, err := json.Marshal(ocispecv1.Index{
