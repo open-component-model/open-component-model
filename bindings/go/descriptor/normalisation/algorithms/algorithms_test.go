@@ -196,6 +196,9 @@ func TestWarnNonDefaultReferenceDigest(t *testing.T) {
 	r.Contains(out, "normalisationAlgorithm="+v4alpha1)
 	r.Contains(out, "recommended="+v4alpha3)
 
-	r.Contains(warnFor(descruntime.Digest{}), "normalisationAlgorithm="+algorithms.NoReferenceDigest, "a missing digest warns too")
+	missing := warnFor(descruntime.Digest{})
+	r.Contains(missing, "component reference has no digest", "a missing digest gets its own warning")
+	r.Contains(missing, "reference=child")
+	r.Contains(missing, "normalisationAlgorithm="+algorithms.NoReferenceDigest)
 	r.Contains(warnFor(descruntime.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: algorithms.LegacyV3, Value: "cc"}), "normalisationAlgorithm="+algorithms.LegacyV3, "the legacy alias is reported as written")
 }
