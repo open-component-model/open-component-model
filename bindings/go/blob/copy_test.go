@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -21,6 +22,49 @@ type readSizeRecorder struct {
 func (r *readSizeRecorder) Read(p []byte) (int, error) {
 	r.maxRead = max(r.maxRead, len(p))
 	return r.Reader.Read(p)
+}
+
+// writeSizeRecorder is a file whose Write records the largest chunk. Kernel copy paths
+// and *os.File's own ReadFrom loop write through the embedded file and bypass it.
+type writeSizeRecorder struct {
+	*os.File
+	maxWrite int
+}
+
+func (w *writeSizeRecorder) Write(p []byte) (int, error) {
+	w.maxWrite = max(w.maxWrite, len(p))
+	return w.File.Write(p)
+}
+
+func TestCopyReaderFileToFilePath(t *testing.T) {
+	r := require.New(t)
+	dir := t.TempDir()
+	data := strings.Repeat("0123456789abcdef", 64*1024) // 1 MiB
+	r.NoError(os.WriteFile(dir+"/src", []byte(data), 0o600))
+	src, err := os.Open(dir + "/src")
+	r.NoError(err)
+	t.Cleanup(func() { r.NoError(src.Close()) })
+	f, err := os.Create(dir + "/dst")
+	r.NoError(err)
+	t.Cleanup(func() { r.NoError(f.Close()) })
+	dst := &writeSizeRecorder{File: f}
+
+	n, err := blob.CopyReader(dst, src)
+	r.NoError(err)
+	r.Equal(int64(len(data)), n)
+	got, err := os.ReadFile(f.Name())
+	r.NoError(err)
+	r.Equal(data, string(got))
+
+	switch runtime.GOOS {
+	case "linux", "freebsd", "solaris":
+		// Handed to *os.File.ReadFrom for copy_file_range and friends.
+		r.Zero(dst.maxWrite)
+	default:
+		// No kernel file-to-file path (e.g. darwin, windows): use the pooled buffer
+		// instead of ReadFrom's 32 KiB fallback.
+		r.Equal(blob.DefaultArchiveBlobBufferSize, dst.maxWrite)
+	}
 }
 
 func TestCopyReader(t *testing.T) {

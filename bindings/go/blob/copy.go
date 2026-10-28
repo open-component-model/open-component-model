@@ -2,6 +2,8 @@ package blob
 
 import (
 	"io"
+	"net"
+	"runtime"
 	"sync"
 	"syscall"
 )
@@ -15,18 +17,19 @@ var copyBufPool = sync.Pool{New: func() any {
 //
 // When both sides are backed by a file descriptor (they implement syscall.Conn, as
 // *os.File, types embedding it, and net connections do; a src *io.LimitedReader is
-// unwrapped for this check), it defers to io.Copy so kernel zero-copy paths
-// (copy_file_range, splice, sendfile) apply. Otherwise it hides the descriptor-backed
-// side's ReadFrom/WriteTo, whose generic fallback would allocate a fresh 32 KiB
-// buffer and ignore the pooled one.
+// unwrapped for this check) and the platform has a kernel copy path into dst, it
+// defers to io.Copy so that path (copy_file_range, splice, sendfile) applies.
+// Otherwise it hides the descriptor-backed sides' ReadFrom/WriteTo, whose generic
+// fallback would allocate a fresh 32 KiB buffer and ignore the pooled one.
 func CopyReader(dst io.Writer, src io.Reader) (int64, error) {
 	srcFD, dstFD := isFDBacked(src), isFDBacked(dst)
-	switch {
-	case srcFD && dstFD:
+	if srcFD && dstFD && hasKernelCopyInto(dst) {
 		return io.Copy(dst, src)
-	case srcFD:
+	}
+	if srcFD {
 		src = struct{ io.Reader }{src}
-	case dstFD:
+	}
+	if dstFD {
 		dst = struct{ io.Writer }{dst}
 	}
 	bufp := copyBufPool.Get().(*[]byte)
@@ -53,4 +56,24 @@ func isFDBacked(v any) bool {
 	}
 	_, ok := v.(syscall.Conn)
 	return ok
+}
+
+// hasKernelCopyInto reports whether ReadFrom on the descriptor-backed dst can use a
+// kernel copy path on this platform. It mirrors the build constraints of the standard
+// library: net connections use sendfile (net/sendfile.go), while files only have a
+// ReadFrom fast path on linux, freebsd and solaris (os/zero_copy_*.go). On darwin and
+// windows, *os.File.ReadFrom is a plain read/write loop with its own buffer.
+func hasKernelCopyInto(dst io.Writer) bool {
+	if _, ok := dst.(net.Conn); ok {
+		switch runtime.GOOS {
+		case "linux", "darwin", "dragonfly", "freebsd", "solaris", "windows":
+			return true
+		}
+		return false
+	}
+	switch runtime.GOOS {
+	case "linux", "freebsd", "solaris":
+		return true
+	}
+	return false
 }
