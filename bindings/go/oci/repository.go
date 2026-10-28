@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"regexp"
 
@@ -724,16 +725,15 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 		})
 	}
 
-	data, err := store.Fetch(ctx, artifact)
-	if err != nil {
-		return nil, fmt.Errorf("fetch layer: %w", err)
-	}
-	// data cannot be closed, as it is used by the blob
-	b := ociblob.NewDescriptorBlob(data, artifact)
-	if actual, _ := b.Digest(); actual != artifact.Digest.String() {
-		return nil, fmt.Errorf("digest mismatch: expected %q, got %q", artifact.Digest, actual)
-	}
-	return b, nil
+	// The layer is fetched on every read with the context of this call, so the blob holds
+	// no open stream and callers need not release it.
+	return ociblob.NewDescriptorBlob(blob.ReadOnlyBlobFunc(func() (io.ReadCloser, error) {
+		data, err := store.Fetch(ctx, artifact)
+		if err != nil {
+			return nil, fmt.Errorf("fetch layer: %w", err)
+		}
+		return data, nil
+	}), artifact), nil
 }
 
 func (repo *Repository) getStore(ctx context.Context, component string, version string) (ref string, store spec.Store, err error) {
@@ -1037,7 +1037,7 @@ func (repo *Repository) downloadLayer(ctx context.Context, layer *accessv1.OCIIm
 	if err != nil {
 		return nil, err
 	}
-	return fetchLayer(ctx, src, layerDescriptor(layer))
+	return fetchLayer(ctx, src, layerDescriptor(layer)), nil
 }
 
 // targetOCIImageAccess converts an upload target access into an OCI image access.

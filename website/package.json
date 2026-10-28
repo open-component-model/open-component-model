@@ -28,7 +28,7 @@
     "preinfo": "npm version",
     "preview": "http-server --gzip --brotli --ext=html --cors",
     "postinstall": "node scripts/link-dart-sass.js",
-    "test": "node --test scripts/register-docs-version.test.js"
+    "test": "node --test scripts/register-docs-version.test.js assets/js/schema/doc-text.test.ts"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
@@ -39,7 +39,7 @@
     "@thulite/inline-svg": "^1.2.2",
     "@thulite/seo": "^2.4.3",
     "mermaid": "^12.0.0",
-    "preact": "^10.29.0",
+    "preact": "^11.0.0",
     "thulite": "^3.0.0"
   },
   "devDependencies": {
@@ -51,7 +51,7 @@
     "hugo-extended": "0.166.0",
     "jiti": "2.7.0",
     "js-yaml": "5.4.2",
-    "sass-embedded": "1.105.0",
+    "sass-embedded": "1.105.1",
     "shx": "0.4.0",
     "typescript-eslint": "8.71.0"
   },

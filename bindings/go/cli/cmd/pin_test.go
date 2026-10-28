@@ -51,7 +51,6 @@ resources:
 		"add", "cv",
 		"--constructor", constructor,
 		"--repository", archive,
-		"--component-version-conflict-policy", "replace",
 	))
 	r.NoError(err, "could not add component version")
 }

@@ -256,10 +256,7 @@ func (r *Reconciler) Untrack(ctx context.Context, deployer deliveryv1alpha1.Depl
 		if !r.resourceWatchIsStopped(deployer, obj) {
 			logger.Info("unregistering resource watch for deployer", "name", deployer.GetName())
 			select {
-			case r.stopResourceWatchChannel <- dynamic.Event{
-				Parent: deployer,
-				Child:  obj,
-			}:
+			case r.stopResourceWatchChannel <- watchEvent(deployer, obj):
 			case <-ctx.Done():
 				return false, fmt.Errorf("context canceled while unregistering resource watch for deployer %s: %w", deployer.GetName(), ctx.Err())
 			}
@@ -1032,10 +1029,7 @@ func (r *Reconciler) track(ctx context.Context, deployer deliveryv1alpha1.Deploy
 	} else {
 		logger.Info("registering watch from deployer", "obj", obj.GetName())
 		select {
-		case r.resourceWatchChannel <- dynamic.Event{
-			Parent: deployer,
-			Child:  obj,
-		}:
+		case r.resourceWatchChannel <- watchEvent(deployer, obj):
 		case <-ctx.Done():
 			return fmt.Errorf("context canceled while unregistering resource watch for deployer %s: %w", deployer.GetName(), ctx.Err())
 		}
@@ -1044,6 +1038,15 @@ func (r *Reconciler) track(ctx context.Context, deployer deliveryv1alpha1.Deploy
 	}
 
 	return nil
+}
+
+// watchEvent snapshots the deployer: the informer manager consumes events on its own
+// goroutines while this reconcile keeps mutating the live object (e.g. decoding the status patch response).
+func watchEvent(deployer deliveryv1alpha1.DeployerObject, obj client.Object) dynamic.Event {
+	return dynamic.Event{
+		Parent: deployer.DeepCopyObject().(client.Object), //nolint:forcetypeassert // deep copies keep the concrete deployer type
+		Child:  obj,
+	}
 }
 
 // getEffectiveComponentDescriptor retrieves the effective component descriptor for the resource.

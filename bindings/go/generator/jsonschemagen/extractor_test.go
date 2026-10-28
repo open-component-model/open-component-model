@@ -41,6 +41,33 @@ func TestExtractStructDoc_WithCodeBlock(t *testing.T) {
 	require.True(t, deprecated)
 }
 
+func TestExtractStructDoc_PreservesIndentation(t *testing.T) {
+	ts := &ast.TypeSpec{
+		Name: ast.NewIdent("Example"),
+		Doc: commentGroup(
+			"// Example is a sibling of [Config].",
+			"//",
+			"//\ttype: example/v1",
+			"//\tlist:",
+			"//\t  - a",
+			"//",
+			"// Supported:",
+			"//   - first, wrapped",
+			"//     onto a second line",
+			"//   - second",
+		),
+	}
+
+	desc, _ := extractStructDoc(ts, &ast.GenDecl{})
+
+	require.Equal(t,
+		"Example is a sibling of [Config].\n\n"+
+			"\ttype: example/v1\n\tlist:\n\t  - a\n\n"+
+			"Supported:\n  - first, wrapped\n    onto a second line\n  - second",
+		desc,
+	)
+}
+
 func TestExtractStructDoc_BlockComments(t *testing.T) {
 	ts := &ast.TypeSpec{
 		Name: ast.NewIdent("Example"),
