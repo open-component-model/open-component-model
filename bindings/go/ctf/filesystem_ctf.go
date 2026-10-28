@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/opencontainers/go-digest"
 
@@ -124,18 +123,6 @@ func (c *FileSystemCTF) SetIndex(_ context.Context, index v1.Index) (err error) 
 	return c.writeFile(v1.ArtifactIndexFileName, bytes.NewReader(data), int64(len(data)))
 }
 
-// ioBufPool is a pool of byte buffers that can be reused for copying content
-// between i/o relevant data, such as files.
-var ioBufPool = sync.Pool{
-	New: func() interface{} {
-		// the buffer size should be larger than or equal to 128 KiB
-		// for performance considerations.
-		// we choose 1 MiB here so there will be less disk I/O.
-		buffer := make([]byte, blob.DefaultArchiveBlobBufferSize)
-		return &buffer
-	},
-}
-
 // writeFile writes the given raw data to the given name in the CTF.
 // If the directory does not exist, it will be created.
 // Always uses atomic write (temp file + rename) for safe concurrent access.
@@ -172,11 +159,9 @@ func (c *FileSystemCTF) stageFile(dir, tempPattern string, raw io.Reader, size i
 	tempPath := tempFile.Name()
 
 	if size <= blob.SizeUnknown {
-		buf := ioBufPool.Get().(*[]byte)
-		defer ioBufPool.Put(buf)
-		_, err = io.CopyBuffer(tempFile, raw, *buf)
+		_, err = blob.CopyReader(tempFile, raw)
 	} else {
-		_, err = io.CopyN(tempFile, raw, size)
+		_, err = blob.CopyReaderN(tempFile, raw, size)
 	}
 	if err != nil {
 		return "", fmt.Errorf("unable to write content: %w", errors.Join(err, tempFile.Close(), os.Remove(tempPath)))
