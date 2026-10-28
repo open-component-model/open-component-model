@@ -127,18 +127,13 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		password = opt.OCICredentials.AccessToken
 	}
 
-	var regClientOpts []registry.ClientOption
-	var httpClient *http.Client
-	if opt.HTTPConfig != nil {
-		// Build a single client from the full config (includes per-host routing).
-		// It is shared between the OCI registry client and the HTTP/S getter so
-		// both paths use the same timeout and per-host override behaviour.
-		httpClient = ocmhttp.New(ocmhttp.WithConfig(opt.HTTPConfig))
-		regClientOpts = append(regClientOpts, registry.ClientOptHTTPClient(httpClient))
-	}
-	regClient, err := registry.NewClient(regClientOpts...)
+	httpClient, indexClient, regClient, err := newClients(opt, caFile, username, password)
 	if err != nil {
-		return nil, fmt.Errorf("error creating registry client: %w", err)
+		return nil, err
+	}
+	if httpClient != nil {
+		// Without it, helm's OCI getter pulls the chart with a client of its own.
+		helmGetterOpts = append(helmGetterOpts, getter.WithRegistryClient(regClient))
 	}
 
 	cfgOpts := HTTPConfigGetterOpts{
@@ -170,10 +165,9 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		Keyring:          keyring,
 	}
 
-	// index.yaml is parsed, never hashed, and compresses up to ~18x.
 	indexProviders := providers
-	if opt.HTTPConfig != nil {
-		indexProviders = GetterProviders(ocmhttp.New(ocmhttp.WithConfig(opt.HTTPConfig), ocmhttp.WithCompression()), cfgOpts)
+	if indexClient != nil {
+		indexProviders = GetterProviders(indexClient, cfgOpts)
 	}
 
 	resolvedRepo, err := resolveHTTPChartURL(ctx, helmRepo, opt.Version, targetDir, indexProviders, &helmrepo.Entry{
@@ -278,6 +272,34 @@ func renameChart(savedPath, target string) (string, error) {
 		}
 	}
 	return target, nil
+}
+
+// newClients builds the registry client and, with an HTTP configuration, the clients for
+// downloads and for index.yaml. One configuration (per-host routing, timeouts), with the TLS
+// material of the input or credentials overriding its own, then serves the OCI registry
+// client, the OCI chart pull and the HTTP/S getter alike. The registry client carries the
+// resolved credentials, because with an HTTP configuration it also performs the OCI chart pull.
+func newClients(opt *option, caFile, username, password string) (httpClient, indexClient *http.Client, regClient *registry.Client, err error) {
+	var regClientOpts []registry.ClientOption
+	if username != "" && password != "" {
+		regClientOpts = append(regClientOpts, registry.ClientOptBasicAuth(username, password))
+	}
+	if opt.HTTPConfig != nil {
+		if httpClient, err = overlayInputTLS(ocmhttp.New(ocmhttp.WithConfig(opt.HTTPConfig)),
+			caFile, opt.Credentials.CertFile, opt.Credentials.KeyFile); err != nil {
+			return nil, nil, nil, err
+		}
+		// index.yaml is parsed, never hashed, and compresses up to ~18x.
+		if indexClient, err = overlayInputTLS(ocmhttp.New(ocmhttp.WithConfig(opt.HTTPConfig), ocmhttp.WithCompression()),
+			caFile, opt.Credentials.CertFile, opt.Credentials.KeyFile); err != nil {
+			return nil, nil, nil, err
+		}
+		regClientOpts = append(regClientOpts, registry.ClientOptHTTPClient(httpClient))
+	}
+	if regClient, err = registry.NewClient(regClientOpts...); err != nil {
+		return nil, nil, nil, fmt.Errorf("error creating registry client: %w", err)
+	}
+	return httpClient, indexClient, regClient, nil
 }
 
 // ResolveOCIManifestDigest resolves the manifest digest an oci:// chart reference points to.
