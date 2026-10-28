@@ -3,6 +3,7 @@ package sdk
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"net"
@@ -10,7 +11,6 @@ import (
 	"net/url"
 	"os"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -146,27 +146,23 @@ func TestIdleChecker(t *testing.T) {
 		r.NoError(os.RemoveAll(location))
 	})
 
+	// No requests are sent: the idle checker alone must shut the server down,
+	// which makes Start return.
+	stopped := make(chan error, 1)
 	go func() {
-		_ = p.Start(ctx)
+		stopped <- p.Start(ctx)
 	}()
-	// wait until the plugin starts up
+	select {
+	case err := <-stopped:
+		r.NoError(err)
+	case <-time.After(5 * time.Second):
+		r.FailNow("idle checker did not shut down the plugin")
+	}
+
 	r.Eventually(func() bool {
-		return p.server != nil
-	}, time.Second, 5*time.Millisecond)
-
-	httpClient := createHttpClient(location)
-
-	// idle timeout should kill the plugin and remove the socket prematurely.
-	r.Eventually(func() bool {
-		_, err := httpGet(ctx, httpClient, "http://unix/healthz")
-		if err == nil {
-			return false
-		}
-
-		// The socket may return EOF while it's still shutting down before
-		// being removed. Only consider the test done once the socket is gone.
-		return strings.Contains(err.Error(), "no such file or directory")
-	}, 5*time.Second, 20*time.Millisecond)
+		_, err := os.Stat(location)
+		return errors.Is(err, os.ErrNotExist)
+	}, 5*time.Second, 10*time.Millisecond, "idle shutdown must remove the socket")
 }
 
 func TestHealthCheckInvalidMethod(t *testing.T) {
