@@ -10,9 +10,12 @@ on:
       - 'website/**'
       - '.github/workflows/website-publish-site.yaml'
       # Paths relevant for the `main` version dev build. This list MUST cover
-      # every BINDING_MOUNTS source dir in website/scripts/register-docs-version.js;
-      # the register-docs-version unit tests fail if a mount is not triggered here.
-      # CRDs are generated from api/v1alpha1 at build time via controller-gen.
+      # every BINDING_MOUNTS source dir plus the MAIN_EXTRA_MOUNTS source dirs
+      # (CLI reference docs, controller CRD bases) in
+      # website/scripts/register-docs-version.js; the register-docs-version unit
+      # tests fail if a mounted source dir is not triggered here. The controller
+      # CRD bases are committed files mounted directly, so changes to them must
+      # trigger a publish on their own.
       - 'bindings/go/blob/filesystem/spec/access/v1alpha1/schemas/**'
       - 'bindings/go/cli/docs/reference/**'
       - 'bindings/go/configuration/checksum/http/v1alpha1/spec/schemas/**'
@@ -36,6 +39,7 @@ on:
       - 'bindings/go/input/file/spec/v1/schemas/**'
       - 'bindings/go/input/utf8/spec/v1/schemas/**'
       - 'bindings/go/kubernetes/controller/api/v1alpha1/**'
+      - 'bindings/go/kubernetes/controller/config/crd/bases/**'
       - 'bindings/go/oci/spec/access/v1/schemas/**'
       - 'bindings/go/oci/spec/credentials/v1/schemas/**'
       - 'bindings/go/rsa/spec/credentials/v1/schemas/**'

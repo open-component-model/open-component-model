@@ -1007,7 +1007,7 @@ test("module.yaml main mounts match BINDING_MOUNTS (committed file is regenerate
         "module.yaml has stale main binding mounts not in BINDING_MOUNTS");
 });
 
-test("website-publish-site.yaml paths cover every BINDING_MOUNTS source dir", () => {
+test("website-publish-site.yaml paths cover every BINDING_MOUNTS and MAIN_EXTRA_MOUNTS source dir", () => {
     const wf = fs.readFileSync(
         path.join(__dirname, "..", "..", ".github", "workflows", "website-publish-site.yaml"), "utf-8");
     const parsed = yaml.load(wf);
@@ -1019,5 +1019,13 @@ test("website-publish-site.yaml paths cover every BINDING_MOUNTS source dir", ()
         const dir = `bindings/go/${row.pkg}/${row.source}`;
         assert.ok(covered(dir),
             `website-publish-site.yaml paths do not trigger on ${dir}; add a covering glob`);
+    }
+    // MAIN_EXTRA_MOUNTS sources are website/-relative (../bindings/go/...); the
+    // controller CRD bases are committed files mounted directly, so a push that
+    // touches only them must still trigger a publish.
+    for (const m of MAIN_EXTRA_MOUNTS) {
+        const dir = m.source.replace(/^\.\.\//, "");
+        assert.ok(covered(dir),
+            `website-publish-site.yaml paths do not trigger on MAIN_EXTRA_MOUNTS source ${dir}; add a covering glob`);
     }
 });
