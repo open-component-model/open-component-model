@@ -6,6 +6,9 @@ import { Tab } from "bootstrap";
 import "bootstrap/js/src/dropdown.js";
 import "bootstrap/js/src/offcanvas.js";
 import "bootstrap/js/src/carousel.js";
+import { initAnalytics } from "./analytics.js";
+
+initAnalytics();
 
 // Custom JS for OCM website
 // Necessity: Sidebar section links (<a> inside <summary>) need special click
