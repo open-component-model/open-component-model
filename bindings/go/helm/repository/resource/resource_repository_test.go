@@ -1,10 +1,12 @@
 package resource
 
 import (
+	"archive/tar"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,12 +14,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
 	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -229,4 +233,75 @@ func downloadAndDigest(t *testing.T, ctx context.Context, repo *ResourceReposito
 	}
 
 	return ""
+}
+
+func TestDownloadResource_VerifiesChartDigest(t *testing.T) {
+	srv := httptest.NewServer(http.FileServer(http.Dir("../../testdata")))
+	t.Cleanup(srv.Close)
+
+	chart, err := os.ReadFile("../../testdata/mychart-0.1.0.tgz")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name    string
+		value   string
+		wantErr string
+	}{
+		{name: "matching digest", value: digest.FromBytes(chart).Encoded()},
+		{name: "wrong digest", value: digest.FromString("other").Encoded(), wantErr: "does not match the digest"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			res := helmResource(t, srv.URL, "mychart-0.1.0.tgz")
+			res.Name = "mychart"
+			res.Digest = &descriptor.Digest{
+				HashAlgorithm:          "SHA-256",
+				NormalisationAlgorithm: descriptor.GenericBlobDigestV1,
+				Value:                  tc.value,
+			}
+			b, err := NewResourceRepository(nil).DownloadResource(t.Context(), res, nil)
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.NotNil(b)
+		})
+	}
+}
+
+func TestDownloadResource_RealOCIRepo(t *testing.T) {
+	r := require.New(t)
+	if testing.Short() {
+		t.Skip("skipping real OCI registry test in short mode")
+	}
+	res := helmResource(t, "oci://ghcr.io/stefanprodan/charts", "podinfo:6.9.1")
+	res.Name = "podinfo"
+	processed, err := helmdigest.NewDigestProcessor("").ProcessResourceDigest(t.Context(), res, nil)
+	r.NoError(err)
+	r.Equal(descriptor.OCIArtifactDigestV1, processed.Digest.NormalisationAlgorithm)
+
+	repo := NewResourceRepository(nil)
+	b, err := repo.DownloadResource(t.Context(), processed, nil)
+	r.NoError(err)
+	rc, err := b.ReadCloser()
+	r.NoError(err)
+	t.Cleanup(func() { _ = rc.Close() })
+	var names []string
+	tr := tar.NewReader(rc)
+	for {
+		hdr, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		r.NoError(err)
+		names = append(names, hdr.Name)
+	}
+	r.Contains(names, "podinfo-6.9.1.tgz")
+
+	other := processed.DeepCopy()
+	other.Digest.Value = digest.FromString("other").Encoded()
+	_, err = repo.DownloadResource(t.Context(), other, nil)
+	r.Error(err)
 }

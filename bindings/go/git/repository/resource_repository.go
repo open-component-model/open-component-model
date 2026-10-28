@@ -20,6 +20,7 @@ import (
 	gitcreds "ocm.software/open-component-model/bindings/go/git/spec/credentials"
 	identityv1 "ocm.software/open-component-model/bindings/go/git/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/repository/integrity"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -115,30 +116,21 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, res *descript
 		return nil, err
 	}
 
-	result, err := r.download(ctx, spec, res.Digest, creds, r.tempFolder())
+	result, err := r.download(ctx, spec, creds, r.tempFolder())
 	if err != nil {
 		return nil, err
 	}
 
-	return result.Blob, nil
+	return integrity.VerifyPrecomputed(ctx, res.Digest, result.Digest, result.Blob)
 }
 
-func (r *ResourceRepository) download(ctx context.Context, spec *accessv1.Git, expected *descriptor.Digest, creds runtime.Typed, tempDir string) (*download.Result, error) {
+func (r *ResourceRepository) download(ctx context.Context, spec *accessv1.Git, creds runtime.Typed, tempDir string) (*download.Result, error) {
 	typed, err := convertGitCredentials(creds)
 	if err != nil {
 		return nil, err
 	}
 
-	result, err := download.Download(ctx, spec, typed, r.downloadOptions(tempDir))
-	if err != nil {
-		return nil, err
-	}
-
-	if err := verifyDigest(expected, result.Digest); err != nil {
-		return nil, err
-	}
-
-	return result, nil
+	return download.Download(ctx, spec, typed, r.downloadOptions(tempDir))
 }
 
 func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, res *descriptor.Resource) (runtime.Identity, error) {
@@ -165,8 +157,11 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *des
 		return nil, err
 	}
 
-	downloaded, err := r.download(ctx, spec, res.Digest, creds, tempDir)
+	downloaded, err := r.download(ctx, spec, creds, tempDir)
 	if err != nil {
+		return nil, err
+	}
+	if err := verifyDigest(res.Digest, downloaded.Digest); err != nil {
 		return nil, err
 	}
 
@@ -181,7 +176,7 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *des
 
 	result := res.DeepCopy()
 	result.Access = pinned
-	// r.download already rejected a set digest that does not match this archive.
+	// verifyDigest already rejected a set digest that does not match this archive.
 	result.Digest = &descriptor.Digest{
 		HashAlgorithm:          hashAlgorithmSHA256,
 		NormalisationAlgorithm: genericBlobDigestV1,

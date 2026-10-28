@@ -127,12 +127,12 @@ func TestResourceDigestVerification(t *testing.T) {
 	}, generated.Digest)
 
 	for _, tc := range []struct {
-		name, value, hashAlgorithm, normalisation, wantErr string
+		name, value, hashAlgorithm, normalisation, wantErr, wantDownloadErr string
 	}{
 		{name: "compressed digest", value: checksum.Encoded()},
-		{name: "wrong digest", value: strings.Repeat("0", 64), wantErr: "digest mismatch"},
-		{name: "unsupported hash", value: checksum.Encoded(), hashAlgorithm: "SHA-512", wantErr: "unsupported git hash algorithm"},
-		{name: "unsupported normalisation", value: checksum.Encoded(), normalisation: "other", wantErr: "unsupported git normalisation"},
+		{name: "wrong digest", value: strings.Repeat("0", 64), wantErr: "digest mismatch", wantDownloadErr: "digest mismatch"},
+		{name: "unsupported hash", value: checksum.Encoded(), hashAlgorithm: "SHA-512", wantErr: "unsupported git hash algorithm", wantDownloadErr: "invalid digest"},
+		{name: "unsupported normalisation", value: checksum.Encoded(), normalisation: "other", wantErr: "unsupported git normalisation", wantDownloadErr: "unsupported normalisation algorithm"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
@@ -149,12 +149,15 @@ func TestResourceDigestVerification(t *testing.T) {
 
 			_, downloadErr := repo.DownloadResource(t.Context(), preset, nil)
 			processed, processErr := repo.ProcessResourceDigest(t.Context(), preset, nil)
-			if tc.wantErr == "" {
+			if tc.wantDownloadErr == "" {
 				r.NoError(downloadErr)
+			} else {
+				r.ErrorContains(downloadErr, tc.wantDownloadErr)
+			}
+			if tc.wantErr == "" {
 				r.NoError(processErr)
 				r.Equal(preset.Digest, processed.Digest)
 			} else {
-				r.ErrorContains(downloadErr, tc.wantErr)
 				r.ErrorContains(processErr, tc.wantErr)
 				r.Nil(processed)
 			}

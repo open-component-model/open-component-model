@@ -1198,6 +1198,123 @@ func createSingleLayerOCIImage(t *testing.T, data []byte, ref string) ([]byte, *
 	}
 }
 
+func TestRepository_GetLocalResource_VerifiesResourceDigest(t *testing.T) {
+	const component, version = "ocm.software/test-component", "1.0.0"
+	other := digest.FromString("other").Encoded()
+	withValue := func(value string) func(*descriptor.Digest) *descriptor.Digest {
+		return func(added *descriptor.Digest) *descriptor.Digest {
+			changed := *added
+			changed.Value = value
+			return &changed
+		}
+	}
+	legacyDigest := func(value string) func(*descriptor.Digest) *descriptor.Digest {
+		return func(*descriptor.Digest) *descriptor.Digest {
+			return &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: descriptor.OCIArtifactDigestV1, Value: value}
+		}
+	}
+	layoutData, _ := createSingleLayerOCIImage(t, []byte("test content"), "test-image:latest")
+	legacyData, err := os.ReadFile("../ctf/testdata/compatibility/02/with-resource/blobs/sha256.e40e3a2f1ab1a98328dfd14539a79d27aff5c4d5c34cd16a85f0288bfa76490b")
+	require.NoError(t, err)
+	const legacyMediaType = "application/vnd.oci.image.manifest.v1+tar+gzip"
+	const legacyRoot = "62be4af3382a4493cb7f1dd4ec47bcb28f1863b615fc9e4a1dceefbe93898dd0"
+
+	tests := []struct {
+		name      string
+		data      []byte
+		mediaType string
+		// digest returns the digest the component version records, given the one AddLocalResource set.
+		digest      func(added *descriptor.Digest) *descriptor.Digest
+		wantGetErr  string
+		wantReadErr string
+	}{
+		{name: "blob of its digest", data: []byte("test content"), mediaType: "application/octet-stream", digest: func(d *descriptor.Digest) *descriptor.Digest { return d }},
+		{name: "blob of another digest", data: []byte("test content"), mediaType: "application/octet-stream", digest: withValue(other), wantGetErr: "digest mismatch"},
+		{name: "OCI layout of its digest", data: layoutData, mediaType: layout.MediaTypeOCIImageLayoutV1 + "+tar", digest: func(d *descriptor.Digest) *descriptor.Digest { return d }},
+		{name: "OCI layout of another digest", data: layoutData, mediaType: layout.MediaTypeOCIImageLayoutV1 + "+tar", digest: withValue(other), wantGetErr: "OCI artifact digest mismatch"},
+		{name: "legacy artifact set of its digest", data: legacyData, mediaType: legacyMediaType, digest: legacyDigest(legacyRoot)},
+		{name: "legacy artifact set of another digest", data: legacyData, mediaType: legacyMediaType, digest: legacyDigest(other), wantReadErr: "layout main artifact is"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			ctx := t.Context()
+			fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+			r.NoError(err)
+			repo := Repository(t, ocictf.WithCTF(ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))))
+
+			resource := &descriptor.Resource{
+				Relation:    descriptor.LocalRelation,
+				ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "test-resource", Version: "1.0.0"}},
+				Type:        "test-type",
+				Access:      &v2.LocalBlob{LocalReference: digest.FromBytes(tt.data).String(), MediaType: tt.mediaType},
+			}
+			added, err := repo.AddLocalResource(ctx, component, version, resource, inmemory.New(bytes.NewReader(tt.data), inmemory.WithMediaType(tt.mediaType)))
+			r.NoError(err)
+			added.Digest = tt.digest(added.Digest)
+			r.NoError(repo.AddComponentVersion(ctx, &descriptor.Descriptor{
+				Meta: descriptor.Meta{Version: "v2"},
+				Component: descriptor.Component{
+					ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: component, Version: version}},
+					Provider:      descriptor.Provider{Name: "test-provider"},
+					Resources:     []descriptor.Resource{*added},
+				},
+			}))
+
+			b, _, err := repo.GetLocalResource(ctx, component, version, runtime.Identity{"name": "test-resource", "version": "1.0.0"})
+			if tt.wantGetErr != "" {
+				r.ErrorContains(err, tt.wantGetErr)
+				return
+			}
+			r.NoError(err)
+			rc, err := b.ReadCloser()
+			r.NoError(err)
+			_, readErr := io.ReadAll(rc)
+			readErr = errors.Join(readErr, rc.Close())
+			if tt.wantReadErr != "" {
+				r.ErrorContains(readErr, tt.wantReadErr)
+				return
+			}
+			r.NoError(readErr)
+		})
+	}
+}
+
+func TestRepository_DownloadResource_VerifiesOCIArtifactDigest(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store), oci.WithScheme(testScheme))
+	artifact, root := buildTestManifestStream(t)
+	imageStore, err := store.StoreForReference(ctx, "test-image:1.0.0")
+	r.NoError(err)
+	r.NoError(oras.CopyGraph(ctx, artifact, imageStore, root, oras.DefaultCopyGraphOptions))
+	r.NoError(imageStore.Tag(ctx, root, "1.0.0"))
+
+	resourceOf := func(value string) *descriptor.Resource {
+		return &descriptor.Resource{
+			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "artifact", Version: "1.0.0"}},
+			Type:        "ociImage",
+			Relation:    descriptor.ExternalRelation,
+			Access:      &v1.OCIImage{Type: runtime.NewVersionedType(v1.OCIImageType, v1.Version), ImageReference: "test-image:1.0.0"},
+			Digest:      &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: descriptor.OCIArtifactDigestV1, Value: value},
+		}
+	}
+
+	downloaded, err := repo.DownloadResource(ctx, resourceOf(root.Digest.Encoded()))
+	r.NoError(err)
+	rc, err := downloaded.ReadCloser()
+	r.NoError(err)
+	_, err = io.ReadAll(rc)
+	r.NoError(err)
+	r.NoError(rc.Close())
+
+	_, err = repo.DownloadResource(ctx, resourceOf(digest.FromString("other").Encoded()))
+	r.ErrorContains(err, "OCI artifact digest mismatch")
+}
+
 func TestRepository_ListComponentVersions(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()

@@ -14,6 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobs"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/repository/integrity"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -113,7 +114,12 @@ func (c *componentVersionRepositoryWrapper) GetLocalResource(ctx context.Context
 
 	convert := descriptor.ConvertFromV2Resources([]descriptorv2.Resource{*response.Resource})
 
-	return rBlob, &convert[0], nil
+	verified, err := integrity.Verify(ctx, convert[0].Digest, rBlob)
+	if err != nil {
+		return nil, nil, fmt.Errorf("local resource %q: %w", convert[0].Name, err)
+	}
+
+	return verified, &convert[0], nil
 }
 
 func (c *componentVersionRepositoryWrapper) AddLocalSource(ctx context.Context, component, version string, res *descriptor.Source, content blob.ReadOnlyBlob) (_ *descriptor.Source, err error) {

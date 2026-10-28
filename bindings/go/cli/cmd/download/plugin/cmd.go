@@ -211,7 +211,7 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		slog.String("type", res.Type),
 		slog.Any("identity", res.ToIdentity()))
 
-	data, err := shared.DownloadResourceData(ctx, pluginManager, credentialGraph, ref, desc, repo, res, resourceIdentity)
+	data, err := shared.DownloadResourceData(ctx, pluginManager, credentialGraph, desc, repo, res, resourceIdentity)
 	if err != nil {
 		return fmt.Errorf("downloading plugin resource for identity %q failed: %w", resourceIdentity, err)
 	}

@@ -14,6 +14,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/repository/integrity"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/checksum"
 	"ocm.software/open-component-model/bindings/go/wget/checksum/httpverify"
@@ -105,6 +106,9 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 // the blob's reader before the body is read, and a checksum mismatch fails it at
 // the end of the body (its last Read and its Close).
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
+	if resource == nil {
+		return nil, fmt.Errorf("resource is required")
+	}
 	url := policyURL(resource)
 	policy, hasPolicy := httpverify.PolicyForMode(r.checksumConfig.ModeForURL(url))
 
@@ -130,7 +134,8 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	if err != nil {
 		return nil, err
 	}
-	return repository.VerifyDownload(ctx, resource, b)
+	// The body streams, so the content is bound to the resource digest when it is read.
+	return integrity.Verify(ctx, resource.Digest, b)
 }
 
 // download prepares the resource download and returns the streaming blob plus

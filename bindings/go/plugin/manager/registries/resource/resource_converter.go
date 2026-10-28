@@ -12,6 +12,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobs"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/repository/integrity"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -52,7 +53,12 @@ func (r *resourcePluginConverter) DownloadResource(ctx context.Context, resource
 		return nil, fmt.Errorf("failed to create blob data: %w", err)
 	}
 
-	return rBlob, nil
+	verified, err := integrity.Verify(ctx, resource.Digest, rBlob)
+	if err != nil {
+		return nil, fmt.Errorf("resource %q: %w", resource.Name, err)
+	}
+
+	return verified, nil
 }
 
 func (r *resourcePluginConverter) UploadResource(ctx context.Context, resource *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (result *descriptor.Resource, err error) {

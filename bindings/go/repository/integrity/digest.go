@@ -1,4 +1,4 @@
-package repository
+package integrity
 
 import (
 	"crypto"
@@ -27,7 +27,7 @@ func ParseDigest(d *descriptor.Digest) (digest.Digest, error) {
 		return "", fmt.Errorf("incomplete digest: hashAlgorithm=%q, value=%q", d.HashAlgorithm, d.Value)
 	}
 
-	algorithm, err := verifiableAlgorithm(d.HashAlgorithm)
+	algorithm, err := HashAlgorithm(d.HashAlgorithm)
 	if err != nil {
 		return "", err
 	}
@@ -36,7 +36,7 @@ func ParseDigest(d *descriptor.Digest) (digest.Digest, error) {
 	// a value spelled "<algorithm>:<hex>", as digest.Digest.String() writes it, would
 	// otherwise be prefixed a second time and fail to parse.
 	if prefix, encoded, prefixed := strings.Cut(value, ":"); prefixed {
-		if prefixAlgorithm, err := verifiableAlgorithm(prefix); err != nil || prefixAlgorithm != algorithm {
+		if prefixAlgorithm, err := HashAlgorithm(prefix); err != nil || prefixAlgorithm != algorithm {
 			return "", fmt.Errorf("digest value %q carries algorithm %q but hashAlgorithm is %q", d.Value, prefix, d.HashAlgorithm)
 		}
 		value = encoded
@@ -50,10 +50,10 @@ func ParseDigest(d *descriptor.Digest) (digest.Digest, error) {
 	return parsed, nil
 }
 
-// verifiableAlgorithm maps a hash algorithm name ("SHA-256" as the spec spells it, or "sha256")
+// HashAlgorithm maps a hash algorithm name ("SHA-256" as the spec spells it, or "sha256")
 // to the digest algorithm content can be verified with: SHA-256 or SHA-512, the hashes
 // signing accepts (see algorithms.Hash).
-func verifiableAlgorithm(name string) (digest.Algorithm, error) {
+func HashAlgorithm(name string) (digest.Algorithm, error) {
 	hash, err := algorithms.Hash(name)
 	if err != nil {
 		return "", err

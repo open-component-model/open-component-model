@@ -225,15 +225,19 @@ func Test_DownloadResource_DigestVerification(t *testing.T) {
 	})
 
 	t.Run("rejects an object that does not match the resource digest", func(t *testing.T) {
-		// Verification is streaming, so the download itself still succeeds.
-		b, err := downloadWith(t, []byte("not what was promised"), matching)
-		require.NoError(t, err)
+		r := require.New(t)
+		tempFolder := t.TempDir()
+		srv := newFakeS3(t, []byte("not what was promised"), "")
+		repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
+		res := s3Resource(servedBy(srv, &v2.S3{BucketName: "b", ObjectKey: "k"}))
+		res.Digest = matching
 
-		rc, err := b.ReadCloser()
-		require.NoError(t, err)
-		_, err = io.ReadAll(rc)
-		require.ErrorContains(t, err, "digest mismatch")
-		require.ErrorContains(t, rc.Close(), "digest mismatch")
+		_, err := repo.DownloadResource(t.Context(), res, fakeCredentials())
+		r.ErrorContains(err, "digest mismatch")
+
+		entries, err := os.ReadDir(tempFolder)
+		r.NoError(err)
+		r.Empty(entries, "a rejected object must not be left behind")
 	})
 
 	t.Run("serves an object unverified when the resource carries no digest", func(t *testing.T) {
