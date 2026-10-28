@@ -339,7 +339,7 @@ func processFile(path string, fi fs.FileInfo, fileSystem fs.FS, opt DirOptions, 
 		return fmt.Errorf("error opening file %q for reading: %w", path, err)
 	}
 
-	_, copyErr := io.CopyN(tw, fr, header.Size)
+	_, copyErr := blob.CopyReaderN(tw, fr, header.Size)
 	closeErr := fr.Close()
 
 	if copyErr != nil {

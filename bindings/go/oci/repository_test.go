@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	_ "crypto/sha512" // SHA-384 and SHA-512 OCI roots
@@ -2110,13 +2112,18 @@ func TestRepository_DownloadResourceOCIImageLayer(t *testing.T) {
 		r.Equal("application/octet-stream", mediaType, "an empty media type must not overwrite the default")
 	})
 
-	t.Run("a size that does not match the blob is rejected", func(t *testing.T) {
+	t.Run("a size that does not match the blob is rejected on read", func(t *testing.T) {
 		r := require.New(t)
 		wrongSize := res.DeepCopy()
 		wrongSize.Access.(*v1.OCIImageLayer).Size = int64(len(testdata)) + 1
 
-		_, err := repo.DownloadResource(ctx, wrongSize)
-		r.ErrorContains(err, "the descriptor declares")
+		downloaded, err := repo.DownloadResource(ctx, wrongSize)
+		r.NoError(err)
+		reader, err := downloaded.ReadCloser()
+		r.NoError(err)
+		_, err = io.ReadAll(reader)
+		r.ErrorContains(err, "size mismatch")
+		r.Error(reader.Close())
 	})
 
 	t.Run("a layer cannot be streamed", func(t *testing.T) {
@@ -4250,4 +4257,72 @@ func TestRepository_AddOwnership_OCIImageLayerSubjectRejected(t *testing.T) {
 	pushed, err := layerStore.Exists(ctx, ociImageSpecV1.DescriptorEmptyJSON)
 	r.NoError(err)
 	r.False(pushed, "no ownership referrer may be pushed against a layer")
+}
+
+// stagingProbeBlob is a blob with neither a known size nor a known digest. When its
+// content is fully read it records whether a staged upload file exists in the CTF blobs
+// directory, which only happens when the blob is streamed to disk rather than buffered.
+type stagingProbeBlob struct {
+	content  []byte
+	blobsDir string
+	sawStage bool
+}
+
+func (b *stagingProbeBlob) ReadCloser() (io.ReadCloser, error) {
+	return io.NopCloser(&stagingProbeReader{blob: b, r: bytes.NewReader(b.content)}), nil
+}
+
+type stagingProbeReader struct {
+	blob *stagingProbeBlob
+	r    io.Reader
+}
+
+func (p *stagingProbeReader) Read(buf []byte) (int, error) {
+	n, err := p.r.Read(buf)
+	if errors.Is(err, io.EOF) {
+		entries, _ := os.ReadDir(p.blob.blobsDir)
+		for _, e := range entries {
+			if strings.HasPrefix(e.Name(), ".upload.") {
+				p.blob.sawStage = true
+			}
+		}
+	}
+	return n, err
+}
+
+func TestRepository_AddLocalResource_StreamsUnknownDigestBlobIntoCTF(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+	content := []byte("streamed local blob of unknown digest and size")
+	want := digest.FromBytes(content)
+
+	dir := t.TempDir()
+	fs, err := filesystem.NewFS(dir, os.O_RDWR)
+	r.NoError(err)
+	store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	repo := Repository(t, ocictf.WithCTF(store))
+
+	blobsDir := filepath.Join(dir, ctf.BlobsDirectoryName)
+	probe := &stagingProbeBlob{content: content, blobsDir: blobsDir}
+	resource := &descriptor.Resource{
+		Relation:    descriptor.LocalRelation,
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "r", Version: "1.0.0"}},
+		Type:        "blob",
+		Access:      &v2.LocalBlob{MediaType: "application/octet-stream"},
+	}
+
+	newRes, err := repo.AddLocalResource(ctx, "ocm.software/test-component", "1.0.0", resource, probe)
+	r.NoError(err)
+	r.True(probe.sawStage, "the blob must be streamed into a staged file, not buffered in memory")
+	r.Equal(want.String(), newRes.Access.(*v2.LocalBlob).LocalReference)
+
+	stored, err := os.ReadFile(filepath.Join(blobsDir, "sha256."+want.Encoded()))
+	r.NoError(err)
+	r.Equal(content, stored)
+
+	entries, err := os.ReadDir(blobsDir)
+	r.NoError(err)
+	for _, e := range entries {
+		r.False(strings.HasPrefix(e.Name(), ".upload."), "no staged file may remain: %s", e.Name())
+	}
 }

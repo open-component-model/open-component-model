@@ -103,11 +103,6 @@ For more information about the OCM configuration file,
 see [.ocmconfig documentation](https://github.com/open-component-model/ocm/blob/main/docs/reference/ocm_configfile.md).
 {{< /step >}}
 
-{{<callout context="tip">}}
-If you are re-running this guide and the component versions already exist, add
-`--component-version-conflict-policy replace` to the `ocm add cv` commands to overwrite existing versions.
-{{</callout>}}
-
 {{< step >}}
 **Create and Push the Backend Component**
 

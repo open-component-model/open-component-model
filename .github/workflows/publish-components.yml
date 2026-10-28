@@ -31,10 +31,6 @@ on:
         description: "Digest of the Helm chart already pushed to ghcr.io/<owner>/kubernetes/controller/chart."
         required: true
         type: string
-      conflict_policy:
-        description: "Passed to `ocm add component-version --component-version-conflict-policy`. 'replace' keeps reruns idempotent."
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -115,7 +111,6 @@ jobs:
       - name: Publish component-versions
         env:
           VERSION: ${{ inputs.version }}
-          CONFLICT_POLICY: ${{ inputs.conflict_policy }}
           WORKSPACE: ${{ github.workspace }}
           CONSTRUCTOR: ${{ github.workspace }}/.github/components/ocm-release/component-constructor.yaml
         run: |
@@ -139,8 +134,7 @@ jobs:
               add component-version \
               --config "/.ocmconfig" \
               --repository "$REPO_ROOT" \
-              --constructor "$CONSTRUCTOR" \
-              --component-version-conflict-policy "$CONFLICT_POLICY"
+              --constructor "$CONSTRUCTOR"
 
       # The full CLI image ships a FIPS build of cosign on PATH, so no cosign is
       # installed on the runner. Forward the GHA OIDC vars explicitly.

@@ -101,7 +101,6 @@ tasks:
       - cmd: |
           {{ .ocm }} add componentversion \
             --repository {{.CTF}} \
-            --component-version-conflict-policy=replace \
             --constructor component-constructor.yaml
 
   build:postgres:
@@ -114,7 +113,6 @@ tasks:
     cmd: |
       {{ .ocm }} add componentversion \
         --repository {{.CTF}} \
-        --component-version-conflict-policy=replace \
         --constructor component-constructor.yaml
 
   build:product:
@@ -137,7 +135,6 @@ tasks:
       - cmd: |
           {{ .ocm }} add componentversion \
             --repository {{.CTF}} \
-            --component-version-conflict-policy=replace \
             --constructor component-constructor.yaml
       - task: sign
         vars:

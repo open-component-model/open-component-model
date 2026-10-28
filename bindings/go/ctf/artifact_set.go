@@ -301,7 +301,8 @@ func ConvertToOCIImageLayout(ctx context.Context, as *ArtifactSet, writer io.Wri
 		if err != nil {
 			return fmt.Errorf("unable to read blob %s: %w", b, err)
 		}
-		if _, err := io.Copy(tw, rc); err != nil {
+		_, copyErr := blob.CopyReader(tw, rc)
+		if err := errors.Join(copyErr, rc.Close()); err != nil {
 			return fmt.Errorf("unable to copy blob %s: %w", b, err)
 		}
 	}
