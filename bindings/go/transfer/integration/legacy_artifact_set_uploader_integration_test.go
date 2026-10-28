@@ -175,6 +175,115 @@ func transferLegacyArtifactSetCTFToOCI(t *testing.T, legacyMediaType, manifestTy
 	r.Equal(root.Digest, artifacts[0].Digest)
 }
 
+// Test_Integration_TransferDockerArtifactSetLocalBlob_CTFToCTF covers the other half
+// of the customer scenario: transferring a docker artifact-set local blob as a local
+// blob (no OCI uploader). The CTF->CTF path copies the blob verbatim, so the stored
+// blob must remain a docker artifact set with the same main-artifact digest.
+func Test_Integration_TransferDockerArtifactSetLocalBlob_CTFToCTF(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctx := t.Context()
+
+	const (
+		componentName    = "github.com/openmcp-project/landscaper"
+		componentVersion = "v1.0.5"
+		resourceName     = "landscaper-webhooks-server"
+		referenceName    = "openmcp-project/components/github.com/openmcp-project/landscaper/images/landscaper-webhooks-server:v1.0.5"
+		dockerMediaType  = "application/vnd.docker.distribution.manifest.list.v2+tar+gzip"
+		dockerManifest   = "application/vnd.docker.distribution.manifest.v2+json"
+		dockerList       = "application/vnd.docker.distribution.manifest.list.v2+json"
+	)
+	archive, root := legacyOCIIndexArtifactSet(t, dockerManifest, dockerList)
+
+	// Confirm the fixture is a genuine legacy artifact set (flat blobs/<algo>.<encoded>,
+	// no oci-layout), not just an OCI layout with a docker media type stamped on.
+	set, err := ctf.NewArtifactSetFromBlob(inmemory.New(bytes.NewReader(archive), inmemory.WithMediaType(dockerMediaType)))
+	r.NoError(err)
+	r.Equal(ctf.ArtifactSetFormatLegacyOCI, set.Format())
+	r.NoError(set.Close())
+
+	sourcePath := t.TempDir()
+	sourceRepo := createCTFRepository(t, sourcePath)
+	resource, err := sourceRepo.AddLocalResource(ctx, componentName, componentVersion, &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: resourceName, Version: componentVersion}},
+		Type:        "ociImage",
+		Relation:    descriptor.LocalRelation,
+		Access: &descriptorv2.LocalBlob{
+			Type:          runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion),
+			MediaType:     dockerMediaType,
+			ReferenceName: referenceName,
+		},
+	}, inmemory.New(bytes.NewReader(archive), inmemory.WithMediaType(dockerMediaType)))
+	r.NoError(err)
+	resource.Digest = &descriptor.Digest{
+		HashAlgorithm:          "SHA-256",
+		NormalisationAlgorithm: "ociArtifactDigest/v1",
+		Value:                  root.Digest.Encoded(),
+	}
+	r.NoError(sourceRepo.AddComponentVersion(ctx, &descriptor.Descriptor{
+		Meta: descriptor.Meta{Version: "v2"},
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: componentVersion}},
+			Provider:      descriptor.Provider{Name: "openmcp-project"},
+			Resources:     []descriptor.Resource{*resource},
+		},
+	}))
+
+	sourceSpec := &ctfrepospec.Repository{
+		Type:     runtime.NewVersionedType(ctfrepospec.Type, ctfrepospec.Version),
+		FilePath: sourcePath,
+	}
+	targetPath := t.TempDir()
+	targetSpec := &ctfrepospec.Repository{
+		Type:       runtime.NewVersionedType(ctfrepospec.Type, ctfrepospec.Version),
+		FilePath:   targetPath,
+		AccessMode: "readwrite|create",
+	}
+	// No uploaders: the artifact-set local blob is embedded as a local blob in the target CTF.
+	definition, err := transfer.BuildGraphDefinition(ctx, &transferv1alpha1.Config{}, nil, transfer.Mapping{
+		Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
+		Target:     targetSpec,
+		Resolver:   transfer.NewRepositoryResolver(sourceRepo, sourceSpec),
+	})
+	r.NoError(err)
+
+	var localBlobToLocalBlob bool
+	for _, transformation := range definition.Transformations {
+		if transformation.Type.Name == "TransferCTFLocalBlobToCTFLocalBlob" {
+			localBlobToLocalBlob = true
+			break
+		}
+	}
+	r.True(localBlobToLocalBlob, "docker artifact-set local blob must be transferred as a local blob")
+
+	builder := transfer.NewDefaultBuilder(
+		provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir())),
+		ociresource.NewResourceRepository(nil),
+		nil,
+	)
+	graph, err := builder.BuildAndCheck(definition)
+	r.NoError(err)
+	r.NoError(graph.Process(ctx))
+
+	targetRepo := createCTFRepository(t, targetPath)
+	got, err := targetRepo.GetComponentVersion(ctx, componentName, componentVersion)
+	r.NoError(err)
+	r.Len(got.Component.Resources, 1)
+
+	var targetAccess descriptorv2.LocalBlob
+	r.NoError(descriptorv2.Scheme.Convert(got.Component.Resources[0].Access, &targetAccess))
+	r.Equal(dockerMediaType, targetAccess.MediaType, "docker artifact-set media type must be preserved")
+
+	stored, _, err := targetRepo.GetLocalResource(ctx, componentName, componentVersion, got.Component.Resources[0].ToIdentity())
+	r.NoError(err)
+	layout, err := ocitar.ReadOCILayout(ctx, stored)
+	r.NoError(err)
+	t.Cleanup(func() { r.NoError(layout.Close()) })
+	artifacts := layout.MainArtifacts(ctx)
+	r.Len(artifacts, 1)
+	r.Equal(root.Digest, artifacts[0].Digest, "main artifact digest must not change across the local-blob transfer")
+}
+
 func legacyOCIIndexArtifactSet(t *testing.T, manifestType, indexType string) ([]byte, ocispecv1.Descriptor) {
 	t.Helper()
 	r := require.New(t)
