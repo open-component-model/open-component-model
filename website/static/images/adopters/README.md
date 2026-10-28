@@ -1,16 +1,17 @@
 # Adopter logos
 
-Logos in this directory power the *Trusted by* marquee on the OCM landing page.
-They are shown for editorial purposes only. Everything below this section of the
+Logos in this directory power the *Adopted by* marquee on the OCM landing page.
+Each logo is shown with permission of the respective trademark owner and
+identifies an organisation that uses OCM. Everything below this section of the
 README is maintainer internal; only the next section is public.
 
 ## Trademark attribution
 
 The adopter logos are trademarks or registered trademarks of their respective
-owners. Inclusion of a logo on this site does not imply endorsement of the
-Open Component Model by the trademark owner, and it does not grant any right to
-reuse those marks. If you want to use any of these marks, contact the respective
-owner.
+owners. Logos are displayed with the permission of each owner to indicate that
+the organisation uses the Open Component Model. Display on this site does not
+grant any right to reuse those marks. If you want to use any of these marks,
+contact the respective owner.
 
 | Mark             | Owner                                |
 |------------------|--------------------------------------|
@@ -41,9 +42,22 @@ If you own a mark shown here and want it corrected or removed, open an issue at
 The entries below record source URL, fetch date, licence rationale, trademark
 owner, and any customisation applied to each logo.
 
-**No explicit permission emails were sent.** Usage is based on editorial/factual
-use to indicate OCM adoption. If any owner objects, files will be removed
-immediately.
+**Permission is required before a logo is added.** Each entry below records
+the permission state of the mark:
+
+- `Permission: granted (implicit)` covers organisations inside the NeoNephos
+  Foundation or run by SAP (SAP, SAP NS2, Gardener, Kyma, Platform Mesh,
+  OpenControlPlane, IronCore, Konfidence). The OCM project is itself a
+  NeoNephos project staffed by SAP employees, so sibling-project and SAP marks
+  are used under the Foundation's trademark usage guidelines without a
+  per-mark email.
+- `Permission: requested (pending)` means we have reached out to the trademark
+  owner for an explicit OK. The logo stays in this state until the owner
+  confirms.
+- `Permission: granted (explicit)` means the owner has confirmed in writing.
+  Keep the confirmation reference (email date, contact person) in the entry.
+
+If any owner objects at any time, the logo is removed immediately.
 
 Logos are used as downloaded. A few of the initial 12 assets below carry a
 "Notes" line describing a one-off adjustment (e.g. a recoloured dark variant)
@@ -107,6 +121,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Fetched:** 2026-10-26
 - **Licence:** Public domain (PD-textlogo / simple shapes)
 - **Trademark owner:** SAP SE
+- **Permission:** granted (implicit)
 
 ### BWI (BWI GmbH)
 
@@ -115,6 +130,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Fetched:** 2026-10-26
 - **Licence:** Public domain (PD-textlogo)
 - **Trademark owner:** BWI GmbH
+- **Permission:** requested (pending)
 
 ### SAP NS2 (SAP National Security Services)
 
@@ -123,12 +139,14 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Fetched:** 2026-10-26
 - **Licence:** Editorial use only (no explicit licence found)
 - **Trademark owner:** SAP National Security Services, Inc.
+- **Permission:** granted (implicit)
 
 ### Gardener
 
 - **File:** `gardener-color.svg`
 - **Source:** <https://github.com/gardener/gardener/blob/master/logo/gardener.svg>
 - **Trademark owner:** NeoNephos Foundation
+- **Permission:** granted (implicit)
 - **Fetched:** 2026-10-26
 - **Licence:** NeoNephos trademark usage guidelines
 - **Notes:** viewBox cropped from `0 0 595.3 170.1` to `46 0 502 170.1` to
@@ -139,6 +157,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **File:** `konfidence-dark.svg`
 - **Source:** <https://konfidence.cloud>
 - **Trademark owner:** SAP SE / Konfidence project
+- **Permission:** granted (implicit)
 - **Fetched:** 2026-10-26
 - **Licence:** Editorial use (no explicit licence)
 - **Notes:** viewBox cropped from `0 0 3440 400` to `78 0 3283 400` to
@@ -149,6 +168,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **File:** `kyma-light.svg` / `kyma-dark.svg` (icon + label lockup built from `kyma-color.svg`)
 - **Source:** <https://kyma-project.io/assets/logo_icon.svg>
 - **Trademark owner:** SAP SE / Kyma project
+- **Permission:** granted (implicit)
 - **Fetched:** 2026-10-26
 - **Licence:** Editorial use (no explicit licence)
 - **Notes:** viewBox cropped from `0 0 150 60` to `0 0 126 60` to remove
@@ -159,6 +179,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **File:** `ocp-light.svg` / `ocp-dark.svg` (icon + label lockup built from `ocp-color.svg`)
 - **Source:** <https://open-control-plane.io>
 - **Trademark owner:** NeoNephos Foundation
+- **Permission:** granted (implicit)
 - **Fetched:** 2026-10-26
 - **Licence:** NeoNephos trademark usage guidelines
 - **Notes:** `ocp-dark.svg` remaps the original dark blues to lighter tones for
@@ -173,6 +194,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Fetched:** 2026-10-26
 - **Licence:** NeoNephos trademark usage guidelines
 - **Trademark owner:** NeoNephos Foundation
+- **Permission:** granted (implicit)
 
 ### T-Systems
 
@@ -181,6 +203,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Fetched:** 2026-10-27
 - **Licence:** Public domain (PD-textlogo)
 - **Trademark owner:** T-Systems International GmbH
+- **Permission:** requested (pending)
 
 ### STACKIT
 
@@ -189,6 +212,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Fetched:** 2026-10-26
 - **Licence:** Editorial use (official brand asset in project repo)
 - **Trademark owner:** STACKIT GmbH & Co. KG
+- **Permission:** requested (pending)
 - **Notes:** Dark variant derived from the official light SVG by replacing the
   fill colour with white. viewBox cropped from
   `0 0 1612.0708246 546.8535461` to `111 0 1385 546.8535461` on both files to
@@ -201,6 +225,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Fetched:** 2026-10-26
 - **Licence:** NeoNephos trademark usage guidelines
 - **Trademark owner:** NeoNephos Foundation
+- **Permission:** granted (implicit)
 
 ### EverBright
 
@@ -209,3 +234,4 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Fetched:** 2026-10-26
 - **Licence:** Editorial use (no explicit licence; file is the site's own header logo)
 - **Trademark owner:** EverBright GmbH (per Impressum on everbright-it.de)
+- **Permission:** requested (pending)
