@@ -45,7 +45,7 @@ func Test_Integration_TransferLegacyOCIIndexArtifactSet_CTFToOCI(t *testing.T) {
 			indexType:       ocispecv1.MediaTypeImageIndex,
 		},
 		{
-			// Customer components carry docker media types, e.g. landscaper images
+			// Customer components carry docker media types, e.g. images
 			// synthesized from docker inputs. The digest must survive the transfer
 			// unchanged, i.e. no docker->OCI manifest conversion.
 			name:            "docker",
@@ -70,10 +70,10 @@ func transferLegacyArtifactSetCTFToOCI(t *testing.T, legacyMediaType, manifestTy
 	archive, root := legacyOCIIndexArtifactSet(t, manifestType, indexType)
 
 	const (
-		componentName    = "github.com/openmcp-project/landscaper"
+		componentName    = "example.com/acme/component"
 		componentVersion = "v1.0.5"
-		resourceName     = "landscaper-webhooks-server"
-		referenceName    = "openmcp-project/components/github.com/openmcp-project/landscaper/images/landscaper-webhooks-server:v1.0.5"
+		resourceName     = "webhooks-server"
+		referenceName    = "acme/components/example.com/acme/component/images/webhooks-server:v1.0.5"
 	)
 	artifactSet, err := ctf.NewArtifactSetFromBlob(inmemory.New(bytes.NewReader(archive), inmemory.WithMediaType(legacyMediaType)))
 	r.NoError(err)
@@ -102,7 +102,7 @@ func transferLegacyArtifactSetCTFToOCI(t *testing.T, legacyMediaType, manifestTy
 		Meta: descriptor.Meta{Version: "v2"},
 		Component: descriptor.Component{
 			ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: componentVersion}},
-			Provider:      descriptor.Provider{Name: "openmcp-project"},
+			Provider:      descriptor.Provider{Name: "acme"},
 			Resources:     []descriptor.Resource{*resource},
 		},
 	}))
@@ -185,10 +185,10 @@ func Test_Integration_TransferDockerArtifactSetLocalBlob_CTFToCTF(t *testing.T) 
 	ctx := t.Context()
 
 	const (
-		componentName    = "github.com/openmcp-project/landscaper"
+		componentName    = "example.com/acme/component"
 		componentVersion = "v1.0.5"
-		resourceName     = "landscaper-webhooks-server"
-		referenceName    = "openmcp-project/components/github.com/openmcp-project/landscaper/images/landscaper-webhooks-server:v1.0.5"
+		resourceName     = "webhooks-server"
+		referenceName    = "acme/components/example.com/acme/component/images/webhooks-server:v1.0.5"
 		dockerMediaType  = "application/vnd.docker.distribution.manifest.list.v2+tar+gzip"
 		dockerManifest   = "application/vnd.docker.distribution.manifest.v2+json"
 		dockerList       = "application/vnd.docker.distribution.manifest.list.v2+json"
@@ -224,7 +224,7 @@ func Test_Integration_TransferDockerArtifactSetLocalBlob_CTFToCTF(t *testing.T) 
 		Meta: descriptor.Meta{Version: "v2"},
 		Component: descriptor.Component{
 			ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: componentVersion}},
-			Provider:      descriptor.Provider{Name: "openmcp-project"},
+			Provider:      descriptor.Provider{Name: "acme"},
 			Resources:     []descriptor.Resource{*resource},
 		},
 	}))
@@ -288,7 +288,7 @@ func legacyOCIIndexArtifactSet(t *testing.T, manifestType, indexType string) ([]
 	t.Helper()
 	r := require.New(t)
 
-	payload := []byte("landscaper webhook server")
+	payload := []byte("webhooks server payload")
 	layer := content.NewDescriptorFromBytes(ocispecv1.MediaTypeImageLayer, payload)
 	configData := []byte(`{}`)
 	config := content.NewDescriptorFromBytes(ocispecv1.MediaTypeImageConfig, configData)
