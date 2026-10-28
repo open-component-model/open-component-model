@@ -12,6 +12,8 @@ package algorithms
 
 import (
 	"crypto"
+	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -116,7 +118,12 @@ func sum(desc *descruntime.Descriptor, normalisationAlgorithm, hashAlgorithm str
 	if err != nil {
 		return nil, err
 	}
-	h := hash.New()
+	// Use the implementations directly instead of hash.New: crypto.Hash.New
+	// panics unless some package in the binary links the implementation.
+	h := sha256.New()
+	if hash == crypto.SHA512 {
+		h = sha512.New()
+	}
 	if _, err := h.Write(normalised); err != nil {
 		return nil, fmt.Errorf("hashing component version failed: %w", err)
 	}
