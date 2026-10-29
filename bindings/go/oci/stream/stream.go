@@ -23,7 +23,9 @@ type ResourceStream interface {
 	Root() ocispec.Descriptor
 
 	// Materialize produces a ReadOnlyBlob (OCI layout tar) for legacy consumers.
-	// This is the only code path that creates a tar file.
+	// This is the only code path that creates a tar file. Consumers that copy
+	// OCI graphs should check the returned blob for ResourceStream and copy from
+	// it instead of reading the tar.
 	Materialize(ctx context.Context) (blob.ReadOnlyBlob, error)
 }
 
