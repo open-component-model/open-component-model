@@ -172,6 +172,10 @@ The Secret is looked up in the `Component`'s own namespace unless the reference 
 this `Component` inherits it and verifies the same signature.
 {{< /callout >}}
 
+{{< callout context="caution" title="Ensure component version verification" icon="outline/alert-triangle" >}}
+Specifying a different `ocmConfig` in an object referencing the `Component` (e.g. a `Resource`) drops the inherited config including the verifier configuration. As a result, the component version won't be verified again! To keep the verifier configuration and enforce component version verification, reference the parent objects, too.
+{{< /callout >}}
+
 {{< /step >}}
 
 {{< step >}}
