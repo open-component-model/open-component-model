@@ -25,14 +25,17 @@ OCM CLI. Migrate gradually, as part of your regular releases. You do not need to
 The normalisation algorithm decides which parts of a component descriptor a digest, and therefore a signature, covers.
 Older algorithms may cover less of the descriptor than the current default (see
 [Normalization and Digest Calculation]({{< relref "docs/concepts/signing-and-verification-concept.md#normalization-and-digest-calculation" >}})).
-OCM logs a warning whenever it relies on such a digest:
+OCM logs a warning whenever it relies on such a digest and you can act on it:
 
-- `trusted digest was computed with an older normalisation algorithm`: a signature (`ocm verify`, the controller) or a
-  digest pin.
-- `component reference digest was computed with an older normalisation algorithm`: a component reference (`ocm add cv`,
-  `ocm transfer cv`, the controller).
+- `trusted digest was computed with an older normalisation algorithm`: a signature checked by `ocm verify`, or a digest
+  pin.
+- `component reference digest was computed with an older normalisation algorithm`: a component reference in your
+  component constructor (`ocm add cv`), or of a component version you transfer (`ocm transfer cv`).
 - `signing with an older normalisation algorithm`: `ocm sign cv --normalisation` with an algorithm other than the
   default.
+
+The OCM controller and `ocm add cv`, for the references of component versions published by others, log the same messages
+at debug level only: these digests can only be upgraded by their publisher.
 
 ## Why Re-Signing Alone Is Not Enough
 
