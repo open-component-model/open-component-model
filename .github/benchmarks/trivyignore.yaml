@@ -6,4 +6,4 @@ misconfigurations:
   - id: KSV-0041
     paths:
       - chart/templates/rbac/manager-role.yaml
-    statement: The controller resolves OCI registry credentials from Kubernetes Secrets referenced in Repository and Resource custom resources. Read/list/watch on secrets is required for this. The ClusterRole does not grant create, update, or delete on secrets.
+    statement: The controller resolves OCI registry credentials from Kubernetes Secrets referenced in Repository and Resource custom resources. Read/list/watch on secrets is required for this. The ClusterRole does not grant create, update, or delete on secrets; OCM-KSV-0003 fails the scan if any role does.

@@ -351,6 +351,12 @@
       ],
       minimumReleaseAge: null,
     },
+    {
+      // Fixtures for OCM's Trivy checks reference images unpinned or with fake
+      // digests on purpose; pinning or updating them would change what they test.
+      matchFileNames: ['.github/trivy-checks/testdata/**'],
+      enabled: false,
+    },
   ],
   customDatasources: {
     envtest: {

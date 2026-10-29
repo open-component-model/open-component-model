@@ -7,8 +7,8 @@ name: Image scan
 # The controller chart, rendered with its opt-in NetworkPolicy, is checked
 # against the CIS Kubernetes Benchmark (Trivy config) and NSA/CISA and MITRE
 # (Kubescape); the image build files get Trivy's Dockerfile checks. OCM's own
-# Trivy checks are in .github/trivy-checks, accepted findings and check
-# settings in .github/benchmarks. Benchmark findings fail.
+# Trivy checks are in .github/trivy-checks (fixtures in testdata), accepted
+# findings and check settings in .github/benchmarks. Benchmark findings fail.
 on:
   workflow_call:
     inputs:
@@ -246,7 +246,7 @@ jobs:
           persist-credentials: false
 
       - name: Load .env
-        run: grep -E '^(TRIVY_VERSION|KUBESCAPE_IMAGE)=' .env >> "$GITHUB_ENV"
+        run: grep -E '^(TRIVY_VERSION|TRIVY_CHECKS_IMAGE|KUBESCAPE_IMAGE|KUBESCAPE_CONTROLS_VERSION)=' .env >> "$GITHUB_ENV"
 
       - name: Install Helm
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
@@ -274,8 +274,13 @@ jobs:
           TRIVY_CHECK_NAMESPACES: user
           # Settings of built-in checks (KSV-0125 trusted registries).
           TRIVY_CONFIG_DATA: .github/benchmarks/trivy-data
+          TRIVY_CHECKS_BUNDLE_REPOSITORY: ${{ env.TRIVY_CHECKS_IMAGE }}
         with:
           version: ${{ env.TRIVY_VERSION }}
+          # A config scan needs no vulnerability DB, and a restored cache could
+          # hold a checks bundle other than the pinned one: Trivy reuses a bundle
+          # downloaded within the last day without comparing digests.
+          cache: 'false'
           scan-type: config
           scan-ref: tmp/chart
           trivyignores: .github/benchmarks/trivyignore.yaml
@@ -283,33 +288,64 @@ jobs:
           format: json
           output: tmp/chart-scan/trivy.json
 
+      # Every fixture names the OCM checks it must fail on its first line, so a
+      # check that stops firing, or fires on a compliant fixture, fails the job.
+      - name: Test OCM Trivy checks
+        if: ${{ !cancelled() }}
+        env:
+          TRIVY_CONFIG_CHECK: .github/trivy-checks
+          TRIVY_CHECK_NAMESPACES: user
+          TRIVY_CHECKS_BUNDLE_REPOSITORY: ${{ env.TRIVY_CHECKS_IMAGE }}
+        run: |
+          dir=.github/trivy-checks/testdata
+          report=tmp/chart-scan/trivy-checks-test.json
+          trivy config --quiet --format json --output "$report" "$dir"
+          fail=0
+          for f in "$dir"/*; do
+            line="$(head -n 1 "$f")"
+            [[ "$line" == "# expect:"* ]] || { echo "::error file=$f::first line must be '# expect: <check IDs>'"; fail=1; continue; }
+            want="$(tr -s ' ' '\n' <<< "${line#"# expect:"}" | sed '/^$/d' | sort | paste -sd ' ')"
+            got="$(jq -r --arg t "${f#"$dir"/}" '[.Results[]? | select(.Target == $t)]
+              | if . == [] then "not scanned"
+                else [.[].Misconfigurations[]?.ID | select(startswith("OCM-"))] | sort | join(" ") end' "$report")"
+            [[ "$got" == "$want" ]] || { echo "::error file=$f::expected [$want], got [$got]"; fail=1; }
+          done
+          exit "$fail"
+
       # Trivy's JSON lists only failed checks; accepted findings are dropped.
+      # trivy convert renders the failed ones with their source lines.
       - name: CIS Kubernetes Benchmark summary
         if: ${{ !cancelled() }}
         run: |
           report=tmp/chart-scan/trivy.json
           [[ -s "$report" ]] || { echo "::error::Trivy wrote no report for the chart"; exit 1; }
-          jq -r '[.Results[]? | .Target as $t | .Misconfigurations[]? | . + {Target: $t}] as $failed
-            | "### ☸️ CIS Kubernetes Benchmark: controller chart and image build files (Trivy config)\n",
-              "\([.Results[]?.MisconfSummary.Successes // 0] | add // 0) checks passed, \($failed | length) failed in \([.Results[]?] | length) files. Accepted findings: `.github/benchmarks/trivyignore.yaml`.",
-              if $failed == [] then empty
-              else "\n| File | Line | ID | Severity | Title | Message |\n| --- | --- | --- | --- | --- | --- |",
-                ($failed[] | "| \(.Target) | \(.CauseMetadata.StartLine // "") | \(.ID) | \(.Severity) | \(.Title | gsub("\\|"; "\\|")) | \(.Message | gsub("\\|"; "\\|") | gsub("\n"; " ")) |")
-              end' "$report" >> "$GITHUB_STEP_SUMMARY"
+          trivy convert --format table --table-mode detailed --scanners misconfig --output tmp/chart-scan/trivy.txt "$report"
+          cat tmp/chart-scan/trivy.txt
+          {
+            echo "### ☸️ CIS Kubernetes Benchmark: controller chart and image build files (Trivy config)"
+            echo
+            jq -r '"\([.Results[]?.MisconfSummary.Successes // 0] | add // 0) checks passed, \([.Results[]?.Misconfigurations[]?] | length) failed in \([.Results[]?] | length) files. Accepted findings: `.github/benchmarks/trivyignore.yaml`."' "$report"
+            if [[ -s tmp/chart-scan/trivy.txt ]]; then
+              printf '\n```text\n'
+              cat tmp/chart-scan/trivy.txt
+              printf '```\n'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # Kubescape fails on an empty input, but its thresholds count controls
       # covered by an exception as failed, so the open ones are selected here.
       - name: NSA/CISA and MITRE (Kubescape)
         if: ${{ !cancelled() }}
         run: |
-          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/work" -w /work "$KUBESCAPE_IMAGE" \
-            scan framework nsa,mitre tmp/chart --exceptions .github/benchmarks/kubescape-exceptions.json \
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e KS_SKIP_UPDATE_CHECK=true -v "$PWD:/work" -w /work "$KUBESCAPE_IMAGE" \
+            scan framework nsa,mitre tmp/chart --controls-version "$KUBESCAPE_CONTROLS_VERSION" \
+            --exceptions .github/benchmarks/kubescape-exceptions.json \
             --format pretty-printer,json --output tmp/chart-scan/kubescape
           report=tmp/chart-scan/kubescape.json
           # Resource IDs chain the objects a control relates (path=<n>/api=<group>/<ns>/<Kind>/<name>/...);
-          # only Kind/name pairs are kept.
-          failed="$(jq -c '[.results[] | (.resourceID | [scan("(?:^|/)([A-Z][A-Za-z]+)/([^/]+)") | join("/")] | join(" → ")) as $r
-            | .controls[] | select(.status.status == "failed")
+          # only Kind/name pairs are kept. The report omits results and controls when empty.
+          failed="$(jq -c '[.results[]? | (.resourceID | [scan("(?:^|/)([A-Z][A-Za-z]+)/([^/]+)") | join("/")] | join(" → ")) as $r
+            | .controls[]? | select(.status.status == "failed")
             | {resource: $r, id: .controlID, name, accepted: (.status.subStatus == "w/exceptions")}]' "$report")"
           jq -r --argjson failed "$failed" '"### 🛡️ NSA/CISA and MITRE: controller chart (Kubescape)\n",
             (.summaryDetails.frameworks[]? | "- \(.name): compliance score \(.complianceScore * 100 | round / 100)%"),
