@@ -6,13 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
-	"golang.org/x/time/rate"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -28,6 +25,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/pkg/configuration"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -93,10 +91,7 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 				}
 			})).
 		WithOptions(controller.Options{
-			RateLimiter: workqueue.NewTypedMaxOfRateLimiter(
-				workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](5*time.Millisecond, 5*time.Minute),
-				&workqueue.TypedBucketRateLimiter[reconcile.Request]{Limiter: rate.NewLimiter(10, 100)},
-			),
+			RateLimiter: r.RateLimit.Limiter(),
 		}).
 		Complete(r)
 }
@@ -161,12 +156,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get effective config: %w", err)
 	}
 
-	// Set effective config immediately so the deferred patch persists it
-	// even if a subsequent step fails.
-	if !equality.Semantic.DeepEqual(ocmRepo.Status.EffectiveOCMConfig, configs) {
-		ocmRepo.Status.EffectiveOCMConfig = configs
-		return ctrl.Result{}, fmt.Errorf("effective ocm config changed")
-	}
+	// The deferred status patch persists it, even if a later step fails.
+	ocmRepo.Status.EffectiveOCMConfig = configs
 
 	repoSpec := &runtime.Raw{}
 	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Decode(bytes.NewReader(ocmRepo.Spec.RepositorySpec.Raw), repoSpec); err != nil {
@@ -197,17 +188,28 @@ func (r *Reconciler) validate(ctx context.Context, repoSpec runtime.Typed, confi
 		return fmt.Errorf("failed to create plugin manager: %w", err)
 	}
 
-	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
+	repoResolver, err := r.Resolver.RepositoryResolver(ctx, &resolution.Options{
 		RepositorySpec: repoSpec,
 		Configuration:  cfg,
 		PluginManager:  pm,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create repository: %w", err)
+		return fmt.Errorf("failed to create repository resolver: %w", err)
 	}
 
-	// Perform health check on the repository
-	if err := cacheBackedRepo.CheckHealth(ctx); err != nil {
+	repo, err := repoResolver.GetComponentVersionRepositoryForSpecification(ctx, repoSpec)
+	if err != nil {
+		return fmt.Errorf("failed to get repository for health check: %w", err)
+	}
+
+	checkable, ok := repo.(repository.HealthCheckable)
+	if !ok {
+		log.FromContext(ctx).V(1).Info("repository is not health-checkable")
+
+		return nil
+	}
+
+	if err := checkable.CheckHealth(ctx); err != nil {
 		return fmt.Errorf("health check failed: %w", err)
 	}
 

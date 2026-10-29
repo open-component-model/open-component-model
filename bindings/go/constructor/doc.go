@@ -10,7 +10,9 @@
 //  1. Core Constructor Implementation
 //     The main construct.go file implements the core constructor functionality:
 //     - Component descriptor creation and validation
-//     - Source and source processing
+//     - Resource and source processing (sources are deprecated: they carry no
+//     digest and are not covered by signatures; declare such content as resources,
+//     see https://ocm.software/docs/changelog/migrate-from-sources/)
 //     - Concurrent processing of components
 //     - Input method handling
 //
@@ -28,7 +30,7 @@
 //     - Thread-safe operations with synchronized access
 //
 //  2. Input Method Support:
-//     - Flexible input method handling for resources and sources
+//     - Flexible input method handling for resources and (deprecated) sources
 //     - Provider-based input method resolution
 //     - Support for various input types and formats
 //
@@ -85,8 +87,7 @@
 //
 // The package supports flexible configuration through Options:
 //   - ResourceInputMethodProvider: Provider for resource input methods
-//   - SourceInputMethodProvider: Provider for source input methods
-//   - Options.ConcurrencyLimit: Maximum number of concurrent operations on resources and sources
+//   - SourceInputMethodProvider: Provider for source input methods (sources are deprecated)
 //   - CredentialProvider: Function to resolve credentials for resources and sources
 //   - ResourceDigestProcessorProvider: Provider for processing resource digests when adding resources by reference
 //   - TargetRepositoryProvider: Provider for target repositories when adding component versions

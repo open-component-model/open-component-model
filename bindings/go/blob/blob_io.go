@@ -60,9 +60,9 @@ func Copy(dst io.Writer, src ReadOnlyBlob) (err error) {
 	}
 
 	if size > SizeUnknown {
-		_, err = io.CopyN(dst, reader, size)
+		_, err = CopyReaderN(dst, reader, size)
 	} else {
-		_, err = io.Copy(dst, reader)
+		_, err = CopyReader(dst, reader)
 	}
 
 	return err

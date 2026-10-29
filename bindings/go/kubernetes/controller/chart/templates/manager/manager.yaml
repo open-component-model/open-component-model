@@ -60,23 +60,73 @@ spec:
                     {{- end }}
                     {{- /* Concurrency */}}
                     {{- with .Values.manager.concurrency }}
+                    {{- if .component }}
+                    - --component-controller-concurrency={{ .component }}
+                    {{- end }}
                     {{- if .resource }}
                     - --resource-controller-concurrency={{ .resource }}
                     {{- end }}
+                    {{- if .deployer }}
+                    - --deployer-controller-concurrency={{ .deployer }}
                     {{- end }}
-                    {{- /* Resolver */}}
-                    {{- with .Values.manager.resolver }}
-                    {{- if .workerCount }}
-                    - --resolver-worker-count={{ .workerCount }}
                     {{- end }}
-                    {{- if .workerQueueLength }}
-                    - --resolver-worker-queue-length={{ .workerQueueLength }}
+                    {{- /* Rate limiter */}}
+                    {{- with .Values.manager.rateLimiter }}
+                    {{- with .repository }}
+                    {{- if hasKey . "qps" }}
+                    - --repository-controller-rate-limit-qps={{ .qps }}
                     {{- end }}
-                    {{- if hasKey . "subscriberBufferSize" }}
-                    - --resolver-subscriber-buffer-size={{ .subscriberBufferSize }}
+                    {{- if .burst }}
+                    - --repository-controller-rate-limit-burst={{ int .burst }}
                     {{- end }}
-                    {{- if hasKey . "cacheTTL" }}
-                    - --resolver-cache-ttl={{ .cacheTTL }}
+                    {{- end }}
+                    {{- with .component }}
+                    {{- if hasKey . "qps" }}
+                    - --component-controller-rate-limit-qps={{ .qps }}
+                    {{- end }}
+                    {{- if .burst }}
+                    - --component-controller-rate-limit-burst={{ int .burst }}
+                    {{- end }}
+                    {{- end }}
+                    {{- with .resource }}
+                    {{- if hasKey . "qps" }}
+                    - --resource-controller-rate-limit-qps={{ .qps }}
+                    {{- end }}
+                    {{- if .burst }}
+                    - --resource-controller-rate-limit-burst={{ int .burst }}
+                    {{- end }}
+                    {{- end }}
+                    {{- with .replication }}
+                    {{- if hasKey . "qps" }}
+                    - --replication-controller-rate-limit-qps={{ .qps }}
+                    {{- end }}
+                    {{- if .burst }}
+                    - --replication-controller-rate-limit-burst={{ int .burst }}
+                    {{- end }}
+                    {{- end }}
+                    {{- with .discovery }}
+                    {{- if hasKey . "qps" }}
+                    - --discovery-controller-rate-limit-qps={{ .qps }}
+                    {{- end }}
+                    {{- if .burst }}
+                    - --discovery-controller-rate-limit-burst={{ int .burst }}
+                    {{- end }}
+                    {{- end }}
+                    {{- with .deployer }}
+                    {{- if hasKey . "qps" }}
+                    - --deployer-controller-rate-limit-qps={{ .qps }}
+                    {{- end }}
+                    {{- if .burst }}
+                    - --deployer-controller-rate-limit-burst={{ int .burst }}
+                    {{- end }}
+                    {{- end }}
+                    {{- with .namespacedDeployer }}
+                    {{- if hasKey . "qps" }}
+                    - --namespaced-deployer-controller-rate-limit-qps={{ .qps }}
+                    {{- end }}
+                    {{- if .burst }}
+                    - --namespaced-deployer-controller-rate-limit-burst={{ int .burst }}
+                    {{- end }}
                     {{- end }}
                     {{- end }}
                     {{- /* Cache */}}

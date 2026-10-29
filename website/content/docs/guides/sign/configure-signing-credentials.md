@@ -1,6 +1,6 @@
 ---
 title: "Configure Signing Credentials"
-description: "Configure OCM signing and verification keys using .ocmconfig."
+description: "Configure OCM signing and verification keys in .ocmconfig: set private keys for signing and public keys for verification by identity."
 weight: 20
 toc: true
 aliases:

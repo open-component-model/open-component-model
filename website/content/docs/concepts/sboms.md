@@ -1,6 +1,6 @@
 ---
 title: "Software Bills of Materials"
-description: "What is an SBOM and its relevance to the OCM ecosystem."
+description: "What an SBOM is, why it matters for software supply chains, and how OCM supports attaching and retrieving SBOMs from component versions."
 icon: "🧾"
 weight: 13
 toc: true

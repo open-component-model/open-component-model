@@ -1,6 +1,6 @@
 ---
 title: "Add HTTP Resources"
-description: "Add a file served over HTTP or HTTPS to a component version with the Wget input or access type, then understand media types, credentials, non-GET requests, download tuning, and v1 migration."
+description: "Add a file served over HTTP or HTTPS to a component version with the Wget input or access type: media types, credentials, non-GET requests, and v1 migration."
 weight: 20
 toc: true
 aliases:
