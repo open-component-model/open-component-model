@@ -138,8 +138,9 @@ type Reference struct {
 	ElementMeta `json:",inline"`
 	// Component describes the remote name of the referenced object.
 	Component string `json:"componentName"`
-	// Digest of the reference.
-	Digest Digest `json:"digest,omitempty"`
+	// Digest of the reference. omitzero, because omitempty never omits a struct
+	// and an unset digest would otherwise be serialised as empty strings.
+	Digest Digest `json:"digest,omitzero"`
 }
 
 // ToComponentIdentity returns the runtime.Identity that can be used to resolve the reference.
