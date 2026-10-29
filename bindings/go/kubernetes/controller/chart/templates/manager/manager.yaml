@@ -60,6 +60,9 @@ spec:
                     {{- end }}
                     {{- /* Concurrency */}}
                     {{- with .Values.manager.concurrency }}
+                    {{- if .repository }}
+                    - --repository-controller-concurrency={{ .repository }}
+                    {{- end }}
                     {{- if .component }}
                     - --component-controller-concurrency={{ .component }}
                     {{- end }}
@@ -68,6 +71,12 @@ spec:
                     {{- end }}
                     {{- if .deployer }}
                     - --deployer-controller-concurrency={{ .deployer }}
+                    {{- end }}
+                    {{- if .replication }}
+                    - --replication-controller-concurrency={{ .replication }}
+                    {{- end }}
+                    {{- if .discovery }}
+                    - --discovery-controller-concurrency={{ .discovery }}
                     {{- end }}
                     {{- end }}
                     {{- /* Rate limiter */}}
