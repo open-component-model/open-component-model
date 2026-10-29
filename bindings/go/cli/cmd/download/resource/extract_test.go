@@ -42,7 +42,7 @@ func Test_ExtractFSFromBlob_CopiesContents(t *testing.T) {
 			name: "file-backed blob",
 			blob: func(t *testing.T) blob.ReadOnlyBlob {
 				t.Helper()
-				b, err := filesystem.NewFileBlobFromPathWithFlag(tarPath, os.O_RDONLY)
+				b, err := filesystem.GetBlobFromOSPath(tarPath)
 				require.NoError(t, err)
 				b.SetMediaType("application/tar")
 				return b

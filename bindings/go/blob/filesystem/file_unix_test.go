@@ -252,7 +252,7 @@ func TestGetBlobInWorkingDirectorySymlinks(t *testing.T) {
 		r.NoError(os.Symlink(outside, file))
 
 		_, err = b.ReadCloser()
-		r.Error(err)
+		r.ErrorContains(err, "path escapes from parent")
 		r.Equal(blob.SizeUnknown, b.Size())
 	})
 }
