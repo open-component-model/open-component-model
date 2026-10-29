@@ -447,6 +447,8 @@ func TestNewFromBytesReadCloserSupportsWriterTo(t *testing.T) {
 		"bytes":          NewFromBytes(data),
 		"buffer":         NewFromBuffer(bytes.NewBuffer(data), false),
 		"size truncated": NewFromBytes(data, WithSize(5)),
+		"nil bytes":      NewFromBytes(nil),
+		"empty buffer":   NewFromBuffer(&bytes.Buffer{}, false),
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := require.New(t)
@@ -459,7 +461,7 @@ func TestNewFromBytesReadCloserSupportsWriterTo(t *testing.T) {
 			n, err := wt.WriteTo(&out)
 			r.NoError(err)
 			r.Equal(b.Size(), n)
-			r.Equal(data[:n], out.Bytes())
+			r.Equal(string(data[:n]), out.String())
 		})
 	}
 }

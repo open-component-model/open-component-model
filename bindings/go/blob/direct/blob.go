@@ -35,6 +35,10 @@ func NewFromBuffer(buffer *bytes.Buffer, unsafe bool, opts ...DirectBlobOption) 
 //
 // See New for more details on how the Blob is constructed.
 func NewFromBytes(data []byte, opts ...DirectBlobOption) *Blob {
+	if data == nil {
+		// keep nil input (e.g. a zero-value bytes.Buffer) on the byte-backed path
+		data = []byte{}
+	}
 	b := New(bytes.NewReader(data),
 		append([]DirectBlobOption{WithSize(int64(len(data)))}, opts...)...)
 	b.data = data
