@@ -42,13 +42,28 @@
                     "type": "object",
                     "properties": {
                         "component": {
-                            "type": "integer"
+                            "type": "integer",
+                            "minimum": 1
                         },
                         "deployer": {
-                            "type": "integer"
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "discovery": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "replication": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "repository": {
+                            "type": "integer",
+                            "minimum": 1
                         },
                         "resource": {
-                            "type": "integer"
+                            "type": "integer",
+                            "minimum": 1
                         }
                     }
                 },
