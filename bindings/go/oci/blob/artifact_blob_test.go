@@ -331,7 +331,6 @@ func TestNewResourceBlobWithMediaType_SizeValidation(t *testing.T) {
 			resource := &descriptor.Resource{}
 
 			base := &mockSizeAwareBlob{size: tt.blobSize}
-			require.NoError(t, ociblob.UpdateArtifactWithInformationFromBlob(resource, base))
 			_, err := ociblob.NewArtifactBlobWithMediaType(resource, base, "application/octet-stream")
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -400,7 +399,6 @@ func TestNewResourceBlobWithMediaType_DigestValidation(t *testing.T) {
 			}
 
 			base := &mockDigestAwareBlob{digest: tt.blobDigest}
-			require.NoError(t, ociblob.UpdateArtifactWithInformationFromBlob(resource, base))
 			_, err := ociblob.NewArtifactBlobWithMediaType(resource, base, "application/octet-stream")
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -492,9 +490,6 @@ func TestArtifactBlob_LayoutDigestSeparation(t *testing.T) {
 						if known {
 							b, wantDigest = &mockDigestAwareBlob{ReadOnlyBlob: base, digest: checksum, mediaType: underlyingType}, checksum
 						}
-						if location != "explicit" {
-							r.NoError(ociblob.UpdateArtifactWithInformationFromBlob(resource, b))
-						}
 						ab, err := ociblob.NewArtifactBlobWithMediaType(resource, b, explicitType)
 						r.NoError(err)
 						r.Zero(reader.reads, "classifying a layout must not read it")
@@ -508,7 +503,6 @@ func TestArtifactBlob_LayoutDigestSeparation(t *testing.T) {
 						r.NoError(err)
 						mt, _ := buffered.MediaType()
 						r.Equal(explicitType, mt)
-						r.NoError(ociblob.UpdateArtifactWithInformationFromBlob(resource, buffered))
 						rewrapped, err := ociblob.NewArtifactBlob(resource, buffered)
 						r.NoError(err)
 						requireChecksum(r, buffered, checksum)
@@ -543,7 +537,6 @@ func TestArtifactBlob_OrdinaryDigestNormalization(t *testing.T) {
 				if known {
 					base.digest = digest.FromString("bytes").String()
 				}
-				r.NoError(ociblob.UpdateArtifactWithInformationFromBlob(resource, base))
 				ab, err := ociblob.NewArtifactBlob(resource, base)
 				generic := normalization == "" || normalization == internaldigest.GenericBlobDigestV1
 				if generic && known {

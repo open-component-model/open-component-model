@@ -538,10 +538,6 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(
 		return err
 	}
 
-	if err := ociblob.UpdateArtifactWithInformationFromBlob(artifact, b); err != nil {
-		return fmt.Errorf("failed to update artifact with data from blob: %w", err)
-	}
-
 	artifactBlob, err := ociblob.NewArtifactBlob(artifact, b)
 	if err != nil {
 		return fmt.Errorf("failed to create resource blob: %w", err)
