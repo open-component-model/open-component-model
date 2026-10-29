@@ -324,10 +324,11 @@ func TestManifestPin(t *testing.T) {
 	other := digest.FromString("other")
 
 	tests := []struct {
-		name    string
-		digest  *descriptor.Digest
-		want    digest.Digest
-		wantErr string
+		name     string
+		chartRef string
+		digest   *descriptor.Digest
+		want     digest.Digest
+		wantErr  string
 	}{
 		{name: "no digest", digest: nil},
 		{
@@ -354,6 +355,15 @@ func TestManifestPin(t *testing.T) {
 			digest: &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "jsonNormalisation/v1", Value: manifest.Encoded()},
 		},
 		{
+			name:   "non-SHA-256 genericBlobDigest/v1 does not pin",
+			digest: &descriptor.Digest{HashAlgorithm: "SHA-512", NormalisationAlgorithm: descriptor.GenericBlobDigestV1, Value: digest.SHA512.FromBytes(tgz).Encoded()},
+		},
+		{
+			name:     "unresolvable reference does not pin",
+			chartRef: "oci://" + strings.TrimPrefix(srv.URL, "https://") + "/charts/missing:0.1.0",
+			digest:   &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: descriptor.GenericBlobDigestV1, Value: manifest.Encoded()},
+		},
+		{
 			name:    "invalid digest fails",
 			digest:  &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: descriptor.OCIArtifactDigestV1, Value: "not-hex"},
 			wantErr: `resource "mychart": invalid digest`,
@@ -364,7 +374,11 @@ func TestManifestPin(t *testing.T) {
 			r := require.New(t)
 			res := &descriptor.Resource{Digest: tc.digest}
 			res.Name = "mychart"
-			got, err := repo.manifestPin(t.Context(), res, chartRef, nil)
+			ref := chartRef
+			if tc.chartRef != "" {
+				ref = tc.chartRef
+			}
+			got, err := repo.manifestPin(t.Context(), res, ref, nil)
 			if tc.wantErr != "" {
 				r.ErrorContains(err, tc.wantErr)
 				return

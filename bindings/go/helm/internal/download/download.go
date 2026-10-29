@@ -219,10 +219,21 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 // named as a pull by version would name it.
 func pullChart(dl *downloader.ChartDownloader, helmRepo, resolvedRepo, wantVersion, chartDir string, pin godigest.Digest) (string, *chartv2.Chart, error) {
 	version := ""
+	pinnedName := ""
+	verifyAfterRename := false
 	var err error
 	if pin != "" {
+		if pinnedName, err = pinnedChartName(resolvedRepo, wantVersion); err != nil {
+			return "", nil, err
+		}
 		if resolvedRepo, err = pinOCIReference(resolvedRepo, pin); err != nil {
 			return "", nil, err
+		}
+		// Helm verifies before we rename, against a file named after the digest, which the
+		// .prov does not list; it only knows <name>-<version>.tgz.
+		if dl.Verify == downloader.VerifyIfPossible {
+			dl.Verify = downloader.VerifyLater
+			verifyAfterRename = true
 		}
 	} else if version, err = getVersion(wantVersion, resolvedRepo); err != nil {
 		return "", nil, fmt.Errorf("error determining chart version: %w", err)
@@ -238,13 +249,42 @@ func pullChart(dl *downloader.ChartDownloader, helmRepo, resolvedRepo, wantVersi
 		return "", nil, fmt.Errorf("error loading downloaded chart from %q: %w", savedPath, err)
 	}
 
-	if pin != "" {
-		// A digest pull names the file after the digest; give it the name a tag pull would have.
-		if savedPath, err = renameChart(savedPath, filepath.Join(chartDir, fmt.Sprintf("%s-%s.tgz", chart.Name(), chart.Metadata.Version))); err != nil {
-			return "", nil, err
+	if pin == "" {
+		return savedPath, chart, nil
+	}
+	if pinnedName == "" {
+		pinnedName = fmt.Sprintf("%s-%s.tgz", chart.Name(), chart.Metadata.Version)
+	}
+	// A digest pull names the file after the digest; give it the name a tag pull would have.
+	if savedPath, err = renameChart(savedPath, filepath.Join(chartDir, pinnedName)); err != nil {
+		return "", nil, err
+	}
+	if verifyAfterRename {
+		// Helm's VerifyIfPossible skips a chart without provenance; so do we.
+		if _, statErr := os.Stat(savedPath + ".prov"); statErr == nil {
+			if _, err := downloader.VerifyChart(savedPath, savedPath+".prov", dl.Keyring); err != nil {
+				return "", nil, fmt.Errorf("error verifying provenance of chart %q: %w", helmRepo, err)
+			}
 		}
 	}
 	return savedPath, chart, nil
+}
+
+// pinnedChartName returns the file name a pull of chartRef by tag produces, so that a digest
+// pull yields the same file name (and thus the same archive). It is "" when there is no tag.
+func pinnedChartName(chartRef, wantVersion string) (string, error) {
+	ref, err := looseref.ParseReference(strings.TrimPrefix(chartRef, "oci://"))
+	if err != nil {
+		return "", fmt.Errorf("error parsing OCI chart reference %q: %w", chartRef, err)
+	}
+	tag := wantVersion
+	if tag == "" {
+		tag = ref.Tag
+	}
+	if tag == "" {
+		return "", nil
+	}
+	return fmt.Sprintf("%s-%s.tgz", path.Base(ref.Repository), tag), nil
 }
 
 // pinOCIReference rewrites an oci:// chart reference to pull the manifest d, dropping any tag.

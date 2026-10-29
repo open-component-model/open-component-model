@@ -18,8 +18,9 @@ import (
 )
 
 type resourcePluginConverter struct {
-	externalPlugin v1.ReadWriteResourcePluginContract
-	scheme         *runtime.Scheme
+	externalPlugin   v1.ReadWriteResourcePluginContract
+	scheme           *runtime.Scheme
+	artifactVerifier integrity.ArtifactVerifier
 }
 
 func (r *resourcePluginConverter) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error) {
@@ -55,6 +56,7 @@ func (r *resourcePluginConverter) DownloadResource(ctx context.Context, resource
 	}
 
 	verified, err := integrity.Verify(ctx, resource.Digest, rBlob,
+		integrity.WithArtifactVerifier(r.artifactVerifier),
 		integrity.WithLogAttrs(slog.Any("resource", resource.ToIdentity())))
 	if err != nil {
 		return nil, fmt.Errorf("resource %q: %w", resource.Name, err)
@@ -100,7 +102,8 @@ var _ Repository = (*resourcePluginConverter)(nil)
 
 func (r *ResourceRegistry) externalToResourcePluginConverter(plugin v1.ReadWriteResourcePluginContract, scheme *runtime.Scheme) *resourcePluginConverter {
 	return &resourcePluginConverter{
-		externalPlugin: plugin,
-		scheme:         scheme,
+		externalPlugin:   plugin,
+		scheme:           scheme,
+		artifactVerifier: r.artifactVerifier,
 	}
 }

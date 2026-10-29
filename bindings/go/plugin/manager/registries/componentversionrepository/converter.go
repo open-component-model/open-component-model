@@ -26,6 +26,7 @@ type componentVersionRepositoryWrapper struct {
 	repositorySpecification runtime.Typed
 	credentials             runtime.Typed
 	scheme                  *runtime.Scheme
+	artifactVerifier        integrity.ArtifactVerifier
 }
 
 var _ repository.ComponentVersionRepository = (*componentVersionRepositoryWrapper)(nil)
@@ -116,6 +117,7 @@ func (c *componentVersionRepositoryWrapper) GetLocalResource(ctx context.Context
 	convert := descriptor.ConvertFromV2Resources([]descriptorv2.Resource{*response.Resource})
 
 	verified, err := integrity.Verify(ctx, convert[0].Digest, rBlob,
+		integrity.WithArtifactVerifier(c.artifactVerifier),
 		integrity.WithLogAttrs(slog.Any("resource", convert[0].ToIdentity())))
 	if err != nil {
 		return nil, nil, fmt.Errorf("local resource %q: %w", convert[0].Name, err)
@@ -186,5 +188,6 @@ func (r *RepositoryRegistry) externalToComponentVersionRepository(plugin ocmrepo
 		repositorySpecification: repositorySpecification,
 		credentials:             credentials,
 		scheme:                  scheme,
+		artifactVerifier:        r.artifactVerifier,
 	}
 }

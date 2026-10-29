@@ -6,8 +6,10 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -177,6 +179,30 @@ func TestLayoutVerifier_RefusesTamperedLayouts(t *testing.T) {
 			wantErr: "more than once",
 		},
 		{
+			name: "index.json alias following the index",
+			entries: []tarEntry{
+				layoutFile, blobEntry(config, configData), blobEntry(layer, layerData), blobEntry(manifest, manifestData), index(nil),
+				{name: ".//" + ociImageSpecV1.ImageIndexFile, data: []byte(`{"schemaVersion":2,"manifests":[]}`)},
+			},
+			wantErr: "more than once",
+		},
+		{
+			name: "blob alias following the blob",
+			entries: []tarEntry{
+				layoutFile, blobEntry(config, configData), blobEntry(layer, layerData), blobEntry(manifest, manifestData), index(nil),
+				{name: ".//" + blobEntry(layer, nil).name, data: []byte("tampered")},
+			},
+			wantErr: "more than once",
+		},
+		{
+			name: "absolute index.json alias following the index",
+			entries: []tarEntry{
+				layoutFile, blobEntry(config, configData), blobEntry(layer, layerData), blobEntry(manifest, manifestData), index(nil),
+				{name: "/" + ociImageSpecV1.ImageIndexFile, data: []byte(`{"schemaVersion":2,"manifests":[]}`)},
+			},
+			wantErr: "more than once",
+		},
+		{
 			name:    "main annotation naming another artifact",
 			entries: []tarEntry{index(map[string]string{annotationMainArtifact: digest.FromString("other").String()}), blobEntry(config, configData), blobEntry(layer, layerData), blobEntry(manifest, manifestData)},
 			wantErr: "layout annotation software.ocm/main names",
@@ -198,6 +224,22 @@ func TestLayoutVerifier_RefusesTamperedLayouts(t *testing.T) {
 			r.ErrorContains(err, tt.wantErr)
 		})
 	}
+}
+
+func TestLayoutVerifier_BoundsRetainedManifests(t *testing.T) {
+	r := require.New(t)
+	// Every blob is manifest-shaped and just below maxLayoutManifestSize, so each is
+	// retained individually, but together they exceed maxLayoutRetainedSize.
+	pad := strings.Repeat("a", int(maxLayoutManifestSize)-64)
+	count := int(maxLayoutRetainedSize/maxLayoutManifestSize) + 1
+	entries := make([]tarEntry, 0, count)
+	for i := range count {
+		data := []byte(fmt.Sprintf(`{"schemaVersion":2,"n":%d,"pad":%q}`, i, pad))
+		r.LessOrEqual(int64(len(data)), maxLayoutManifestSize)
+		dig := digest.FromBytes(data)
+		entries = append(entries, tarEntry{name: "blobs/" + dig.Algorithm().String() + "/" + dig.Encoded(), data: data})
+	}
+	r.ErrorContains(verifyLayout(gzippedTar(t, entries...), digest.FromString("root")), "layout manifests and indexes exceed")
 }
 
 func TestLayoutVerifier_LegacyArtifactSet(t *testing.T) {

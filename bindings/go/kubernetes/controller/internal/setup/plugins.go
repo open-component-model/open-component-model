@@ -19,6 +19,7 @@ import (
 	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	ociidentityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
+	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
@@ -86,7 +87,7 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 		fsCfg.TempFolder = &options.TempDir
 	}
 
-	pm := manager.NewPluginManager(ctx)
+	pm := manager.NewPluginManager(ctx, manager.WithArtifactVerifier(ocitar.LayoutVerifier{}))
 
 	providerOpts := []provider.Option{
 		provider.WithScheme(ocirepository.Scheme),

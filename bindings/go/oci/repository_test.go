@@ -45,6 +45,7 @@ import (
 	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/repository/integrity"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -1313,6 +1314,82 @@ func TestRepository_DownloadResource_VerifiesOCIArtifactDigest(t *testing.T) {
 
 	_, err = repo.DownloadResource(ctx, resourceOf(digest.FromString("other").Encoded()))
 	r.ErrorContains(err, "OCI artifact digest mismatch")
+}
+
+func TestRepository_DownloadResource_OCIImageLayer_VerifiesResourceDigest(t *testing.T) {
+	testdata := []byte("test layer content")
+	dig := digest.FromBytes(testdata)
+
+	for name, tc := range map[string]struct {
+		digest      descriptor.Digest
+		downloadErr func(r *require.Assertions, err error)
+		readErr     string
+	}{
+		"matching generic digest": {
+			digest: descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: descriptor.GenericBlobDigestV1, Value: dig.Encoded()},
+		},
+		"mismatching generic sha256 digest": {
+			digest: descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: descriptor.GenericBlobDigestV1, Value: digest.FromString("other").Encoded()},
+			downloadErr: func(r *require.Assertions, err error) {
+				r.ErrorContains(err, "digest mismatch")
+			},
+		},
+		// A sha512 digest cannot be compared with the sha256 layer digest up front, so it is checked while reading.
+		"mismatching generic sha512 digest": {
+			digest:  descriptor.Digest{HashAlgorithm: "SHA-512", NormalisationAlgorithm: descriptor.GenericBlobDigestV1, Value: digest.SHA512.FromString("other").Encoded()},
+			readErr: "digest mismatch",
+		},
+		"oci artifact digest on plain layer": {
+			digest: descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: descriptor.OCIArtifactDigestV1, Value: dig.Encoded()},
+			downloadErr: func(r *require.Assertions, err error) {
+				r.ErrorIs(err, integrity.ErrUnverifiable)
+			},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := require.New(t)
+			ctx := t.Context()
+			fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+			r.NoError(err)
+			store := ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+			repo := Repository(t, ocictf.WithCTF(store))
+			layerStore, err := store.StoreForReference(ctx, "test-registry/test-layer")
+			r.NoError(err)
+			desc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, testdata)
+			r.NoError(layerStore.Push(ctx, desc, bytes.NewReader(testdata)))
+
+			dgst := tc.digest
+			downloaded, err := repo.DownloadResource(ctx, &descriptor.Resource{
+				Relation:    descriptor.ExternalRelation,
+				ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "layer", Version: "1.0.0"}},
+				Type:        "blob",
+				Access: &v1.OCIImageLayer{
+					Type:      runtime.NewVersionedType(v1.OCIImageLayerType, v1.Version),
+					Reference: "test-registry/test-layer@" + dig.String(),
+					MediaType: ociImageSpecV1.MediaTypeImageLayer,
+					Digest:    dig,
+					Size:      int64(len(testdata)),
+				},
+				Digest: &dgst,
+			})
+			if tc.downloadErr != nil {
+				r.Error(err)
+				tc.downloadErr(r, err)
+				return
+			}
+			r.NoError(err)
+			rc, err := downloaded.ReadCloser()
+			r.NoError(err)
+			t.Cleanup(func() { _ = rc.Close() })
+			data, err := io.ReadAll(rc)
+			if tc.readErr != "" {
+				r.ErrorContains(err, tc.readErr)
+				return
+			}
+			r.NoError(err)
+			r.Equal(testdata, data)
+		})
+	}
 }
 
 func TestRepository_GetLocalResource_RelativeOCIReference_VerifiesResourceDigest(t *testing.T) {

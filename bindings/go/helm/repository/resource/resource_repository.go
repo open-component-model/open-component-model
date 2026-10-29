@@ -206,9 +206,16 @@ func (r *ResourceRepository) manifestPin(ctx context.Context, resource *descript
 		return want, nil
 	case descriptor.GenericBlobDigestV1, "":
 		// OCM v1 records the chart .tgz digest here, OCM v2 historically the manifest digest.
+		// Resolve reports the registry's SHA-256 manifest digest, which another algorithm never equals.
+		if want.Algorithm() != digest.SHA256 {
+			return "", nil
+		}
 		m, err := helmdownload.ResolveOCIManifestDigest(ctx, helmURL, creds, r.httpConfig)
 		if err != nil {
-			return "", err
+			// Not knowing the manifest only means the .tgz content check decides instead.
+			slog.WarnContext(ctx, "could not resolve the manifest digest of the helm chart, verifying the chart archive instead",
+				"chartReference", helmURL, "resource", resource.Name, "error", err)
+			return "", nil
 		}
 		if m == want {
 			return want, nil

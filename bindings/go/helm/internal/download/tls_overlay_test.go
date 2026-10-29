@@ -30,7 +30,7 @@ func TestNewReadOnlyChartFromRemote_InputTLSOverridesHTTPConfig(t *testing.T) {
 	tgz, err := os.ReadFile("../../testdata/mychart-0.1.0.tgz")
 	require.NoError(t, err)
 
-	reg, manifest := newChartRegistry(t, "charts/mychart", "0.1.0", tgz)
+	reg, manifest := newChartRegistry(t, "charts/mychart", "0.1.0", tgz, nil)
 	ociRef := "oci://" + strings.TrimPrefix(reg.URL, "https://") + "/charts/mychart:0.1.0"
 
 	files := httptest.NewTLSServer(http.FileServer(http.Dir("../../testdata")))
@@ -81,7 +81,7 @@ func TestNewReadOnlyChartFromRemote_HTTPConfigKeepsOCICredentials(t *testing.T) 
 	tgz, err := os.ReadFile("../../testdata/mychart-0.1.0.tgz")
 	require.NoError(t, err)
 
-	reg, _ := newChartRegistry(t, "charts/mychart", "0.1.0", tgz)
+	reg, _ := newChartRegistry(t, "charts/mychart", "0.1.0", tgz, nil)
 	target, err := url.Parse(reg.URL)
 	require.NoError(t, err)
 	proxy := httputil.NewSingleHostReverseProxy(target)

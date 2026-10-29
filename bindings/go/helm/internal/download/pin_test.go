@@ -1,6 +1,7 @@
 package download
 
 import (
+	"bytes"
 	"encoding/json"
 	"encoding/pem"
 	"net/http"
@@ -16,6 +17,8 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v4/pkg/registry"
+
+	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 )
 
 func TestPinOCIReference(t *testing.T) {
@@ -39,6 +42,25 @@ func TestPinOCIReference(t *testing.T) {
 				r.ErrorContains(err, tc.wantErr)
 				return
 			}
+			r.NoError(err)
+			r.Equal(tc.want, got)
+		})
+	}
+}
+
+func TestPinnedChartName(t *testing.T) {
+	tests := []struct {
+		name, ref, version, want string
+	}{
+		{name: "tag", ref: "oci://registry.example/charts/mychart:1.0.0", want: "mychart-1.0.0.tgz"},
+		{name: "version overrides missing tag", ref: "oci://registry.example/charts/mychart", version: "1.0.0", want: "mychart-1.0.0.tgz"},
+		{name: "repository base, not chart name", ref: "oci://registry.example/charts/renamed:1.0.0", want: "renamed-1.0.0.tgz"},
+		{name: "no tag falls back to chart metadata", ref: "oci://registry.example/charts/mychart"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			got, err := pinnedChartName(tc.ref, tc.version)
 			r.NoError(err)
 			r.Equal(tc.want, got)
 		})
@@ -97,7 +119,7 @@ func TestRenameChart(t *testing.T) {
 func TestNewReadOnlyChartFromRemote_ManifestDigestPin(t *testing.T) {
 	tgz, err := os.ReadFile("../../testdata/mychart-0.1.0.tgz")
 	require.NoError(t, err)
-	srv, manifest := newChartRegistry(t, "charts/mychart", "0.1.0", tgz)
+	srv, manifest := newChartRegistry(t, "charts/mychart", "0.1.0", tgz, nil)
 	caPEM := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw}))
 	chartRef := "oci://" + strings.TrimPrefix(srv.URL, "https://") + "/charts/mychart:0.1.0"
 
@@ -124,13 +146,77 @@ func TestNewReadOnlyChartFromRemote_ManifestDigestPin(t *testing.T) {
 		r.ErrorContains(err, `error downloading chart "`+chartRef+`" version ""`)
 		r.ErrorContains(err, "not found")
 	})
+
+	t.Run("pinned file is named after the repository and tag, not the chart", func(t *testing.T) {
+		r := require.New(t)
+		renamed, renamedManifest := newChartRegistry(t, "charts/renamed", "0.1.0", tgz, nil)
+		renamedCA := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: renamed.Certificate().Raw}))
+		ref := "oci://" + strings.TrimPrefix(renamed.URL, "https://") + "/charts/renamed:0.1.0"
+		result, err := NewReadOnlyChartFromRemote(t.Context(), ref, t.TempDir(),
+			WithCACert(renamedCA), WithOCIManifestDigest(renamedManifest))
+		r.NoError(err)
+		r.Equal("mychart", result.Name)
+		_, err = os.Stat(filepath.Join(result.ChartDir, "renamed-0.1.0.tgz"))
+		r.NoError(err)
+	})
 }
 
-// newChartRegistry serves tgz as a helm chart at repo:tag from a read-only OCI distribution
-// endpoint over TLS and returns the server and the chart's manifest digest.
-func newChartRegistry(t *testing.T, repo, tag string, tgz []byte) (*httptest.Server, godigest.Digest) {
+func TestNewReadOnlyChartFromRemote_ManifestDigestPinWithKeyring(t *testing.T) {
+	tgz, err := os.ReadFile("../../testdata/provenance/mychart-0.1.0.tgz")
+	require.NoError(t, err)
+	prov, err := os.ReadFile("../../testdata/provenance/mychart-0.1.0.tgz.prov")
+	require.NoError(t, err)
+	keyring, err := filepath.Abs("../../testdata/provenance/pub.gpg")
+	require.NoError(t, err)
+	srv, manifest := newChartRegistry(t, "charts/mychart", "0.1.0", tgz, prov)
+	caPEM := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw}))
+	chartRef := "oci://" + strings.TrimPrefix(srv.URL, "https://") + "/charts/mychart:0.1.0"
+
+	t.Run("provenance verifies against the renamed file", func(t *testing.T) {
+		r := require.New(t)
+		result, err := NewReadOnlyChartFromRemote(t.Context(), chartRef, t.TempDir(), WithCACert(caPEM),
+			WithCredentials(&helmcredsv1.HelmHTTPCredentials{Keyring: keyring}), WithOCIManifestDigest(manifest))
+		r.NoError(err)
+		r.NotNil(result.ProvBlob)
+		_, err = os.Stat(filepath.Join(result.ChartDir, "mychart-0.1.0.tgz.prov"))
+		r.NoError(err)
+	})
+
+	t.Run("provenance of another chart fails", func(t *testing.T) {
+		r := require.New(t)
+		tampered := bytes.Replace(prov, []byte("mychart-0.1.0.tgz"), []byte("mychart-0.2.0.tgz"), 1)
+		other, otherManifest := newChartRegistry(t, "charts/mychart", "0.1.0", tgz, tampered)
+		otherCA := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: other.Certificate().Raw}))
+		ref := "oci://" + strings.TrimPrefix(other.URL, "https://") + "/charts/mychart:0.1.0"
+		_, err := NewReadOnlyChartFromRemote(t.Context(), ref, t.TempDir(), WithCACert(otherCA),
+			WithCredentials(&helmcredsv1.HelmHTTPCredentials{Keyring: keyring}), WithOCIManifestDigest(otherManifest))
+		r.ErrorContains(err, `error verifying provenance of chart "`+ref+`"`)
+	})
+}
+
+// newChartRegistry serves tgz (and, if non-nil, its provenance prov) as a helm chart at repo:tag
+// from a read-only OCI distribution endpoint over TLS and returns the server and the chart's
+// manifest digest.
+func newChartRegistry(t *testing.T, repo, tag string, tgz, prov []byte) (*httptest.Server, godigest.Digest) {
 	t.Helper()
 	config := []byte(`{"apiVersion":"v2","name":"mychart","version":"0.1.0"}`)
+	layers := []ociImageSpecV1.Descriptor{{
+		MediaType: registry.ChartLayerMediaType,
+		Digest:    godigest.FromBytes(tgz),
+		Size:      int64(len(tgz)),
+	}}
+	blobs := map[string][]byte{
+		godigest.FromBytes(config).String(): config,
+		godigest.FromBytes(tgz).String():    tgz,
+	}
+	if prov != nil {
+		layers = append(layers, ociImageSpecV1.Descriptor{
+			MediaType: registry.ProvLayerMediaType,
+			Digest:    godigest.FromBytes(prov),
+			Size:      int64(len(prov)),
+		})
+		blobs[godigest.FromBytes(prov).String()] = prov
+	}
 	manifest, err := json.Marshal(ociImageSpecV1.Manifest{
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		MediaType: ociImageSpecV1.MediaTypeImageManifest,
@@ -139,20 +225,12 @@ func newChartRegistry(t *testing.T, repo, tag string, tgz []byte) (*httptest.Ser
 			Digest:    godigest.FromBytes(config),
 			Size:      int64(len(config)),
 		},
-		Layers: []ociImageSpecV1.Descriptor{{
-			MediaType: registry.ChartLayerMediaType,
-			Digest:    godigest.FromBytes(tgz),
-			Size:      int64(len(tgz)),
-		}},
+		Layers: layers,
 	})
 	require.NoError(t, err)
 	manifestDigest := godigest.FromBytes(manifest)
 
 	manifests := map[string][]byte{tag: manifest, manifestDigest.String(): manifest}
-	blobs := map[string][]byte{
-		godigest.FromBytes(config).String(): config,
-		godigest.FromBytes(tgz).String():    tgz,
-	}
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if req.URL.Path == "/v2/" {
 			w.WriteHeader(http.StatusOK)

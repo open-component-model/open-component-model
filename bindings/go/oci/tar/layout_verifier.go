@@ -28,6 +28,10 @@ const (
 	// maxLayoutManifestSize bounds the manifests, indexes and layout indexes a
 	// LayoutVerifier holds in memory.
 	maxLayoutManifestSize int64 = 4 << 20
+	// maxLayoutRetainedSize bounds the bytes of all manifest-shaped blobs a
+	// LayoutVerifier holds in memory at once, which a layout could otherwise
+	// inflate with any number of such blobs.
+	maxLayoutRetainedSize = 16 * maxLayoutManifestSize
 	// annotationMainArtifact is set by legacy artifact sets on their index to the
 	// digest of the artifact they hold.
 	annotationMainArtifact = "software.ocm/main"
@@ -219,14 +223,20 @@ type layoutInspection struct {
 	seen map[digest.Digest]int64
 	// retained holds the blobs that may be manifests or indexes.
 	retained retainedFetcher
-	buf      bytes.Buffer
+	// retainedSize is the total size of retained.
+	retainedSize int64
+	buf          bytes.Buffer
 }
 
 func (ins *layoutInspection) entry(hdr *tar.Header, r io.Reader) error {
 	if hdr.Typeflag == tar.TypeDir {
 		return nil
 	}
-	name := path.Clean(strings.TrimPrefix(hdr.Name, "./"))
+	// Names are resolved like go-tarfs (used by ReadOCILayout) resolves them, so that
+	// aliases such as .//index.json, which it serves in place of an earlier entry,
+	// count as repeated entries. Rooting the name first also maps absolute and
+	// escaping names onto the layout root instead of letting them pass unchecked.
+	name := strings.TrimPrefix(path.Clean("/"+hdr.Name), "/")
 	isIndex := name == ociImageSpecV1.ImageIndexFile || name == ctf.ArtifactSetDescriptorFileName
 	blobName, isBlob := strings.CutPrefix(name, ctf.BlobsDirectoryName+"/")
 	if !isIndex && !isBlob {
@@ -289,6 +299,10 @@ func (ins *layoutInspection) blob(hdr *tar.Header, blobName string, r io.Reader)
 
 	ins.seen[dig] = hdr.Size
 	if small && isManifest(ins.buf.Bytes()) {
+		ins.retainedSize += hdr.Size
+		if ins.retainedSize > maxLayoutRetainedSize {
+			return fmt.Errorf("layout manifests and indexes exceed %d bytes", maxLayoutRetainedSize)
+		}
 		ins.retained[dig] = bytes.Clone(ins.buf.Bytes())
 	}
 	return nil
