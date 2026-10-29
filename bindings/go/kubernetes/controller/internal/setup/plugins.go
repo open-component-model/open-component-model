@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
@@ -33,6 +35,8 @@ const creator = "ocm.software/open-component-model/bindings/go/kubernetes/contro
 type PluginOptions struct {
 	// TempDir used to write temporary files into.
 	TempDir string
+	// BlobCache is the OCI blob cache shared by every plugin manager of the process.
+	BlobCache *ocicache.BlobCache
 }
 
 // PluginOption configures [NewPluginManager].
@@ -43,6 +47,26 @@ func WithTempDir(dir string) PluginOption {
 	return func(o *PluginOptions) {
 		o.TempDir = dir
 	}
+}
+
+// WithBlobCache shares the OCI blob cache between plugin managers. Without it, OCI caching is disabled,
+// because the cache owns its directory and per-request plugin managers must not each build their own.
+func WithBlobCache(bc *ocicache.BlobCache) PluginOption {
+	return func(o *PluginOptions) {
+		o.BlobCache = bc
+	}
+}
+
+// NewBlobCache creates the blob cache to pass to [WithBlobCache]. There is no reference cache:
+// it never serves tag lookups from cache, and those are what the controller resolves.
+func NewBlobCache(tempDir string) (*ocicache.BlobCache, error) {
+	if tempDir == "" {
+		tempDir = os.TempDir()
+	}
+	return ocicache.NewBlobCache(ocicache.Options{
+		Dir:          filepath.Join(tempDir, "ocm-oci-cas"),
+		RemotePolicy: ocicache.RemotePolicyIfNotPresent,
+	})
 }
 
 // NewPluginManager build a per-request plugin manager.
@@ -64,14 +88,16 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 
 	pm := manager.NewPluginManager(ctx)
 
-	repositoryProvider := provider.NewComponentVersionRepositoryProvider(
+	providerOpts := []provider.Option{
 		provider.WithScheme(ocirepository.Scheme),
 		provider.WithUserAgent(creator),
 		provider.WithTempDir(options.TempDir),
 		provider.WithHTTPConfig(httpCfg),
-		provider.WithBlobCacheOptions(&ocicache.Options{RemotePolicy: ocicache.RemotePolicyAlways}),
-		provider.WithReferenceCacheOptions(&ocicache.Options{RemotePolicy: ocicache.RemotePolicyAlways}),
-	)
+	}
+	if options.BlobCache != nil {
+		providerOpts = append(providerOpts, provider.WithBlobCache(options.BlobCache))
+	}
+	repositoryProvider := provider.NewComponentVersionRepositoryProvider(providerOpts...)
 
 	signingHandler, err := handler.New(signingv1alpha1.Scheme, true)
 	if err != nil {

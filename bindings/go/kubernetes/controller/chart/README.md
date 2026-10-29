@@ -66,6 +66,8 @@ Kubernetes: `>=1.26.0-0`
 | manager.affinity | object | `{}` | Pod affinity rules |
 | manager.cache.deployerDownloadMaxResourceSize | string | `"2Mi"` | Maximum size of a single downloadable resource as a Kubernetes resource.Quantity (e.g. "2Mi", "512Ki"). "0" disables the limit. |
 | manager.cache.deployerDownloadSize | int | `1000` | Maximum size of the deployer download object LRU cache |
+| manager.concurrency.component | int | `4` | Number of active component controller workers |
+| manager.concurrency.deployer | int | `4` | Number of active workers per enabled deployer controller (Deployer and NamespacedDeployer) |
 | manager.concurrency.resource | int | `4` | Number of active resource controller workers |
 | manager.deployer.enabled | bool | `true` | Run the controller for the cluster-scoped Deployer. It applies with the permissions of the controller itself. Deprecated: Use NamespacedDeployer instead. |
 | manager.env | list | `[]` | Environment variables for the controller |
@@ -111,10 +113,6 @@ Kubernetes: `>=1.26.0-0`
 | manager.readinessProbe.periodSeconds | int | `10` | Period between readiness probes |
 | manager.readinessProbe.port | int | `8081` | Port for the readiness probe |
 | manager.replicas | int | `1` | Number of controller manager replicas |
-| manager.resolver.cacheTTL | int | `30` | The time-to-live (TTL) for the resolver cache entries in minutes. Setting TTL to less than 30 minutes is discouraged in productive use as it can lead to unintended performance issues. |
-| manager.resolver.subscriberBufferSize | int | `100` | Buffer size for each subscriber's event channel. Larger values reduce dropped resolution events under load. Monitor resolver_event_channel_drops_total metric. |
-| manager.resolver.workerCount | int | `10` | Number of active resolver workers |
-| manager.resolver.workerQueueLength | int | `1000` | Maximum work items in queue for component version resolution |
 | manager.resources | object | `{"limits":{"cpu":"500m","memory":"512Mi"},"requests":{"cpu":"100m","memory":"256Mi"}}` | Resource limits and requests |
 | manager.securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true}` | Container-level security context |
 | manager.tolerations | list | `[]` | Pod tolerations |
