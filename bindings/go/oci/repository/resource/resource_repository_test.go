@@ -135,10 +135,12 @@ func TestOCIImageLayer_ReadPathsAccepted(t *testing.T) {
 		r.ErrorContains(err, "nonexistent.invalid")
 	})
 
-	t.Run("download reaches the registry", func(t *testing.T) {
+	t.Run("download reaches the registry on read", func(t *testing.T) {
 		r := require.New(t)
 		repo := NewResourceRepository(nil)
-		_, err := repo.DownloadResource(t.Context(), layerResource(t, ref), nil)
+		b, err := repo.DownloadResource(t.Context(), layerResource(t, ref), nil)
+		r.NoError(err)
+		_, err = b.ReadCloser()
 		r.ErrorContains(err, "nonexistent.invalid")
 	})
 }
@@ -371,9 +373,10 @@ func TestOCIImageLayer_RegistryEndpoint(t *testing.T) {
 
 					b, err := repo.DownloadResource(t.Context(), res, nil)
 					r.NoError(err)
-					r.Equal("GET "+path, <-requests)
+					r.Empty(requests, "the layer is fetched only when read")
 					rc, err := b.ReadCloser()
 					r.NoError(err)
+					r.Equal("GET "+path, <-requests)
 					data, err := io.ReadAll(rc)
 					r.NoError(err)
 					r.NoError(rc.Close())

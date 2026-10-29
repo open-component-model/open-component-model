@@ -17,6 +17,35 @@ type readerBlob struct{ io.Reader }
 
 func (b readerBlob) ReadCloser() (io.ReadCloser, error) { return io.NopCloser(b.Reader), nil }
 
+// A relative path is bound to the working directory at creation, not at read time,
+// and a failed read names the file's directory.
+func TestGetBlobFromOSPathRelative(t *testing.T) {
+	r := require.New(t)
+	a, b := t.TempDir(), t.TempDir()
+	r.NoError(os.WriteFile(filepath.Join(a, "f"), []byte("A"), 0o600))
+	r.NoError(os.WriteFile(filepath.Join(b, "f"), []byte("B"), 0o600))
+
+	t.Chdir(a)
+	wd, err := os.Getwd()
+	r.NoError(err)
+	present, err := filesystem.GetBlobFromOSPath("f")
+	r.NoError(err)
+	missing, err := filesystem.GetBlobFromOSPath(filepath.Join("sub", "g"))
+	r.NoError(err)
+	t.Chdir(b)
+
+	rc, err := present.ReadCloser()
+	r.NoError(err)
+	t.Cleanup(func() { _ = rc.Close() })
+	data, err := io.ReadAll(rc)
+	r.NoError(err)
+	r.Equal("A", string(data))
+
+	_, err = missing.ReadCloser()
+	r.ErrorIs(err, os.ErrNotExist)
+	r.ErrorContains(err, filepath.Join(wd, "sub", "g"))
+}
+
 func TestCopyBlobToOSPath(t *testing.T) {
 	r := require.New(t)
 	tempDir := t.TempDir()

@@ -162,20 +162,25 @@ func createSingleFileBlob(path string, opt DirOptions) (blob.ReadOnlyBlob, error
 		return nil, fmt.Errorf("include/exclude patterns are not supported for single files")
 	}
 
-	// Open file for reading
-	fr, err := os.Open(path)
+	// Both reopen the file on every read and hold no descriptor in between;
+	// with a working directory, every read is confined to it again.
+	var fileBlob *Blob
+	var err error
+	if opt.WorkingDir != "" {
+		fileBlob, err = GetBlobInWorkingDirectory(path, opt.WorkingDir)
+	} else {
+		fileBlob, err = GetBlobFromOSPath(path)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("error opening single file %q for reading: %w", path, err)
+		return nil, fmt.Errorf("error creating blob for single file %q: %w", path, err)
 	}
 
-	// Determine media type for single file
 	mediaType := DefaultFileMediaType
 	if opt.MediaType != "" {
 		mediaType = opt.MediaType
 	}
+	fileBlob.SetMediaType(mediaType)
 
-	// Create ReadOnlyBlob from file
-	var fileBlob blob.ReadOnlyBlob = direct.New(fr, direct.WithMediaType(mediaType))
 	// Apply compression if requested
 	if opt.Compress {
 		compressed := compression.Compress(fileBlob)

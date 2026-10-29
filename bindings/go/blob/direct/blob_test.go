@@ -407,3 +407,61 @@ func TestConcurrentAndSerialReads(t *testing.T) {
 		}
 	})
 }
+
+func TestReadCloser_PreservesRandomAccess(t *testing.T) {
+	data := []byte("random access content")
+	tests := []struct {
+		name       string
+		blob       *Blob
+		wantRandom bool
+	}{
+		{name: "reader at source", blob: NewFromBytes(data), wantRandom: true},
+		{name: "sequential source", blob: New(io.NopCloser(bytes.NewReader(data))), wantRandom: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			rc, err := tc.blob.ReadCloser()
+			r.NoError(err)
+			t.Cleanup(func() { r.NoError(rc.Close()) })
+
+			readerAt, isReaderAt := rc.(io.ReaderAt)
+			_, isSeeker := rc.(io.Seeker)
+			r.Equal(tc.wantRandom, isReaderAt)
+			r.Equal(tc.wantRandom, isSeeker)
+			if !tc.wantRandom {
+				return
+			}
+
+			buf := make([]byte, 6)
+			n, err := readerAt.ReadAt(buf, 7)
+			r.NoError(err)
+			r.Equal("access", string(buf[:n]))
+		})
+	}
+}
+
+func TestNewFromBytesReadCloserSupportsWriterTo(t *testing.T) {
+	data := []byte("hello world")
+	for name, b := range map[string]*Blob{
+		"bytes":          NewFromBytes(data),
+		"buffer":         NewFromBuffer(bytes.NewBuffer(data), false),
+		"size truncated": NewFromBytes(data, WithSize(5)),
+		"nil bytes":      NewFromBytes(nil),
+		"empty buffer":   NewFromBuffer(&bytes.Buffer{}, false),
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := require.New(t)
+			rc, err := b.ReadCloser()
+			r.NoError(err)
+			t.Cleanup(func() { r.NoError(rc.Close()) })
+			wt, ok := rc.(io.WriterTo)
+			r.True(ok, "byte-backed ReadCloser must implement io.WriterTo")
+			var out bytes.Buffer
+			n, err := wt.WriteTo(&out)
+			r.NoError(err)
+			r.Equal(b.Size(), n)
+			r.Equal(string(data[:n]), out.String())
+		})
+	}
+}

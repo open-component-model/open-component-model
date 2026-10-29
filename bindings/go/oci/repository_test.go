@@ -2112,13 +2112,18 @@ func TestRepository_DownloadResourceOCIImageLayer(t *testing.T) {
 		r.Equal("application/octet-stream", mediaType, "an empty media type must not overwrite the default")
 	})
 
-	t.Run("a size that does not match the blob is rejected", func(t *testing.T) {
+	t.Run("a size that does not match the blob is rejected on read", func(t *testing.T) {
 		r := require.New(t)
 		wrongSize := res.DeepCopy()
 		wrongSize.Access.(*v1.OCIImageLayer).Size = int64(len(testdata)) + 1
 
-		_, err := repo.DownloadResource(ctx, wrongSize)
-		r.ErrorContains(err, "the descriptor declares")
+		downloaded, err := repo.DownloadResource(ctx, wrongSize)
+		r.NoError(err)
+		reader, err := downloaded.ReadCloser()
+		r.NoError(err)
+		_, err = io.ReadAll(reader)
+		r.ErrorContains(err, "size mismatch")
+		r.Error(reader.Close())
 	})
 
 	t.Run("a layer cannot be streamed", func(t *testing.T) {
@@ -4320,4 +4325,112 @@ func TestRepository_AddLocalResource_StreamsUnknownDigestBlobIntoCTF(t *testing.
 	for _, e := range entries {
 		r.False(strings.HasPrefix(e.Name(), ".upload."), "no staged file may remain: %s", e.Name())
 	}
+}
+
+// TestRepository_NestedManifestLocalResource_CopiedFromSourceStore covers a local resource
+// holding a nested OCI manifest that is added to a component version or uploaded as an OCI
+// image. Both must copy the graph from the source store instead of packing it into an OCI
+// layout tar: the reading repository cannot create the temporary file the tar is built in.
+func TestRepository_NestedManifestLocalResource_CopiedFromSourceStore(t *testing.T) {
+	const (
+		component = "ocm.software/test-component"
+		target    = "ocm.software/target-component"
+		version   = "1.0.0"
+		imageRef  = "test-image:latest"
+	)
+	layoutBytes, main, referrer := buildLayoutWithOwnershipReferrer(t, "latest", component, version)
+	resourceIdentity := runtime.Identity{"name": "backend", "version": version}
+
+	newStore := func(t *testing.T) *ocictf.Store {
+		t.Helper()
+		fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+		require.NoError(t, err)
+		return ocictf.NewFromCTF(ctf.NewFileSystemCTF(fs))
+	}
+	// source stores the layout as a nested-manifest local resource and opens it through a
+	// repository that fails to build any OCI layout tar.
+	source := func(t *testing.T) (*ocictf.Store, blob.ReadOnlyBlob, *descriptor.Resource) {
+		t.Helper()
+		r := require.New(t)
+		store := newStore(t)
+		setup := Repository(t, ocictf.WithCTF(store))
+		added, err := setup.AddLocalResource(t.Context(), component, version, &descriptor.Resource{
+			Relation:    descriptor.ExternalRelation,
+			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "backend", Version: version}},
+			Type:        "ociArtifact",
+			Access: &v2.LocalBlob{
+				LocalReference: digest.FromBytes(layoutBytes).String(),
+				MediaType:      layout.MediaTypeOCIImageLayoutTarV1,
+			},
+		}, inmemory.New(bytes.NewReader(layoutBytes)))
+		r.NoError(err)
+		r.NoError(setup.AddComponentVersion(t.Context(), &descriptor.Descriptor{
+			Meta: descriptor.Meta{Version: "v2"},
+			Component: descriptor.Component{
+				Provider:      descriptor.Provider{Name: "test-provider"},
+				ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: component, Version: version}},
+				Resources:     []descriptor.Resource{*added},
+			},
+		}))
+
+		noLayout := Repository(t, ocictf.WithCTF(store), oci.WithTempDir(filepath.Join(t.TempDir(), "missing")))
+		b, res, err := noLayout.GetLocalResource(t.Context(), component, version, resourceIdentity)
+		r.NoError(err)
+		return store, b, res
+	}
+	requireGraph := func(t *testing.T, store spec.Store) {
+		t.Helper()
+		r := require.New(t)
+		for _, desc := range []ociImageSpecV1.Descriptor{main, referrer} {
+			exists, err := store.Exists(t.Context(), desc)
+			r.NoError(err)
+			r.True(exists, "%s must be copied to the target", desc.Digest)
+		}
+	}
+
+	t.Run("the layout tar cannot be built", func(t *testing.T) {
+		_, b, _ := source(t)
+		_, err := b.ReadCloser()
+		require.ErrorContains(t, err, "temp file", "otherwise the cases below prove nothing")
+	})
+
+	for _, tc := range []struct {
+		name      string
+		sameStore bool
+	}{
+		{name: "add local resource to another CTF"},
+		{name: "add local resource within the same CTF", sameStore: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			src, b, res := source(t)
+			dst := src
+			if !tc.sameStore {
+				dst = newStore(t)
+			}
+			added, err := Repository(t, ocictf.WithCTF(dst)).AddLocalResource(t.Context(), target, version, res, b)
+			r.NoError(err)
+			r.Equal(main.Digest.String(), added.Access.(*v2.LocalBlob).LocalReference)
+
+			componentStore, err := dst.StoreForReference(t.Context(), dst.ComponentVersionReference(t.Context(), target, version))
+			r.NoError(err)
+			requireGraph(t, componentStore)
+		})
+	}
+
+	t.Run("upload as OCI image", func(t *testing.T) {
+		r := require.New(t)
+		_, b, res := source(t)
+		dst := newStore(t)
+		res.Access = &v1.OCIImage{ImageReference: imageRef}
+		_, err := Repository(t, ocictf.WithCTF(dst)).UploadResource(t.Context(), res, b)
+		r.NoError(err)
+
+		imgStore, err := dst.StoreForReference(t.Context(), imageRef)
+		r.NoError(err)
+		requireGraph(t, imgStore)
+		tagged, err := imgStore.Resolve(t.Context(), "latest")
+		r.NoError(err)
+		r.Equal(main.Digest, tagged.Digest)
+	})
 }

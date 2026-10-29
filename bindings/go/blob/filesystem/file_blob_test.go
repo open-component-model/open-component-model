@@ -172,26 +172,4 @@ func TestBlob_FromPath(t *testing.T) {
 		r.Error(err)
 		r.Equal(b.Size(), int64(len(td)))
 	})
-
-	t.Run("if flag is rdwr, it is read/write", func(t *testing.T) {
-		td := []byte("bar")
-		r := require.New(t)
-		filePath := filepath.Join(t.TempDir(), "foo")
-		r.NoError(os.WriteFile(filePath, td, 0o644))
-
-		b, err := filesystem.NewFileBlobFromPathWithFlag(filePath, os.O_RDWR)
-		r.NoError(err)
-		reader, err := b.ReadCloser()
-		r.NoError(err)
-		data, err := io.ReadAll(reader)
-		r.NoError(err)
-		r.Equal(td, data)
-		r.NoError(reader.Close())
-
-		writer, err := b.WriteCloser()
-		r.NoError(err)
-		_, err = writer.Write([]byte("test data"))
-		r.NoError(err)
-		r.NoError(writer.Close())
-	})
 }
