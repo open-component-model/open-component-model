@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -220,7 +219,7 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 		return nil, fmt.Errorf("error reading resource for digest processing: %w", err)
 	}
 	h := checksum.StorageAlgorithm.New()
-	_, copyErr := io.Copy(h, rc)
+	_, copyErr := blob.CopyReader(h, rc)
 	if err := errors.Join(copyErr, rc.Close()); err != nil {
 		return nil, fmt.Errorf("error reading resource for digest processing: %w", err)
 	}
