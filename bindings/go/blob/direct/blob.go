@@ -29,7 +29,9 @@ func NewFromBuffer(buffer *bytes.Buffer, unsafe bool, opts ...DirectBlobOption) 
 
 // NewFromBytes creates a Blob from a byte slice. It wraps the slice in a reader
 // and applies a WithSize option based on its length. Further DirectBlobOption
-// values can customize behavior.
+// values can customize behavior. The Blob aliases data without copying it, so
+// callers must not modify data afterwards (use NewFromBuffer with unsafe=false
+// to get a private copy).
 //
 // See New for more details on how the Blob is constructed.
 func NewFromBytes(data []byte, opts ...DirectBlobOption) *Blob {
@@ -128,11 +130,14 @@ func (b *Blob) ReadCloser() (io.ReadCloser, error) {
 		if err != nil {
 			return nil, err
 		}
-		data := b.data
-		if size >= 0 && size < int64(len(data)) {
-			data = data[:size]
+		n := int64(len(b.data))
+		if size >= 0 && size < n {
+			n = size
 		}
-		return bytesReadCloser{bytes.NewReader(data)}, nil
+		// Cap capacity at n: bytes.Reader.WriteTo hands this slice straight to
+		// dst.Write, so a writer violating the io.Writer contract by appending
+		// to it must not reach bytes past the blob.
+		return bytesReadCloser{bytes.NewReader(b.data[:n:n])}, nil
 	}
 	if readerAt, ok := b.reader.(io.ReaderAt); ok {
 		size, err := b.size()
