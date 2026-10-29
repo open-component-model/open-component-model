@@ -407,3 +407,36 @@ func TestConcurrentAndSerialReads(t *testing.T) {
 		}
 	})
 }
+
+func TestReadCloser_PreservesRandomAccess(t *testing.T) {
+	data := []byte("random access content")
+	tests := []struct {
+		name       string
+		blob       *Blob
+		wantRandom bool
+	}{
+		{name: "reader at source", blob: NewFromBytes(data), wantRandom: true},
+		{name: "sequential source", blob: New(io.NopCloser(bytes.NewReader(data))), wantRandom: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			rc, err := tc.blob.ReadCloser()
+			r.NoError(err)
+			t.Cleanup(func() { r.NoError(rc.Close()) })
+
+			readerAt, isReaderAt := rc.(io.ReaderAt)
+			_, isSeeker := rc.(io.Seeker)
+			r.Equal(tc.wantRandom, isReaderAt)
+			r.Equal(tc.wantRandom, isSeeker)
+			if !tc.wantRandom {
+				return
+			}
+
+			buf := make([]byte, 6)
+			n, err := readerAt.ReadAt(buf, 7)
+			r.NoError(err)
+			r.Equal("access", string(buf[:n]))
+		})
+	}
+}

@@ -41,6 +41,12 @@
                 "concurrency": {
                     "type": "object",
                     "properties": {
+                        "component": {
+                            "type": "integer"
+                        },
+                        "deployer": {
+                            "type": "integer"
+                        },
                         "resource": {
                             "type": "integer"
                         }
@@ -314,23 +320,6 @@
                 },
                 "replicas": {
                     "type": "integer"
-                },
-                "resolver": {
-                    "type": "object",
-                    "properties": {
-                        "cacheTTL": {
-                            "type": "integer"
-                        },
-                        "subscriberBufferSize": {
-                            "type": "integer"
-                        },
-                        "workerCount": {
-                            "type": "integer"
-                        },
-                        "workerQueueLength": {
-                            "type": "integer"
-                        }
-                    }
                 },
                 "resources": {
                     "type": "object",

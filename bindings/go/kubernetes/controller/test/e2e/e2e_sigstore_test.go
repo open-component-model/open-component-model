@@ -39,8 +39,8 @@ var _ = Describe("Sigstore E2E Tests", func() {
 				"--tail=-1",
 			))
 			return string(out), err
-		}, timeout).Should(ContainSubstring(
-			`"verified signature","signature":"default","verifier":"SigstoreVerificationConfiguration/v1alpha1"`,
+		}, timeout).Should(MatchRegexp(
+			`"msg":"verified signature"[^\n]*"signature":"default","verifier":"SigstoreVerificationConfiguration/v1alpha1"`,
 		))
 	})
 })
