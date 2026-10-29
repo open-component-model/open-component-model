@@ -114,6 +114,8 @@ func (b *Blob) Size() int64 {
 
 // ReadCloser returns a new io.ReadCloser that streams from the start
 // of the blob to its size. Closing it does not close the underlying source.
+// If the source supports io.ReaderAt, the returned reader also implements
+// io.ReaderAt and io.Seeker, so consumers can access it randomly without buffering.
 func (b *Blob) ReadCloser() (io.ReadCloser, error) {
 	if readerAt, ok := b.reader.(io.ReaderAt); ok {
 		size, err := b.size()
@@ -121,13 +123,20 @@ func (b *Blob) ReadCloser() (io.ReadCloser, error) {
 			return nil, err
 		}
 		// NewSectionReader reads from offset 0 up to the blob size
-		return io.NopCloser(io.NewSectionReader(readerAt, 0, size)), nil
+		return sectionReadCloser{io.NewSectionReader(readerAt, 0, size)}, nil
 	}
 
 	// If the reader does not support io.ReaderAt, we need to serialize access to the reader.
 	// lets do that by using our serialized access.
 	return b.serial().ReadCloser()
 }
+
+// sectionReadCloser is a no-op closer that, unlike io.NopCloser, keeps io.ReaderAt and io.Seeker visible.
+type sectionReadCloser struct {
+	*io.SectionReader
+}
+
+func (sectionReadCloser) Close() error { return nil }
 
 // SetMediaType updates the MIME type of the blob.
 func (b *Blob) SetMediaType(s string) {
