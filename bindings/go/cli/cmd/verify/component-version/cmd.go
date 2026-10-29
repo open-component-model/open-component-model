@@ -452,7 +452,7 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 			if err := handler.Verify(verifyCtx, signature, verifierSpec, creds); err != nil {
 				return err
 			}
-			algorithms.WarnNonDefaultDigest(egctx, logger, signature.Digest.NormalisationAlgorithm, "name", signature.Name)
+			algorithms.LogNonDefaultDigest(egctx, logger, slog.LevelWarn, signature.Digest.NormalisationAlgorithm, "name", signature.Name)
 			return nil
 		})
 	}

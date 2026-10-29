@@ -252,14 +252,15 @@ func hasUsableAccess(res descruntime.Resource) bool {
 }
 
 // ensureNormalisationAlgo resolves the effective normalisation algorithm.
-// If the provided value is the legacy v3 algorithm, it logs a warning and
-// returns v4alpha2.Algorithm instead. Otherwise, it returns the original value.
-// v4alpha2 reproduces legacy jsonNormalisation/v3 byte-for-byte, so existing v3
-// (and old ocm v1 style) signatures keep verifying.
+// If the provided value is the legacy v3 algorithm, it returns v4alpha2.Algorithm
+// instead, which reproduces legacy jsonNormalisation/v3 byte-for-byte, so
+// existing v3 (and old ocm v1 style) signatures keep verifying. The resolution
+// is logged at debug level only: callers that trust a digest already warn about
+// any non-default algorithm (see algorithms.LogNonDefaultDigest).
 func ensureNormalisationAlgo(ctx context.Context, algo string, logger *slog.Logger) string {
 	resolved, aliased := algorithms.Resolve(algo)
 	if aliased {
-		logger.WarnContext(ctx,
+		logger.DebugContext(ctx,
 			"legacy normalisation algorithm detected, using v4alpha2",
 			"legacy", algo,
 			"new", resolved,

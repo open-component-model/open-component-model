@@ -125,7 +125,8 @@ func verifySignatures(
 		}
 
 		logger.Info("verified signature", "signature", v.Signature, "verifier", v.Verifier.GetType())
-		algorithms.WarnNonDefaultDigest(ctx, slog.New(logr.ToSlogHandler(logger)), descSig.Digest.NormalisationAlgorithm,
+		// Debug: resolution runs on every reconcile and only the publisher can re-sign.
+		algorithms.LogNonDefaultDigest(ctx, slog.New(logr.ToSlogHandler(logger)), slog.LevelDebug, descSig.Digest.NormalisationAlgorithm,
 			"component", desc.Component.Name, "version", desc.Component.Version, "signature", descSig.Name)
 	}
 
@@ -178,7 +179,9 @@ func compareDigest(ctx context.Context, desc *descriptor.Descriptor, digest *v2.
 		return nil, fmt.Errorf("verifying digest (%s/%s) of component version %s:%s failed: %w",
 			digest.NormalisationAlgorithm, digest.HashAlgorithm, desc.Component.Name, desc.Component.Version, err)
 	}
-	algorithms.WarnNonDefaultDigest(ctx, slog.New(logr.ToSlogHandler(logger)), digest.NormalisationAlgorithm,
+	// The digest is a component reference digest. Debug: resolution runs on every
+	// reconcile and only the publisher can rebuild the referencing version.
+	algorithms.LogNonDefaultReferenceDigest(ctx, slog.New(logr.ToSlogHandler(logger)), slog.LevelDebug, expected.Digest,
 		"component", desc.Component.Name, "version", desc.Component.Version)
 
 	return desc, nil

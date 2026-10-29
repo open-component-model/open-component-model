@@ -262,9 +262,9 @@ func (d *discoverer) Discover(ctx context.Context, parent *discoveryValue) ([]st
 }
 
 // warnNonDefaultReferenceDigest warns if a reference of parent does not use the
-// default normalisation, see [algorithms.WarnNonDefaultReferenceDigest].
+// default normalisation, see [algorithms.LogNonDefaultReferenceDigest].
 func warnNonDefaultReferenceDigest(ctx context.Context, parent *discoveryValue, ref descriptor.Reference) {
-	algorithms.WarnNonDefaultReferenceDigest(ctx, slog.Default(), ref.Digest,
+	algorithms.LogNonDefaultReferenceDigest(ctx, slog.Default(), slog.LevelWarn, ref.Digest,
 		"component", parent.Descriptor.Component.ToIdentity().String(), "reference", ref.ToIdentity().String())
 }
 

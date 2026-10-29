@@ -1,6 +1,7 @@
 package signing
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"encoding/hex"
@@ -306,4 +307,20 @@ func TestVerifyDigestMatchesDescriptor_LegacyHashName(t *testing.T) {
 	dg.HashAlgorithm = "sha256"
 	r.NoError(IsSafelyDigestible(&descruntime.Component{References: []descruntime.Reference{{Digest: *dg}}}))
 	r.NoError(VerifyDigestMatchesDescriptor(t.Context(), d, descruntime.Signature{Name: "s5", Digest: *dg}, logger))
+}
+
+// Resolving the jsonNormalisation/v3 alias is not itself worth a warning: the
+// places that trust a digest already warn about any non-default algorithm, and
+// a second line per v3 digest would only repeat that.
+func TestVerifyDigestMatchesDescriptor_LegacyAliasDoesNotWarn(t *testing.T) {
+	r := require.New(t)
+	d := &descruntime.Descriptor{Component: descruntime.Component{ComponentMeta: descruntime.ComponentMeta{ObjectMeta: descruntime.ObjectMeta{Name: "acme.org/c", Version: "1.0.0"}}, Provider: descruntime.Provider{Name: "p"}}}
+	dg, err := GenerateDigest(t.Context(), d, slog.New(slog.DiscardHandler), LegacyNormalisationAlgo, crypto.SHA256.String())
+	r.NoError(err)
+	dg.NormalisationAlgorithm = LegacyNormalisationAlgo
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	r.NoError(VerifyDigestMatchesDescriptor(t.Context(), d, descruntime.Signature{Name: "s", Digest: *dg}, logger))
+	r.Empty(logs.String())
 }

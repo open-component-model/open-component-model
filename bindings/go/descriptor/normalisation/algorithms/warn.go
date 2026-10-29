@@ -11,18 +11,18 @@ import (
 // warning about an older normalisation algorithm links to it.
 const MigrationGuide = "https://ocm.software/docs/how-to/migrate-normalisation-algorithms/"
 
-// NoReferenceDigest is the normalisation algorithm WarnNonDefaultReferenceDigest
+// NoReferenceDigest is the normalisation algorithm LogNonDefaultReferenceDigest
 // reports for a component reference without a digest.
 const NoReferenceDigest = "none"
 
-// WarnNonDefaultReferenceDigest logs a warning if the component reference
-// digest d is missing or not computed with Default. attrs identify the
-// reference.
-func WarnNonDefaultReferenceDigest(ctx context.Context, logger *slog.Logger, d descruntime.Digest, attrs ...any) {
+// LogNonDefaultReferenceDigest logs at level if the component reference digest
+// d is missing or not computed with Default. Callers that cannot act on it log
+// below warning level. attrs identify the reference.
+func LogNonDefaultReferenceDigest(ctx context.Context, logger *slog.Logger, level slog.Level, d descruntime.Digest, attrs ...any) {
 	if d.Value == "" {
 		// Older tools (e.g. cc-utils) computed reference digests while signing
 		// without writing them into the descriptor; nothing adds them later.
-		logger.WarnContext(ctx,
+		logger.Log(ctx, level,
 			"component reference has no digest: the referenced component version is not verified against it, and a signature of the referencing component version cannot be verified",
 			append(attrs, "normalisationAlgorithm", NoReferenceDigest)...,
 		)
@@ -31,17 +31,18 @@ func WarnNonDefaultReferenceDigest(ctx context.Context, logger *slog.Logger, d d
 	if d.NormalisationAlgorithm == Default {
 		return
 	}
-	logger.WarnContext(ctx, "component reference digest was computed with an older normalisation algorithm",
+	logger.Log(ctx, level, "component reference digest was computed with an older normalisation algorithm",
 		append(attrs, "normalisationAlgorithm", d.NormalisationAlgorithm, "recommended", Default, "migration", MigrationGuide)...)
 }
 
-// WarnNonDefaultDigest logs a warning if a digest about to be trusted (a
-// signature digest or a digest pin) was computed with a normalisation algorithm
-// other than Default. attrs identify what is trusted.
-func WarnNonDefaultDigest(ctx context.Context, logger *slog.Logger, normalisationAlgorithm string, attrs ...any) {
+// LogNonDefaultDigest logs at level if a digest about to be trusted (a signature
+// digest or a digest pin) was computed with a normalisation algorithm other than
+// Default. Callers that cannot act on it log below warning level. attrs identify
+// what is trusted.
+func LogNonDefaultDigest(ctx context.Context, logger *slog.Logger, level slog.Level, normalisationAlgorithm string, attrs ...any) {
 	if resolved, _ := Resolve(normalisationAlgorithm); resolved == Default {
 		return
 	}
-	logger.WarnContext(ctx, "trusted digest was computed with an older normalisation algorithm",
+	logger.Log(ctx, level, "trusted digest was computed with an older normalisation algorithm",
 		append(attrs, "normalisationAlgorithm", normalisationAlgorithm, "recommended", Default, "migration", MigrationGuide)...)
 }

@@ -184,11 +184,11 @@ func TestVerify(t *testing.T) {
 	})
 }
 
-func TestWarnNonDefaultReferenceDigest(t *testing.T) {
+func TestLogNonDefaultReferenceDigest(t *testing.T) {
 	warnFor := func(d descruntime.Digest) string {
 		var buf bytes.Buffer
 		logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
-		algorithms.WarnNonDefaultReferenceDigest(t.Context(), logger, d, "reference", "child")
+		algorithms.LogNonDefaultReferenceDigest(t.Context(), logger, slog.LevelWarn, d, "reference", "child")
 		return buf.String()
 	}
 	r := require.New(t)
@@ -218,11 +218,11 @@ func TestVerifyOnly(t *testing.T) {
 	}
 }
 
-func TestWarnNonDefaultDigest(t *testing.T) {
+func TestLogNonDefaultDigest(t *testing.T) {
 	warnFor := func(algo string) string {
 		var buf bytes.Buffer
 		logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
-		algorithms.WarnNonDefaultDigest(t.Context(), logger, algo, "component", "c")
+		algorithms.LogNonDefaultDigest(t.Context(), logger, slog.LevelWarn, algo, "component", "c")
 		return buf.String()
 	}
 	r := require.New(t)
@@ -237,4 +237,20 @@ func TestWarnNonDefaultDigest(t *testing.T) {
 		r.Contains(out, "recommended="+v4alpha3, algo)
 		r.Contains(out, "component=c", "caller attributes identify what is trusted")
 	}
+}
+
+// Callers that cannot act on the message (the controller, references of
+// component versions published by others) log it below warning level.
+func TestLogNonDefaultHonoursLevel(t *testing.T) {
+	r := require.New(t)
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+
+	algorithms.LogNonDefaultDigest(t.Context(), logger, slog.LevelDebug, v4alpha1)
+	algorithms.LogNonDefaultReferenceDigest(t.Context(), logger, slog.LevelDebug, descruntime.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: v4alpha1, Value: "bb"})
+	algorithms.LogNonDefaultReferenceDigest(t.Context(), logger, slog.LevelDebug, descruntime.Digest{})
+	r.Empty(buf.String(), "debug messages must not reach an info logger")
+
+	algorithms.LogNonDefaultDigest(t.Context(), logger, slog.LevelInfo, v4alpha1)
+	r.Contains(buf.String(), "level=INFO")
 }

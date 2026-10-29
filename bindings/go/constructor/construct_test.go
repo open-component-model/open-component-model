@@ -1111,3 +1111,30 @@ components:
 	r.Equal(1, strings.Count(logs.String(), warning), "a pinned v4alpha1 reference must warn once")
 	r.Contains(logs.String(), "normalisationAlgorithm="+v4alpha1.Algorithm)
 }
+
+// References of an external component version belong to its publisher: the
+// user cannot change them and they do not affect the parent being built, so
+// they must not warn (they are logged at debug level).
+func TestDiscoverDoesNotWarnAboutExternalReferenceDigests(t *testing.T) {
+	r := require.New(t)
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	external := &descriptor.Descriptor{Component: descriptor.Component{
+		ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: "ocm.software/external", Version: "1.0.0"}},
+		References: []descriptor.Reference{{
+			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "old", Version: "1.0.0"}},
+			Component:   "ocm.software/old",
+			Digest:      descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: v4alpha1.Algorithm, Value: "aa"},
+		}},
+	}}
+	_, err := (&resolverAndDiscoverer{}).Discover(t.Context(), &ConstructorOrExternalComponent{
+		ExternalComponent: &DescriptorWithLocalBlobs{Descriptor: external},
+	})
+	r.NoError(err)
+	r.Contains(logs.String(), "component reference digest was computed with an older normalisation algorithm")
+	r.NotContains(logs.String(), "level=WARN")
+	r.Contains(logs.String(), "level=DEBUG")
+}

@@ -180,7 +180,7 @@ func verifyNormalizedPin(ctx context.Context, desc *descriptor.Descriptor, pin *
 		return fmt.Errorf("component version %s:%s does not match pinned digest %s: resolved digest is %s",
 			component, version, FormatDigestPin(pin), FormatDigestPin(resolved))
 	}
-	algorithms.WarnNonDefaultDigest(ctx, slog.Default(), pin.NormalisationAlgorithm, "component", component, "version", version, "pin", FormatDigestPin(pin))
+	algorithms.LogNonDefaultDigest(ctx, slog.Default(), slog.LevelWarn, pin.NormalisationAlgorithm, "component", component, "version", version, "pin", FormatDigestPin(pin))
 	return nil
 }
 
