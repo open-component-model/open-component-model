@@ -544,10 +544,10 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(
 	}
 
 	packOptions := pack.Options{
-		AccessScheme:       repo.scheme,
-		CopyGraphOptions:   repo.copyGraphOptions(),
-		BaseReference:      reference,
-		GlobalAccessPolicy: repo.globalAccessPolicy,
+		AccessScheme:             repo.scheme,
+		ExtendedCopyGraphOptions: repo.extendedCopyGraphOptions(),
+		BaseReference:            reference,
+		GlobalAccessPolicy:       repo.globalAccessPolicy,
 	}
 	_, err = pack.ArtifactBlob(slogcontext.With(ctx, slog.String("target", reference)), store, artifactBlob, packOptions)
 	if err != nil {
@@ -708,17 +708,20 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 		return nil, fmt.Errorf("resolve artifact %q: %w", ref, err)
 	}
 
-	// Nested manifest: copy full OCI layout
+	// Nested manifest: an OCI layout of the full graph. Consumers that copy OCI
+	// graphs read the store directly; the layout tar is only built when read.
 	if index != nil && introspection.IsOCICompliantManifest(artifact) {
 		graph, ok := store.(content.ReadOnlyGraphStorage)
 		if !ok {
 			return nil, fmt.Errorf("store %T does not support predecessor walks", store)
 		}
-		return tar.CopyToOCILayoutInMemory(ctx, graph, artifact, tar.CopyToOCILayoutOptions{
-			ExtendedCopyGraphOptions: repo.extendedCopyGraphOptions(),
-			Tags:                     []string{version},
-			TempDir:                  repo.tempDir,
-		})
+		return ocistream.NewLayoutBlob(ctx, &ocistream.OCIResourceStream{
+			ReadOnlyGraphStorage: graph,
+			Descriptor:           artifact,
+			ExtendedCopyOpts:     repo.extendedCopyGraphOptions(),
+			TempDir:              repo.tempDir,
+			Tags:                 []string{version},
+		}), nil
 	}
 
 	// The layer is fetched on every read with the context of this call, so the blob holds
@@ -806,19 +809,28 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 		return ociImageSpecV1.Descriptor{}, nil, err
 	}
 
-	ociStore, err := tar.ReadOCILayout(slogcontext.With(ctx, slog.String("target", access.ImageReference)), b)
-	if err != nil {
-		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to read OCI layout: %w", err)
-	}
-	defer func() {
-		err = errors.Join(err, ociStore.Close())
-	}()
+	var (
+		src  content.ReadOnlyGraphStorage
+		main ociImageSpecV1.Descriptor
+	)
+	if rs, ok := b.(ocistream.ResourceStream); ok {
+		// Copy from the source store instead of building and re-reading its layout tar.
+		src, main = rs, rs.Root()
+	} else {
+		var ociStore *tar.CloseableReadOnlyStore
+		if ociStore, err = tar.ReadOCILayout(slogcontext.With(ctx, slog.String("target", access.ImageReference)), b); err != nil {
+			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to read OCI layout: %w", err)
+		}
+		defer func() {
+			err = errors.Join(err, ociStore.Close())
+		}()
 
-	mainArtifacts := ociStore.MainArtifacts(ctx)
-	if len(mainArtifacts) != 1 {
-		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("expected exactly one main artifact in OCI layout, but got %d", len(mainArtifacts))
+		mainArtifacts := ociStore.MainArtifacts(ctx)
+		if len(mainArtifacts) != 1 {
+			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("expected exactly one main artifact in OCI layout, but got %d", len(mainArtifacts))
+		}
+		src, main = ociStore, mainArtifacts[0]
 	}
-	main := mainArtifacts[0]
 	// A nil digest denotes a source. Resources must validate or complete their
 	// digest before any destination writes, including the incomplete-digest case.
 	if resourceDigest != nil {
@@ -839,7 +851,7 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("target access digest mismatch: expected %s, got %s", pinned, main.Digest)
 	}
 
-	if err := oras.ExtendedCopyGraph(slogcontext.With(ctx, slog.String("target", access.ImageReference)), ociStore, store, main, repo.extendedCopyGraphOptions()); err != nil {
+	if err := oras.ExtendedCopyGraph(slogcontext.With(ctx, slog.String("target", access.ImageReference)), src, store, main, repo.extendedCopyGraphOptions()); err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to upload resource via copy: %w", err)
 	}
 
