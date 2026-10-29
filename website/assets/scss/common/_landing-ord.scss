@@ -129,10 +129,6 @@
         justify-content: center;
     }
 
-    .container--after-hero {
-        margin-top: 40px;
-    }
-
     /* Sections below the hero: left-aligned title above full-width content */
     .lp-section {
         display: flex;
@@ -143,10 +139,12 @@
         text-align: left;
     }
 
+    /* Steps sit side by side while each command fits on one line and wrap below each other otherwise:
+       the flex basis is the unwrapped command width. */
     .quickstart-steps {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        gap: 20px 24px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 32px 24px;
         list-style: none;
         margin: 0;
         padding: 0;
@@ -154,8 +152,9 @@
     }
 
     .quickstart-step {
+        flex: 1 1 auto;
+        min-width: 0; /* a command wider than the row wraps inside its block */
         counter-increment: quickstart-step;
-        min-width: 0; /* keep long commands inside their grid column */
     }
 
     .quickstart-step-title {
@@ -164,7 +163,7 @@
         gap: 10px;
         margin-bottom: 12px;
         color: var(--lp-c-text-1);
-        font-size: 14px;
+        font-size: 16px;
         font-weight: 600;
 
         &::before {
@@ -173,25 +172,41 @@
             flex: 0 0 auto;
             align-items: center;
             justify-content: center;
-            width: 24px;
-            height: 24px;
-            border: 1px solid var(--lp-button-brand-bg);
+            width: 28px;
+            height: 28px;
+            border: 2px solid var(--lp-button-brand-bg);
             border-radius: 50%;
             color: var(--lp-button-brand-bg);
-            font-size: 12px;
-            font-weight: 400;
+            font-size: 14px;
+            font-weight: 600;
         }
     }
 
     .quickstart-more {
-        margin: 0;
-        color: var(--ocm-card-desc-color);
+        display: inline-block;
+        margin-top: 8px;
         font-size: 14px;
     }
 
-    /* Docs-style code frame without the terminal title bar */
+    /* Docs code frame styled like the cards below, without the terminal title bar */
     .quickstart-step .expressive-code {
         margin: 0;
+
+        .frame {
+            box-shadow: none;
+            border: 1px solid var(--ocm-card-border);
+            border-radius: var(--ocm-card-border-radius);
+            overflow: hidden;
+        }
+
+        .frame,
+        pre {
+            background: var(--ocm-card-bg);
+        }
+
+        pre {
+            border: none;
+        }
 
         .frame.is-terminal {
             --button-spacing: 0.4rem; /* the copy button otherwise sits below the hidden title bar */
@@ -202,8 +217,10 @@
         }
 
         /* Wrap instead of scrolling so the whole command is readable; copy still yields one line.
-           Right padding keeps text clear of the copy button. */
+           Right padding keeps text clear of the copy button. The slightly smaller font lets both
+           commands fit side by side on wide screens. */
         pre > code {
+            font-size: 13px;
             white-space: pre-wrap;
             overflow-wrap: break-word; /* break inside a token only if it alone overflows */
             padding-inline-end: 3rem;
@@ -217,7 +234,7 @@
         border-radius: 24px;
         padding: 0 24px;
         line-height: 46px;
-        font-size: 14px;
+        font-size: 16px;
         font-weight: 400;
         text-decoration: none;
         transition: color 0.25s, border-color 0.25s, background-color 0.25s;
@@ -727,5 +744,13 @@ html[data-bs-theme="light"] .neonephos-logo--light {
         background: var(--lp-c-bg) !important;
         color: var(--lp-c-text-2) !important;
         border-top-color: var(--lp-c-divider);
+    }
+}
+
+/* Dark Theme Overrides: quick start code frames use the dark card background like .ocm-card */
+[data-bs-theme="dark"] .lp-home .quickstart-step .expressive-code {
+    .frame,
+    pre {
+        background: var(--ocm-card-bg-dark);
     }
 }

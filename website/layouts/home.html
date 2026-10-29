@@ -31,31 +31,27 @@
     </div>
   </div>
 
-  {{- $tryCmd := partial "main/cli-try-command.html" . }}
-  {{- with $tryCmd }}
+  {{- with partial "main/cli-try-command.html" . }}
   {{- $installCmd := printf "curl -sfL https://ocm.software/install-cli.sh | %sbash" (partial "main/site-version.html" (dict "page" $ "format" "env")) }}
-  <div class="container container--after-hero">
+  <div class="container">
     <section class="lp-section" aria-labelledby="quickstart-title">
       <h2 id="quickstart-title" class="section-title section-title--left">Try It Out</h2>
       <ol class="quickstart-steps">
         <li class="quickstart-step">
           <span class="quickstart-step-title">Install the CLI (Linux, macOS)</span>
           {{ printf "```shell\n%s\n```" $installCmd | $.RenderString (dict "display" "block") }}
+          <a class="quickstart-more" href='{{ relref $ "docs/getting-started/ocm-cli-installation.md" }}'>View more installation options</a>
         </li>
         <li class="quickstart-step">
           <span class="quickstart-step-title">Inspect the public CLI component</span>
           {{ printf "```shell\n%s\n```" . | $.RenderString (dict "display" "block") }}
         </li>
       </ol>
-      <p class="quickstart-more">
-        Windows, containers, and binary verification:
-        <a href='{{ relref $ "docs/getting-started/ocm-cli-installation.md" }}'>Install the OCM CLI</a>
-      </p>
     </section>
   </div>
   {{- end }}
 
-  <div class="container{{ if not $tryCmd }} container--after-hero{{ end }}">
+  <div class="container">
     <section class="lp-section" aria-labelledby="how-title">
       <h2 id="how-title" class="section-title section-title--left">How OCM Works</h2>
       <div class="ocm-card-grid ocm-card-grid--action">
