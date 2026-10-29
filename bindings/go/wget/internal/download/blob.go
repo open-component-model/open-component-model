@@ -22,9 +22,10 @@ import (
 //
 // Size, media type and the advertised digest (see [WithAdvertisedDigest]) are
 // learned once: from a HEAD request sent the first time one of them is asked
-// for, or from the first reader's response if that comes first. Other methods
-// than GET and HEAD send no HEAD request, so their metadata is unknown until a
-// reader got its response. Every reader is checked against the learned
+// for, or from the first reader's response if that comes first. A failed HEAD
+// request (e.g. denied for a presigned URL) is not repeated and learns nothing,
+// so the metadata stays unknown until a reader got its response. Other methods
+// than GET and HEAD send no HEAD request. Every reader is checked against the learned
 // metadata: a response announcing another size is rejected, and a reported
 // digest is handed to the [Verifier] as [Computed.Pinned].
 //
@@ -39,6 +40,8 @@ type Blob struct {
 
 	// probe serializes metadata requests, so at most one HEAD request is sent.
 	probe sync.Mutex
+	// probed reports whether the HEAD request was sent. Guarded by probe.
+	probed bool
 
 	mu sync.Mutex
 	// mediaType is the media type set by the request or [Blob.SetMediaType];
@@ -101,7 +104,7 @@ func newBlob(f *fetcher, mediaType string, o *option) *Blob {
 }
 
 // metadata returns the learned metadata, sending a HEAD request to learn it if
-// no response was seen yet.
+// no response was seen yet. Without learned metadata it reports all unknown.
 func (b *Blob) metadata() metadata {
 	if m, ok := b.learned(); ok {
 		return m
@@ -111,7 +114,16 @@ func (b *Blob) metadata() metadata {
 	if m, ok := b.learned(); ok {
 		return m
 	}
+	unknown := metadata{size: blob.SizeUnknown}
+	if b.probed {
+		return unknown
+	}
+	b.probed = true
 	header, size := b.head()
+	if header == nil {
+		// Learning nothing leaves the metadata to the response of a reader.
+		return unknown
+	}
 	return b.learn(header, size)
 }
 
@@ -125,14 +137,11 @@ func (b *Blob) learned() (metadata, bool) {
 }
 
 // learn records the metadata announced by header unless metadata was already
-// learned, and returns the learned metadata. A nil header announces nothing.
+// learned, and returns the learned metadata.
 func (b *Blob) learn(header http.Header, size int64) metadata {
-	m := metadata{size: size}
-	if header != nil {
-		m.contentType = header.Get("Content-Type")
-		if b.advertised != nil {
-			m.digest, _ = b.advertised(header)
-		}
+	m := metadata{size: size, contentType: header.Get("Content-Type")}
+	if b.advertised != nil {
+		m.digest, _ = b.advertised(header)
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()

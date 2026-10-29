@@ -521,23 +521,32 @@ func TestDownload_Metadata(t *testing.T) {
 		r.Equal(content, readBlob(t, b))
 	})
 
-	t.Run("failing HEAD leaves metadata unknown", func(t *testing.T) {
+	t.Run("failing HEAD is not repeated and leaves metadata to the response", func(t *testing.T) {
 		t.Parallel()
 		r := require.New(t)
+		var heads atomic.Int32
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			if req.Method == http.MethodHead {
-				w.WriteHeader(http.StatusForbidden)
+				heads.Add(1)
+				w.WriteHeader(520)
 				return
 			}
+			w.Header().Set("Content-Type", "text/plain")
+			w.Header().Set("X-Digest", "sha256:advertised")
 			_, _ = w.Write(content)
 		}))
 		t.Cleanup(srv.Close)
-		b, err := download.Download(t.Context(), download.Request{URL: srv.URL}, download.WithClient(srv.Client()))
+		b, err := download.Download(t.Context(), download.Request{URL: srv.URL}, download.WithClient(srv.Client()), advertised)
 		r.NoError(err)
 
 		r.Equal(blob.SizeUnknown, b.Size())
+		mediaType, _ := b.MediaType()
+		r.Equal("application/octet-stream", mediaType)
+		r.Equal(int32(1), heads.Load(), "a failed HEAD request must not be repeated")
+
 		r.Equal(content, readBlob(t, b))
-		r.Equal(blob.SizeUnknown, b.Size(), "metadata must not change once learned")
+		requireMetadata(r, b)
+		r.Equal(int32(1), heads.Load())
 	})
 
 	t.Run("response of another size than announced by HEAD is rejected", func(t *testing.T) {
