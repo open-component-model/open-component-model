@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec/schemas/Config.schema.json",
   "title": "Config",
   "type": "object",
-  "description": "Config is the wire format of the checksum-over-HTTP configuration. It steers\nboth the wget input method and the wget access resource repository through\na single knob.\n\ntype: generic.config.ocm.software/v1\nconfigurations:\n- type: checksum.http.config.ocm.software/v1alpha1\nmode: Prefer\nhosts:\n\"repo.example.com\":\nmode: Require",
+  "description": "Config is the wire format of the checksum-over-HTTP configuration. It steers\nboth the wget input method and the wget access resource repository through\na single knob.\n\n\ttype: generic.config.ocm.software/v1\n\tconfigurations:\n\t  - type: checksum.http.config.ocm.software/v1alpha1\n\t    mode: Prefer\n\t    hosts:\n\t      \"repo.example.com\":\n\t        mode: Require",
   "properties": {
     "hosts": {
       "type": "object",

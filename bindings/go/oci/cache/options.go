@@ -51,8 +51,8 @@ type Options struct {
 	// the same Dir can be shared.
 	Dir string
 
-	// MaxEntries bounds the LRU. A value of 0 means unlimited
-	// (subject only to TTL).
+	// MaxEntries bounds the LRU. A value of 0 uses the cache's default:
+	// [DefaultBlobMaxEntries] or [DefaultReferenceMaxEntries].
 	MaxEntries int
 
 	// TTL is the maximum age of a cache entry. A value of 0 disables
@@ -76,33 +76,43 @@ type Options struct {
 	RemotePolicy RemotePolicy
 }
 
+const (
+	// DefaultBlobMaxEntries is the [BlobCache] entry limit. A component version takes
+	// about three entries (manifest, config, descriptor).
+	DefaultBlobMaxEntries = 100_000
+	// DefaultReferenceMaxEntries is the [ReferenceCache] entry limit.
+	DefaultReferenceMaxEntries = 10_000
+	// DefaultMaxBlobSize is the per-blob size cap of the [BlobCache].
+	DefaultMaxBlobSize = 20 << 20
+)
+
 // Defaults returns an [Options] populated with sane caching limits:
-//   - 256 entries
+//   - [DefaultBlobMaxEntries] or [DefaultReferenceMaxEntries] entries,
+//     depending on the cache (MaxEntries is left zero)
 //   - 10 minute TTL
-//   - 4 MiB per-blob size cap
+//   - [DefaultMaxBlobSize] per-blob size cap
 //   - [DefaultAccept] media-type filter
-//   - [RemotePolicyAlways] (secure by default)
+//   - [RemotePolicyIfNotPresent]
 //
 // Dir is left zero — callers must set it explicitly.
 func Defaults() *Options {
 	return &Options{
-		MaxEntries:   256,
 		TTL:          10 * time.Minute,
-		MaxBlobSize:  4 << 20,
+		MaxBlobSize:  DefaultMaxBlobSize,
 		Accept:       DefaultAccept,
-		RemotePolicy: RemotePolicyAlways,
+		RemotePolicy: RemotePolicyIfNotPresent,
 	}
 }
 
 // applyDefaults validates required fields and fills zero-valued
-// fields from [Defaults].
-func (o Options) applyDefaults() (Options, error) {
+// fields from [Defaults], using maxEntries for MaxEntries.
+func (o Options) applyDefaults(maxEntries int) (Options, error) {
 	if o.Dir == "" {
 		return Options{}, errors.New("cache: Options.Dir is required")
 	}
 	d := Defaults()
 	if o.MaxEntries == 0 {
-		o.MaxEntries = d.MaxEntries
+		o.MaxEntries = maxEntries
 	}
 	if o.TTL == 0 {
 		o.TTL = d.TTL

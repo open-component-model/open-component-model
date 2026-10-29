@@ -30,6 +30,7 @@ func init() {
 //	configurations:
 //	  - type: transfer.config.ocm.software/v1alpha1
 //	    recursive: -1
+//	    unmatchedResourcePolicy: Fail
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
@@ -44,9 +45,14 @@ type Config struct {
 	// component: -1 means infinite recursion, 0 means no recursion. Positive
 	// depths are reserved but not implemented yet. See [Recursive].
 	Recursive Recursive `json:"recursive,omitempty"`
+
+	// UnmatchedResourcePolicy decides what happens to a resource no uploader
+	// selects: Ignore, Warn (default) or Fail. See [UnmatchedResourcePolicy].
+	UnmatchedResourcePolicy UnmatchedResourcePolicy `json:"unmatchedResourcePolicy,omitempty"`
 }
 
-// Validate rejects a non-matching [Config.Type] and unsupported recursion depths.
+// Validate rejects a non-matching [Config.Type], unsupported recursion depths
+// and unknown [UnmatchedResourcePolicy] values.
 // An empty Type is allowed so callers constructing a Config programmatically
 // (without going through [Scheme.Decode]) do not need to set it explicitly.
 func (cfg *Config) Validate() error {
@@ -66,6 +72,10 @@ func (cfg *Config) Validate() error {
 	}
 	if cfg.Recursive > RecursiveNone {
 		return fmt.Errorf("recursive depth %d is not implemented yet (use -1 for infinite recursion or 0 for none)", cfg.Recursive)
+	}
+	if !cfg.UnmatchedResourcePolicy.Valid() {
+		return fmt.Errorf("invalid unmatchedResourcePolicy %q (must be one of %q, %q or %q)",
+			cfg.UnmatchedResourcePolicy, UnmatchedResourcePolicyIgnore, UnmatchedResourcePolicyWarn, UnmatchedResourcePolicyFail)
 	}
 	return nil
 }
@@ -100,7 +110,8 @@ func LookupConfig(cfg *genericv1.Config) (*Config, error) {
 // Merge merges the provided configs into a single config. Later entries win:
 // a non-zero Recursive overrides whatever earlier entries set. An explicit
 // "recursive: 0" cannot be distinguished from an omitted field; both leave the
-// default of no recursion.
+// default of no recursion. A non-empty UnmatchedResourcePolicy likewise
+// overrides earlier entries.
 func Merge(configs ...*Config) *Config {
 	if len(configs) == 0 {
 		return nil
@@ -114,6 +125,9 @@ func Merge(configs ...*Config) *Config {
 		}
 		if cfg.Recursive != RecursiveNone {
 			merged.Recursive = cfg.Recursive
+		}
+		if cfg.UnmatchedResourcePolicy != "" {
+			merged.UnmatchedResourcePolicy = cfg.UnmatchedResourcePolicy
 		}
 	}
 	return merged

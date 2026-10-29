@@ -11,7 +11,6 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/pkg/configuration"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -65,18 +64,18 @@ func VerifyResource(ctx context.Context, pm *manager.PluginManager, resource *de
 
 // ResolveReferencePath walks a reference path from a parent component version to a final component version.
 // It returns the final descriptor and repository spec.
-// The baseOpts are used as a template for each resolution step; only the Digest field is overridden per reference.
+// Each referenced component version is integrity-checked against the digest of its reference, if one is set.
 func ResolveReferencePath(
 	ctx context.Context,
 	resolver *resolution.Resolver,
 	parentDesc *descriptor.Descriptor,
 	referencePath []runtime.Identity,
-	baseOpts *resolution.RepositoryOptions,
+	opts *resolution.Options,
 ) (*descriptor.Descriptor, runtime.Typed, error) {
 	logger := log.FromContext(ctx)
 
 	if len(referencePath) == 0 {
-		return parentDesc, baseOpts.RepositorySpec, nil
+		return parentDesc, opts.RepositorySpec, nil
 	}
 
 	currentDesc := parentDesc
@@ -90,17 +89,11 @@ func ResolveReferencePath(
 				refIdentity, currentDesc.Component.Name, currentDesc.Component.Version, i+1)
 		}
 
-		stepOpts := *baseOpts
-		stepOpts.Digest = extractDigest(matchedRef)
-
-		refRepo, err := resolver.NewCacheBackedRepository(ctx, &stepOpts)
+		refDesc, err := resolver.GetComponentVersion(ctx, opts,
+			resolution.Verification{Digest: extractDigest(matchedRef)},
+			matchedRef.Component, matchedRef.Version)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to create cache-backed repository for reference: %w", err)
-		}
-
-		refDesc, err := refRepo.GetComponentVersion(ctx, matchedRef.Component, matchedRef.Version)
-		if err != nil {
-			if !errors.Is(err, workerpool.ErrNotSafelyDigestible) {
+			if !errors.Is(err, resolution.ErrNotSafelyDigestible) {
 				return nil, nil, fmt.Errorf("failed to get referenced component version %s:%s: %w",
 					matchedRef.Component, matchedRef.Version, err)
 			}
@@ -111,7 +104,7 @@ func ResolveReferencePath(
 		currentDesc = refDesc
 	}
 
-	return currentDesc, baseOpts.RepositorySpec, errsNotSafelyDigestible
+	return currentDesc, opts.RepositorySpec, errsNotSafelyDigestible
 }
 
 func findMatchingReference(desc *descriptor.Descriptor, identity runtime.Identity) *descriptor.Reference {
