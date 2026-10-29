@@ -324,8 +324,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	// The status digest only detects changes (replication re-transfers on a new
-	// value), it is never a signature. A fixed algorithm keeps it stable across
-	// releases; changing it would re-transfer every replicated component once.
+	// value), it is never a signature. It names a concrete algorithm, not the
+	// default or the jsonNormalisation/v3 alias: both can resolve differently in
+	// a later release, which would re-transfer every replicated component once.
 	digestSpec, err := signing.GenerateDigest(ctx, desc, slog.New(logr.ToSlogHandler(logger)), v4alpha1.Algorithm, crypto.SHA256.String())
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
