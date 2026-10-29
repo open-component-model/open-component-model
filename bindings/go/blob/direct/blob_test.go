@@ -442,7 +442,6 @@ func TestReadCloser_PreservesRandomAccess(t *testing.T) {
 }
 
 func TestNewFromBytesReadCloserSupportsWriterTo(t *testing.T) {
-	r := require.New(t)
 	data := []byte("hello world")
 	for name, b := range map[string]*Blob{
 		"bytes":          NewFromBytes(data),
@@ -450,6 +449,7 @@ func TestNewFromBytesReadCloserSupportsWriterTo(t *testing.T) {
 		"size truncated": NewFromBytes(data, WithSize(5)),
 	} {
 		t.Run(name, func(t *testing.T) {
+			r := require.New(t)
 			rc, err := b.ReadCloser()
 			r.NoError(err)
 			t.Cleanup(func() { r.NoError(rc.Close()) })
