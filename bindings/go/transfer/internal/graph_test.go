@@ -1,8 +1,10 @@
 package internal
 
 import (
+	"bytes"
 	"context"
 	"crypto"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -1192,4 +1194,123 @@ func TestBuildGraphDefinition_DockerManifestLocalBlob_FallsBackToLocalBlobWithou
 
 	require.Len(t, tgd.Transformations, 2)
 	assert.Equal(t, ociv1alpha1.TransferOCILocalBlobToOCILocalBlobV1alpha1, tgd.Transformations[0].Type)
+}
+
+// A transferred tree whose reference digests are not all the default must warn
+// for each such reference, so users rebuild with a current CLI; a default-only
+// tree must not.
+func TestBuildGraphDefinition_WarnsAboutNonDefaultReferenceDigests(t *testing.T) {
+	r := require.New(t)
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	const warning = "component reference digest was computed with an older normalisation algorithm"
+
+	child := testDescriptor("ocm.software/child", "1.0.0", nil, nil)
+	transfer := func(t *testing.T, normalisationAlgorithm string) {
+		t.Helper()
+		dig, err := signing.GenerateDigest(t.Context(), child, slog.New(slog.DiscardHandler), normalisationAlgorithm, crypto.SHA256.String())
+		require.NoError(t, err)
+		parent := testDescriptor("ocm.software/parent", "1.0.0", nil, []descriptor.Reference{{
+			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "child", Version: "1.0.0"}},
+			Component:   "ocm.software/child",
+			Digest:      *dig,
+		}})
+		source := testOCIRepo("ghcr.io/source")
+		resolver := testMultiResolver(map[string]struct {
+			spec runtime.Typed
+			desc *descriptor.Descriptor
+		}{
+			"ocm.software/parent:1.0.0": {spec: source, desc: parent},
+			"ocm.software/child:1.0.0":  {spec: source, desc: child},
+		})
+		roots := testTransferRoots("ocm.software/parent", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
+		_, err = BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{Recursive: transferv1alpha1.RecursiveInfinite}, nil)
+		require.NoError(t, err)
+	}
+
+	transfer(t, signing.DefaultNormalisationAlgorithm)
+	r.NotContains(logs.String(), warning, "a tree with only default reference digests must not warn")
+
+	transfer(t, v4alpha1.Algorithm)
+	r.Equal(1, strings.Count(logs.String(), warning), "a v4alpha1 reference digest must warn once")
+	r.Contains(logs.String(), "normalisationAlgorithm="+v4alpha1.Algorithm)
+}
+
+// Transfer never adds or rewrites reference digests: an existing digest is only
+// used to verify the referenced component version, a missing one stays missing
+// (and is warned about). Rewriting either would change the referencing
+// descriptor and invalidate its signature.
+func TestBuildGraphDefinition_KeepsReferenceDigests(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	r := require.New(t)
+
+	pinned := testDescriptor("ocm.software/pinned", "1.0.0", nil, nil)
+	unpinned := testDescriptor("ocm.software/unpinned", "1.0.0", nil, nil)
+	dig, err := signing.GenerateDigest(t.Context(), pinned, slog.New(slog.DiscardHandler), v4alpha1.Algorithm, crypto.SHA256.String())
+	r.NoError(err)
+	refs := []descriptor.Reference{
+		{
+			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "pinned", Version: "1.0.0"}},
+			Component:   "ocm.software/pinned",
+			Digest:      *dig,
+		},
+		{
+			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "unpinned", Version: "1.0.0"}},
+			Component:   "ocm.software/unpinned",
+		},
+	}
+	parent := testDescriptor("ocm.software/parent", "1.0.0", nil, refs)
+	source := testOCIRepo("ghcr.io/source")
+	resolver := testMultiResolver(map[string]struct {
+		spec runtime.Typed
+		desc *descriptor.Descriptor
+	}{
+		"ocm.software/parent:1.0.0":   {spec: source, desc: parent},
+		"ocm.software/pinned:1.0.0":   {spec: source, desc: pinned},
+		"ocm.software/unpinned:1.0.0": {spec: source, desc: unpinned},
+	})
+	roots := testTransferRoots("ocm.software/parent", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{Recursive: transferv1alpha1.RecursiveInfinite}, nil)
+	r.NoError(err)
+
+	v2desc, err := descriptor.ConvertToV2(runtime.NewScheme(), parent)
+	r.NoError(err)
+	want, err := json.Marshal(v2desc.Component.References)
+	r.NoError(err)
+
+	var envID string
+	for id, data := range tgd.Environment.Data {
+		component := data.(map[string]any)["component"].(map[string]any)
+		if component["name"] == "ocm.software/parent" {
+			envID = id
+			got, err := json.Marshal(component["componentReferences"])
+			r.NoError(err)
+			r.JSONEq(string(want), string(got), "the transferred references must be the source references, digests unchanged")
+		}
+	}
+	r.NotEmpty(envID, "parent must be in the environment")
+	r.Contains(logs.String(), "normalisationAlgorithm="+v4alpha1.Algorithm, "the v4alpha1 reference digest must be warned about")
+	r.Contains(logs.String(), `reference="name=unpinned,version=1.0.0"`, "the missing reference digest must be warned about")
+
+	for _, tr := range tgd.Transformations {
+		if !strings.HasSuffix(tr.ID, "Upload") {
+			continue
+		}
+		spec := tr.Spec.Data["descriptor"]
+		if s, ok := spec.(string); ok {
+			if s == "${environment."+envID+"}" {
+				return
+			}
+			continue
+		}
+		if refs := spec.(map[string]any)["component"].(map[string]any)["componentReferences"]; refs == "${environment."+envID+".component.componentReferences}" {
+			return
+		}
+	}
+	r.Fail("the parent's upload must take its references from the environment unchanged")
 }

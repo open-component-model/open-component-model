@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	v1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	rt "ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -1846,4 +1847,21 @@ func TestConvertResourceDigestFullChain(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, original, backToV1.Digest)
+}
+
+// label.version is part of what a signature covers (jsonNormalisation/v4alpha3),
+// so every label conversion between the constructor spec, its runtime form and
+// the descriptor must carry it.
+func TestConvertLabelVersionFullChain(t *testing.T) {
+	r := require.New(t)
+	in := []v1.Label{{Name: "sig", Value: []byte(`"v"`), Signing: true, Version: "v1"}}
+
+	runtimeLabels := ConvertFromV1Labels(in)
+	r.Equal([]Label{{Name: "sig", Value: []byte(`"v"`), Signing: true, Version: "v1"}}, runtimeLabels)
+
+	desc := ConvertToDescriptorLabels(runtimeLabels)
+	r.Equal([]descriptor.Label{{Name: "sig", Value: []byte(`"v"`), Signing: true, Version: "v1"}}, desc)
+
+	r.Equal(runtimeLabels, ConvertFromDescriptorLabels(desc))
+	r.Equal(in, ConvertToV1Labels(runtimeLabels))
 }

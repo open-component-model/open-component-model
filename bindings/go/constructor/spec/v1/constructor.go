@@ -207,7 +207,9 @@ type Reference struct {
 	// Component describes the remote name of the referenced object.
 	Component string `json:"componentName"`
 	// Digest is the optional digest of the referenced component.
-	// If provided, it will be verified against the calculated digest during construction.
+	// If provided, it is verified against the referenced component under its own
+	// normalisation and hash algorithms and kept, instead of computing one with the
+	// default normalisation. The verify-only jsonNormalisation/v1 is rejected.
 	Digest *Digest `json:"digest,omitempty"`
 }
 
