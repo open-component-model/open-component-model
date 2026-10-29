@@ -56,7 +56,7 @@ OCM uses a two-layer approach to ensure consistent and reproducible digests:
 
 Before hashing, the component descriptor is normalized into a canonical form, eliminating any ambiguities
 that could cause the same logical descriptor to produce different digests. The default normalization
-algorithm ([`jsonNormalisation/v4alpha3`](https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/04-algorithms/component-descriptor-normalization-algorithms.md#normalization-algorithms)) defines exactly how this canonical form is derived, ensuring
+algorithm ([`jsonNormalisation/v4alpha3`](https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/04-algorithms/component-descriptor-normalization-algorithms.md#jsonnormalisationv4alpha3)) defines exactly how this canonical form is derived, ensuring
 identical component descriptors always yield the same digest.
 
 Digests computed with older algorithms keep verifying: `jsonNormalisation/v4alpha1`, `jsonNormalisation/v4alpha2`,
