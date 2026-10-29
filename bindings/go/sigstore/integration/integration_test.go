@@ -9,13 +9,13 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"log"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testenv"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/handler"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
@@ -24,9 +24,9 @@ import (
 )
 
 // sigstoreEnv holds the environment configuration for the sigstore integration
-// tests. All values are read from environment variables in TestMain, which are
-// expected to be set by the scaffolding setup (either via CI or locally via
-// hack/extract-sigstore-env.sh).
+// tests, written by the scaffolding setup (hack/extract-sigstore-env.sh). Every
+// test passes through newHandler, which skips or fails it via testenv.Sigstore
+// when the environment is incomplete.
 type sigstoreEnv struct {
 	OIDCToken         string
 	SigningConfigPath string
@@ -36,25 +36,12 @@ type sigstoreEnv struct {
 }
 
 // stack is the shared sigstore environment used by all tests.
-var stack *sigstoreEnv
-
-func TestMain(m *testing.M) {
-	stack = &sigstoreEnv{
-		OIDCToken:         requireEnv("SIGSTORE_OIDC_TOKEN"),
-		SigningConfigPath: requireEnv("SIGSTORE_SIGNING_CONFIG"),
-		TrustedRootPath:   requireEnv("SIGSTORE_TRUSTED_ROOT"),
-		OIDCIssuer:        requireEnv("SIGSTORE_OIDC_ISSUER"),
-		OIDCIdentity:      requireEnv("SIGSTORE_OIDC_IDENTITY"),
-	}
-	os.Exit(m.Run())
-}
-
-func requireEnv(key string) string {
-	v := os.Getenv(key)
-	if v == "" {
-		log.Fatalf("required env var %s is not set", key)
-	}
-	return v
+var stack = &sigstoreEnv{
+	OIDCToken:         os.Getenv("SIGSTORE_OIDC_TOKEN"),
+	SigningConfigPath: os.Getenv("SIGSTORE_SIGNING_CONFIG"),
+	TrustedRootPath:   os.Getenv("SIGSTORE_TRUSTED_ROOT"),
+	OIDCIssuer:        os.Getenv("SIGSTORE_OIDC_ISSUER"),
+	OIDCIdentity:      os.Getenv("SIGSTORE_OIDC_IDENTITY"),
 }
 
 // ---------------------------------------------------------------------------
@@ -97,6 +84,7 @@ func decodeBundle(t *testing.T, sigInfo descruntime.SignatureInfo) *bundleJSON {
 
 func newHandler(t *testing.T) *handler.Handler {
 	t.Helper()
+	testenv.Require(t, testenv.Sigstore)
 	return handler.New()
 }
 

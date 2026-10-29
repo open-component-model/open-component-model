@@ -47,6 +47,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testenv"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
@@ -77,10 +78,6 @@ const (
 )
 
 func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
-	if testing.Short() {
-		t.Skipf("skipping integration test as downloading from ghcr.io is taking too long!")
-	}
-
 	t.Parallel()
 	user, password := getUserAndPasswordWithGitHubCLIAndJQ(t)
 
@@ -159,10 +156,6 @@ func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 }
 
 func Test_Integration_HealthCheck_Authentication(t *testing.T) {
-	if testing.Short() {
-		t.Skipf("skipping integration test as reaching ghcr.io is taking too long!")
-	}
-
 	t.Parallel()
 	user, password := getUserAndPasswordWithGitHubCLIAndJQ(t)
 
@@ -237,6 +230,7 @@ func Test_Integration_OCIRepository(t *testing.T) {
 
 	// Start containerized registry
 	t.Logf("Launching test registry (%s)...", distributionRegistryImage)
+	testenv.Require(t, testenv.Docker)
 	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
 		registry.WithHtpasswd(htpasswd),
 		testcontainers.WithEnv(map[string]string{
@@ -469,6 +463,7 @@ func Test_Integration_Transformers(t *testing.T) {
 
 	// Start containerized registry
 	t.Logf("Launching test registry (%s)...", distributionRegistryImage)
+	testenv.Require(t, testenv.Docker)
 	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
 		registry.WithHtpasswd(htpasswd),
 		testcontainers.WithEnv(map[string]string{
@@ -1611,6 +1606,7 @@ func startOwnershipRegistry(t *testing.T, ctx context.Context) (*urlresolver.Cac
 
 	password := generateRandomPassword(t, passwordLength)
 	htpasswd := generateHtpasswd(t, testUsername, password)
+	testenv.Require(t, testenv.Docker)
 	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
 		registry.WithHtpasswd(htpasswd),
 		testcontainers.WithEnv(map[string]string{
@@ -1838,6 +1834,7 @@ func Test_Integration_OCIImageLayer(t *testing.T) {
 	htpasswd := generateHtpasswd(t, testUsername, password)
 
 	t.Logf("Launching test registry (%s)...", distributionRegistryImage)
+	testenv.Require(t, testenv.Docker)
 	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
 		registry.WithHtpasswd(htpasswd),
 		testcontainers.WithEnv(map[string]string{

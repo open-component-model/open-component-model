@@ -163,6 +163,13 @@ linters:
       - linters:
           - depguard
         path: git/integration/constructor_integration_test\.go
+      # internal/testenv gates integration tests on external systems. It is a
+      # test-only helper, not a layering dependency, so every binding's tests may
+      # import it without listing it in that binding's depguard allow list.
+      - linters:
+          - depguard
+        path: (_test\.go$|/integration/)
+        text: bindings/go/internal/testenv
     paths:
       - third_party$
       - builtin$

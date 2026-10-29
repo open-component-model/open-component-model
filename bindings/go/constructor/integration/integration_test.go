@@ -18,6 +18,7 @@ import (
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testenv"
 	ocmoci "ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -137,6 +138,7 @@ func launchRegistryRepositoryWithResolver(t *testing.T) (repository.ComponentVer
 	r := require.New(t)
 
 	t.Logf("Launching test registry (%s)...", distributionRegistryImage)
+	testenv.Require(t, testenv.Docker)
 	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
 		testcontainers.WithEnv(map[string]string{
 			"REGISTRY_VALIDATION_DISABLED": "true",

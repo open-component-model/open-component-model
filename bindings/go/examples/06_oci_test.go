@@ -10,7 +10,8 @@
 //
 // This is the capstone of the tour. Everything from the previous steps —
 // blobs, descriptors, repositories — comes together in a real OCI registry
-// workflow. These tests require Docker and are skipped with -short.
+// workflow. These tests require Docker; the examples package therefore runs with
+// the integration tests (containers group) rather than the unit tests.
 
 package examples
 
@@ -33,6 +34,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testenv"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
@@ -45,16 +47,10 @@ import (
 // TestExample_OCIRegistryRoundTrip demonstrates a full OCI registry workflow:
 // start a local registry, push a component version with a local resource,
 // list versions, and retrieve the resource content.
-//
-// This test is skipped with -short because it requires Docker to spin up a
-// container-based OCI registry.
 func TestExample_OCIRegistryRoundTrip(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping OCI registry test in short mode (requires Docker)")
-	}
-
 	r := require.New(t)
 	ctx := t.Context()
+	testenv.Require(t, testenv.Docker)
 
 	// 1. Start a local OCI registry using testcontainers.
 	registryContainer, err := registry.Run(ctx, "registry:3.0.0")
@@ -156,13 +152,10 @@ func TestExample_OCIRegistryRoundTrip(t *testing.T) {
 // TestExample_OCIRegistryMultipleVersions demonstrates pushing multiple
 // versions to an OCI registry and listing them.
 func TestExample_OCIRegistryMultipleVersions(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping OCI registry test in short mode (requires Docker)")
-	}
-
 	r := require.New(t)
 	ctx := t.Context()
 
+	testenv.Require(t, testenv.Docker)
 	registryContainer, err := registry.Run(ctx, "registry:3.0.0")
 	r.NoError(err)
 	t.Cleanup(func() {
@@ -251,13 +244,7 @@ func TestExample_OCIRegistryMultipleVersions(t *testing.T) {
 // OCM resolves credentials by matching a consumer identity — here derived
 // from the registry URL — against a static credential map. This is the same
 // identity model used in Steps 3 and 4, applied to a real registry.
-//
-// This test is skipped with -short because it requires Docker.
 func TestExample_PrivateOCIRegistry(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping private OCI registry test in short mode (requires Docker)")
-	}
-
 	r := require.New(t)
 	ctx := t.Context()
 
@@ -266,6 +253,7 @@ func TestExample_PrivateOCIRegistry(t *testing.T) {
 	htpasswdHash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	r.NoError(err)
 
+	testenv.Require(t, testenv.Docker)
 	registryContainer, err := registry.Run(ctx, "registry:3.0.0",
 		registry.WithHtpasswd(fmt.Sprintf("%s:%s", username, string(htpasswdHash))),
 	)

@@ -1,4 +1,5 @@
-package handler
+// Package integration checks the GPG signing handler against a real GnuPG installation.
+package integration
 
 import (
 	"bytes"
@@ -18,15 +19,18 @@ import (
 	pgperrors "github.com/ProtonMail/go-crypto/openpgp/errors"
 	"github.com/stretchr/testify/require"
 
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/gpg/signing/handler"
 	gpgcredentialsv1 "ocm.software/open-component-model/bindings/go/gpg/spec/credentials/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/gpg/spec/signing/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/testenv"
 )
 
 // Test_Integration_GPGHandler checks interoperability with a real GnuPG in both directions,
 // with keys and signatures gpg created.
 func Test_Integration_GPGHandler(t *testing.T) {
-	requireGPG(t)
-	h := mustHandler(t)
+	testenv.Require(t, testenv.GPG)
+	h := newHandler(t)
 
 	withSubkey := gpgKey(t, "certify-only with signing subkey", "ed25519", "cert", "")
 	withSubkey.addSubkey(t, "ed25519", "sign")
@@ -98,7 +102,7 @@ func Test_Integration_GPGHandler(t *testing.T) {
 }
 
 // interop signs with OCM and verifies with gpg, and the other way round.
-func interop(t *testing.T, h *Handler, k *testKey) {
+func interop(t *testing.T, h *handler.Handler, k *testKey) {
 	t.Helper()
 	r := require.New(t)
 	digest := makeDigest(t, crypto.SHA256, []byte("gpg integration"))
@@ -112,8 +116,8 @@ func interop(t *testing.T, h *Handler, k *testKey) {
 // Test_Integration_GPGHandler_Keyring signs and verifies with the keys of a GnuPG keyring
 // selected through keyringFingerprint in the credentials.
 func Test_Integration_GPGHandler_Keyring(t *testing.T) {
-	requireGPG(t)
-	h := mustHandler(t)
+	testenv.Require(t, testenv.GPG)
+	h := newHandler(t)
 	digest := makeDigest(t, crypto.SHA256, []byte("keyring integration"))
 
 	keyring := gpgKey(t, "keyring", "ed25519", "sign", "")
@@ -217,10 +221,52 @@ func Test_Integration_GPGHandler_Keyring(t *testing.T) {
 	})
 }
 
-func requireGPG(t *testing.T) {
+func newHandler(t *testing.T) *handler.Handler {
 	t.Helper()
-	_, err := exec.LookPath("gpg")
-	require.NoError(t, err, "GnuPG >= 2.2 must be on PATH")
+	h, err := handler.New(v1alpha1.Scheme)
+	require.NoError(t, err)
+	return h
+}
+
+func makeDigest(t *testing.T, h crypto.Hash, data []byte) descruntime.Digest {
+	t.Helper()
+	sum := h.New()
+	_, err := sum.Write(data)
+	require.NoError(t, err)
+	return descruntime.Digest{
+		HashAlgorithm:          h.String(),
+		NormalisationAlgorithm: "jsonNormalisation/v4alpha1",
+		Value:                  hex.EncodeToString(sum.Sum(nil)),
+	}
+}
+
+func gpgSignature(digest descruntime.Digest, value string) descruntime.Signature {
+	return descruntime.Signature{
+		Name:   "test",
+		Digest: digest,
+		Signature: descruntime.SignatureInfo{
+			Algorithm: v1alpha1.AlgorithmGPG,
+			MediaType: v1alpha1.MediaTypeGPG,
+			Value:     value,
+		},
+	}
+}
+
+// spaced formats a fingerprint in groups of four, as gpg --fingerprint prints it.
+func spaced(fpr string) string {
+	var parts []string
+	for i := 0; i < len(fpr); i += 4 {
+		parts = append(parts, fpr[i:min(i+4, len(fpr))])
+	}
+	return strings.Join(parts, " ")
+}
+
+// readFixture returns the trimmed content of a file under the handler's testdata.
+func readFixture(t *testing.T, name string) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("..", "signing", "handler", "testdata", name))
+	require.NoError(t, err)
+	return strings.TrimSpace(string(b))
 }
 
 // requireGPGVersion skips the test if the gpg on PATH is older than minimum.

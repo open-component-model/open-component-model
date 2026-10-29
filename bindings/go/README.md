@@ -63,14 +63,14 @@ The [`examples/`](examples/) directory contains runnable, tested examples for th
 - **Credentials** — resolving credentials by identity using the static resolver
 - **Signing** — generating and verifying digests, RSA signing (plain and PEM), tamper detection
 - **Repository** — creating CTF-backed repositories, storing and retrieving component versions and resources
-- **OCI Registry** — full round-trip against a real OCI registry using testcontainers (skipped with `-short`)
+- **OCI Registry** — full round-trip against a real OCI registry using testcontainers
 - **Transfer** — transferring component versions between CTF repositories using the transfer graph API
 
-All examples are self-contained and run as part of CI, except **OCI Registry** which requires a real OCI registry via
-testcontainers and is skipped with `-short`:
+All examples are self-contained. Because **OCI Registry** needs Docker, the `examples` package runs in CI with the
+integration tests (`containers` group) rather than the unit tests; without Docker that step skips:
 
 ```bash
-cd bindings/go && go test -short ./examples/...
+cd bindings/go && go test ./examples/...
 ```
 
 ## Testing

@@ -14,9 +14,6 @@ import (
 )
 
 func Test_Integration_VersionCheck_FetchesLatestFromGitHub(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping GitHub API integration test in short mode")
-	}
 	r := require.New(t)
 	t.Parallel()
 
@@ -31,9 +28,6 @@ func Test_Integration_VersionCheck_FetchesLatestFromGitHub(t *testing.T) {
 }
 
 func Test_Integration_VersionCheck_CurrentVersionIsLatest(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping GitHub API integration test in short mode")
-	}
 	r := require.New(t)
 	t.Parallel()
 
@@ -84,9 +78,6 @@ func Test_Integration_VersionCheck_DisabledByEnvVar(t *testing.T) {
 }
 
 func Test_Integration_VersionCheck_CachesResult(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping GitHub API integration test in short mode")
-	}
 	r := require.New(t)
 	t.Parallel()
 

@@ -17,6 +17,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote/auth"
 	"oras.land/oras-go/v2/registry/remote/retry"
 
+	"ocm.software/open-component-model/bindings/go/internal/testenv"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -62,6 +63,7 @@ const distributionRegistryImage = "registry:3.0.0"
 func StartDockerContainerRegistry(t *testing.T, container, htpasswd string) string {
 	t.Helper()
 	t.Logf("Launching test registry (%s)...", distributionRegistryImage)
+	testenv.Require(t, testenv.Docker)
 	registryContainer, err := registry.Run(t.Context(), distributionRegistryImage,
 		WithHtpasswd(htpasswd),
 		testcontainers.WithEnv(map[string]string{

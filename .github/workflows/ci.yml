@@ -187,13 +187,46 @@ jobs:
           # otherwise reuse stale per-package results and hide findings until main.
           skip-cache: ${{ needs.changes.outputs.lint_changed == 'true' }}
 
-  run_integration_tests:
-    name: "Integration Tests"
+  integration_groups:
+    name: "Integration Test Groups"
     needs: changes
     runs-on: ubuntu-26.04-arm
     if: ${{ needs.changes.outputs.run_go == 'true' }}
+    outputs:
+      groups: ${{ steps.groups.outputs.groups }}
+    steps:
+      - name: Install Task
+        uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            bindings/go
+          persist-credentials: false
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: '${{ github.workspace }}/bindings/go/go.mod'
+          cache-dependency-path: '${{ github.workspace }}/bindings/go/go.sum'
+      - name: Verify every integration package is in exactly one group
+        run: task -d bindings/go test/integration:groups:verify
+      - name: List groups
+        id: groups
+        run: echo "groups=$(task -s -d bindings/go test/integration:groups)" >> "$GITHUB_OUTPUT"
+
+  run_integration_tests:
+    name: "Integration Tests (${{ matrix.group }})"
+    needs: integration_groups
+    runs-on: ubuntu-26.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        # INTEGRATION_GROUPS in bindings/go/Taskfile.yml
+        group: ${{ fromJSON(needs.integration_groups.outputs.groups) }}
     env:
-      # All packages of one `go test ./...` share a single testcontainers reaper, which
+      # All packages of one `go test` share a single testcontainers reaper, which
       # reaps and removes itself 10s after the last package disconnects — the next package
       # then blocks 60s on the removed container and fails. Outlive the suite instead.
       RYUK_RECONNECTION_TIMEOUT: 30m
@@ -211,52 +244,90 @@ jobs:
         with:
           go-version-file: '${{ github.workspace }}/bindings/go/go.mod'
           cache-dependency-path: '${{ github.workspace }}/bindings/go/go.sum'
-      - name: Run Tests
+      - name: Provision sigstore scaffolding
+        if: matrix.group == 'sigstore'
+        run: task bindings/go/sigstore/integration:setup
+      - name: Export sigstore environment
+        if: matrix.group == 'sigstore'
+        working-directory: bindings/go/sigstore/integration
+        run: |
+          . tmp/sigstore-env.sh
+          echo "::add-mask::${SIGSTORE_OIDC_TOKEN}"
+          for v in SIGSTORE_OIDC_TOKEN SIGSTORE_SIGNING_CONFIG SIGSTORE_TRUSTED_ROOT SIGSTORE_OIDC_ISSUER SIGSTORE_OIDC_IDENTITY; do
+            echo "${v}=${!v}" >> "$GITHUB_ENV"
+          done
+          echo "$PWD/tmp/bin" >> "$GITHUB_PATH"
+      - name: Run tests
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_USER: ${{ github.actor }}
-        run: task bindings/go:test/integration
-      - name: Require sigstore report
+          GROUP: ${{ matrix.group }}
+        run: >
+          task bindings/go:test/integration
+          GROUP="$GROUP"
+          COVERPROFILE="output/coverage.integration.${GROUP}.out"
+          JUNIT="output/junit-${GROUP}.xml"
+      - name: Upload coverage profile
         if: always()
-        working-directory: bindings/go
-        run: |
-          # A sigstore run that dies before gotestsum writes its report (setup, build,
-          # or crash) leaves no junit-sigstore.xml, which the junit publisher silently
-          # skips — the suite would read as all-green. Surface the gap.
-          test -f output/junit-sigstore.xml || {
-            echo "### Integration: sigstore suite produced no JUnit report; it likely failed before tests ran (setup, build, or crash). See the Run Tests log." >> "$GITHUB_STEP_SUMMARY"
-            exit 1
-          }
-      - name: Coverage summary and threshold
-        if: always()
-        working-directory: bindings/go
-        run: |
-          if [ ! -f output/coverage.integration.out ]; then
-            echo "### Integration coverage: n/a (tests did not run)" >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          # Floor = measured baseline (~47%, merged + generated excluded) minus a margin for churn. Ratchet up over time.
-          floor=43
-          pct=$(go tool cover -func=output/coverage.integration.out | awk '/^total:/{gsub(/%/,"",$NF);print $NF}')
-          echo "### Integration coverage: ${pct}% (floor ${floor}%)" >> "$GITHUB_STEP_SUMMARY"
-          awk -v p="$pct" -v f="$floor" 'BEGIN{exit (p+0 < f+0)}' \
-            || { echo "::error::integration coverage ${pct}% is below the ${floor}% floor"; exit 1; }
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: coverage-integration-${{ matrix.group }}
+          path: bindings/go/output/coverage.integration.${{ matrix.group }}.out
+          if-no-files-found: ignore
+          retention-days: 1
       - name: Publish integration test report
         uses: mikepenz/action-junit-report@a9170d5795813c01ab4901ffb045b52bab4ab09d # v6.5.0
         if: always()
         with:
-          report_paths: '${{ github.workspace }}/bindings/go/output/junit*.xml'
+          check_name: Integration Tests (${{ matrix.group }})
+          report_paths: '${{ github.workspace }}/bindings/go/output/junit-${{ matrix.group }}.xml'
           detailed_summary: true
-          flaky_summary: true
           include_passed: false
           # annotate inline + write the job summary without creating a check run,
           # so the report works on fork PRs (read-only token) too.
           annotate_only: true
-          # gotestsum --rerun-fails writes the failed attempt and the passing
-          # rerun as two testcases with the same name; honor only the final run
-          # so a flaky test that passed on retry is not annotated red.
-          check_retries: true
+
+  integration_coverage:
+    name: "Integration Coverage"
+    needs: run_integration_tests
+    runs-on: ubuntu-26.04-arm
+    if: ${{ !cancelled() && needs.run_integration_tests.result != 'skipped' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            bindings/go
+          persist-credentials: false
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: '${{ github.workspace }}/bindings/go/go.mod'
+          cache-dependency-path: '${{ github.workspace }}/bindings/go/go.sum'
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: coverage-integration-*
+          merge-multiple: true
+          path: bindings/go/output
+      - name: Coverage summary and threshold
+        working-directory: bindings/go
+        run: |
+          shopt -s nullglob
+          profiles=(output/coverage.integration.*.out)
+          if [ ${#profiles[@]} -eq 0 ]; then
+            echo "### Integration coverage: n/a (no suite produced a profile)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # go tool cover sums blocks that appear in several profiles; keep one mode line.
+          # Drop generated files (zz_generated.*) so the number reflects hand-written code.
+          { echo "mode: atomic"; for p in "${profiles[@]}"; do tail -n +2 "$p"; done; } \
+            | grep -v 'zz_generated\.' > output/coverage.integration.out
+          # Floor = measured baseline (~47%, merged + generated excluded) minus a margin for churn. Ratchet up over time.
+          floor=43
+          pct=$(go tool cover -func=output/coverage.integration.out | awk '/^total:/{gsub(/%/,"",$NF);print $NF}')
+          echo "### Integration coverage: ${pct}% (floor ${floor}%, suites: ${profiles[*]})" >> "$GITHUB_STEP_SUMMARY"
+          awk -v p="$pct" -v f="$floor" 'BEGIN{exit (p+0 < f+0)}' \
+            || { echo "::error::integration coverage ${pct}% is below the ${floor}% floor"; exit 1; }
 
   run_unit_tests:
     name: "Unit Tests"
@@ -343,7 +414,9 @@ jobs:
       - changes
       - generate
       - run_unit_tests
+      - integration_groups
       - run_integration_tests
+      - integration_coverage
       - golangci_lint
       - govulncheck
       - dependency_list_verify

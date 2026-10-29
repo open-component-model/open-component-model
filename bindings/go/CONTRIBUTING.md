@@ -55,26 +55,41 @@ cd bindings/go && go test ./oci/... -run TestResourceRepository
 
 ### Running Integration Tests
 
-Some packages have integration tests that require external systems (Docker for OCI registries via
-[testcontainers](https://golang.testcontainers.org/)). These are separated by naming convention - test functions
-containing `Integration` in their name are skipped during unit test runs and only executed during integration test runs.
+Integration tests need external systems: Docker for registries and storage via
+[testcontainers](https://golang.testcontainers.org/), GnuPG, the GitHub API, or a sigstore scaffolding cluster. They
+live in `<area>/integration/` packages.
+
+Integration packages are grouped: each **group** is a package list (`INTEGRATION_GROUP_<name>`, listed in
+`INTEGRATION_GROUPS`) in [`Taskfile.yml`](Taskfile.yml). Every package in a group is excluded from the unit test task
+and runs with `test/integration`; besides the `<area>/integration` packages this includes `examples`, whose OCI step
+needs Docker. CI runs one job per group and provisions what that group needs (the `sigstore` group gets the
+scaffolding cluster). `task bindings/go:test/integration:groups:verify` fails when an `<area>/integration` package is
+in no group or a package is in several; CI runs it before the integration jobs.
 
 ```bash
-# Run integration tests for a specific package
-cd bindings/go && go test -run Integration ./oci/...
+# Run one area, or one test
+cd bindings/go && go test ./oci/integration/... -run Test_Integration_OCIRepository
 
-# Run all integration tests
+# Run one group, or every group, through Task (adds coverage)
+task bindings/go:test/integration GROUP=containers
 task test/integration
+
+# Sigstore group: provisions the scaffolding cluster first
+task bindings/go/sigstore/integration:test/integration
 ```
+
+A test declares the systems it needs with `testenv.Require(t, testenv.Docker, ...)` from
+[`internal/testenv`](internal/testenv). A missing system skips the test with a hint on how to provide it. Run with `-v`
+and look for `SKIP` to see what skipped and why.
 
 ### Conventions
 
 For testing conventions (table-driven tests, `require.New(t)`, `t.Context()`, naming), see the testing section in the
 [coding patterns guide](../../docs/coding-patterns.md).
 
-The one convention specific to the Go bindings is the `Integration` naming filter: integration test functions must
-include `Integration` in their name (e.g., `Test_Integration_OCIRepository`). This is how the Taskfile skip/run
-patterns separate unit and integration test runs.
+Specific to the Go bindings: a test that needs an external system goes into an `<area>/integration/` package, calls
+`testenv.Require` before using the system, and its package goes into the group whose CI job provides that system. Name
+integration tests `Test_Integration_<Subject>`.
 
 ## Code Generation
 

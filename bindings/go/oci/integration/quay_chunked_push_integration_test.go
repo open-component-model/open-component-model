@@ -22,6 +22,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 	"oras.land/oras-go/v2/registry/remote/auth"
 
+	"ocm.software/open-component-model/bindings/go/internal/testenv"
 	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 )
@@ -37,9 +38,6 @@ const (
 )
 
 func Test_Integration_OCIRepository_ChunkedPush_QuayLayerLimit(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping Quay layer-limit integration test in short mode")
-	}
 	t.Parallel()
 
 	r := require.New(t)
@@ -192,6 +190,7 @@ func runQuayFixtureContainer(
 ) *testcontainers.DockerContainer {
 	t.Helper()
 	opts = append(opts, testcontainers.WithLogger(log.TestLogger(t)))
+	testenv.Require(t, testenv.Docker)
 	container, err := testcontainers.Run(ctx, image, opts...)
 	testcontainers.CleanupContainer(t, container, testcontainers.StopTimeout(time.Second))
 	if container != nil {

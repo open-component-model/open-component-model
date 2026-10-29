@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"io"
-	"os"
 	"strings"
 	"testing"
 
@@ -19,6 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/github/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
+	"ocm.software/open-component-model/bindings/go/internal/testenv"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -32,18 +32,15 @@ const (
 	ocmCommit = "b4bb4e880aa5c159366db7cc2ae800e1ee14dbda"
 )
 
-// testCredentials authenticates the run when GITHUB_TOKEN is set and stays
-// anonymous otherwise. Unauthenticated GitHub allows only 60 requests per hour
-// per IP, and this test makes ~10 — on shared CI egress the token is what
-// keeps the run from flaking on rate limits.
+// testCredentials authenticates the run with testenv.GitHubAuthToken
+// (GITHUB_TOKEN, else the gh CLI token). Unauthenticated GitHub allows only 60
+// requests per hour per IP, and this test makes ~10 — on shared CI egress the
+// token is what keeps the run from flaking on rate limits, so the test requires
+// testenv.GitHubToken.
 func testCredentials() runtime.Typed {
-	token := os.Getenv("GITHUB_TOKEN")
-	if token == "" {
-		return nil
-	}
 	return &credsv1.GitHubCredentials{
 		Type:  runtime.NewVersionedType(credsv1.GitHubCredentialsType, credsv1.Version),
-		Token: token,
+		Token: testenv.GitHubAuthToken(),
 	}
 }
 
@@ -135,20 +132,8 @@ func assertOCMArchive(t *testing.T, downloaded blob.ReadOnlyBlob) {
 	assert.True(t, readmeFound, "the archive must contain the repository's README.md under the commit-prefixed root")
 }
 
-func requireCIToken(t *testing.T) {
-	t.Helper()
-	if os.Getenv("CI") != "" && os.Getenv("GITHUB_TOKEN") == "" {
-		t.Fatal("GITHUB_TOKEN must be set in CI: without it these requests go out anonymous " +
-			"and are rate limited at 60 per hour for the runner's shared IP")
-	}
-}
-
 func Test_Integration_GitHub(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
-
-	requireCIToken(t)
+	testenv.Require(t, testenv.GitHubToken)
 
 	t.Run("resource", func(t *testing.T) {
 		processor := digest.NewDigestProcessor()

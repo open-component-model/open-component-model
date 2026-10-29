@@ -31,6 +31,7 @@ import (
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 	inputv1 "ocm.software/open-component-model/bindings/go/git/spec/input/v1"
+	"ocm.software/open-component-model/bindings/go/internal/testenv"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -148,6 +149,7 @@ func Test_Integration_GitSSHAuthentication(t *testing.T) {
 	r.NoError(err)
 
 	repoPath := "/srv/" + filepath.Base(path)
+	testenv.Require(t, testenv.Docker)
 	container, err := testcontainers.GenericContainer(t.Context(), testcontainers.GenericContainerRequest{
 		ContainerRequest: testcontainers.ContainerRequest{
 			Image:        "rockstorm/git-server:2.38",

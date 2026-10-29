@@ -32,6 +32,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testenv"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -1011,9 +1012,6 @@ components:
 // integration test uses — so it needs network access and is subject to
 // GitHub's rate limits. Set GITHUB_TOKEN to lift the anonymous 60/hour cap.
 func Test_Integration_AddComponentVersion_GitHubAccess(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
 	t.Parallel()
 
 	r := require.New(t)
@@ -1442,6 +1440,7 @@ func startS3WithObject(t *testing.T, registry *internal.OCIRegistry, bucket, key
 	ctx := t.Context()
 
 	const s3AccessKey, s3SecretKey = "ocm-test", "ocm-test-secret"
+	testenv.Require(t, testenv.Docker)
 	container, err := testcontainers.Run(ctx, "rustfs/rustfs:1.0.0-rc.6",
 		testcontainers.WithExposedPorts("9000/tcp"),
 		testcontainers.WithEnv(map[string]string{"RUSTFS_ACCESS_KEY": s3AccessKey, "RUSTFS_SECRET_KEY": s3SecretKey}),

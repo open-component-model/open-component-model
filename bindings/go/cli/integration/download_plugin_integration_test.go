@@ -16,10 +16,6 @@ import (
 )
 
 func TestDownloadPluginIntegration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
-	}
-
 	user, password := getUserAndPasswordForTest(t)
 	cfg := fmt.Sprintf(`
 type: generic.config.ocm.software/v1
@@ -64,10 +60,6 @@ configurations:
 }
 
 func TestDownloadPluginIntegrationWithResolvers(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
-	}
-
 	user, password := getUserAndPasswordForTest(t)
 	cfg := fmt.Sprintf(`
 type: generic.config.ocm.software/v1
@@ -119,10 +111,6 @@ configurations:
 }
 
 func TestDownloadPluginMissingResourceIntegration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
-	}
-
 	user, password := getUserAndPasswordForTest(t)
 	cfg := fmt.Sprintf(`
 type: generic.config.ocm.software/v1
@@ -165,10 +153,6 @@ configurations:
 }
 
 func TestDownloadPluginInvalidComponentReferenceIntegration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
-	}
-
 	user, password := getUserAndPasswordForTest(t)
 	cfg := fmt.Sprintf(`
 type: generic.config.ocm.software/v1
@@ -208,10 +192,6 @@ configurations:
 }
 
 func TestDownloadPluginWithValidationFailureIntegration(t *testing.T) {
-	if testing.Short() {
-		t.Skip("Skipping integration test in short mode")
-	}
-
 	user, password := getUserAndPasswordForTest(t)
 	cfg := fmt.Sprintf(`
 type: generic.config.ocm.software/v1

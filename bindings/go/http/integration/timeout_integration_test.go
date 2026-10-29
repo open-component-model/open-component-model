@@ -24,6 +24,7 @@ import (
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/testenv"
 )
 
 const (
@@ -170,6 +171,7 @@ func newIntegrationEnv(t *testing.T, ctx context.Context) *integrationEnv {
 	r.NoError(err, "create docker network")
 
 	t.Log("starting registry container")
+	testenv.Require(t, testenv.Docker)
 	registryContainer, err := registry.Run(ctx, registryImage,
 		network.WithNetwork([]string{registryAlias}, nw),
 		testcontainers.WithLogger(log.TestLogger(t)),
