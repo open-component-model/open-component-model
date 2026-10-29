@@ -142,7 +142,7 @@ and <code>nginx</code> are streamed by a single TransferOCIArtifactToOCILocalBlo
 <code>bundle</code> and <code>notes</code>, which are local blobs already, by a single
 TransferOCILocalBlobToOCILocalBlob node each (TransferCTFLocalBlobToOCILocalBlob
 when the source is a CTF), with no intermediate file between download and upload.
-An OCI image is still materialized as an OCI layout while it is downloaded.
+An OCI image, or a local blob holding one, is copied blob by blob without building an OCI layout.
 A config with only a <code>localblob.uploader…</code> entry (no other uploaders) produces the same graph.</p><h2 id=e11--oci-artifacts-plus-everything-else-copied>E11 — OCI artifacts plus everything else copied<a href=#e11--oci-artifacts-plus-everything-else-copied class=anchor aria-hidden=true>#</a></h2><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>generic.config.ocm.software/v1</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=nt>configurations</span><span class=p>:</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>oci.uploader.transfer.config.ocm.software/v1alpha1</span><span class=w>
