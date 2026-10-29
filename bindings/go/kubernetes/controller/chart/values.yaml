@@ -26,12 +26,18 @@ manager:
     enabled: true
   ## Controller concurrency settings
   concurrency:
+    # -- Number of active repository controller workers
+    repository: 4 # @schema minimum:1
     # -- Number of active component controller workers
-    component: 4
+    component: 4 # @schema minimum:1
     # -- Number of active resource controller workers
-    resource: 4
+    resource: 4 # @schema minimum:1
     # -- Number of active workers per enabled deployer controller (Deployer and NamespacedDeployer)
-    deployer: 4
+    deployer: 4 # @schema minimum:1
+    # -- Number of active replication controller workers
+    replication: 4 # @schema minimum:1
+    # -- Number of active discovery controller workers
+    discovery: 4 # @schema minimum:1
   ## Workqueue rate limiter of every controller.
   ## New objects pass through it once, and so do retries after an error.
   rateLimiter:

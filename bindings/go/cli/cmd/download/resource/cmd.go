@@ -246,13 +246,14 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 		}
 
 		// try extracting FS
-		extractedFS, err := extractFSFromBlob(decompressedOrOriginal)
+		extractedFS, closeFS, err := extractFSFromBlob(decompressedOrOriginal)
 		if err != nil && !errors.Is(err, ErrCannotExtractFS) {
 			return fmt.Errorf("extracting resource as filesystem failed: %w", err)
 		}
 
 		if extractedFS != nil {
-			return os.CopyFS(finalOutputPath, extractedFS)
+			// tarfs reads entries lazily via io.ReaderAt, so the source must stay open until the copy is done.
+			return errors.Join(os.CopyFS(finalOutputPath, extractedFS), closeFS())
 		}
 
 		// if we cannot extract a fs, since it's not supported, return the decompressed blob
@@ -266,35 +267,36 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 
 var ErrCannotExtractFS = errors.New("cannot extract resource as filesystem")
 
-func extractFSFromBlob(b blob.ReadOnlyBlob) (_ fs.FS, err error) {
+// extractFSFromBlob returns a filesystem view of b and a function closing the underlying reader,
+// which must only be called once the filesystem is no longer used.
+func extractFSFromBlob(b blob.ReadOnlyBlob) (fs.FS, func() error, error) {
 	mediaTypeAware, ok := b.(blob.MediaTypeAware)
 	if !ok {
 		// if were not media type aware, it's unsafe to try to extract it, avoid
-		return nil, fmt.Errorf("blob is not media type aware: %w", ErrCannotExtractFS)
+		return nil, nil, fmt.Errorf("blob is not media type aware: %w", ErrCannotExtractFS)
 	}
 
 	mediaType, ok := mediaTypeAware.MediaType()
 	if !ok {
-		return nil, ErrCannotExtractFS
+		return nil, nil, ErrCannotExtractFS
 	}
 
 	// TODO(jakobmoellerdev): once we add more compression algorithms, use blob media type for discovery.
 	//  For now we just support tar.
-	switch {
-	case isTar(mediaType):
-		data, err := b.ReadCloser()
-		if err != nil {
-			return nil, fmt.Errorf("failed to read resource: %w", err)
-		}
-		defer func() {
-			err = errors.Join(err, data.Close())
-		}()
-
-		f, err := tarfs.New(data)
-		return f, err
-	default:
-		return nil, ErrCannotExtractFS
+	if !isTar(mediaType) {
+		return nil, nil, ErrCannotExtractFS
 	}
+
+	data, err := b.ReadCloser()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read resource: %w", err)
+	}
+
+	f, err := tarfs.New(data)
+	if err != nil {
+		return nil, nil, errors.Join(err, data.Close())
+	}
+	return f, data.Close, nil
 }
 
 func isTar(mediaType string) bool {

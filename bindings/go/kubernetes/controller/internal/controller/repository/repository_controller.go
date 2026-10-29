@@ -41,7 +41,7 @@ type Reconciler struct {
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, concurrency int) error {
 	// This index is required to get all components that reference an OCM repository. This is required to make sure that
 	// when deleting the OCM repository, no component exists anymore that references that OCM repository.
 	if err := mgr.GetFieldIndexer().IndexField(ctx, &v1alpha1.Component{}, repositoryKey, func(rawObj client.Object) []string {
@@ -91,7 +91,8 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 				}
 			})).
 		WithOptions(controller.Options{
-			RateLimiter: r.RateLimit.Limiter(),
+			MaxConcurrentReconciles: concurrency,
+			RateLimiter:             r.RateLimit.Limiter(),
 		}).
 		Complete(r)
 }
