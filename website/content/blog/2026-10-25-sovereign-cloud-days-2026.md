@@ -103,8 +103,8 @@ Same identity, same signature, any location. Operators and auditors inside the s
 run Day-2 operations with what was shipped. Nothing has to reach back to the source.
 
 If you want to try this yourself, follow
-[Transfer Components across an Air Gap](/main/docs/guides/transfer/transfer-components-across-an-air-gap/) and
-[Verify Component Signatures on Deployment](/main/docs/guides/deploy/verify-component-signatures-on-deployment/).
+[Transfer Components across an Air Gap](https://ocm.software/main/docs/guides/transfer/transfer-components-across-an-air-gap/) and
+[Verify Component Signatures on Deployment](https://ocm.software/main/docs/guides/deploy/verify-component-signatures-on-deployment/).
 
 ## From a single service to a full sovereign product
 
@@ -133,7 +133,7 @@ components:
 
 Start with a single component for one service. When your landscape grows, compose those components into products, and
 compose products into platforms, without changing tools or formats along the way. See
-[Add Component References](/main/docs/guides/pack/add-component-references/) for a hands-on walkthrough.
+[Add Component References](https://ocm.software/main/docs/guides/pack/add-component-references/) for a hands-on walkthrough.
 
 This range is not theoretical. OCM is open source by design, part of the [NeoNephos Foundation](https://neonephos.org/)
 under the Linux Foundation Europe, and in use from small-scale setups to enterprise landscapes, including
