@@ -8,7 +8,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/hashicorp/golang-lru/v2/expirable"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
@@ -23,7 +22,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
@@ -126,23 +124,8 @@ var _ = BeforeSuite(func() {
 	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(scheme))
 	Expect(pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider)).To(Succeed())
 
-	const unlimited = 0
-	ttl := time.Minute * 30
-	resolverCache := expirable.NewLRU[string, *workerpool.Result](unlimited, nil, ttl)
-
-	// Create worker pool with its own dependencies
-	workerLogger := logf.Log.WithName("worker-pool")
-	workerPool := workerpool.NewWorkerPool(workerpool.PoolOptions{
-		WorkerCount: 10,
-		QueueSize:   100,
-		Logger:      &workerLogger,
-		Client:      k8sManager.GetClient(),
-		Cache:       resolverCache,
-	})
-	Expect(k8sManager.Add(workerPool)).To(Succeed())
-
 	resolutionLogger := logf.Log.WithName("resolution")
-	resolver := resolution.NewResolver(&resolutionLogger, workerPool)
+	resolver := resolution.NewResolver(&resolutionLogger)
 
 	repositoryKey = "metadata.name"
 	// Register reconcilers
