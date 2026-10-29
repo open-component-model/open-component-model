@@ -77,10 +77,12 @@ func main() {
 		enableHTTP2               bool
 		deployerDownloadCacheSize int
 		deployerMaxResourceSize   string
+		repositoryConcurrency     int
 		componentConcurrency      int
 		resourceConcurrency       int
 		deployerConcurrency       int
 		replicationConcurrency    int
+		discoveryConcurrency      int
 		// The qps values are strings because Helm's --set turns fractions into strings.
 		repositoryRateLimit            ocm.RateLimit
 		repositoryRateLimitQPS         string
@@ -116,6 +118,8 @@ func main() {
 		"The maximum size of the deployer download object LRU cache.")
 	flag.StringVar(&deployerMaxResourceSize, "deployer-download-max-resource-size", defaultMaxResourceSize,
 		"Maximum size of a single downloadable resource as a Kubernetes resource.Quantity (e.g. \"2Mi\", \"512Ki\"). \"0\" disables the limit.")
+	flag.IntVar(&repositoryConcurrency, "repository-controller-concurrency", 4, //nolint:mnd // no magic number
+		"The repository controller concurrency. This is the number of active repository controller workers that can be kept alive.")
 	flag.IntVar(&componentConcurrency, "component-controller-concurrency", 4, //nolint:mnd // no magic number
 		"The component controller concurrency. This is the number of active component controller workers that can be kept alive.")
 	flag.IntVar(&resourceConcurrency, "resource-controller-concurrency", 4, //nolint:mnd // no magic number
@@ -125,6 +129,8 @@ func main() {
 			"(Deployer and NamespacedDeployer each get their own).")
 	flag.IntVar(&replicationConcurrency, "replication-controller-concurrency", 4, //nolint:mnd // no magic number
 		"The replication controller concurrency. This is the number of active replication controller workers that can be kept alive.")
+	flag.IntVar(&discoveryConcurrency, "discovery-controller-concurrency", 4, //nolint:mnd // no magic number
+		"The discovery controller concurrency. This is the number of active discovery controller workers that can be kept alive.")
 	flag.StringVar(&repositoryRateLimitQPS, "repository-controller-rate-limit-qps", strconv.Itoa(ocm.DefaultRateLimitQPS),
 		"Requeues per second the Repository controller admits once its burst is used up. Must be a float greater than 0, e.g. 0.1.")
 	flag.IntVar(&repositoryRateLimit.Burst, "repository-controller-rate-limit-burst", ocm.DefaultRateLimitBurst,
@@ -293,7 +299,7 @@ func main() {
 			RateLimit:        repositoryRateLimit,
 		},
 		Resolver: resolver,
-	}).SetupWithManager(ctx, mgr); err != nil {
+	}).SetupWithManager(ctx, mgr, repositoryConcurrency); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Repository")
 		os.Exit(1)
 	}
@@ -348,7 +354,7 @@ func main() {
 			NewPluginManager: newPluginManager,
 			RateLimit:        discoveryRateLimit,
 		},
-	}).SetupWithManager(ctx, mgr); err != nil {
+	}).SetupWithManager(ctx, mgr, discoveryConcurrency); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Discovery")
 		os.Exit(1)
 	}

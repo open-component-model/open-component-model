@@ -11,6 +11,7 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -40,6 +41,83 @@ func TestGetBlobFromPath_SingleFile(t *testing.T) {
 	content, err := io.ReadAll(reader)
 	r.NoError(err)
 	r.Equal(testContent, string(content))
+
+	// Single files are stat- and digest-aware without buffering the content.
+	r.Implements((*blob.SizeAware)(nil), b)
+	r.Equal(int64(len(testContent)), b.(blob.SizeAware).Size())
+	r.Implements((*blob.DigestAware)(nil), b)
+	dig, ok := b.(blob.DigestAware).Digest()
+	r.True(ok)
+	r.Equal(digest.FromString(testContent).String(), dig)
+}
+
+// A symlink to a file outside its own directory is followed, as os.Stat does.
+func TestGetBlobFromPath_SingleFileSymlinkOutsideParent(t *testing.T) {
+	r := require.New(t)
+
+	tmpDir := t.TempDir()
+	createTestFile(t, filepath.Join(tmpDir, "data"), "target.txt", "linked content")
+	linkDir := filepath.Join(tmpDir, "links")
+	r.NoError(os.MkdirAll(linkDir, 0o755))
+	link := filepath.Join(linkDir, "link.txt")
+	if err := os.Symlink(filepath.Join("..", "data", "target.txt"), link); err != nil {
+		t.Skipf("symlink creation failed (may not be supported on this system): %v", err)
+	}
+
+	b, err := filesystem.GetBlobFromPath(t.Context(), "links/link.txt", filesystem.DirOptions{WorkingDir: tmpDir})
+	r.NoError(err)
+
+	reader, err := b.ReadCloser()
+	r.NoError(err)
+	defer func() { r.NoError(reader.Close()) }()
+	content, err := io.ReadAll(reader)
+	r.NoError(err)
+	r.Equal("linked content", string(content))
+}
+
+// The file is reopened on every read, so confinement must hold at read time,
+// not only when the blob is created.
+func TestGetBlobFromPath_SingleFileSwappedToEscapingSymlink(t *testing.T) {
+	r := require.New(t)
+
+	workDir := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "secret.txt")
+	r.NoError(os.WriteFile(outside, []byte("secret"), 0o600))
+	file := filepath.Join(workDir, "file.txt")
+	r.NoError(os.WriteFile(file, []byte("content"), 0o600))
+
+	b, err := filesystem.GetBlobFromPath(t.Context(), "file.txt", filesystem.DirOptions{WorkingDir: workDir})
+	r.NoError(err)
+
+	r.NoError(os.Remove(file))
+	if err := os.Symlink(outside, file); err != nil {
+		t.Skipf("symlink creation failed (may not be supported on this system): %v", err)
+	}
+
+	_, err = b.ReadCloser()
+	r.Error(err)
+	r.Equal(blob.SizeUnknown, b.(blob.SizeAware).Size())
+}
+
+// A relative path is resolved when the blob is created, not when it is read.
+func TestGetBlobFromPath_SingleFileRelativePathSurvivesChdir(t *testing.T) {
+	r := require.New(t)
+
+	dir := t.TempDir()
+	createTestFile(t, dir, "file.txt", "content")
+	t.Chdir(dir)
+
+	b, err := filesystem.GetBlobFromPath(t.Context(), "file.txt", filesystem.DirOptions{})
+	r.NoError(err)
+
+	t.Chdir(t.TempDir())
+
+	reader, err := b.ReadCloser()
+	r.NoError(err)
+	defer func() { r.NoError(reader.Close()) }()
+	content, err := io.ReadAll(reader)
+	r.NoError(err)
+	r.Equal("content", string(content))
 }
 
 func TestGetBlobFromPath_SimpleDirectory(t *testing.T) {

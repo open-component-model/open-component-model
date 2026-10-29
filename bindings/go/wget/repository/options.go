@@ -34,9 +34,8 @@ func WithHTTPClient(client *http.Client) Option {
 }
 
 // WithMaxDownloadSize caps the number of bytes read from a response body.
-// Zero or negative (the default) means unlimited: bodies are streamed to disk
-// rather than held in memory, so a download is bounded by free disk rather than
-// by RAM.
+// Zero or negative (the default) means unlimited: bodies are streamed to the
+// consumer rather than held in memory or on disk.
 func WithMaxDownloadSize(size int64) Option {
 	return func(o *Options) {
 		o.MaxDownloadSize = &size
