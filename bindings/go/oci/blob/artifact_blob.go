@@ -61,8 +61,14 @@ func NewArtifactBlobWithMediaType(artifact descriptor.Artifact, b blob.ReadOnlyB
 						return nil, fmt.Errorf("resource blob digest mismatch: resource %s vs blob %s", resource.Digest.Value, blobDig)
 					}
 				} else if resource.Digest == nil {
-					resource.Digest = digestSpecFromDigest(digest.Digest(blobDig))
-					resource.Digest.NormalisationAlgorithm = internaldigest.GenericBlobDigestV1
+					digSpec, err := digestSpec(blobDig)
+					if err != nil {
+						return nil, fmt.Errorf("failed to parse digest spec from blob: %w", err)
+					}
+					if digSpec != nil {
+						digSpec.NormalisationAlgorithm = internaldigest.GenericBlobDigestV1
+					}
+					resource.Digest = digSpec
 				}
 			}
 		}

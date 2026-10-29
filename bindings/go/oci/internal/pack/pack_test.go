@@ -102,7 +102,6 @@ func TestNewResourceBlobOCILayer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			require.NoError(t, resourceblob.UpdateArtifactWithInformationFromBlob(tt.res, tt.blob))
 			resourceBlob, err := resourceblob.NewArtifactBlob(tt.res, tt.blob)
 			require.NoError(t, err)
 
@@ -460,7 +459,6 @@ func TestResourceBlob(t *testing.T) {
 
 			v2.MustAddToScheme(tt.opts.AccessScheme)
 			oci.MustAddToScheme(tt.opts.AccessScheme)
-			require.NoError(t, resourceblob.UpdateArtifactWithInformationFromBlob(tt.resource, tt.blob))
 			resourceBlob, err := resourceblob.NewArtifactBlob(tt.resource, tt.blob)
 			require.NoError(t, err)
 			if tt.nilOutResourceBlobDigest {
@@ -549,8 +547,6 @@ func TestResourceLocalBlob(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			v2.MustAddToScheme(tt.opts.AccessScheme)
 			oci.MustAddToScheme(tt.opts.AccessScheme)
-
-			require.NoError(t, resourceblob.UpdateArtifactWithInformationFromBlob(tt.resource, tt.blob))
 
 			resourceBlob, err := resourceblob.NewArtifactBlob(tt.resource, tt.blob)
 			require.NoError(t, err)
@@ -693,7 +689,6 @@ func TestResourceLocalBlobMediaTypeDetection(t *testing.T) {
 			oci.MustAddToScheme(opts.AccessScheme)
 
 			resource := &descriptor.Resource{Access: tt.access}
-			require.NoError(t, resourceblob.UpdateArtifactWithInformationFromBlob(resource, tt.blob))
 
 			resourceBlob, err := resourceblob.NewArtifactBlob(resource, tt.blob)
 			require.NoError(t, err)
@@ -836,8 +831,6 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			v2.MustAddToScheme(tt.opts.AccessScheme)
 			oci.MustAddToScheme(tt.opts.AccessScheme)
-
-			require.NoError(t, resourceblob.UpdateArtifactWithInformationFromBlob(tt.resource, tt.blob))
 
 			resourceBlob, err := resourceblob.NewArtifactBlob(tt.resource, tt.blob)
 			require.NoError(t, err)
@@ -1014,7 +1007,6 @@ func TestPackingRejectsInvalidOCILayoutDigest(t *testing.T) {
 			source := &testBlob{
 				content: data, mediaType: layout.MediaTypeOCIImageLayoutTarV1, digest: digest.FromBytes(data),
 			}
-			r.NoError(resourceblob.UpdateArtifactWithInformationFromBlob(resource, source))
 			r.Equal(resourceDigest, resource.Digest)
 			artifact, err := resourceblob.NewArtifactBlob(resource, source)
 			r.NoError(err)
@@ -1105,8 +1097,6 @@ func TestResourceLocalBlobOCILayout(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			v2.MustAddToScheme(tt.opts.AccessScheme)
 			oci.MustAddToScheme(tt.opts.AccessScheme)
-
-			require.NoError(t, resourceblob.UpdateArtifactWithInformationFromBlob(tt.resource, tt.blob))
 
 			resourceBlob, err := resourceblob.NewArtifactBlob(tt.resource, tt.blob)
 			require.NoError(t, err)
