@@ -63,7 +63,6 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	if err != nil {
 		return nil, fmt.Errorf("failed downloading OCI artifact %v %w", resource.ToIdentity(), err)
 	}
-	defer releaseBlob(ctx, blobContent)
 
 	// Determine output path
 	if outputPath, err = DetermineOutputPath(outputPath, "oci-artifact"); err != nil {
