@@ -241,14 +241,14 @@ base64-encoded in YAML, because the underlying field is a byte slice:</p><div cl
 </span></span></span><span class=line><span class=cl><span class=w>          </span>- <span class=l>ocm</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>      </span><span class=c># base64 of {&#34;format&#34;:&#34;json&#34;}</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>body</span><span class=p>:</span><span class=w> </span><span class=l>eyJmb3JtYXQiOiJqc29uIn0=</span></span></span></code></pre></div></figure></div><h2 id=fine-tuning-the-download>Fine-tuning the download<a href=#fine-tuning-the-download class=anchor aria-hidden=true>#</a></h2><p><strong>Only successful responses are accepted.</strong> OCM accepts a 2xx status and fails on anything else. Redirects are followed by
-default. If you set <code>noRedirect: true</code>, the request fails.</p><p><strong>Downloads are streamed to disk, not held in memory.</strong> The response body is written straight to a temporary file, so
-memory use stays flat no matter how big the file is. There is no size limit by default. That temporary file is created
-under the <code>tempFolder</code> of the <code>filesystem.config.ocm.software/v1alpha1</code> attribute in the .ocmconfig configuration file, falling back to the operating
-system&rsquo;s temp directory if no configuration is provided.</p><p><strong>Timeouts, retries, and per-host settings</strong> come from the <code>http.config.ocm.software/v1alpha1</code> configuration and apply
+default. If you set <code>noRedirect: true</code>, the request fails.</p><p><strong>Downloads are streamed, not held in memory or on disk.</strong> The response body flows straight to wherever OCM stores or
+uploads it, so memory use stays flat no matter how big the file is. There is no size limit by default. Checksum and
+digest checks run while the body is read, so a mismatch fails that read. The request is sent only when the body is
+read. When OCM needs the size, media type, or advertised checksum before reading, for example to pack the resource
+into an OCI layer, a <code>GET</code> download sends a single <code>HEAD</code> request first. If the server refuses <code>HEAD</code>, these stay
+unknown until the body is read.</p><p><strong>Timeouts, retries, and per-host settings</strong> come from the <code>http.config.ocm.software/v1alpha1</code> configuration and apply
 to every Wget request:</p><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>generic.config.ocm.software/v1</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=nt>configurations</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>filesystem.config.ocm.software/v1alpha1</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>tempFolder</span><span class=p>:</span><span class=w> </span><span class=l>/var/tmp/ocm</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>  </span>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>http.config.ocm.software/v1alpha1</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>timeout</span><span class=p>:</span><span class=w> </span><span class=l>2m</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>retry</span><span class=p>:</span><span class=w>
@@ -256,7 +256,9 @@ to every Wget request:</p><div class=expressive-code><figure class="frame not-co
 </span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>hosts</span><span class=p>:</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>      </span><span class=nt>github.com</span><span class=p>:</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>timeout</span><span class=p>:</span><span class=w> </span><span class=l>5m</span></span></span></code></pre></div></figure></div><p>See <a href=/main/docs/reference/configuration/http-client/>HTTP Client Configuration</a> for the full schema,
-defaults, and how per-host settings are merged.</p><h2 id=checksum-verification>Verifying downloads against the source<a href=#checksum-verification class=anchor aria-hidden=true>#</a></h2><p>A pinned resource <code>digest</code> protects consumers after the build, but the first
+defaults, and how per-host settings are merged.</p><p>Because the body is streamed, a per-host <code>timeout</code> on the source host covers reading the whole body, and that read runs
+for as long as the target takes to store or upload it. When you transfer a large file to a slow target, set the
+source host&rsquo;s <code>timeout</code> high enough for the entire transfer, not just the download.</p><h2 id=checksum-verification>Verifying downloads against the source<a href=#checksum-verification class=anchor aria-hidden=true>#</a></h2><p>A pinned resource <code>digest</code> protects consumers after the build, but the first
 <code>ocm add cv</code> still trusts whatever the server sends. A <strong>source-side checksum</strong>
 closes that gap: OCM compares the downloaded bytes against a digest the source
 advertises in response headers (RFC 9530 <code>Content-Digest</code>, <code>x-checksum-*</code>) and
