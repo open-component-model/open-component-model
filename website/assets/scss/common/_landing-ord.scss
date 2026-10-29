@@ -133,50 +133,64 @@
         margin-top: 40px;
     }
 
-    /* Quick start under the hero buttons: install command plus a first read-only command */
-    .main {
-        min-width: 0; /* let long commands scroll inside their code block instead of widening the hero */
-    }
-
-    .hero-quickstart {
-        margin: 32px auto 0;
-        max-width: 720px;
+    /* Sections below the hero: left-aligned title above full-width content */
+    .lp-section {
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+        width: 100%;
+        margin-top: 24px;
         text-align: left;
     }
 
-    .hero-quickstart-title,
-    .hero-quickstart-more {
+    .quickstart-steps {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 20px 24px;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        counter-reset: quickstart-step;
+    }
+
+    .quickstart-step {
+        counter-increment: quickstart-step;
+        min-width: 0; /* keep long commands inside their grid column */
+    }
+
+    .quickstart-step-title {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 12px;
+        color: var(--lp-c-text-1);
+        font-size: 14px;
+        font-weight: 600;
+
+        &::before {
+            content: counter(quickstart-step);
+            display: inline-flex;
+            flex: 0 0 auto;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border: 1px solid var(--lp-button-brand-bg);
+            border-radius: 50%;
+            color: var(--lp-button-brand-bg);
+            font-size: 12px;
+            font-weight: 400;
+        }
+    }
+
+    .quickstart-more {
+        margin: 0;
         color: var(--ocm-card-desc-color);
         font-size: 14px;
     }
 
-    .hero-quickstart-title {
-        font-weight: 600;
-        margin: 0 0 8px;
-    }
-
-    .hero-quickstart-more {
-        margin: 8px 0 0;
-    }
-
-    .hero-quickstart-steps {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr);
-        gap: 8px;
-        list-style: none;
-        margin: 0;
-        padding: 0;
-    }
-
-    .hero-quickstart-label {
-        color: var(--ocm-card-desc-color);
-        display: block;
-        font-size: 12px;
-        margin-bottom: 4px;
-    }
-
-    /* Docs-style code frame minus the terminal title bar, to keep the hero compact */
-    .hero-quickstart-step .expressive-code {
+    /* Docs-style code frame without the terminal title bar */
+    .quickstart-step .expressive-code {
         margin: 0;
 
         .frame.is-terminal {
@@ -191,7 +205,7 @@
            Right padding keeps text clear of the copy button. */
         pre > code {
             white-space: pre-wrap;
-            overflow-wrap: anywhere;
+            overflow-wrap: break-word; /* break inside a token only if it alone overflows */
             padding-inline-end: 3rem;
             box-sizing: border-box;
         }
@@ -337,11 +351,6 @@
 
         .tagline {
             margin: 0 0 32px;
-        }
-
-        .hero-quickstart {
-            margin-left: 0;
-            max-width: none; /* full text column so the get cv command fits on one line on wide screens */
         }
 
         .hero-actions {

@@ -17,25 +17,6 @@
         <a class="hero-button hero-button--brand" href='{{ relref . "docs/getting-started/" }}'>Get Started</a>
         <a class="hero-button hero-button--alt" href='{{ relref . "docs/overview/" }}'>Overview</a>
       </div>
-      {{- $installCmd := printf "curl -sfL https://ocm.software/install-cli.sh | %sbash" (partial "main/site-version.html" (dict "page" . "format" "env")) -}}
-      {{- $getCmd := printf "ocm get cv ghcr.io/open-component-model//ocm.software/cli --latest --constraint '%s' -o widetree" (partial "main/site-version.html" (dict "page" . "format" "constraint")) }}
-      <section class="hero-quickstart" aria-labelledby="hero-quickstart-title">
-        <p id="hero-quickstart-title" class="hero-quickstart-title">Try it in one minute, no account needed:</p>
-        <ol class="hero-quickstart-steps">
-          <li class="hero-quickstart-step">
-            <span class="hero-quickstart-label">Install the CLI (Linux, macOS)</span>
-            {{ printf "```shell\n%s\n```" $installCmd | $.RenderString (dict "display" "block") }}
-          </li>
-          <li class="hero-quickstart-step">
-            <span class="hero-quickstart-label">Inspect the public component version that ships the CLI</span>
-            {{ printf "```shell\n%s\n```" $getCmd | $.RenderString (dict "display" "block") }}
-          </li>
-        </ol>
-        <p class="hero-quickstart-more">
-          Windows, containers, and binary verification:
-          <a href='{{ relref . "docs/getting-started/ocm-cli-installation.md" }}'>Install the OCM CLI</a>
-        </p>
-      </section>
     </div>
     <div class="image">
       <div class="image-container">
@@ -50,8 +31,34 @@
     </div>
   </div>
 
+  {{- $tryCmd := partial "main/cli-try-command.html" . }}
+  {{- with $tryCmd }}
+  {{- $installCmd := printf "curl -sfL https://ocm.software/install-cli.sh | %sbash" (partial "main/site-version.html" (dict "page" $ "format" "env")) }}
   <div class="container container--after-hero">
-    <div class="ocm-card-grid ocm-card-grid--action">
+    <section class="lp-section" aria-labelledby="quickstart-title">
+      <h2 id="quickstart-title" class="section-title section-title--left">Try It Out</h2>
+      <ol class="quickstart-steps">
+        <li class="quickstart-step">
+          <span class="quickstart-step-title">Install the CLI (Linux, macOS)</span>
+          {{ printf "```shell\n%s\n```" $installCmd | $.RenderString (dict "display" "block") }}
+        </li>
+        <li class="quickstart-step">
+          <span class="quickstart-step-title">Inspect the public CLI component</span>
+          {{ printf "```shell\n%s\n```" . | $.RenderString (dict "display" "block") }}
+        </li>
+      </ol>
+      <p class="quickstart-more">
+        Windows, containers, and binary verification:
+        <a href='{{ relref $ "docs/getting-started/ocm-cli-installation.md" }}'>Install the OCM CLI</a>
+      </p>
+    </section>
+  </div>
+  {{- end }}
+
+  <div class="container{{ if not $tryCmd }} container--after-hero{{ end }}">
+    <section class="lp-section" aria-labelledby="how-title">
+      <h2 id="how-title" class="section-title section-title--left">How OCM Works</h2>
+      <div class="ocm-card-grid ocm-card-grid--action">
       {{ range .Params.actions }}
       <a href="{{ relref $ .link }}" class="ocm-card">
         <div class="ocm-card-content">
@@ -69,15 +76,14 @@
         </div>
       </a>
       {{ end }}
-    </div>
+      </div>
+    </section>
   </div>
 
   <div class="container">
-    <hr class="section-divider" />
-  </div>
-  
-  <div class="container">
-    <div class="ocm-card-grid ocm-card-grid--benefit">
+    <section class="lp-section" aria-labelledby="why-title">
+      <h2 id="why-title" class="section-title section-title--left">Why OCM</h2>
+      <div class="ocm-card-grid ocm-card-grid--benefit">
       {{ range .Params.benefits }}
       {{ if .link }}
       <a href="{{ relref $ .link }}" class="ocm-card ocm-card--benefit">
@@ -113,7 +119,8 @@
       </div>
       {{ end }}
       {{ end }}
-    </div>
+      </div>
+    </section>
   </div>
 
 </div>
