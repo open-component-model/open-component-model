@@ -125,8 +125,8 @@ func WarnDiscouragedNormalisation(ctx context.Context, logger *slog.Logger, norm
 	if normalisationAlgorithm == DefaultNormalisationAlgorithm {
 		return
 	}
-	logger.WarnContext(ctx, "signing with a non-default normalisation algorithm, use the recommended one for new signatures",
-		"algorithm", normalisationAlgorithm, "recommended", DefaultNormalisationAlgorithm)
+	logger.WarnContext(ctx, "signing with an older normalisation algorithm",
+		"algorithm", normalisationAlgorithm, "recommended", DefaultNormalisationAlgorithm, "migration", algorithms.MigrationGuide)
 }
 
 // GenerateDigest computes a new digest for a descriptor with the given

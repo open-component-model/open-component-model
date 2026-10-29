@@ -1084,7 +1084,7 @@ components:
 		require.NoError(t, c.Construct(t.Context()))
 		return collectDescriptors(t, c.GetGraph())
 	}
-	const warning = "component reference does not use the current normalisation algorithm"
+	const warning = "component reference digest was computed with an older normalisation algorithm"
 
 	var leaf *descriptor.Descriptor
 	for _, d := range construct(t, "") {

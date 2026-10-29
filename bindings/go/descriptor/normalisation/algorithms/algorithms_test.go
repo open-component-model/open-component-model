@@ -200,6 +200,8 @@ func TestWarnNonDefaultReferenceDigest(t *testing.T) {
 	r.Contains(out, "reference=child", "caller attributes identify the reference")
 	r.Contains(out, "normalisationAlgorithm="+v4alpha1)
 	r.Contains(out, "recommended="+v4alpha3)
+	r.Contains(out, "component reference digest was computed with an older normalisation algorithm")
+	r.Contains(out, "migration="+algorithms.MigrationGuide)
 
 	missing := warnFor(descruntime.Digest{})
 	r.Contains(missing, "component reference has no digest", "a missing digest gets its own warning")
@@ -229,7 +231,8 @@ func TestWarnNonDefaultDigest(t *testing.T) {
 	for _, algo := range []string{jsonV1, algorithms.LegacyV3, v4alpha1, v4alpha2} {
 		out := warnFor(algo)
 		r.Contains(out, "level=WARN", algo)
-		r.Contains(out, "older normalisation algorithm", algo)
+		r.Contains(out, "trusted digest was computed with an older normalisation algorithm", algo)
+		r.Contains(out, "migration="+algorithms.MigrationGuide, algo)
 		r.Contains(out, "normalisationAlgorithm="+algo, "%s is reported as written", algo)
 		r.Contains(out, "recommended="+v4alpha3, algo)
 		r.Contains(out, "component=c", "caller attributes identify what is trusted")

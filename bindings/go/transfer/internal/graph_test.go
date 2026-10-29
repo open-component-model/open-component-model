@@ -1205,7 +1205,7 @@ func TestBuildGraphDefinition_WarnsAboutNonDefaultReferenceDigests(t *testing.T)
 	previous := slog.Default()
 	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
 	t.Cleanup(func() { slog.SetDefault(previous) })
-	const warning = "component reference does not use the current normalisation algorithm"
+	const warning = "component reference digest was computed with an older normalisation algorithm"
 
 	child := testDescriptor("ocm.software/child", "1.0.0", nil, nil)
 	transfer := func(t *testing.T, normalisationAlgorithm string) {

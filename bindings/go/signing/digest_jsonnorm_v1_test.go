@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/algorithms"
 	v1 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v1"
 	v4alpha1 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	v4alpha2 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha2"
@@ -130,6 +131,8 @@ func TestWarnDiscouragedNormalisation(t *testing.T) {
 		r.Contains(out, "level=WARN", "%s must warn", algo)
 		r.Contains(out, algo, "warning must name the chosen algorithm %s", algo)
 		r.Contains(out, v4alpha3.Algorithm, "warning must recommend v4alpha3")
+		r.Contains(out, "signing with an older normalisation algorithm", algo)
+		r.Contains(out, "migration="+algorithms.MigrationGuide, algo)
 	}
 }
 

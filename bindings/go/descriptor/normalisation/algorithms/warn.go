@@ -7,15 +7,17 @@ import (
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
 
+// MigrationGuide documents how to move component versions to Default. Every
+// warning about an older normalisation algorithm links to it.
+const MigrationGuide = "https://ocm.software/docs/how-to/migrate-normalisation-algorithms/"
+
 // NoReferenceDigest is the normalisation algorithm WarnNonDefaultReferenceDigest
 // reports for a component reference without a digest.
 const NoReferenceDigest = "none"
 
 // WarnNonDefaultReferenceDigest logs a warning if the component reference
-// digest d is missing or not computed with Default. Reference digests are
-// minted when the referencing component version is built, so rebuilding it
-// with a current OCM CLI upgrades them, unless the constructor pins the
-// reference digest. attrs identify the reference.
+// digest d is missing or not computed with Default. attrs identify the
+// reference.
 func WarnNonDefaultReferenceDigest(ctx context.Context, logger *slog.Logger, d descruntime.Digest, attrs ...any) {
 	if d.Value == "" {
 		// Older tools (e.g. cc-utils) computed reference digests while signing
@@ -29,22 +31,17 @@ func WarnNonDefaultReferenceDigest(ctx context.Context, logger *slog.Logger, d d
 	if d.NormalisationAlgorithm == Default {
 		return
 	}
-	logger.WarnContext(ctx,
-		"component reference does not use the current normalisation algorithm; rebuild the referencing component version with a current OCM CLI, without pinning the reference digest, to upgrade it",
-		append(attrs, "normalisationAlgorithm", d.NormalisationAlgorithm, "recommended", Default)...,
-	)
+	logger.WarnContext(ctx, "component reference digest was computed with an older normalisation algorithm",
+		append(attrs, "normalisationAlgorithm", d.NormalisationAlgorithm, "recommended", Default, "migration", MigrationGuide)...)
 }
 
 // WarnNonDefaultDigest logs a warning if a digest about to be trusted (a
 // signature digest or a digest pin) was computed with a normalisation algorithm
-// other than Default, recommending to upgrade it. attrs identify what is
-// trusted.
+// other than Default. attrs identify what is trusted.
 func WarnNonDefaultDigest(ctx context.Context, logger *slog.Logger, normalisationAlgorithm string, attrs ...any) {
 	if resolved, _ := Resolve(normalisationAlgorithm); resolved == Default {
 		return
 	}
-	logger.WarnContext(ctx,
-		"trusted digest was computed with an older normalisation algorithm; re-sign or re-pin with a current OCM CLI to upgrade it",
-		append(attrs, "normalisationAlgorithm", normalisationAlgorithm, "recommended", Default)...,
-	)
+	logger.WarnContext(ctx, "trusted digest was computed with an older normalisation algorithm",
+		append(attrs, "normalisationAlgorithm", normalisationAlgorithm, "recommended", Default, "migration", MigrationGuide)...)
 }
