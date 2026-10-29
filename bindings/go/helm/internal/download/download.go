@@ -244,6 +244,7 @@ func newClients(opt *option, caFile string) (httpClient, indexClient *http.Clien
 	}
 	return httpClient, indexClient, regClient, nil
 }
+
 // GetterProviders returns the available getter providers.
 // This replaces the need for cli.New() and avoids the explosion of the dependency tree.
 // When client is non-nil, the HTTP/S provider uses a custom getter backed by
