@@ -23,6 +23,10 @@ take to deliver software into an environment you are not allowed to call home fr
 
 ![Jakob Möller opening the OCM talk on the Main Stage](/images/sovereign-cloud-days-2026-ocm-talk.jpg)
 
+Page through the full slide deck here, or read on for the highlights:
+
+{{< slides dir="images/sovereign-cloud-days-2026-slides" title="Sovereign Cloud and Air-Gapped Delivery" pdf="/slides/ocm-sovereign-cloud-days-2026.pdf" >}}
+
 ## Sovereign readiness is an operating model, not a checkbox
 
 Sovereign cloud is not a deployment target you add at the end of a release. It changes how a product must be built and
