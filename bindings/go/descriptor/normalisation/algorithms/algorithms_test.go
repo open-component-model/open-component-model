@@ -207,3 +207,31 @@ func TestWarnNonDefaultReferenceDigest(t *testing.T) {
 	r.Contains(missing, "normalisationAlgorithm="+algorithms.NoReferenceDigest)
 	r.Contains(warnFor(descruntime.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: algorithms.LegacyV3, Value: "cc"}), "normalisationAlgorithm="+algorithms.LegacyV3, "the legacy alias is reported as written")
 }
+
+func TestVerifyOnly(t *testing.T) {
+	r := require.New(t)
+	r.True(algorithms.VerifyOnly(jsonV1))
+	for _, algo := range []string{v4alpha1, v4alpha2, algorithms.LegacyV3, v4alpha3} {
+		r.False(algorithms.VerifyOnly(algo), algo)
+	}
+}
+
+func TestWarnNonDefaultDigest(t *testing.T) {
+	warnFor := func(algo string) string {
+		var buf bytes.Buffer
+		logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
+		algorithms.WarnNonDefaultDigest(t.Context(), logger, algo, "component", "c")
+		return buf.String()
+	}
+	r := require.New(t)
+
+	r.Empty(warnFor(v4alpha3), "the default must not warn")
+	for _, algo := range []string{jsonV1, algorithms.LegacyV3, v4alpha1, v4alpha2} {
+		out := warnFor(algo)
+		r.Contains(out, "level=WARN", algo)
+		r.Contains(out, "older normalisation algorithm", algo)
+		r.Contains(out, "normalisationAlgorithm="+algo, "%s is reported as written", algo)
+		r.Contains(out, "recommended="+v4alpha3, algo)
+		r.Contains(out, "component=c", "caller attributes identify what is trusted")
+	}
+}

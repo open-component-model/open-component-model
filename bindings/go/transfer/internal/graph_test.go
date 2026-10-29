@@ -1236,7 +1236,6 @@ func TestBuildGraphDefinition_WarnsAboutNonDefaultReferenceDigests(t *testing.T)
 	transfer(t, v4alpha1.Algorithm)
 	r.Equal(1, strings.Count(logs.String(), warning), "a v4alpha1 reference digest must warn once")
 	r.Contains(logs.String(), "normalisationAlgorithm="+v4alpha1.Algorithm)
-	r.Contains(logs.String(), "uncovered=label.version", "trusting a v4alpha1 reference digest must name what it does not cover")
 }
 
 // Transfer never adds or rewrites reference digests: an existing digest is only

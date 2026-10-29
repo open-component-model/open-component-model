@@ -721,7 +721,6 @@ func (c *DefaultConstructor) processReference(ctx context.Context, reference *co
 			}
 			return nil, fmt.Errorf("error verifying digest of referenced component %q: %w", reference.ToIdentity(), err)
 		}
-		algorithms.WarnUncovered(ctx, logger, pinned.NormalisationAlgorithm, "reference", reference.ToIdentity().String())
 		hash, _ := algorithms.Hash(pinned.HashAlgorithm)
 		ref.Digest.HashAlgorithm = hash.String()
 		ref.Digest.Value = strings.ToLower(pinned.Value)

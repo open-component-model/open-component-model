@@ -19,10 +19,10 @@ import (
 	"fmt"
 	"strings"
 
-	_ "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v1"
 	_ "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
+	jsonv1 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v1"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha2"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha3"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -59,6 +59,12 @@ func Resolve(normalisationAlgorithm string) (string, bool) {
 		return v4alpha2.Algorithm, true
 	}
 	return normalisationAlgorithm, false
+}
+
+// VerifyOnly reports whether normalisationAlgorithm may only verify existing
+// digests: no new signature or component reference digest may record it.
+func VerifyOnly(normalisationAlgorithm string) bool {
+	return normalisationAlgorithm == jsonv1.Algorithm //nolint:staticcheck // the deprecated v1 is the verify-only algorithm
 }
 
 // Hash resolves a hash algorithm name to SHA-256 or SHA-512. Case is ignored

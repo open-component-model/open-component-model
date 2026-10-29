@@ -1104,5 +1104,4 @@ components:
 `)
 	r.Equal(1, strings.Count(logs.String(), warning), "a pinned v4alpha1 reference must warn once")
 	r.Contains(logs.String(), "normalisationAlgorithm="+v4alpha1.Algorithm)
-	r.Contains(logs.String(), "uncovered=label.version", "a pinned v4alpha1 reference must name what it does not cover")
 }

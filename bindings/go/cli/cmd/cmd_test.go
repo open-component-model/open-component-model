@@ -1850,13 +1850,35 @@ configurations:
 		r.ErrorContains(err, "expected one of", "%s must not be signable", algo)
 	}
 
+	const olderAlgorithmWarning = "older normalisation algorithm"
+	verifyLogs := test.NewJSONLogReader()
 	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
 		reference,
 		"--signature", signatureName,
 		"--config", ocmConfigFilePath),
-		test.WithOutput(logs),
+		test.WithErrorOutput(verifyLogs),
 	)
 	r.NoError(err, "failed to verify component version")
+	r.NotContains(verifyLogs.String(), olderAlgorithmWarning, "a default signature must not warn")
+
+	// Trusting a signature under an older algorithm warns, recommending an upgrade.
+	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+		reference,
+		"--signature", signatureName,
+		"--normalisation", "jsonNormalisation/v4alpha1",
+		"--force",
+		"--config", ocmConfigFilePath),
+	)
+	r.NoError(err, "failed to re-sign component version with v4alpha1")
+	verifyLogs = test.NewJSONLogReader()
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
+		reference,
+		"--signature", signatureName,
+		"--config", ocmConfigFilePath),
+		test.WithErrorOutput(verifyLogs),
+	)
+	r.NoError(err, "failed to verify v4alpha1 signature")
+	r.Contains(verifyLogs.String(), olderAlgorithmWarning, "a v4alpha1 signature must warn")
 }
 
 func Test_Sign_With_Sigstore_Spec_Selects_Cosign_Handler(t *testing.T) {

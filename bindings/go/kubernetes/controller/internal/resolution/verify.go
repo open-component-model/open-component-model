@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/algorithms"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/verification"
@@ -124,6 +125,8 @@ func verifySignatures(
 		}
 
 		logger.Info("verified signature", "signature", v.Signature, "verifier", v.Verifier.GetType())
+		algorithms.WarnNonDefaultDigest(ctx, slog.New(logr.ToSlogHandler(logger)), descSig.Digest.NormalisationAlgorithm,
+			"component", desc.Component.Name, "version", desc.Component.Version, "signature", descSig.Name)
 	}
 
 	return desc, nil
@@ -175,6 +178,8 @@ func compareDigest(ctx context.Context, desc *descriptor.Descriptor, digest *v2.
 		return nil, fmt.Errorf("verifying digest (%s/%s) of component version %s:%s failed: %w",
 			digest.NormalisationAlgorithm, digest.HashAlgorithm, desc.Component.Name, desc.Component.Version, err)
 	}
+	algorithms.WarnNonDefaultDigest(ctx, slog.New(logr.ToSlogHandler(logger)), digest.NormalisationAlgorithm,
+		"component", desc.Component.Name, "version", desc.Component.Version)
 
 	return desc, nil
 }

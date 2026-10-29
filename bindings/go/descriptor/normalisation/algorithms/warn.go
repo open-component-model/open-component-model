@@ -34,3 +34,17 @@ func WarnNonDefaultReferenceDigest(ctx context.Context, logger *slog.Logger, d d
 		append(attrs, "normalisationAlgorithm", d.NormalisationAlgorithm, "recommended", Default)...,
 	)
 }
+
+// WarnNonDefaultDigest logs a warning if a digest about to be trusted (a
+// signature digest or a digest pin) was computed with a normalisation algorithm
+// other than Default, recommending to upgrade it. attrs identify what is
+// trusted.
+func WarnNonDefaultDigest(ctx context.Context, logger *slog.Logger, normalisationAlgorithm string, attrs ...any) {
+	if resolved, _ := Resolve(normalisationAlgorithm); resolved == Default {
+		return
+	}
+	logger.WarnContext(ctx,
+		"trusted digest was computed with an older normalisation algorithm; re-sign or re-pin with a current OCM CLI to upgrade it",
+		append(attrs, "normalisationAlgorithm", normalisationAlgorithm, "recommended", Default)...,
+	)
+}

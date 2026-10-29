@@ -83,7 +83,6 @@ func DigestHashAlgorithmsEnforced() bool {
 //  4. Hash the normalised descriptor.
 //  5. Decode the digest value from the signature.
 //  6. Compare the freshly computed digest against the signature digest.
-//  7. Warn if the matched digest leaves descriptor fields uncovered.
 func VerifyDigestMatchesDescriptor(
 	ctx context.Context,
 	desc *descruntime.Descriptor,
@@ -91,12 +90,7 @@ func VerifyDigestMatchesDescriptor(
 	logger *slog.Logger,
 ) error {
 	signature.Digest.NormalisationAlgorithm = ensureNormalisationAlgo(ctx, signature.Digest.NormalisationAlgorithm, logger)
-	if err := algorithms.Verify(desc, signature.Digest); err != nil {
-		return err
-	}
-	algorithms.WarnUncovered(ctx, logger, signature.Digest.NormalisationAlgorithm,
-		"component", desc.Component.Name, "version", desc.Component.Version)
-	return nil
+	return algorithms.Verify(desc, signature.Digest)
 }
 
 // SignableNormalisationAlgorithms returns the normalisation algorithms a
@@ -131,11 +125,8 @@ func WarnDiscouragedNormalisation(ctx context.Context, logger *slog.Logger, norm
 	if normalisationAlgorithm == DefaultNormalisationAlgorithm {
 		return
 	}
-	attrs := []any{"algorithm", normalisationAlgorithm, "recommended", DefaultNormalisationAlgorithm}
-	if fields := algorithms.Uncovered(normalisationAlgorithm); fields != "" {
-		attrs = append(attrs, "uncovered", fields)
-	}
-	logger.WarnContext(ctx, "signing with a non-default normalisation algorithm, use the recommended one for new signatures", attrs...)
+	logger.WarnContext(ctx, "signing with a non-default normalisation algorithm, use the recommended one for new signatures",
+		"algorithm", normalisationAlgorithm, "recommended", DefaultNormalisationAlgorithm)
 }
 
 // GenerateDigest computes a new digest for a descriptor with the given

@@ -106,9 +106,9 @@ func TestVerifyNormalizedPin_V1(t *testing.T) {
 	r.ErrorContains(verifyNormalizedPin(ctx, desc, wrong), "does not match pinned digest")
 }
 
-// A normalized pin under a normalisation that leaves fields uncovered must
-// warn on a match: the pin does not detect changes to those fields.
-func TestVerifyNormalizedPin_WarnsUncovered(t *testing.T) {
+// A normalized pin under an older normalisation must warn on a match, so users
+// upgrade it; a pin under the default must not.
+func TestVerifyNormalizedPin_WarnsNonDefault(t *testing.T) {
 	r := require.New(t)
 	var logs bytes.Buffer
 	previous := slog.Default()
@@ -123,20 +123,17 @@ func TestVerifyNormalizedPin_WarnsUncovered(t *testing.T) {
 			Provider: descruntime.Provider{Name: "acme"},
 		},
 	}
-	for algo, uncovered := range map[string]string{
-		jsonv1.Algorithm:                      "sources",
-		v4alpha1.Algorithm:                    "label.version",
-		signing.DefaultNormalisationAlgorithm: "",
-	} {
+	for _, algo := range []string{jsonv1.Algorithm, v4alpha1.Algorithm, signing.DefaultNormalisationAlgorithm} {
 		logs.Reset()
 		generated, err := signing.GenerateDigest(t.Context(), desc, slog.New(slog.DiscardHandler), algo, crypto.SHA256.String())
 		r.NoError(err)
 		r.NoError(verifyNormalizedPin(t.Context(), desc, generated))
-		if uncovered == "" {
+		if algo == signing.DefaultNormalisationAlgorithm {
 			r.Empty(logs.String(), algo)
 			continue
 		}
-		r.Contains(logs.String(), "uncovered="+uncovered, algo)
+		r.Contains(logs.String(), "older normalisation algorithm", algo)
+		r.Contains(logs.String(), "normalisationAlgorithm="+algo, algo)
 		r.Contains(logs.String(), "component=acme.org/test", algo)
 	}
 }

@@ -1,7 +1,6 @@
 package signing
 
 import (
-	"bytes"
 	"context"
 	"crypto"
 	"encoding/hex"
@@ -307,26 +306,4 @@ func TestVerifyDigestMatchesDescriptor_LegacyHashName(t *testing.T) {
 	dg.HashAlgorithm = "sha256"
 	r.NoError(IsSafelyDigestible(&descruntime.Component{References: []descruntime.Reference{{Digest: *dg}}}))
 	r.NoError(VerifyDigestMatchesDescriptor(t.Context(), d, descruntime.Signature{Name: "s5", Digest: *dg}, logger))
-}
-
-// Trusting a digest whose normalisation leaves fields uncovered must warn, so
-// users know changes to them would go unnoticed; the default must not.
-func TestVerifyDigestMatchesDescriptor_WarnsUncovered(t *testing.T) {
-	r := require.New(t)
-	d := &descruntime.Descriptor{Component: descruntime.Component{ComponentMeta: descruntime.ComponentMeta{ObjectMeta: descruntime.ObjectMeta{Name: "acme.org/c", Version: "1.0.0"}}, Provider: descruntime.Provider{Name: "p"}}}
-
-	verify := func(algo string) string {
-		var buf bytes.Buffer
-		logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn}))
-		dg, err := GenerateDigest(t.Context(), d, slog.New(slog.DiscardHandler), algo, crypto.SHA256.String())
-		r.NoError(err)
-		r.NoError(VerifyDigestMatchesDescriptor(t.Context(), d, descruntime.Signature{Name: "s", Digest: *dg}, logger))
-		return buf.String()
-	}
-
-	r.Empty(verify(DefaultNormalisationAlgorithm))
-	out := verify(v4alpha1.Algorithm)
-	r.Contains(out, "uncovered=label.version")
-	r.Contains(out, "component=acme.org/c")
-	r.Contains(out, "version=1.0.0")
 }
