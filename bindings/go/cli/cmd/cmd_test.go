@@ -424,17 +424,9 @@ func Test_Get_Component_Version_Formats_Recursive(t *testing.T) {
 - component:
     componentReferences:
     - componentName: ocm.software/leaf-a
-      digest:
-        hashAlgorithm: ""
-        normalisationAlgorithm: ""
-        value: ""
       name: leaf-a
       version: 0.0.1
     - componentName: ocm.software/leaf-b
-      digest:
-        hashAlgorithm: ""
-        normalisationAlgorithm: ""
-        value: ""
       name: leaf-b
       version: 0.0.1
     name: ocm.software/root
@@ -516,21 +508,11 @@ COMPONENT           │ VERSION │ PROVIDER
 								"name":          "leaf-a",
 								"version":       "0.0.1",
 								"componentName": "ocm.software/leaf-a",
-								"digest": map[string]any{
-									"hashAlgorithm":          "",
-									"normalisationAlgorithm": "",
-									"value":                  "",
-								},
 							},
 							map[string]any{
 								"name":          "leaf-b",
 								"version":       "0.0.1",
 								"componentName": "ocm.software/leaf-b",
-								"digest": map[string]any{
-									"hashAlgorithm":          "",
-									"normalisationAlgorithm": "",
-									"value":                  "",
-								},
 							},
 						},
 						"name":               "ocm.software/root",
