@@ -714,6 +714,10 @@ func (c *DefaultConstructor) processReference(ctx context.Context, reference *co
 			return nil, fmt.Errorf("%w: reference %q pins its digest with %s: remove the digest to compute one with %s",
 				ErrVerifyOnlyReferenceDigest, reference.ToIdentity(), pinned.NormalisationAlgorithm, algorithms.Default)
 		}
+		hash, err := algorithms.Hash(pinned.HashAlgorithm)
+		if err != nil {
+			return nil, fmt.Errorf("reference %q has an invalid digest: %w", reference.ToIdentity(), err)
+		}
 		if err := algorithms.Verify(referencedComponent, pinned); err != nil {
 			if errors.Is(err, algorithms.ErrDigestMismatch) {
 				return nil, fmt.Errorf("%w: reference %q has digest (hashAlgorithm=%s, normalisationAlgorithm=%s, value=%s) that does not match the referenced component: %w",
@@ -721,7 +725,6 @@ func (c *DefaultConstructor) processReference(ctx context.Context, reference *co
 			}
 			return nil, fmt.Errorf("error verifying digest of referenced component %q: %w", reference.ToIdentity(), err)
 		}
-		hash, _ := algorithms.Hash(pinned.HashAlgorithm)
 		ref.Digest.HashAlgorithm = hash.String()
 		ref.Digest.Value = strings.ToLower(pinned.Value)
 		logger.Debug("digest verification successful", "expected", ref.Digest.Value)

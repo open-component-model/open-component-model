@@ -1040,6 +1040,12 @@ func TestProcessReference_DigestAlgorithmSelection(t *testing.T) {
 	_, err = c.processReference(t.Context(), mkRef(mustDigest(jsonv1.Algorithm, crypto.SHA256.String())), child)
 	r.ErrorIs(err, ErrVerifyOnlyReferenceDigest)
 
+	// An unsupported hash name fails instead of being recorded.
+	_, err = c.processReference(t.Context(), mkRef(&constructorruntime.Digest{
+		HashAlgorithm: "MD5", NormalisationAlgorithm: a1.NormalisationAlgorithm, Value: a1.Value,
+	}), child)
+	r.ErrorIs(err, algorithms.ErrUnsupportedHash)
+
 	// A pinned digest whose value does not match the referenced component fails.
 	_, err = c.processReference(t.Context(), mkRef(&constructorruntime.Digest{
 		HashAlgorithm:          a1.HashAlgorithm,
