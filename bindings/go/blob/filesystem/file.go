@@ -51,14 +51,37 @@ func copyBuffered(dst io.Writer, src io.Reader) error {
 }
 
 // GetBlobFromOSPath returns a read-only blob for the file at path.
+// A relative path is resolved against the current working directory once, on creation.
 // The file is opened by path on every read and no descriptor is held between reads.
 // Symlinks are followed like os.Open. A missing or unreadable file is reported when the blob is read.
 func GetBlobFromOSPath(path string) (*Blob, error) {
 	if path == "" {
 		return nil, errors.New("path must not be empty")
 	}
-	path = filepath.Clean(path)
-	return NewFileBlob(os.DirFS(filepath.Dir(path)), filepath.Base(path)), nil
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve absolute path: %w", err)
+	}
+	return NewFileBlob(osDirFS(filepath.Dir(path)), filepath.Base(path)), nil
+}
+
+// osDirFS is a read-only fs.FS over an absolute directory. Unlike os.DirFS it keeps
+// the full path in errors, so a failed read names the file's directory.
+type osDirFS string
+
+var _ fs.StatFS = osDirFS("")
+
+func (dir osDirFS) Open(name string) (fs.File, error) {
+	// A nil *os.File must not be returned as a non-nil fs.File.
+	f, err := os.Open(filepath.Join(string(dir), name))
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
+func (dir osDirFS) Stat(name string) (fs.FileInfo, error) {
+	return os.Stat(filepath.Join(string(dir), name))
 }
 
 // GetBlobInWorkingDirectory returns a read-only blob for a file that must stay inside workingDir.
