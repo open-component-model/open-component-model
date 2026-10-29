@@ -75,6 +75,51 @@ func TestGetBlobFromPath_SingleFileSymlinkOutsideParent(t *testing.T) {
 	r.Equal("linked content", string(content))
 }
 
+// The file is reopened on every read, so confinement must hold at read time,
+// not only when the blob is created.
+func TestGetBlobFromPath_SingleFileSwappedToEscapingSymlink(t *testing.T) {
+	r := require.New(t)
+
+	workDir := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "secret.txt")
+	r.NoError(os.WriteFile(outside, []byte("secret"), 0o600))
+	file := filepath.Join(workDir, "file.txt")
+	r.NoError(os.WriteFile(file, []byte("content"), 0o600))
+
+	b, err := filesystem.GetBlobFromPath(t.Context(), "file.txt", filesystem.DirOptions{WorkingDir: workDir})
+	r.NoError(err)
+
+	r.NoError(os.Remove(file))
+	if err := os.Symlink(outside, file); err != nil {
+		t.Skipf("symlink creation failed (may not be supported on this system): %v", err)
+	}
+
+	_, err = b.ReadCloser()
+	r.Error(err)
+	r.Equal(blob.SizeUnknown, b.(blob.SizeAware).Size())
+}
+
+// A relative path is resolved when the blob is created, not when it is read.
+func TestGetBlobFromPath_SingleFileRelativePathSurvivesChdir(t *testing.T) {
+	r := require.New(t)
+
+	dir := t.TempDir()
+	createTestFile(t, dir, "file.txt", "content")
+	t.Chdir(dir)
+
+	b, err := filesystem.GetBlobFromPath(t.Context(), "file.txt", filesystem.DirOptions{})
+	r.NoError(err)
+
+	t.Chdir(t.TempDir())
+
+	reader, err := b.ReadCloser()
+	r.NoError(err)
+	defer func() { r.NoError(reader.Close()) }()
+	content, err := io.ReadAll(reader)
+	r.NoError(err)
+	r.Equal("content", string(content))
+}
+
 func TestGetBlobFromPath_SimpleDirectory(t *testing.T) {
 	r := require.New(t)
 
