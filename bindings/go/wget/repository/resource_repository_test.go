@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	_ "crypto/sha1"
@@ -215,6 +216,38 @@ func TestDownloadResource_DigestVerification(t *testing.T) {
 		b, err := repo.DownloadResource(t.Context(), resource, nil)
 		require.NoError(t, err)
 		assert.Equal(t, []byte(served), readBlob(t, b))
+	})
+
+	t.Run("reads without a HEAD request and keeps the metadata of the GET response", func(t *testing.T) {
+		t.Parallel()
+		var heads atomic.Int32
+		// Like a presigned URL, the server answers GET only.
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodHead {
+				heads.Add(1)
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte(served))
+		}))
+		t.Cleanup(server.Close)
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
+		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
+		resource.Digest = &descruntime.Digest{
+			HashAlgorithm:          "SHA-256",
+			NormalisationAlgorithm: "genericBlobDigest/v1",
+			Value:                  godigest.FromString(served).Encoded(),
+		}
+
+		b, err := repo.DownloadResource(t.Context(), resource, nil)
+		require.NoError(t, err)
+		assert.Equal(t, []byte(served), readBlob(t, b))
+		assert.Zero(t, heads.Load())
+		assert.Equal(t, int64(len(served)), b.(blob.SizeAware).Size())
+		mediaType, ok := b.(blob.MediaTypeAware).MediaType()
+		assert.True(t, ok)
+		assert.Equal(t, "text/plain", mediaType)
 	})
 
 	t.Run("refuses content when the digest is present but unusable", func(t *testing.T) {

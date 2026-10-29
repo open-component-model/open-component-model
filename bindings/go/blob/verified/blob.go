@@ -69,7 +69,16 @@ func (b *Blob) ReadCloser() (io.ReadCloser, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open blob content: %w", err)
 	}
-	return &reader{base: rc, digester: digester, expected: expected, size: b.Size()}, nil
+	r := &reader{base: rc, digester: digester, expected: expected, size: b.meta.Size}
+	if r.size == blob.SizeUnknown {
+		// Asked only once content arrived: a source learning its size from the
+		// response it streams (e.g. a lazy HTTP download) would otherwise have to
+		// send an extra request before its content is even requested.
+		if sizeAware, ok := b.src.(blob.SizeAware); ok {
+			r.sourceSize = sizeAware.Size
+		}
+	}
+	return r, nil
 }
 
 // Digest returns the expected digest, if known.
@@ -108,14 +117,19 @@ type reader struct {
 	digester digest.Digester // nil if the digest is unknown
 	expected digest.Digest
 	size     int64
-	read     int64
-	eof      bool
+	// sourceSize, if set, is asked once for the size left unknown by the metadata.
+	sourceSize func() int64
+	read       int64
+	eof        bool
 }
 
 // Read also reports a mismatch, not only Close, so that a caller ignoring the
 // Close error (_ = rc.Close()) cannot skip verification.
 func (r *reader) Read(p []byte) (int, error) {
 	n, err := r.base.Read(p)
+	if n > 0 || errors.Is(err, io.EOF) {
+		r.resolveSize()
+	}
 	if n > 0 {
 		r.read += int64(n)
 		if r.digester != nil {
@@ -143,6 +157,7 @@ func (r *reader) Close() error {
 // Content of known size counts as complete once that size is read, because readers
 // handed the exact size (e.g. io.CopyN in blob.Copy) stop before the source reports EOF.
 func (r *reader) verify() error {
+	r.resolveSize()
 	switch {
 	case r.size != blob.SizeUnknown && r.read != r.size:
 		return fmt.Errorf("size mismatch: expected %d bytes, read %d", r.size, r.read)
@@ -152,4 +167,11 @@ func (r *reader) verify() error {
 		return fmt.Errorf("digest mismatch: expected %s, got %s", r.expected, r.digester.Digest())
 	}
 	return nil
+}
+
+func (r *reader) resolveSize() {
+	if r.sourceSize != nil {
+		r.size = r.sourceSize()
+		r.sourceSize = nil
+	}
 }

@@ -152,19 +152,19 @@ func (b *Blob) head() (http.Header, int64) {
 	ctx := b.fetch.request.Context()
 	r, err := b.fetch.clone()
 	if err != nil {
-		slog.DebugContext(ctx, "wget: cannot build HEAD request for metadata", "url", b.fetch.safeURL, "err", err)
+		slog.DebugContext(ctx, "http: cannot build HEAD request for metadata", "url", b.fetch.safeURL, "err", err)
 		return nil, blob.SizeUnknown
 	}
 	isHead := r.Method == http.MethodHead
 	r.Method = http.MethodHead
 	resp, err := b.fetch.client.Do(r)
 	if err != nil {
-		slog.DebugContext(ctx, "wget: HEAD request for metadata failed", "url", b.fetch.safeURL, "err", err)
+		slog.DebugContext(ctx, "http: HEAD request for metadata failed", "url", b.fetch.safeURL, "err", err)
 		return nil, blob.SizeUnknown
 	}
 	_ = resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		slog.DebugContext(ctx, "wget: HEAD request for metadata failed", "url", b.fetch.safeURL, "status", resp.StatusCode)
+		slog.DebugContext(ctx, "http: HEAD request for metadata failed", "url", b.fetch.safeURL, "status", resp.StatusCode)
 		return nil, blob.SizeUnknown
 	}
 	// The HEAD response of a HEAD download describes its empty body. Otherwise
