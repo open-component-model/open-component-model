@@ -63,8 +63,8 @@ Digests computed with older algorithms keep verifying: `jsonNormalisation/v4alph
 the legacy `jsonNormalisation/v3` (computed as `jsonNormalisation/v4alpha2`, which reproduces it byte for byte), and
 `jsonNormalisation/v1`, which can only be verified, never used for new signatures or component reference digests.
 Older algorithms may sign less of the descriptor than the default, so OCM logs a warning whenever it trusts a digest
-computed with one (a signature, a digest pin or a component reference digest). Re-sign the component version, re-pin it,
-or rebuild the referencing component version with a current OCM CLI to move to the default. No algorithm signs the whole
+computed with one (a signature, a digest pin or a component reference digest). To move to the default, see
+[Migrate Normalisation Algorithms]({{< relref "docs/changelog/migrate-normalisation-algorithms.md" >}}). No algorithm signs the whole
 descriptor: access information and labels without `signing: true` are never signed.
 
 This entire approach relies on the fact that **content digests** are preserved across transfers.
