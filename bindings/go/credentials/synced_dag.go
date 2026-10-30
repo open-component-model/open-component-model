@@ -3,7 +3,6 @@ package credentials
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/dag"
@@ -94,7 +93,7 @@ func (g *syncedDag) matchAnyNode(identity runtime.Identity) (*dag.Vertex[string]
 		if !identity.Match(existing) {
 			continue
 		}
-		if strings.HasPrefix(existing[runtime.IdentityAttributeHostname], "*.") {
+		if runtime.IsHostnameGlobPattern(existing[runtime.IdentityAttributeHostname]) {
 			if globMatch == nil {
 				globMatch = vertex
 			}

@@ -119,20 +119,24 @@ func IdentityMatchesURL(i, o Identity) bool {
 	return defaultPort(effectiveScheme, iPort) == defaultPort(effectiveScheme, oPort)
 }
 
+// IsHostnameGlobPattern reports whether pattern is a hostname glob — i.e. it starts with "*."
+// and the suffix after "*." contains at least one ".". All other patterns containing "*" are
+// matched literally by [IdentityMatchesURL].
+func IsHostnameGlobPattern(pattern string) bool {
+	return strings.HasPrefix(pattern, "*.") && strings.Contains(pattern[2:], ".")
+}
+
 // matchHostnamePattern reports whether host matches pattern (case-sensitive).
 // Patterns of the form "*.suffix.tld" (e.g. "*.example.com") match exactly one DNS label
 // followed by the literal suffix; "*" does not cross ".". All other patterns match literally.
 func matchHostnamePattern(pattern, host string) bool {
-	if strings.HasPrefix(pattern, "*.") && !strings.HasPrefix(host, ".") {
-		suffix := pattern[2:]
-		if strings.Contains(suffix, ".") {
-			g, err := glob.Compile("*."+glob.QuoteMeta(suffix), '.')
-			if err != nil {
-				slog.Warn("hostname consumer pattern failed to compile", "pattern", pattern, "err", err)
-				return false
-			}
-			return g.Match(host)
+	if IsHostnameGlobPattern(pattern) && !strings.HasPrefix(host, ".") {
+		g, err := glob.Compile("*."+glob.QuoteMeta(pattern[2:]), '.')
+		if err != nil {
+			slog.Warn("hostname consumer pattern failed to compile", "pattern", pattern, "err", err)
+			return false
 		}
+		return g.Match(host)
 	}
 	if strings.Contains(pattern, "*") && pattern != host {
 		slog.Info("hostname consumer pattern contains '*' but is not of the form '*.suffix.tld' — matched literally", "pattern", pattern)
