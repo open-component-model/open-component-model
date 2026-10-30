@@ -17,6 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/opencontainers/go-digest"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
@@ -46,6 +47,11 @@ type Result struct {
 	// [UnversionedVersionID] for an unversioned object and empty for stores that do
 	// not report a version, so it identifies immutable content only when it is neither.
 	VersionID string
+	// Digest is the digest of the stored object, computed while it was written; empty
+	// without [WithDigestAlgorithm].
+	Digest digest.Digest
+	// Path is the file backing Blob; owned by the caller.
+	Path string
 }
 
 // Request describes a single S3 object download.
@@ -145,7 +151,7 @@ func Download(ctx context.Context, req Request, opts ...Option) (*Result, error)
 		return nil, fmt.Errorf("error creating temporary file for s3 object %s/%s: %w", req.BucketName, req.ObjectKey, err)
 	}
 
-	b, err := storeObject(file, body, maxDownloadSize, req)
+	b, dig, err := storeObject(file, body, maxDownloadSize, req, o.DigestAlgorithm)
 	if err != nil {
 		if err := os.Remove(file.Name()); err != nil {
 			slog.WarnContext(ctx, "error removing temporary file after failed download", "file", file.Name(), "err", err)
@@ -154,32 +160,43 @@ func Download(ctx context.Context, req Request, opts ...Option) (*Result, error)
 	}
 	b.SetMediaType(mediaType)
 
-	return &Result{Blob: b, VersionID: aws.ToString(out.VersionId)}, nil
+	return &Result{Blob: b, VersionID: aws.ToString(out.VersionId), Digest: dig, Path: file.Name()}, nil
 }
 
 // storeObject streams body into file and returns a blob backed by it. It closes file
 // whether or not it succeeds, but never removes it; the caller does that in one place.
-func storeObject(file *os.File, body io.Reader, maxDownloadSize int64, req Request) (*filesystem.Blob, error) {
+func storeObject(file *os.File, body io.Reader, maxDownloadSize int64, req Request, alg digest.Algorithm) (*filesystem.Blob, digest.Digest, error) {
 	path := file.Name()
 
-	written, err := io.Copy(file, body)
+	var dst io.Writer = file
+	var digester digest.Digester
+	if alg != "" {
+		digester = alg.Digester()
+		dst = io.MultiWriter(file, digester.Hash())
+	}
+
+	written, err := io.Copy(dst, body)
 	if closeErr := file.Close(); err == nil {
 		err = closeErr
 	}
 	if err != nil {
-		return nil, fmt.Errorf("error writing s3 object %s/%s to %s: %w", req.BucketName, req.ObjectKey, path, err)
+		return nil, "", fmt.Errorf("error writing s3 object %s/%s to %s: %w", req.BucketName, req.ObjectKey, path, err)
 	}
 
 	if maxDownloadSize > 0 && written > maxDownloadSize {
-		return nil, fmt.Errorf("s3 object %s/%s exceeds maximum allowed size of %d bytes", req.BucketName, req.ObjectKey, maxDownloadSize)
+		return nil, "", fmt.Errorf("s3 object %s/%s exceeds maximum allowed size of %d bytes", req.BucketName, req.ObjectKey, maxDownloadSize)
 	}
 
 	b, err := filesystem.GetBlobFromOSPath(path)
 	if err != nil {
-		return nil, fmt.Errorf("error creating blob for s3 object %s/%s from %s: %w", req.BucketName, req.ObjectKey, path, err)
+		return nil, "", fmt.Errorf("error creating blob for s3 object %s/%s from %s: %w", req.BucketName, req.ObjectKey, path, err)
 	}
 
-	return b, nil
+	var dig digest.Digest
+	if digester != nil {
+		dig = digester.Digest()
+	}
+	return b, dig, nil
 }
 
 // disableRetry is the maxRetries value that turns the ocm transport's retry off.

@@ -288,9 +288,6 @@ func TestGetGitResourceRemovesOutputOnBufferFailure(t *testing.T) {
 	intercept := &testRepository{download: func(ctx context.Context, resource *descriptor.Resource, creds runtime.Typed) (blob.ReadOnlyBlob, error) {
 		b, err := repo.DownloadResource(ctx, resource, creds)
 		r.NoError(err)
-		files, err := os.ReadDir(downloadDir)
-		r.NoError(err)
-		r.Len(files, 1, "buffer a real downloaded archive")
 		// Make the already-created output path unwritable as a file, without
 		// depending on permission checks that behave differently under root.
 		outputs, err := os.ReadDir(outDir)

@@ -10,6 +10,7 @@ package fips140
 
 import (
 	"crypto/fips140"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -49,6 +50,8 @@ func TestResourceDigestAndDownload(t *testing.T) {
 	b, err := repo.DownloadResource(t.Context(), pinned, nil)
 	r.NoError(err)
 	rc, err := b.ReadCloser()
+	r.NoError(err)
+	_, err = io.Copy(io.Discard, rc)
 	r.NoError(err)
 	r.NoError(rc.Close())
 }

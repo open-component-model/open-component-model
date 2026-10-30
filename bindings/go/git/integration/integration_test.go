@@ -4,9 +4,11 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/cgi"
@@ -25,6 +27,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // trustServerCertificate changes process-global state; callers and their ancestors must not run in parallel.
@@ -75,6 +80,20 @@ func newHTTPSServer(t *testing.T, path, authorization string) (url string, ca []
 	t.Cleanup(server.Close)
 
 	return server.URL + "/" + filepath.Base(path), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
+}
+
+// downloadError downloads res and reads it to its end, which is when a download fails.
+func downloadError(ctx context.Context, repo *gitrepository.ResourceRepository, res *descriptor.Resource, creds runtime.Typed) error {
+	b, err := repo.DownloadResource(ctx, res, creds)
+	if err != nil {
+		return err
+	}
+	rc, err := b.ReadCloser()
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(io.Discard, rc)
+	return errors.Join(err, rc.Close())
 }
 
 func assertArchive(t *testing.T, content blob.ReadOnlyBlob, expectedReadme string) []byte {
