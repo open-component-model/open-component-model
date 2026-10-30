@@ -44,7 +44,7 @@ var _ = Describe("Credentials E2E Tests", func() {
 			)
 
 			By("creating an instance of the example")
-			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(testdata, ctx.SpecReport().LeafNodeText, Instance), "condition=Ready=true", timeout)).To(Succeed())
+			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(testdata, ctx.SpecReport().LeafNodeText, KroInstance), "condition=Ready=true", timeout)).To(Succeed())
 
 			By("validating the example")
 			deploymentName := "deployment.apps/" + testName + "-podinfo"
@@ -75,7 +75,7 @@ var _ = Describe("Credentials E2E Tests", func() {
 			)
 
 			By("creating an instance of the example")
-			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(testdata, ctx.SpecReport().LeafNodeText, Instance), "condition=Ready=true", timeout)).To(Succeed())
+			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(testdata, ctx.SpecReport().LeafNodeText, KroInstance), "condition=Ready=true", timeout)).To(Succeed())
 
 			By("validating the example")
 			deploymentName := "deployment.apps/" + testName + "-podinfo"

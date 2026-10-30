@@ -1,0 +1,6 @@
+apiVersion: examples.ocm.software/v1alpha1
+kind: HelmNestedCrossplane
+metadata:
+  name: helm-nested-crossplane
+spec:
+  prefix: helm-nested-crossplane

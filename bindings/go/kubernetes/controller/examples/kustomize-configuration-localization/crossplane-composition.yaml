@@ -1,0 +1,353 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: kustomizeconfigurationlocalizationcrossplanes.examples.ocm.software
+spec:
+  group: examples.ocm.software
+  names:
+    kind: KustomizeConfigurationLocalizationCrossplane
+    plural: kustomizeconfigurationlocalizationcrossplanes
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                prefix:
+                  type: string
+                  default: kustomize-configuration-localization-crossplane
+                podinfo:
+                  type: object
+                  properties:
+                    message:
+                      type: string
+                      default: "kustomize-configuration-localization"
+            status:
+              type: object
+              properties:
+                ociRegistry:
+                  type: string
+                ociRepository:
+                  type: string
+                ociDigest:
+                  type: string
+                imageRegistry:
+                  type: string
+                imageRepository:
+                  type: string
+                imageDigest:
+                  type: string
+---
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: kustomize-configuration-localization-crossplane
+spec:
+  compositeTypeRef:
+    apiVersion: examples.ocm.software/v1alpha1
+    kind: KustomizeConfigurationLocalizationCrossplane
+  mode: Pipeline
+  pipeline:
+    - step: patch-and-transform
+      functionRef:
+        name: crossplane-contrib-function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        resources:
+          - name: resourceKustomization
+            base:
+              apiVersion: delivery.ocm.software/v1alpha1
+              kind: Resource
+              metadata:
+                namespace: default
+              spec:
+                componentRef:
+                  name: kustomize-configuration-localization-component
+                resource:
+                  byReference:
+                    resource:
+                      name: kustomize-resource
+                additionalStatusFields:
+                  registry: resource.access.toOCI().registry
+                  repository: resource.access.toOCI().repository
+                  digest: resource.access.toOCI().digest
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.prefix
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-resource-kustomization"
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.registry
+                toFieldPath: status.ociRegistry
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.repository
+                toFieldPath: status.ociRepository
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.digest
+                toFieldPath: status.ociDigest
+          - name: resourceImage
+            base:
+              apiVersion: delivery.ocm.software/v1alpha1
+              kind: Resource
+              metadata:
+                namespace: default
+              spec:
+                componentRef:
+                  name: kustomize-configuration-localization-component
+                resource:
+                  byReference:
+                    resource:
+                      name: image-resource
+                additionalStatusFields:
+                  registry: resource.access.toOCI().registry
+                  repository: resource.access.toOCI().repository
+                  digest: resource.access.toOCI().digest
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.prefix
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-resource-image"
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.registry
+                toFieldPath: status.imageRegistry
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.repository
+                toFieldPath: status.imageRepository
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.additional.digest
+                toFieldPath: status.imageDigest
+          # FluxCD delivery via Kustomization from an OCI source, with localization and configuration
+          - name: ocirepository
+            base:
+              apiVersion: source.toolkit.fluxcd.io/v1
+              kind: OCIRepository
+              metadata:
+                namespace: default
+              spec:
+                interval: 1m0s
+                insecure: true
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.prefix
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-oci-repository"
+              - type: CombineFromComposite
+                combine:
+                  variables:
+                    - fromFieldPath: status.ociRegistry
+                    - fromFieldPath: status.ociRepository
+                  strategy: string
+                  string:
+                    fmt: "oci://%s/%s"
+                toFieldPath: spec.url
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.ociDigest
+                toFieldPath: spec.ref.digest
+          - name: kustomization
+            base:
+              apiVersion: kustomize.toolkit.fluxcd.io/v1
+              kind: Kustomization
+              metadata:
+                namespace: default
+              spec:
+                targetNamespace: default
+                interval: 1m
+                prune: true
+                path: "./"
+                sourceRef:
+                  kind: OCIRepository
+                patches:
+                  # Localization (filled from composite status)
+                  - patch: ""
+                    target:
+                      kind: Deployment
+                      name: .*
+                  # Configuration (filled from composite spec)
+                  - patch: ""
+                    target:
+                      kind: Deployment
+                      name: .*
+                  # e2e-test related patch to validate deployment
+                  - patch: |
+                      - op: replace
+                        path: /metadata/name
+                        value: kustomize-configuration-localization-crossplane-podinfo
+                      - op: add
+                        path: /spec/template/metadata/labels/app.kubernetes.io~1name
+                        value: kustomize-configuration-localization-crossplane-podinfo
+                    target:
+                      kind: Deployment
+                      name: .*
+                  # Delete podinfo's HPA. The e2e cluster has no metrics-server, so the HPA can never
+                  # become healthy.
+                  - patch: |
+                      apiVersion: autoscaling/v2
+                      kind: HorizontalPodAutoscaler
+                      metadata:
+                        name: podinfo
+                      $patch: delete
+                    target:
+                      kind: HorizontalPodAutoscaler
+                      name: .*
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.prefix
+                toFieldPath: metadata.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-kustomization"
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.prefix
+                toFieldPath: spec.sourceRef.name
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "%s-oci-repository"
+              # Localization: rewrite the container image to the transferred OCI location
+              - type: CombineFromComposite
+                combine:
+                  variables:
+                    - fromFieldPath: status.imageRegistry
+                    - fromFieldPath: status.imageRepository
+                    - fromFieldPath: status.imageDigest
+                  strategy: string
+                  string:
+                    fmt: |
+                      - op: replace
+                        path: /spec/template/spec/containers/0/image
+                        value: %s/%s@%s
+                toFieldPath: spec.patches[0].patch
+              # Configuration: inject the PODINFO_UI_MESSAGE env var
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.podinfo.message
+                toFieldPath: spec.patches[1].patch
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: |
+                        - op: add
+                          path: /spec/template/spec/containers/0/env/-
+                          value:
+                            name: PODINFO_UI_MESSAGE
+                            value: %s
+          # ArgoCD delivery via Application from an OCI source, with localization and configuration
+          - name: argocdApplication
+            base:
+              apiVersion: argoproj.io/v1alpha1
+              kind: Application
+              metadata:
+                namespace: argocd
+                finalizers:
+                  - resources-finalizer.argocd.argoproj.io
+              spec:
+                project: default
+                source:
+                  path: "./"
+                  kustomize:
+                    patches:
+                      # Localization (filled from composite status)
+                      - patch: ""
+                        target:
+                          kind: Deployment
+                          name: podinfo
+                      # Configuration (filled from composite spec)
+                      - patch: ""
+                        target:
+                          kind: Deployment
+                          name: podinfo
+                      # e2e-test related patch to validate deployment
+                      - patch: |
+                          - op: replace
+                            path: /metadata/name
+                            value: kustomize-configuration-localization-crossplane-podinfo
+                          - op: add
+                            path: /spec/template/metadata/labels/app.kubernetes.io~1name
+                            value: kustomize-configuration-localization-crossplane-podinfo
+                        target:
+                          kind: Deployment
+                          name: podinfo
+                      # Delete podinfo's HPA. The e2e cluster has no metrics-server, so the HPA can never
+                      # become healthy.
+                      - patch: |
+                          apiVersion: autoscaling/v2
+                          kind: HorizontalPodAutoscaler
+                          metadata:
+                            name: podinfo
+                          $patch: delete
+                        target:
+                          kind: HorizontalPodAutoscaler
+                          name: podinfo
+                destination:
+                  server: https://kubernetes.default.svc
+                  namespace: default-argocd
+                syncPolicy:
+                  automated:
+                    prune: true
+                    selfHeal: true
+                  syncOptions:
+                    - CreateNamespace=true
+            readinessChecks:
+              - type: MatchString
+                fieldPath: status.health.status
+                matchString: Healthy
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.prefix
+                toFieldPath: metadata.name
+              - type: CombineFromComposite
+                combine:
+                  variables:
+                    - fromFieldPath: status.ociRegistry
+                    - fromFieldPath: status.ociRepository
+                  strategy: string
+                  string:
+                    fmt: "oci://%s/%s"
+                toFieldPath: spec.source.repoURL
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.ociDigest
+                toFieldPath: spec.source.targetRevision
+              # Localization: rewrite the container image to the transferred OCI location
+              - type: CombineFromComposite
+                combine:
+                  variables:
+                    - fromFieldPath: status.imageRegistry
+                    - fromFieldPath: status.imageRepository
+                    - fromFieldPath: status.imageDigest
+                  strategy: string
+                  string:
+                    fmt: '[{"op":"replace","path":"/spec/template/spec/containers/0/image","value":"%s/%s@%s"}]'
+                toFieldPath: spec.source.kustomize.patches[0].patch
+              # Configuration: inject the PODINFO_UI_MESSAGE env var
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.podinfo.message
+                toFieldPath: spec.source.kustomize.patches[1].patch
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: '[{"op":"add","path":"/spec/template/spec/containers/0/env/-","value":{"name":"PODINFO_UI_MESSAGE","value":"%s"}}]'
+    - step: auto-ready
+      functionRef:
+        name: crossplane-contrib-function-auto-ready
