@@ -159,11 +159,11 @@ func newReadOnlyChart(path, workingDir, tmpDirBase string) (result *ReadOnlyChar
 	}
 
 	// A chart packaged from a directory lives in tmpDir, outside the working directory.
-	getBlob := func(p string) (*filesystem.Blob, error) { return filesystem.GetBlobFromOSPath(p) }
-	if workingDir != "" && !fi.IsDir() {
-		getBlob = func(p string) (*filesystem.Blob, error) {
+	getBlob := func(p string) (*filesystem.Blob, error) {
+		if workingDir != "" && !fi.IsDir() {
 			return filesystem.GetBlobInWorkingDirectory(p, workingDir)
 		}
+		return filesystem.GetBlobFromOSPath(p)
 	}
 
 	// Now we know that the path refers to a valid Helm chart packaged as a tgz file. Thus returning its contents.
