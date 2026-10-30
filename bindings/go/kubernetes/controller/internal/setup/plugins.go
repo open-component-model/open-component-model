@@ -118,7 +118,7 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 		ocires.WithHTTPConfig(httpCfg),
 	)
 
-	helmDigestProcessor := helmdigest.NewDigestProcessor(options.TempDir)
+	helmDigestProcessor := helmdigest.NewDigestProcessor(options.TempDir, helmdigest.WithHTTPConfig(httpCfg))
 
 	if err := errors.Join(
 		pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider),

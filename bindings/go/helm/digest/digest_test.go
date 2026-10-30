@@ -2,6 +2,7 @@ package digest_test
 
 import (
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,7 @@ import (
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/helm/digest"
 	"ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -263,13 +265,13 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 	})
 }
 
-// A chart the index lists without digest is downloaded and hashed.
+// A chart the index lists without digest is downloaded and hashed. The HTTP configuration
+// applies to the index and the chart: the server's certificate is only trusted through it.
 func TestProcessResourceDigest_HTTPIndexWithoutDigest(t *testing.T) {
-	r := require.New(t)
 	tgz, err := os.ReadFile("../testdata/mychart-0.1.0.tgz")
-	r.NoError(err)
+	require.NoError(t, err)
 	var srv *httptest.Server
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+	srv = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		switch req.URL.Path {
 		case "/index.yaml":
 			_, _ = fmt.Fprintf(w, "apiVersion: v1\nentries:\n  mychart:\n    - urls: [%s/mychart-0.1.0.tgz]\n      name: mychart\n      version: 0.1.0\n      apiVersion: v2\n", srv.URL)
@@ -280,11 +282,30 @@ func TestProcessResourceDigest_HTTPIndexWithoutDigest(t *testing.T) {
 		}
 	}))
 	t.Cleanup(srv.Close)
+	trusted := &httpv1alpha1.Config{TLSConfig: httpv1alpha1.TLSConfig{
+		RootCAsPEM: string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})),
+	}}
 
-	result, err := digest.NewDigestProcessor(t.TempDir()).ProcessResourceDigest(t.Context(), helmAccessResource(t, srv.URL, "mychart:0.1.0"), nil)
-	r.NoError(err)
-	r.Equal(godigest.FromBytes(tgz).Encoded(), result.Digest.Value)
-	r.Equal("genericBlobDigest/v1", result.Digest.NormalisationAlgorithm)
+	for _, tc := range []struct {
+		name    string
+		opts    []digest.Option
+		wantErr string
+	}{
+		{name: "with the HTTP configuration", opts: []digest.Option{digest.WithHTTPConfig(trusted)}},
+		{name: "without it", wantErr: "certificate"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			result, err := digest.NewDigestProcessor(t.TempDir(), tc.opts...).ProcessResourceDigest(t.Context(), helmAccessResource(t, srv.URL, "mychart:0.1.0"), nil)
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.Equal(godigest.FromBytes(tgz).Encoded(), result.Digest.Value)
+			r.Equal("genericBlobDigest/v1", result.Digest.NormalisationAlgorithm)
+		})
+	}
 }
 
 func TestProcessResourceDigest_RealRepo(t *testing.T) {

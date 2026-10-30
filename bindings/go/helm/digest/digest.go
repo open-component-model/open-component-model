@@ -18,6 +18,7 @@ import (
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	helmcreds "ocm.software/open-component-model/bindings/go/helm/spec/credentials"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
@@ -36,12 +37,26 @@ var _ digestprocessor.BuiltinDigestProcessorPlugin = (*DigestProcessor)(nil)
 // For OCI repositories it resolves the OCI manifest digest.
 type DigestProcessor struct {
 	tempFolder string
+	httpConfig *httpv1alpha1.Config
+}
+
+// Option configures a [DigestProcessor].
+type Option func(*DigestProcessor)
+
+// WithHTTPConfig sets the HTTP client configuration for every request the processor
+// makes: OCI manifest resolution, repository index and chart downloads.
+func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
+	return func(p *DigestProcessor) { p.httpConfig = cfg }
 }
 
 // NewDigestProcessor creates a new Helm digest processor.
 // tempFolder specifies a base directory for temporary files; if empty, os.TempDir() is used.
-func NewDigestProcessor(tempFolder string) *DigestProcessor {
-	return &DigestProcessor{tempFolder: tempFolder}
+func NewDigestProcessor(tempFolder string, opts ...Option) *DigestProcessor {
+	p := &DigestProcessor{tempFolder: tempFolder}
+	for _, opt := range opts {
+		opt(p)
+	}
+	return p
 }
 
 func (p *DigestProcessor) GetResourceRepositoryScheme() *ocmruntime.Scheme {
@@ -101,7 +116,7 @@ func (p *DigestProcessor) ProcessResourceDigest(
 		if ref, err = helm.ChartReference(); err != nil {
 			return nil, fmt.Errorf("error constructing chart reference: %w", err)
 		}
-		resolvedDigest, err = download.ResolveOCIManifestDigest(ctx, ref, ociCreds, nil)
+		resolvedDigest, err = download.ResolveOCIManifestDigest(ctx, ref, ociCreds, p.httpConfig)
 	} else {
 		var helmCreds *helmcredsv1.HelmHTTPCredentials
 		if credentials != nil {
@@ -161,7 +176,11 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 		entry.KeyFile = credentials.KeyFile
 	}
 
-	chartRepo, err := repo.NewChartRepository(entry, download.GetterProviders(nil, download.HTTPConfigGetterOpts{}))
+	providers, err := download.IndexGetterProviders(helm.HelmRepository, credentials, p.httpConfig)
+	if err != nil {
+		return "", fmt.Errorf("error creating helm repository client: %w", err)
+	}
+	chartRepo, err := repo.NewChartRepository(entry, providers)
 	if err != nil {
 		return "", fmt.Errorf("error creating chart repository: %w", err)
 	}
@@ -227,6 +246,9 @@ func (p *DigestProcessor) downloadChartDigest(ctx context.Context, helm helmv1.H
 	var opts []download.Option
 	if credentials != nil {
 		opts = append(opts, download.WithCredentials(credentials))
+	}
+	if p.httpConfig != nil {
+		opts = append(opts, download.WithHTTPConfig(p.httpConfig))
 	}
 	chart, err := download.NewReadOnlyChartFromRemote(ctx, ref, dir, opts...)
 	if err != nil {

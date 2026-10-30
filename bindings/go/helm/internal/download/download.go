@@ -426,6 +426,27 @@ func GetterProviders(client *http.Client, opts HTTPConfigGetterOpts) getter.Prov
 	return providers
 }
 
+// IndexGetterProviders returns the getter providers that fetch the index of the HTTP/S
+// repository helmRepo with httpConfig and credentials, as chart downloads do. Without
+// httpConfig the default Helm client is used.
+func IndexGetterProviders(helmRepo string, credentials *helmcredsv1.HelmHTTPCredentials, httpConfig *httpv1alpha1.Config) (getter.Providers, error) {
+	if httpConfig == nil {
+		return GetterProviders(nil, HTTPConfigGetterOpts{}), nil
+	}
+	if credentials == nil {
+		credentials = &helmcredsv1.HelmHTTPCredentials{}
+	}
+	_, indexClient, _, err := newClients(&option{Credentials: credentials, HTTPConfig: httpConfig}, "", credentials.Username, credentials.Password)
+	if err != nil {
+		return nil, err
+	}
+	return GetterProviders(indexClient, HTTPConfigGetterOpts{
+		username: credentials.Username,
+		password: credentials.Password,
+		baseURL:  helmRepo,
+	}), nil
+}
+
 // getVersion determines the version of the chart to download based on the provided version override and the helm repository URL.
 // We don't let helm download decide on the version of the chart. Version, either through ref or through
 // the spec.Version field always MUST be defined. This is only true for OCI repositories.
