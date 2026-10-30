@@ -375,15 +375,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 			matchedResource, err = ocm.VerifyResource(ctx, pm, matchedResource, cfg)
 		}
 		if err != nil {
-			if errors.Is(err, ocm.ErrPluginNotFound) {
-				// TODO(@frewilhelm): For now we skip resource types that do not have a digest processor plugin.
-				//                    We need to adjust this when the plugins are available
-				logger.V(1).Info("skipping resource verification as no suitable plugin was found")
-			} else {
-				status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
+			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
 
-				return ctrl.Result{}, fmt.Errorf("failed to verify resource: %w", err)
-			}
+			return ctrl.Result{}, fmt.Errorf("failed to verify resource: %w", err)
 		}
 	} else {
 		logger.V(1).Info("skip verifying resource: verification policy is Never")

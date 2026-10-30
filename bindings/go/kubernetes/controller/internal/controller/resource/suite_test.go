@@ -19,6 +19,7 @@ import (
 	metricserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
@@ -122,6 +123,7 @@ var _ = BeforeSuite(func() {
 	ociResourceRepoPlugin := ocires.NewResourceRepository(&filesystemv1alpha1.Config{})
 	Expect(pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(ociResourceRepoPlugin)).To(Succeed())
 	Expect(pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(ociResourceRepoPlugin)).To(Succeed())
+	Expect(pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(helmdigest.NewDigestProcessor(GinkgoT().TempDir()))).To(Succeed())
 
 	resolutionLogger := logf.Log.WithName("resolution")
 	resolver := resolution.NewResolver(&resolutionLogger)

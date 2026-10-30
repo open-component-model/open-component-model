@@ -26,7 +26,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-var _ = Describe("Resource Controller local resource verification", func() {
+var _ = Describe("Resource Controller verification", func() {
 	// A local blob is checked against the digest the repository stores it under, so a
 	// descriptor recording another digest fails without the blob being downloaded.
 	DescribeTable("verifies a local blob against its descriptor digest",
@@ -105,4 +105,55 @@ var _ = Describe("Resource Controller local resource verification", func() {
 		Entry("the recorded digest", false),
 		Entry("another recorded digest", true),
 	)
+
+	// Without a digest processor for its access type a resource cannot be verified, so it
+	// fails unless verification is skipped.
+	It("fails a resource that cannot be verified", func(ctx SpecContext) {
+		componentName := "ocm.software/unverifiable"
+		namespace := test.NamespaceForTest(ctx)
+		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
+
+		_, specData := test.SetupCTFComponentVersionRepository(ctx, GinkgoT().TempDir(), []*descruntime.Descriptor{{
+			Meta: descruntime.Meta{Version: "v2"},
+			Component: descruntime.Component{
+				ComponentMeta: descruntime.ComponentMeta{ObjectMeta: descruntime.ObjectMeta{Name: componentName, Version: "v1.0.0"}},
+				Provider:      descruntime.Provider{Name: "ocm.software"},
+				Resources: []descruntime.Resource{{
+					ElementMeta: descruntime.ElementMeta{ObjectMeta: descruntime.ObjectMeta{Name: "source", Version: "v1.0.0"}},
+					Type:        "blob",
+					Relation:    descruntime.ExternalRelation,
+					Access: &runtime.Raw{
+						Type: runtime.Type{Name: "git", Version: "v1"},
+						Data: []byte(`{"type":"git/v1","repository":"https://github.com/open-component-model/ocm-k8s-toolkit","ref":"refs/heads/main"}`),
+					},
+				}},
+			},
+		}})
+
+		componentObj := test.MockComponent(ctx, "unverifiable", namespace.GetName(), &test.MockComponentOptions{
+			Client:   k8sClient,
+			Recorder: recorder,
+			Info: v1alpha1.ComponentInfo{
+				Component:      componentName,
+				Version:        "v1.0.0",
+				RepositorySpec: &apiextensionsv1.JSON{Raw: specData},
+			},
+			Repository: "ocm.software/test-repository",
+		})
+		DeferCleanup(func(ctx SpecContext) { test.DeleteObject(ctx, k8sClient, componentObj) })
+
+		resourceObj := &v1alpha1.Resource{
+			ObjectMeta: metav1.ObjectMeta{Name: "unverifiable", Namespace: namespace.GetName()},
+			Spec: v1alpha1.ResourceSpec{
+				ComponentRef: corev1.LocalObjectReference{Name: componentObj.GetName()},
+				Resource: v1alpha1.ResourceID{
+					ByReference: v1alpha1.ResourceReference{Resource: runtime.Identity{"name": "source"}},
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
+		DeferCleanup(func(ctx SpecContext) { test.DeleteObject(ctx, k8sClient, resourceObj) })
+
+		test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, resourceObj, v1alpha1.GetOCMResourceFailedReason, "cannot be verified")
+	})
 })

@@ -22,6 +22,9 @@ spec:
             byReference:
               resource:
                 name: kustomize-resource
+          # The controller has no digest processor for gitHub accesses; Flux fetches the
+          # pinned commit below, which binds the content.
+          verificationPolicy: Never
           additionalStatusFields:
             gitRepoURL: resource.access.repoUrl
             gitCommit: resource.access.commit

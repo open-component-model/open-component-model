@@ -15,8 +15,8 @@ type VerificationPolicy string
 const (
 	// VerificationPolicyAlways verifies the resource digest. Content is checked against what it is
 	// addressed by where possible (an OCI manifest, the digest a local blob is stored under, a Helm
-	// repository index) and only downloaded otherwise. If no suitable plugin is found, we only log
-	// this because the operator cannot resolve this
+	// repository index) and only downloaded otherwise. A resource that cannot be verified, because
+	// no digest processor supports its access type, fails.
 	VerificationPolicyAlways VerificationPolicy = "Always"
 	// VerificationPolicyNever skips resource digest verification unconditionally.
 	VerificationPolicyNever VerificationPolicy = "Never"
@@ -39,7 +39,7 @@ type ResourceSpec struct {
 
 	// VerificationPolicy controls when resource digest verification is performed.
 	// Always (default): verify the resource digest, downloading the content only if it cannot be
-	// checked against what it is addressed by; if no processor plugin is found, log and continue.
+	// checked against what it is addressed by; a resource that cannot be verified fails.
 	// Never: skip verification unconditionally.
 	// +kubebuilder:validation:Enum:="Always";"Never"
 	// +kubebuilder:default:="Always"

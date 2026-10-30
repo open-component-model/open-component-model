@@ -163,7 +163,7 @@ spec:
                 description: |-
                   VerificationPolicy controls when resource digest verification is performed.
                   Always (default): verify the resource digest, downloading the content only if it cannot be
-                  checked against what it is addressed by; if no processor plugin is found, log and continue.
+                  checked against what it is addressed by; a resource that cannot be verified fails.
                   Never: skip verification unconditionally.
                 enum:
                 - Always

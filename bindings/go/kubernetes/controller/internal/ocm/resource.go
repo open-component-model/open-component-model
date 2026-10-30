@@ -19,8 +19,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-var ErrPluginNotFound = errors.New("digest processor plugin not found")
-
 // IsLocalResource reports whether res is stored with its component version and is read
 // through the component version repository.
 func IsLocalResource(res *descriptor.Resource) bool {
@@ -53,10 +51,8 @@ func VerifyResource(ctx context.Context, pm *manager.PluginManager, resource *de
 
 	digestProcessor, err := pm.DigestProcessorRegistry.GetPlugin(ctx, resource.Access)
 	if err != nil {
-		// Return the resource along with the error to allow further handling if needed
-		// (Currently, we just log the error and continue without digest verification because some resources may not
-		// have digest processors yet)
-		return resource, errors.Join(ErrPluginNotFound, err)
+		return nil, fmt.Errorf("resource %q of access type %s cannot be verified, set verificationPolicy Never to skip verification: %w",
+			resource.Name, resource.Access.GetType(), err)
 	}
 
 	var creds runtime.Typed
