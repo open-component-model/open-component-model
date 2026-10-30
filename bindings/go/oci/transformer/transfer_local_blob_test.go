@@ -2,22 +2,17 @@ package transformer
 
 import (
 	"bytes"
-	"context"
-	"errors"
 	"io"
 	"testing"
 
-	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ctfspec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -115,77 +110,4 @@ func testTransferCTFLocalBlobToCTFLocalBlob(t *testing.T, sameArchive bool) {
 	data, err := io.ReadAll(rc)
 	r.NoError(err)
 	r.Equal(content, data)
-}
-
-// closingBlob is a source blob that owns a resource, such as the temporary file behind a
-// downloaded resource, and must be closed by its holder.
-type closingBlob struct {
-	blob.ReadOnlyBlob
-	closed bool
-}
-
-func (b *closingBlob) Close() error { b.closed = true; return nil }
-
-// failingTargetRepository serves a fixed local blob and rejects every add before reading it.
-type failingTargetRepository struct {
-	repository.ComponentVersionRepository
-	content  blob.ReadOnlyBlob
-	resource *descriptor.Resource
-}
-
-func (r *failingTargetRepository) GetLocalResource(context.Context, string, string, runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
-	return r.content, r.resource, nil
-}
-
-func (r *failingTargetRepository) AddLocalResource(context.Context, string, string, *descriptor.Resource, blob.ReadOnlyBlob) (*descriptor.Resource, error) {
-	return nil, errors.New("target unavailable")
-}
-
-type staticRepositoryProvider struct {
-	repository.ComponentVersionRepositoryProvider
-	repo repository.ComponentVersionRepository
-}
-
-func (p *staticRepositoryProvider) GetComponentVersionRepository(context.Context, runtime.Typed, runtime.Typed) (repository.ComponentVersionRepository, error) {
-	return p.repo, nil
-}
-
-// TestTransferLocalBlob_ReleasesSourceOnTargetFailure checks that a source blob owning a
-// resource is closed when the target fails before consuming it.
-func TestTransferLocalBlob_ReleasesSourceOnTargetFailure(t *testing.T) {
-	r := require.New(t)
-	data := []byte("source body")
-	source := &closingBlob{ReadOnlyBlob: inmemory.New(bytes.NewReader(data))}
-	d := digest.FromBytes(data)
-	repo := &failingTargetRepository{
-		content: source,
-		resource: &descriptor.Resource{
-			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "payload", Version: "1.0.0"}},
-			Type:        "plainText",
-			Relation:    descriptor.LocalRelation,
-			Access: &v2.LocalBlob{
-				Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
-				LocalReference: d.String(),
-				MediaType:      "text/plain",
-			},
-		},
-	}
-	spec := ctfspec.Repository{Type: runtime.NewVersionedType(ctfspec.Type, ctfspec.Version), FilePath: t.TempDir()}
-	scheme := runtime.NewScheme()
-	scheme.MustRegisterScheme(v1alpha1.Scheme)
-
-	_, err := (&TransferLocalBlob{Scheme: scheme, RepoProvider: &staticRepositoryProvider{repo: repo}}).Transform(t.Context(), &v1alpha1.TransferCTFLocalBlobToCTFLocalBlob{
-		Type: v1alpha1.TransferCTFLocalBlobToCTFLocalBlobV1alpha1,
-		Spec: &v1alpha1.TransferCTFLocalBlobToCTFLocalBlobSpec{
-			Source: v1alpha1.CTFLocalBlobSource{
-				Repository:       spec,
-				Component:        "example.org/c",
-				Version:          "1.0.0",
-				ResourceIdentity: runtime.Identity{"name": "payload"},
-			},
-			Repository: spec,
-		},
-	})
-	r.ErrorContains(err, "target unavailable")
-	r.True(source.closed, "source blob must be closed when the target fails before reading it")
 }

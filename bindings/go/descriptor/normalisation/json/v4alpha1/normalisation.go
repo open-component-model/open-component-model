@@ -1,19 +1,10 @@
 package v4alpha1
 
 import (
-	"encoding/json"
-
 	norms "ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/engine/jcs"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/internal/common"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/runtime"
-)
-
-// Constants for "none" access types.
-const (
-	NoneType       = "none"
-	NoneLegacyType = "None"
 )
 
 // Algorithm is the registered name for this normalisation algorithm.
@@ -47,14 +38,14 @@ var ExclusionRules = jcs.MapExcludes{
 	"component": jcs.MapExcludes{
 		"repositoryContexts": nil,
 		"provider": jcs.MapValue{
-			Mapping: ProviderAsMap,
+			Mapping: common.ProviderAsMap,
 			Continue: jcs.MapExcludes{
 				"labels": LabelExcludes,
 			},
 		},
 		"labels": LabelExcludes,
 		"resources": jcs.DynamicArrayExcludes{
-			ValueMapper: MapResourcesWithNoneAccess,
+			ValueMapper: common.MapResourcesWithNoneAccess,
 			Continue: jcs.MapExcludes{
 				"access":  nil,
 				"srcRefs": nil,
@@ -75,8 +66,8 @@ var ExclusionRules = jcs.MapExcludes{
 		// jsonNormalisation/v1), exclude ONLY label.version here to keep v4alpha1
 		// byte-stable; do NOT apply the full LabelExcludes, which would also drop
 		// non-signing reference labels and change existing digests. Proper
-		// signing-only filtering for reference labels is a deliberate v4alpha1
-		// change deferred to v4alpha2.
+		// signing-only filtering for reference labels is a deliberate change
+		// shipped in jsonNormalisation/v4alpha3.
 		"componentReferences": jcs.ArrayExcludes{
 			Continue: jcs.MapExcludes{
 				"labels": jcs.ArrayExcludes{
@@ -100,10 +91,11 @@ var ExclusionRules = jcs.MapExcludes{
 // because the field was always empty across the conversion. Including it here
 // would silently change v4alpha1 digests and break existing signatures over
 // versioned signing labels. Keep v4alpha1 byte-stable; signing label version is
-// a deliberate, versioned change (see jsonNormalisation/v1 for that behaviour).
+// a deliberate, versioned change (see jsonNormalisation/v1 and
+// jsonNormalisation/v4alpha2 and v4alpha3 for that behaviour).
 var LabelExcludes = jcs.ExcludeEmpty{
 	TransformationRules: jcs.DynamicArrayExcludes{
-		ValueChecker: IgnoreLabelsWithoutSignature,
+		ValueChecker: common.IgnoreLabelsWithoutSignature,
 		Continue: jcs.MapIncludes{
 			"name":    jcs.NoExcludes{},
 			"value":   jcs.NoExcludes{},
@@ -124,9 +116,8 @@ func init() {
 // JSON format.
 type algo struct{}
 
-// Normalise performs normalisation on the given descriptor using the default type and exclusion rules.
-// It converts the descriptor to v2 format, applies default values, and then normalizes
-// the JSON representation using the JCS (JSON Canonicalization Scheme) algorithm.
+// Normalise performs normalisation on the given descriptor using the default
+// type and v4alpha1 exclusion rules, delegating to the shared v4-family body.
 //
 // Parameters:
 //   - cd: The component descriptor to normalize
@@ -135,104 +126,5 @@ type algo struct{}
 //   - []byte: The normalized JSON representation of the descriptor
 //   - error: Any error that occurred during normalization
 func (m algo) Normalise(cd *descruntime.Descriptor) ([]byte, error) {
-	scheme := runtime.NewScheme(runtime.WithAllowUnknown())
-	desc, err := descruntime.ConvertToV2(scheme, cd)
-	if err != nil {
-		return nil, err
-	}
-	DefaultComponent(desc)
-	return jcs.Normalise(desc, ExclusionRules)
-}
-
-// DefaultComponent sets default values for various fields in the v2 descriptor
-// if they are not already set. This ensures consistent normalization output
-// regardless of whether optional fields are present in the input.
-//
-// Parameters:
-//   - d: The v2 descriptor to set defaults for
-func DefaultComponent(d *v2.Descriptor) {
-	if d.Component.RepositoryContexts == nil {
-		d.Component.RepositoryContexts = make([]*runtime.Raw, 0)
-	}
-	if d.Component.References == nil {
-		d.Component.References = make([]v2.Reference, 0)
-	}
-	if d.Component.Sources == nil {
-		d.Component.Sources = make([]v2.Source, 0)
-	}
-	if d.Component.Resources == nil {
-		d.Component.Resources = make([]v2.Resource, 0)
-	}
-}
-
-// ProviderAsMap converts a provider string into a map structure if possible.
-// This function is used during normalization to handle provider information
-// in a standardized way.
-// ProviderAsMap tries to parse a JSON-encoded provider string into a map.
-func ProviderAsMap(v any) any {
-	var provider map[string]any
-
-	switch v := v.(type) {
-	case []byte:
-		if err := json.Unmarshal(v, &provider); err == nil {
-			return provider
-		}
-	case string:
-		if err := json.Unmarshal([]byte(v), &provider); err == nil {
-			return provider
-		}
-	}
-
-	return map[string]any{
-		"name": v,
-	}
-}
-
-// IgnoreLabelsWithoutSignature checks if a label lacks a valid signature and should be ignored.
-// Returns true if the label should be excluded from normalization.
-func IgnoreLabelsWithoutSignature(v interface{}) bool {
-	if m, ok := v.(map[string]interface{}); ok {
-		if sig, ok := m["signing"]; ok && sig != nil {
-			return sig != "true" && sig != true
-		}
-	}
-	return true
-}
-
-// MapResourcesWithNoneAccess maps resources with "none" access, removing the digest.
-// This is used to handle special cases where resources with no access type
-// should have their digest removed during normalization.
-func MapResourcesWithNoneAccess(v interface{}) interface{} {
-	return MapResourcesWithAccessType(
-		IsNoneAccessKind,
-		func(v interface{}) interface{} {
-			m := v.(map[string]interface{})
-			delete(m, "digest")
-			return m
-		},
-		v,
-	)
-}
-
-// MapResourcesWithAccessType applies a mapper function if the access type matches.
-// This is used to transform resources based on their access type.
-func MapResourcesWithAccessType(test func(string) bool, mapper func(interface{}) interface{}, v interface{}) interface{} {
-	access, ok := v.(map[string]interface{})["access"]
-	if !ok || access == nil {
-		return v
-	}
-	typ, ok := access.(map[string]interface{})["type"]
-	if !ok || typ == nil {
-		return v
-	}
-	if s, ok := typ.(string); ok && test(s) {
-		return mapper(v)
-	}
-	return v
-}
-
-// IsNoneAccessKind checks if the given access type is "none".
-// Supports both current and legacy access type values.
-func IsNoneAccessKind(kind string) bool {
-	return kind == NoneType || kind == NoneLegacyType
+	return common.Normalise(cd, ExclusionRules)
 }

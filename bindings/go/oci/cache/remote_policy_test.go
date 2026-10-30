@@ -2,9 +2,11 @@ package cache
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -17,18 +19,31 @@ import (
 
 // ---- Options validation ----
 
-func TestOptions_DefaultPolicyIsAlways(t *testing.T) {
-	assert.Equal(t, RemotePolicyAlways, Defaults().RemotePolicy)
+func TestOptions_DefaultPolicyIsIfNotPresent(t *testing.T) {
+	assert.Equal(t, RemotePolicyIfNotPresent, Defaults().RemotePolicy)
+}
+
+func TestOptions_DefaultLimitsPerCache(t *testing.T) {
+	r := require.New(t)
+
+	blobs, err := NewBlobCache(Options{Dir: t.TempDir()})
+	r.NoError(err)
+	r.Equal(DefaultBlobMaxEntries, blobs.opts.MaxEntries)
+	r.EqualValues(DefaultMaxBlobSize, blobs.MaxBlobSize())
+
+	refs, err := NewReferenceCache(Options{Dir: t.TempDir()})
+	r.NoError(err)
+	r.Equal(DefaultReferenceMaxEntries, refs.opts.MaxEntries)
 }
 
 func TestOptions_ExplicitAlwaysAccepted(t *testing.T) {
-	opts, err := Options{Dir: t.TempDir(), RemotePolicy: RemotePolicyAlways}.applyDefaults()
+	opts, err := Options{Dir: t.TempDir(), RemotePolicy: RemotePolicyAlways}.applyDefaults(DefaultBlobMaxEntries)
 	require.NoError(t, err)
 	assert.Equal(t, RemotePolicyAlways, opts.RemotePolicy)
 }
 
 func TestOptions_InvalidPolicyRejected(t *testing.T) {
-	_, err := Options{Dir: t.TempDir(), RemotePolicy: "Never"}.applyDefaults()
+	_, err := Options{Dir: t.TempDir(), RemotePolicy: "Never"}.applyDefaults(DefaultBlobMaxEntries)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported RemotePolicy")
 }
@@ -67,7 +82,7 @@ func TestBlobCache_Always_ExistsCalledOnHit(t *testing.T) {
 	assert.Equal(t, manifest, readAllAndClose(t, rc2))
 
 	assert.EqualValues(t, 1, base.fetches.Load(), "fetches")
-	assert.EqualValues(t, 1, base.exists.Load(), "exists must be called on cache hit with Always")
+	assert.EqualValues(t, 1, base.exists.Load(), "the miss proves access through its own fetch, only the hit calls exists")
 }
 
 func TestBlobCache_Always_ExistsDeniedReturnsError(t *testing.T) {
@@ -86,6 +101,37 @@ func TestBlobCache_Always_ExistsDeniedReturnsError(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "remote does not contain")
 	assert.EqualValues(t, 1, base.exists.Load())
+}
+
+func TestBlobCache_Always_MissesAreNotCollapsed(t *testing.T) {
+	r := require.New(t)
+	c := newTestCache(t, Options{RemotePolicy: RemotePolicyAlways})
+	base := newFakeReadOnly()
+	manifest := []byte(`{"schemaVersion":2}`)
+	desc := base.put(ociImageSpecV1.MediaTypeImageManifest, manifest)
+	allowed := newGated(base, 1)
+	denied := newFakeReadOnly()
+
+	allowedErr := make(chan error, 1)
+	go func() {
+		rc, err := c.Fetch(t.Context(), allowed, desc)
+		if err == nil {
+			assert.Equal(t, manifest, readAllAndClose(t, rc))
+		}
+		allowedErr <- err
+	}()
+	allowed.waitBlocked(t, 1)
+
+	// The denied caller fails on its own fetch while the allowed caller's fetch is still in flight.
+	_, err := c.Fetch(t.Context(), denied, desc)
+	r.Error(err)
+	r.EqualValues(1, denied.fetches.Load(), "the denied caller must fetch with its own upstream")
+	r.Zero(denied.exists.Load())
+
+	close(allowed.release)
+	r.NoError(<-allowedErr)
+	r.EqualValues(1, base.fetches.Load())
+	r.Zero(base.exists.Load(), "a miss proves access through its own fetch")
 }
 
 // ---- ReferenceCache remote policy ----
@@ -157,6 +203,43 @@ func TestReferenceCache_Always_AlwaysCallsUpstream(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.EqualValues(t, 2, resolves.Load(), "Always must call upstream on every resolve")
+}
+
+func TestReferenceCache_Always_ConcurrentCallersResolveIndependently(t *testing.T) {
+	r := require.New(t)
+	c := newTestRefCache(t, Options{RemotePolicy: RemotePolicyAlways})
+
+	desc := ociImageSpecV1.Descriptor{MediaType: ociImageSpecV1.MediaTypeImageManifest, Size: 1}
+	ref, err := registry.ParseReference("ghcr.io/owner/repo:v1")
+	r.NoError(err)
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	allowed := resolverFn(func(_ context.Context, _ string) (ociImageSpecV1.Descriptor, error) {
+		close(started)
+		<-release
+		return desc, nil
+	})
+	denied := resolverFn(func(_ context.Context, _ string) (ociImageSpecV1.Descriptor, error) {
+		return ociImageSpecV1.Descriptor{}, errors.New("access denied")
+	})
+
+	go func() { _, _ = c.Resolve(t.Context(), allowed, ref) }()
+	<-started
+
+	deniedErr := make(chan error, 1)
+	go func() {
+		_, err := c.Resolve(t.Context(), denied, ref)
+		deniedErr <- err
+	}()
+
+	select {
+	case err := <-deniedErr:
+		r.ErrorContains(err, "access denied")
+	case <-time.After(5 * time.Second):
+		t.Fatal("denied caller waited on another caller's in-flight resolve")
+	}
 }
 
 // ---- Provider scope ----

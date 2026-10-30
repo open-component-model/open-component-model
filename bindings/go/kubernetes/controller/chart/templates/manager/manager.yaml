@@ -60,23 +60,23 @@ spec:
                     {{- end }}
                     {{- /* Concurrency */}}
                     {{- with .Values.manager.concurrency }}
+                    {{- if .repository }}
+                    - --repository-controller-concurrency={{ .repository }}
+                    {{- end }}
+                    {{- if .component }}
+                    - --component-controller-concurrency={{ .component }}
+                    {{- end }}
                     {{- if .resource }}
                     - --resource-controller-concurrency={{ .resource }}
                     {{- end }}
+                    {{- if .deployer }}
+                    - --deployer-controller-concurrency={{ .deployer }}
                     {{- end }}
-                    {{- /* Resolver */}}
-                    {{- with .Values.manager.resolver }}
-                    {{- if .workerCount }}
-                    - --resolver-worker-count={{ .workerCount }}
+                    {{- if .replication }}
+                    - --replication-controller-concurrency={{ .replication }}
                     {{- end }}
-                    {{- if .workerQueueLength }}
-                    - --resolver-worker-queue-length={{ .workerQueueLength }}
-                    {{- end }}
-                    {{- if hasKey . "subscriberBufferSize" }}
-                    - --resolver-subscriber-buffer-size={{ .subscriberBufferSize }}
-                    {{- end }}
-                    {{- if hasKey . "cacheTTL" }}
-                    - --resolver-cache-ttl={{ .cacheTTL }}
+                    {{- if .discovery }}
+                    - --discovery-controller-concurrency={{ .discovery }}
                     {{- end }}
                     {{- end }}
                     {{- /* Rate limiter */}}

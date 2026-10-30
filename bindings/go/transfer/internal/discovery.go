@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/algorithms"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
@@ -183,6 +184,11 @@ type discoverer struct {
 //     be resolved by the caller via an explicit Mapping for that component.
 func (d *discoverer) Discover(ctx context.Context, parent *discoveryValue) ([]string, error) {
 	if d.recursive == transferv1alpha1.RecursiveNone {
+		// The references are not followed, but a non-default reference digest of a
+		// transferred component version is still worth a warning.
+		for _, ref := range parent.Descriptor.Component.References {
+			warnNonDefaultReferenceDigest(ctx, parent, ref)
+		}
 		return nil, nil
 	}
 
@@ -204,6 +210,7 @@ func (d *discoverer) Discover(ctx context.Context, parent *discoveryValue) ([]st
 		slog.DebugContext(ctx, "discovered child reference",
 			"parent", parentKey, "child", key,
 			"hasDigest", ref.Digest.Value != "")
+		warnNonDefaultReferenceDigest(ctx, parent, ref)
 
 		// Record expected digest for later verification during resolution.
 		if ref.Digest.Value != "" {
@@ -252,6 +259,13 @@ func (d *discoverer) Discover(ctx context.Context, parent *discoveryValue) ([]st
 		children = append(children, key)
 	}
 	return children, nil
+}
+
+// warnNonDefaultReferenceDigest warns if a reference of parent does not use the
+// default normalisation, see [algorithms.LogNonDefaultReferenceDigest].
+func warnNonDefaultReferenceDigest(ctx context.Context, parent *discoveryValue, ref descriptor.Reference) {
+	algorithms.LogNonDefaultReferenceDigest(ctx, slog.Default(), slog.LevelWarn, ref.Digest,
+		"component", parent.Descriptor.Component.ToIdentity().String(), "reference", ref.ToIdentity().String())
 }
 
 // identityToTransformationID derives a stable, opaque transformation ID from a component or

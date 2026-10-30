@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -61,9 +62,9 @@ components:
 		res := desc.Component.Resources[0]
 		r.Equal("remote-blob", res.Name)
 
-		data, ok := repo.localResourceData(res)
+		data, ok := repo.localResource(res)
 		r.True(ok, "resource must be stored as a local blob")
-		r.Equal(content, readAll(t, data))
+		r.Equal(content, data)
 	})
 }
 
@@ -89,16 +90,6 @@ func constructWget(t *testing.T, yamlData string) *inMemoryTargetRepository {
 	return repo
 }
 
-func readAll(t *testing.T, b blob.ReadOnlyBlob) []byte {
-	t.Helper()
-	rc, err := b.ReadCloser()
-	require.NoError(t, err)
-	defer func() { require.NoError(t, rc.Close()) }()
-	data, err := io.ReadAll(rc)
-	require.NoError(t, err)
-	return data
-}
-
 // wgetInputProvider resolves every resource input to the wget input method.
 type wgetInputProvider struct{}
 
@@ -120,20 +111,20 @@ func (p inMemoryTargetProvider) GetTargetRepository(_ context.Context, _ *constr
 type inMemoryTargetRepository struct {
 	mu                sync.Mutex
 	components        map[string]*descriptor.Descriptor
-	localResourceBlob map[string]blob.ReadOnlyBlob
+	localResourceData map[string][]byte
 }
 
 func newInMemoryTargetRepository() *inMemoryTargetRepository {
 	return &inMemoryTargetRepository{
 		components:        make(map[string]*descriptor.Descriptor),
-		localResourceBlob: make(map[string]blob.ReadOnlyBlob),
+		localResourceData: make(map[string][]byte),
 	}
 }
 
-func (m *inMemoryTargetRepository) localResourceData(res descriptor.Resource) (blob.ReadOnlyBlob, bool) {
+func (m *inMemoryTargetRepository) localResource(res descriptor.Resource) ([]byte, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	data, ok := m.localResourceBlob[res.ToIdentity().String()]
+	data, ok := m.localResourceData[res.ToIdentity().String()]
 	return data, ok
 }
 
@@ -146,10 +137,20 @@ func (m *inMemoryTargetRepository) GetComponentVersion(_ context.Context, name, 
 	return nil, fmt.Errorf("component version %q not found: %w", name+":"+version, repository.ErrNotFound)
 }
 
-func (m *inMemoryTargetRepository) AddLocalResource(_ context.Context, _, _ string, resource *descriptor.Resource, data blob.ReadOnlyBlob) (*descriptor.Resource, error) {
+// AddLocalResource consumes the blob during the call, like a real repository: the
+// input method's blob streams a response bound to the construction context.
+func (m *inMemoryTargetRepository) AddLocalResource(_ context.Context, _, _ string, resource *descriptor.Resource, b blob.ReadOnlyBlob) (*descriptor.Resource, error) {
+	rc, err := b.ReadCloser()
+	if err != nil {
+		return nil, err
+	}
+	data, readErr := io.ReadAll(rc)
+	if err := errors.Join(readErr, rc.Close()); err != nil {
+		return nil, err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.localResourceBlob[resource.ToIdentity().String()] = data
+	m.localResourceData[resource.ToIdentity().String()] = data
 	return resource, nil
 }
 

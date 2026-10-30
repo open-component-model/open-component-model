@@ -16,6 +16,7 @@
 @import "landing-ord"; // Landing page & footer
 @import "changelog"; // Changelog version list
 @import "../components/schema-renderer"; // Schema renderer (Preact)
+@import "../components/slides"; // Slide deck viewer
 
 // Note: Dart Sass compatibility fixes for the theme's search form @extend
 // rules are applied via assets/scss/components/_forms.scss (overrides

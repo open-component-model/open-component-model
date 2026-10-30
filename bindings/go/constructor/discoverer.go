@@ -4,13 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/constructor/internal/log"
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/algorithms"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -55,12 +58,20 @@ func (d *resolverAndDiscoverer) Discover(ctx context.Context, component *Constru
 		children := make([]string, len(component.ConstructorComponent.References))
 		for index, ref := range component.ConstructorComponent.References {
 			children[index] = ref.ToComponentIdentity().String()
+			// A reference without a digest is minted with the default.
+			if ref.Digest != nil {
+				algorithms.LogNonDefaultReferenceDigest(ctx, log.Base(), slog.LevelWarn, constructor.ConvertToDescriptorReference(&ref).Digest, "component", component.ConstructorComponent.ToIdentity().String(), "reference", ref.ToIdentity().String())
+			}
 		}
 		return children, nil
 	case component.ExternalComponent != nil:
 		children := make([]string, len(component.ExternalComponent.Component.References))
 		for index, ref := range component.ExternalComponent.Component.References {
 			children[index] = ref.ToComponentIdentity().String()
+			// Published by someone else: the user cannot change it, and it does
+			// not affect the digest of the component version being built.
+			algorithms.LogNonDefaultReferenceDigest(ctx, log.Base(), slog.LevelDebug, ref.Digest,
+				"component", component.ExternalComponent.Component.ToIdentity().String(), "reference", ref.ToIdentity().String())
 		}
 		return children, nil
 	}
