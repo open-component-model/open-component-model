@@ -102,18 +102,30 @@
       groupSlug: 'npm-deps',
     },
     {
-      // Collapse digest-only re-pins (same tag, new SHA) for Actions,
-      // Docker base images, and .env-file Docker image pins (custom.regex
-      // manager, datasource=docker — e.g. OPENSCAP_IMAGE, DOCKLE_IMAGE)
-      // into one weekly PR, regardless of image name or file location.
-      // gomod is excluded so Go module digests keep their own per-module
-      // PRs (no cross-module PR, go.sum post-upgrade step intact).
+      // Collapse digest-only re-pins (same tag, new SHA) for Actions and
+      // Docker base images into one weekly PR, regardless of image name
+      // or file location. gomod is excluded so Go module digests keep
+      // their own per-module PRs (no cross-module PR, go.sum post-upgrade
+      // step intact).
       matchManagers: [
         'github-actions',
         'dockerfile',
         'docker-compose',
-        'custom.regex',
       ],
+      matchUpdateTypes: ['digest', 'pinDigest'],
+      groupName: 'Digest pins',
+      groupSlug: 'digest-pins',
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ],
+    },
+    {
+      // Collapse digest-only re-pins for .env-file Docker image pins managed
+      // by custom.regex (datasource=docker — e.g. OPENSCAP_IMAGE, DOCKLE_IMAGE)
+      // into the same weekly 'Digest pins' PR. Scoped to docker datasource only
+      // so envtest and other non-docker custom managers are unaffected.
+      matchManagers: ['custom.regex'],
+      matchDatasources: ['docker'],
       matchUpdateTypes: ['digest', 'pinDigest'],
       groupName: 'Digest pins',
       groupSlug: 'digest-pins',
