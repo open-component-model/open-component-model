@@ -16,6 +16,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/repository/integrity"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/internal/download"
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
@@ -84,8 +85,9 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 // returned blob reads from that file, which outlives this call and is owned by the
 // caller.
 //
-// The content is held to the digest the resource declares, which is the digest over
-// exactly these bytes, so a store serving something else fails the read.
+// The content is bound to the digest the resource declares, which is the digest over
+// exactly these bytes; it is hashed while it is written, so an object that differs
+// fails the download and its file is removed.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	spec, err := r.convertAccess(resource)
 	if err != nil {
@@ -97,12 +99,25 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		tempFolder = *r.filesystemConfig.TempFolder
 	}
 
-	result, err := r.download(ctx, spec, credentials, tempFolder)
+	var extra []download.Option
+	if alg, ok := integrity.PrecomputeAlgorithm(resource.Digest); ok {
+		extra = append(extra, download.WithDigestAlgorithm(alg))
+	}
+
+	result, err := r.download(ctx, spec, credentials, tempFolder, extra...)
 	if err != nil {
 		return nil, err
 	}
 
-	return repository.VerifyDownload(ctx, resource, result.Blob)
+	b, err := integrity.VerifyPrecomputed(ctx, resource.Digest, result.Digest, result.Blob,
+		integrity.WithLogAttrs(slog.Any("resource", resource.ToIdentity())))
+	if err != nil {
+		if rmErr := os.Remove(result.Path); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
+			slog.WarnContext(ctx, "error removing downloaded s3 object that failed verification", "file", result.Path, "err", rmErr)
+		}
+		return nil, fmt.Errorf("resource %q: %w", resource.Name, err)
+	}
+	return b, nil
 }
 
 func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v2.S3, error) {
@@ -126,7 +141,7 @@ func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v2.S
 
 // download streams the object described by spec into tempDir and returns it as a
 // file-backed blob. The file outlives this call and is owned by the caller.
-func (r *ResourceRepository) download(ctx context.Context, spec *v2.S3, credentials runtime.Typed, tempDir string) (*download.Result, error) {
+func (r *ResourceRepository) download(ctx context.Context, spec *v2.S3, credentials runtime.Typed, tempDir string, extra ...download.Option) (*download.Result, error) {
 	opts := []download.Option{
 		download.WithCredentials(credentials),
 		download.WithTempDir(tempDir),
@@ -140,6 +155,7 @@ func (r *ResourceRepository) download(ctx context.Context, spec *v2.S3, credenti
 	if r.httpClient != nil {
 		opts = append(opts, download.WithHTTPClient(r.httpClient))
 	}
+	opts = append(opts, extra...)
 
 	return download.Download(ctx, download.Request{
 		Region:       spec.Region,

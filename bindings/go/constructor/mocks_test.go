@@ -34,6 +34,52 @@ func newMockTargetRepository() *mockTargetRepository {
 	}
 }
 
+// contextBoundRepository serves local resources whose reads fail once the context
+// they were fetched with is done, like repositories that fetch lazily.
+type contextBoundRepository struct {
+	repository.ComponentVersionRepository
+}
+
+func (r contextBoundRepository) GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error) {
+	data, res, err := r.ComponentVersionRepository.GetLocalResource(ctx, component, version, identity)
+	if err != nil {
+		return nil, nil, err
+	}
+	return blob.ReadOnlyBlobFunc(func() (io.ReadCloser, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("local resource read after its context ended: %w", err)
+		}
+		return data.ReadCloser()
+	}), res, nil
+}
+
+// readingTargetRepository reads local resources while they are added, like real
+// repositories do, and records what it read by resource name.
+type readingTargetRepository struct {
+	*mockTargetRepository
+	readMu sync.Mutex
+	read   map[string][]byte
+}
+
+func (r *readingTargetRepository) AddLocalResource(ctx context.Context, component, version string, resource *descriptor.Resource, data blob.ReadOnlyBlob) (*descriptor.Resource, error) {
+	rc, err := data.ReadCloser()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rc.Close() }()
+	content, err := io.ReadAll(rc)
+	if err != nil {
+		return nil, err
+	}
+	r.readMu.Lock()
+	if r.read == nil {
+		r.read = make(map[string][]byte)
+	}
+	r.read[resource.Name] = content
+	r.readMu.Unlock()
+	return r.mockTargetRepository.AddLocalResource(ctx, component, version, resource, data)
+}
+
 func (m *mockTargetRepository) GetComponentVersion(ctx context.Context, name, version string) (*descriptor.Descriptor, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

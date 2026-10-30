@@ -21,6 +21,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credentialsRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 )
 
@@ -39,7 +40,7 @@ func OCMConfig(cmd *cobra.Command) error {
 }
 
 func PluginManager(cmd *cobra.Command) error {
-	pluginManager := manager.NewPluginManager(cmd.Context())
+	pluginManager := manager.NewPluginManager(cmd.Context(), manager.WithArtifactVerifier(ocitar.LayoutVerifier{}))
 
 	if cfg := ocmctx.FromContext(cmd.Context()).Configuration(); cfg == nil {
 		slog.WarnContext(cmd.Context(), "could not get configuration to initialize plugin manager")

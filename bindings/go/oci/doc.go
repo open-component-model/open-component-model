@@ -37,7 +37,6 @@
 //     - ArtifactAnnotation: Handles OCI artifact annotations
 //
 //     Resources are managed through multiple types:
-//     - LocalBlob: For temporary storage of resources
 //     - ResourceBlob: For resource-specific operations (a blob described by an OCM resource)
 //     - NewDescriptorBlob: For OCI descriptor management (a verified blob described by an OCI descriptor)
 //

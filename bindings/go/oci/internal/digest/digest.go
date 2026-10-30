@@ -12,8 +12,8 @@ import (
 const (
 	HashAlgorithmSHA256 = "SHA-256"
 	HashAlgorithmSHA512 = "SHA-512"
-	GenericBlobDigestV1 = "genericBlobDigest/v1"
-	OCIArtifactDigestV1 = "ociArtifactDigest/v1"
+	GenericBlobDigestV1 = runtime.GenericBlobDigestV1
+	OCIArtifactDigestV1 = runtime.OCIArtifactDigestV1
 )
 
 var SHAMapping = map[string]digest.Algorithm{

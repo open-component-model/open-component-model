@@ -13,6 +13,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/algorithms"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/repository/integrity"
 	"ocm.software/open-component-model/bindings/go/signing"
 )
 
@@ -59,7 +60,7 @@ func PinRepository(repo ComponentVersionRepository, component, version, pin stri
 // with "/" of the normalisation algorithm written as ".".
 var digestPinPattern = regexp.MustCompile(`^(?:([A-Za-z][A-Za-z0-9]*(?:[-_.][A-Za-z][A-Za-z0-9]*)*)\+)?([A-Za-z][A-Za-z0-9]*):([0-9A-Fa-f]+)$`)
 
-// hashAlgorithmNames maps the algorithms [verifiableAlgorithm] returns to the hash algorithm names
+// hashAlgorithmNames maps the algorithms [integrity.HashAlgorithm] returns to the hash algorithm names
 // OCM descriptors use.
 var hashAlgorithmNames = map[digest.Algorithm]string{
 	digest.SHA256: crypto.SHA256.String(),
@@ -81,7 +82,7 @@ func ParseDigestPin(pin string) (*descriptor.Digest, error) {
 		return nil, fmt.Errorf("invalid digest pin %q: expected [<normalisation>+]<hash>:<hex>", pin)
 	}
 	normalisationAlgorithm, hashName, value := match[1], strings.ToLower(match[2]), strings.ToLower(match[3])
-	alg, err := verifiableAlgorithm(hashName)
+	alg, err := integrity.HashAlgorithm(hashName)
 	if err != nil {
 		return nil, fmt.Errorf("invalid digest pin %q: unsupported hash %q, use sha256 or sha512", pin, match[2])
 	}
@@ -124,7 +125,7 @@ func GetPinnedComponentVersion(ctx context.Context, repo ComponentVersionReposit
 		desc, err := repo.GetComponentVersion(ctx, component, version)
 		return repo, desc, err
 	}
-	if _, err := verifiableAlgorithm(pin.HashAlgorithm); err != nil {
+	if _, err := integrity.HashAlgorithm(pin.HashAlgorithm); err != nil {
 		return nil, nil, fmt.Errorf("unsupported hash algorithm %q in digest pin: use sha256 or sha512", pin.HashAlgorithm)
 	}
 
@@ -224,7 +225,7 @@ func GetComponentVersionByArtifact(ctx context.Context, repo ComponentVersionRep
 		return nil, nil, nil, err
 	}
 	if pin != nil {
-		if _, err := verifiableAlgorithm(pin.HashAlgorithm); err != nil {
+		if _, err := integrity.HashAlgorithm(pin.HashAlgorithm); err != nil {
 			return nil, nil, nil, fmt.Errorf("unsupported hash algorithm %q in digest pin: use sha256 or sha512", pin.HashAlgorithm)
 		}
 		if err := verifyNormalizedPin(ctx, desc, pin); err != nil {

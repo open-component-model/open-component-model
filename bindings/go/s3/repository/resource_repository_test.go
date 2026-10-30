@@ -13,6 +13,8 @@ import (
 	"sync"
 	"testing"
 
+	_ "crypto/sha512"
+
 	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
@@ -225,15 +227,19 @@ func Test_DownloadResource_DigestVerification(t *testing.T) {
 	})
 
 	t.Run("rejects an object that does not match the resource digest", func(t *testing.T) {
-		// Verification is streaming, so the download itself still succeeds.
-		b, err := downloadWith(t, []byte("not what was promised"), matching)
-		require.NoError(t, err)
+		r := require.New(t)
+		tempFolder := t.TempDir()
+		srv := newFakeS3(t, []byte("not what was promised"), "")
+		repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
+		res := s3Resource(servedBy(srv, &v2.S3{BucketName: "b", ObjectKey: "k"}))
+		res.Digest = matching
 
-		rc, err := b.ReadCloser()
-		require.NoError(t, err)
-		_, err = io.ReadAll(rc)
-		require.ErrorContains(t, err, "digest mismatch")
-		require.ErrorContains(t, rc.Close(), "digest mismatch")
+		_, err := repo.DownloadResource(t.Context(), res, fakeCredentials())
+		r.ErrorContains(err, "digest mismatch")
+
+		entries, err := os.ReadDir(tempFolder)
+		r.NoError(err)
+		r.Empty(entries, "a rejected object must not be left behind")
 	})
 
 	t.Run("serves an object unverified when the resource carries no digest", func(t *testing.T) {
@@ -248,13 +254,50 @@ func Test_DownloadResource_DigestVerification(t *testing.T) {
 		require.Equal(t, content, got)
 	})
 
+	t.Run("verifies an object against a SHA-512 resource digest", func(t *testing.T) {
+		sha512 := &descriptor.Digest{
+			HashAlgorithm:          "SHA-512",
+			NormalisationAlgorithm: genericBlobDigestV1,
+			Value:                  godigest.SHA512.FromBytes(content).Encoded(),
+		}
+
+		t.Run("match", func(t *testing.T) {
+			r := require.New(t)
+			b, err := downloadWith(t, content, sha512)
+			r.NoError(err)
+
+			rc, err := b.ReadCloser()
+			r.NoError(err)
+			got, err := io.ReadAll(rc)
+			r.NoError(err)
+			r.NoError(rc.Close())
+			r.Equal(content, got)
+		})
+
+		t.Run("mismatch", func(t *testing.T) {
+			_, err := downloadWith(t, []byte("not what was promised"), sha512)
+			require.ErrorContains(t, err, "digest mismatch")
+		})
+	})
+
 	t.Run("refuses an object when the digest is present but unusable", func(t *testing.T) {
-		_, err := downloadWith(t, content, &descriptor.Digest{
+		r := require.New(t)
+		tempFolder := t.TempDir()
+		srv := newFakeS3(t, content, "")
+		repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
+		res := s3Resource(servedBy(srv, &v2.S3{BucketName: "b", ObjectKey: "k"}))
+		res.Digest = &descriptor.Digest{
 			HashAlgorithm:          "MD5",
 			NormalisationAlgorithm: genericBlobDigestV1,
 			Value:                  godigest.FromBytes(content).Encoded(),
-		})
-		require.ErrorContains(t, err, "unsupported hash algorithm")
+		}
+
+		_, err := repo.DownloadResource(t.Context(), res, fakeCredentials())
+		r.ErrorContains(err, "unsupported hash algorithm")
+
+		entries, err := os.ReadDir(tempFolder)
+		r.NoError(err)
+		r.Empty(entries, "a refused object must not be left behind")
 	})
 }
 
