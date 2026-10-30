@@ -1,0 +1,32 @@
+{{- /* Returns the "ocm get cv" command that inspects the public component shipping the
+       OCM CLI, using only flags the CLI installed on this docs version supports (see the
+       "env" format of main/site-version.html for what install-cli.sh installs).
+       Context: the page. Returns "" for versions without a v2 CLI (legacy). */ -}}
+{{- $version := .Site.Version.Name -}}
+{{- $flags := "" -}}
+{{- if eq $version "main" -}}
+  {{- /* The unpinned install picks the newest stable release. Without a constraint
+         --latest would also consider prereleases. */ -}}
+  {{- $flags = "--latest --constraint '>0.0.0' -o widetree" -}}
+{{- else if .Site.Version.IsDefault -}}
+  {{- $flags = "--latest -o widetree" -}}
+{{- else if findRE `^\d+\.\d+$` $version -}}
+  {{- $parts := split $version "." -}}
+  {{- $major := int (index $parts 0) -}}
+  {{- $minor := int (index $parts 1) -}}
+  {{- if or (gt $major 0) (ge $minor 18) -}}
+    {{- /* Newest stable patch of this series; X.Y.0 is not always published. */ -}}
+    {{- $flags = printf "--latest --constraint '~%s' -o widetree" $version -}}
+  {{- else if eq $minor 17 -}}
+    {{- /* --constraint arrived in 0.18. */ -}}
+    {{- $flags = "--latest -o widetree" -}}
+  {{- else -}}
+    {{- /* widetree arrived in 0.17. */ -}}
+    {{- $flags = "--latest -o tree" -}}
+  {{- end -}}
+{{- end -}}
+{{- $cmd := "" -}}
+{{- with $flags -}}
+  {{- $cmd = printf "ocm get cv ghcr.io/open-component-model//ocm.software/cli %s" . -}}
+{{- end -}}
+{{- return $cmd -}}
