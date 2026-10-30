@@ -137,7 +137,7 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 	gitHubRepository := githubrepository.NewResourceRepository(githubrepository.WithHTTPClient(httpClient))
 	gitHubDigestProcessor := githubdigest.NewDigestProcessor(githubrepository.WithHTTPClient(httpClient))
 	wgetRepository := wgetrepository.NewResourceRepository(wgetrepository.WithHTTPClient(httpClient), wgetrepository.WithChecksumConfig(checksumCfg))
-	s3Repository := s3repository.NewResourceRepository(fsCfg, s3repository.WithHTTPConfig(httpCfg))
+	s3Repository := s3repository.NewResourceRepository(s3repository.WithHTTPConfig(httpCfg))
 
 	if err := errors.Join(
 		pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider),
