@@ -3,6 +3,7 @@ package credentials
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/dag"
@@ -76,6 +77,7 @@ func (g *syncedDag) addEdge(from, to string, attributes ...map[string]any) error
 // If an exact match is not found, it falls back to a wildcard search by comparing identities
 // using the Identity.Match method.
 // This wildcard search is the reason there can be undiscovered cycles at runtime.
+// When multiple consumers match, a non-glob hostname consumer is preferred over a glob one.
 func (g *syncedDag) matchAnyNode(identity runtime.Identity) (*dag.Vertex[string], error) {
 	g.dagMu.RLock()
 	defer g.dagMu.RUnlock()
@@ -83,14 +85,25 @@ func (g *syncedDag) matchAnyNode(identity runtime.Identity) (*dag.Vertex[string]
 	if vertex, ok := g.dag.Vertices[node]; ok {
 		return vertex, nil
 	}
+	var globMatch *dag.Vertex[string]
 	for _, vertex := range g.dag.Vertices {
 		existing, ok := vertex.Attributes[attributeIdentity].(runtime.Identity)
 		if !ok {
 			continue
 		}
-		if identity.Match(existing) {
-			return vertex, nil
+		if !identity.Match(existing) {
+			continue
 		}
+		if strings.HasPrefix(existing[runtime.IdentityAttributeHostname], "*.") {
+			if globMatch == nil {
+				globMatch = vertex
+			}
+			continue
+		}
+		return vertex, nil
+	}
+	if globMatch != nil {
+		return globMatch, nil
 	}
 	return nil, fmt.Errorf("failed to match any node: %w", ErrNoDirectCredentials)
 }
