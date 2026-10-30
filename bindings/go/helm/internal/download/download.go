@@ -140,6 +140,7 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		username: username,
 		password: password,
 		baseURL:  helmRepo,
+		ctx:      ctx,
 	}
 
 	cacheDir, err := os.MkdirTemp(targetDir, "helm-cache*")
@@ -427,9 +428,10 @@ func GetterProviders(client *http.Client, opts HTTPConfigGetterOpts) getter.Prov
 }
 
 // IndexGetterProviders returns the getter providers that fetch the index of the HTTP/S
-// repository helmRepo with httpConfig and credentials, as chart downloads do. Without
-// httpConfig the default Helm client is used.
-func IndexGetterProviders(helmRepo string, credentials *helmcredsv1.HelmHTTPCredentials, httpConfig *httpv1alpha1.Config) (getter.Providers, error) {
+// repository helmRepo with httpConfig and credentials, as chart downloads do. Their
+// requests end with ctx. Without httpConfig the default Helm client is used, which is
+// bounded by its own timeout instead.
+func IndexGetterProviders(ctx context.Context, helmRepo string, credentials *helmcredsv1.HelmHTTPCredentials, httpConfig *httpv1alpha1.Config) (getter.Providers, error) {
 	if httpConfig == nil {
 		return GetterProviders(nil, HTTPConfigGetterOpts{}), nil
 	}
@@ -444,6 +446,7 @@ func IndexGetterProviders(helmRepo string, credentials *helmcredsv1.HelmHTTPCred
 		username: credentials.Username,
 		password: credentials.Password,
 		baseURL:  helmRepo,
+		ctx:      ctx,
 	}), nil
 }
 

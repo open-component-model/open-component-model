@@ -177,7 +177,7 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 		entry.KeyFile = credentials.KeyFile
 	}
 
-	providers, err := download.IndexGetterProviders(helm.HelmRepository, credentials, p.httpConfig)
+	providers, err := download.IndexGetterProviders(ctx, helm.HelmRepository, credentials, p.httpConfig)
 	if err != nil {
 		return "", fmt.Errorf("error creating helm repository client: %w", err)
 	}
@@ -269,8 +269,9 @@ func downloadChartDigest(ctx context.Context, providers getter.Providers, repoUR
 		}
 	}
 
-	// Helm's getters do not accept a context, so the download runs in a goroutine and the
-	// context is selected on to allow cancellation.
+	// Helm's getters do not accept a context: the configured getter ends its request with
+	// ctx (see download.IndexGetterProviders); the context is also selected on so the
+	// default getter, bounded by its own timeout, does not hold up cancellation.
 	type chartResult struct {
 		digest godigest.Digest
 		err    error

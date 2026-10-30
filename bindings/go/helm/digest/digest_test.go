@@ -1,6 +1,7 @@
 package digest_test
 
 import (
+	"context"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
@@ -371,6 +373,38 @@ func TestProcessResourceDigest_HTTPIndexWithoutDigestDownloadsListedURL(t *testi
 				r.Equal(tc.wantAuth, chartAuth.Load())
 			}
 		})
+	}
+}
+
+// Cancelling digest processing ends a stalled chart download with an HTTP configuration,
+// so no request outlives the reconciliation that started it.
+func TestProcessResourceDigest_CancelEndsStalledChartDownload(t *testing.T) {
+	r := require.New(t)
+	requested, aborted := make(chan struct{}), make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/index.yaml":
+			_, _ = fmt.Fprint(w, "apiVersion: v1\nentries:\n  mychart:\n    - urls: [mychart-0.1.0.tgz]\n      name: mychart\n      version: 0.1.0\n      apiVersion: v2\n")
+		case "/mychart-0.1.0.tgz":
+			close(requested)
+			<-req.Context().Done()
+			close(aborted)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	go func() {
+		<-requested
+		cancel()
+	}()
+	_, err := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(&httpv1alpha1.Config{})).
+		ProcessResourceDigest(ctx, helmAccessResource(t, srv.URL, "mychart:0.1.0"), nil)
+	r.ErrorIs(err, context.Canceled)
+	select {
+	case <-aborted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the chart request was not cancelled")
 	}
 }
 
