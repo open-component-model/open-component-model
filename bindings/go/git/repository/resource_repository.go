@@ -117,7 +117,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, res *descript
 		return nil, err
 	}
 
-	result, err := r.download(ctx, spec, creds, r.tempFolder())
+	result, err := r.download(ctx, spec, creds)
 	if err != nil {
 		return nil, err
 	}
@@ -133,13 +133,13 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, res *descript
 	return b, nil
 }
 
-func (r *ResourceRepository) download(ctx context.Context, spec *accessv1.Git, creds runtime.Typed, tempDir string) (*download.Result, error) {
+func (r *ResourceRepository) download(ctx context.Context, spec *accessv1.Git, creds runtime.Typed) (*download.Result, error) {
 	typed, err := convertGitCredentials(creds)
 	if err != nil {
 		return nil, err
 	}
 
-	return download.Download(ctx, spec, typed, r.downloadOptions(tempDir))
+	return download.Download(ctx, spec, typed, r.downloadOptions(r.tempFolder()))
 }
 
 func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, res *descriptor.Resource) (runtime.Identity, error) {
@@ -148,27 +148,19 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 
 // ProcessResourceDigest pins the access and hashes the same snapshot in one download.
 // Pinning records the commit (see [download.WithRepository]).
-// The archive is only read here, so it is downloaded into a directory of its own
-// that this call removes again.
+// The archive is only hashed here, so it is discarded again before this call returns.
 func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *descriptor.Resource, creds runtime.Typed) (*descriptor.Resource, error) {
-	tempDir, err := os.MkdirTemp(r.tempFolder(), "ocm-git-digest-*")
-	if err != nil {
-		return nil, fmt.Errorf("cannot create temporary directory for digest processing: %w", err)
-	}
-	defer func() {
-		if rmErr := os.RemoveAll(tempDir); rmErr != nil {
-			slog.WarnContext(ctx, "failed to remove temporary directory after digest processing", "path", tempDir, "err", rmErr)
-		}
-	}()
-
 	spec, err := accessFrom(res)
 	if err != nil {
 		return nil, err
 	}
 
-	downloaded, err := r.download(ctx, spec, creds, tempDir)
+	downloaded, err := r.download(ctx, spec, creds)
 	if err != nil {
 		return nil, err
+	}
+	if err := downloaded.Blob.Remove(); err != nil {
+		slog.WarnContext(ctx, "failed to remove git archive after digest processing", "err", err)
 	}
 	if err := verifyDigest(res.Digest, downloaded.Digest); err != nil {
 		return nil, err

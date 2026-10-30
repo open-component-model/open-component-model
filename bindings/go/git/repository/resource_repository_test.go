@@ -44,7 +44,7 @@ func TestResourceDigestPinning(t *testing.T) {
 	r.Equal("SHA-256", pinned.Digest.HashAlgorithm)
 	r.Equal("genericBlobDigest/v1", pinned.Digest.NormalisationAlgorithm)
 
-	// Digest processing downloads into a directory of its own and removes it again.
+	// Digest processing only hashes the archive and discards it again.
 	files, err := os.ReadDir(dir)
 	r.NoError(err)
 	r.Empty(files)
