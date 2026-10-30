@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -201,65 +200,64 @@ func Test_FileSystemCTF_ConcurrentOperations(t *testing.T) {
 	r.Len(savedBlobs, 10)
 }
 
-// barrierBlob ends its content only once every concurrent reader has read all of it, so
-// all writers of the blob have staged it before any of them publishes.
-type barrierBlob struct {
-	content []byte
-	staged  *sync.WaitGroup
-}
-
-func (b *barrierBlob) ReadCloser() (io.ReadCloser, error) {
-	return io.NopCloser(&barrierReader{r: bytes.NewReader(b.content), staged: b.staged}), nil
-}
-
-func (b *barrierBlob) Digest() (string, bool) { return digest.FromBytes(b.content).String(), true }
-
-type barrierReader struct {
-	r       *bytes.Reader
-	staged  *sync.WaitGroup
-	arrived bool
-}
-
-func (r *barrierReader) Read(p []byte) (int, error) {
-	n, err := r.r.Read(p)
-	if err == io.EOF && !r.arrived {
-		r.arrived = true
-		r.staged.Done()
-		r.staged.Wait()
-	}
-	return n, err
-}
-
-// Writers of one blob all find it missing once they have staged it; all of them must
-// succeed, publishing it once and leaving no staged file behind.
-func TestFileSystemCTF_SaveBlob_ConcurrentSameBlob(t *testing.T) {
-	r := require.New(t)
+// A staged blob is invisible until published, publishing keeps an already stored blob,
+// and discarding leaves nothing behind.
+func TestFileSystemCTF_StageBlob(t *testing.T) {
 	ctx := t.Context()
-	archive, err := ctf.OpenCTFFromOSPath(t.TempDir(), ctf.O_RDWR)
-	r.NoError(err)
+	content := []byte("staged content")
+	dig := digest.FromBytes(content).String()
 
-	const writers = 8
-	content := []byte("same content")
-	var staged sync.WaitGroup
-	staged.Add(writers)
-	var eg errgroup.Group
-	for range writers {
-		eg.Go(func() error { return archive.SaveBlob(ctx, &barrierBlob{content: content, staged: &staged}) })
+	for _, tc := range []struct {
+		name        string
+		preexisting bool
+		publish     bool
+		wantBlobs   []string
+	}{
+		{name: "published", publish: true, wantBlobs: []string{dig}},
+		{name: "published over stored blob", preexisting: true, publish: true, wantBlobs: []string{dig}},
+		{name: "discarded", wantBlobs: []string{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			dir := t.TempDir()
+			archive, err := ctf.OpenCTFFromOSPath(dir, ctf.O_RDWR)
+			r.NoError(err)
+			if tc.preexisting {
+				r.NoError(archive.SaveBlob(ctx, inmemory.New(bytes.NewReader(content))))
+			}
+
+			staged, err := archive.StageBlob(ctx, inmemory.New(bytes.NewReader(content)))
+			r.NoError(err)
+			r.Equal(dig, staged.Digest())
+			if !tc.preexisting {
+				_, err = archive.GetBlob(ctx, dig)
+				r.Error(err, "a staged blob must not be visible before it is published")
+			}
+			if tc.publish {
+				r.NoError(staged.Publish())
+			}
+			r.NoError(staged.Discard())
+
+			entries, err := os.ReadDir(filepath.Join(dir, ctf.BlobsDirectoryName))
+			r.NoError(err)
+			names := []string{}
+			for _, e := range entries {
+				names = append(names, ctf.ToDigest(e.Name()))
+			}
+			r.Equal(tc.wantBlobs, names, "only published blobs may remain, no staged file")
+			if !tc.publish {
+				return
+			}
+			stored, err := archive.GetBlob(ctx, dig)
+			r.NoError(err)
+			rc, err := stored.ReadCloser()
+			r.NoError(err)
+			t.Cleanup(func() { _ = rc.Close() })
+			data, err := io.ReadAll(rc)
+			r.NoError(err)
+			r.Equal(content, data)
+		})
 	}
-	r.NoError(eg.Wait())
-
-	blobs, err := archive.ListBlobs(ctx)
-	r.NoError(err)
-	r.Equal([]string{digest.FromBytes(content).String()}, blobs)
-
-	stored, err := archive.GetBlob(ctx, digest.FromBytes(content).String())
-	r.NoError(err)
-	rc, err := stored.ReadCloser()
-	r.NoError(err)
-	t.Cleanup(func() { _ = rc.Close() })
-	data, err := io.ReadAll(rc)
-	r.NoError(err)
-	r.Equal(content, data)
 }
 
 func Test_FileSystemCTF_IndexOperations(t *testing.T) {
