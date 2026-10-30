@@ -158,7 +158,7 @@ func (r *ResourceRepository) push(ctx context.Context, repo *git.Repository, tar
 	// and it is a tag; push a branch ref (refs/heads/*) instead to give the target a default.
 	if targetRef.IsTag() && !hasBranch(refs) {
 		slog.WarnContext(ctx, "pushing a tag into a repository with no branch leaves it without a default branch; Git hosts may show it as empty and a clone checks out no working tree",
-			"repository", target.Repository, "ref", target.Ref, "hint", "push a refs/heads/* ref as well to give the target a default branch")
+			"repository", target.Repository, "ref", target.Ref, "hint", "also push the branch the target's HEAD points at (or set its default branch) so the tag becomes reachable")
 	}
 
 	const uploadRef = "refs/ocm/upload"

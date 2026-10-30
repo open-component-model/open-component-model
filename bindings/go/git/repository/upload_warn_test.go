@@ -78,12 +78,14 @@ func TestUploadTagToEmptyRepositoryWarns(t *testing.T) {
 	source, content := downloadResource(t, uploader, fixture.Path, "refs/heads/main", fixture.First)
 
 	for _, tc := range []struct {
-		name      string
-		targetRef string
-		wantWarn  bool
+		name       string
+		targetRef  string
+		seedBranch bool
+		wantWarn   bool
 	}{
 		{name: "tag into empty repo warns", targetRef: "refs/tags/rel-x", wantWarn: true},
 		{name: "branch into empty repo is silent", targetRef: "refs/heads/main", wantWarn: false},
+		{name: "tag into repo with a branch is silent", targetRef: "refs/tags/rel-y", seedBranch: true, wantWarn: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
@@ -94,6 +96,14 @@ func TestUploadTagToEmptyRepositoryWarns(t *testing.T) {
 			// git http-backend refuses receive-pack unless explicitly enabled.
 			r.NoError(exec.CommandContext(t.Context(), "git", "-C", targetPath, "config", "http.receivepack", "true").Run())
 			url := gitHTTPBackend(t, root) + "/target.git"
+
+			if tc.seedBranch {
+				// Give the target a branch before the tag push so hasBranch(refs) is true;
+				// this is what distinguishes "tag suppressed because a branch exists" from
+				// "no warning because the pushed ref is itself a branch".
+				_, err := uploader.UploadResource(t.Context(), targetResource(source, url, "refs/heads/main"), content, nil)
+				r.NoError(err)
+			}
 
 			capture := captureWarnings(t)
 			_, err = uploader.UploadResource(t.Context(), targetResource(source, url, tc.targetRef), content, nil)
