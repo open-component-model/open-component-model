@@ -94,6 +94,17 @@ func TestBlob_Remove(t *testing.T) {
 		r.NoFileExists(path)
 		r.ErrorIs(b.Remove(), os.ErrNotExist)
 	})
+	t.Run("blob confined to a working directory removes the file inside it", func(t *testing.T) {
+		r := require.New(t)
+		dir := t.TempDir()
+		path := filepath.Join(dir, "testfile.txt")
+		r.NoError(os.WriteFile(path, []byte("data"), 0o600))
+
+		b, err := filesystem.GetBlobFromOSPath("testfile.txt", filesystem.InWorkingDirectory(dir), filesystem.AllowRemove())
+		r.NoError(err)
+		r.NoError(b.Remove())
+		r.NoFileExists(path)
+	})
 }
 
 func TestBlob_Size(t *testing.T) {
