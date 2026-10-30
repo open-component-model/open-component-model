@@ -28,12 +28,16 @@ import (
 
 // Locate returns the packaged Helm chart (.tgz) in content: content itself when it is gzip, the
 // first .tgz of a tar (helm downloader output), or the chart layer of a Helm chart OCI layout.
+// Content whose media type declares a packaged chart is taken as is without reading it.
 // fromOCI reports that the chart came from an OCI artifact, so the source digest does not describe it.
 // The chart is located, not parsed: the target repository reads and validates it.
 func Locate(ctx context.Context, content blob.ReadOnlyBlob, mediaType string, id runtime.Identity) (chart blob.ReadOnlyBlob, fromOCI bool, err error) {
-	if layout.IsOCILayoutMediaType(mediaType) {
+	switch {
+	case layout.IsOCILayoutMediaType(mediaType):
 		chart, err := fromLayout(ctx, content, id)
 		return chart, true, err
+	case mediaType == registry.ChartLayerMediaType:
+		return content, false, nil
 	}
 	chart, err = fromArchive(content, id)
 	return chart, false, err

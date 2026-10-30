@@ -156,3 +156,17 @@ func TestLocate(t *testing.T) {
 		})
 	}
 }
+
+func TestLocate_DeclaredChartIsNotRead(t *testing.T) {
+	r := require.New(t)
+	opened := 0
+	content := blob.ReadOnlyBlobFunc(func() (io.ReadCloser, error) {
+		opened++
+		return io.NopCloser(bytes.NewReader([]byte("chart"))), nil
+	})
+	chart, fromOCI, err := Locate(t.Context(), content, registry.ChartLayerMediaType, runtime.Identity{"name": "mychart"})
+	r.NoError(err)
+	r.False(fromOCI)
+	r.Zero(opened, "a declared packaged chart needs no probe")
+	r.NotNil(chart)
+}
