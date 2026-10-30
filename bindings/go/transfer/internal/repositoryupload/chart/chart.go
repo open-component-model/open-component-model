@@ -107,9 +107,10 @@ func fromArchive(b blob.ReadOnlyBlob, id runtime.Identity) (blob.ReadOnlyBlob, e
 	if err != nil {
 		return nil, fmt.Errorf("content of resource %s: %w", id, err)
 	}
-	if err := rc.Close(); err != nil {
-		return nil, fmt.Errorf("failed closing content of resource %s: %w", id, err)
-	}
+	// Only the start of the content was read to find the chart; a verifying source rejects
+	// that partial read on Close, which is expected. Every read of the returned blob is
+	// verified in full.
+	_ = rc.Close()
 	return &chartBlob{source: b, size: size}, nil
 }
 
@@ -135,9 +136,35 @@ func openChart(b blob.ReadOnlyBlob) (io.ReadCloser, int64, error) {
 			return nil, 0, errors.New("neither a packaged helm chart, a tar containing one, nor a helm chart OCI artifact")
 		}
 		if hdr.Typeflag == tar.TypeReg && strings.HasSuffix(hdr.Name, ".tgz") {
-			return readCloser{Reader: tr, Closer: rc}, hdr.Size, nil
+			return &tarChart{tr: tr, rest: r, Closer: rc}, hdr.Size, nil
 		}
 	}
+}
+
+// tarChart reads the chart entry of a tar. A source verifying its content checks it when
+// closed, which fails unless it was read to its end, so once the chart has been read
+// completely Close reads the rest of the tar before closing the source.
+type tarChart struct {
+	tr   *tar.Reader
+	rest io.Reader
+	io.Closer
+	done bool
+}
+
+func (c *tarChart) Read(p []byte) (int, error) {
+	n, err := c.tr.Read(p)
+	if errors.Is(err, io.EOF) {
+		c.done = true
+	}
+	return n, err
+}
+
+func (c *tarChart) Close() error {
+	var drainErr error
+	if c.done {
+		_, drainErr = io.Copy(io.Discard, c.rest)
+	}
+	return errors.Join(drainErr, c.Closer.Close())
 }
 
 func fetchJSON(ctx context.Context, store orascontent.Fetcher, desc ocispec.Descriptor, v any) error {

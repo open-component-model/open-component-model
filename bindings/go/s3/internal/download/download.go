@@ -214,11 +214,15 @@ func (b *Blob) learn() bool {
 	if req.Version == "" {
 		req.Version = b.version
 	}
-	size, mediaType, err := head(b.ctx, req, b.o)
+	obj, err := head(b.ctx, req, b.o)
 	if err != nil {
 		return false
 	}
-	b.describe(size, mediaType)
+	// Pin the described version so reads serve the bytes the size and media type describe.
+	if b.version == "" && IsVersion(obj.versionID) {
+		b.version = obj.versionID
+	}
+	b.describe(obj.size, obj.mediaType)
 	return true
 }
 
@@ -240,7 +244,7 @@ func (b *Blob) request() Request {
 	return req
 }
 
-// object is one GetObject response.
+// object is one GetObject response, or a HeadObject response without a body.
 type object struct {
 	// body is the object body, failing once it exceeds the maximum download size.
 	body io.ReadCloser
@@ -307,15 +311,15 @@ func open(ctx context.Context, req Request, o *option) (*object, error) {
 	}, nil
 }
 
-// head sends a HeadObject for req and returns the size and media type of the object.
-func head(ctx context.Context, req Request, o *option) (int64, string, error) {
+// head sends a HeadObject for req and returns what it reports about the object; body is nil.
+func head(ctx context.Context, req Request, o *option) (*object, error) {
 	if err := validate(req); err != nil {
-		return blob.SizeUnknown, "", err
+		return nil, err
 	}
 
 	client, err := newClient(ctx, req, o)
 	if err != nil {
-		return blob.SizeUnknown, "", err
+		return nil, err
 	}
 
 	in := &s3.HeadObjectInput{
@@ -328,9 +332,13 @@ func head(ctx context.Context, req Request, o *option) (int64, string, error) {
 
 	out, err := headObject(ctx, client, req, in)
 	if err != nil {
-		return blob.SizeUnknown, "", fmt.Errorf("error getting s3 object metadata %s/%s: %w", req.BucketName, req.ObjectKey, err)
+		return nil, fmt.Errorf("error getting s3 object metadata %s/%s: %w", req.BucketName, req.ObjectKey, err)
 	}
-	return contentLength(out.ContentLength), mediaType(req, out.ContentType), nil
+	return &object{
+		versionID: aws.ToString(out.VersionId),
+		size:      contentLength(out.ContentLength),
+		mediaType: mediaType(req, out.ContentType),
+	}, nil
 }
 
 func contentLength(length *int64) int64 {
@@ -367,7 +375,8 @@ func (l *limitedBody) Read(p []byte) (int, error) {
 	n, err := l.ReadCloser.Read(p)
 	l.read += int64(n)
 	if l.read > l.max {
-		return n - int(l.read-l.max), tooLarge(l.req, l.max)
+		// Only the bytes up to the limit belong to the caller; a later call returns none.
+		return max(0, n-int(l.read-l.max)), tooLarge(l.req, l.max)
 	}
 	return n, err
 }

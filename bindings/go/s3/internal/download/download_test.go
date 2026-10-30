@@ -611,6 +611,19 @@ func TestBlob_DescribedByHeadBeforeRead(t *testing.T) {
 	r.Equal([]string{http.MethodHead, http.MethodGet}, methods(srv.recorded()))
 }
 
+func TestBlob_PinsVersionDescribedByHead(t *testing.T) {
+	r := require.New(t)
+	srv := newFakeS3(t, s3Object{body: []byte("described"), versionID: "v-1"})
+	b := blobFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"})
+
+	r.Equal(int64(len("described")), b.Size())
+	readBlob(t, b)
+
+	requests := srv.recorded()
+	r.Equal([]string{http.MethodHead, http.MethodGet}, methods(requests))
+	r.Equal("v-1", requests[1].versionID, "reads serve the version the size describes")
+}
+
 func TestBlob_FailedHeadLeavesItUndescribed(t *testing.T) {
 	r := require.New(t)
 	srv := newFakeS3(t, s3Object{errStatus: http.StatusForbidden, errCode: "AccessDenied"})

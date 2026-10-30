@@ -56,11 +56,12 @@
 //	    objectKey: path/to/blob.txt
 //
 // It downloads the object over the same path a resource download uses and hands it to
-// the constructor as local blob data: the object is read once to learn its digest,
-// size and version, and again, pinned to that version and verified, when the
-// constructor stores it, so the finished component version carries the
-// bytes and no longer resolves anything against the bucket. That is the difference to
-// the access type, which leaves the object where it is and fetches it on every read.
+// the constructor as local blob data: the object is downloaded once to learn its digest,
+// size and version, and that download is what the constructor stores. Any later read
+// requests the object again, pinned to that version and verified. The finished component
+// version carries the bytes and no longer resolves anything against the bucket. That is
+// the difference to the access type, which leaves the object where it is and fetches it
+// on every read.
 //
 // The input derives its credential consumer identity exactly as the access type does,
 // so one consumer entry serves a bucket whether its objects are referenced or taken in.

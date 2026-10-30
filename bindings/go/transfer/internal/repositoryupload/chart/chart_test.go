@@ -18,6 +18,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/blob/verified"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -63,6 +64,23 @@ func TestLocate(t *testing.T) {
 	fromBytes := func(data []byte) blob.ReadOnlyBlob {
 		return inmemory.New(bytes.NewReader(data), inmemory.WithSize(int64(len(data))))
 	}
+	// A tar whose content continues well past the chart, so locating the chart reads only a
+	// prefix of it.
+	var paddedTar bytes.Buffer
+	tw = tar.NewWriter(&paddedTar)
+	for _, f := range []struct {
+		name string
+		data []byte
+	}{{"mychart-0.1.0.tgz", chartTGZ}, {"padding", bytes.Repeat([]byte{'x'}, 64<<10)}} {
+		require.NoError(t, tw.WriteHeader(&tar.Header{Name: f.name, Size: int64(len(f.data)), Mode: 0o644}))
+		_, err := tw.Write(f.data)
+		require.NoError(t, err)
+	}
+	require.NoError(t, tw.Close())
+	// verifiedBytes rejects a partial read on Close, as sources verifying their content do.
+	verifiedBytes := func(data []byte) blob.ReadOnlyBlob {
+		return verified.New(fromBytes(data), verified.Metadata{Digest: digest.FromBytes(data), Size: int64(len(data))})
+	}
 
 	tests := []struct {
 		name        string
@@ -80,6 +98,11 @@ func TestLocate(t *testing.T) {
 		{
 			name:    "first .tgz of a helm downloader tar",
 			content: func(*testing.T) blob.ReadOnlyBlob { return fromBytes(helmTar.Bytes()) },
+			want:    chartTGZ,
+		},
+		{
+			name:    "chart in a verified source read only in part to locate it",
+			content: func(*testing.T) blob.ReadOnlyBlob { return verifiedBytes(paddedTar.Bytes()) },
 			want:    chartTGZ,
 		},
 		{
