@@ -110,11 +110,12 @@ tests:
             # "0" is a non-empty string, so the flag is rendered and disables metrics in the manager.
             - --metrics-bind-address=0
             - --leader-elect
+            - --repository-controller-concurrency=4
+            - --component-controller-concurrency=4
             - --resource-controller-concurrency=4
-            - --resolver-worker-count=10
-            - --resolver-worker-queue-length=1000
-            - --resolver-subscriber-buffer-size=100
-            - --resolver-cache-ttl=30
+            - --deployer-controller-concurrency=4
+            - --replication-controller-concurrency=4
+            - --discovery-controller-concurrency=4
             - --repository-controller-rate-limit-qps=10
             - --repository-controller-rate-limit-burst=100
             - --component-controller-rate-limit-qps=10
@@ -203,31 +204,36 @@ tests:
             initialDelaySeconds: 3
             periodSeconds: 4
 
-  - it: passes custom concurrency, resolver and cache values
+  - it: passes custom concurrency and cache values
+    # Distinct values per controller so a key wired to the wrong flag fails here.
     set:
-      manager.concurrency.resource: 8
-      manager.resolver.workerCount: 20
-      manager.resolver.workerQueueLength: 500
-      manager.resolver.subscriberBufferSize: 50
-      manager.resolver.cacheTTL: 60
+      manager.concurrency.repository: 5
+      manager.concurrency.component: 6
+      manager.concurrency.resource: 7
+      manager.concurrency.deployer: 8
+      manager.concurrency.replication: 9
+      manager.concurrency.discovery: 10
       manager.cache.deployerDownloadSize: 42
       manager.cache.deployerDownloadMaxResourceSize: 512Ki
     asserts:
       - contains:
           path: spec.template.spec.containers[0].args
-          content: --resource-controller-concurrency=8
+          content: --repository-controller-concurrency=5
       - contains:
           path: spec.template.spec.containers[0].args
-          content: --resolver-worker-count=20
+          content: --component-controller-concurrency=6
       - contains:
           path: spec.template.spec.containers[0].args
-          content: --resolver-worker-queue-length=500
+          content: --resource-controller-concurrency=7
       - contains:
           path: spec.template.spec.containers[0].args
-          content: --resolver-subscriber-buffer-size=50
+          content: --deployer-controller-concurrency=8
       - contains:
           path: spec.template.spec.containers[0].args
-          content: --resolver-cache-ttl=60
+          content: --replication-controller-concurrency=9
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --discovery-controller-concurrency=10
       - contains:
           path: spec.template.spec.containers[0].args
           content: --deployer-download-cache-size=42
@@ -235,30 +241,21 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --deployer-download-max-resource-size=512Ki
 
-  - it: keeps zero-valued resolver and cache flags
-    # The template uses hasKey for these so an explicit 0 is not dropped as falsy.
+  - it: keeps the zero-valued max resource size flag
+    # The template uses hasKey for this key so an explicit "0" (no limit) is not dropped as falsy.
     set:
-      manager.resolver.subscriberBufferSize: 0
-      manager.resolver.cacheTTL: 0
       manager.cache.deployerDownloadMaxResourceSize: "0"
     asserts:
-      - contains:
-          path: spec.template.spec.containers[0].args
-          content: --resolver-subscriber-buffer-size=0
-      - contains:
-          path: spec.template.spec.containers[0].args
-          content: --resolver-cache-ttl=0
       - contains:
           path: spec.template.spec.containers[0].args
           content: --deployer-download-max-resource-size=0
 
   - it: drops flags whose value is zero or empty so the manager uses its built-in default
-    # These keys use a plain "if", unlike the hasKey ones above. Changing one to hasKey
+    # These keys use a plain "if", unlike the hasKey one above. Changing one to hasKey
     # (or the other way round) changes what users get and must be a deliberate decision.
+    # Concurrency keys also use a plain "if", but values.schema.json rejects them below 1,
+    # so their zero branch is unreachable (see "rejects a concurrency below 1").
     set:
-      manager.concurrency.resource: 0
-      manager.resolver.workerCount: 0
-      manager.resolver.workerQueueLength: 0
       manager.cache.deployerDownloadSize: 0
       manager.logging.level: ""
       manager.logging.encoder: ""
@@ -269,8 +266,12 @@ tests:
             - --health-probe-bind-address=:8081
             - --metrics-bind-address=0
             - --leader-elect
-            - --resolver-subscriber-buffer-size=100
-            - --resolver-cache-ttl=30
+            - --repository-controller-concurrency=4
+            - --component-controller-concurrency=4
+            - --resource-controller-concurrency=4
+            - --deployer-controller-concurrency=4
+            - --replication-controller-concurrency=4
+            - --discovery-controller-concurrency=4
             - --repository-controller-rate-limit-qps=10
             - --repository-controller-rate-limit-burst=100
             - --component-controller-rate-limit-qps=10
@@ -288,6 +289,13 @@ tests:
             - --deployer-download-max-resource-size=2Mi
             - --enable-deployer=true
             - --enable-namespaced-deployer=true
+
+  - it: rejects a concurrency below 1
+    set:
+      manager.concurrency.resource: 0
+    asserts:
+      - failedTemplate:
+          errorPattern: manager/concurrency/resource.*minimum
 
   - it: defaults the deployer flags to true when the keys are absent
     # Simulates helm upgrade --reuse-values from a release that predates these keys.
@@ -315,28 +323,19 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --repository-controller-rate-limit-burst=7
 
-  - it: drops the hasKey flags when their key is absent
-    # The other half of "keeps zero-valued": an absent key means no flag, not an empty value.
+  - it: drops the hasKey flag when its key is absent
+    # The other half of "keeps the zero-valued": an absent key means no flag, not an empty value.
     set:
-      manager.resolver.subscriberBufferSize: null
-      manager.resolver.cacheTTL: null
       manager.cache.deployerDownloadMaxResourceSize: null
     asserts:
       - notContains:
           path: spec.template.spec.containers[0].args
-          content: --resolver-subscriber-buffer-size=
-      - notContains:
-          path: spec.template.spec.containers[0].args
-          content: --resolver-cache-ttl=
-      - notContains:
-          path: spec.template.spec.containers[0].args
           content: --deployer-download-max-resource-size=
 
-  - it: renders no flags for absent concurrency, resolver, rateLimiter, cache and logging blocks
+  - it: renders no flags for absent concurrency, rateLimiter, cache and logging blocks
     # Simulates helm upgrade --reuse-values from a release that predates these sections.
     set:
       manager.concurrency: null
-      manager.resolver: null
       manager.rateLimiter: null
       manager.cache: null
       manager.logging: null
