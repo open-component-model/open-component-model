@@ -64,6 +64,25 @@ func TestResourceDigestPinning(t *testing.T) {
 	r.Len(files, 1)
 }
 
+func TestDownloadResourceRemovesArchiveThatFailsVerification(t *testing.T) {
+	r := require.New(t)
+
+	fixture := newRepository(t)
+	dir := t.TempDir()
+	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &dir})
+	res := &descriptor.Resource{
+		Access: &v1.Git{Type: runtime.NewUnversionedType("git"), Repository: fixture.Path, Commit: fixture.First.String()},
+		Digest: &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: digest.FromString("other").Encoded()},
+	}
+
+	_, err := repo.DownloadResource(t.Context(), res, nil)
+	r.ErrorContains(err, "digest mismatch")
+
+	files, err := os.ReadDir(dir)
+	r.NoError(err)
+	r.Empty(files, "the archive that failed verification must be removed")
+}
+
 // TestResourceDigestLeavesRefUnchanged documents that digest processing pins the commit but
 // records the ref as authored: it does not expand a short name or HEAD to a full ref, which
 // could be ambiguous between a branch and a tag of the same name.

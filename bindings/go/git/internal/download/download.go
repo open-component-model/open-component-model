@@ -28,7 +28,8 @@ import (
 
 // Result is one downloaded snapshot of a Git repository with its history, archived as tar.gz.
 type Result struct {
-	// Blob is backed by a file that outlives the call and is owned by the caller.
+	// Blob is backed by a file that outlives the call and is owned by the caller, who
+	// discards it with Blob.Remove.
 	Blob *filesystem.Blob
 	// Commit is the full SHA the archive was taken from.
 	Commit string
@@ -37,8 +38,6 @@ type Result struct {
 	Ref string
 	// Digest covers the final compressed archive bytes.
 	Digest digest.Digest
-	// Path is the file backing Blob; owned by the caller.
-	Path string
 }
 
 // Download resolves one snapshot of the repository and archives it with its history.
@@ -57,7 +56,7 @@ func Download(ctx context.Context, access *accessv1.Git, creds runtime.Typed, op
 		if err != nil {
 			return err
 		}
-		result = &Result{Blob: b, Commit: selected.Hash.String(), Ref: ref.String(), Digest: archiveDigest, Path: archivePath}
+		result = &Result{Blob: b, Commit: selected.Hash.String(), Ref: ref.String(), Digest: archiveDigest}
 		return nil
 	})
 	if err != nil && archivePath != "" {

@@ -125,8 +125,8 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, res *descript
 	b, err := integrity.VerifyPrecomputed(ctx, res.Digest, result.Digest, result.Blob,
 		integrity.WithLogAttrs(slog.Any("resource", res.ToIdentity())))
 	if err != nil {
-		if rmErr := os.Remove(result.Path); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
-			slog.WarnContext(ctx, "error removing downloaded git archive that failed verification", "file", result.Path, "err", rmErr)
+		if rmErr := result.Blob.Remove(); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
+			slog.WarnContext(ctx, "error removing downloaded git archive that failed verification", "err", rmErr)
 		}
 		return nil, fmt.Errorf("resource %q: %w", res.Name, err)
 	}

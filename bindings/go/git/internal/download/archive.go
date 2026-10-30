@@ -72,10 +72,13 @@ func archive(ctx context.Context, repo *git.Repository, selected *object.Commit,
 		return nil, "", fmt.Errorf("cannot create git archive: %w", err)
 	}
 
-	b, err := filesystem.GetBlobFromOSPath(file.Name())
+	// A writable root, unlike GetBlobFromOSPath, lets the owner discard the archive
+	// through the blob (see filesystem.Blob.Remove).
+	dir, err := filesystem.NewFS(filepath.Dir(file.Name()), os.O_RDWR)
 	if err != nil {
-		return nil, "", fmt.Errorf("cannot open git archive file %q: %w", file.Name(), err)
+		return nil, "", fmt.Errorf("cannot open git archive directory: %w", err)
 	}
+	b := filesystem.NewFileBlob(dir, filepath.Base(file.Name()))
 
 	b.SetMediaType(mediaTypeTGZ)
 
