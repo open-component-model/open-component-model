@@ -91,16 +91,14 @@ const (
 )
 
 // Verify returns content bound to expected: the returned blob reports expected as its
-// digest and fails, at the latest when it is read to its end or closed, if the content
-// does not match.
+// digest and fails, at the latest when it is read to its end, if the content does not
+// match.
 // For an OCI artifact verified while it is read, ctx bounds those reads: once it is
 // done, reading the returned blob fails.
-//
-// It takes ownership of content: on error, content is closed if it is an [io.Closer].
 func Verify(ctx context.Context, expected *descriptor.Digest, content blob.ReadOnlyBlob, opts ...Option) (blob.ReadOnlyBlob, error) {
 	k, want, err := classify(expected)
 	if err != nil {
-		return nil, release(content, err)
+		return nil, err
 	}
 
 	switch k {
@@ -110,7 +108,7 @@ func Verify(ctx context.Context, expected *descriptor.Digest, content blob.ReadO
 	case kindArtifact:
 		verifying, err := newArtifactBlob(ctx, content, want, opts)
 		if err != nil {
-			return nil, release(content, err)
+			return nil, err
 		}
 		return verifying, nil
 	}
@@ -121,7 +119,7 @@ func Verify(ctx context.Context, expected *descriptor.Digest, content blob.ReadO
 			case got == want:
 				return content, nil
 			case got.Algorithm() == want.Algorithm():
-				return nil, release(content, mismatch(want, got))
+				return nil, mismatch(want, got)
 			}
 		}
 	}
@@ -136,7 +134,7 @@ func VerifyPrecomputed(ctx context.Context, expected *descriptor.Digest, compute
 	k, want, err := classify(expected)
 	if err == nil && k == kindBlob && computed != "" && computed.Algorithm() == want.Algorithm() {
 		if computed != want {
-			return nil, release(content, mismatch(want, computed))
+			return nil, mismatch(want, computed)
 		}
 		return &digestBlob{base: content, digest: want}, nil
 	}
@@ -163,7 +161,6 @@ func VerifiedOnRead(content blob.ReadOnlyBlob) bool {
 }
 
 // VerifyContent reads content to its end and reports whether it matches expected.
-// It neither takes ownership of content nor closes it.
 func VerifyContent(ctx context.Context, expected *descriptor.Digest, content blob.ReadOnlyBlob, opts ...Option) error {
 	k, want, err := classify(expected)
 	if err != nil {
@@ -287,17 +284,4 @@ func unsupportedNormalisation(normalisation string) error {
 
 func mismatch(want, got digest.Digest) error {
 	return fmt.Errorf("digest mismatch: expected %s, got %s", want, got)
-}
-
-// release closes refused content, so that what it holds (such as a temporary file)
-// does not leak.
-func release(content blob.ReadOnlyBlob, err error) error {
-	closer, ok := content.(io.Closer)
-	if !ok {
-		return err
-	}
-	if closeErr := closer.Close(); closeErr != nil {
-		return errors.Join(err, fmt.Errorf("failed to release unverifiable content: %w", closeErr))
-	}
-	return err
 }

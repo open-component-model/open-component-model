@@ -28,9 +28,8 @@ func GetLocalResource(ctx context.Context, repo ComponentVersionRepository, comp
 		gotDigest = got.Digest
 	}
 	if !sameDigest(gotDigest, res.Digest) {
-		err := fmt.Errorf("local resource %q of %s:%s records digest %s, but the resolved component version records %s",
+		return nil, fmt.Errorf("local resource %q of %s:%s records digest %s, but the resolved component version records %s",
 			res.Name, component, version, formatDigest(gotDigest), formatDigest(res.Digest))
-		return nil, errors.Join(err, closeBlob(data))
 	}
 	return data, nil
 }
@@ -41,12 +40,11 @@ func GetLocalResource(ctx context.Context, repo ComponentVersionRepository, comp
 // the repository stores it under, and an OCI artifact against its resolved manifest, but
 // content that is only checked while it is read (see [integrity.VerifiedOnRead]) is read
 // to its end.
-func VerifyLocalResource(ctx context.Context, repo ComponentVersionRepository, component, version string, res *descriptor.Resource) (err error) {
+func VerifyLocalResource(ctx context.Context, repo ComponentVersionRepository, component, version string, res *descriptor.Resource) error {
 	data, err := GetLocalResource(ctx, repo, component, version, res)
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, closeBlob(data)) }()
 	if !integrity.VerifiedOnRead(data) {
 		return nil
 	}
@@ -70,11 +68,4 @@ func formatDigest(d *descriptor.Digest) string {
 		return "<none>"
 	}
 	return fmt.Sprintf("%s:%s (%s)", d.HashAlgorithm, d.Value, d.NormalisationAlgorithm)
-}
-
-func closeBlob(b blob.ReadOnlyBlob) error {
-	if closer, ok := b.(io.Closer); ok {
-		return closer.Close()
-	}
-	return nil
 }

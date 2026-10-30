@@ -19,12 +19,11 @@ import (
 
 const content = "the content a digest was taken over"
 
-// sourceBlob counts how often it is opened and records whether it was closed.
+// sourceBlob counts how often it is opened.
 type sourceBlob struct {
 	content   string
 	mediaType string
 	opened    int
-	closed    bool
 }
 
 func (s *sourceBlob) ReadCloser() (io.ReadCloser, error) {
@@ -33,11 +32,6 @@ func (s *sourceBlob) ReadCloser() (io.ReadCloser, error) {
 }
 
 func (s *sourceBlob) MediaType() (string, bool) { return s.mediaType, s.mediaType != "" }
-
-func (s *sourceBlob) Close() error {
-	s.closed = true
-	return nil
-}
 
 // fakeArtifactVerifier passes content through and records the root it verifies against.
 type fakeArtifactVerifier struct {
@@ -172,7 +166,6 @@ func TestVerify_RefusesUnusableDigest(t *testing.T) {
 
 			_, err := Verify(t.Context(), expected, src)
 			r.Error(err)
-			r.True(src.closed, "refused content must be released")
 		})
 	}
 
@@ -183,7 +176,6 @@ func TestVerify_RefusesUnusableDigest(t *testing.T) {
 		_, err := Verify(t.Context(), withNormalisation(digest.FromString(content), "jsonNormalisation/v1"), src)
 		r.ErrorIs(err, ErrUnverifiable)
 		r.ErrorContains(err, `unsupported normalisation algorithm "jsonNormalisation/v1"`)
-		r.True(src.closed)
 	})
 }
 
@@ -234,16 +226,6 @@ func TestVerify_GenericBlobDigest(t *testing.T) {
 		_, err = rc.Read(make([]byte, 4))
 		r.NoError(err)
 		r.ErrorContains(rc.Close(), "incomplete read")
-	})
-
-	t.Run("forwards close to the content", func(t *testing.T) {
-		r := require.New(t)
-		src := &sourceBlob{content: content}
-		got, err := Verify(t.Context(), generic(expected), src)
-		r.NoError(err)
-
-		r.NoError(got.(io.Closer).Close())
-		r.True(src.closed)
 	})
 }
 
@@ -300,7 +282,6 @@ func TestVerifyPrecomputed(t *testing.T) {
 
 		_, err := VerifyPrecomputed(t.Context(), generic(digest.FromString(content)), digest.FromString("other"), src)
 		r.ErrorContains(err, "digest mismatch")
-		r.True(src.closed)
 	})
 
 	t.Run("verifies on read if the computed digest is of another algorithm", func(t *testing.T) {
@@ -323,7 +304,6 @@ func TestVerify_OCIArtifactDigest(t *testing.T) {
 
 		_, err := Verify(t.Context(), expected, src)
 		r.ErrorIs(err, ErrUnverifiable)
-		r.True(src.closed)
 	})
 
 	t.Run("is unverifiable for content the verifier does not accept", func(t *testing.T) {
@@ -423,7 +403,6 @@ func TestVerifyContent(t *testing.T) {
 
 	src := &sourceBlob{content: content}
 	r.NoError(VerifyContent(t.Context(), expected, src))
-	r.False(src.closed, "content is not owned by VerifyContent")
 
 	r.ErrorContains(VerifyContent(t.Context(), expected, &sourceBlob{content: "tampered"}), "digest mismatch")
 }

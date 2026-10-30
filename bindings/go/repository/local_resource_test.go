@@ -31,21 +31,15 @@ func (l *localRepository) GetLocalResource(ctx context.Context, _, _ string, _ r
 	return b, &descriptor.Resource{Digest: l.digest}, err
 }
 
-// trackedBlob records whether it was opened and closed.
+// trackedBlob records whether it was opened.
 type trackedBlob struct {
 	content string
 	opened  bool
-	closed  bool
 }
 
 func (b *trackedBlob) ReadCloser() (io.ReadCloser, error) {
 	b.opened = true
 	return io.NopCloser(bytes.NewReader([]byte(b.content))), nil
-}
-
-func (b *trackedBlob) Close() error {
-	b.closed = true
-	return nil
 }
 
 func genericDigest(d digest.Digest) *descriptor.Digest {
@@ -88,7 +82,6 @@ func TestGetLocalResource_MustRecordResolvedDigest(t *testing.T) {
 				return
 			}
 			r.ErrorContains(err, tt.wantErr)
-			r.True(served.closed, "content of a substituted resource must be released")
 		})
 	}
 }
