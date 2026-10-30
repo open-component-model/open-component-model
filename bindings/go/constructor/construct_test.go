@@ -2,8 +2,11 @@ package constructor
 
 import (
 	"bytes"
+	"crypto"
 	"io"
+	"log/slog"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,6 +19,11 @@ import (
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/algorithms"
+	jsonv1 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v1"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha2"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha3"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/repository"
@@ -701,6 +709,13 @@ components:
 		"parent-b must stamp leaf-b's digest into its reference")
 	assert.NotEqual(t, digestA.Value, digestB.Value,
 		"references to different components must not share a digest despite the same local reference name")
+
+	// Child reference digests must use the current default normalisation
+	// (v4alpha3) so a parent signed with the default covers the child's versioned
+	// signing labels; v4alpha1 (the previous hardcoded value) dropped
+	// label.version.
+	assert.Equal(t, v4alpha3.Algorithm, digestA.NormalisationAlgorithm,
+		"child reference digest must use the current default normalisation (v4alpha3)")
 }
 
 func TestConstructWithSourceBlobToCTF(t *testing.T) {
@@ -944,4 +959,182 @@ components:
 
 	// The component version is added only after successful validation.
 	assert.Empty(t, repo.addedVersions, "no component version should be added when a resource version is invalid")
+}
+
+// TestProcessReference_DigestAlgorithmSelection pins the reference-digest
+// normalisation policy for `ocm add cv`: a reference without a digest is minted
+// with the current default (v4alpha3) so a parent signed with the default covers
+// the child's versioned signing labels, while a reference that already carries a
+// digest keeps its own recorded algorithm (we recompute under it only to verify,
+// never rewrite an existing child's digest to the default).
+func TestProcessReference_DigestAlgorithmSelection(t *testing.T) {
+	r := require.New(t)
+	c := &DefaultConstructor{componentDigestCache: make(map[string]*descriptor.Digest)}
+
+	child := &descriptor.Descriptor{
+		Component: descriptor.Component{
+			ComponentMeta: descriptor.ComponentMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "ocm.software/child",
+					Version: "1.0.0",
+					// A versioned signing label makes v4alpha1 (drops version) and
+					// v4alpha3 (keeps version) produce different bytes, so the test
+					// proves the pinned algorithm is honoured rather than coinciding.
+					Labels: []descriptor.Label{{Name: "sig", Value: []byte(`"v"`), Signing: true, Version: "v1"}},
+				},
+			},
+			Provider: descriptor.Provider{Name: "ocm.software"},
+		},
+	}
+	mkRef := func(dig *constructorruntime.Digest) *constructorruntime.Reference {
+		return &constructorruntime.Reference{
+			ElementMeta: constructorruntime.ElementMeta{
+				ObjectMeta: constructorruntime.ObjectMeta{Name: "child", Version: "1.0.0"},
+			},
+			Component: "ocm.software/child",
+			Digest:    dig,
+		}
+	}
+
+	// No supplied digest -> minted with the default (v4alpha3).
+	got, err := c.processReference(t.Context(), mkRef(nil), child)
+	r.NoError(err)
+	r.Equal(v4alpha3.Algorithm, got.Digest.NormalisationAlgorithm)
+
+	// A pinned digest is verified under its own recorded algorithms and kept,
+	// never rewritten to the default. Only its spelling is canonicalised
+	// (lowercase hex, SHA-256/SHA-512), so every verifier accepts it.
+	mustDigest := func(norm, hash string) *constructorruntime.Digest {
+		d, err := algorithms.Digest(child, norm, hash)
+		r.NoError(err)
+		return &constructorruntime.Digest{HashAlgorithm: d.HashAlgorithm, NormalisationAlgorithm: d.NormalisationAlgorithm, Value: d.Value}
+	}
+	a1 := mustDigest(v4alpha1.Algorithm, crypto.SHA256.String())
+	r.NotEqual(got.Digest.Value, a1.Value, "v4alpha1 and v4alpha3 must differ for this child or the test proves nothing")
+	a2 := mustDigest(v4alpha2.Algorithm, crypto.SHA256.String())
+	legacyV3 := &constructorruntime.Digest{HashAlgorithm: a2.HashAlgorithm, NormalisationAlgorithm: algorithms.LegacyV3, Value: a2.Value}
+	sha512 := mustDigest(v4alpha3.Algorithm, crypto.SHA512.String())
+
+	for name, tt := range map[string]struct{ pinned, want *constructorruntime.Digest }{
+		"v4alpha1":        {pinned: a1, want: a1},
+		"v4alpha2":        {pinned: a2, want: a2},
+		"legacy v3 alias": {pinned: legacyV3, want: legacyV3},
+		"sha512":          {pinned: sha512, want: sha512},
+		"legacy hash name": {
+			pinned: &constructorruntime.Digest{HashAlgorithm: "sha256", NormalisationAlgorithm: a1.NormalisationAlgorithm, Value: a1.Value},
+			want:   a1,
+		},
+		"uppercase hex": {
+			pinned: &constructorruntime.Digest{HashAlgorithm: a1.HashAlgorithm, NormalisationAlgorithm: a1.NormalisationAlgorithm, Value: strings.ToUpper(a1.Value)},
+			want:   a1,
+		},
+	} {
+		gotPinned, err := c.processReference(t.Context(), mkRef(tt.pinned), child)
+		r.NoError(err, name)
+		r.Equal(descriptor.Digest{HashAlgorithm: tt.want.HashAlgorithm, NormalisationAlgorithm: tt.want.NormalisationAlgorithm, Value: tt.want.Value}, gotPinned.Digest,
+			"%s: pinned digest must be kept, canonically spelled", name)
+	}
+
+	// The verify-only jsonNormalisation/v1 must not be recorded in a new
+	// descriptor, even when it matches.
+	_, err = c.processReference(t.Context(), mkRef(mustDigest(jsonv1.Algorithm, crypto.SHA256.String())), child)
+	r.ErrorIs(err, ErrVerifyOnlyReferenceDigest)
+
+	// An unsupported hash name fails instead of being recorded.
+	_, err = c.processReference(t.Context(), mkRef(&constructorruntime.Digest{
+		HashAlgorithm: "MD5", NormalisationAlgorithm: a1.NormalisationAlgorithm, Value: a1.Value,
+	}), child)
+	r.ErrorIs(err, algorithms.ErrUnsupportedHash)
+
+	// A pinned digest whose value does not match the referenced component fails.
+	_, err = c.processReference(t.Context(), mkRef(&constructorruntime.Digest{
+		HashAlgorithm:          a1.HashAlgorithm,
+		NormalisationAlgorithm: a1.NormalisationAlgorithm,
+		Value:                  a2.Value,
+	}), child)
+	r.ErrorIs(err, ErrDigestMismatch)
+}
+
+// A constructed tree whose reference digests are not all the default must warn
+// for each such reference, so users rebuild with a current CLI; a default-only
+// tree must not.
+func TestConstructWarnsAboutNonDefaultReferenceDigests(t *testing.T) {
+	r := require.New(t)
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	construct := func(t *testing.T, pin string) []*descriptor.Descriptor {
+		t.Helper()
+		yamlData := `
+components:
+  - name: ocm.software/leaf
+    version: 1.0.0
+    provider:
+      name: ocm.software
+  - name: ocm.software/parent
+    version: 1.0.0
+    provider:
+      name: ocm.software
+    componentReferences:
+      - name: leaf
+        version: 1.0.0
+        componentName: ocm.software/leaf
+` + pin
+		var spec constructorv1.ComponentConstructor
+		require.NoError(t, yaml.Unmarshal([]byte(yamlData), &spec))
+		c := NewDefaultConstructor(constructorruntime.ConvertToRuntimeConstructor(&spec), Options{
+			TargetRepositoryProvider: &mockTargetRepositoryProvider{repo: newMockTargetRepository()},
+		})
+		require.NoError(t, c.Construct(t.Context()))
+		return collectDescriptors(t, c.GetGraph())
+	}
+	const warning = "component reference digest was computed with an older normalisation algorithm"
+
+	var leaf *descriptor.Descriptor
+	for _, d := range construct(t, "") {
+		if d.Component.Name == "ocm.software/leaf" {
+			leaf = d
+		}
+	}
+	r.NotNil(leaf)
+	r.NotContains(logs.String(), warning, "a tree with only default reference digests must not warn")
+
+	a1, err := algorithms.Digest(leaf, v4alpha1.Algorithm, crypto.SHA256.String())
+	r.NoError(err)
+	construct(t, `        digest:
+          hashAlgorithm: `+a1.HashAlgorithm+`
+          normalisationAlgorithm: `+a1.NormalisationAlgorithm+`
+          value: `+a1.Value+`
+`)
+	r.Equal(1, strings.Count(logs.String(), warning), "a pinned v4alpha1 reference must warn once")
+	r.Contains(logs.String(), "normalisationAlgorithm="+v4alpha1.Algorithm)
+}
+
+// References of an external component version belong to its publisher: the
+// user cannot change them and they do not affect the parent being built, so
+// they must not warn (they are logged at debug level).
+func TestDiscoverDoesNotWarnAboutExternalReferenceDigests(t *testing.T) {
+	r := require.New(t)
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	external := &descriptor.Descriptor{Component: descriptor.Component{
+		ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: "ocm.software/external", Version: "1.0.0"}},
+		References: []descriptor.Reference{{
+			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "old", Version: "1.0.0"}},
+			Component:   "ocm.software/old",
+			Digest:      descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: v4alpha1.Algorithm, Value: "aa"},
+		}},
+	}}
+	_, err := (&resolverAndDiscoverer{}).Discover(t.Context(), &ConstructorOrExternalComponent{
+		ExternalComponent: &DescriptorWithLocalBlobs{Descriptor: external},
+	})
+	r.NoError(err)
+	r.Contains(logs.String(), "component reference digest was computed with an older normalisation algorithm")
+	r.NotContains(logs.String(), "level=WARN")
+	r.Contains(logs.String(), "level=DEBUG")
 }

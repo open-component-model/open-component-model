@@ -1815,13 +1815,52 @@ configurations:
 	)
 	r.NoError(err, "failed to sign component version")
 
+	// Signing without --normalisation must default to jsonNormalisation/v4alpha3:
+	// the printed signature pins its own normalisation algorithm.
+	r.Contains(logs.String(), "jsonNormalisation/v4alpha3",
+		"signing without --normalisation must default to v4alpha3")
+
+	// --normalisation only offers signable algorithms: the verify-only v1 and
+	// the legacy v3 alias are rejected while parsing the flag.
+	for _, algo := range []string{"jsonNormalisation/v1", "jsonNormalisation/v3"} {
+		_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+			reference,
+			"--signature", signatureName,
+			"--normalisation", algo,
+			"--config", ocmConfigFilePath),
+		)
+		r.ErrorContains(err, "expected one of", "%s must not be signable", algo)
+	}
+
+	const olderAlgorithmWarning = "older normalisation algorithm"
+	verifyLogs := test.NewJSONLogReader()
 	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
 		reference,
 		"--signature", signatureName,
 		"--config", ocmConfigFilePath),
-		test.WithOutput(logs),
+		test.WithErrorOutput(verifyLogs),
 	)
 	r.NoError(err, "failed to verify component version")
+	r.NotContains(verifyLogs.String(), olderAlgorithmWarning, "a default signature must not warn")
+
+	// Trusting a signature under an older algorithm warns, recommending an upgrade.
+	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+		reference,
+		"--signature", signatureName,
+		"--normalisation", "jsonNormalisation/v4alpha1",
+		"--force",
+		"--config", ocmConfigFilePath),
+	)
+	r.NoError(err, "failed to re-sign component version with v4alpha1")
+	verifyLogs = test.NewJSONLogReader()
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
+		reference,
+		"--signature", signatureName,
+		"--config", ocmConfigFilePath),
+		test.WithErrorOutput(verifyLogs),
+	)
+	r.NoError(err, "failed to verify v4alpha1 signature")
+	r.Contains(verifyLogs.String(), olderAlgorithmWarning, "a v4alpha1 signature must warn")
 }
 
 func Test_Sign_With_Sigstore_Spec_Selects_Cosign_Handler(t *testing.T) {

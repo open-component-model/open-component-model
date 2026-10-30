@@ -1,11 +1,13 @@
 package repository
 
 import (
+	"crypto"
 	"fmt"
 	"strings"
 
 	"github.com/opencontainers/go-digest"
 
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/algorithms"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
 
@@ -50,14 +52,14 @@ func ParseDigest(d *descriptor.Digest) (digest.Digest, error) {
 
 // verifiableAlgorithm maps a hash algorithm name ("SHA-256" as the spec spells it, or "sha256")
 // to the digest algorithm content can be verified with: SHA-256 or SHA-512, the hashes
-// signing accepts.
+// signing accepts (see algorithms.Hash).
 func verifiableAlgorithm(name string) (digest.Algorithm, error) {
-	switch strings.ToLower(strings.ReplaceAll(name, "-", "")) {
-	case "sha256":
-		return digest.SHA256, nil
-	case "sha512":
-		return digest.SHA512, nil
-	default:
-		return "", fmt.Errorf("unsupported hash algorithm %q: only SHA-256 and SHA-512 are supported", name)
+	hash, err := algorithms.Hash(name)
+	if err != nil {
+		return "", err
 	}
+	if hash == crypto.SHA512 {
+		return digest.SHA512, nil
+	}
+	return digest.SHA256, nil
 }
