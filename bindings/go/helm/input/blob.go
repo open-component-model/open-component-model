@@ -159,7 +159,7 @@ func newReadOnlyChart(path, workingDir, tmpDirBase string) (result *ReadOnlyChar
 	}
 
 	// A chart packaged from a directory lives in tmpDir, outside the working directory.
-	getBlob := filesystem.GetBlobFromOSPath
+	getBlob := func(p string) (*filesystem.Blob, error) { return filesystem.GetBlobFromOSPath(p) }
 	if workingDir != "" && !fi.IsDir() {
 		getBlob = func(p string) (*filesystem.Blob, error) {
 			return filesystem.GetBlobInWorkingDirectory(p, workingDir)

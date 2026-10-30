@@ -54,7 +54,8 @@ func copyBuffered(dst io.Writer, src io.Reader) error {
 // A relative path is resolved against the current working directory once, on creation.
 // The file is opened by path on every read and no descriptor is held between reads.
 // Symlinks are followed like os.Open. A missing or unreadable file is reported when the blob is read.
-func GetBlobFromOSPath(path string) (*Blob, error) {
+// With [AllowRemove], [Blob.Remove] deletes the file.
+func GetBlobFromOSPath(path string, opts ...OSPathOption) (*Blob, error) {
 	if path == "" {
 		return nil, errors.New("path must not be empty")
 	}
@@ -62,7 +63,28 @@ func GetBlobFromOSPath(path string) (*Blob, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve absolute path: %w", err)
 	}
-	return NewFileBlob(osDirFS(filepath.Dir(path)), filepath.Base(path)), nil
+	var o osPathOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+	var dir fs.FS = osDirFS(filepath.Dir(path))
+	if o.allowRemove {
+		dir = removableOSDirFS(filepath.Dir(path))
+	}
+	return NewFileBlob(dir, filepath.Base(path)), nil
+}
+
+// OSPathOption configures [GetBlobFromOSPath].
+type OSPathOption func(*osPathOptions)
+
+type osPathOptions struct {
+	allowRemove bool
+}
+
+// AllowRemove lets [Blob.Remove] delete the file, for blobs that own it. Like reads,
+// removal opens nothing that outlives the call, so the directory stays removable.
+func AllowRemove() OSPathOption {
+	return func(o *osPathOptions) { o.allowRemove = true }
 }
 
 // osDirFS is a read-only fs.FS over an absolute directory. Unlike os.DirFS it keeps
@@ -82,6 +104,22 @@ func (dir osDirFS) Open(name string) (fs.File, error) {
 
 func (dir osDirFS) Stat(name string) (fs.FileInfo, error) {
 	return os.Stat(filepath.Join(string(dir), name))
+}
+
+// removableOSDirFS is an osDirFS whose files can be removed.
+type removableOSDirFS string
+
+var (
+	_ fs.StatFS = removableOSDirFS("")
+	_ RemoveFS  = removableOSDirFS("")
+)
+
+func (dir removableOSDirFS) Open(name string) (fs.File, error) { return osDirFS(dir).Open(name) }
+
+func (dir removableOSDirFS) Stat(name string) (fs.FileInfo, error) { return osDirFS(dir).Stat(name) }
+
+func (dir removableOSDirFS) Remove(name string) error {
+	return os.Remove(filepath.Join(string(dir), name))
 }
 
 // GetBlobInWorkingDirectory returns a read-only blob for a file that must stay inside workingDir.

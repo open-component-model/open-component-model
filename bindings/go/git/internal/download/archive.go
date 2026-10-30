@@ -72,47 +72,14 @@ func archive(ctx context.Context, repo *git.Repository, selected *object.Commit,
 		return nil, "", fmt.Errorf("cannot create git archive: %w", err)
 	}
 
-	b := filesystem.NewFileBlob(archiveDir(filepath.Dir(file.Name())), filepath.Base(file.Name()))
+	// The owner discards the archive through the blob (see filesystem.Blob.Remove).
+	b, err := filesystem.GetBlobFromOSPath(file.Name(), filesystem.AllowRemove())
+	if err != nil {
+		return nil, "", fmt.Errorf("cannot open git archive file %q: %w", file.Name(), err)
+	}
 	b.SetMediaType(mediaTypeTGZ)
 
 	return b, digester.Digest(), nil
-}
-
-// archiveDir serves the archive in one directory and lets its owner remove it through
-// the blob (see filesystem.Blob.Remove), which GetBlobFromOSPath does not allow. Unlike
-// filesystem.RootFileSystem it holds no handle on the directory between calls: the only
-// handle left is that of an opened file, released when its reader is closed. On Windows
-// an open directory handle would keep the directory from being removed.
-type archiveDir string
-
-var (
-	_ fs.StatFS           = archiveDir("")
-	_ filesystem.RemoveFS = archiveDir("")
-)
-
-func (d archiveDir) Open(name string) (fs.File, error) {
-	return inRoot(d, func(root *os.Root) (fs.File, error) { return root.Open(name) })
-}
-
-func (d archiveDir) Stat(name string) (fs.FileInfo, error) {
-	return inRoot(d, func(root *os.Root) (fs.FileInfo, error) { return root.Stat(name) })
-}
-
-func (d archiveDir) Remove(name string) error {
-	_, err := inRoot(d, func(root *os.Root) (struct{}, error) { return struct{}{}, root.Remove(name) })
-	return err
-}
-
-// inRoot runs fn on the directory d, confined to it, and releases the directory again.
-// Files fn opens stay usable after that.
-func inRoot[T any](d archiveDir, fn func(*os.Root) (T, error)) (T, error) {
-	root, err := os.OpenRoot(string(d))
-	if err != nil {
-		var zero T
-		return zero, err
-	}
-	defer func() { _ = root.Close() }()
-	return fn(root)
 }
 
 // writeGitStorage initialises a repository in dir, stores the history of commit
