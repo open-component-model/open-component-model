@@ -157,16 +157,21 @@ func (p *processor) processExternalComponent(ctx context.Context, descriptor *De
 
 	eg, egctx := errgroup.WithContext(ctx)
 	var mu sync.Mutex
-	for _, local := range descriptor.Local {
+	for _, idx := range descriptor.Local {
 		eg.Go(func() error {
-			uploaded, err := repo.AddLocalResource(egctx,
-				descriptor.Component.Name, descriptor.Component.Version, local.Resource, local.Content)
+			identity := descriptor.Component.Resources[idx].ToIdentity()
+			content, resource, err := descriptor.Source.GetLocalResource(egctx, descriptor.Component.Name, descriptor.Component.Version, identity)
 			if err != nil {
-				return fmt.Errorf("error getting local resource %q for component %q: %w", local.Resource.ToIdentity(), descriptor.Component.ToIdentity(), err)
+				return fmt.Errorf("error getting local resource %q for component %q: %w", identity, descriptor.Component.ToIdentity(), err)
+			}
+			uploaded, err := repo.AddLocalResource(egctx,
+				descriptor.Component.Name, descriptor.Component.Version, resource, content)
+			if err != nil {
+				return fmt.Errorf("error uploading local resource %q for component %q: %w", identity, descriptor.Component.ToIdentity(), err)
 			}
 			mu.Lock()
 			defer mu.Unlock()
-			descriptor.Component.Resources[local.Index] = *uploaded
+			descriptor.Component.Resources[idx] = *uploaded
 			return nil
 		})
 	}

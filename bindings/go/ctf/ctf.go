@@ -94,10 +94,34 @@ type ReadOnlyIndexStore interface {
 type BlobStore interface {
 	ReadOnlyBlobStore
 	// SaveBlob saves the blob to the CTF. The blob must be blob.DigestAware; its digest is
-	// only asked for after its content has been read and closed.
+	// only asked for after its content has been read and closed. Saving a blob that is
+	// already stored keeps the stored one, also when both saves run concurrently.
 	SaveBlob(ctx context.Context, blob blob.ReadOnlyBlob) (err error)
 	// DeleteBlob deletes the blob with the specified digest from the CTF.
 	DeleteBlob(ctx context.Context, digest string) (err error)
+}
+
+// BlobStager is implemented by a BlobStore that can store a blob in two steps. Callers
+// that serialize writes to the CTF stage outside their lock and publish under it, so a
+// slow blob source never holds the lock. Stores that do not implement it are written
+// with SaveBlob.
+type BlobStager interface {
+	// StageBlob reads and verifies the blob into the CTF without publishing it, under the
+	// same contract as SaveBlob. The returned StagedBlob must be discarded.
+	StageBlob(ctx context.Context, blob blob.ReadOnlyBlob) (StagedBlob, error)
+}
+
+// StagedBlob is blob content held by a CTF but not yet stored under its digest.
+type StagedBlob interface {
+	// Digest returns the digest of the staged content.
+	Digest() string
+	// Publish stores the staged content under its digest, keeping an already stored blob
+	// of that digest, also one published concurrently. It may be called once and not
+	// after Discard.
+	Publish() error
+	// Discard removes the staged content if it was not published. It is safe to call
+	// more than once and after Publish.
+	Discard() error
 }
 
 type ReadOnlyBlobStore interface {

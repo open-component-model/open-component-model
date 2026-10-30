@@ -200,6 +200,81 @@ func Test_FileSystemCTF_ConcurrentOperations(t *testing.T) {
 	r.Len(savedBlobs, 10)
 }
 
+// A staged blob is invisible until published, also to ListBlobs; publishing keeps an
+// already stored blob; discarding leaves nothing behind and ends the staged blob.
+func TestFileSystemCTF_StageBlob(t *testing.T) {
+	ctx := t.Context()
+	content := []byte("staged content")
+	dig := digest.FromBytes(content).String()
+
+	for _, tc := range []struct {
+		name        string
+		preexisting bool
+		publish     bool
+		wantBlobs   []string
+	}{
+		{name: "published", publish: true, wantBlobs: []string{dig}},
+		{name: "published over stored blob", preexisting: true, publish: true, wantBlobs: []string{dig}},
+		{name: "discarded", wantBlobs: []string{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			dir := t.TempDir()
+			file, err := ctf.ToBlobFileName(dig)
+			r.NoError(err)
+			blobPath := filepath.Join(dir, ctf.BlobsDirectoryName, file)
+			archive, err := ctf.OpenCTFFromOSPath(dir, ctf.O_RDWR)
+			r.NoError(err)
+			var before os.FileInfo
+			if tc.preexisting {
+				r.NoError(archive.SaveBlob(ctx, inmemory.New(bytes.NewReader(content))))
+				before, err = os.Stat(blobPath)
+				r.NoError(err)
+			}
+
+			staged, err := archive.StageBlob(ctx, inmemory.New(bytes.NewReader(content)))
+			r.NoError(err)
+			r.Equal(dig, staged.Digest())
+			if !tc.preexisting {
+				_, err = archive.GetBlob(ctx, dig)
+				r.Error(err, "a staged blob must not be visible before it is published")
+				listed, err := archive.ListBlobs(ctx)
+				r.NoError(err)
+				r.Empty(listed, "a staged file is not listed as a blob")
+			}
+			if tc.publish {
+				r.NoError(staged.Publish())
+			}
+			r.NoError(staged.Discard())
+			r.Error(staged.Publish(), "a discarded blob cannot be published")
+
+			entries, err := os.ReadDir(filepath.Join(dir, ctf.BlobsDirectoryName))
+			r.NoError(err)
+			names := []string{}
+			for _, e := range entries {
+				names = append(names, ctf.ToDigest(e.Name()))
+			}
+			r.Equal(tc.wantBlobs, names, "only published blobs may remain, no staged file")
+			if before != nil {
+				after, err := os.Stat(blobPath)
+				r.NoError(err)
+				r.True(os.SameFile(before, after), "the stored blob is kept, not replaced")
+			}
+			if !tc.publish {
+				return
+			}
+			stored, err := archive.GetBlob(ctx, dig)
+			r.NoError(err)
+			rc, err := stored.ReadCloser()
+			r.NoError(err)
+			t.Cleanup(func() { _ = rc.Close() })
+			data, err := io.ReadAll(rc)
+			r.NoError(err)
+			r.Equal(content, data)
+		})
+	}
+}
+
 func Test_FileSystemCTF_IndexOperations(t *testing.T) {
 	ctx := t.Context()
 	r := require.New(t)

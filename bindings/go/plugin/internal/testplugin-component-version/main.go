@@ -116,8 +116,8 @@ func (m *TestPlugin) GetLocalResource(ctx context.Context, request repov1.GetLoc
 			},
 			Digest: &v2.Digest{
 				HashAlgorithm:          "SHA-256",
-				NormalisationAlgorithm: "jsonNormalisation/v1",
-				Value:                  "test-value",
+				NormalisationAlgorithm: "genericBlobDigest/v1",
+				Value:                  "6f95a5a0677846fbabae149e34aee0720cec1361ed4905205b33b5ce79da3b44",
 			},
 		},
 	}, nil

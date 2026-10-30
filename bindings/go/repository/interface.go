@@ -77,6 +77,9 @@ type LocalResourceRepository interface {
 
 	// GetLocalResource retrieves and verifies the integrity of a local [descriptor.Resource] from the repository.
 	// The [runtime.Identity] must match a resource in the [descriptor.Descriptor].
+	// The returned content is bound to the digest of the returned resource (see package integrity):
+	// content that does not match fails, at the latest when it is read to its end. A resource
+	// without a digest is returned unverified.
 	GetLocalResource(ctx context.Context, component, version string, identity runtime.Identity) (blob.ReadOnlyBlob, *descriptor.Resource, error)
 }
 
@@ -111,6 +114,9 @@ type ResourceRepository interface {
 	UploadResource(ctx context.Context, res *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (*descriptor.Resource, error)
 	// DownloadResource downloads and verifies the integrity of a [descriptor.Resource] from the repository.
 	// The credentials map must contain necessary authentication information to access the resource.
+	// The returned content is bound to res.Digest (see package integrity): content that does not
+	// match fails, at the latest when it is read to its end. A resource without a digest is
+	// returned unverified.
 	DownloadResource(ctx context.Context, res *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error)
 }
 

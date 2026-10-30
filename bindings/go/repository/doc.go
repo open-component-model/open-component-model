@@ -19,4 +19,12 @@
 // Use this module when you need to work with OCM repositories in a generic way,
 // or when building new repository backends that should be compatible with the
 // OCM tooling and workflows.
+//
+// # Content and contexts
+//
+// Blobs returned by GetLocalResource, GetLocalSource, DownloadResource and
+// DownloadSource may be read lazily, and their reads may be bound to the context of
+// the call that returned them: once that context is done, reading fails. Read such a
+// blob while that context lasts; to read it later, fetch it with a context that
+// lasts as long, or fetch it where it is read.
 package repository

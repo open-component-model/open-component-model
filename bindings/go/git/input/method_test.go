@@ -3,6 +3,8 @@ package input_test
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -63,7 +65,6 @@ func TestProcessResourceSnapshots(t *testing.T) {
 
 			reader, err := result.ProcessedBlobData.ReadCloser()
 			r.NoError(err)
-			t.Cleanup(func() { r.NoError(reader.Close()) })
 			gz, err := gzip.NewReader(reader)
 			r.NoError(err)
 			t.Cleanup(func() { r.NoError(gz.Close()) })
@@ -84,12 +85,30 @@ func TestProcessResourceSnapshots(t *testing.T) {
 			}
 			r.Equal(map[string]string{"README.md": tc.want}, archived)
 
+			// The clone serving the read is removed once the reader is closed.
+			_, err = io.Copy(io.Discard, reader)
+			r.NoError(err)
+			r.NoError(reader.Close())
 			files, err := os.ReadDir(dir)
 			r.NoError(err)
-			r.Len(files, 1, "only the returned archive should outlive the download")
-			r.False(files[0].IsDir())
+			r.Empty(files, "closing the reader removes the clone; the archive is never stored")
 		})
 	}
+}
+
+// processAndRead processes resource and reads the archive to its end, which is when a
+// download fails.
+func processAndRead(ctx context.Context, method *input.InputMethod, resource *constructorruntime.Resource, creds runtime.Typed) error {
+	result, err := method.ProcessResource(ctx, resource, creds)
+	if err != nil {
+		return err
+	}
+	rc, err := result.ProcessedBlobData.ReadCloser()
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(io.Discard, rc)
+	return errors.Join(err, rc.Close())
 }
 
 func TestProcessResourceErrors(t *testing.T) {
@@ -117,9 +136,8 @@ func TestProcessResourceErrors(t *testing.T) {
 			dir := t.TempDir()
 			method := &input.InputMethod{TempFolder: dir, MaxArchiveSize: tc.maxArchiveSize}
 
-			result, err := method.ProcessResource(t.Context(), resource, tc.credentials)
+			err := processAndRead(t.Context(), method, resource, tc.credentials)
 			r.ErrorContains(err, tc.wantErr)
-			r.Nil(result)
 			r.Equal(before, resource)
 		})
 	}

@@ -1,13 +1,17 @@
 package download
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 
 	"helm.sh/helm/v4/pkg/getter"
 
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 )
 
 type tlsOptions struct {
@@ -97,4 +101,41 @@ func constructTLSOptions(targetDir string, opts ...tlOptionsFn) (_ getter.Option
 	// it's safe to always add this option even with empty values
 	// because the default is empty.
 	return getter.WithTLSClientConfig(opt.Credentials.CertFile, opt.Credentials.KeyFile, caFilePath), caFilePath, nil
+}
+
+// overlayInputTLS returns client with the CA and client certificate of the chart's input or
+// credentials in place of those of the HTTP configuration. They are specific to the chart's
+// repository and so take precedence over the global configuration, like helm's own getters,
+// which replace the system roots with a configured CA file as well.
+func overlayInputTLS(client *http.Client, caFile, certFile, keyFile string) (*http.Client, error) {
+	var roots *x509.CertPool
+	if caFile != "" {
+		pemData, err := os.ReadFile(caFile)
+		if err != nil {
+			return nil, fmt.Errorf("error reading CA certificate file: %w", err)
+		}
+		roots = x509.NewCertPool()
+		if !roots.AppendCertsFromPEM(pemData) {
+			return nil, fmt.Errorf("CA certificate file %q contains no valid PEM certificate", caFile)
+		}
+	}
+	var certs []tls.Certificate
+	if certFile != "" && keyFile != "" {
+		pair, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return nil, fmt.Errorf("error loading client certificate: %w", err)
+		}
+		certs = []tls.Certificate{pair}
+	}
+	if roots == nil && certs == nil {
+		return client, nil
+	}
+	return ocmhttp.CloneTransports(client, func(tr *http.Transport) {
+		if roots != nil {
+			tr.TLSClientConfig.RootCAs = roots
+		}
+		if certs != nil {
+			tr.TLSClientConfig.Certificates = certs
+		}
+	})
 }
