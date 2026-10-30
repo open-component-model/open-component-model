@@ -13,8 +13,10 @@ const KindResource = "Resource"
 type VerificationPolicy string
 
 const (
-	// VerificationPolicyAlways attempts to verify resource digest using a digest processor plugin.
-	// If no suitable plugin is found, we only log this because the operator cannot resolve this
+	// VerificationPolicyAlways verifies the resource digest. Content is checked against what it is
+	// addressed by where possible (an OCI manifest, the digest a local blob is stored under, a Helm
+	// repository index) and only downloaded otherwise. If no suitable plugin is found, we only log
+	// this because the operator cannot resolve this
 	VerificationPolicyAlways VerificationPolicy = "Always"
 	// VerificationPolicyNever skips resource digest verification unconditionally.
 	VerificationPolicyNever VerificationPolicy = "Never"
@@ -36,7 +38,8 @@ type ResourceSpec struct {
 	OCMConfig []OCMConfiguration `json:"ocmConfig,omitempty"`
 
 	// VerificationPolicy controls when resource digest verification is performed.
-	// Always (default): attempt to verify resource digest; if no processor plugin is found, log and continue.
+	// Always (default): verify the resource digest, downloading the content only if it cannot be
+	// checked against what it is addressed by; if no processor plugin is found, log and continue.
 	// Never: skip verification unconditionally.
 	// +kubebuilder:validation:Enum:="Always";"Never"
 	// +kubebuilder:default:="Always"

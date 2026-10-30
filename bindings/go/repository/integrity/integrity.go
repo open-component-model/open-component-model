@@ -143,6 +143,25 @@ func VerifyPrecomputed(ctx context.Context, expected *descriptor.Digest, compute
 	return Verify(ctx, expected, content, opts...)
 }
 
+// VerifiedOnRead reports whether content, as returned by [Verify] or [VerifyPrecomputed],
+// is checked against its digest only while it is read: its bytes are hashed, or an
+// archive is introspected, and a mismatch fails the read. Otherwise the digest was
+// checked when content was returned, against what content is addressed by (such as the
+// OCI descriptor of a stored blob, or a digest computed while it was written).
+//
+// A caller that needs the outcome without using the content reads it to its end only
+// if VerifiedOnRead reports true.
+func VerifiedOnRead(content blob.ReadOnlyBlob) bool {
+	switch content := content.(type) {
+	case *digestBlob:
+		return content.verifyOnRead
+	case *artifactBlob:
+		return true
+	default:
+		return false
+	}
+}
+
 // VerifyContent reads content to its end and reports whether it matches expected.
 // It neither takes ownership of content nor closes it.
 func VerifyContent(ctx context.Context, expected *descriptor.Digest, content blob.ReadOnlyBlob, opts ...Option) error {

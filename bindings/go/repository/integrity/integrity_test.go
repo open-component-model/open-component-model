@@ -382,6 +382,41 @@ func TestVerifyOCIArtifact(t *testing.T) {
 	}
 }
 
+// Only content whose digest is checked while it is read needs to be read to learn
+// whether it matches.
+func TestVerifiedOnRead(t *testing.T) {
+	expected := digest.FromString(content)
+	artifact := withNormalisation(digest.FromString("manifest"), descriptor.OCIArtifactDigestV1)
+	for _, tc := range []struct {
+		name   string
+		verify func(ctx context.Context) (blob.ReadOnlyBlob, error)
+		want   bool
+	}{
+		{name: "hashed while read", want: true, verify: func(ctx context.Context) (blob.ReadOnlyBlob, error) {
+			return Verify(ctx, generic(expected), &sourceBlob{content: content})
+		}},
+		{name: "addressed by its digest", verify: func(ctx context.Context) (blob.ReadOnlyBlob, error) {
+			return Verify(ctx, generic(expected), verified.New(&sourceBlob{content: content}, verified.Metadata{Digest: expected, Size: blob.SizeUnknown}))
+		}},
+		{name: "hashed while written", verify: func(ctx context.Context) (blob.ReadOnlyBlob, error) {
+			return VerifyPrecomputed(ctx, generic(expected), expected, &sourceBlob{content: content})
+		}},
+		{name: "artifact introspected while read", want: true, verify: func(ctx context.Context) (blob.ReadOnlyBlob, error) {
+			return Verify(ctx, artifact, &sourceBlob{content: content}, WithArtifactVerifier(&fakeArtifactVerifier{accepts: true}))
+		}},
+		{name: "without digest", verify: func(ctx context.Context) (blob.ReadOnlyBlob, error) {
+			return Verify(ctx, nil, &sourceBlob{content: content})
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			got, err := tc.verify(t.Context())
+			r.NoError(err)
+			r.Equal(tc.want, VerifiedOnRead(got))
+		})
+	}
+}
+
 func TestVerifyContent(t *testing.T) {
 	r := require.New(t)
 	expected := generic(digest.FromString(content))

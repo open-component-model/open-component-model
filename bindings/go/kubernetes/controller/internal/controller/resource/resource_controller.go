@@ -367,7 +367,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	if resource.Spec.VerificationPolicy != v1alpha1.VerificationPolicyNever {
 		logger.V(1).Info("verifying resource")
 
-		matchedResource, err = ocm.VerifyResource(ctx, pm, matchedResource, cfg)
+		if ocm.IsLocalResource(matchedResource) {
+			// Local resources are checked against the digest their repository stores them
+			// under; only content it cannot check that way is downloaded.
+			err = ocm.VerifyLocalResource(ctx, r.Resolver, resolveOpts, resourceDescriptor, matchedResource)
+		} else {
+			matchedResource, err = ocm.VerifyResource(ctx, pm, matchedResource, cfg)
+		}
 		if err != nil {
 			if errors.Is(err, ocm.ErrPluginNotFound) {
 				// TODO(@frewilhelm): For now we skip resource types that do not have a digest processor plugin.

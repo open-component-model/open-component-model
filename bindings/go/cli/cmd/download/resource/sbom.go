@@ -47,8 +47,8 @@ func downloadSBOMs(cmd *cobra.Command, dc downloadContext) error {
 		PluginManager: dc.pluginManager,
 		Credentials:   dc.credentialGraph,
 		Logger:        dc.logger,
-		Download: func(ctx context.Context, res *descriptor.Resource, identity runtime.Identity) (ocmblob.ReadOnlyBlob, error) {
-			return shared.DownloadResourceData(ctx, dc.pluginManager, dc.credentialGraph, dc.descriptor, dc.repo, res, identity)
+		Download: func(ctx context.Context, res *descriptor.Resource, _ runtime.Identity) (ocmblob.ReadOnlyBlob, error) {
+			return shared.DownloadResourceData(ctx, dc.pluginManager, dc.credentialGraph, dc.descriptor, dc.repo, res)
 		},
 		DiscoverLocal: localSBOMDiscoverer,
 		Options:       []repository.SBOMOption{repository.WithAllSBOMPlatforms()},

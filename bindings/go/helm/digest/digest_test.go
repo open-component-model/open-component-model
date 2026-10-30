@@ -2,10 +2,13 @@ package digest_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
+	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -39,13 +42,6 @@ entries:
       description: A chart with bare hex digest
       version: 1.0.0
       digest: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-      apiVersion: v2
-  nodigest:
-    - urls:
-        - https://example.com/charts/nodigest-1.0.0.tgz
-      name: nodigest
-      description: A chart without digest
-      version: 1.0.0
       apiVersion: v2
 `
 
@@ -246,16 +242,6 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 		assert.Contains(t, err.Error(), "digest value mismatch")
 	})
 
-	t.Run("returns error when chart has no digest in index", func(t *testing.T) {
-		t.Parallel()
-		p := digest.NewDigestProcessor(t.TempDir())
-		resource := helmAccessResource(t, srv.URL, "nodigest:1.0.0")
-
-		_, err := p.ProcessResourceDigest(t.Context(), resource, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "has no digest")
-	})
-
 	t.Run("returns error when chart not found in index", func(t *testing.T) {
 		t.Parallel()
 		p := digest.NewDigestProcessor(t.TempDir())
@@ -275,6 +261,30 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "helm repository URL is required")
 	})
+}
+
+// A chart the index lists without digest is downloaded and hashed.
+func TestProcessResourceDigest_HTTPIndexWithoutDigest(t *testing.T) {
+	r := require.New(t)
+	tgz, err := os.ReadFile("../testdata/mychart-0.1.0.tgz")
+	r.NoError(err)
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/index.yaml":
+			_, _ = fmt.Fprintf(w, "apiVersion: v1\nentries:\n  mychart:\n    - urls: [%s/mychart-0.1.0.tgz]\n      name: mychart\n      version: 0.1.0\n      apiVersion: v2\n", srv.URL)
+		case "/mychart-0.1.0.tgz":
+			_, _ = w.Write(tgz)
+		default:
+			http.NotFound(w, req)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	result, err := digest.NewDigestProcessor(t.TempDir()).ProcessResourceDigest(t.Context(), helmAccessResource(t, srv.URL, "mychart:0.1.0"), nil)
+	r.NoError(err)
+	r.Equal(godigest.FromBytes(tgz).Encoded(), result.Digest.Value)
+	r.Equal("genericBlobDigest/v1", result.Digest.NormalisationAlgorithm)
 }
 
 func TestProcessResourceDigest_RealRepo(t *testing.T) {

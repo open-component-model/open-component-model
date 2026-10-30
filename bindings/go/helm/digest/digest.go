@@ -2,6 +2,7 @@ package digest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -203,7 +204,10 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 	}
 
 	if cv.Digest == "" {
-		return "", fmt.Errorf("chart %q version %q in repository index has no digest", chartName, version)
+		// The index does not vouch for the chart, so it is hashed as it is downloaded.
+		slog.InfoContext(ctx, "helm repository index lists no digest for the chart; downloading it to compute one",
+			"chart", chartName, "version", version)
+		return p.downloadChartDigest(ctx, helm, credentials, cacheDir)
 	}
 
 	d, err := parseDigest(cv.Digest)
@@ -211,6 +215,31 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 		return "", fmt.Errorf("error parsing chart digest %q: %w", cv.Digest, err)
 	}
 
+	return d, nil
+}
+
+// downloadChartDigest downloads the chart .tgz into dir and returns its digest.
+func (p *DigestProcessor) downloadChartDigest(ctx context.Context, helm helmv1.Helm, credentials *helmcredsv1.HelmHTTPCredentials, dir string) (godigest.Digest, error) {
+	ref, err := helm.ChartReference()
+	if err != nil {
+		return "", fmt.Errorf("error constructing chart reference: %w", err)
+	}
+	var opts []download.Option
+	if credentials != nil {
+		opts = append(opts, download.WithCredentials(credentials))
+	}
+	chart, err := download.NewReadOnlyChartFromRemote(ctx, ref, dir, opts...)
+	if err != nil {
+		return "", fmt.Errorf("error downloading helm chart %q: %w", ref, err)
+	}
+	rc, err := chart.ChartBlob.ReadCloser()
+	if err != nil {
+		return "", fmt.Errorf("error reading helm chart %q: %w", ref, err)
+	}
+	d, err := godigest.SHA256.FromReader(rc)
+	if err = errors.Join(err, rc.Close()); err != nil {
+		return "", fmt.Errorf("error hashing helm chart %q: %w", ref, err)
+	}
 	return d, nil
 }
 

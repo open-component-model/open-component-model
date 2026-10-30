@@ -203,7 +203,7 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	data, err := shared.DownloadResourceData(cmd.Context(), pluginManager, credentialGraph, desc, repo, res, requestedIdentity)
+	data, err := shared.DownloadResourceData(cmd.Context(), pluginManager, credentialGraph, desc, repo, res)
 	if err != nil {
 		return fmt.Errorf("downloading resource for identity %q failed: %w", requestedIdentity, err)
 	}
