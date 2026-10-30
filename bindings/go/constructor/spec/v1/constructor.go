@@ -69,6 +69,8 @@ type Component struct {
 	// Resources defines all resources that are created by the component and by a third party.
 	Resources []Resource `json:"resources"`
 	// Sources defines sources that produced the component.
+	// Sources are deprecated: they carry no digest, so neither the component
+	// version digest nor a signature binds their content. Use resources instead.
 	Sources []Source `json:"sources"`
 	// References component dependencies that can be resolved in the current context.
 	References []Reference `json:"componentReferences"`
@@ -116,7 +118,8 @@ type Resource struct {
 	ElementMeta `json:",inline"`
 	// SourceRefs defines a list of source names.
 	// These entries reference the sources defined in the
-	// component.sources.
+	// component.sources. SourceRefs are deprecated along with sources: link the
+	// resource with the ocm.software/artifact-references label instead.
 	SourceRefs []SourceRef `json:"srcRefs,omitempty"`
 	// Type describes the type of the object.
 	Type string `json:"type"`
@@ -204,7 +207,9 @@ type Reference struct {
 	// Component describes the remote name of the referenced object.
 	Component string `json:"componentName"`
 	// Digest is the optional digest of the referenced component.
-	// If provided, it will be verified against the calculated digest during construction.
+	// If provided, it is verified against the referenced component under its own
+	// normalisation and hash algorithms and kept, instead of computing one with the
+	// default normalisation. The verify-only jsonNormalisation/v1 is rejected.
 	Digest *Digest `json:"digest,omitempty"`
 }
 

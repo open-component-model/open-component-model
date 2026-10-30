@@ -1,8 +1,8 @@
-// Package httpverify runs a resolved [checksum.Policy] over a downloaded blob
+// Package httpverify runs a resolved [checksum.Policy] over a downloaded body
 // or a source's advertised response headers (RFC 9530 Content-Digest and the
-// x-checksum-* family). Verify reads an already-downloaded response; Peek
-// issues a single credentialed HEAD. Both the wget input method and the access
-// resource repository use it so both paths verify identically.
+// x-checksum-* family). Verify checks a fully read response body against its
+// headers; Peek issues a single credentialed HEAD. Both the wget input method and
+// the access resource repository use it so both paths verify identically.
 package httpverify
 
 import (
@@ -20,22 +20,15 @@ import (
 	"ocm.software/open-component-model/bindings/go/wget/internal/download"
 )
 
-// Verify resolves policy against the already-downloaded blob. A checksum
-// advertised in the response headers whose value mismatches the downloaded
-// bytes is a hard error. The client and credentials are unused (headers are
-// read from data) and kept for signature symmetry with [Peek].
-func Verify(
-	ctx context.Context,
-	_ *http.Client,
-	_ runtime.Typed,
-	artifactURL string,
-	policy checksum.Policy,
-	data *download.Blob,
-) error {
+// Verify resolves policy against a fully read response body. header is the
+// response header and computed the digests of the body keyed by OCM name (see
+// [DigestAlgorithms]). A checksum advertised in header whose value mismatches the
+// body is a hard error.
+func Verify(ctx context.Context, artifactURL string, policy checksum.Policy, header http.Header, computed download.Computed) error {
 	_, _, err := checksum.Resolve(ctx, policy, checksum.Input{
 		URL:      artifactURL,
-		Headers:  data.Headers(),
-		Computed: data.Digests(),
+		Headers:  header,
+		Computed: computed.Content,
 	})
 	return err
 }

@@ -36,6 +36,14 @@ type ReadOnlyBlob interface {
 	ReadCloser() (io.ReadCloser, error)
 }
 
+// ReadOnlyBlobFunc adapts a function opening fresh content to a ReadOnlyBlob.
+// Every call to ReadCloser calls the function, so it MUST return a new reader
+// starting at the beginning of the content each time.
+type ReadOnlyBlobFunc func() (io.ReadCloser, error)
+
+// ReadCloser calls f.
+func (f ReadOnlyBlobFunc) ReadCloser() (io.ReadCloser, error) { return f() }
+
 // SizeUnknown is a constant that represents an unknown size of a blob.
 const SizeUnknown int64 = -1
 

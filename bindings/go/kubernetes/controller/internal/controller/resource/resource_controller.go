@@ -9,12 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/time/rate"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/fields"
 	k8stypes "k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -30,7 +28,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/util"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/verification"
@@ -41,8 +38,7 @@ import (
 type Reconciler struct {
 	*ocm.BaseReconciler
 
-	// Resolver provides repository resolution and caching for resource reconciliation.
-	// It ensures that repository access is efficient and consistent during reconciliation operations.
+	// Resolver provides repository resolution and verification for resource reconciliation.
 	Resolver *resolution.Resolver
 }
 
@@ -120,12 +116,8 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 		}
 	})
 
-	// event source from resolver's worker pool to get notified when resolutions complete
-	eventSource := workerpool.NewEventSource(r.Resolver.WorkerPool())
-
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Resource{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		WatchesRawSource(eventSource).
 		// Watch for component-events that are referenced by resources
 		Watches(
 			&v1alpha1.Component{},
@@ -158,10 +150,7 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 		Watches(&v1alpha1.NamespacedDeployer{}, enqueueDeletingResource).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: concurrency,
-			RateLimiter: workqueue.NewTypedMaxOfRateLimiter(
-				workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](5*time.Millisecond, 5*time.Minute),
-				&workqueue.TypedBucketRateLimiter[reconcile.Request]{Limiter: rate.NewLimiter(10, 100)},
-			),
+			RateLimiter:             r.RateLimit.Limiter(),
 		}).
 		Complete(r)
 }
@@ -314,39 +303,18 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get verifications: %w", err)
 	}
 
-	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
+	resolveOpts := &resolution.Options{
 		RepositorySpec: repoSpec,
 		Configuration:  cfg,
 		PluginManager:  pm,
-		Verifications:  verifications,
-		RequesterFunc: func() workerpool.RequesterInfo {
-			return workerpool.RequesterInfo{
-				NamespacedName: k8stypes.NamespacedName{
-					Namespace: resource.GetNamespace(),
-					Name:      resource.GetName(),
-				},
-			}
-		},
-	})
-	if err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), resource, v1alpha1.GetRepositoryFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to create cache-backed repository: %w", err)
 	}
 
-	referencedDescriptor, err := cacheBackedRepo.GetComponentVersion(ctx,
+	referencedDescriptor, err := r.Resolver.GetComponentVersion(ctx, resolveOpts,
+		resolution.Verification{Verifications: verifications},
 		component.Status.Component.Component,
 		component.Status.Component.Version)
 	switch {
-	case errors.Is(err, workerpool.ErrResolutionInProgress):
-		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
-		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.ResolutionInProgress, err.Error())
-		logger.Info("component version resolution in progress, waiting for event notification",
-			"component", component.Status.Component.Component,
-			"version", component.Status.Component.Version)
-
-		return ctrl.Result{}, nil
-	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+	case errors.Is(err, resolution.ErrNotSafelyDigestible):
 		// Ignore error, but log event
 		event.New(r.EventRecorder, resource, nil, v1alpha1.EventSeverityError, "%s", err.Error())
 	default:
@@ -364,28 +332,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		r.Resolver,
 		referencedDescriptor,
 		resource.Spec.Resource.ByReference.ReferencePath,
-		&resolution.RepositoryOptions{
-			RepositorySpec: repoSpec,
-			Configuration:  cfg,
-			PluginManager:  pm,
-			RequesterFunc: func() workerpool.RequesterInfo {
-				return workerpool.RequesterInfo{
-					NamespacedName: k8stypes.NamespacedName{
-						Namespace: resource.GetNamespace(),
-						Name:      resource.GetName(),
-					},
-				}
-			},
-		},
+		resolveOpts,
 	)
 	switch {
-	case errors.Is(err, workerpool.ErrResolutionInProgress):
-		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
-		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.ResolutionInProgress, err.Error())
-		logger.Info("reference path resolution in progress, waiting for event notification")
-
-		return ctrl.Result{}, nil
-	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+	case errors.Is(err, resolution.ErrNotSafelyDigestible):
 		// Ignore error, but log event
 		event.New(r.EventRecorder, resource, nil, v1alpha1.EventSeverityError, "%s", err.Error())
 	default:

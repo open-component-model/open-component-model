@@ -11,7 +11,7 @@ import (
 
 	"github.com/opencontainers/go-digest"
 
-	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/algorithms"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
 )
@@ -71,7 +71,7 @@ var hashAlgorithmNames = map[digest.Algorithm]string{
 // Without a normalisation the pin is an OCI digest: the digest of the OCI image index or manifest
 // the component version is stored as (what its version tag resolves to), and the returned digest has
 // an empty NormalisationAlgorithm. As the root of the stored artifact graph, it covers the descriptor
-// and all local blobs. With a normalisation, e.g. "jsonNormalisation.v4alpha1+sha256:<hex>", the pin
+// and all local blobs. With a normalisation, e.g. "jsonNormalisation.v4alpha3+sha256:<hex>", the pin
 // is the hash of the descriptor normalised with that algorithm ("/" written as "."), i.e. the digest
 // OCM signatures sign. The hash is sha256 or sha512; hash and hex are case-insensitive.
 // Whether the normalisation algorithm exists is checked when the pin is verified.
@@ -141,7 +141,7 @@ func GetPinnedComponentVersion(ctx context.Context, repo ComponentVersionReposit
 			return nil, nil, fmt.Errorf("repository of component %s does not store component versions content-addressed, "+
 				"so the OCI digest pin %s cannot be used: pin the normalized digest (%s) instead",
 				component, FormatDigestPin(pin),
-				FormatDigestPin(&descriptor.Digest{NormalisationAlgorithm: v4alpha1.Algorithm, HashAlgorithm: pin.HashAlgorithm, Value: "<hex>"}))
+				FormatDigestPin(&descriptor.Digest{NormalisationAlgorithm: signing.DefaultNormalisationAlgorithm, HashAlgorithm: pin.HashAlgorithm, Value: "<hex>"}))
 		}
 		if err != nil {
 			return nil, nil, fmt.Errorf("pinning component %s to %s failed: %w", component, FormatDigestPin(pin), err)
@@ -168,7 +168,7 @@ func GetPinnedComponentVersion(ctx context.Context, repo ComponentVersionReposit
 }
 
 // verifyNormalizedPin verifies desc against the normalized pin. It hashes like signature verification,
-// which reads the legacy jsonNormalisation/v3 as jsonNormalisation/v4alpha1, so a pin taken from a
+// which reads the legacy jsonNormalisation/v3 as jsonNormalisation/v4alpha2, so a pin taken from a
 // v1 signature or component reference verifies as it does in transfer.
 func verifyNormalizedPin(ctx context.Context, desc *descriptor.Descriptor, pin *descriptor.Digest) error {
 	component, version := desc.Component.Name, desc.Component.Version
@@ -180,6 +180,7 @@ func verifyNormalizedPin(ctx context.Context, desc *descriptor.Descriptor, pin *
 		return fmt.Errorf("component version %s:%s does not match pinned digest %s: resolved digest is %s",
 			component, version, FormatDigestPin(pin), FormatDigestPin(resolved))
 	}
+	algorithms.LogNonDefaultDigest(ctx, slog.Default(), slog.LevelWarn, pin.NormalisationAlgorithm, "component", component, "version", version, "pin", FormatDigestPin(pin))
 	return nil
 }
 

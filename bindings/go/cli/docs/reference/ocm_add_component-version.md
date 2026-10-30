@@ -116,7 +116,7 @@ add component-version --repository ./archive --constructor component-constructor
 ```
       --blob-cache-directory string                   path to the blob cache directory (default ".ocm/cache")
       --component-version-conflict-policy enum        policy to apply when a component version already exists in the repository
-                                                      (must be one of [abort-and-fail replace skip]) (default abort-and-fail)
+                                                      (must be one of [abort-and-fail replace skip]) (default replace) (DEPRECATED: existing versions are replaced by default; protect them with registry tag immutability. The flag will be removed)
       --concurrency-limit int                         maximum number of component versions that can be constructed concurrently. (default 4)
   -c, --constructor path                              path to the component constructor file (default component-constructor.yaml)
       --display-mode enum                             static: print the output once the complete component graph is discovered
@@ -128,7 +128,7 @@ add component-version --repository ./archive --constructor component-constructor
   -o, --output enum                                   output format of the component descriptors
                                                       (must be one of [json ndjson table tree yaml]) (default table)
   -r, --repository string                             repository ref (default "transport-archive")
-      --skip-reference-digest-processing              skip digest processing for resources and sources. Any resource referenced via access type will not have their digest updated.
+      --skip-reference-digest-processing              skip digest processing for resources. Any resource referenced via access type will not have their digest updated.
 ```
 
 ### Options inherited from parent commands

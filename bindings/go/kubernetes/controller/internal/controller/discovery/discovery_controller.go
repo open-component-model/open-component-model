@@ -6,12 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"time"
 
-	"golang.org/x/time/rate"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -42,11 +39,10 @@ import (
 // compiled selector/extraction query against it, and atomically publishes the
 // resulting payload and conditions into the Discovery status.
 //
-// The reconciler is synchronous: contrary to BaseReconciler.PluginManagerFor,
-// the request-scoped plugin manager is built with the reconcile context so
-// cancellation propagates into plugin calls. It does not use the resolution
-// worker pool; repository access happens through a request-scoped resolver
-// rooted at the referenced Component's repository spec.
+// The request-scoped plugin manager is built with the reconcile context so
+// cancellation propagates into plugin calls. Repository access happens
+// through a request-scoped resolver rooted at the referenced Component's
+// repository spec.
 type Reconciler struct {
 	*ocm.BaseReconciler
 }
@@ -57,7 +53,7 @@ var _ ocm.Reconciler = (*Reconciler)(nil)
 const componentRefIndex = "spec.componentRef.name"
 
 // SetupWithManager sets up the Discovery controller with the Manager.
-func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, concurrency int) error {
 	// Build index for discoveries that reference a component to make sure that we
 	// get notified when a component changes.
 	if err := mgr.GetFieldIndexer().IndexField(ctx, &v1alpha1.Discovery{}, componentRefIndex, func(obj client.Object) []string {
@@ -78,10 +74,8 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 			handler.EnqueueRequestsFromMapFunc(r.mapComponentToDiscoveries),
 			builder.WithPredicates(ocm.ComponentInfoChangedPredicate{})).
 		WithOptions(controller.Options{
-			RateLimiter: workqueue.NewTypedMaxOfRateLimiter(
-				workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](5*time.Millisecond, 5*time.Minute),
-				&workqueue.TypedBucketRateLimiter[reconcile.Request]{Limiter: rate.NewLimiter(10, 100)},
-			),
+			MaxConcurrentReconciles: concurrency,
+			RateLimiter:             r.RateLimit.Limiter(),
 		}).
 		Complete(r)
 }

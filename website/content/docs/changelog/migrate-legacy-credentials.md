@@ -1,6 +1,6 @@
 ---
 title: "Migrate Legacy Credentials"
-description: "Update your legacy OCM credential configuration to use modern field names and optional typed credentials."
+description: "Update your legacy OCM credential configuration to use the modern field names and optional typed credentials, covering the pathprefix to path rename."
 icon: "arrow-autofit-right"
 weight: 20
 toc: true

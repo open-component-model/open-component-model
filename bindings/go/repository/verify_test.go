@@ -2,12 +2,15 @@ package repository
 
 import (
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 )
@@ -80,10 +83,52 @@ func TestVerifyDownload(t *testing.T) {
 		}
 	})
 
-	t.Run("releases content it refuses to verify", func(t *testing.T) {
-		content := &closableBlob{Blob: inmemory.New(strings.NewReader(verifyContent))}
-		_, err := VerifyDownload(t.Context(), resourceWithDigest(&descriptor.Digest{HashAlgorithm: "SHA-256"}), content)
-		require.Error(t, err)
-		require.True(t, content.closed, "the temporary file behind a refused download must not be left behind")
+	t.Run("reports the metadata of the content without asking for it up front", func(t *testing.T) {
+		content := &lazyMetadataBlob{Blob: inmemory.New(strings.NewReader(verifyContent), inmemory.WithMediaType("application/x-tar"))}
+		verified, err := VerifyDownload(t.Context(), resourceWithDigest(matching), content)
+		require.NoError(t, err)
+		require.Zero(t, content.asked, "a lazy source must not be asked for its metadata before it is needed")
+
+		require.Equal(t, int64(len(verifyContent)), verified.(blob.SizeAware).Size())
+		mediaType, ok := verified.(blob.MediaTypeAware).MediaType()
+		require.True(t, ok)
+		require.Equal(t, "application/x-tar", mediaType)
 	})
+
+	t.Run("reports the digest of the content, not the one the resource claims", func(t *testing.T) {
+		claimed := &descriptor.Digest{HashAlgorithm: "SHA-256", Value: godigest.FromString("claimed").Encoded()}
+		verified, err := VerifyDownload(t.Context(), resourceWithDigest(claimed),
+			inmemory.New(strings.NewReader(verifyContent)))
+		require.NoError(t, err)
+
+		dig, ok := verified.(blob.DigestAware).Digest()
+		require.True(t, ok)
+		require.Equal(t, godigest.FromString(verifyContent).String(), dig)
+	})
+
+	t.Run("content that fails verification is not left at the target path", func(t *testing.T) {
+		verified, err := VerifyDownload(t.Context(), resourceWithDigest(matching),
+			inmemory.New(strings.NewReader("something else entirely")))
+		require.NoError(t, err)
+
+		out := filepath.Join(t.TempDir(), "out")
+		require.ErrorContains(t, filesystem.CopyBlobToOSPath(verified, out), "digest mismatch")
+		require.NoFileExists(t, out)
+	})
+}
+
+// lazyMetadataBlob counts how often it is asked for its size or media type.
+type lazyMetadataBlob struct {
+	*inmemory.Blob
+	asked int
+}
+
+func (b *lazyMetadataBlob) Size() int64 {
+	b.asked++
+	return b.Blob.Size()
+}
+
+func (b *lazyMetadataBlob) MediaType() (string, bool) {
+	b.asked++
+	return b.Blob.MediaType()
 }

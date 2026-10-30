@@ -1,6 +1,6 @@
 ---
 title: "Configure Signing Credentials"
-description: "Configure OCM signing and verification keys using .ocmconfig."
+description: "Configure OCM signing and verification keys in .ocmconfig: set private keys for signing and public keys for verification by identity."
 weight: 20
 toc: true
 aliases:
@@ -221,7 +221,7 @@ If configured correctly, the dry run completes without "no private key found" er
 time=2026-03-12T17:05:46.428+01:00 level=INFO msg="no signer configured, using default" algorithm=RSASSA-PSS encodingPolicy=Plain
 digest:
   hashAlgorithm: SHA-256
-  normalisationAlgorithm: jsonNormalisation/v4alpha1
+  normalisationAlgorithm: jsonNormalisation/v4alpha3
   value: 91dd197868907487e62872695db1fa7b397fde300bcbae23e24abc188fb147ad
 name: default
 signature:
@@ -249,7 +249,7 @@ If configured correctly, the dry run completes without "no private key found" er
 ```text
 digest:
   hashAlgorithm: SHA-256
-  normalisationAlgorithm: jsonNormalisation/v4alpha1
+  normalisationAlgorithm: jsonNormalisation/v4alpha3
   value: 4e376182b3d535143e8e009b1e467df3a5b0c1f912c71ae432200654c355606f
 name: default
 signature:

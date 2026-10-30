@@ -2,6 +2,7 @@ package deployer
 
 import (
 	"context"
+	"fmt"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -53,25 +54,37 @@ func setOwnershipAnnotations(obj client.Object, resource *deliveryv1alpha1.Resou
 // onto the given object.
 // It merges existing labels and annotations with those from the metadata.
 func (r *Reconciler) setApplySetMetadata(ctx context.Context, obj client.Object, meta applyset.Metadata) error {
+	// Update decodes the server's copy into its argument, which would drop status set earlier in this reconcile.
+	updated, ok := obj.DeepCopyObject().(client.Object)
+	if !ok {
+		return fmt.Errorf("deep copy of %T is not a client.Object", obj)
+	}
+
 	labels := map[string]string{}
-	if existing := obj.GetLabels(); existing != nil {
+	if existing := updated.GetLabels(); existing != nil {
 		labels = existing
 	}
 	for k, v := range meta.Labels() {
 		labels[k] = v
 	}
-	obj.SetLabels(labels)
+	updated.SetLabels(labels)
 
 	annotations := map[string]string{}
-	if existing := obj.GetAnnotations(); existing != nil {
+	if existing := updated.GetAnnotations(); existing != nil {
 		annotations = existing
 	}
 	for k, v := range meta.Annotations() {
 		annotations[k] = v
 	}
-	obj.SetAnnotations(annotations)
+	updated.SetAnnotations(annotations)
 
-	// update object labels and annotations
-	err := r.Update(ctx, obj)
-	return err
+	if err := r.Update(ctx, updated); err != nil {
+		return err
+	}
+
+	obj.SetLabels(updated.GetLabels())
+	obj.SetAnnotations(updated.GetAnnotations())
+	obj.SetResourceVersion(updated.GetResourceVersion())
+
+	return nil
 }

@@ -364,6 +364,18 @@ mounts:
       matrix:
         versions:
           - main
+  - source: ../bindings/go/configuration/resolvers/v1alpha1/spec/schemas
+    target: static/main/schemas/bindings/go/configuration/resolvers/v1alpha1
+    sites:
+      matrix:
+        versions:
+          - main
+  - source: ../bindings/go/configuration/versioning/v1alpha1/spec/schemas
+    target: static/main/schemas/bindings/go/configuration/versioning/v1alpha1
+    sites:
+      matrix:
+        versions:
+          - main
   - source: ../bindings/go/kubernetes/controller/config/crd/bases
     target: static/main/schemas/kubernetes/controller
     sites:

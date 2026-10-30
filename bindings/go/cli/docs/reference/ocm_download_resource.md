@@ -20,13 +20,14 @@ It supports optional transformation of the resource using a registered transform
 
 If no transformer is specified, the resource is written directly in its original format.
 
-Resources can be accessed either locally or via a plugin that supports remote fetching, with optional credential resolution.
+Every access type with a built-in resource repository works natively without any plugin,
+with optional credential resolution. Plugins extend OCM with support for additional, custom access types.
 
 When --output is not provided, the output filename is the resource name.
 
 A reference can pin the component version with a digest: "{component}[:{version}]@sha256:<hex>" (OCI digest
 of the artifact the component version is stored as, which local resources are then read from) or
-"{component}:{version}@jsonNormalisation.v4alpha1+sha256:<hex>" (normalized: the digest signatures sign).
+"{component}:{version}@jsonNormalisation.v4alpha3+sha256:<hex>" (normalized: the digest signatures sign).
 See "ocm get cv --help" for when to use which. The resource content is then verified against its digest in the pinned descriptor.
 
 With --sbom, the Software Bills of Materials describing the resource are downloaded instead of the
