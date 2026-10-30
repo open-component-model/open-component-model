@@ -3,6 +3,7 @@ package input
 import (
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	"hash/crc32"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -25,10 +27,10 @@ import (
 type fakeS3 struct {
 	*httptest.Server
 
-	body []byte
-
-	mu       sync.Mutex
-	requests []s3Request
+	mu        sync.Mutex
+	body      []byte
+	versionID string
+	requests  []s3Request
 }
 
 // s3Request is one request a [fakeS3] answered.
@@ -51,21 +53,34 @@ func newFakeS3(t *testing.T, body []byte, contentType string) *fakeS3 {
 			path:      r.URL.Path,
 			versionID: r.URL.Query().Get("versionId"),
 		})
+		body, versionID := f.body, f.versionID
 		f.mu.Unlock()
 
 		if contentType != "" {
 			w.Header().Set("Content-Type", contentType)
 		}
+		if versionID != "" {
+			w.Header().Set("X-Amz-Version-Id", versionID)
+		}
 		// Real S3 reports a checksum, and the SDK warns about every response carrying none.
 		sum := make([]byte, 4)
-		binary.BigEndian.PutUint32(sum, crc32.ChecksumIEEE(f.body))
+		binary.BigEndian.PutUint32(sum, crc32.ChecksumIEEE(body))
 		w.Header().Set("X-Amz-Checksum-Crc32", base64.StdEncoding.EncodeToString(sum))
 
-		_, _ = w.Write(f.body)
+		_, _ = w.Write(body)
 	}))
 	t.Cleanup(f.Close)
 
 	return f
+}
+
+// serve makes the server answer with body from now on, reporting versionID as the
+// object version when it is not empty.
+func (f *fakeS3) serve(body []byte, versionID string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.body, f.versionID = body, versionID
 }
 
 // recorded returns the requests the server answered, in the order it answered them.
@@ -141,97 +156,151 @@ func Test_GetResourceCredentialConsumerIdentity(t *testing.T) {
 	})
 }
 
+// read reads b to its end, also when reading fails, and closes it.
+func read(t *testing.T, b blob.ReadOnlyBlob) ([]byte, error) {
+	t.Helper()
+	rc, err := b.ReadCloser()
+	if err != nil {
+		return nil, err
+	}
+	got, err := io.ReadAll(rc)
+	return got, errors.Join(err, rc.Close())
+}
+
 // The input method yields the object as local blob data, which is what makes the
 // component version carry the content instead of a reference to the bucket.
 func Test_ProcessResource(t *testing.T) {
 	content := []byte("hello from s3 input")
 
-	t.Run("the object is returned as local blob data", func(t *testing.T) {
-		srv := newFakeS3(t, content, "text/plain")
-		method := &InputMethod{TempFolder: t.TempDir()}
-
-		result, err := method.ProcessResource(t.Context(), s3InputResource(servedBy(srv, &v2.S3{
-			BucketName: "my-bucket",
-			ObjectKey:  "path/blob.txt",
-		})), fakeCredentials())
-		require.NoError(t, err)
-		require.NotNil(t, result)
+	process := func(t *testing.T, method *InputMethod, srv *fakeS3, spec *v2.S3) (blob.ReadOnlyBlob, error) {
+		t.Helper()
+		result, err := method.ProcessResource(t.Context(), s3InputResource(servedBy(srv, spec)), fakeCredentials())
+		if err != nil {
+			return nil, err
+		}
 		require.Nil(t, result.ProcessedResource, "the object is stored as a local blob, not as an access")
-		require.NotNil(t, result.ProcessedBlobData)
+		return result.ProcessedBlobData, nil
+	}
 
-		rc, err := result.ProcessedBlobData.ReadCloser()
-		require.NoError(t, err)
-		t.Cleanup(func() { require.NoError(t, rc.Close()) })
-		got, err := io.ReadAll(rc)
-		require.NoError(t, err)
-		require.Equal(t, content, got)
+	t.Run("the object is returned as described local blob data", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeS3(t, content, "text/plain")
 
-		mediaTypeAware, ok := result.ProcessedBlobData.(blob.MediaTypeAware)
-		require.True(t, ok)
+		b, err := process(t, &InputMethod{}, srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt"})
+		r.NoError(err)
+		r.Len(srv.recorded(), 1, "the object is read once to describe it")
+
+		digestAware, ok := b.(blob.DigestAware)
+		r.True(ok)
+		dig, known := digestAware.Digest()
+		r.True(known)
+		r.Equal(digest.FromBytes(content).String(), dig)
+		sizeAware, ok := b.(blob.SizeAware)
+		r.True(ok)
+		r.Equal(int64(len(content)), sizeAware.Size())
+		mediaTypeAware, ok := b.(blob.MediaTypeAware)
+		r.True(ok)
 		mediaType, known := mediaTypeAware.MediaType()
-		require.True(t, known)
-		require.Equal(t, "text/plain", mediaType)
+		r.True(known)
+		r.Equal("text/plain", mediaType)
+		r.Len(srv.recorded(), 1, "describing the blob needs no further request")
+
+		got, err := read(t, b)
+		r.NoError(err)
+		r.Equal(content, got)
 
 		requests := srv.recorded()
-		require.Len(t, requests, 1)
-		require.Equal(t, "/my-bucket/path/blob.txt", requests[0].path)
-		require.Empty(t, requests[0].versionID, "an unpinned input reads the latest version")
+		r.Len(requests, 2, "reading the blob requests the object again")
+		for _, request := range requests {
+			r.Equal("/my-bucket/path/blob.txt", request.path)
+			r.Empty(request.versionID, "an unpinned input reads the latest version")
+		}
 	})
 
 	t.Run("a pinned version is requested", func(t *testing.T) {
+		r := require.New(t)
 		srv := newFakeS3(t, content, "")
-		method := &InputMethod{TempFolder: t.TempDir()}
 
-		_, err := method.ProcessResource(t.Context(), s3InputResource(servedBy(srv, &v2.S3{
-			BucketName: "my-bucket",
-			ObjectKey:  "path/blob.txt",
-			Version:    "v-1",
-		})), fakeCredentials())
-		require.NoError(t, err)
+		b, err := process(t, &InputMethod{}, srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt", Version: "v-1"})
+		r.NoError(err)
+		_, err = read(t, b)
+		r.NoError(err)
 
 		requests := srv.recorded()
-		require.Len(t, requests, 1)
-		require.Equal(t, "v-1", requests[0].versionID)
+		r.Len(requests, 2)
+		for _, request := range requests {
+			r.Equal("v-1", request.versionID)
+		}
+	})
+
+	t.Run("reads are pinned to the version the store reported", func(t *testing.T) {
+		for _, tt := range []struct {
+			name      string
+			versionID string
+			want      string
+		}{
+			{name: "a real version is pinned", versionID: "v-2", want: "v-2"},
+			{name: "the unversioned placeholder is not", versionID: "null"},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				r := require.New(t)
+				srv := newFakeS3(t, content, "")
+				srv.serve(content, tt.versionID)
+
+				b, err := process(t, &InputMethod{}, srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt"})
+				r.NoError(err)
+				_, err = read(t, b)
+				r.NoError(err)
+
+				requests := srv.recorded()
+				r.Len(requests, 2)
+				r.Empty(requests[0].versionID)
+				r.Equal(tt.want, requests[1].versionID)
+			})
+		}
+	})
+
+	t.Run("an object overwritten after it was described fails the read", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeS3(t, content, "")
+
+		b, err := process(t, &InputMethod{}, srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt"})
+		r.NoError(err)
+		srv.serve([]byte("overwritten content"), "")
+
+		_, err = read(t, b)
+		r.ErrorContains(err, "mismatch")
 	})
 
 	t.Run("the spec media type overrides the one the store reports", func(t *testing.T) {
+		r := require.New(t)
 		srv := newFakeS3(t, content, "text/plain")
-		method := &InputMethod{TempFolder: t.TempDir()}
 
-		result, err := method.ProcessResource(t.Context(), s3InputResource(servedBy(srv, &v2.S3{
-			BucketName: "my-bucket",
-			ObjectKey:  "path/blob.txt",
-			MediaType:  "application/custom",
-		})), fakeCredentials())
-		require.NoError(t, err)
+		b, err := process(t, &InputMethod{}, srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt", MediaType: "application/custom"})
+		r.NoError(err)
 
-		mediaTypeAware, ok := result.ProcessedBlobData.(blob.MediaTypeAware)
-		require.True(t, ok)
+		mediaTypeAware, ok := b.(blob.MediaTypeAware)
+		r.True(ok)
 		mediaType, known := mediaTypeAware.MediaType()
-		require.True(t, known)
-		require.Equal(t, "application/custom", mediaType)
+		r.True(known)
+		r.Equal("application/custom", mediaType)
 	})
 
 	t.Run("an object exceeding the maximum size is rejected", func(t *testing.T) {
 		srv := newFakeS3(t, content, "")
 		maxDownloadSize := int64(1)
-		method := &InputMethod{TempFolder: t.TempDir(), MaxDownloadSize: &maxDownloadSize}
 
-		_, err := method.ProcessResource(t.Context(), s3InputResource(servedBy(srv, &v2.S3{
-			BucketName: "my-bucket",
-			ObjectKey:  "path/blob.txt",
-		})), fakeCredentials())
+		_, err := process(t, &InputMethod{MaxDownloadSize: &maxDownloadSize}, srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt"})
 		require.ErrorContains(t, err, "exceeds maximum allowed size")
 	})
 
 	t.Run("an invalid input spec is rejected before anything is requested", func(t *testing.T) {
+		r := require.New(t)
 		srv := newFakeS3(t, content, "")
-		method := &InputMethod{TempFolder: t.TempDir()}
 
-		_, err := method.ProcessResource(t.Context(),
-			s3InputResource(servedBy(srv, &v2.S3{BucketName: "my-bucket"})), fakeCredentials())
-		require.ErrorContains(t, err, "objectKey is required")
-		require.Empty(t, srv.recorded())
+		_, err := process(t, &InputMethod{}, srv, &v2.S3{BucketName: "my-bucket"})
+		r.ErrorContains(err, "objectKey is required")
+		r.Empty(srv.recorded())
 	})
 }
 

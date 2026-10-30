@@ -3,7 +3,6 @@ package s3
 import (
 	"fmt"
 
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtyperepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
@@ -20,17 +19,8 @@ func Register(inputRegistry *input.RepositoryRegistry,
 	digestProcessorRegistry *digestprocessor.RepositoryRegistry,
 	credentialTypeRegistry *credentialtyperepository.CredentialTypeRegistry,
 	httpConfig *httpv1alpha1.Config,
-	filesystemConfig *filesystemv1alpha1.Config,
 ) error {
-	var tempFolder string
-	if filesystemConfig.TempFolder != nil {
-		tempFolder = *filesystemConfig.TempFolder
-	}
-
-	method := &s3input.InputMethod{
-		TempFolder: tempFolder,
-		HTTPConfig: httpConfig,
-	}
+	method := &s3input.InputMethod{HTTPConfig: httpConfig}
 	if err := inputRegistry.RegisterInternalResourceInputPlugin(method); err != nil {
 		return fmt.Errorf("could not register s3 resource input method: %w", err)
 	}
@@ -40,7 +30,7 @@ func Register(inputRegistry *input.RepositoryRegistry,
 
 	// WithHTTPConfig rather than a prebuilt client: the repository switches off
 	// transport retry for the client it hands to the SDK, which retries on its own.
-	repository := s3repository.NewResourceRepository(filesystemConfig, s3repository.WithHTTPConfig(httpConfig))
+	repository := s3repository.NewResourceRepository(s3repository.WithHTTPConfig(httpConfig))
 	if err := resourcePluginRegistry.RegisterInternalResourcePlugin(repository); err != nil {
 		return fmt.Errorf("could not register s3 resource repository plugin: %w", err)
 	}

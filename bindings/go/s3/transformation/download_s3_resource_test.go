@@ -101,7 +101,7 @@ func TestDownloadS3Resource_Transform(t *testing.T) {
 
 		transform := &transformation.DownloadS3Resource{
 			Scheme:             scheme,
-			ResourceRepository: repository.NewResourceRepository(nil),
+			ResourceRepository: repository.NewResourceRepository(),
 			CredentialProvider: staticCredentials{},
 		}
 
@@ -142,7 +142,7 @@ func TestDownloadS3Resource_Transform(t *testing.T) {
 
 		transform := &transformation.DownloadS3Resource{
 			Scheme:             scheme,
-			ResourceRepository: repository.NewResourceRepository(nil),
+			ResourceRepository: repository.NewResourceRepository(),
 			CredentialProvider: staticCredentials{},
 		}
 
@@ -180,7 +180,7 @@ func TestDownloadS3Resource_Transform(t *testing.T) {
 
 		transform := &transformation.DownloadS3Resource{
 			Scheme:             scheme,
-			ResourceRepository: repository.NewResourceRepository(nil),
+			ResourceRepository: repository.NewResourceRepository(),
 			CredentialProvider: staticCredentials{},
 		}
 
@@ -209,7 +209,7 @@ func TestDownloadS3Resource_Transform(t *testing.T) {
 
 		transform := &transformation.DownloadS3Resource{
 			Scheme:             scheme,
-			ResourceRepository: repository.NewResourceRepository(nil),
+			ResourceRepository: repository.NewResourceRepository(),
 			CredentialProvider: staticCredentials{},
 		}
 
@@ -232,7 +232,7 @@ func TestDownloadS3Resource_Transform(t *testing.T) {
 
 		transform := &transformation.DownloadS3Resource{
 			Scheme:             scheme,
-			ResourceRepository: repository.NewResourceRepository(nil),
+			ResourceRepository: repository.NewResourceRepository(),
 			CredentialProvider: staticCredentials{},
 		}
 

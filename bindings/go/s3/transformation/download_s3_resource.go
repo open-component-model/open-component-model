@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 
@@ -16,7 +15,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/s3/transformation/spec/v1alpha1"
 )
 
-// DownloadS3Resource is a transformer that downloads S3 resources from their bucket and buffers
+// DownloadS3Resource is a transformer that downloads S3 resources from their bucket and writes
 // them to a file. The downloaded content is a plain blob; a subsequent AddLocalResource
 // transformation is expected to embed it as a local blob in the target repository.
 type DownloadS3Resource struct {
@@ -69,16 +68,6 @@ func (t *DownloadS3Resource) Transform(ctx context.Context, step runtime.Typed) 
 	if err != nil {
 		return nil, fmt.Errorf("error downloading s3 resource: %w", err)
 	}
-	// The downloaded blob is backed by a temporary file the repository hands over to
-	// us. Its content is copied to outputPath below, so release it afterwards instead
-	// of leaving a second copy behind.
-	defer func() {
-		if closer, ok := downloadedBlob.(io.Closer); ok {
-			if closeErr := closer.Close(); closeErr != nil {
-				slog.WarnContext(ctx, "failed to remove temporary s3 download file", "err", closeErr)
-			}
-		}
-	}()
 
 	fileSpec, err := filesystem.BlobToSpec(downloadedBlob, outputPath)
 	if err != nil {
