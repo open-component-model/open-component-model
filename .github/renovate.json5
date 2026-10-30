@@ -120,6 +120,20 @@
       ],
     },
     {
+      // Collapse digest-only re-pins for .env-file Docker image pins managed
+      // by custom.regex (datasource=docker — e.g. OPENSCAP_IMAGE, DOCKLE_IMAGE)
+      // into the same weekly 'Digest pins' PR. Scoped to docker datasource only
+      // so envtest and other non-docker custom managers are unaffected.
+      matchManagers: ['custom.regex'],
+      matchDatasources: ['docker'],
+      matchUpdateTypes: ['digest', 'pinDigest'],
+      groupName: 'Digest pins',
+      groupSlug: 'digest-pins',
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ],
+    },
+    {
       // Actual Go toolchain version bumps (go.mod `toolchain go1.X.Y`, setup-go,
       // golang image tags). The go.mod `go 1.X` directive is deliberately NOT
       // bumped here. See the depType 'golang' rule at the end of packageRules.
