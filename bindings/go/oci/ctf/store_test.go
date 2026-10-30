@@ -2,6 +2,7 @@ package ctf
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/errdef"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/ctf"
@@ -235,13 +237,17 @@ func TestPushStreaming(t *testing.T) {
 }
 
 // gatedReader yields its content only after gate is closed, like a remote source the
-// server streams while the client is busy elsewhere.
+// server streams while the client is busy elsewhere. reading is closed once the first
+// Read starts, i.e. once the write reads its source.
 type gatedReader struct {
-	gate <-chan struct{}
-	r    io.Reader
+	gate    <-chan struct{}
+	reading chan struct{}
+	once    sync.Once
+	r       io.Reader
 }
 
 func (g *gatedReader) Read(p []byte) (int, error) {
+	g.once.Do(func() { close(g.reading) })
 	<-g.gate
 	return g.r.Read(p)
 }
@@ -266,9 +272,17 @@ func TestPush_StalledSourceDoesNotBlockOtherWriters(t *testing.T) {
 	t.Cleanup(release)
 
 	stalledDone := make(chan error, 1)
+	source := &gatedReader{gate: gate, reading: make(chan struct{}), r: bytes.NewReader(stalled)}
 	go func() {
-		stalledDone <- repo.Push(ctx, stalledDesc, &gatedReader{gate: gate, r: bytes.NewReader(stalled)})
+		stalledDone <- repo.Push(ctx, stalledDesc, source)
 	}()
+	// The other writes start only once the stalled one reads its source, so under a lock
+	// held while reading they always wait for it.
+	select {
+	case <-source.reading:
+	case err := <-stalledDone:
+		t.Fatalf("stalled write returned before reading its source: %v", err)
+	}
 
 	layer := []byte("other layer")
 	manifest := []byte(`{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.empty.v1+json","digest":"sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a","size":2},"layers":[]}`)
@@ -302,6 +316,36 @@ func TestPush_StalledSourceDoesNotBlockOtherWriters(t *testing.T) {
 		digest.FromString("streamed layer").String(),
 		digest.FromBytes(manifest).String(),
 	}, blobs)
+}
+
+// savingOnlyCTF hides StageBlob, like a CTF implementation that cannot stage blobs.
+type savingOnlyCTF struct {
+	ctf.CTF
+	saves int
+}
+
+func (c *savingOnlyCTF) SaveBlob(ctx context.Context, b blob.ReadOnlyBlob) error {
+	c.saves++
+	return c.CTF.SaveBlob(ctx, b)
+}
+
+// An archive that cannot stage blobs is written with SaveBlob.
+func TestPush_ArchiveWithoutStaging(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+	archive := &savingOnlyCTF{CTF: setupTestCTF(t)}
+	_, staging := ctf.CTF(archive).(ctf.BlobStager)
+	r.False(staging)
+	store, err := NewFromCTF(archive).StoreForReference(ctx, "test-repo:test-tag")
+	r.NoError(err)
+
+	layer := []byte("layer")
+	desc := ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: digest.FromBytes(layer), Size: int64(len(layer))}
+	r.NoError(store.Push(ctx, desc, bytes.NewReader(layer)))
+	r.Equal(1, archive.saves)
+	exists, err := store.Exists(ctx, desc)
+	r.NoError(err)
+	r.True(exists)
 }
 
 func TestResolve(t *testing.T) {

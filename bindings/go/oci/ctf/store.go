@@ -95,9 +95,10 @@ func (s *Store) ComponentVersionReference(ctx context.Context, component, versio
 // Each repository instance shares the same mutex with its parent Store to ensure
 // consistent locking across all repositories within the same CTF archive.
 //
-// The mutex serializes every change to the archive, but it is never held while a
-// caller-supplied stream is read: blobs are staged (read, written and verified) without
-// it and only published under it (see saveBlob). Holding it while reading would leave
+// The mutex serializes every change to the archive, but for an archive that can stage
+// blobs (ctf.BlobStager) it is never held while a caller-supplied stream is read: blobs
+// are staged (read, written and verified) without it and only published under it (see
+// saveBlob). Holding it while reading would leave
 // every other writer's source unread for that long, and a server streaming such a
 // source may reset it (e.g. an HTTP/2 RST_STREAM once its send window stays full).
 type repository struct {
@@ -229,9 +230,15 @@ func (s *repository) PushStreaming(ctx context.Context, partial ociImageSpecV1.D
 }
 
 // saveBlob stages b without the lock, which may take as long as its source does, and
-// publishes it under the write lock.
+// publishes it under the write lock. An archive that cannot stage saves b under the lock.
 func (s *repository) saveBlob(ctx context.Context, b blob.ReadOnlyBlob) (err error) {
-	staged, err := s.archive.StageBlob(ctx, b)
+	stager, ok := s.archive.(ctf.BlobStager)
+	if !ok {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.archive.SaveBlob(ctx, b)
+	}
+	staged, err := stager.StageBlob(ctx, b)
 	if err != nil {
 		return err
 	}
