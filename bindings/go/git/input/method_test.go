@@ -65,7 +65,6 @@ func TestProcessResourceSnapshots(t *testing.T) {
 
 			reader, err := result.ProcessedBlobData.ReadCloser()
 			r.NoError(err)
-			t.Cleanup(func() { r.NoError(reader.Close()) })
 			gz, err := gzip.NewReader(reader)
 			r.NoError(err)
 			t.Cleanup(func() { r.NoError(gz.Close()) })
@@ -86,9 +85,13 @@ func TestProcessResourceSnapshots(t *testing.T) {
 			}
 			r.Equal(map[string]string{"README.md": tc.want}, archived)
 
+			// The clone serving the read is removed once the reader is closed.
+			_, err = io.Copy(io.Discard, reader)
+			r.NoError(err)
+			r.NoError(reader.Close())
 			files, err := os.ReadDir(dir)
 			r.NoError(err)
-			r.Empty(files, "the archive is streamed, nothing of it is stored")
+			r.Empty(files, "closing the reader removes the clone; the archive is never stored")
 		})
 	}
 }
