@@ -81,15 +81,21 @@ func (q *Query) Project(ctx context.Context, filtered *Filtered) (*Payload, erro
 	if err != nil {
 		return nil, err
 	}
+	// Keys in the same order as descriptors, so per-component field programs
+	// can be looked up by index.
+	keys := make([]ComponentKey, len(filtered.Descriptors))
+	for i, d := range filtered.Descriptors {
+		keys[i] = ComponentKey{Name: d.Component.Name, Version: d.Component.Version}
+	}
 
 	// Every projector returns an allocated slice, so the selected output stays
 	// non-nil even when empty. The default keeps a future mode from shipping as
 	// a silent empty result.
 	switch q.extract.mode {
 	case extractByResources:
-		payload.Extracted, err = q.projectPerResource(ctx, descriptors)
+		payload.Extracted, err = q.projectPerResource(ctx, descriptors, keys, filtered.Repositories)
 	case extractByComponents:
-		payload.Extracted, err = q.projectPerComponent(ctx, descriptors)
+		payload.Extracted, err = q.projectPerComponent(ctx, descriptors, keys, filtered.Repositories)
 	case extractExpression:
 		payload.Extracted, err = q.projectExpression(ctx, descriptors)
 	default:
@@ -166,7 +172,7 @@ func resources(component map[string]any) []map[string]any {
 	return out
 }
 
-func (q *Query) projectPerResource(ctx context.Context, descriptors []*runtime.Unstructured) ([]map[string]any, error) {
+func (q *Query) projectPerResource(ctx context.Context, descriptors []*runtime.Unstructured, keys []ComponentKey, repositories map[ComponentKey]runtime.Typed) ([]map[string]any, error) {
 	records := make([]map[string]any, 0, len(descriptors))
 	for i, desc := range descriptors {
 		if err := checkContext(ctx); err != nil {
@@ -176,8 +182,12 @@ func (q *Query) projectPerResource(ctx context.Context, descriptors []*runtime.U
 		if err != nil {
 			return nil, fmt.Errorf("failed to project resources of descriptor %d: %w", i, err)
 		}
+		fields, err := q.fieldsFor(ctx, keys[i], repositories)
+		if err != nil {
+			return nil, err
+		}
 		for _, resource := range resources(comp) {
-			record, err := q.evalFields(ctx, map[string]any{
+			record, err := q.evalFields(ctx, fields, map[string]any{
 				"component": comp,
 				"resource":  resource,
 			})
@@ -190,7 +200,7 @@ func (q *Query) projectPerResource(ctx context.Context, descriptors []*runtime.U
 	return records, nil
 }
 
-func (q *Query) projectPerComponent(ctx context.Context, descriptors []*runtime.Unstructured) ([]map[string]any, error) {
+func (q *Query) projectPerComponent(ctx context.Context, descriptors []*runtime.Unstructured, keys []ComponentKey, repositories map[ComponentKey]runtime.Typed) ([]map[string]any, error) {
 	records := make([]map[string]any, 0, len(descriptors))
 	for i, desc := range descriptors {
 		if err := checkContext(ctx); err != nil {
@@ -200,7 +210,11 @@ func (q *Query) projectPerComponent(ctx context.Context, descriptors []*runtime.
 		if err != nil {
 			return nil, fmt.Errorf("failed to project descriptor %d: %w", i, err)
 		}
-		record, err := q.evalFields(ctx, map[string]any{"component": comp})
+		fields, err := q.fieldsFor(ctx, keys[i], repositories)
+		if err != nil {
+			return nil, err
+		}
+		record, err := q.evalFields(ctx, fields, map[string]any{"component": comp})
 		if err != nil {
 			return nil, err
 		}
@@ -245,9 +259,9 @@ func (q *Query) projectExpression(ctx context.Context, descriptors []*runtime.Un
 // A field whose expression accesses missing data is omitted; the record is
 // kept even when all its fields disappear. Genuine CEL errors are returned as
 // *ExtractError.
-func (q *Query) evalFields(ctx context.Context, activation map[string]any) (map[string]any, error) {
-	record := make(map[string]any, len(q.extract.fields))
-	for _, field := range q.extract.fields {
+func (q *Query) evalFields(ctx context.Context, fields []extractedField, activation map[string]any) (map[string]any, error) {
+	record := make(map[string]any, len(fields))
+	for _, field := range fields {
 		val, _, err := field.prog.ContextEval(ctx, activation)
 		missing, cause := evalResult(ctx, val, err)
 		if missing {
