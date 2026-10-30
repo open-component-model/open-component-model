@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/opencontainers/go-digest"
 
@@ -121,93 +120,95 @@ func (c *FileSystemCTF) SetIndex(_ context.Context, index v1.Index) (err error) 
 		return fmt.Errorf("unable to encode artifact index: %w", err)
 	}
 
-	return c.writeFile(v1.ArtifactIndexFileName, bytes.NewReader(data), int64(len(data)), nil)
-}
-
-// ioBufPool is a pool of byte buffers that can be reused for copying content
-// between i/o relevant data, such as files.
-var ioBufPool = sync.Pool{
-	New: func() interface{} {
-		// the buffer size should be larger than or equal to 128 KiB
-		// for performance considerations.
-		// we choose 1 MiB here so there will be less disk I/O.
-		buffer := make([]byte, blob.DefaultArchiveBlobBufferSize)
-		return &buffer
-	},
+	return c.writeFile(v1.ArtifactIndexFileName, bytes.NewReader(data), int64(len(data)))
 }
 
 // writeFile writes the given raw data to the given name in the CTF.
 // If the directory does not exist, it will be created.
 // Always uses atomic write (temp file + rename) for safe concurrent access.
-// If beforeCommit is set, it runs after the content is staged and before it replaces name;
-// if it fails, only the staged content is removed and name stays untouched.
-func (c *FileSystemCTF) writeFile(name string, raw io.Reader, size int64, beforeCommit func() error) (err error) {
-	// Ensure directory exists
+func (c *FileSystemCTF) writeFile(name string, raw io.Reader, size int64) error {
+	staged, err := c.stageFile(filepath.Dir(name), "."+filepath.Base(name)+".*", raw, size)
+	if err != nil {
+		return err
+	}
+	if err := publishFile(staged, filepath.Base(name)); err != nil {
+		return errors.Join(err, os.Remove(staged))
+	}
+	return nil
+}
+
+// stageFile writes raw to a new temporary file in dir (relative to the CTF root) and
+// returns its OS path. On failure nothing is left behind. A size <= blob.SizeUnknown
+// reads raw to its end.
+func (c *FileSystemCTF) stageFile(dir, tempPattern string, raw io.Reader, size int64) (string, error) {
 	if c.mkdirFS != nil {
-		if err := c.mkdirFS.MkdirAll(filepath.Dir(name), 0o755); err != nil {
-			return fmt.Errorf("unable to create directory: %w", err)
+		if err := c.mkdirFS.MkdirAll(dir, 0o755); err != nil {
+			return "", fmt.Errorf("unable to create directory: %w", err)
 		}
 	}
 
-	// Check if this is an OS filesystem
 	osFS, ok := c.fs.(*filesystem.RootFileSystem)
 	if !ok {
-		return fmt.Errorf("atomic writes not supported on non-OS filesystem: %T", c.fs)
+		return "", fmt.Errorf("atomic writes not supported on non-OS filesystem: %T", c.fs)
 	}
-	targetPath := filepath.Join(osFS.String(), name)
 
-	// Create temp file
-	tempFile, err := os.CreateTemp(filepath.Dir(targetPath), "."+filepath.Base(targetPath)+".*")
+	tempFile, err := os.CreateTemp(filepath.Join(osFS.String(), dir), tempPattern)
 	if err != nil {
-		return fmt.Errorf("unable to create temp file: %w", err)
+		return "", fmt.Errorf("unable to create temp file: %w", err)
 	}
 	tempPath := tempFile.Name()
 
-	// Write content to temp file
 	if size <= blob.SizeUnknown {
-		buf := ioBufPool.Get().(*[]byte)
-		defer ioBufPool.Put(buf)
-		if _, err = io.CopyBuffer(tempFile, raw, *buf); err != nil {
-			err = errors.Join(err, tempFile.Close(), os.Remove(tempPath))
-			return fmt.Errorf("unable to write content: %w", errors.Join(err, tempFile.Close(), os.Remove(tempPath)))
-		}
+		_, err = blob.CopyReader(tempFile, raw)
 	} else {
-		if _, err = io.CopyN(tempFile, raw, size); err != nil {
-			err = errors.Join(err, tempFile.Close(), os.Remove(tempPath))
-			return fmt.Errorf("unable to write content: %w", err)
-		}
+		_, err = blob.CopyReaderN(tempFile, raw, size)
+	}
+	if err != nil {
+		return "", fmt.Errorf("unable to write content: %w", errors.Join(err, tempFile.Close(), os.Remove(tempPath)))
 	}
 
 	// Close file before chmod and rename (required for Windows compatibility)
-	if err = tempFile.Close(); err != nil {
-		err = errors.Join(err, os.Remove(tempPath))
-		return fmt.Errorf("unable to close temp file: %w", err)
+	if err := tempFile.Close(); err != nil {
+		return "", fmt.Errorf("unable to close temp file: %w", errors.Join(err, os.Remove(tempPath)))
 	}
+	return tempPath, nil
+}
 
-	// Ensure cleanup on error after this point
-	defer func() {
-		if err != nil {
-			err = errors.Join(err, os.Remove(tempPath))
-		}
-	}()
-
-	if beforeCommit != nil {
-		if err = beforeCommit(); err != nil {
-			return err
-		}
-	}
-
-	// Make read-only
-	if err = os.Chmod(tempPath, 0o444); err != nil {
+// publishFile makes the staged file read-only and atomically renames it to fileName in
+// the directory it was staged in. On failure the caller removes the staged file.
+func publishFile(staged, fileName string) error {
+	if err := os.Chmod(staged, 0o444); err != nil {
 		return fmt.Errorf("unable to make temp file readonly: %w", err)
 	}
-
-	// Atomic rename
-	if err = os.Rename(tempPath, targetPath); err != nil {
+	if err := os.Rename(staged, filepath.Join(filepath.Dir(staged), fileName)); err != nil {
 		return fmt.Errorf("unable to rename temp file: %w", err)
 	}
-
 	return nil
+}
+
+// publishBlobFile makes the staged file read-only and stores it as fileName in the
+// directory it was staged in, unless that file exists: blobs are content-addressed, so an
+// existing file holds the same content and is kept. A hard link creates the name only if
+// it is absent, also against a concurrent publish, and then the staged name is removed.
+// Where hard links are not supported, the staged file is renamed; that can replace a
+// blob published concurrently (or fail to on Windows), so callers serialize publishing.
+// published reports whether the staged file is gone; otherwise the caller removes it.
+func publishBlobFile(staged, fileName string) (published bool, err error) {
+	if err := os.Chmod(staged, 0o444); err != nil {
+		return false, fmt.Errorf("unable to make temp file readonly: %w", err)
+	}
+	target := filepath.Join(filepath.Dir(staged), fileName)
+	linkErr := os.Link(staged, target)
+	switch {
+	case linkErr == nil:
+		return true, os.Remove(staged)
+	case errors.Is(linkErr, fs.ErrExist):
+		return false, nil
+	}
+	if err := os.Rename(staged, target); err != nil {
+		return false, fmt.Errorf("unable to rename temp file: %w", errors.Join(err, linkErr))
+	}
+	return true, nil
 }
 
 // DeleteBlob deletes the blob with the given digest from the CTF by removing the file from BlobsDirectoryName.
@@ -263,7 +264,8 @@ func (c *FileSystemCTF) ListBlobs(_ context.Context) (digests []string, err erro
 
 	digests = make([]string, 0, len(dir))
 	for _, entry := range dir {
-		if entry.Type().IsRegular() {
+		// Blobs being written are staged under hidden names (see StageBlob).
+		if entry.Type().IsRegular() && !strings.HasPrefix(entry.Name(), ".") {
 			digests = append(digests, ToDigest(entry.Name()))
 		}
 	}
@@ -271,69 +273,118 @@ func (c *FileSystemCTF) ListBlobs(_ context.Context) (digests []string, err erro
 	return digests, nil
 }
 
-func (c *FileSystemCTF) SaveBlob(ctx context.Context, b blob.ReadOnlyBlob) (err error) {
-	digestable, ok := b.(blob.DigestAware)
-	if !ok {
-		return errors.New("blob does not have a digest that can be used to save it")
-	}
-
-	dig, known := digestable.Digest()
-	if !known {
-		return errors.New("blob does not have a digest that can be used to save it")
-	}
-
-	file, err := ToBlobFileName(dig)
+// SaveBlob stores b under its digest in BlobsDirectoryName without buffering it in memory.
+// It is StageBlob followed by StagedBlob.Publish, so concurrent saves of one blob keep
+// the first one stored.
+func (c *FileSystemCTF) SaveBlob(ctx context.Context, b blob.ReadOnlyBlob) error {
+	staged, err := c.StageBlob(ctx, b)
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(BlobsDirectoryName, file)
+	return errors.Join(staged.Publish(), staged.Discard())
+}
 
-	// Blobs are content-addressed, so an existing blob already holds this content and is
-	// kept. The content is still read and verified, as callers rely on it being consumed.
-	// Not replacing it also means a blob is never renamed over while a reader may hold it
-	// open: readers do not lock against writers for the whole read, and renaming over an
-	// open file fails on Windows.
-	exists := false
-	if c.statFS != nil {
-		_, statErr := c.statFS.Stat(path)
-		exists = statErr == nil
-	}
-
-	size := blob.SizeUnknown
-	if sizeable, ok := b.(blob.SizeAware); ok {
-		size = sizeable.Size()
+// StageBlob reads b in full into a temporary file in BlobsDirectoryName, without
+// publishing it, so a caller can read a slow source without holding a lock that only
+// publishing needs.
+//
+// b is asked for its digest only once its content has been read in full and closed:
+// asking earlier could make b buffer its content to compute the digest, and b may
+// compute it while being read. Closing can fail when the content does not match the
+// digest (e.g. a verifying reader); then nothing is staged.
+func (c *FileSystemCTF) StageBlob(ctx context.Context, b blob.ReadOnlyBlob) (_ StagedBlob, err error) {
+	digestable, ok := b.(blob.DigestAware)
+	if !ok {
+		return nil, errors.New("blob does not have a digest that can be used to save it")
 	}
 
 	data, err := b.ReadCloser()
 	if err != nil {
-		return fmt.Errorf("unable to read blob: %w", err)
+		return nil, fmt.Errorf("unable to read blob: %w", err)
 	}
-	// Closing data can fail when the content does not match its digest (e.g. a verifying
-	// reader). It is closed before the staged content is published, so unverified content
-	// is never stored under its digest.
-	closed := false
-	closeData := func() error {
-		closed = true
-		return data.Close()
+	ctxRead, err := newCtxReader(ctx, data)
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("unable to create context reader: %w", err), data.Close())
 	}
+
+	s := &stagedBlob{ctf: c}
 	defer func() {
-		if !closed {
-			err = errors.Join(err, data.Close())
+		if err != nil {
+			err = errors.Join(err, s.Discard())
 		}
 	}()
 
-	ctxRead, err := newCtxReader(ctx, data)
-	if err != nil {
-		return fmt.Errorf("unable to create context reader: %w", err)
+	osFS, writable := c.fs.(*filesystem.RootFileSystem)
+	s.writable = writable && !osFS.ReadOnly()
+	if s.writable {
+		// The size is passed as unknown so the content is read to its end, whatever size b
+		// may report: b can only vouch for its digest once it has seen all of it.
+		s.path, err = c.stageFile(BlobsDirectoryName, ".upload.*", ctxRead, blob.SizeUnknown)
+	} else {
+		_, err = io.Copy(io.Discard, ctxRead)
+	}
+	if err = errors.Join(err, data.Close()); err != nil {
+		return nil, err
 	}
 
-	if exists {
-		if _, err := io.Copy(io.Discard, ctxRead); err != nil {
-			return fmt.Errorf("unable to read content: %w", err)
-		}
-		return closeData()
+	dig, known := digestable.Digest()
+	if !known {
+		return nil, errors.New("blob does not have a digest that can be used to save it")
 	}
-	return c.writeFile(path, ctxRead, size, closeData)
+	s.digest = dig
+	if s.file, err = ToBlobFileName(dig); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// stagedBlob is the FileSystemCTF StagedBlob: a verified temporary file, or no file at
+// all for a CTF that cannot be written to.
+type stagedBlob struct {
+	ctf      *FileSystemCTF
+	writable bool
+	path     string // OS path of the staged file; empty once it is gone
+	digest   string
+	file     string // blob file name in BlobsDirectoryName
+	done     bool   // Publish or Discard was called
+}
+
+func (s *stagedBlob) Digest() string { return s.digest }
+
+// Publish stores the staged file under its content address (see publishBlobFile).
+// Blobs are content-addressed, so an already stored blob holds the same content and is
+// kept, dropping the staged copy. Not replacing it also means a blob is never replaced
+// while a reader may hold it open: readers do not lock against writers for the whole
+// read, and replacing an open file fails on Windows. For the same reason a CTF that
+// cannot be written to still accepts a blob it already stores.
+func (s *stagedBlob) Publish() error {
+	if s.done {
+		return errors.New("staged blob was already published or discarded")
+	}
+	s.done = true
+	if s.ctf.statFS != nil {
+		if _, err := s.ctf.statFS.Stat(filepath.Join(BlobsDirectoryName, s.file)); err == nil {
+			return nil
+		}
+	}
+	if !s.writable {
+		return fmt.Errorf("unable to save blob %s to %T: %w", s.digest, s.ctf.fs, filesystem.ErrReadOnly)
+	}
+	published, err := publishBlobFile(s.path, s.file)
+	if published {
+		s.path = ""
+	}
+	return err
+}
+
+func (s *stagedBlob) Discard() error {
+	s.done = true
+	if s.path == "" {
+		return nil
+	}
+	path := s.path
+	s.path = ""
+	return os.Remove(path)
 }
 
 // ToBlobFileName converts a digest to a blob file name by replacing the ":" with ".", which is the
