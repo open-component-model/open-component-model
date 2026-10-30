@@ -162,18 +162,19 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           mkdir -p stig
-          docker run --rm -u 0:0 -e IMAGE -e OSCAP_PROBE_ROOT=/rootfs \
-            -v "$PWD/tmp/rootfs:/rootfs:ro" -v "$PWD/.github/stig:/stig:ro" -v "$PWD/stig:/out" \
-            --entrypoint /bin/sh "$OPENSCAP_IMAGE" -euc '
-              rc=0
-              oscap xccdf eval \
-                --tailoring-file /stig/tailoring.xml --profile xccdf_software.ocm_profile_gpos-container \
-                --results /out/gpos-results.xml --report /out/gpos-report.html \
-                /usr/share/xml/scap/ssg/content/ssg-chainguard-gpos-ds.xml || rc=$?
-              oscap xccdf eval --profile "xccdf_software.ocm_profile_${IMAGE}" \
-                --results /out/ocm-results.xml --report /out/ocm-report.html \
-                /stig/ocm-supplement-xccdf.xml || rc=$?
-              exit "$rc"'
+          oscap() {
+            docker run --rm -u 0:0 -e OSCAP_PROBE_ROOT=/rootfs \
+              -v "$PWD/tmp/rootfs:/rootfs:ro" -v "$PWD/.github/stig:/stig:ro" -v "$PWD/stig:/out" \
+              "$OPENSCAP_IMAGE" xccdf eval "$@"
+          }
+          rc=0
+          oscap --tailoring-file /stig/tailoring.xml --profile xccdf_software.ocm_profile_gpos-container \
+            --results /out/gpos-results.xml --report /out/gpos-report.html \
+            /usr/share/xml/scap/ssg/content/ssg-chainguard-gpos-ds.xml || rc=$?
+          oscap --profile "xccdf_software.ocm_profile_${IMAGE}" \
+            --results /out/ocm-results.xml --report /out/ocm-report.html \
+            /stig/ocm-supplement-xccdf.xml || rc=$?
+          exit "$rc"
 
       # The supplement's checks that OVAL cannot do: OVAL reads no binaries and
       # no values from outside the scanned root filesystem.
