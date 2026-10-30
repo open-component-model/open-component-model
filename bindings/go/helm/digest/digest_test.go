@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync/atomic"
 	"testing"
 
 	godigest "github.com/opencontainers/go-digest"
@@ -306,6 +307,69 @@ func TestProcessResourceDigest_HTTPIndexWithoutDigest(t *testing.T) {
 			r.NoError(err)
 			r.Equal(godigest.FromBytes(tgz).Encoded(), result.Digest.Value)
 			r.Equal("genericBlobDigest/v1", result.Digest.NormalisationAlgorithm)
+		})
+	}
+}
+
+// The chart the index selects is downloaded from the URL the index lists, resolved against
+// the repository, without fetching the index again. Credentials go to the repository host only.
+func TestProcessResourceDigest_HTTPIndexWithoutDigestDownloadsListedURL(t *testing.T) {
+	tgz, err := os.ReadFile("../testdata/mychart-0.1.0.tgz")
+	require.NoError(t, err)
+	creds := &runtime.Raw{
+		Type: runtime.NewVersionedType("HelmHTTPCredentials", "v1"),
+		Data: []byte(`{"type":"HelmHTTPCredentials/v1","username":"user","password":"secret"}`),
+	}
+
+	// elsewhere serves the chart on another host and records whether credentials reached it.
+	var elsewhereAuth atomic.Bool
+	elsewhere := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if _, _, ok := req.BasicAuth(); ok {
+			elsewhereAuth.Store(true)
+		}
+		_, _ = w.Write(tgz)
+	}))
+	t.Cleanup(elsewhere.Close)
+
+	for _, tc := range []struct {
+		name      string
+		chartURL  func(repo string) string
+		wantAuth  bool
+		elsewhere bool
+	}{
+		{name: "relative URL on the repository host", chartURL: func(string) string { return "charts/mychart-0.1.0.tgz" }, wantAuth: true},
+		{name: "absolute URL on another host", chartURL: func(string) string { return elsewhere.URL + "/mychart-0.1.0.tgz" }, elsewhere: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			elsewhereAuth.Store(false)
+			var indexFetches atomic.Int32
+			var chartAuth atomic.Bool
+			var srv *httptest.Server
+			srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				switch req.URL.Path {
+				case "/index.yaml":
+					indexFetches.Add(1)
+					_, _ = fmt.Fprintf(w, "apiVersion: v1\nentries:\n  mychart:\n    - urls: [%s]\n      name: mychart\n      version: 0.1.0\n      apiVersion: v2\n", tc.chartURL(srv.URL))
+				case "/charts/mychart-0.1.0.tgz":
+					_, _, ok := req.BasicAuth()
+					chartAuth.Store(ok)
+					_, _ = w.Write(tgz)
+				default:
+					http.NotFound(w, req)
+				}
+			}))
+			t.Cleanup(srv.Close)
+
+			result, err := digest.NewDigestProcessor(t.TempDir()).ProcessResourceDigest(t.Context(), helmAccessResource(t, srv.URL, "mychart:0.1.0"), creds)
+			r.NoError(err)
+			r.Equal(godigest.FromBytes(tgz).Encoded(), result.Digest.Value)
+			r.Equal(int32(1), indexFetches.Load(), "the index is fetched once")
+			if tc.elsewhere {
+				r.False(elsewhereAuth.Load(), "credentials must not reach another host")
+			} else {
+				r.Equal(tc.wantAuth, chartAuth.Load())
+			}
 		})
 	}
 }

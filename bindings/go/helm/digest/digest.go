@@ -2,13 +2,14 @@ package digest
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"strings"
 
 	godigest "github.com/opencontainers/go-digest"
+	"helm.sh/helm/v4/pkg/getter"
 	"helm.sh/helm/v4/pkg/repo/v1"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -223,12 +224,11 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 	}
 
 	if cv.Digest == "" {
-		// The index does not vouch for the chart, so it is hashed as it is downloaded. The
-		// download is pinned to the version the index selected, also if none was requested.
+		// The index does not vouch for the chart, so the chart it selected is downloaded
+		// and hashed, from the URL the index lists for it.
 		slog.InfoContext(ctx, "helm repository index lists no digest for the chart; downloading it to compute one",
 			"chart", chartName, "version", cv.Version)
-		helm.HelmChart, helm.Version = chartName+":"+cv.Version, ""
-		return p.downloadChartDigest(ctx, helm, credentials, cacheDir)
+		return downloadChartDigest(ctx, providers, helm.HelmRepository, cv, credentials)
 	}
 
 	d, err := parseDigest(cv.Digest)
@@ -239,32 +239,60 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 	return d, nil
 }
 
-// downloadChartDigest downloads the chart .tgz into dir and returns its digest.
-func (p *DigestProcessor) downloadChartDigest(ctx context.Context, helm helmv1.Helm, credentials *helmcredsv1.HelmHTTPCredentials, dir string) (godigest.Digest, error) {
-	ref, err := helm.ChartReference()
-	if err != nil {
-		return "", fmt.Errorf("error constructing chart reference: %w", err)
+// downloadChartDigest downloads the chart cv names with the getters the index was fetched
+// with and returns its digest. Credentials are sent only to the host of repoURL, also if
+// the index points the chart elsewhere.
+func downloadChartDigest(ctx context.Context, providers getter.Providers, repoURL string, cv *repo.ChartVersion, credentials *helmcredsv1.HelmHTTPCredentials) (godigest.Digest, error) {
+	if len(cv.URLs) == 0 {
+		return "", fmt.Errorf("chart %q version %q in repository index has no download URL", cv.Name, cv.Version)
 	}
-	var opts []download.Option
+	chartURL, err := repo.ResolveReferenceURL(repoURL, cv.URLs[0])
+	if err != nil {
+		return "", fmt.Errorf("error resolving download URL of chart %q version %q: %w", cv.Name, cv.Version, err)
+	}
+	u, err := url.Parse(chartURL)
+	if err != nil {
+		return "", fmt.Errorf("error parsing download URL %q: %w", chartURL, err)
+	}
+	g, err := providers.ByScheme(u.Scheme)
+	if err != nil {
+		return "", fmt.Errorf("error downloading helm chart %q: %w", chartURL, err)
+	}
+	// Helm's getter sends basic auth only to the host of the URL it is given.
+	opts := []getter.Option{getter.WithURL(repoURL)}
 	if credentials != nil {
-		opts = append(opts, download.WithCredentials(credentials))
+		if base, err := url.Parse(repoURL); err == nil && base.Scheme == u.Scheme && base.Host == u.Host {
+			opts = append(opts, getter.WithBasicAuth(credentials.Username, credentials.Password))
+		}
+		if credentials.CertFile != "" || credentials.KeyFile != "" {
+			opts = append(opts, getter.WithTLSClientConfig(credentials.CertFile, credentials.KeyFile, ""))
+		}
 	}
-	if p.httpConfig != nil {
-		opts = append(opts, download.WithHTTPConfig(p.httpConfig))
+
+	// Helm's getters do not accept a context, so the download runs in a goroutine and the
+	// context is selected on to allow cancellation.
+	type chartResult struct {
+		digest godigest.Digest
+		err    error
 	}
-	chart, err := download.NewReadOnlyChartFromRemote(ctx, ref, dir, opts...)
-	if err != nil {
-		return "", fmt.Errorf("error downloading helm chart %q: %w", ref, err)
+	ch := make(chan chartResult, 1)
+	go func() {
+		buf, err := g.Get(chartURL, opts...)
+		if err != nil {
+			ch <- chartResult{err: err}
+			return
+		}
+		ch <- chartResult{digest: godigest.SHA256.FromBytes(buf.Bytes())}
+	}()
+	select {
+	case <-ctx.Done():
+		return "", fmt.Errorf("context cancelled while downloading helm chart %q: %w", chartURL, ctx.Err())
+	case res := <-ch:
+		if res.err != nil {
+			return "", fmt.Errorf("error downloading helm chart %q: %w", chartURL, res.err)
+		}
+		return res.digest, nil
 	}
-	rc, err := chart.ChartBlob.ReadCloser()
-	if err != nil {
-		return "", fmt.Errorf("error reading helm chart %q: %w", ref, err)
-	}
-	d, err := godigest.SHA256.FromReader(rc)
-	if err = errors.Join(err, rc.Close()); err != nil {
-		return "", fmt.Errorf("error hashing helm chart %q: %w", ref, err)
-	}
-	return d, nil
 }
 
 // parseDigest parses a digest string that may be either in the standard
