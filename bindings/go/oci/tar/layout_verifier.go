@@ -18,6 +18,7 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	slogcontext "github.com/veqryn/slog-context"
 	"oras.land/oras-go/v2/errdef"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -71,15 +72,20 @@ func (LayoutVerifier) Accepts(mediaType string) bool {
 // size is the byte size of the archive or [blob.SizeUnknown]; when known, the read
 // that reaches it already reports the verification result, so consumers reading
 // exactly size bytes see a failure before they close.
-func (LayoutVerifier) Verify(rc io.ReadCloser, root digest.Digest, size int64) io.ReadCloser {
-	return newLayoutVerifier(rc, root, size)
+//
+// ctx bounds the reader: once it is done, reads and the rest of a Close fail with
+// its cause, and the inspection stops. Warnings are logged with the logger of ctx.
+func (LayoutVerifier) Verify(ctx context.Context, rc io.ReadCloser, root digest.Digest, size int64) io.ReadCloser {
+	return newLayoutVerifier(ctx, rc, root, size)
 }
 
-func newLayoutVerifier(rc io.ReadCloser, root digest.Digest, size int64) *layoutVerifier {
+func newLayoutVerifier(ctx context.Context, rc io.ReadCloser, root digest.Digest, size int64) *layoutVerifier {
 	pr, pw := io.Pipe()
-	v := &layoutVerifier{base: rc, pw: pw, size: size, result: make(chan error, 1)}
+	v := &layoutVerifier{ctx: ctx, base: rc, pw: pw, size: size, result: make(chan error, 1)}
+	// Unblocks the inspector even if the consumer stops reading without closing.
+	v.stop = context.AfterFunc(ctx, func() { _ = pw.CloseWithError(context.Cause(ctx)) })
 	go func() {
-		err := inspectLayout(pr, root)
+		err := inspectLayout(ctx, pr, root)
 		_ = pr.CloseWithError(err)
 		v.result <- err
 	}()
@@ -89,6 +95,8 @@ func newLayoutVerifier(rc io.ReadCloser, root digest.Digest, size int64) *layout
 // layoutVerifier tees everything read from base to an inspector reading the
 // archive from the other end of a pipe.
 type layoutVerifier struct {
+	ctx    context.Context
+	stop   func() bool
 	base   io.ReadCloser
 	pw     *io.PipeWriter
 	result chan error
@@ -113,6 +121,12 @@ func (v *layoutVerifier) Read(p []byte) (int, error) {
 	}
 	if v.eof {
 		return 0, io.EOF
+	}
+	if v.ctx.Err() != nil {
+		v.err = fmt.Errorf("layout verification stopped: %w", context.Cause(v.ctx))
+		_ = v.pw.CloseWithError(v.err)
+		_ = v.collect()
+		return 0, v.err
 	}
 
 	n, err := v.base.Read(p)
@@ -181,12 +195,13 @@ func (v *layoutVerifier) collect() error {
 		return nil
 	}
 	v.collected = true
+	v.stop()
 	return <-v.result
 }
 
 // inspectLayout reads an OCI layout or legacy artifact set tar, optionally gzipped,
 // from r to its end and verifies that it holds the complete artifact root.
-func inspectLayout(r io.Reader, root digest.Digest) error {
+func inspectLayout(ctx context.Context, r io.Reader, root digest.Digest) error {
 	buffered := bufio.NewReader(r)
 	var archive io.Reader = buffered
 	if magic, _ := buffered.Peek(2); len(magic) == 2 && magic[0] == 0x1F && magic[1] == 0x8B {
@@ -226,7 +241,7 @@ func inspectLayout(r io.Reader, root digest.Digest) error {
 		return fmt.Errorf("failed to read layout: %w", err)
 	}
 
-	return ins.verify(context.Background(), root)
+	return ins.verify(ctx, root)
 }
 
 type layoutInspection struct {
@@ -521,7 +536,7 @@ func (ins *layoutInspection) warnUntracked(ctx context.Context, root digest.Dige
 		return
 	}
 	slices.Sort(unreferenced)
-	slog.WarnContext(ctx, "layout holds content that neither its index nor its main artifact references",
+	slogcontext.Warn(ctx, "layout holds content that neither its index nor its main artifact references",
 		slog.String("root", root.String()),
 		slog.Int("unreferencedBlobs", len(unreferenced)),
 		slog.Any("unreferencedBlobSample", unreferenced[:min(len(unreferenced), maxLoggedUntracked)]),

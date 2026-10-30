@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/opencontainers/go-digest"
+	slogcontext "github.com/veqryn/slog-context"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/verified"
@@ -42,7 +43,8 @@ type ArtifactVerifier interface {
 	// Verify returns rc wrapped so that reading it to its end (or closing it) verifies that the
 	// archive's main artifact has digest root and is complete. size is the byte size of the
 	// archive, or [blob.SizeUnknown]; when known, the read reaching it reports the result.
-	Verify(rc io.ReadCloser, root digest.Digest, size int64) io.ReadCloser
+	// ctx bounds the returned reader and carries the logger for what verification reports.
+	Verify(ctx context.Context, rc io.ReadCloser, root digest.Digest, size int64) io.ReadCloser
 }
 
 type options struct {
@@ -91,6 +93,8 @@ const (
 // Verify returns content bound to expected: the returned blob reports expected as its
 // digest and fails, at the latest when it is read to its end or closed, if the content
 // does not match.
+// For an OCI artifact verified while it is read, ctx bounds those reads: once it is
+// done, reading the returned blob fails.
 //
 // It takes ownership of content: on error, content is closed if it is an [io.Closer].
 func Verify(ctx context.Context, expected *descriptor.Digest, content blob.ReadOnlyBlob, opts ...Option) (blob.ReadOnlyBlob, error) {
@@ -104,7 +108,7 @@ func Verify(ctx context.Context, expected *descriptor.Digest, content blob.ReadO
 		logUnverified(ctx, expected, newOptions(opts).logAttrs)
 		return content, nil
 	case kindArtifact:
-		verifying, err := newArtifactBlob(content, want, opts)
+		verifying, err := newArtifactBlob(ctx, content, want, opts)
 		if err != nil {
 			return nil, release(content, err)
 		}
@@ -153,7 +157,7 @@ func VerifyContent(ctx context.Context, expected *descriptor.Digest, content blo
 		logUnverified(ctx, expected, newOptions(opts).logAttrs)
 		return nil
 	case kindArtifact:
-		if verifying, err = newArtifactBlob(content, want, opts); err != nil {
+		if verifying, err = newArtifactBlob(ctx, content, want, opts); err != nil {
 			return err
 		}
 	default:
@@ -225,7 +229,7 @@ func classify(expected *descriptor.Digest) (kind, digest.Digest, error) {
 	}
 }
 
-func newArtifactBlob(content blob.ReadOnlyBlob, root digest.Digest, opts []Option) (*artifactBlob, error) {
+func newArtifactBlob(ctx context.Context, content blob.ReadOnlyBlob, root digest.Digest, opts []Option) (*artifactBlob, error) {
 	o := newOptions(opts)
 
 	var mediaType string
@@ -237,7 +241,16 @@ func newArtifactBlob(content blob.ReadOnlyBlob, root digest.Digest, opts []Optio
 			ErrUnverifiable, descriptor.OCIArtifactDigestV1, mediaType)
 	}
 
-	return &artifactBlob{base: content, root: root, verifier: o.artifacts}, nil
+	// The blob is read after Verify returns, so it keeps ctx: reading stays bound to it,
+	// and what the verifier logs names the content like the other warnings of this package.
+	if len(o.logAttrs) > 0 {
+		args := make([]any, len(o.logAttrs))
+		for i, attr := range o.logAttrs {
+			args[i] = attr
+		}
+		ctx = slogcontext.With(ctx, args...)
+	}
+	return &artifactBlob{ctx: ctx, base: content, root: root, verifier: o.artifacts}, nil
 }
 
 func logUnverified(ctx context.Context, expected *descriptor.Digest, attrs []slog.Attr) {

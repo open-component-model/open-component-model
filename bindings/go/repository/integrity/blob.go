@@ -1,6 +1,7 @@
 package integrity
 
 import (
+	"context"
 	"io"
 
 	"github.com/opencontainers/go-digest"
@@ -64,6 +65,8 @@ func (b *digestBlob) Close() error {
 // root. Unlike digestBlob, it reports the digest of the archive itself, because that is
 // what the bytes it serves hash to.
 type artifactBlob struct {
+	// ctx is the context of the Verify call, which bounds every read of the blob.
+	ctx      context.Context
 	base     blob.ReadOnlyBlob
 	root     digest.Digest
 	verifier ArtifactVerifier
@@ -74,7 +77,7 @@ func (b *artifactBlob) ReadCloser() (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	return b.verifier.Verify(rc, b.root, sizeOf(b.base)), nil
+	return b.verifier.Verify(b.ctx, rc, b.root, sizeOf(b.base)), nil
 }
 
 func (b *artifactBlob) Digest() (string, bool) {

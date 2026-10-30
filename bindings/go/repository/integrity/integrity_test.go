@@ -2,6 +2,7 @@ package integrity
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"log/slog"
@@ -47,7 +48,7 @@ type fakeArtifactVerifier struct {
 
 func (f *fakeArtifactVerifier) Accepts(string) bool { return f.accepts }
 
-func (f *fakeArtifactVerifier) Verify(rc io.ReadCloser, root digest.Digest, size int64) io.ReadCloser {
+func (f *fakeArtifactVerifier) Verify(_ context.Context, rc io.ReadCloser, root digest.Digest, size int64) io.ReadCloser {
 	f.root, f.size = root, size
 	return rc
 }

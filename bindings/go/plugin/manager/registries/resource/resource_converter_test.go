@@ -41,7 +41,7 @@ type rootVerifier struct{ root digest.Digest }
 
 func (v rootVerifier) Accepts(mediaType string) bool { return mediaType == testArchiveMediaType }
 
-func (v rootVerifier) Verify(rc io.ReadCloser, root digest.Digest, _ int64) io.ReadCloser {
+func (v rootVerifier) Verify(_ context.Context, rc io.ReadCloser, root digest.Digest, _ int64) io.ReadCloser {
 	return &rootCheckingReader{ReadCloser: rc, ok: root == v.root, root: root}
 }
 

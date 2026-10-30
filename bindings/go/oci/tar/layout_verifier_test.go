@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -18,6 +19,7 @@ import (
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
+	slogcontext "github.com/veqryn/slog-context"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/content/memory"
@@ -51,8 +53,8 @@ func blobEntry(desc ociImageSpecV1.Descriptor, data []byte) tarEntry {
 }
 
 // verifyLayout reads archive through a LayoutVerifier like a consumer copying it would.
-func verifyLayout(archive []byte, root digest.Digest) error {
-	rc := LayoutVerifier{}.Verify(io.NopCloser(bytes.NewReader(archive)), root, -1)
+func verifyLayout(ctx context.Context, archive []byte, root digest.Digest) error {
+	rc := LayoutVerifier{}.Verify(ctx, io.NopCloser(bytes.NewReader(archive)), root, -1)
 	_, err := io.ReadAll(rc)
 	return errors.Join(err, rc.Close())
 }
@@ -117,8 +119,8 @@ func TestLayoutVerifier_OCMLayout(t *testing.T) {
 			r.NoError(err)
 			archive := readAllBlob(t, b)
 
-			r.NoError(verifyLayout(archive, root.Digest))
-			r.ErrorContains(verifyLayout(archive, digest.FromString("other")), "layout main artifact is")
+			r.NoError(verifyLayout(t.Context(), archive, root.Digest))
+			r.ErrorContains(verifyLayout(t.Context(), archive, digest.FromString("other")), "layout main artifact is")
 		})
 	}
 }
@@ -219,7 +221,7 @@ func TestLayoutVerifier_RefusesTamperedLayouts(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
-			err := verifyLayout(gzippedTar(t, tt.entries...), manifest.Digest)
+			err := verifyLayout(t.Context(), gzippedTar(t, tt.entries...), manifest.Digest)
 			if tt.wantErr == "" {
 				r.NoError(err)
 				return
@@ -269,13 +271,15 @@ func TestLayoutVerifier_WarnsAboutUntrackedContent(t *testing.T) {
 		want  []string
 	}{
 		{name: "everything reachable from the index"},
-		{name: "a blob nothing references", extra: []tarEntry{blobEntry(stray, strayData)}, want: []string{"unreferencedBlobs=1", stray.Digest.String()}},
-		{name: "a file outside the layout structure", extra: []tarEntry{{name: "notes.txt", data: []byte("hi")}}, want: []string{"otherFiles=1", "notes.txt"}},
+		{name: "a blob nothing references", extra: []tarEntry{blobEntry(stray, strayData)}, want: []string{"unreferencedBlobs=1", stray.Digest.String(), "resource=chart"}},
+		{name: "a file outside the layout structure", extra: []tarEntry{{name: "notes.txt", data: []byte("hi")}}, want: []string{"otherFiles=1", "notes.txt", "resource=chart"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			logged.Reset()
-			r.NoError(verifyLayout(gzippedTar(t, append(slices.Clone(tracked), tc.extra...)...), main.Digest))
+			// The warning goes to the logger ctx carries, so callers can name the content.
+			ctx := slogcontext.With(t.Context(), slog.String("resource", "chart"))
+			r.NoError(verifyLayout(ctx, gzippedTar(t, append(slices.Clone(tracked), tc.extra...)...), main.Digest))
 			if len(tc.want) == 0 {
 				r.Empty(logged.String())
 				return
@@ -288,16 +292,50 @@ func TestLayoutVerifier_WarnsAboutUntrackedContent(t *testing.T) {
 	}
 }
 
+func TestLayoutVerifier_StopsWhenContextIsDone(t *testing.T) {
+	// Zero blocks end a tar right away, so the inspector would drain them forever.
+	endless := io.NopCloser(zeroReader{})
+
+	t.Run("read", func(t *testing.T) {
+		r := require.New(t)
+		ctx, cancel := context.WithCancel(t.Context())
+		rc := LayoutVerifier{}.Verify(ctx, endless, digest.FromString("root"), -1)
+		_, err := rc.Read(make([]byte, 1024))
+		r.NoError(err)
+		cancel()
+		_, err = io.Copy(io.Discard, rc)
+		r.ErrorIs(err, context.Canceled)
+		r.ErrorIs(rc.Close(), context.Canceled)
+	})
+	t.Run("close drains no further", func(t *testing.T) {
+		r := require.New(t)
+		ctx, cancel := context.WithCancelCause(t.Context())
+		rc := LayoutVerifier{}.Verify(ctx, endless, digest.FromString("root"), -1)
+		_, err := rc.Read(make([]byte, 1024))
+		r.NoError(err)
+		stop := errors.New("stop")
+		cancel(stop)
+		r.ErrorIs(rc.Close(), stop)
+	})
+}
+
+type zeroReader struct{}
+
+func (zeroReader) Read(p []byte) (int, error) {
+	clear(p)
+	return len(p), nil
+}
+
 func TestLayoutVerifier_LegacyArtifactSet(t *testing.T) {
 	r := require.New(t)
 	archive, err := os.ReadFile("../../ctf/testdata/compatibility/02/with-resource/blobs/sha256.e40e3a2f1ab1a98328dfd14539a79d27aff5c4d5c34cd16a85f0288bfa76490b")
 	r.NoError(err)
 
-	r.NoError(verifyLayout(archive, "sha256:62be4af3382a4493cb7f1dd4ec47bcb28f1863b615fc9e4a1dceefbe93898dd0"))
-	r.ErrorContains(verifyLayout(archive, digest.FromString("other")), "layout main artifact is")
+	r.NoError(verifyLayout(t.Context(), archive, "sha256:62be4af3382a4493cb7f1dd4ec47bcb28f1863b615fc9e4a1dceefbe93898dd0"))
+	r.ErrorContains(verifyLayout(t.Context(), archive, digest.FromString("other")), "layout main artifact is")
 
 	built, manifest, _ := legacyArtifactSet(t)
-	r.NoError(verifyLayout(built, manifest.Digest))
+	r.NoError(verifyLayout(t.Context(), built, manifest.Digest))
 }
 
 func TestLayoutVerifier_CloseCompletesVerification(t *testing.T) {
@@ -311,7 +349,7 @@ func TestLayoutVerifier_CloseCompletesVerification(t *testing.T) {
 	archive := readAllBlob(t, b)
 
 	readPartially := func(root digest.Digest) error {
-		rc := LayoutVerifier{}.Verify(io.NopCloser(bytes.NewReader(archive)), root, int64(len(archive)))
+		rc := LayoutVerifier{}.Verify(t.Context(), io.NopCloser(bytes.NewReader(archive)), root, int64(len(archive)))
 		_, err := io.ReadFull(rc, make([]byte, 10))
 		require.NoError(t, err)
 		return rc.Close()
@@ -356,7 +394,7 @@ func TestLayoutVerifier_RefusesRootsConsumersWouldNotPick(t *testing.T) {
 			blobEntry(root, rootData), blobEntry(wrapper, wrapperData),
 			indexOf(named, wrapper),
 		)
-		r.ErrorContains(verifyLayout(archive, root.Digest), "layout main artifact is "+wrapper.Digest.String())
+		r.ErrorContains(verifyLayout(t.Context(), archive, root.Digest), "layout main artifact is "+wrapper.Digest.String())
 	})
 
 	t.Run("a listed manifest that is not one", func(t *testing.T) {
@@ -368,7 +406,7 @@ func TestLayoutVerifier_RefusesRootsConsumersWouldNotPick(t *testing.T) {
 			blobEntry(root, rootData), blobEntry(notManifest, notManifestData),
 			indexOf(named, notManifest),
 		)
-		r.ErrorContains(verifyLayout(archive, root.Digest),
+		r.ErrorContains(verifyLayout(t.Context(), archive, root.Digest),
 			"layout manifest "+notManifest.Digest.String()+" listed in the index cannot be inspected")
 	})
 }
@@ -466,7 +504,7 @@ func TestLayoutVerifier_LargeManifests(t *testing.T) {
 				blobEntry(layer, layerData), blobEntry(config, configData), blobEntry(manifest, manifestData),
 				tarEntry{name: ociImageSpecV1.ImageIndexFile, data: indexData},
 			)
-			err = verifyLayout(archive, manifest.Digest)
+			err = verifyLayout(t.Context(), archive, manifest.Digest)
 			if tc.wantErr == "" {
 				r.NoError(err)
 				return
@@ -489,7 +527,7 @@ func TestLayoutVerifier_VerifiesAtSize(t *testing.T) {
 
 	t.Run("a valid layout read to its size", func(t *testing.T) {
 		r := require.New(t)
-		rc := LayoutVerifier{}.Verify(io.NopCloser(bytes.NewReader(archive)), manifest.Digest, size)
+		rc := LayoutVerifier{}.Verify(t.Context(), io.NopCloser(bytes.NewReader(archive)), manifest.Digest, size)
 		data, err := io.ReadAll(io.LimitReader(rc, size))
 		r.NoError(err)
 		r.Equal(archive, data)
@@ -501,7 +539,7 @@ func TestLayoutVerifier_VerifiesAtSize(t *testing.T) {
 
 	t.Run("a wrong root fails the read reaching the size", func(t *testing.T) {
 		r := require.New(t)
-		rc := LayoutVerifier{}.Verify(io.NopCloser(bytes.NewReader(archive)), digest.FromString("other"), size)
+		rc := LayoutVerifier{}.Verify(t.Context(), io.NopCloser(bytes.NewReader(archive)), digest.FromString("other"), size)
 		_, err := io.ReadAll(io.LimitReader(rc, size))
 		r.ErrorContains(err, "layout main artifact is")
 		r.Error(rc.Close())
@@ -509,7 +547,7 @@ func TestLayoutVerifier_VerifiesAtSize(t *testing.T) {
 
 	t.Run("more bytes than the size", func(t *testing.T) {
 		r := require.New(t)
-		rc := LayoutVerifier{}.Verify(io.NopCloser(bytes.NewReader(archive)), manifest.Digest, size-1)
+		rc := LayoutVerifier{}.Verify(t.Context(), io.NopCloser(bytes.NewReader(archive)), manifest.Digest, size-1)
 		_, err := io.ReadAll(rc)
 		r.ErrorContains(err, "exceeds its size")
 		r.Error(rc.Close())

@@ -42,7 +42,7 @@ func BenchmarkLayoutVerifier_LayerSize(b *testing.B) {
 				b.ReportAllocs()
 				b.ResetTimer()
 				for b.Loop() {
-					rc := LayoutVerifier{}.Verify(io.NopCloser(bytes.NewReader(archive)), root, int64(len(archive)))
+					rc := LayoutVerifier{}.Verify(b.Context(), io.NopCloser(bytes.NewReader(archive)), root, int64(len(archive)))
 					if _, err := io.Copy(io.Discard, rc); err != nil {
 						b.Fatal(err)
 					}
