@@ -172,7 +172,8 @@ func (s *repository) fetchReference(ctx context.Context, idx v1.Index, reference
 }
 
 // Push stores a new blob in the CTF archive with the expected descriptor.
-// The content is read from the provided io.Reader.
+// The content is read from the provided io.Reader and verified against expected;
+// content read from a verified.Blob for the same digest is not hashed again.
 //
 // Push also updates referrers for manifests with a subject field.
 func (s *repository) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, data io.Reader) error {
@@ -180,13 +181,27 @@ func (s *repository) Push(ctx context.Context, expected ociImageSpecV1.Descripto
 	defer s.mu.Unlock()
 
 	if !introspection.IsOCICompliantMediaType(expected.MediaType) {
-		if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(direct.New(data), expected)); err != nil {
+		if err := s.pushBlob(ctx, expected, data); err != nil {
 			return fmt.Errorf("unable to save blob for descriptor %v: %w", expected, err)
 		}
 		return nil
 	}
 
 	return s.pushManifest(ctx, expected, data)
+}
+
+// pushBlob is the non-manifest branch of Push.
+//
+// The caller MUST hold the write lock.
+func (s *repository) pushBlob(ctx context.Context, expected ociImageSpecV1.Descriptor, data io.Reader) error {
+	if expected.Digest == "" {
+		return errors.New("descriptor has no digest")
+	}
+	b, err := newDigestingBlob(data, expected.Digest, expected.Size)
+	if err != nil {
+		return err
+	}
+	return s.archive.SaveBlob(ctx, b)
 }
 
 // PushStreaming implements remotestore.StreamingPusher: it stores a blob whose digest

@@ -136,3 +136,31 @@ func TestBlob(t *testing.T) {
 		r.Empty(src.opened)
 	})
 }
+
+func TestExpected(t *testing.T) {
+	data := []byte("verified blob content")
+	meta := verified.Metadata{Digest: digest.FromBytes(data), Size: int64(len(data))}
+
+	t.Run("a reader of a blob reports what it verifies, also behind NopCloser", func(t *testing.T) {
+		r := require.New(t)
+		src := &opener{content: data}
+		rc, err := verified.New(src, meta).ReadCloser()
+		r.NoError(err)
+		for _, reader := range []io.Reader{rc, verified.NopCloser(rc)} {
+			dig, size, ok := verified.Expected(reader)
+			r.True(ok)
+			r.Equal(meta.Digest, dig)
+			r.Equal(meta.Size, size)
+		}
+		r.NoError(verified.NopCloser(rc).Close())
+		r.Zero(src.opened[0].closes, "NopCloser must not close the source")
+	})
+
+	t.Run("other readers are not trusted", func(t *testing.T) {
+		r := require.New(t)
+		for _, reader := range []io.Reader{bytes.NewReader(data), verified.NopCloser(bytes.NewReader(data))} {
+			_, _, ok := verified.Expected(reader)
+			r.False(ok)
+		}
+	})
+}

@@ -32,6 +32,38 @@ var (
 	_ blob.MediaTypeAware = (*Blob)(nil)
 )
 
+// Expected reports the digest and size r verifies its content against if r was
+// returned by [Blob.ReadCloser], also when wrapped by [NopCloser]: an empty digest
+// or blob.SizeUnknown when that value is not verified. Such a reader fails a Read
+// once the content exceeds the expected size, or ends without matching the
+// expected digest and size, so a consumer that reads the content to its end and
+// would otherwise hash it to check the same digest can rely on the reader instead.
+//
+// Only readers of this package are recognised: content verification must not be
+// skippable by any reader merely claiming to verify.
+func Expected(r io.Reader) (digest.Digest, int64, bool) {
+	switch v := r.(type) {
+	case *reader:
+		return v.expected, v.size, true
+	case nopCloser:
+		return v.expected, v.size, true
+	}
+	return "", blob.SizeUnknown, false
+}
+
+// NopCloser returns r with a no-op Close like [io.NopCloser], but keeps a reader
+// returned by [Blob.ReadCloser] recognisable by [Expected].
+func NopCloser(r io.Reader) io.ReadCloser {
+	if v, ok := r.(*reader); ok {
+		return nopCloser{v}
+	}
+	return io.NopCloser(r)
+}
+
+type nopCloser struct{ *reader }
+
+func (nopCloser) Close() error { return nil }
+
 // Blob reports digest, size and media type from Metadata and verifies the content
 // read from its source against them. Size and media type left unknown in the
 // Metadata are asked from the source each time, so a source that learns them

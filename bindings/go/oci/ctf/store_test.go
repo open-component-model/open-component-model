@@ -15,8 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/errdef"
 
+	"ocm.software/open-component-model/bindings/go/blob/direct"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/blob/verified"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	v1 "ocm.software/open-component-model/bindings/go/ctf/index/v1"
 	"ocm.software/open-component-model/bindings/go/oci"
@@ -148,6 +150,70 @@ func TestPush(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, exists)
 	})
+}
+
+// Content that already verifies itself is not hashed again, so Push must still reject
+// content its verifying reader rejects, and content verified against another digest.
+func TestPushVerifiedContent(t *testing.T) {
+	ctx := t.Context()
+	const mediaType = "application/octet-stream"
+	content := []byte("verified layer")
+	tampered := []byte("tampered layer")
+	want := ociImageSpecV1.Descriptor{MediaType: mediaType, Digest: digest.FromBytes(content), Size: int64(len(content))}
+
+	verifying := func(data []byte, dig digest.Digest) func(*testing.T) io.Reader {
+		return func(t *testing.T) io.Reader {
+			t.Helper()
+			rc, err := verified.New(direct.NewFromBytes(data), verified.Metadata{Digest: dig, Size: int64(len(data))}).ReadCloser()
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = rc.Close() })
+			// As pack.Blob hands it to Push.
+			return verified.NopCloser(rc)
+		}
+	}
+
+	tests := []struct {
+		name    string
+		desc    ociImageSpecV1.Descriptor
+		reader  func(*testing.T) io.Reader
+		wantErr string
+	}{
+		{name: "reader verifying the descriptor", desc: want, reader: verifying(content, want.Digest)},
+		{name: "reader rejecting its content", desc: want, reader: verifying(tampered, want.Digest), wantErr: "digest mismatch"},
+		{name: "reader verifying another digest", desc: want, reader: verifying(tampered, digest.FromBytes(tampered)), wantErr: "does not match expected digest"},
+		{
+			name:    "descriptor without digest",
+			desc:    ociImageSpecV1.Descriptor{MediaType: mediaType, Size: want.Size},
+			reader:  func(*testing.T) io.Reader { return bytes.NewReader(content) },
+			wantErr: "descriptor has no digest",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			archive := setupTestCTF(t)
+			store, err := NewFromCTF(archive).StoreForReference(ctx, "test-repo:test-tag")
+			r.NoError(err)
+
+			err = store.Push(ctx, tc.desc, tc.reader(t))
+			blobs, listErr := archive.ListBlobs(ctx)
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				r.Empty(blobs, "rejected content must not be stored")
+				return
+			}
+			r.NoError(err)
+			r.NoError(listErr)
+			r.Equal([]string{want.Digest.String()}, blobs)
+
+			rc, err := store.Fetch(ctx, want)
+			r.NoError(err)
+			t.Cleanup(func() { _ = rc.Close() })
+			data, err := io.ReadAll(rc)
+			r.NoError(err)
+			r.Equal(content, data)
+		})
+	}
 }
 
 func TestPushStreaming(t *testing.T) {

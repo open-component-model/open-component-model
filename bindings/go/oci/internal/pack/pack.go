@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"maps"
 
 	"github.com/opencontainers/go-digest"
@@ -18,6 +17,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/verified"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
@@ -409,7 +409,8 @@ func Blob(ctx context.Context, storage content.Pusher, b blob.ReadOnlyBlob, desc
 		err = errors.Join(err, layerData.Close())
 	}()
 
-	if err := storage.Push(ctx, desc, io.NopCloser(layerData)); err != nil {
+	// verified.NopCloser keeps a verifying reader recognisable, so stores need not hash it again.
+	if err := storage.Push(ctx, desc, verified.NopCloser(layerData)); err != nil {
 		return fmt.Errorf("failed to push layer: %w", err)
 	}
 
