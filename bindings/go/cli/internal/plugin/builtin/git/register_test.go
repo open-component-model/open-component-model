@@ -2,8 +2,6 @@ package git
 
 import (
 	"context"
-	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"sync/atomic"
@@ -90,12 +88,7 @@ func TestRegister(t *testing.T) {
 	}
 	plugin, err := resources.GetResourcePlugin(ctx, access)
 	r.NoError(err)
-	b, err := plugin.DownloadResource(ctx, &descriptor.Resource{Access: access}, nil)
-	r.NoError(err)
-	// The archive is streamed lazily, so the fetch runs and fails on read.
-	rc, err := b.ReadCloser()
-	r.NoError(err)
-	_, err = io.Copy(io.Discard, rc)
-	r.ErrorContains(errors.Join(err, rc.Close()), "503")
+	_, err = plugin.DownloadResource(ctx, &descriptor.Resource{Access: access}, nil)
+	r.ErrorContains(err, "503")
 	r.Equal(int32(1), requests.Load(), "configured client must not retry HTTP 503 responses")
 }

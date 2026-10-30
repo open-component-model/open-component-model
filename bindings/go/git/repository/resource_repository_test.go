@@ -65,6 +65,32 @@ func TestResourceDigestPinning(t *testing.T) {
 	r.Empty(files)
 }
 
+// A ref-only access without digest is pinned by DownloadResource, so a ref that moves
+// before the blob is read does not change what it serves.
+func TestDownloadResourcePinsRefOnDownload(t *testing.T) {
+	r := require.New(t)
+	fixture := newRepository(t)
+	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{})
+
+	atSecond, err := readResource(t.Context(), repo, &descriptor.Resource{Access: &v1.Git{
+		Type: runtime.NewVersionedType(v1.Type, v1.Version), Repository: fixture.Path, Commit: fixture.Second.String(),
+	}})
+	r.NoError(err)
+
+	b, err := repo.DownloadResource(t.Context(), &descriptor.Resource{Access: &v1.Git{
+		Type: runtime.NewVersionedType(v1.Type, v1.Version), Repository: fixture.Path, Ref: "main",
+	}}, nil)
+	r.NoError(err)
+	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/main", fixture.First)))
+
+	rc, err := b.ReadCloser()
+	r.NoError(err)
+	data, err := io.ReadAll(rc)
+	r.NoError(err)
+	r.NoError(rc.Close())
+	r.Equal(atSecond, data)
+}
+
 func TestDownloadResourceVerifiesWhileStreaming(t *testing.T) {
 	r := require.New(t)
 

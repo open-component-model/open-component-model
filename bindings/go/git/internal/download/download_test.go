@@ -78,9 +78,11 @@ func TestDownloadRevisions(t *testing.T) {
 					r := require.New(t)
 					spec := &v1.Git{Repository: fixture.Path, Ref: tc.ref, Commit: tc.commit}
 					result, err := download(t.Context(), spec, nil, Options{TempDir: t.TempDir()})
+					pinned, pinErr := Pin(t.Context(), spec, nil, Options{})
 					if head == "missing HEAD" && tc.missingHeadError != "" {
 						r.ErrorContains(err, tc.missingHeadError)
 						r.Nil(result)
+						r.Error(pinErr, "a ref the fetch cannot resolve is not pinned")
 						return
 					}
 					r.NoError(err)
@@ -92,6 +94,8 @@ func TestDownloadRevisions(t *testing.T) {
 					}
 					r.Equal(tc.commit, spec.Commit)
 					r.NotEmpty(result.Data)
+					r.NoError(pinErr)
+					r.Equal(tc.want.String(), pinned.Commit, "Pin selects the commit the fetch selects")
 				})
 			}
 		})

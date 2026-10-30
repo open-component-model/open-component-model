@@ -19,6 +19,7 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/client"
 	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/go-git/go-git/v6/plumbing/transport"
+	"github.com/go-git/go-git/v6/storage/memory"
 	"github.com/opencontainers/go-digest"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -294,6 +295,88 @@ func fetch(ctx context.Context, access *accessv1.Git, creds runtime.Typed, opts 
 	}
 	clone.selected, clone.Commit, clone.Ref = selected, selected.Hash.String(), ref.String()
 	return clone, nil
+}
+
+// Pin returns access with the commit its ref currently names on the server, so every
+// fetch of the result selects the same snapshot. The refs are listed without fetching
+// objects. A ref is resolved like resolveRef: a branch first, then the rev-parse rules;
+// HEAD as the commit of the branch it points to, an annotated tag as the commit it
+// peels to. An access with a commit is returned normalised and is not looked up.
+func Pin(ctx context.Context, access *accessv1.Git, creds runtime.Typed, opts Options) (*accessv1.Git, error) {
+	if err := access.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid git access: %w", err)
+	}
+	pinned, err := access.Normalize()
+	if err != nil {
+		return nil, fmt.Errorf("invalid git access: %w", err)
+	}
+	if pinned.Commit != "" {
+		return pinned, nil
+	}
+
+	ep, err := endpoint.Parse(pinned.Repository)
+	if err != nil {
+		return nil, fmt.Errorf("cannot address git repository: %w", err)
+	}
+	clientOptions, release, err := ClientOptions(ctx, ep, creds, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
+	remote := git.NewRemote(memory.NewStorage(), &config.RemoteConfig{Name: "origin", URLs: []string{ep.URL}})
+	var advertised []*plumbing.Reference
+	fips140.WithoutEnforcement(func() {
+		advertised, err = remote.ListContext(ctx, &git.ListOptions{ClientOptions: clientOptions, PeelingOption: git.AppendPeeled})
+	})
+	if err != nil {
+		return nil, TransportError(ctx, "cannot list git refs", err)
+	}
+	refs := make(map[plumbing.ReferenceName]*plumbing.Reference, len(advertised))
+	for _, ref := range advertised {
+		refs[ref.Name()] = ref
+	}
+
+	hash, ok := advertisedCommit(refs, pinned.Ref)
+	if !ok {
+		return nil, fmt.Errorf("cannot resolve git ref: %q is not advertised by the repository", pinned.Ref)
+	}
+	pinned.Commit = hash.String()
+	return pinned, nil
+}
+
+// advertisedCommit resolves name among advertised refs with the precedence of resolveRef.
+// A fetch stores the branches of the server as refs/remotes/origin/*, so those names
+// select the branch.
+func advertisedCommit(refs map[plumbing.ReferenceName]*plumbing.Reference, name string) (plumbing.Hash, bool) {
+	candidates := make([]plumbing.ReferenceName, 0, len(plumbing.RefRevParseRules)+1)
+	if name != "HEAD" && (strings.HasPrefix(name, "refs/heads/") || !strings.HasPrefix(name, "refs/")) {
+		candidates = append(candidates, plumbing.NewBranchReferenceName(strings.TrimPrefix(name, "refs/heads/")))
+	}
+	for _, rule := range plumbing.RefRevParseRules {
+		candidate := fmt.Sprintf(rule, name)
+		if branch, ok := strings.CutPrefix(candidate, "refs/remotes/origin/"); ok {
+			candidate = plumbing.NewBranchReferenceName(branch).String()
+		}
+		candidates = append(candidates, plumbing.ReferenceName(candidate))
+	}
+	for _, candidate := range candidates {
+		ref, ok := refs[candidate]
+		// HEAD may be advertised as a symbolic ref; follow it once to its branch.
+		if ok && ref.Type() == plumbing.SymbolicReference {
+			candidate = ref.Target()
+			ref, ok = refs[candidate]
+		}
+		if !ok || ref.Type() != plumbing.HashReference {
+			continue
+		}
+		// The peeled entry of an annotated tag names the commit it points to.
+		if peeled, ok := refs[plumbing.ReferenceName(candidate.String()+"^{}")]; ok {
+			return peeled.Hash(), true
+		}
+		return ref.Hash(), true
+	}
+	return plumbing.ZeroHash, false
 }
 
 // selectCommit returns the commit the access selects and the full name of its ref.

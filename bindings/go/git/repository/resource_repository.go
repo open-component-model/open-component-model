@@ -108,9 +108,10 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Con
 }
 
 // DownloadResource returns the archive of the resolved commit as a lazy blob (see
-// [download.Blob]): nothing is stored and nothing is left to clean up. Reads are
-// verified against res.Digest and bound to ctx (see package repository). Errors of
-// the fetch surface on read.
+// [download.Blob]): nothing is stored and nothing is left to clean up. A ref-only access
+// is pinned here to the commit the ref names (see [download.Pin]), so every read serves
+// the same snapshot; a ref that cannot be resolved fails here. Reads are verified against
+// res.Digest and bound to ctx (see package repository). Errors of the fetch surface on read.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, res *descriptor.Resource, creds runtime.Typed) (blob.ReadOnlyBlob, error) {
 	spec, err := accessFrom(res)
 	if err != nil {
@@ -121,7 +122,12 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, res *descript
 		return nil, err
 	}
 
-	archive := download.NewBlob(ctx, spec, typed, r.downloadOptions(r.tempFolder()))
+	opts := r.downloadOptions(r.tempFolder())
+	pinned, err := download.Pin(ctx, spec, typed, opts)
+	if err != nil {
+		return nil, fmt.Errorf("resource %q: %w", res.Name, err)
+	}
+	archive := download.NewBlob(ctx, pinned, typed, opts)
 	b, err := integrity.Verify(ctx, res.Digest, archive, integrity.WithLogAttrs(slog.Any("resource", res.ToIdentity())))
 	if err != nil {
 		return nil, fmt.Errorf("resource %q: %w", res.Name, err)
@@ -134,7 +140,7 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 }
 
 // ProcessResourceDigest pins the access and hashes the same snapshot in one download.
-// Pinning records the commit (see [download.WithRepository]).
+// Pinning records the commit (see [download.Clone]).
 // The archive is only hashed here, so it is never stored (see [download.Stream]).
 func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *descriptor.Resource, creds runtime.Typed) (*descriptor.Resource, error) {
 	spec, err := accessFrom(res)
