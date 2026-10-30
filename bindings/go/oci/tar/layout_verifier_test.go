@@ -8,7 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -223,6 +225,65 @@ func TestLayoutVerifier_RefusesTamperedLayouts(t *testing.T) {
 				return
 			}
 			r.ErrorContains(err, tt.wantErr)
+		})
+	}
+}
+
+func TestLayoutVerifier_WarnsAboutUntrackedContent(t *testing.T) {
+	var logged bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	configData := []byte(`{}`)
+	config := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageConfig, configData)
+	manifestWith := func(layer ociImageSpecV1.Descriptor) (ociImageSpecV1.Descriptor, []byte) {
+		data, err := json.Marshal(ociImageSpecV1.Manifest{
+			Versioned: specs.Versioned{SchemaVersion: 2},
+			MediaType: ociImageSpecV1.MediaTypeImageManifest,
+			Config:    config,
+			Layers:    []ociImageSpecV1.Descriptor{layer},
+		})
+		require.NoError(t, err)
+		return content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, data), data
+	}
+	layerData, otherLayerData, strayData := []byte("layer"), []byte("other layer"), []byte("stray")
+	layer := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, layerData)
+	otherLayer := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, otherLayerData)
+	stray := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, strayData)
+	main, mainData := manifestWith(layer)
+	other, otherData := manifestWith(otherLayer)
+	main.Annotations = map[string]string{ociImageSpecV1.AnnotationRefName: "main"}
+	indexData, err := json.Marshal(ociImageSpecV1.Index{Versioned: specs.Versioned{SchemaVersion: 2}, Manifests: []ociImageSpecV1.Descriptor{main, other}})
+	require.NoError(t, err)
+	tracked := []tarEntry{
+		{name: ociImageSpecV1.ImageLayoutFile, data: []byte(`{"imageLayoutVersion":"1.0.0"}`)},
+		blobEntry(config, configData), blobEntry(layer, layerData), blobEntry(main, mainData),
+		blobEntry(otherLayer, otherLayerData), blobEntry(other, otherData),
+		{name: ociImageSpecV1.ImageIndexFile, data: indexData},
+	}
+
+	for _, tc := range []struct {
+		name  string
+		extra []tarEntry
+		want  []string
+	}{
+		{name: "everything reachable from the index"},
+		{name: "a blob nothing references", extra: []tarEntry{blobEntry(stray, strayData)}, want: []string{"unreferencedBlobs=1", stray.Digest.String()}},
+		{name: "a file outside the layout structure", extra: []tarEntry{{name: "notes.txt", data: []byte("hi")}}, want: []string{"otherFiles=1", "notes.txt"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			logged.Reset()
+			r.NoError(verifyLayout(gzippedTar(t, append(slices.Clone(tracked), tc.extra...)...), main.Digest))
+			if len(tc.want) == 0 {
+				r.Empty(logged.String())
+				return
+			}
+			r.Contains(logged.String(), "layout holds content that neither its index nor its main artifact references")
+			for _, want := range tc.want {
+				r.Contains(logged.String(), want)
+			}
 		})
 	}
 }

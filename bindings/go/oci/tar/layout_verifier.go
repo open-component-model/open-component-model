@@ -11,7 +11,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/opencontainers/go-digest"
@@ -236,6 +238,10 @@ type layoutInspection struct {
 	seen map[digest.Digest]int64
 	// retained holds the decoded blobs that may be manifests or indexes.
 	retained retainedGraph
+	// otherEntries counts the files that are neither index nor blob nor oci-layout,
+	// and otherSample holds the first maxLoggedUntracked of them for the warning.
+	otherEntries int
+	otherSample  []string
 	// dec and truncator are reused to decode each entry.
 	dec       jsontext.Decoder
 	truncator jsonTruncator
@@ -253,6 +259,12 @@ func (ins *layoutInspection) entry(hdr *tar.Header, r io.Reader) error {
 	isIndex := name == ociImageSpecV1.ImageIndexFile || name == ctf.ArtifactSetDescriptorFileName
 	blobName, isBlob := strings.CutPrefix(name, ctf.BlobsDirectoryName+"/")
 	if !isIndex && !isBlob {
+		if name != ociImageSpecV1.ImageLayoutFile {
+			ins.otherEntries++
+			if len(ins.otherSample) < maxLoggedUntracked {
+				ins.otherSample = append(ins.otherSample, name)
+			}
+		}
 		return nil
 	}
 	if hdr.Typeflag != tar.TypeReg {
@@ -473,7 +485,49 @@ func (ins *layoutInspection) verify(ctx context.Context, root digest.Digest) err
 		}
 		pending = append(pending, children...)
 	}
+	ins.warnUntracked(ctx, root, manifests, visited)
 	return nil
+}
+
+// maxLoggedUntracked bounds the names a warning about untracked content lists.
+const maxLoggedUntracked = 10
+
+// warnUntracked logs the content of a verified layout that nothing tracks: blobs that
+// neither the main artifact nor any other manifest of the index reaches, and files
+// outside the layout structure. Consumers ignore such content, but it may hide data
+// that was not meant to be shipped. visited holds the main artifact's graph.
+func (ins *layoutInspection) warnUntracked(ctx context.Context, root digest.Digest, manifests []ociImageSpecV1.Descriptor, visited map[digest.Digest]struct{}) {
+	// Other index entries need not be complete; what of them is present is tracked.
+	pending := slices.Clone(manifests)
+	for len(pending) > 0 {
+		node := pending[len(pending)-1]
+		pending = pending[:len(pending)-1]
+		if _, done := visited[node.Digest]; done {
+			continue
+		}
+		visited[node.Digest] = struct{}{}
+		if children, err := ins.retained.successors(node); err == nil {
+			pending = append(pending, children...)
+		}
+	}
+
+	var unreferenced []string
+	for dig := range ins.seen {
+		if _, ok := visited[dig]; !ok {
+			unreferenced = append(unreferenced, dig.String())
+		}
+	}
+	if len(unreferenced) == 0 && ins.otherEntries == 0 {
+		return
+	}
+	slices.Sort(unreferenced)
+	slog.WarnContext(ctx, "layout holds content that neither its index nor its main artifact references",
+		slog.String("root", root.String()),
+		slog.Int("unreferencedBlobs", len(unreferenced)),
+		slog.Any("unreferencedBlobSample", unreferenced[:min(len(unreferenced), maxLoggedUntracked)]),
+		slog.Int("otherFiles", ins.otherEntries),
+		slog.Any("otherFileSample", ins.otherSample),
+	)
 }
 
 // mediaTypeArtifactManifest is the withdrawn OCI artifact manifest, which
