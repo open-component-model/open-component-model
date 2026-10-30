@@ -3,6 +3,7 @@ package s3
 import (
 	"fmt"
 
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtyperepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
@@ -19,8 +20,12 @@ func Register(inputRegistry *input.RepositoryRegistry,
 	digestProcessorRegistry *digestprocessor.RepositoryRegistry,
 	credentialTypeRegistry *credentialtyperepository.CredentialTypeRegistry,
 	httpConfig *httpv1alpha1.Config,
+	filesystemConfig *filesystemv1alpha1.Config,
 ) error {
 	method := &s3input.InputMethod{HTTPConfig: httpConfig}
+	if filesystemConfig != nil && filesystemConfig.TempFolder != nil {
+		method.TempFolder = *filesystemConfig.TempFolder
+	}
 	if err := inputRegistry.RegisterInternalResourceInputPlugin(method); err != nil {
 		return fmt.Errorf("could not register s3 resource input method: %w", err)
 	}

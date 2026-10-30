@@ -6,8 +6,9 @@ package input
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"io"
+	"os"
 
 	"github.com/opencontainers/go-digest"
 
@@ -35,6 +36,9 @@ type InputMethod struct {
 	// MaxDownloadSize caps the number of bytes read from an object. Nil uses the
 	// download package default, which is unlimited.
 	MaxDownloadSize *int64
+	// TempFolder is the directory an object is downloaded to until it is first read. Empty
+	// uses the OS temporary directory.
+	TempFolder string
 }
 
 func (i *InputMethod) GetInputMethodScheme() *runtime.Scheme {
@@ -56,11 +60,11 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 // ProcessResource returns the object described by the S3 input specification as
 // local blob data to be stored in the component version.
 //
-// The object is read once here to learn its version, digest, size and media type, and
-// again whenever the returned blob is read; nothing is stored. If the store reported a
-// real object version, later reads are pinned to it. Every read is verified against
-// the digest and size of the first, so an object overwritten in an unversioned bucket
-// fails the read instead of being stored.
+// The object is downloaded once, to a file under [InputMethod.TempFolder], to learn its
+// version, digest, size and media type. The first read of the returned blob is served from
+// that file and removes it when closed; if nothing reads the blob, the file is removed when
+// ctx ends. Later reads request the object again, pinned to the version the store reported
+// if it is a real one. Every read is verified against the digest and size of the download.
 func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials runtime.Typed) (*constructor.ResourceInputMethodResult, error) {
 	spec, err := i.convertInput(resource)
 	if err != nil {
@@ -84,8 +88,13 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		Endpoint:     spec.Endpoint,
 		UsePathStyle: spec.UsePathStyle,
 	}
-	result, err := download.Stream(ctx, req, io.Discard, append(opts, download.WithDigestAlgorithm(digest.SHA256))...)
+	file, err := os.CreateTemp(i.TempFolder, "ocm-s3-input-*")
 	if err != nil {
+		return nil, fmt.Errorf("error creating file for s3 input from %s: %w", spec.String(), err)
+	}
+	result, err := download.Stream(ctx, req, file, append(opts, download.WithDigestAlgorithm(digest.SHA256))...)
+	if err = errors.Join(err, file.Close()); err != nil {
+		removeFile(ctx, file.Name())
 		return nil, fmt.Errorf("error downloading s3 input from %s: %w", spec.String(), err)
 	}
 	if req.Version == "" && download.IsVersion(result.VersionID) {
@@ -93,7 +102,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	}
 
 	return &constructor.ResourceInputMethodResult{
-		ProcessedBlobData: verified.New(download.NewBlob(ctx, req, opts...), verified.Metadata{
+		ProcessedBlobData: verified.New(newKeptBlob(ctx, file.Name(), download.NewBlob(ctx, req, opts...)), verified.Metadata{
 			Digest:    result.Digest,
 			Size:      result.Size,
 			MediaType: result.MediaType,

@@ -78,7 +78,8 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		manager.ResourcePluginRegistry,
 		manager.DigestProcessorRegistry,
 		manager.CredentialTypeRegistry,
-		httpConfig); err != nil {
+		httpConfig,
+		filesystemConfig); err != nil {
 		return fmt.Errorf("could not register s3 inbuilt plugin: %w", err)
 	}
 

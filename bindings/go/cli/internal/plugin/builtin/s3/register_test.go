@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtyperepository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
@@ -15,20 +16,21 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/s3/spec/input/v2"
 )
 
-// The registered input method must carry the configured HTTP settings; without them
-// downloads silently fall back to the shared client's defaults.
-func TestRegister_InputMethodUsesConfiguredHTTPConfig(t *testing.T) {
-	r := require.New(t)
+// The registered input method must carry the configured temp folder. Without it the
+// download silently lands in the OS temp directory, ignoring tempFolder of the
+// filesystem configuration.
+func TestRegister_InputMethodUsesConfiguredTempFolder(t *testing.T) {
 	ctx := t.Context()
-	httpConfig := &httpv1alpha1.Config{}
+	tempFolder := t.TempDir()
 
 	inputRegistry := input.NewInputRepositoryRegistry(ctx)
-	r.NoError(Register(
+	require.NoError(t, Register(
 		inputRegistry,
 		resource.NewResourceRegistry(ctx),
 		digestprocessor.NewDigestProcessorRegistry(ctx),
 		credentialtyperepository.NewCredentialTypeRegistry(ctx),
-		httpConfig,
+		&httpv1alpha1.Config{},
+		&filesystemv1alpha1.Config{TempFolder: &tempFolder},
 	))
 
 	plugin, err := inputRegistry.GetResourceInputPlugin(ctx, &v2.S3{
@@ -36,9 +38,9 @@ func TestRegister_InputMethodUsesConfiguredHTTPConfig(t *testing.T) {
 		BucketName: "my-bucket",
 		ObjectKey:  "path/to/blob.txt",
 	})
-	r.NoError(err)
+	require.NoError(t, err)
 
 	method, ok := plugin.(*s3input.InputMethod)
-	r.True(ok, "expected the built-in s3 input method, got %T", plugin)
-	r.Same(httpConfig, method.HTTPConfig)
+	require.True(t, ok, "expected the built-in s3 input method, got %T", plugin)
+	require.Equal(t, tempFolder, method.TempFolder)
 }

@@ -1,6 +1,7 @@
 package input
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/binary"
 	"errors"
@@ -8,8 +9,10 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
@@ -182,13 +185,22 @@ func Test_ProcessResource(t *testing.T) {
 		return result.ProcessedBlobData, nil
 	}
 
-	t.Run("the object is returned as described local blob data", func(t *testing.T) {
+	files := func(t *testing.T, dir string) []os.DirEntry {
+		t.Helper()
+		entries, err := os.ReadDir(dir)
+		require.NoError(t, err)
+		return entries
+	}
+
+	t.Run("the object is downloaded once and its file removed after the first read", func(t *testing.T) {
 		r := require.New(t)
 		srv := newFakeS3(t, content, "text/plain")
+		dir := t.TempDir()
 
-		b, err := process(t, &InputMethod{}, srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt"})
+		b, err := process(t, &InputMethod{TempFolder: dir}, srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt"})
 		r.NoError(err)
-		r.Len(srv.recorded(), 1, "the object is read once to describe it")
+		r.Len(srv.recorded(), 1, "the object is downloaded once to describe it")
+		r.Len(files(t, dir), 1, "the download is kept for the first read")
 
 		digestAware, ok := b.(blob.DigestAware)
 		r.True(ok)
@@ -203,28 +215,48 @@ func Test_ProcessResource(t *testing.T) {
 		mediaType, known := mediaTypeAware.MediaType()
 		r.True(known)
 		r.Equal("text/plain", mediaType)
-		r.Len(srv.recorded(), 1, "describing the blob needs no further request")
 
 		got, err := read(t, b)
 		r.NoError(err)
 		r.Equal(content, got)
+		r.Len(srv.recorded(), 1, "the first read is served from the download")
+		r.Empty(files(t, dir), "closing the first reader removes the download")
 
+		got, err = read(t, b)
+		r.NoError(err)
+		r.Equal(content, got)
 		requests := srv.recorded()
-		r.Len(requests, 2, "reading the blob requests the object again")
+		r.Len(requests, 2, "later reads request the object again")
 		for _, request := range requests {
 			r.Equal("/my-bucket/path/blob.txt", request.path)
 			r.Empty(request.versionID, "an unpinned input reads the latest version")
 		}
 	})
 
+	t.Run("an unread download is removed when the context ends", func(t *testing.T) {
+		r := require.New(t)
+		srv := newFakeS3(t, content, "")
+		dir := t.TempDir()
+		ctx, cancel := context.WithCancel(t.Context())
+
+		_, err := (&InputMethod{TempFolder: dir}).ProcessResource(ctx, s3InputResource(servedBy(srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt"})), fakeCredentials())
+		r.NoError(err)
+		r.Len(files(t, dir), 1)
+
+		cancel()
+		r.Eventually(func() bool { return len(files(t, dir)) == 0 }, 5*time.Second, 10*time.Millisecond)
+	})
+
 	t.Run("a pinned version is requested", func(t *testing.T) {
 		r := require.New(t)
 		srv := newFakeS3(t, content, "")
 
-		b, err := process(t, &InputMethod{}, srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt", Version: "v-1"})
+		b, err := process(t, &InputMethod{TempFolder: t.TempDir()}, srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt", Version: "v-1"})
 		r.NoError(err)
-		_, err = read(t, b)
-		r.NoError(err)
+		for range 2 {
+			_, err = read(t, b)
+			r.NoError(err)
+		}
 
 		requests := srv.recorded()
 		r.Len(requests, 2)
@@ -233,7 +265,7 @@ func Test_ProcessResource(t *testing.T) {
 		}
 	})
 
-	t.Run("reads are pinned to the version the store reported", func(t *testing.T) {
+	t.Run("later reads are pinned to the version the store reported", func(t *testing.T) {
 		for _, tt := range []struct {
 			name      string
 			versionID string
@@ -247,10 +279,12 @@ func Test_ProcessResource(t *testing.T) {
 				srv := newFakeS3(t, content, "")
 				srv.serve(content, tt.versionID)
 
-				b, err := process(t, &InputMethod{}, srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt"})
+				b, err := process(t, &InputMethod{TempFolder: t.TempDir()}, srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt"})
 				r.NoError(err)
-				_, err = read(t, b)
-				r.NoError(err)
+				for range 2 {
+					_, err = read(t, b)
+					r.NoError(err)
+				}
 
 				requests := srv.recorded()
 				r.Len(requests, 2)
@@ -260,14 +294,17 @@ func Test_ProcessResource(t *testing.T) {
 		}
 	})
 
-	t.Run("an object overwritten after it was described fails the read", func(t *testing.T) {
+	t.Run("an object overwritten after it was downloaded fails a later read", func(t *testing.T) {
 		r := require.New(t)
 		srv := newFakeS3(t, content, "")
 
-		b, err := process(t, &InputMethod{}, srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt"})
+		b, err := process(t, &InputMethod{TempFolder: t.TempDir()}, srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt"})
 		r.NoError(err)
 		srv.serve([]byte("overwritten content"), "")
 
+		got, err := read(t, b)
+		r.NoError(err, "the first read serves the download")
+		r.Equal(content, got)
 		_, err = read(t, b)
 		r.ErrorContains(err, "mismatch")
 	})
