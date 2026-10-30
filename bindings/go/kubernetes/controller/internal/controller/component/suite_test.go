@@ -2,8 +2,11 @@ package component
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
+
+	"github.com/go-logr/logr"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -19,20 +22,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	gpghandler "ocm.software/open-component-model/bindings/go/gpg/signing/handler"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
-	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
-	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
-	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
-	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
-	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // +kubebuilder:scaffold:imports
@@ -108,41 +103,9 @@ var _ = BeforeSuite(func() {
 		}
 	}()
 
-	pm = manager.NewPluginManager(ctx)
-	scheme := ocmruntime.NewScheme()
-	scheme.MustRegisterWithAlias(&ociv1.Repository{},
-		ocmruntime.NewVersionedType(ociv1.Type, ociv1.Version),
-		ocmruntime.NewUnversionedType(ociv1.Type),
-		ocmruntime.NewVersionedType(ociv1.ShortType, ociv1.Version),
-		ocmruntime.NewUnversionedType(ociv1.ShortType),
-		ocmruntime.NewVersionedType(ociv1.ShortType2, ociv1.Version),
-		ocmruntime.NewUnversionedType(ociv1.ShortType2),
-		ocmruntime.NewVersionedType(ociv1.LegacyRegistryType, ociv1.Version),
-		ocmruntime.NewUnversionedType(ociv1.LegacyRegistryType),
-		ocmruntime.NewVersionedType(ociv1.LegacyRegistryType2, ociv1.Version),
-		ocmruntime.NewUnversionedType(ociv1.LegacyRegistryType2),
-	)
-	scheme.MustRegisterWithAlias(&ctfv1.Repository{},
-		ocmruntime.NewVersionedType(ctfv1.Type, ctfv1.Version),
-		ocmruntime.NewUnversionedType(ctfv1.Type),
-		ocmruntime.NewVersionedType(ctfv1.ShortType, ctfv1.Version),
-		ocmruntime.NewUnversionedType(ctfv1.ShortType),
-		ocmruntime.NewVersionedType(ctfv1.ShortType2, ctfv1.Version),
-		ocmruntime.NewUnversionedType(ctfv1.ShortType2),
-	)
-	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(scheme))
-	Expect(pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider)).To(Succeed())
-	signingHandler, err := handler.New(signingv1alpha1.Scheme, true)
+	// The plugins the controller registers in production.
+	pm, err = setup.NewPluginManager(ctx, nil, slog.New(logr.ToSlogHandler(GinkgoLogr)), setup.WithTempDir(GinkgoT().TempDir()))
 	Expect(err).ToNot(HaveOccurred())
-	Expect(pm.SigningRegistry.RegisterInternalComponentSignatureHandler(signingHandler)).To(Succeed())
-	gpgSigningHandler, err := gpghandler.New(nil)
-	Expect(err).ToNot(HaveOccurred())
-	Expect(pm.SigningRegistry.RegisterInternalComponentSignatureHandler(gpgSigningHandler)).To(Succeed())
-	Expect(pm.CredentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(gpgSigningHandler)).To(Succeed())
-	Expect(pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(
-		&ocicredentials.OCICredentialRepository{},
-		[]ocmruntime.Type{v1.Type},
-	)).To(Succeed())
 
 	resolutionLogger := logf.Log.WithName("resolution")
 	resolver := resolution.NewResolver(&resolutionLogger)
