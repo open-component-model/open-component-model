@@ -1,0 +1,658 @@
+suite: manager deployment
+templates:
+  - manager/manager.yaml
+release:
+  name: ocm-k8s-toolkit
+  namespace: ocm-k8s-toolkit-system
+tests:
+  - it: renders a Deployment whose selector matches the pod labels
+    asserts:
+      - isKind:
+          of: Deployment
+      - equal:
+          path: metadata.name
+          value: ocm-k8s-toolkit-controller-manager
+      - equal:
+          path: metadata.namespace
+          value: ocm-k8s-toolkit-system
+      - equal:
+          path: metadata.labels
+          value:
+            app.kubernetes.io/managed-by: Helm
+            app.kubernetes.io/name: ocm-k8s-toolkit
+            app.kubernetes.io/instance: ocm-k8s-toolkit
+            helm.sh/chart: chart-0.1.0
+            control-plane: controller-manager
+      - equal:
+          path: spec.replicas
+          value: 1
+      # The selector is immutable; a drift from the pod labels breaks every upgrade.
+      - equal:
+          path: spec.selector.matchLabels
+          value:
+            app.kubernetes.io/name: ocm-k8s-toolkit
+            app.kubernetes.io/instance: ocm-k8s-toolkit
+            control-plane: controller-manager
+      - equal:
+          path: spec.template.metadata.labels
+          value:
+            app.kubernetes.io/name: ocm-k8s-toolkit
+            app.kubernetes.io/instance: ocm-k8s-toolkit
+            control-plane: controller-manager
+      - equal:
+          path: spec.template.metadata.annotations
+          value:
+            kubectl.kubernetes.io/default-container: manager
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: ocm-k8s-toolkit-controller-manager
+      - equal:
+          path: spec.template.spec.terminationGracePeriodSeconds
+          value: 10
+
+  - it: follows nameOverride in the selector, pod labels and names together
+    # If the selector moved but the pod labels did not, the Deployment would never become available.
+    release:
+      name: foo
+    set:
+      nameOverride: custom
+    asserts:
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/name"]
+          value: custom
+      - equal:
+          path: spec.template.metadata.labels["app.kubernetes.io/name"]
+          value: custom
+      - equal:
+          path: spec.selector.matchLabels["app.kubernetes.io/instance"]
+          value: foo
+      - equal:
+          path: spec.template.spec.serviceAccountName
+          value: foo-custom-controller-manager
+
+  - it: runs a single manager container with the fixed entrypoint and no ports by default
+    # Health probes bind on 8081 without a declared port; metrics are off and the webhook is disabled.
+    asserts:
+      - lengthEqual:
+          path: spec.template.spec.containers
+          count: 1
+      - equal:
+          path: spec.template.spec.containers[0].name
+          value: manager
+      - equal:
+          path: spec.template.spec.containers[0].command
+          value:
+            - /manager
+      - notExists:
+          path: spec.template.spec.containers[0].ports
+
+  - it: builds the image reference from repository and tag
+    set:
+      manager.image.repository: example.com/ocm/controller
+      manager.image.tag: v1.2.3
+      manager.image.pullPolicy: Always
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].image
+          value: example.com/ocm/controller:v1.2.3
+      - equal:
+          path: spec.template.spec.containers[0].imagePullPolicy
+          value: Always
+
+  - it: renders the exact default argument list
+    # Pins every flag and its order, so a dropped or renamed flag fails here even
+    # when no other test looks at it. Update this list when values.yaml defaults change.
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value:
+            - --health-probe-bind-address=:8081
+            # "0" is a non-empty string, so the flag is rendered and disables metrics in the manager.
+            - --metrics-bind-address=0
+            - --leader-elect
+            - --resource-controller-concurrency=4
+            - --resolver-worker-count=10
+            - --resolver-worker-queue-length=1000
+            - --resolver-subscriber-buffer-size=100
+            - --resolver-cache-ttl=30
+            - --repository-controller-rate-limit-qps=10
+            - --repository-controller-rate-limit-burst=100
+            - --component-controller-rate-limit-qps=10
+            - --component-controller-rate-limit-burst=100
+            - --resource-controller-rate-limit-qps=10
+            - --resource-controller-rate-limit-burst=100
+            - --replication-controller-rate-limit-qps=10
+            - --replication-controller-rate-limit-burst=100
+            - --discovery-controller-rate-limit-qps=10
+            - --discovery-controller-rate-limit-burst=100
+            - --deployer-controller-rate-limit-qps=10
+            - --deployer-controller-rate-limit-burst=100
+            - --namespaced-deployer-controller-rate-limit-qps=10
+            - --namespaced-deployer-controller-rate-limit-burst=100
+            - --deployer-download-cache-size=1000
+            - --deployer-download-max-resource-size=2Mi
+            - --enable-deployer=true
+            - --enable-namespaced-deployer=true
+            - --zap-log-level=info
+            - --zap-encoder=json
+
+  - it: falls back to :8081 when the health probe address is empty
+    set:
+      manager.healthProbe.bindAddress: ""
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --health-probe-bind-address=:8081
+
+  - it: passes a custom health probe address
+    set:
+      manager.healthProbe.bindAddress: ":9999"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --health-probe-bind-address=:9999
+
+  - it: renders the probes from values and points them at the health probe port
+    # The probe port must match the port in manager.healthProbe.bindAddress (":8081"),
+    # otherwise kubelet restarts a healthy manager.
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe
+          value:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe
+          value:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+  - it: passes custom probe settings
+    set:
+      manager.livenessProbe:
+        path: /live
+        port: 9000
+        initialDelaySeconds: 1
+        periodSeconds: 2
+      manager.readinessProbe:
+        path: /ready
+        port: 9001
+        initialDelaySeconds: 3
+        periodSeconds: 4
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe
+          value:
+            httpGet:
+              path: /live
+              port: 9000
+            initialDelaySeconds: 1
+            periodSeconds: 2
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe
+          value:
+            httpGet:
+              path: /ready
+              port: 9001
+            initialDelaySeconds: 3
+            periodSeconds: 4
+
+  - it: passes custom concurrency, resolver and cache values
+    set:
+      manager.concurrency.resource: 8
+      manager.resolver.workerCount: 20
+      manager.resolver.workerQueueLength: 500
+      manager.resolver.subscriberBufferSize: 50
+      manager.resolver.cacheTTL: 60
+      manager.cache.deployerDownloadSize: 42
+      manager.cache.deployerDownloadMaxResourceSize: 512Ki
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --resource-controller-concurrency=8
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --resolver-worker-count=20
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --resolver-worker-queue-length=500
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --resolver-subscriber-buffer-size=50
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --resolver-cache-ttl=60
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --deployer-download-cache-size=42
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --deployer-download-max-resource-size=512Ki
+
+  - it: keeps zero-valued resolver and cache flags
+    # The template uses hasKey for these so an explicit 0 is not dropped as falsy.
+    set:
+      manager.resolver.subscriberBufferSize: 0
+      manager.resolver.cacheTTL: 0
+      manager.cache.deployerDownloadMaxResourceSize: "0"
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --resolver-subscriber-buffer-size=0
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --resolver-cache-ttl=0
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --deployer-download-max-resource-size=0
+
+  - it: drops flags whose value is zero or empty so the manager uses its built-in default
+    # These keys use a plain "if", unlike the hasKey ones above. Changing one to hasKey
+    # (or the other way round) changes what users get and must be a deliberate decision.
+    set:
+      manager.concurrency.resource: 0
+      manager.resolver.workerCount: 0
+      manager.resolver.workerQueueLength: 0
+      manager.cache.deployerDownloadSize: 0
+      manager.logging.level: ""
+      manager.logging.encoder: ""
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value:
+            - --health-probe-bind-address=:8081
+            - --metrics-bind-address=0
+            - --leader-elect
+            - --resolver-subscriber-buffer-size=100
+            - --resolver-cache-ttl=30
+            - --repository-controller-rate-limit-qps=10
+            - --repository-controller-rate-limit-burst=100
+            - --component-controller-rate-limit-qps=10
+            - --component-controller-rate-limit-burst=100
+            - --resource-controller-rate-limit-qps=10
+            - --resource-controller-rate-limit-burst=100
+            - --replication-controller-rate-limit-qps=10
+            - --replication-controller-rate-limit-burst=100
+            - --discovery-controller-rate-limit-qps=10
+            - --discovery-controller-rate-limit-burst=100
+            - --deployer-controller-rate-limit-qps=10
+            - --deployer-controller-rate-limit-burst=100
+            - --namespaced-deployer-controller-rate-limit-qps=10
+            - --namespaced-deployer-controller-rate-limit-burst=100
+            - --deployer-download-max-resource-size=2Mi
+            - --enable-deployer=true
+            - --enable-namespaced-deployer=true
+
+  - it: defaults the deployer flags to true when the keys are absent
+    # Simulates helm upgrade --reuse-values from a release that predates these keys.
+    set:
+      manager.deployer: null
+      manager.namespacedDeployer: null
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --enable-deployer=true
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --enable-namespaced-deployer=true
+
+  - it: passes fractional rate-limit qps and a custom burst
+    # values.schema.json rejects burst < 1, so the zero-burst branch of the template is unreachable.
+    set:
+      manager.rateLimiter.repository.qps: 0.5
+      manager.rateLimiter.repository.burst: 7
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --repository-controller-rate-limit-qps=0.5
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --repository-controller-rate-limit-burst=7
+
+  - it: drops the hasKey flags when their key is absent
+    # The other half of "keeps zero-valued": an absent key means no flag, not an empty value.
+    set:
+      manager.resolver.subscriberBufferSize: null
+      manager.resolver.cacheTTL: null
+      manager.cache.deployerDownloadMaxResourceSize: null
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --resolver-subscriber-buffer-size=
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --resolver-cache-ttl=
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --deployer-download-max-resource-size=
+
+  - it: renders no flags for absent concurrency, resolver, rateLimiter, cache and logging blocks
+    # Simulates helm upgrade --reuse-values from a release that predates these sections.
+    set:
+      manager.concurrency: null
+      manager.resolver: null
+      manager.rateLimiter: null
+      manager.cache: null
+      manager.logging: null
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args
+          value:
+            - --health-probe-bind-address=:8081
+            - --metrics-bind-address=0
+            - --leader-elect
+            - --enable-deployer=true
+            - --enable-namespaced-deployer=true
+
+  - it: fails when replicas > 1 without leader election
+    set:
+      manager.replicas: 2
+      manager.leaderElection.enabled: false
+    asserts:
+      - failedTemplate:
+          errorPattern: requires manager.leaderElection.enabled=true
+
+  - it: allows replicas > 1 with leader election
+    set:
+      manager.replicas: 3
+      manager.leaderElection.enabled: true
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 3
+
+  - it: drops the leader-elect flag when leader election is disabled
+    set:
+      manager.leaderElection.enabled: false
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --leader-elect
+
+  - it: passes metrics flags when the metrics server is configured
+    set:
+      manager.metricsServer.bindAddress: ":8443"
+      manager.metricsServer.secure: true
+      manager.metricsServer.enableHttp2: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --metrics-bind-address=:8443
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --metrics-secure
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --enable-http2
+
+  - it: drops the metrics bind flag when the address is empty
+    set:
+      manager.metricsServer.bindAddress: ""
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --metrics-bind-address=
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --metrics-bind-address=0
+
+  - it: disables deployer controllers on request
+    set:
+      manager.deployer.enabled: false
+      manager.namespacedDeployer.enabled: false
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --enable-deployer=false
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --enable-namespaced-deployer=false
+
+  - it: passes logging flags for development mode
+    set:
+      manager.logging.level: debug
+      manager.logging.development: true
+      manager.logging.encoder: console
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --zap-log-level=debug
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --zap-devel
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --zap-encoder=console
+
+  - it: appends extraArgs after the generated flags
+    set:
+      manager.extraArgs:
+        - --custom-flag=1
+        - --other
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].args[-2]
+          value: --custom-flag=1
+      - equal:
+          path: spec.template.spec.containers[0].args[-1]
+          value: --other
+
+  - it: renders env, imagePullSecrets, tolerations, affinity and nodeSelector
+    set:
+      manager.env:
+        - name: HTTPS_PROXY
+          value: http://proxy:3128
+      manager.imagePullSecrets:
+        - name: regcred
+      manager.tolerations:
+        - key: dedicated
+          operator: Equal
+          value: ocm
+          effect: NoSchedule
+      manager.nodeSelector:
+        kubernetes.io/os: linux
+      manager.affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values: [arm64]
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].env
+          value:
+            - name: HTTPS_PROXY
+              value: http://proxy:3128
+      - equal:
+          path: spec.template.spec.imagePullSecrets
+          value:
+            - name: regcred
+      - equal:
+          path: spec.template.spec.tolerations
+          value:
+            - key: dedicated
+              operator: Equal
+              value: ocm
+              effect: NoSchedule
+      - equal:
+          path: spec.template.spec.nodeSelector
+          value:
+            kubernetes.io/os: linux
+      - equal:
+          path: spec.template.spec.affinity
+          value:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                  - matchExpressions:
+                      - key: kubernetes.io/arch
+                        operator: In
+                        values: [arm64]
+
+  - it: omits optional pod fields when unset
+    asserts:
+      - notExists:
+          path: spec.template.spec.containers[0].env
+      - notExists:
+          path: spec.template.spec.imagePullSecrets
+      - notExists:
+          path: spec.template.spec.tolerations
+      - notExists:
+          path: spec.template.spec.affinity
+      - notExists:
+          path: spec.template.spec.nodeSelector
+
+  - it: renders the default resource requests and limits
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 100m
+              memory: 256Mi
+
+  - it: renders the restricted security defaults
+    # helm/install enforces the restricted Pod Security Standard; this keeps the hardening visible in unit tests.
+    asserts:
+      - equal:
+          path: spec.template.spec.securityContext
+          value:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+  - it: renders empty maps when resources and security contexts are cleared
+    # Users clear these with "null" to run without limits or on clusters that reject the fields.
+    set:
+      manager.resources: null
+      manager.securityContext: null
+      manager.podSecurityContext: null
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].resources
+          value: {}
+      - equal:
+          path: spec.template.spec.containers[0].securityContext
+          value: {}
+      - equal:
+          path: spec.template.spec.securityContext
+          value: {}
+
+  - it: mounts writable data and tmp volumes for the read-only root filesystem
+    asserts:
+      - equal:
+          path: spec.template.spec.volumes
+          value:
+            - emptyDir: {}
+              name: data
+            - emptyDir: {}
+              name: tmp
+      - equal:
+          path: spec.template.spec.containers[0].volumeMounts
+          value:
+            - mountPath: /data
+              name: data
+            - mountPath: /tmp
+              name: tmp
+
+  - it: declares the metrics container port when the metrics server is enabled
+    # monitoring/service.yaml targets this port by name, so the number must follow the bind address.
+    set:
+      manager.metricsServer.bindAddress: "0.0.0.0:8443"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports
+          value:
+            - containerPort: 8443
+              name: metrics
+              protocol: TCP
+
+  - it: lists the metrics port before the webhook port when both are enabled
+    set:
+      manager.metricsServer.bindAddress: ":8443"
+      webhook.enable: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports
+          value:
+            - containerPort: 8443
+              name: metrics
+              protocol: TCP
+            - containerPort: 9443
+              name: webhook-server
+              protocol: TCP
+
+  - it: adds the webhook port, mount and volume when the webhook is enabled
+    set:
+      webhook.enable: true
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports
+          value:
+            - containerPort: 9443
+              name: webhook-server
+              protocol: TCP
+      - contains:
+          path: spec.template.spec.containers[0].volumeMounts
+          content:
+            mountPath: /tmp/k8s-webhook-server/serving-certs
+            name: cert
+            readOnly: true
+      # Must match spec.secretName in webhook/certificate.yaml.
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: cert
+            secret:
+              defaultMode: 420
+              secretName: ocm-k8s-toolkit-webhook-server-cert
+
+  - it: derives the default cert secret name from the release name and nameOverride
+    # Must stay equal to spec.secretName in webhook/certificate.yaml for the same release.
+    release:
+      name: foo
+    set:
+      webhook.enable: true
+      nameOverride: custom
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: cert
+            secret:
+              defaultMode: 420
+              secretName: foo-custom-webhook-server-cert
+
+  - it: uses webhook.certSecret for the cert volume when set
+    set:
+      webhook.enable: true
+      webhook.certSecret: my-webhook-cert
+    asserts:
+      - contains:
+          path: spec.template.spec.volumes
+          content:
+            name: cert
+            secret:
+              defaultMode: 420
+              secretName: my-webhook-cert

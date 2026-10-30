@@ -119,9 +119,9 @@ manager:
     # -- Period between readiness probes
     periodSeconds: 10
   metricsServer:
-    # -- Address the metric endpoint binds to. Set to "0" to disable
+    # -- Address the metric endpoint binds to, for example ":8443". "0" disables metrics. Required by prometheus.enable
     bindAddress: "0"
-    # -- Serve metrics endpoint securely
+    # -- Serve the metrics endpoint over TLS with a certificate the manager generates at startup. The ServiceMonitor then scrapes over https without verification
     secure: false
     # -- Enable HTTP/2 for metrics and webhook servers
     enableHttp2: false
@@ -183,7 +183,7 @@ crd:
 webhook:
   # -- Enable conversion webhook for CRD version conversion
   enable: false
-  # -- Secret name for webhook TLS certificates (when not using cert-manager, create this secret manually)
+  # -- Secret name for the webhook TLS certificate. With cert-manager the Certificate writes into it; without cert-manager, create it manually. Empty uses the chart default name.
   certSecret: ""
 ## Cert-manager integration
 certManager:
@@ -191,5 +191,5 @@ certManager:
   enable: false
 ## Prometheus ServiceMonitor
 prometheus:
-  # -- Enable Prometheus ServiceMonitor (requires prometheus-operator)
+  # -- Render a metrics Service and a Prometheus ServiceMonitor (requires prometheus-operator and manager.metricsServer.bindAddress)
   enable: false

@@ -88,9 +88,9 @@ Kubernetes: `>=1.26.0-0`
 | manager.logging.development | bool | `false` | Enable development mode (console encoder, debug level, warn stacktrace) |
 | manager.logging.encoder | string | `"json"` | Log encoding: 'json' or 'console' |
 | manager.logging.level | string | `"info"` | Zap log level: 'debug', 'info', 'error', 'panic' or integer > 0 |
-| manager.metricsServer.bindAddress | string | `"0"` | Address the metric endpoint binds to. Set to "0" to disable |
+| manager.metricsServer.bindAddress | string | `"0"` | Address the metric endpoint binds to, for example ":8443". "0" disables metrics. Required by prometheus.enable |
 | manager.metricsServer.enableHttp2 | bool | `false` | Enable HTTP/2 for metrics and webhook servers |
-| manager.metricsServer.secure | bool | `false` | Serve metrics endpoint securely |
+| manager.metricsServer.secure | bool | `false` | Serve the metrics endpoint over TLS with a certificate the manager generates at startup. The ServiceMonitor then scrapes over https without verification |
 | manager.namespacedDeployer.enabled | bool | `true` | Run the controller for the NamespacedDeployer and grant the controller permission to impersonate service accounts. A NamespacedDeployer without spec.serviceAccountName impersonates the default service account of its namespace. |
 | manager.networkPolicy.egress | list | `[]` | Egress rules replacing the defaults (DNS on 53, TCP 443 and 6443 to any destination). Set this to reach registries on other ports; it replaces all defaults, so include DNS. Leave empty to keep defaults |
 | manager.networkPolicy.enabled | bool | `false` | Enable NetworkPolicy for the controller manager |
@@ -119,10 +119,10 @@ Kubernetes: `>=1.26.0-0`
 | manager.resources | object | `{"limits":{"cpu":"500m","memory":"512Mi"},"requests":{"cpu":"100m","memory":"256Mi"}}` | Resource limits and requests |
 | manager.securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true}` | Container-level security context |
 | manager.tolerations | list | `[]` | Pod tolerations |
-| prometheus.enable | bool | `false` | Enable Prometheus ServiceMonitor (requires prometheus-operator) |
+| prometheus.enable | bool | `false` | Render a metrics Service and a Prometheus ServiceMonitor (requires prometheus-operator and manager.metricsServer.bindAddress) |
 | rbacHelpers.aggregateToDefaultRoles | bool | `true` | Install ClusterRoles that aggregate OCM resource permissions into the built-in `admin`, `edit` and `view` cluster roles |
 | rbacHelpers.enable | bool | `false` | Install convenience admin/editor/viewer roles for CRDs |
-| webhook.certSecret | string | `""` | Secret name for webhook TLS certificates (when not using cert-manager, create this secret manually) |
+| webhook.certSecret | string | `""` | Secret name for the webhook TLS certificate. With cert-manager the Certificate writes into it; without cert-manager, create it manually. Empty uses the chart default name. |
 | webhook.enable | bool | `false` | Enable conversion webhook for CRD version conversion |
 
 ## Development
@@ -168,6 +168,7 @@ task helm/validate
 
 This checks:
 - Chart linting passes
+- The [helm-unittest](https://github.com/helm-unittest/helm-unittest) suites in `tests/` pass (`task helm/unittest` runs them alone)
 - Templates render successfully
 - CRDs, manager-role, schema, and docs are up to date
 

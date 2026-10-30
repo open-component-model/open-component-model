@@ -67,8 +67,8 @@ To validate that everything is in sync:
 task bindings/go/kubernetes/controller:helm/validate
 ```
 
-This regenerates all artifacts, lints the chart, renders templates, and checks that the working tree is clean. CI
-enforces this - if you modify `api/v1alpha1/` types or RBAC markers and forget to regenerate, CI will fail.
+This regenerates all artifacts, lints the chart, runs the chart unit tests, renders templates, and checks that the
+working tree is clean. CI enforces this - if you modify `api/v1alpha1/` types or RBAC markers and forget to regenerate, CI will fail.
 
 ## Prerequisites
 
@@ -82,7 +82,8 @@ In addition to the [general prerequisites](../../../../CONTRIBUTING.md#prerequis
 - **[kro](https://kro.run)** - required for E2E tests
 
 All other tools (controller-gen, envtest, helm-docs, yq) are installed automatically by the Taskfile into
-`bin/`. Their versions are pinned in `.env`.
+`bin/`. Their versions are pinned in `.env`. The Helm plugins `schema` and `unittest` are installed into your
+Helm plugin directory on first use.
 
 ## Building
 
@@ -141,6 +142,9 @@ The chart lives in `chart/` and is the primary deployment mechanism.
 ```bash
 # Lint the chart
 task bindings/go/kubernetes/controller:helm/lint
+
+# Run the chart unit tests in chart/tests (helm-unittest, installed on first run)
+task bindings/go/kubernetes/controller:helm/unittest
 
 # Render templates locally
 task bindings/go/kubernetes/controller:helm/template

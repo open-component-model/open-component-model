@@ -19,5 +19,6 @@ spec:
     issuerRef:
         kind: Issuer
         name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "selfsigned-issuer" "context" $) }}
-    secretName: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "webhook-server-cert" "context" $) }}
+    {{- /* Must match the cert volume in manager/manager.yaml, which honours the same override. */}}
+    secretName: {{ .Values.webhook.certSecret | default (include "ocm-k8s-toolkit.resourceName" (dict "suffix" "webhook-server-cert" "context" $)) }}
 {{- end }}
