@@ -160,7 +160,12 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		return nil, fmt.Errorf("error downloading helm chart %q: %w", helmURL, err)
 	}
 
-	// A pinned chart is bound through its manifest; otherwise the digest must describe the .tgz.
+	// Verification covers the chart .tgz as downloaded. A pinned chart is bound through its
+	// manifest: the registry client pulls it by that digest and checks the chart layer against
+	// the digest the manifest lists, so the .tgz on disk is that layer. Otherwise the resource
+	// digest must describe the .tgz itself. The tar returned below is no transform of the chart:
+	// it only packs the verified .tgz (and its .prov) byte for byte, read back from downloadDir,
+	// which this function created and nothing else writes to.
 	if pin == "" {
 		if err := integrity.VerifyContent(ctx, resource.Digest, result.ChartBlob,
 			integrity.WithLogAttrs(slog.Any("resource", resource.ToIdentity()))); err != nil {
