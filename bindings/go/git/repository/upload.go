@@ -152,6 +152,15 @@ func (r *ResourceRepository) push(ctx context.Context, repo *git.Repository, tar
 		}
 	}
 
+	// Creating only a tag leaves a repository without a branch: its HEAD resolves to
+	// nothing, so hosts like GitLab and GitHub render it as empty and hide the tag, and a
+	// plain clone checks out no working tree. Warn when this push would be the first ref
+	// and it is a tag; push a branch ref (refs/heads/*) instead to give the target a default.
+	if targetRef.IsTag() && !hasBranch(refs) {
+		slog.WarnContext(ctx, "pushing a tag into a repository with no branch leaves it without a default branch; Git hosts may show it as empty and a clone checks out no working tree",
+			"repository", target.Repository, "ref", target.Ref, "hint", "also push the branch the target's HEAD points at (or set its default branch) so the tag becomes reachable")
+	}
+
 	const uploadRef = "refs/ocm/upload"
 	if err := repo.Storer.SetReference(plumbing.NewHashReference(uploadRef, commit)); err != nil {
 		return fmt.Errorf("cannot stage git upload ref: %w", err)
@@ -164,6 +173,16 @@ func (r *ResourceRepository) push(ctx context.Context, repo *git.Repository, tar
 		return download.TransportError(ctx, "cannot push git ref", err)
 	}
 	return nil
+}
+
+// hasBranch reports whether refs advertises any branch (refs/heads/*).
+func hasBranch(refs []*plumbing.Reference) bool {
+	for _, ref := range refs {
+		if ref.Name().IsBranch() {
+			return true
+		}
+	}
+	return false
 }
 
 func convertGitCredentials(typed runtime.Typed) (runtime.Typed, error) {

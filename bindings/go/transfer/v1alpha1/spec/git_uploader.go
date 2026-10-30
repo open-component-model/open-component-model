@@ -58,6 +58,13 @@ func init() {
 // longer carries its origin. The default match does not select it; push it with an explicit
 // match (on [GitLocalBlobMediaType]), repository and ref.
 //
+// Pushing a tag ref (refs/tags/*) into an otherwise-empty repository leaves it with no
+// branch, so its HEAD resolves to nothing: GitLab and GitHub then render the repository as
+// empty and hide the tag, and a plain clone checks out no working tree even though the
+// commit and tag are present. Push the branch the target's HEAD points at (commonly
+// refs/heads/main), or set the target's default branch to a branch you push, so the tag
+// becomes reachable.
+//
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
 // +k8s:deepcopy-gen=true
 // +ocm:typegen=true
