@@ -3,10 +3,11 @@ package tar
 import (
 	"archive/tar"
 	"bufio"
-	"bytes"
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -14,33 +15,45 @@ import (
 	"strings"
 
 	"github.com/opencontainers/go-digest"
-	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/errdef"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/ctf"
+	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 )
 
 const (
-	// maxLayoutManifestSize bounds the manifests, indexes and layout indexes a
-	// LayoutVerifier holds in memory.
-	maxLayoutManifestSize int64 = 4 << 20
-	// maxLayoutRetainedSize bounds the bytes of all manifest-shaped blobs a
-	// LayoutVerifier holds in memory at once, which a layout could otherwise
-	// inflate with any number of such blobs.
-	maxLayoutRetainedSize = 16 * maxLayoutManifestSize
 	// annotationMainArtifact is set by legacy artifact sets on their index to the
 	// digest of the artifact they hold.
 	annotationMainArtifact = "software.ocm/main"
+	// jsonTokenKeep is how much of a string or number token, and of a whitespace
+	// run, reaches the decoder, which buffers each token whole. Every token whose
+	// value verification compares (digests, media types, sizes, the few annotation
+	// values it reads) is far shorter; a longer one keeps at least this many bytes,
+	// so it still cannot equal any of them.
+	jsonTokenKeep = 4 << 10
+)
+
+// jsonOptions decode like encoding/json, which consumers of a layout use, in
+// everything that decides which members fill which fields. They are not the full
+// [json.DefaultOptionsV1], which buffers every skipped value whole.
+var jsonOptions = jsonv2.JoinOptions(
+	jsonv2.MatchCaseInsensitiveNames(true),
+	json.MatchCaseSensitiveDelimiter(true),
+	json.MergeWithLegacySemantics(true),
+	jsontext.AllowDuplicateNames(true),
+	jsontext.AllowInvalidUTF8(true),
 )
 
 // LayoutVerifier verifies an OCI layout or a legacy artifact set (see
 // [ctf.IsArtifactSetMediaType]) while it is read: that the artifact it holds has the
 // expected root digest, and that every blob of that artifact's graph is present and
-// matches its digest. Only manifests and indexes are held in memory, layers never are.
+// matches its digest. Blobs are hashed while a streaming JSON decoder reads them,
+// with tokens truncated to [jsonTokenKeep]; of manifests and indexes only the
+// media type, digest and size of the descriptors they reference are retained.
+// Memory therefore grows with the number of descriptors, never with blob size.
 //
 // It implements the ArtifactVerifier of package repository/integrity.
 type LayoutVerifier struct{}
@@ -185,9 +198,9 @@ func inspectLayout(r io.Reader, root digest.Digest) error {
 
 	ins := &layoutInspection{
 		names:    make(map[string]struct{}),
-		indexes:  make(map[string]*ociImageSpecV1.Index, 1),
+		indexes:  make(map[string]*layoutIndex, 1),
 		seen:     make(map[digest.Digest]int64),
-		retained: make(retainedFetcher),
+		retained: make(retainedGraph),
 	}
 	tr := tar.NewReader(archive)
 	for {
@@ -218,14 +231,14 @@ type layoutInspection struct {
 	// names holds the entries read, to refuse ambiguous archives.
 	names map[string]struct{}
 	// indexes holds index.json and artifact-descriptor.json.
-	indexes map[string]*ociImageSpecV1.Index
+	indexes map[string]*layoutIndex
 	// seen maps the digests of all blobs read to their size.
 	seen map[digest.Digest]int64
-	// retained holds the blobs that may be manifests or indexes.
-	retained retainedFetcher
-	// retainedSize is the total size of retained.
-	retainedSize int64
-	buf          bytes.Buffer
+	// retained holds the decoded blobs that may be manifests or indexes.
+	retained retainedGraph
+	// dec and truncator are reused to decode each entry.
+	dec       jsontext.Decoder
+	truncator jsonTruncator
 }
 
 func (ins *layoutInspection) entry(hdr *tar.Header, r io.Reader) error {
@@ -251,11 +264,8 @@ func (ins *layoutInspection) entry(hdr *tar.Header, r io.Reader) error {
 	ins.names[name] = struct{}{}
 
 	if isIndex {
-		if hdr.Size > maxLayoutManifestSize {
-			return fmt.Errorf("layout index %s exceeds %d bytes", name, maxLayoutManifestSize)
-		}
-		var idx ociImageSpecV1.Index
-		if err := json.NewDecoder(io.LimitReader(r, maxLayoutManifestSize)).Decode(&idx); err != nil {
+		var idx layoutIndex
+		if err := ins.decodeJSON(r, &idx); err != nil {
 			return fmt.Errorf("failed to decode layout index %s: %w", name, err)
 		}
 		ins.indexes[name] = &idx
@@ -280,32 +290,124 @@ func (ins *layoutInspection) blob(hdr *tar.Header, blobName string, r io.Reader)
 		return fmt.Errorf("layout entry %s does not name a valid digest: %w", hdr.Name, err)
 	}
 
-	digester := dig.Algorithm().Digester()
-	small := hdr.Size <= maxLayoutManifestSize
-	if small {
-		ins.buf.Reset()
-		ins.buf.Grow(int(hdr.Size))
-		if _, err := ins.buf.ReadFrom(r); err != nil {
-			return fmt.Errorf("failed to read layout entry %s: %w", hdr.Name, err)
-		}
-		// hash.Hash.Write never returns an error.
-		_, _ = digester.Hash().Write(ins.buf.Bytes())
-	} else if _, err := blob.CopyReader(digester.Hash(), r); err != nil {
+	hash := dig.Algorithm().Digester()
+	hashed := io.TeeReader(r, hash.Hash())
+	// Every blob is offered to the decoder, which gives up on anything that is not
+	// JSON at its first byte. What it leaves unread is only hashed.
+	var node graphNode
+	retain := ins.decodeJSON(hashed, &node) == nil && node.SchemaVersion == 2
+	if retain {
+		// encoding/json refuses trailing data, so consumers could not read the blob.
+		_, err := ins.dec.ReadToken()
+		retain = errors.Is(err, io.EOF)
+	}
+	if _, err := blob.CopyReader(io.Discard, hashed); err != nil {
 		return fmt.Errorf("failed to read layout entry %s: %w", hdr.Name, err)
 	}
-	if got := digester.Digest(); got != dig {
+	if got := hash.Digest(); got != dig {
 		return fmt.Errorf("layout entry %s does not match its digest: got %s", hdr.Name, got)
 	}
 
 	ins.seen[dig] = hdr.Size
-	if small && isManifest(ins.buf.Bytes()) {
-		ins.retainedSize += hdr.Size
-		if ins.retainedSize > maxLayoutRetainedSize {
-			return fmt.Errorf("layout manifests and indexes exceed %d bytes", maxLayoutRetainedSize)
-		}
-		ins.retained[dig] = bytes.Clone(ins.buf.Bytes())
+	if retain {
+		ins.retained[dig] = &node
 	}
 	return nil
+}
+
+// decodeJSON decodes the next JSON value of r into out, reading through
+// ins.truncator so that the decoder never buffers a long token.
+func (ins *layoutInspection) decodeJSON(r io.Reader, out any) error {
+	ins.truncator = jsonTruncator{r: r}
+	ins.dec.Reset(&ins.truncator, jsonOptions)
+	return jsonv2.UnmarshalDecode(&ins.dec, out)
+}
+
+// jsonTruncator passes JSON through, but keeps only the first jsonTokenKeep bytes
+// of every string and number and collapses whitespace runs to one byte. Valid JSON
+// stays valid with the same structure; only the values of overlong tokens change.
+// Invalid input passes through to fail the decoder.
+type jsonTruncator struct {
+	r io.Reader
+	// run is the length of the current string or number.
+	run                         int
+	inString, inNumber, inSpace bool
+	// escape is -1 after a backslash in a string, the hex digits left of a \u
+	// escape, or 0; keepEscape tells whether the escape is passed on.
+	escape     int
+	keepEscape bool
+	// needDigit is set after a number's sign, point or exponent, which a digit
+	// must follow to keep the number valid.
+	needDigit bool
+}
+
+func (t *jsonTruncator) Read(p []byte) (int, error) {
+	for {
+		n, err := t.r.Read(p)
+		kept := 0
+		for _, c := range p[:n] {
+			if t.keep(c) {
+				p[kept] = c
+				kept++
+			}
+		}
+		if kept > 0 || err != nil {
+			return kept, err
+		}
+	}
+}
+
+func (t *jsonTruncator) keep(c byte) bool {
+	if t.inString {
+		switch {
+		case t.escape == -1:
+			t.escape = 0
+			if c == 'u' {
+				t.escape = 4
+			}
+			return t.keepEscape
+		case t.escape > 0:
+			t.escape--
+			return t.keepEscape
+		case c == '"':
+			t.inString = false
+			return true
+		}
+		keep := t.run < jsonTokenKeep
+		t.run++
+		if c == '\\' {
+			t.escape, t.keepEscape = -1, keep
+		}
+		return keep
+	}
+
+	isDigit := c >= '0' && c <= '9'
+	if t.inNumber {
+		switch {
+		case isDigit:
+			keep := t.run < jsonTokenKeep || t.needDigit
+			t.run++
+			t.needDigit = false
+			return keep
+		case c == '.', c == 'e', c == 'E', c == '+', c == '-':
+			t.needDigit = true
+			return true
+		}
+		t.inNumber = false
+	}
+	if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+		keep := !t.inSpace
+		t.inSpace = true
+		return keep
+	}
+	t.inSpace = false
+	switch {
+	case c == '"':
+		t.inString, t.run = true, 0
+	case isDigit || c == '-':
+		t.inNumber, t.run, t.needDigit = true, 1, c == '-'
+	}
+	return true
 }
 
 // verify checks, once the whole archive is read, that its main artifact is root and
@@ -317,13 +419,15 @@ func (ins *layoutInspection) verify(ctx context.Context, root digest.Digest) err
 			return fmt.Errorf("layout has no %s or %s", ociImageSpecV1.ImageIndexFile, ctf.ArtifactSetDescriptorFileName)
 		}
 	}
-	for _, manifest := range idx.Manifests {
+	manifests := make([]ociImageSpecV1.Descriptor, len(idx.Manifests))
+	for i, manifest := range idx.Manifests {
 		if manifest.MediaType == "" || manifest.Size <= 0 {
 			return fmt.Errorf("layout index entry %s has no media type or size", manifest.Digest)
 		}
+		manifests[i] = manifest.descriptor()
 	}
 
-	top, err := selectRoot(ctx, ins.retained, idx.Manifests)
+	top, err := selectRoot(ctx, ins.retained.edges, manifests)
 	if err != nil {
 		return err
 	}
@@ -332,14 +436,14 @@ func (ins *layoutInspection) verify(ctx context.Context, root digest.Digest) err
 	}
 	// Consumers may pick the main artifact through TopLevelArtifacts rather than
 	// selectRoot; both must agree, or a consumer could unpack an unverified artifact.
-	for _, manifest := range idx.Manifests {
+	for _, manifest := range manifests {
 		if isManifestMediaType(manifest.MediaType) {
 			if _, ok := ins.retained[manifest.Digest]; !ok {
 				return fmt.Errorf("layout manifest %s listed in the index cannot be inspected", manifest.Digest)
 			}
 		}
 	}
-	if top := TopLevelArtifacts(ctx, ins.retained, idx.Manifests); len(top) == 1 && top[0].Digest != root {
+	if top := topLevelArtifacts(ctx, ins.retained.edges, manifests); len(top) == 1 && top[0].Digest != root {
 		return fmt.Errorf("layout main artifact is %s, expected %s", top[0].Digest, root)
 	}
 	if main := idx.Annotations[annotationMainArtifact]; main != "" && main != root.String() {
@@ -363,7 +467,7 @@ func (ins *layoutInspection) verify(ctx context.Context, root digest.Digest) err
 		if size != node.Size {
 			return fmt.Errorf("layout blob %s has size %d, but the artifact graph references %d bytes", node.Digest, size, node.Size)
 		}
-		children, err := content.Successors(ctx, ins.retained, node)
+		children, err := ins.retained.successors(node)
 		if err != nil {
 			return fmt.Errorf("layout manifest %s cannot be read: %w", node.Digest, err)
 		}
@@ -372,11 +476,109 @@ func (ins *layoutInspection) verify(ctx context.Context, root digest.Digest) err
 	return nil
 }
 
-// isManifest reports whether data may be an OCI or Docker manifest or index, all of
-// which declare schema version 2.
-func isManifest(data []byte) bool {
-	var versioned specs.Versioned
-	return json.Unmarshal(data, &versioned) == nil && versioned.SchemaVersion == 2
+// mediaTypeArtifactManifest is the withdrawn OCI artifact manifest, which
+// [content.Successors] still follows.
+const mediaTypeArtifactManifest = "application/vnd.oci.artifact.manifest.v1+json"
+
+// layoutIndex is what verification reads of index.json or artifact-descriptor.json.
+type layoutIndex struct {
+	Manifests   []indexEntry    `json:"manifests"`
+	Annotations keptAnnotations `json:"annotations"`
+}
+
+// indexEntry is a descriptor in a layoutIndex.
+type indexEntry struct {
+	graphDescriptor
+	Annotations keptAnnotations `json:"annotations"`
+}
+
+func (e indexEntry) descriptor() ociImageSpecV1.Descriptor {
+	desc := e.graphDescriptor.descriptor()
+	desc.Annotations = e.Annotations
+	return desc
+}
+
+// keptAnnotations holds only the annotations verification reads, so that an
+// index with many annotations does not cost memory.
+type keptAnnotations map[string]string
+
+func (a *keptAnnotations) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	tok, err := dec.ReadToken()
+	if err != nil {
+		return err
+	}
+	switch tok.Kind() {
+	case 'n':
+		*a = nil
+		return nil
+	case '{':
+	default:
+		return fmt.Errorf("annotations must be an object, got %s", tok.Kind())
+	}
+	for dec.PeekKind() != '}' {
+		name, err := dec.ReadToken()
+		if err != nil {
+			return err
+		}
+		switch key := name.String(); key {
+		case annotationMainArtifact, annotations.OCMLayoutRoot, ociImageSpecV1.AnnotationRefName:
+			value, err := dec.ReadToken()
+			if err != nil {
+				return err
+			}
+			if value.Kind() != '"' {
+				return fmt.Errorf("annotation %s must be a string, got %s", key, value.Kind())
+			}
+			if *a == nil {
+				*a = make(keptAnnotations, 1)
+			}
+			(*a)[key] = value.String()
+		default:
+			if err := dec.SkipValue(); err != nil {
+				return err
+			}
+		}
+	}
+	_, err = dec.ReadToken()
+	return err
+}
+
+// graphNode is what verification reads of an OCI or Docker manifest or index: its
+// schema version, which all of them declare as 2, and the descriptors it references.
+type graphNode struct {
+	SchemaVersion int               `json:"schemaVersion"`
+	Config        graphDescriptor   `json:"config"`
+	Layers        []graphDescriptor `json:"layers"`
+	Manifests     []graphDescriptor `json:"manifests"`
+	Blobs         []graphDescriptor `json:"blobs"`
+	Subject       *graphDescriptor  `json:"subject"`
+}
+
+// graphDescriptor holds the fields of a descriptor that verification reads, so
+// that memory grows with the number of descriptors, not with what they carry.
+type graphDescriptor struct {
+	MediaType string        `json:"mediaType"`
+	Digest    digest.Digest `json:"digest"`
+	Size      int64         `json:"size"`
+}
+
+func (d graphDescriptor) descriptor() ociImageSpecV1.Descriptor {
+	return ociImageSpecV1.Descriptor{MediaType: d.MediaType, Digest: d.Digest, Size: d.Size}
+}
+
+func descriptors(nodes []ociImageSpecV1.Descriptor, ds []graphDescriptor) []ociImageSpecV1.Descriptor {
+	for _, d := range ds {
+		nodes = append(nodes, d.descriptor())
+	}
+	return nodes
+}
+
+func (n *graphNode) subject() *ociImageSpecV1.Descriptor {
+	if n.Subject == nil {
+		return nil
+	}
+	subject := n.Subject.descriptor()
+	return &subject
 }
 
 func isManifestMediaType(mediaType string) bool {
@@ -388,13 +590,61 @@ func isManifestMediaType(mediaType string) bool {
 	return false
 }
 
-// retainedFetcher serves the manifests and indexes retained from a layout.
-type retainedFetcher map[digest.Digest][]byte
+// retainedGraph holds the manifests and indexes retained from a layout, decoded.
+// Their raw bytes are gone, so it answers what [content.Successors] and
+// [extractSubjectAndSuccessors] would from them.
+type retainedGraph map[digest.Digest]*graphNode
 
-func (f retainedFetcher) Fetch(_ context.Context, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
-	data, ok := f[target.Digest]
+func (g retainedGraph) node(desc ociImageSpecV1.Descriptor) (*graphNode, error) {
+	node, ok := g[desc.Digest]
 	if !ok {
-		return nil, fmt.Errorf("%s: %w", target.Digest, errdef.ErrNotFound)
+		return nil, fmt.Errorf("%s: %w", desc.Digest, errdef.ErrNotFound)
 	}
-	return io.NopCloser(bytes.NewReader(data)), nil
+	return node, nil
+}
+
+// successors mirrors [content.Successors].
+func (g retainedGraph) successors(desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
+	switch desc.MediaType {
+	case mediaTypeDockerManifest, ociImageSpecV1.MediaTypeImageManifest,
+		mediaTypeDockerManifestList, ociImageSpecV1.MediaTypeImageIndex, mediaTypeArtifactManifest:
+	default:
+		return nil, nil
+	}
+	node, err := g.node(desc)
+	if err != nil {
+		return nil, err
+	}
+	var nodes []ociImageSpecV1.Descriptor
+	if node.Subject != nil && desc.MediaType != mediaTypeDockerManifest && desc.MediaType != mediaTypeDockerManifestList {
+		nodes = append(nodes, node.Subject.descriptor())
+	}
+	switch desc.MediaType {
+	case mediaTypeDockerManifest, ociImageSpecV1.MediaTypeImageManifest:
+		nodes = append(nodes, node.Config.descriptor())
+		return descriptors(nodes, node.Layers), nil
+	case mediaTypeArtifactManifest:
+		return descriptors(nodes, node.Blobs), nil
+	default:
+		return descriptors(nodes, node.Manifests), nil
+	}
+}
+
+// edges mirrors [extractSubjectAndSuccessors].
+func (g retainedGraph) edges(_ context.Context, desc ociImageSpecV1.Descriptor) (*ociImageSpecV1.Descriptor, []ociImageSpecV1.Descriptor, error) {
+	switch desc.MediaType {
+	case ociImageSpecV1.MediaTypeImageManifest, ociImageSpecV1.MediaTypeImageIndex:
+		node, err := g.node(desc)
+		if err != nil {
+			return nil, nil, err
+		}
+		if desc.MediaType == ociImageSpecV1.MediaTypeImageIndex {
+			return node.subject(), descriptors(nil, node.Manifests), nil
+		}
+		return node.subject(), descriptors([]ociImageSpecV1.Descriptor{node.Config.descriptor()}, node.Layers), nil
+	case mediaTypeDockerManifest, mediaTypeDockerManifestList:
+		successors, err := g.successors(desc)
+		return nil, successors, err
+	}
+	return nil, nil, nil
 }

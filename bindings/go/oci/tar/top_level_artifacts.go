@@ -14,6 +14,10 @@ import (
 // TopLevelArtifacts picks the artifacts a layout is actually about, out of
 // everything its index lists.
 func TopLevelArtifacts(ctx context.Context, fetcher content.Fetcher, candidates []ociImageSpecV1.Descriptor) []ociImageSpecV1.Descriptor {
+	return topLevelArtifacts(ctx, fetcherEdges(fetcher), candidates)
+}
+
+func topLevelArtifacts(ctx context.Context, edges edgesFunc, candidates []ociImageSpecV1.Descriptor) []ociImageSpecV1.Descriptor {
 	if root, ok := markedRoot(candidates); ok {
 		return []ociImageSpecV1.Descriptor{root}
 	}
@@ -26,7 +30,7 @@ func TopLevelArtifacts(ctx context.Context, fetcher content.Fetcher, candidates 
 	for i := range candidates {
 		go func() {
 			defer wg.Done()
-			subject, successors, err := extractSubjectAndSuccessors(ctx, fetcher, candidates[i])
+			subject, successors, err := edges(ctx, candidates[i])
 			if err != nil {
 				return
 			}

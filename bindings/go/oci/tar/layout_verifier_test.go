@@ -44,6 +44,10 @@ func gzippedTar(t *testing.T, entries ...tarEntry) []byte {
 	return buf.Bytes()
 }
 
+func blobEntry(desc ociImageSpecV1.Descriptor, data []byte) tarEntry {
+	return tarEntry{name: "blobs/" + desc.Digest.Algorithm().String() + "/" + desc.Digest.Encoded(), data: data}
+}
+
 // verifyLayout reads archive through a LayoutVerifier like a consumer copying it would.
 func verifyLayout(archive []byte, root digest.Digest) error {
 	rc := LayoutVerifier{}.Verify(io.NopCloser(bytes.NewReader(archive)), root, -1)
@@ -140,9 +144,6 @@ func TestLayoutVerifier_RefusesTamperedLayouts(t *testing.T) {
 		require.NoError(t, err)
 		return tarEntry{name: ociImageSpecV1.ImageIndexFile, data: data}
 	}
-	blobEntry := func(desc ociImageSpecV1.Descriptor, data []byte) tarEntry {
-		return tarEntry{name: "blobs/" + desc.Digest.Algorithm().String() + "/" + desc.Digest.Encoded(), data: data}
-	}
 	layoutFile := tarEntry{name: ociImageSpecV1.ImageLayoutFile, data: []byte(`{"imageLayoutVersion":"1.0.0"}`)}
 
 	tests := []struct {
@@ -226,22 +227,6 @@ func TestLayoutVerifier_RefusesTamperedLayouts(t *testing.T) {
 	}
 }
 
-func TestLayoutVerifier_BoundsRetainedManifests(t *testing.T) {
-	r := require.New(t)
-	// Every blob is manifest-shaped and just below maxLayoutManifestSize, so each is
-	// retained individually, but together they exceed maxLayoutRetainedSize.
-	pad := strings.Repeat("a", int(maxLayoutManifestSize)-64)
-	count := int(maxLayoutRetainedSize/maxLayoutManifestSize) + 1
-	entries := make([]tarEntry, 0, count)
-	for i := range count {
-		data := []byte(fmt.Sprintf(`{"schemaVersion":2,"n":%d,"pad":%q}`, i, pad))
-		r.LessOrEqual(int64(len(data)), maxLayoutManifestSize)
-		dig := digest.FromBytes(data)
-		entries = append(entries, tarEntry{name: "blobs/" + dig.Algorithm().String() + "/" + dig.Encoded(), data: data})
-	}
-	r.ErrorContains(verifyLayout(gzippedTar(t, entries...), digest.FromString("root")), "layout manifests and indexes exceed")
-}
-
 func TestLayoutVerifier_LegacyArtifactSet(t *testing.T) {
 	r := require.New(t)
 	archive, err := os.ReadFile("../../ctf/testdata/compatibility/02/with-resource/blobs/sha256.e40e3a2f1ab1a98328dfd14539a79d27aff5c4d5c34cd16a85f0288bfa76490b")
@@ -292,9 +277,6 @@ func TestLayoutVerifier_RefusesRootsConsumersWouldNotPick(t *testing.T) {
 		require.NoError(t, err)
 		return content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, data), data
 	}
-	blobEntry := func(desc ociImageSpecV1.Descriptor, data []byte) tarEntry {
-		return tarEntry{name: "blobs/" + desc.Digest.Algorithm().String() + "/" + desc.Digest.Encoded(), data: data}
-	}
 	indexOf := func(manifests ...ociImageSpecV1.Descriptor) tarEntry {
 		data, err := json.Marshal(ociImageSpecV1.Index{Versioned: specs.Versioned{SchemaVersion: 2}, Manifests: manifests})
 		require.NoError(t, err)
@@ -316,18 +298,121 @@ func TestLayoutVerifier_RefusesRootsConsumersWouldNotPick(t *testing.T) {
 		r.ErrorContains(verifyLayout(archive, root.Digest), "layout main artifact is "+wrapper.Digest.String())
 	})
 
-	t.Run("a listed manifest too large to inspect", func(t *testing.T) {
+	t.Run("a listed manifest that is not one", func(t *testing.T) {
 		r := require.New(t)
-		oversizedData := bytes.Repeat([]byte{'x'}, int(maxLayoutManifestSize)+1)
-		oversized := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, oversizedData)
+		notManifestData := []byte("not a manifest")
+		notManifest := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, notManifestData)
 		archive := gzippedTar(t,
 			blobEntry(config, configData), blobEntry(layer, layerData),
-			blobEntry(root, rootData), blobEntry(oversized, oversizedData),
-			indexOf(named, oversized),
+			blobEntry(root, rootData), blobEntry(notManifest, notManifestData),
+			indexOf(named, notManifest),
 		)
 		r.ErrorContains(verifyLayout(archive, root.Digest),
-			"layout manifest "+oversized.Digest.String()+" listed in the index cannot be inspected")
+			"layout manifest "+notManifest.Digest.String()+" listed in the index cannot be inspected")
 	})
+}
+
+func TestLayoutVerifier_LargeManifests(t *testing.T) {
+	layerData := []byte("layer")
+	layer := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, layerData)
+	configData := []byte(`{}`)
+	config := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageConfig, configData)
+	missingLayer := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, []byte("missing"))
+	manifestWith := func(annotations map[string]string) []byte {
+		data, err := json.Marshal(ociImageSpecV1.Manifest{
+			Versioned:   specs.Versioned{SchemaVersion: 2},
+			MediaType:   ociImageSpecV1.MediaTypeImageManifest,
+			Config:      config,
+			Layers:      []ociImageSpecV1.Descriptor{layer},
+			Annotations: annotations,
+		})
+		require.NoError(t, err)
+		return data
+	}
+	manyMembers := func(total int) map[string]string {
+		annotations := make(map[string]string, total/64)
+		for i := range total / 64 {
+			annotations[fmt.Sprintf("k%d", i)] = strings.Repeat("a", 64)
+		}
+		return annotations
+	}
+	missingJSON, err := json.Marshal(missingLayer)
+	require.NoError(t, err)
+	// withMember adds a member with raw as its value to the front of a manifest.
+	withMember := func(name, raw string) []byte {
+		return append([]byte(`{"`+name+`":`+raw+`,`), manifestWith(nil)[1:]...)
+	}
+	long := 5 << 20
+
+	for _, tc := range []struct {
+		name     string
+		manifest func() []byte
+		wantErr  string
+	}{
+		{
+			name: "above the former 4 MiB cap, with leading whitespace",
+			manifest: func() []byte {
+				return append([]byte("\n  "), manifestWith(manyMembers(long))...)
+			},
+		},
+		{
+			name: "a long string with escapes",
+			manifest: func() []byte {
+				// encoding/json writes \" \\ and \u003c escapes for these.
+				return manifestWith(map[string]string{"pad": strings.Repeat(`a"\<é`, long/5)})
+			},
+		},
+		{
+			name: "a long member name",
+			manifest: func() []byte {
+				return withMember(strings.Repeat("n", long), "1")
+			},
+		},
+		{
+			name: "a long number",
+			manifest: func() []byte {
+				return withMember("n", "-1"+strings.Repeat("0", long)+".5"+strings.Repeat("5", long)+"e+1"+strings.Repeat("0", long))
+			},
+		},
+		{
+			name: "a long whitespace run",
+			manifest: func() []byte {
+				return withMember("n", strings.Repeat(" \n", long)+"1")
+			},
+		},
+		{
+			// encoding/json matches names case-insensitively, so consumers see these layers.
+			name: "layers under a differently cased name",
+			manifest: func() []byte {
+				var m map[string]any
+				require.NoError(t, json.Unmarshal(manifestWith(nil), &m))
+				m["Layers"] = []json.RawMessage{missingJSON}
+				delete(m, "layers")
+				data, err := json.Marshal(m)
+				require.NoError(t, err)
+				return data
+			},
+			wantErr: "layout blob " + missingLayer.Digest.String() + " referenced by the artifact graph is missing",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			manifestData := tc.manifest()
+			manifest := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, manifestData)
+			indexData, err := json.Marshal(ociImageSpecV1.Index{Versioned: specs.Versioned{SchemaVersion: 2}, Manifests: []ociImageSpecV1.Descriptor{manifest}})
+			r.NoError(err)
+			archive := gzippedTar(t,
+				blobEntry(layer, layerData), blobEntry(config, configData), blobEntry(manifest, manifestData),
+				tarEntry{name: ociImageSpecV1.ImageIndexFile, data: indexData},
+			)
+			err = verifyLayout(archive, manifest.Digest)
+			if tc.wantErr == "" {
+				r.NoError(err)
+				return
+			}
+			r.ErrorContains(err, tc.wantErr)
+		})
+	}
 }
 
 func TestLayoutVerifier_VerifiesAtSize(t *testing.T) {

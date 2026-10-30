@@ -180,16 +180,16 @@ func CopyGraphWithRoot(ctx context.Context, dst content.Storage, src content.Rea
 // pickTopLevelDescriptor works out which manifest in the layout was requested,
 // see [selectRoot].
 func pickTopLevelDescriptor(ctx context.Context, ociStore *CloseableReadOnlyStore) (ociImageSpecV1.Descriptor, error) {
-	return selectRoot(ctx, ociStore, ociStore.Index.Manifests)
+	return selectRoot(ctx, fetcherEdges(ociStore), ociStore.Index.Manifests)
 }
 
 // selectRoot works out which of the manifests a layout index lists was requested,
 // in order: the only one; the one marked with [annotations.OCMLayoutRoot]; the
 // one named by `org.opencontainers.image.ref.name`, only ever set for tag-based
-// references; else [TopLevelArtifacts] for a layout carrying neither, with
-// fetcher serving the manifests. Errors when nothing settles it, because a wrong
+// references; else [TopLevelArtifacts] for a layout carrying neither, with edges
+// reading the manifests. Errors when nothing settles it, because a wrong
 // guess silently packs the wrong artifact.
-func selectRoot(ctx context.Context, fetcher content.Fetcher, manifests []ociImageSpecV1.Descriptor) (ociImageSpecV1.Descriptor, error) {
+func selectRoot(ctx context.Context, edges edgesFunc, manifests []ociImageSpecV1.Descriptor) (ociImageSpecV1.Descriptor, error) {
 	if len(manifests) == 1 {
 		return manifests[0], nil
 	}
@@ -207,7 +207,7 @@ func selectRoot(ctx context.Context, fetcher content.Fetcher, manifests []ociIma
 	}
 	// Nothing was written down, so infer it: an index and the children it lists
 	// collapse to the index. Last, because this branch is the one that guesses.
-	if top := TopLevelArtifacts(ctx, fetcher, manifests); len(top) == 1 {
+	if top := topLevelArtifacts(ctx, edges, manifests); len(top) == 1 {
 		return top[0], nil
 	}
 	return ociImageSpecV1.Descriptor{}, fmt.Errorf(
@@ -226,6 +226,18 @@ const (
 	mediaTypeDockerManifest     = "application/vnd.docker.distribution.manifest.v2+json"
 	mediaTypeDockerManifestList = "application/vnd.docker.distribution.manifest.list.v2+json"
 )
+
+// edgesFunc returns the subject of desc (nil if desc is not a referrer) and its
+// containment successors (config+layers, child manifests, or blobs depending on
+// media type).
+type edgesFunc func(ctx context.Context, desc ociImageSpecV1.Descriptor) (*ociImageSpecV1.Descriptor, []ociImageSpecV1.Descriptor, error)
+
+// fetcherEdges returns the edges of descriptors that fetcher serves.
+func fetcherEdges(fetcher content.Fetcher) edgesFunc {
+	return func(ctx context.Context, desc ociImageSpecV1.Descriptor) (*ociImageSpecV1.Descriptor, []ociImageSpecV1.Descriptor, error) {
+		return extractSubjectAndSuccessors(ctx, fetcher, desc)
+	}
+}
 
 // extractSubjectAndSuccessors decodes desc once and returns its subject (nil if desc is not a
 // referrer) and its containment successors (config+layers, child manifests, or
