@@ -117,3 +117,16 @@ func (f *Blob) MediaType() (string, bool) {
 func (f *Blob) SetMediaType(mediaType string) {
 	f.mediaType.Store(&mediaType)
 }
+
+// Remove deletes the file backing the blob. It fails if the underlying filesystem
+// cannot remove files or is read-only; blobs from GetBlobFromOSPath cannot be removed.
+func (f *Blob) Remove() error {
+	rfs, ok := f.fileSystem.(RemoveFS)
+	if !ok {
+		return fmt.Errorf("filesystem %T does not support remove", f.fileSystem)
+	}
+	if err := rfs.Remove(f.path); err != nil {
+		return fmt.Errorf("unable to remove file %q: %w", f.path, err)
+	}
+	return nil
+}
