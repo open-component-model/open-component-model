@@ -54,7 +54,7 @@ func copyBuffered(dst io.Writer, src io.Reader) error {
 // A relative path is resolved against the current working directory once, on creation.
 // The file is opened by path on every read and no descriptor is held between reads.
 // Symlinks are followed like os.Open. A missing or unreadable file is reported when the blob is read.
-// [InWorkingDirectory] confines the file to a directory, [AllowRemove] lets [Blob.Remove] delete it.
+// [InWorkingDirectory] confines the file to a directory.
 func GetBlobFromOSPath(path string, opts ...OSPathOption) (*Blob, error) {
 	if path == "" {
 		return nil, errors.New("path must not be empty")
@@ -68,21 +68,20 @@ func GetBlobFromOSPath(path string, opts ...OSPathOption) (*Blob, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to ensure path in working directory: %w", err)
 		}
-		return NewFileBlob(osFS{dir: root, confined: true, removable: o.allowRemove}, rel), nil
+		return NewFileBlob(osFS{dir: root, confined: true}, rel), nil
 	}
 	path, err := filepath.Abs(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve absolute path: %w", err)
 	}
-	return NewFileBlob(osFS{dir: filepath.Dir(path), removable: o.allowRemove}, filepath.Base(path)), nil
+	return NewFileBlob(osFS{dir: filepath.Dir(path)}, filepath.Base(path)), nil
 }
 
 // OSPathOption configures [GetBlobFromOSPath].
 type OSPathOption func(*osPathOptions)
 
 type osPathOptions struct {
-	workingDir  string
-	allowRemove bool
+	workingDir string
 }
 
 // InWorkingDirectory confines the file to workingDir: a relative path is resolved
@@ -91,12 +90,6 @@ type osPathOptions struct {
 // escaping symlink after creation cannot be read. Symlinks that stay inside are followed.
 func InWorkingDirectory(workingDir string) OSPathOption {
 	return func(o *osPathOptions) { o.workingDir = workingDir }
-}
-
-// AllowRemove lets [Blob.Remove] delete the file, for blobs that own it. Like reads,
-// removal opens nothing that outlives the call, so the directory stays removable.
-func AllowRemove() OSPathOption {
-	return func(o *osPathOptions) { o.allowRemove = true }
 }
 
 // GetBlobInWorkingDirectory is [GetBlobFromOSPath] with [InWorkingDirectory].
@@ -139,19 +132,16 @@ func resolveInWorkingDirectory(path, workingDirectory string) (root, rel string,
 	return root, rel, nil
 }
 
-// osFS serves the files of an absolute directory without holding a descriptor between
-// calls. Unconfined, it opens by joined path and keeps the full path in errors, so a
-// failed read names the file's directory; confined, it opens a fresh os.Root per call.
-// Remove fails with ErrReadOnly unless removable.
+// osFS is a read-only fs.FS over an absolute directory that holds no descriptor
+// between calls. Unconfined, it opens by joined path and keeps the full path in
+// errors, so a failed read names the file's directory; confined, it opens a fresh
+// os.Root per call.
 type osFS struct {
-	dir                 string
-	confined, removable bool
+	dir      string
+	confined bool
 }
 
-var (
-	_ fs.StatFS = osFS{}
-	_ RemoveFS  = osFS{}
-)
+var _ fs.StatFS = osFS{}
 
 func (f osFS) Open(name string) (fs.File, error) {
 	var (
@@ -181,19 +171,4 @@ func (f osFS) Stat(name string) (fs.FileInfo, error) {
 	}
 	defer root.Close()
 	return root.Stat(name)
-}
-
-func (f osFS) Remove(name string) error {
-	if !f.removable {
-		return ErrReadOnly
-	}
-	if !f.confined {
-		return os.Remove(filepath.Join(f.dir, name))
-	}
-	root, err := os.OpenRoot(f.dir)
-	if err != nil {
-		return err
-	}
-	defer root.Close()
-	return root.Remove(name)
 }

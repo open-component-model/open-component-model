@@ -10,6 +10,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 
 	git "github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/config"
@@ -19,7 +20,7 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/transport"
 	"github.com/opencontainers/go-digest"
 
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/git/internal/endpoint"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
@@ -28,9 +29,6 @@ import (
 
 // Result is one downloaded snapshot of a Git repository with its history, archived as tar.gz.
 type Result struct {
-	// Blob is backed by a file that outlives the call and is owned by the caller, who
-	// discards it with Blob.Remove. Stream leaves it nil.
-	Blob *filesystem.Blob
 	// Commit is the full SHA the archive was taken from.
 	Commit string
 	// Ref is the full name of the ref the access selects (see WithRepository), or empty
@@ -40,42 +38,8 @@ type Result struct {
 	Digest digest.Digest
 }
 
-// Download resolves one snapshot of the repository and archives it with its history
-// into a file under opts.TempDir.
-func Download(ctx context.Context, access *accessv1.Git, creds runtime.Typed, opts Options) (*Result, error) {
-	var (
-		result      *Result
-		archivePath string
-	)
-	err := WithRepository(ctx, access, creds, opts, func(repo *git.Repository, selected *object.Commit, ref plumbing.ReferenceName) error {
-		file, err := os.CreateTemp(opts.TempDir, "ocm-git-archive-*.tar.gz")
-		if err != nil {
-			return fmt.Errorf("cannot create git archive file: %w", err)
-		}
-		archivePath = file.Name()
-		archiveDigest, err := archive(ctx, repo, selected, file, opts)
-		if err = errors.Join(err, file.Close()); err != nil {
-			return err
-		}
-		// The owner discards the archive through the blob (see filesystem.Blob.Remove).
-		b, err := filesystem.GetBlobFromOSPath(archivePath, filesystem.AllowRemove())
-		if err != nil {
-			return fmt.Errorf("cannot open git archive file %q: %w", archivePath, err)
-		}
-		b.SetMediaType(MediaType)
-		result = &Result{Blob: b, Commit: selected.Hash.String(), Ref: ref.String(), Digest: archiveDigest}
-		return nil
-	})
-	if err != nil && archivePath != "" {
-		if removeErr := removeIgnoringMissing(archivePath); removeErr != nil {
-			slog.WarnContext(ctx, "failed to remove incomplete git archive", "path", archivePath, "err", removeErr)
-		}
-	}
-	return result, err
-}
-
-// Stream is Download without a file: it writes the archive to w as it is produced.
-// The Result carries no Blob.
+// Stream resolves one snapshot of the repository and writes it, archived with its
+// history, to w as it is produced. Nothing of the archive is stored.
 func Stream(ctx context.Context, access *accessv1.Git, creds runtime.Typed, w io.Writer, opts Options) (*Result, error) {
 	var result *Result
 	err := WithRepository(ctx, access, creds, opts, func(repo *git.Repository, selected *object.Commit, ref plumbing.ReferenceName) error {
@@ -87,6 +51,85 @@ func Stream(ctx context.Context, access *accessv1.Git, creds runtime.Typed, w io
 		return nil
 	})
 	return result, err
+}
+
+// Blob is the archive of a Git access as a lazy blob: every read fetches the repository
+// and streams the archive as it is produced, so nothing is stored. The first read that
+// completes pins the commit, so later reads produce the same archive even if the ref
+// has moved meanwhile. Reads are bound to the context the blob was created with.
+type Blob struct {
+	ctx    context.Context
+	access *accessv1.Git
+	creds  runtime.Typed
+	opts   Options
+
+	mu     sync.Mutex
+	commit string
+}
+
+var (
+	_ blob.ReadOnlyBlob   = (*Blob)(nil)
+	_ blob.MediaTypeAware = (*Blob)(nil)
+)
+
+// NewBlob returns the archive of access as a lazy [Blob]. Errors of the fetch surface on read.
+func NewBlob(ctx context.Context, access *accessv1.Git, creds runtime.Typed, opts Options) *Blob {
+	return &Blob{ctx: ctx, access: access, creds: creds, opts: opts}
+}
+
+func (b *Blob) ReadCloser() (io.ReadCloser, error) {
+	access := b.pinned()
+	ctx, cancel := context.WithCancel(b.ctx)
+	pr, pw := io.Pipe()
+	r := &streamReader{PipeReader: pr, cancel: cancel, done: make(chan struct{})}
+	go func() {
+		defer close(r.done)
+		result, err := Stream(ctx, access, b.creds, pw, b.opts)
+		if err == nil {
+			b.pin(result.Commit)
+		}
+		_ = pw.CloseWithError(err)
+	}()
+	return r, nil
+}
+
+func (b *Blob) MediaType() (string, bool) {
+	return MediaType, true
+}
+
+// pinned returns the access, pinned to the commit of an earlier read if there was one.
+func (b *Blob) pinned() *accessv1.Git {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.commit == "" || b.access.Commit != "" {
+		return b.access
+	}
+	access := *b.access
+	access.Commit = b.commit
+	return &access
+}
+
+func (b *Blob) pin(commit string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.commit == "" {
+		b.commit = commit
+	}
+}
+
+// streamReader reads the archive a download streams. Close stops the download and
+// waits until it has removed what it stored, so nothing outlives the reader.
+type streamReader struct {
+	*io.PipeReader
+	cancel context.CancelFunc
+	done   chan struct{}
+}
+
+func (r *streamReader) Close() error {
+	err := r.PipeReader.Close()
+	r.cancel()
+	<-r.done
+	return err
 }
 
 // WithRepository supplies the selected commit, the full name of the selecting ref and the
@@ -345,15 +388,6 @@ func peelCommit(repo *git.Repository, hash plumbing.Hash) (*object.Commit, error
 	}
 
 	return nil, fmt.Errorf("git tag nesting exceeds the limit")
-}
-
-// removeIgnoringMissing deletes path, treating an already deleted file as success.
-func removeIgnoringMissing(path string) error {
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("cannot remove %q: %w", path, err)
-	}
-
-	return nil
 }
 
 // TransportError names the common transport failures and keeps a redacted cause,

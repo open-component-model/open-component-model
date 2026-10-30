@@ -5,9 +5,11 @@ package input
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"golang.org/x/crypto/ssh"
 
+	"ocm.software/open-component-model/bindings/go/blob/verified"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	"ocm.software/open-component-model/bindings/go/git/internal/download"
@@ -25,9 +27,8 @@ var _ constructor.ResourceInputMethod = (*InputMethod)(nil)
 
 // InputMethod implements the [constructor.ResourceInputMethod] interface for Git inputs.
 type InputMethod struct {
-	// TempFolder holds temporary Git storage and the returned archive. When empty,
-	// the OS temporary directory is used. The archive outlives ProcessResource
-	// and is owned by the caller.
+	// TempFolder holds temporary Git storage while a snapshot is archived. When empty,
+	// the OS temporary directory is used. The archive itself is never stored.
 	TempFolder string
 	// HTTPConfig configures the HTTP client that serves http(s) repositories.
 	// Nil uses the shared client's defaults.
@@ -60,7 +61,9 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 	return identityv1.IdentityFromURL(access.Repository)
 }
 
-// ProcessResource returns the selected repository snapshot as a gzip-compressed tar.
+// ProcessResource returns the selected repository snapshot as a gzip-compressed tar,
+// streamed lazily while it is read (see download.Blob), so nothing is stored. Errors
+// of the fetch surface on read.
 func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials runtime.Typed) (*constructor.ResourceInputMethodResult, error) {
 	spec, err := i.convertInput(resource)
 	if err != nil {
@@ -91,13 +94,29 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	if err != nil {
 		return nil, fmt.Errorf("invalid git input spec: %w", err)
 	}
-	result, err := download.Download(ctx, access, creds, opts)
+	// The archive is hashed once to pin the commit and record digest and size, then
+	// streamed again whenever it is read, verified against them. Nothing is stored.
+	counter := &countingWriter{}
+	snapshot, err := download.Stream(ctx, access, creds, counter, opts)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading git input: %w", err)
 	}
+	pinned := *access
+	pinned.Commit = snapshot.Commit
+	archive := verified.New(download.NewBlob(ctx, &pinned, creds, opts), verified.Metadata{Digest: snapshot.Digest, Size: counter.n})
 
-	return &constructor.ResourceInputMethodResult{ProcessedBlobData: result.Blob}, nil
+	return &constructor.ResourceInputMethodResult{ProcessedBlobData: archive}, nil
 }
+
+// countingWriter discards what is written to it and counts it.
+type countingWriter struct{ n int64 }
+
+func (w *countingWriter) Write(p []byte) (int, error) {
+	w.n += int64(len(p))
+	return len(p), nil
+}
+
+var _ io.Writer = (*countingWriter)(nil)
 
 func (i *InputMethod) convertInput(resource *constructorruntime.Resource) (*v1.Git, error) {
 	if resource == nil {

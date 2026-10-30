@@ -107,10 +107,10 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Con
 	return identityv1.IdentityFromURL(spec.Repository)
 }
 
-// DownloadResource returns the archive of the resolved commit as a lazy blob: every
-// read fetches the repository and streams the archive as it is produced, so nothing is
-// stored and nothing is left to clean up. Reads are verified against res.Digest and
-// bound to ctx (see package repository). Errors of the fetch surface on read.
+// DownloadResource returns the archive of the resolved commit as a lazy blob (see
+// [download.Blob]): nothing is stored and nothing is left to clean up. Reads are
+// verified against res.Digest and bound to ctx (see package repository). Errors of
+// the fetch surface on read.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, res *descriptor.Resource, creds runtime.Typed) (blob.ReadOnlyBlob, error) {
 	spec, err := accessFrom(res)
 	if err != nil {
@@ -121,56 +121,12 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, res *descript
 		return nil, err
 	}
 
-	archive := &archiveBlob{ctx: ctx, spec: spec, creds: typed, opts: r.downloadOptions(r.tempFolder())}
+	archive := download.NewBlob(ctx, spec, typed, r.downloadOptions(r.tempFolder()))
 	b, err := integrity.Verify(ctx, res.Digest, archive, integrity.WithLogAttrs(slog.Any("resource", res.ToIdentity())))
 	if err != nil {
 		return nil, fmt.Errorf("resource %q: %w", res.Name, err)
 	}
 	return b, nil
-}
-
-// archiveBlob produces the archive of a Git access on every read.
-type archiveBlob struct {
-	ctx   context.Context
-	spec  *accessv1.Git
-	creds runtime.Typed
-	opts  download.Options
-}
-
-var (
-	_ blob.ReadOnlyBlob   = (*archiveBlob)(nil)
-	_ blob.MediaTypeAware = (*archiveBlob)(nil)
-)
-
-func (b *archiveBlob) ReadCloser() (io.ReadCloser, error) {
-	ctx, cancel := context.WithCancel(b.ctx)
-	pr, pw := io.Pipe()
-	r := &archiveReader{PipeReader: pr, cancel: cancel, done: make(chan struct{})}
-	go func() {
-		defer close(r.done)
-		_, err := download.Stream(ctx, b.spec, b.creds, pw, b.opts)
-		_ = pw.CloseWithError(err)
-	}()
-	return r, nil
-}
-
-// archiveReader reads the archive a download streams. Close stops the download and
-// waits until it has removed what it stored, so nothing outlives the reader.
-type archiveReader struct {
-	*io.PipeReader
-	cancel context.CancelFunc
-	done   chan struct{}
-}
-
-func (r *archiveReader) Close() error {
-	err := r.PipeReader.Close()
-	r.cancel()
-	<-r.done
-	return err
-}
-
-func (b *archiveBlob) MediaType() (string, bool) {
-	return download.MediaType, true
 }
 
 func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, res *descriptor.Resource) (runtime.Identity, error) {
