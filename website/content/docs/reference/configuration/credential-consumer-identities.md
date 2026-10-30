@@ -100,13 +100,13 @@ Used when OCM accesses an OCI registry — pushing, pulling, or resolving compon
 
 ### Identity Attributes
 
-| Attribute  | Required | Description                                                                                                                         |
-|------------|----------|-------------------------------------------------------------------------------------------------------------------------------------|
-| `type`     | Yes      | Must be `OCIRegistry`                                                                                                               |
+| Attribute  | Required | Description                                                                                                                                                                                     |
+|------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `type`     | Yes      | Must be `OCIRegistry`                                                                                                                                                                           |
 | `hostname` | Yes      | Registry hostname (e.g. `ghcr.io`, `registry.example.com`). Supports `*.suffix.tld` wildcard (see [Hostname Patterns](#hostname-patterns)). If omitted, matches only requests with no hostname. |
-| `path`     | No       | Repository path. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname.               |
-| `scheme`   | No       | URL scheme (`https`, `http`, `oci`). `oci` and `https` are equivalent. If omitted or empty on the request side, matches any scheme. |
-| `port`     | No       | Port number as string. Default ports are applied when `scheme` is set: `https` and `oci` default to `443`, `http` defaults to `80`. |
+| `path`     | No       | Repository path. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname.                                                                           |
+| `scheme`   | No       | URL scheme (`https`, `http`, `oci`). `oci` and `https` are equivalent. If omitted or empty on the request side, matches any scheme.                                                             |
+| `port`     | No       | Port number as string. Default ports are applied when `scheme` is set: `https` and `oci` default to `443`, `http` defaults to `80`.                                                             |
 
 ### Credential Properties
 
@@ -195,13 +195,13 @@ identity is derived from the Helm repository URL using the same URL-based attrib
 
 ### Identity Attributes
 
-| Attribute  | Required | Description                                                                    |
-|------------|----------|--------------------------------------------------------------------------------|
-| `type`     | Yes      | Must be `HelmChartRepository`                                                  |
+| Attribute  | Required | Description                                                                                                                                                                          |
+|------------|----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `type`     | Yes      | Must be `HelmChartRepository`                                                                                                                                                        |
 | `hostname` | Yes      | Repository hostname (e.g. `charts.example.com`). Supports `*.suffix.tld` wildcard (see [Hostname Patterns](#hostname-patterns)). If omitted, matches only requests with no hostname. |
-| `path`     | No       | Repository path (e.g. `stable`). If omitted, matches any path on the hostname. |
-| `scheme`   | No       | URL scheme (`https`, `http`, `oci`). If omitted, matches any scheme.           |
-| `port`     | No       | Port number as string. If omitted, matches any port.                           |
+| `path`     | No       | Repository path (e.g. `stable`). If omitted, matches any path on the hostname.                                                                                                       |
+| `scheme`   | No       | URL scheme (`https`, `http`, `oci`). If omitted, matches any scheme.                                                                                                                 |
+| `port`     | No       | Port number as string. If omitted, matches any port.                                                                                                                                 |
 
 ### Credential Properties
 
@@ -250,13 +250,13 @@ Both identity type and access type names allow using the `HTTP` alias.
 
 ### Identity Attributes
 
-| Attribute  | Required | Description                                                                                                                            |
-|------------|----------|----------------------------------------------------------------------------------------------------------------------------------------|
-| `type`     | Yes      | `Wget` (recommended); also accepts `Wget/v1`, `HTTP`, `HTTP/v1`, `http`, and `http/v1`                                                 |
-| `hostname` | Yes      | Server hostname (e.g. `downloads.example.com`). Supports `*.suffix.tld` wildcard (see [Hostname Patterns](#hostname-patterns)). If omitted, matches only requests with no hostname. |
-| `path`     | No       | URL path without the leading `/`. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname. |
-| `scheme`   | No       | URL scheme (`https`, `http`). If omitted, matches any scheme. If set, must match exactly.                                              |
-| `port`     | No       | Port number as string. During matching, default ports are applied when `scheme` is set: `https` defaults to `443`, `http` to `80`.     |
+| Attribute  | Required | Description                                                                                                                                                                          |
+|------------|----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `type`     | Yes      | `Wget` (recommended); also accepts `Wget/v1`, `HTTP`, `HTTP/v1`, `http`, and `http/v1`                                                                                               |
+| `hostname` | Yes      | Server hostname (e.g. `downloads.example.com`). Supports `*.suffix.tld` wildcard (see [Hostname Patterns](#hostname-patterns)). If omitted, matches only requests with no hostname.  |
+| `path`     | No       | URL path without the leading `/`. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname.                                               |
+| `scheme`   | No       | URL scheme (`https`, `http`). If omitted, matches any scheme. If set, must match exactly.                                                                                            |
+| `port`     | No       | Port number as string. During matching, default ports are applied when `scheme` is set: `https` defaults to `443`, `http` to `80`.                                                   |
 
 **Example derivation:** for `url: https://downloads.example.com/myapp/1.0.0/myapp.tar.gz`, the lookup identity is:
 
@@ -563,13 +563,13 @@ optional; see the note on anonymous access under
 
 ### Identity Attributes
 
-| Attribute  | Required | Description                                                                                       |
-|------------|----------|---------------------------------------------------------------------------------------------------|
-| `type`     | Yes      | Must be `GitHubRepository`                                                                        |
+| Attribute  | Required | Description                                                                                                                                                                                            |
+|------------|----------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `type`     | Yes      | Must be `GitHubRepository`                                                                                                                                                                             |
 | `hostname` | Yes      | Repository hostname (e.g. `github.com`, a GitHub Enterprise host). Supports `*.suffix.tld` wildcard (see [Hostname Patterns](#hostname-patterns)). If omitted, matches only requests with no hostname. |
-| `path`     | No       | Repository path (e.g. `open-component-model/open-component-model`). If omitted, matches any path. |
-| `scheme`   | No       | URL scheme (`https`, `http`). If omitted, matches any scheme.                                     |
-| `port`     | No       | Port number as string. If omitted, the scheme's default applies (`https` → `443`, `http` → `80`). |
+| `path`     | No       | Repository path (e.g. `open-component-model/open-component-model`). If omitted, matches any path.                                                                                                      |
+| `scheme`   | No       | URL scheme (`https`, `http`). If omitted, matches any scheme.                                                                                                                                          |
+| `port`     | No       | Port number as string. If omitted, the scheme's default applies (`https` → `443`, `http` → `80`).                                                                                                      |
 
 ### Credential Properties
 
