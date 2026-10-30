@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"io"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -46,10 +45,8 @@ func TestArchiveUsesGitTree(t *testing.T) {
 	c, err := repo.CommitObject(commit)
 	r.NoError(err)
 
-	file, err := os.CreateTemp(t.TempDir(), "archive-*.tar.gz")
-	r.NoError(err)
-
-	b, _, err := archive(t.Context(), repo, c, file, Options{TempDir: t.TempDir()})
+	var buf bytes.Buffer
+	_, err = archive(t.Context(), repo, c, &buf, Options{TempDir: t.TempDir()})
 	r.NoError(err)
 
 	type entry struct {
@@ -60,7 +57,7 @@ func TestArchiveUsesGitTree(t *testing.T) {
 	got := map[string]entry{}
 	var names []string
 	var head string
-	compressed := readBlob(t, b)
+	compressed := buf.Bytes()
 	uncompressed := gunzipArchive(t, compressed)
 
 	tr := tar.NewReader(bytes.NewReader(uncompressed))

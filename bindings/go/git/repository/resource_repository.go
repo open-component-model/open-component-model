@@ -148,19 +148,20 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 
 // ProcessResourceDigest pins the access and hashes the same snapshot in one download.
 // Pinning records the commit (see [download.WithRepository]).
-// The archive is only hashed here, so it is discarded again before this call returns.
+// The archive is only hashed here, so it is never stored (see [download.Snapshot]).
 func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *descriptor.Resource, creds runtime.Typed) (*descriptor.Resource, error) {
 	spec, err := accessFrom(res)
 	if err != nil {
 		return nil, err
 	}
-
-	downloaded, err := r.download(ctx, spec, creds)
+	typed, err := convertGitCredentials(creds)
 	if err != nil {
 		return nil, err
 	}
-	if err := downloaded.Blob.Remove(); err != nil {
-		slog.WarnContext(ctx, "failed to remove git archive after digest processing", "err", err)
+
+	downloaded, err := download.Snapshot(ctx, spec, typed, r.downloadOptions(r.tempFolder()))
+	if err != nil {
+		return nil, err
 	}
 	if err := verifyDigest(res.Digest, downloaded.Digest); err != nil {
 		return nil, err

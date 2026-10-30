@@ -29,7 +29,7 @@ import (
 // Result is one downloaded snapshot of a Git repository with its history, archived as tar.gz.
 type Result struct {
 	// Blob is backed by a file that outlives the call and is owned by the caller, who
-	// discards it with Blob.Remove.
+	// discards it with Blob.Remove. Snapshot leaves it nil.
 	Blob *filesystem.Blob
 	// Commit is the full SHA the archive was taken from.
 	Commit string
@@ -40,7 +40,8 @@ type Result struct {
 	Digest digest.Digest
 }
 
-// Download resolves one snapshot of the repository and archives it with its history.
+// Download resolves one snapshot of the repository and archives it with its history
+// into a file under opts.TempDir.
 func Download(ctx context.Context, access *accessv1.Git, creds runtime.Typed, opts Options) (*Result, error) {
 	var (
 		result      *Result
@@ -52,10 +53,16 @@ func Download(ctx context.Context, access *accessv1.Git, creds runtime.Typed, op
 			return fmt.Errorf("cannot create git archive file: %w", err)
 		}
 		archivePath = file.Name()
-		b, archiveDigest, err := archive(ctx, repo, selected, file, opts)
-		if err != nil {
+		archiveDigest, err := archive(ctx, repo, selected, file, opts)
+		if err = errors.Join(err, file.Close()); err != nil {
 			return err
 		}
+		// The owner discards the archive through the blob (see filesystem.Blob.Remove).
+		b, err := filesystem.GetBlobFromOSPath(archivePath, filesystem.AllowRemove())
+		if err != nil {
+			return fmt.Errorf("cannot open git archive file %q: %w", archivePath, err)
+		}
+		b.SetMediaType(mediaTypeTGZ)
 		result = &Result{Blob: b, Commit: selected.Hash.String(), Ref: ref.String(), Digest: archiveDigest}
 		return nil
 	})
@@ -64,6 +71,21 @@ func Download(ctx context.Context, access *accessv1.Git, creds runtime.Typed, op
 			slog.WarnContext(ctx, "failed to remove incomplete git archive", "path", archivePath, "err", removeErr)
 		}
 	}
+	return result, err
+}
+
+// Snapshot is Download for callers that need only the commit and the digest of the
+// archive: the archive is hashed as it is produced and not stored.
+func Snapshot(ctx context.Context, access *accessv1.Git, creds runtime.Typed, opts Options) (*Result, error) {
+	var result *Result
+	err := WithRepository(ctx, access, creds, opts, func(repo *git.Repository, selected *object.Commit, ref plumbing.ReferenceName) error {
+		archiveDigest, err := archive(ctx, repo, selected, io.Discard, opts)
+		if err != nil {
+			return err
+		}
+		result = &Result{Commit: selected.Hash.String(), Ref: ref.String(), Digest: archiveDigest}
+		return nil
+	})
 	return result, err
 }
 

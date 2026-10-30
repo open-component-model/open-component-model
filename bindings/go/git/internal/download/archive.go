@@ -34,18 +34,17 @@ const (
 )
 
 // archive writes the files of the selected commit and a Git storage with their
-// history as a reproducible tar.gz into file and closes it. The storage depends
+// history as a reproducible tar.gz to w and returns its digest. The storage depends
 // on the commit only: its history in one packfile and HEAD detached at the commit.
-// The file belongs to the caller.
-func archive(ctx context.Context, repo *git.Repository, selected *object.Commit, file *os.File, opts Options) (*filesystem.Blob, digest.Digest, error) {
+func archive(ctx context.Context, repo *git.Repository, selected *object.Commit, w io.Writer, opts Options) (digest.Digest, error) {
 	tree, err := selected.Tree()
 	if err != nil {
-		return nil, "", errors.Join(fmt.Errorf("cannot read git tree: %w", err), file.Close())
+		return "", fmt.Errorf("cannot read git tree: %w", err)
 	}
 
 	storage, err := os.MkdirTemp(opts.TempDir, "ocm-git-carrier-*")
 	if err != nil {
-		return nil, "", errors.Join(fmt.Errorf("cannot create git carrier storage: %w", err), file.Close())
+		return "", fmt.Errorf("cannot create git carrier storage: %w", err)
 	}
 	defer func() {
 		if rmErr := os.RemoveAll(storage); rmErr != nil {
@@ -53,11 +52,11 @@ func archive(ctx context.Context, repo *git.Repository, selected *object.Commit,
 		}
 	}()
 	if err := writeGitStorage(repo, selected.Hash, storage); err != nil {
-		return nil, "", errors.Join(err, file.Close())
+		return "", err
 	}
 
 	digester := digest.Canonical.Digester()
-	limited := &limitedWriter{Writer: file, limit: opts.MaxArchiveSize}
+	limited := &limitedWriter{Writer: w, limit: opts.MaxArchiveSize}
 	gz := gzippool.Get(io.MultiWriter(limited, digester.Hash()))
 	tw := tar.NewWriter(gz)
 	err = filesystem.WriteTar(ctx, carrierFS{files: treeFS{tree: tree}, git: filepath.Join(storage, gitDir)}, tw, filesystem.DirOptions{
@@ -66,20 +65,12 @@ func archive(ctx context.Context, repo *git.Repository, selected *object.Commit,
 		OmitRoot:             true,
 		OmitDirTrailingSlash: true,
 	})
-	err = errors.Join(err, tw.Close(), gz.Close(), file.Close())
+	err = errors.Join(err, tw.Close(), gz.Close())
 	gzippool.Put(gz)
 	if err != nil {
-		return nil, "", fmt.Errorf("cannot create git archive: %w", err)
+		return "", fmt.Errorf("cannot create git archive: %w", err)
 	}
-
-	// The owner discards the archive through the blob (see filesystem.Blob.Remove).
-	b, err := filesystem.GetBlobFromOSPath(file.Name(), filesystem.AllowRemove())
-	if err != nil {
-		return nil, "", fmt.Errorf("cannot open git archive file %q: %w", file.Name(), err)
-	}
-	b.SetMediaType(mediaTypeTGZ)
-
-	return b, digester.Digest(), nil
+	return digester.Digest(), nil
 }
 
 // writeGitStorage initialises a repository in dir, stores the history of commit
