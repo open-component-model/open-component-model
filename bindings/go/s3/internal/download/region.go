@@ -23,11 +23,14 @@ func responseRegion(err error) string {
 	return ""
 }
 
-func permanentRedirect(err error) bool {
+// permanentRedirect reports whether err is S3 answering that the bucket lives in another
+// region. code is the error code the operation reports for it: a HEAD response carries
+// no body, so the SDK names its error after the status instead of S3's code.
+func permanentRedirect(err error, code string) bool {
 	var response *smithyhttp.ResponseError
 	var api smithy.APIError
 	return errors.As(err, &response) && response.HTTPStatusCode() == http.StatusMovedPermanently &&
-		errors.As(err, &api) && api.ErrorCode() == "PermanentRedirect"
+		errors.As(err, &api) && api.ErrorCode() == code
 }
 
 func bucketRegion(ctx context.Context, client *s3.Client, bucket string, redirect error) (string, error) {
@@ -61,19 +64,34 @@ func bucketRegion(ctx context.Context, client *s3.Client, bucket string, redirec
 }
 
 func getObject(ctx context.Context, client *s3.Client, req Request, in *s3.GetObjectInput) (*s3.GetObjectOutput, error) {
-	out, err := client.GetObject(ctx, in)
-	if req.Endpoint != "" || !permanentRedirect(err) {
+	return inBucketRegion(ctx, client, req, "PermanentRedirect", func(optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+		return client.GetObject(ctx, in, optFns...)
+	})
+}
+
+func headObject(ctx context.Context, client *s3.Client, req Request, in *s3.HeadObjectInput) (*s3.HeadObjectOutput, error) {
+	return inBucketRegion(ctx, client, req, "MovedPermanently", func(optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
+		return client.HeadObject(ctx, in, optFns...)
+	})
+}
+
+// inBucketRegion runs call and, on AWS, repeats it once in the bucket's region if S3
+// answers with redirectCode that the bucket lives elsewhere.
+func inBucketRegion[T any](ctx context.Context, client *s3.Client, req Request, redirectCode string, call func(...func(*s3.Options)) (T, error)) (T, error) {
+	var none T
+	out, err := call()
+	if req.Endpoint != "" || !permanentRedirect(err, redirectCode) {
 		return out, err
 	}
 	region, discoveryErr := bucketRegion(ctx, client, req.BucketName, err)
 	if discoveryErr != nil {
-		return nil, errors.Join(err, discoveryErr)
+		return none, errors.Join(err, discoveryErr)
 	}
 	// An operation override preserves credentials (including anonymous), transport,
 	// addressing and retry configuration without rebuilding the client. Never loop.
-	out, err = client.GetObject(ctx, in, func(o *s3.Options) { o.Region = region })
+	out, err = call(func(o *s3.Options) { o.Region = region })
 	if err != nil {
-		return nil, fmt.Errorf("retrying in bucket region %q: %w", region, err)
+		return none, fmt.Errorf("retrying in bucket region %q: %w", region, err)
 	}
 	return out, nil
 }
