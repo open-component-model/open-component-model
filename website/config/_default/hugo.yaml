@@ -108,7 +108,7 @@ versions:
   '0.11':
     weight: 11
   legacy:
-    weight: 13
+    weight: 12
 services:
   rss:
     limit: 20
