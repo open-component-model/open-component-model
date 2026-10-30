@@ -112,6 +112,10 @@ Local blobs constructed from a Git input have the media type `application/x-tgz`
 match them the same way. Local blobs of resources constructed with OCM v1 hold the
 files only and are rejected.
 
+A git uploader that selects no resource while the transfer would copy such Git archive
+local blobs fails the transfer and names the blobs, instead of copying them without
+pushing anything.
+
 ## Examples
 
 Push one resource to a tag named after the component version:

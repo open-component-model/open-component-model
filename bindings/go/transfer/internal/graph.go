@@ -217,9 +217,9 @@ func fillGraphDefinitionWithPrefetchedComponents(
 		"components", len(d.Vertices))
 
 	var allFileRefs []string
-	// uploaderUsed records which uploaders matched a resource, so a rule that matched
-	// nothing is reported instead of silently falling back to the default handlers.
-	uploaderUsed := make([]bool, len(uploaders))
+	// usage records which uploaders matched a resource, so a rule that matched nothing is
+	// reported instead of silently falling back to the default handlers.
+	usage := &uploaderUsage{used: make([]bool, len(uploaders))}
 
 	// Iterate vertices in sorted key order so the emitted transformation list is
 	// deterministic across runs (ranging the map directly would randomize order).
@@ -260,7 +260,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 				"targetIndex", targetIdx, "targetType", fmt.Sprintf("%T", target),
 				"transformID", id)
 
-			resourceTransformIDs, fileRefs, err := processResources(ctx, v2desc, baseID, id, val, tgd, target, uploaders, uploaderUsed)
+			resourceTransformIDs, fileRefs, err := processResources(ctx, v2desc, baseID, id, val, tgd, target, uploaders, usage)
 			if err != nil {
 				return err
 			}
@@ -274,7 +274,10 @@ func fillGraphDefinitionWithPrefetchedComponents(
 	}
 
 	addFileCleanupTransformation(tgd, allFileRefs)
-	warnUnusedUploaders(ctx, uploaders, uploaderUsed)
+	if err := checkUnusedGitUploaders(uploaders, usage); err != nil {
+		return err
+	}
+	warnUnusedUploaders(ctx, uploaders, usage.used)
 
 	return nil
 }
@@ -292,7 +295,7 @@ func processResources(
 	tgd *transformv1alpha1.TransformationGraphDefinition,
 	toSpec runtime.Typed,
 	uploaders []transferv1alpha1.UploaderConfig,
-	uploaderUsed []bool,
+	usage *uploaderUsage,
 ) (map[int]string, []string, error) {
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version
@@ -334,7 +337,7 @@ func processResources(
 				if !selected {
 					continue
 				}
-				uploaderUsed[ui] = true
+				usage.used[ui] = true
 				var exprs []string
 				switch cfg := u.(type) {
 				case *transferv1alpha1.HTTPUploaderConfig:
@@ -373,6 +376,10 @@ func processResources(
 				"component", component, "version", version,
 				"resource", resource.ToIdentity().String(), "accessType", resource.Access.Type.String())
 			continue
+		}
+		if isGitArchiveLocalBlob(access) {
+			usage.unselectedGitArchives = append(usage.unselectedGitArchives,
+				fmt.Sprintf("%s:%s %v", component, version, resource.ToIdentity()))
 		}
 
 		exprs, err := processResource(resource, access, id, val, tgd, toSpec, resourceTransformIDs, i)
@@ -463,6 +470,13 @@ func processResource(resource descriptorv2.Resource, access runtime.Typed, id st
 	default:
 		return nil, fmt.Errorf("local blob uploader cannot copy access type %s (adjust match)", resource.Access.Type)
 	}
+}
+
+// uploaderUsage records, across all components of a transfer, which uploaders selected a
+// resource and which Git archive local blobs no uploader selected.
+type uploaderUsage struct {
+	used                  []bool
+	unselectedGitArchives []string
 }
 
 // warnUnusedUploaders logs every uploader whose match selected no resource of the transfer.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -43,7 +44,7 @@ func processGitUploader(ctx context.Context, resource descriptorv2.Resource, acc
 		}
 		tgd.Transformations = append(tgd.Transformations, getTransform)
 	case *descriptorv2.LocalBlob:
-		if acc.MediaType != transferv1alpha1.GitLocalBlobMediaType && acc.MediaType != gitArchiveMediaType {
+		if !isGitArchiveLocalBlob(acc) {
 			return nil, fmt.Errorf("git uploader cannot upload local blob with media type %q: not a Git archive (adjust match)", acc.MediaType)
 		}
 		if strings.TrimSpace(u.Repository) == "" || strings.TrimSpace(u.Ref) == "" {
@@ -99,6 +100,33 @@ func processGitUploader(ctx context.Context, resource descriptorv2.Resource, acc
 	})
 	resourceTransformIDs[i] = addResourceID
 	return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
+}
+
+// isGitArchiveLocalBlob reports whether access is a local blob holding the archive of a Git
+// resource, as left behind by copying a Git resource by value.
+func isGitArchiveLocalBlob(access runtime.Typed) bool {
+	blob, ok := access.(*descriptorv2.LocalBlob)
+	return ok && (blob.MediaType == transferv1alpha1.GitLocalBlobMediaType || blob.MediaType == gitArchiveMediaType)
+}
+
+// checkUnusedGitUploaders fails a transfer whose Git uploaders selected nothing while Git
+// archive local blobs fell back to being copied as local blobs. That combination means the
+// push the configuration asks for silently does not happen: the default match only selects
+// Git accesses, and a Git resource copied by value (e.g. across an air gap) is a local blob.
+func checkUnusedGitUploaders(uploaders []transferv1alpha1.UploaderConfig, usage *uploaderUsage) error {
+	if len(usage.unselectedGitArchives) == 0 {
+		return nil
+	}
+	for idx, u := range uploaders {
+		if _, ok := u.(*transferv1alpha1.GitUploaderConfig); !ok || usage.used[idx] {
+			continue
+		}
+		archives := slices.Compact(slices.Sorted(slices.Values(usage.unselectedGitArchives)))
+		return fmt.Errorf("git uploader %d (match %q) selected no resource, but these Git archive local blobs would only be copied, not pushed: %s; "+
+			`to push them, set match: resource.access.isType("LocalBlob") && has(resource.access.mediaType) && resource.access.mediaType == %q`,
+			idx, u.EffectiveMatch(), strings.Join(archives, ", "), transferv1alpha1.GitLocalBlobMediaType)
+	}
+	return nil
 }
 
 // validateGitTarget rejects a target the upload would reject, so a wrong uploader config
