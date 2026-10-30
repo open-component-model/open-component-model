@@ -38,6 +38,7 @@ on:
       - '.github/stig/**'
       - '.github/benchmarks/**'
       - '.github/trivy-checks/*.rego'
+      - '!.github/trivy-checks/*_test.rego'
   workflow_call:
     inputs:
       ref:

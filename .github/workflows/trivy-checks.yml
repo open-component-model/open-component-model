@@ -1,10 +1,9 @@
 name: Trivy checks
 
-# Tests OCM's own Trivy checks (.github/trivy-checks, used by image-scan.yml on
-# the controller chart and the image build files) against their fixtures in
-# testdata. Every fixture names the OCM checks it must fail on its first line,
-# so a check that stops firing, or fires on a compliant fixture, fails the job.
-# .env pins the Trivy version and checks bundle the checks are evaluated with.
+# Unit tests of OCM's own Trivy checks (.github/trivy-checks, used by
+# image-scan.yml on the controller chart and the image build files): every
+# <check>_test.rego evaluates its check against inputs shaped like Trivy's
+# parsed Dockerfiles and manifests.
 on:
   push:
     branches:
@@ -24,6 +23,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
 jobs:
   test:
     name: Test OCM Trivy checks
@@ -39,61 +42,14 @@ jobs:
           persist-credentials: false
 
       - name: Load .env
-        run: grep -E '^(TRIVY_VERSION|TRIVY_CHECKS_IMAGE)=' .env >> "$GITHUB_ENV"
+        run: grep -E '^OPA_IMAGE=' .env >> "$GITHUB_ENV"
 
-      - name: Scan fixtures
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        env:
-          TRIVY_CONFIG_CHECK: .github/trivy-checks
-          TRIVY_CHECK_NAMESPACES: user
-          TRIVY_CHECKS_BUNDLE_REPOSITORY: ${{ env.TRIVY_CHECKS_IMAGE }}
-        with:
-          version: ${{ env.TRIVY_VERSION }}
-          # See the chart job in image-scan.yml: a restored cache could hold a
-          # checks bundle other than the pinned one.
-          cache: 'false'
-          scan-type: config
-          scan-ref: .github/trivy-checks/testdata
-          exit-code: '0'
-          format: json
-          output: trivy-checks-test.json
-
-      - name: Compare with expectations
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
-        with:
-          script: |
-            const fs = require('node:fs');
-            const path = require('node:path');
-            const dir = '.github/trivy-checks/testdata';
-            const results = JSON.parse(fs.readFileSync('trivy-checks-test.json', 'utf8')).Results ?? [];
-            const ids = (list) => list.sort().join(' ');
-            const cell = (s) => s || 'none';
-
-            const rows = [];
-            for (const name of fs.readdirSync(dir).sort()) {
-              const file = path.join(dir, name);
-              const line = fs.readFileSync(file, 'utf8').split('\n', 1)[0];
-              if (!line.startsWith('# expect:')) {
-                core.error("first line must be '# expect: <check IDs>'", { file });
-                rows.push([name, '?', 'no expectation', '❌']);
-                continue;
-              }
-              const want = ids(line.slice('# expect:'.length).split(/\s+/).filter(Boolean));
-              const scanned = results.filter((r) => r.Target === name);
-              const got = scanned.length === 0 ? 'not scanned' : ids(scanned
-                .flatMap((r) => r.Misconfigurations ?? [])
-                .map((m) => m.ID)
-                .filter((id) => id.startsWith('OCM-')));
-              if (got !== want) core.error(`expected [${want}], got [${got}]`, { file });
-              rows.push([name, cell(want), cell(got), got === want ? '✅' : '❌']);
-            }
-
-            await core.summary
-              .addHeading('🧪 OCM Trivy checks', 3)
-              .addTable([
-                [{ data: 'Fixture', header: true }, { data: 'Expected', header: true },
-                 { data: 'Found', header: true }, { data: 'Result', header: true }],
-                ...rows,
-              ])
-              .write();
-            if (rows.some((r) => r[3] !== '✅')) core.setFailed('OCM Trivy checks do not match their fixtures');
+      # result.new is a Trivy builtin that plain OPA lacks: it is declared in the
+      # capabilities so the checks compile, and the tests replace it with `with`.
+      - name: Format and test
+        run: |
+          opa() { docker run --rm -v "$PWD:/work:ro" -w /work "$OPA_IMAGE" "$@"; }
+          opa capabilities --current | jq '.builtins += [{name: "result.new",
+            decl: {type: "function", args: [{type: "string"}, {type: "any"}], result: {type: "any"}}}]' > capabilities.json
+          opa fmt --fail --list .github/trivy-checks
+          opa test --capabilities capabilities.json --verbose .github/trivy-checks

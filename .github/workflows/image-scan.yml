@@ -7,8 +7,8 @@ name: Image scan
 # The controller chart, rendered with its opt-in NetworkPolicy, is checked
 # against the CIS Kubernetes Benchmark (Trivy config) and NSA/CISA and MITRE
 # (Kubescape); the image build files get Trivy's Dockerfile checks. OCM's own
-# Trivy checks are in .github/trivy-checks (tested against their fixtures by
-# trivy-checks.yml), accepted findings and check settings in .github/benchmarks.
+# Trivy checks are in .github/trivy-checks (unit-tested by trivy-checks.yml),
+# accepted findings and check settings in .github/benchmarks.
 # Benchmark findings fail.
 on:
   workflow_call:
