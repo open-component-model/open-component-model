@@ -180,6 +180,7 @@ jobs:
               replacement: "${BASEURL}/"
           ignorePatterns:
             - pattern: '/images/.*'
+            - pattern: '^https://sapns2\.com'
           EOF
 
           echo "Generated config:"
