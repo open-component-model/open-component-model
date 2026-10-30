@@ -2,11 +2,10 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/opencontainers/go-digest"
@@ -108,38 +107,70 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Con
 	return identityv1.IdentityFromURL(spec.Repository)
 }
 
-// DownloadResource returns the archive of the resolved commit. It is backed by a
-// file under the configured TempFolder, which outlives this call and is owned by
-// the caller.
+// DownloadResource returns the archive of the resolved commit as a lazy blob: every
+// read fetches the repository and streams the archive as it is produced, so nothing is
+// stored and nothing is left to clean up. Reads are verified against res.Digest and
+// bound to ctx (see package repository). Errors of the fetch surface on read.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, res *descriptor.Resource, creds runtime.Typed) (blob.ReadOnlyBlob, error) {
 	spec, err := accessFrom(res)
 	if err != nil {
 		return nil, err
 	}
-
-	result, err := r.download(ctx, spec, creds)
-	if err != nil {
-		return nil, err
-	}
-
-	b, err := integrity.VerifyPrecomputed(ctx, res.Digest, result.Digest, result.Blob,
-		integrity.WithLogAttrs(slog.Any("resource", res.ToIdentity())))
-	if err != nil {
-		if rmErr := result.Blob.Remove(); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
-			slog.WarnContext(ctx, "error removing downloaded git archive that failed verification", "err", rmErr)
-		}
-		return nil, fmt.Errorf("resource %q: %w", res.Name, err)
-	}
-	return b, nil
-}
-
-func (r *ResourceRepository) download(ctx context.Context, spec *accessv1.Git, creds runtime.Typed) (*download.Result, error) {
 	typed, err := convertGitCredentials(creds)
 	if err != nil {
 		return nil, err
 	}
 
-	return download.Download(ctx, spec, typed, r.downloadOptions(r.tempFolder()))
+	archive := &archiveBlob{ctx: ctx, spec: spec, creds: typed, opts: r.downloadOptions(r.tempFolder())}
+	b, err := integrity.Verify(ctx, res.Digest, archive, integrity.WithLogAttrs(slog.Any("resource", res.ToIdentity())))
+	if err != nil {
+		return nil, fmt.Errorf("resource %q: %w", res.Name, err)
+	}
+	return b, nil
+}
+
+// archiveBlob produces the archive of a Git access on every read.
+type archiveBlob struct {
+	ctx   context.Context
+	spec  *accessv1.Git
+	creds runtime.Typed
+	opts  download.Options
+}
+
+var (
+	_ blob.ReadOnlyBlob   = (*archiveBlob)(nil)
+	_ blob.MediaTypeAware = (*archiveBlob)(nil)
+)
+
+func (b *archiveBlob) ReadCloser() (io.ReadCloser, error) {
+	ctx, cancel := context.WithCancel(b.ctx)
+	pr, pw := io.Pipe()
+	r := &archiveReader{PipeReader: pr, cancel: cancel, done: make(chan struct{})}
+	go func() {
+		defer close(r.done)
+		_, err := download.Stream(ctx, b.spec, b.creds, pw, b.opts)
+		_ = pw.CloseWithError(err)
+	}()
+	return r, nil
+}
+
+// archiveReader reads the archive a download streams. Close stops the download and
+// waits until it has removed what it stored, so nothing outlives the reader.
+type archiveReader struct {
+	*io.PipeReader
+	cancel context.CancelFunc
+	done   chan struct{}
+}
+
+func (r *archiveReader) Close() error {
+	err := r.PipeReader.Close()
+	r.cancel()
+	<-r.done
+	return err
+}
+
+func (b *archiveBlob) MediaType() (string, bool) {
+	return download.MediaType, true
 }
 
 func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, res *descriptor.Resource) (runtime.Identity, error) {
@@ -148,7 +179,7 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 
 // ProcessResourceDigest pins the access and hashes the same snapshot in one download.
 // Pinning records the commit (see [download.WithRepository]).
-// The archive is only hashed here, so it is never stored (see [download.Snapshot]).
+// The archive is only hashed here, so it is never stored (see [download.Stream]).
 func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *descriptor.Resource, creds runtime.Typed) (*descriptor.Resource, error) {
 	spec, err := accessFrom(res)
 	if err != nil {
@@ -159,7 +190,7 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *des
 		return nil, err
 	}
 
-	downloaded, err := download.Snapshot(ctx, spec, typed, r.downloadOptions(r.tempFolder()))
+	downloaded, err := download.Stream(ctx, spec, typed, io.Discard, r.downloadOptions(r.tempFolder()))
 	if err != nil {
 		return nil, err
 	}

@@ -29,7 +29,7 @@ import (
 // Result is one downloaded snapshot of a Git repository with its history, archived as tar.gz.
 type Result struct {
 	// Blob is backed by a file that outlives the call and is owned by the caller, who
-	// discards it with Blob.Remove. Snapshot leaves it nil.
+	// discards it with Blob.Remove. Stream leaves it nil.
 	Blob *filesystem.Blob
 	// Commit is the full SHA the archive was taken from.
 	Commit string
@@ -62,7 +62,7 @@ func Download(ctx context.Context, access *accessv1.Git, creds runtime.Typed, op
 		if err != nil {
 			return fmt.Errorf("cannot open git archive file %q: %w", archivePath, err)
 		}
-		b.SetMediaType(mediaTypeTGZ)
+		b.SetMediaType(MediaType)
 		result = &Result{Blob: b, Commit: selected.Hash.String(), Ref: ref.String(), Digest: archiveDigest}
 		return nil
 	})
@@ -74,12 +74,12 @@ func Download(ctx context.Context, access *accessv1.Git, creds runtime.Typed, op
 	return result, err
 }
 
-// Snapshot is Download for callers that need only the commit and the digest of the
-// archive: the archive is hashed as it is produced and not stored.
-func Snapshot(ctx context.Context, access *accessv1.Git, creds runtime.Typed, opts Options) (*Result, error) {
+// Stream is Download without a file: it writes the archive to w as it is produced.
+// The Result carries no Blob.
+func Stream(ctx context.Context, access *accessv1.Git, creds runtime.Typed, w io.Writer, opts Options) (*Result, error) {
 	var result *Result
 	err := WithRepository(ctx, access, creds, opts, func(repo *git.Repository, selected *object.Commit, ref plumbing.ReferenceName) error {
-		archiveDigest, err := archive(ctx, repo, selected, io.Discard, opts)
+		archiveDigest, err := archive(ctx, repo, selected, w, opts)
 		if err != nil {
 			return err
 		}

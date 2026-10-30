@@ -1,6 +1,8 @@
 package repository_test
 
 import (
+	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -50,21 +52,20 @@ func TestResourceDigestPinning(t *testing.T) {
 	r.Empty(files)
 	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/main", fixture.Second)))
 
-	b, err := repo.DownloadResource(t.Context(), pinned, nil)
+	_, err = readResource(t.Context(), repo, pinned)
 	r.NoError(err)
-	r.NotNil(b)
 
 	verified, err := repo.ProcessResourceDigest(t.Context(), pinned, nil)
 	r.NoError(err)
 	r.Equal(pinned, verified)
 
-	// Only the archive handed to the caller by DownloadResource is left behind.
+	// Downloads stream the archive, so nothing is left behind.
 	files, err = os.ReadDir(dir)
 	r.NoError(err)
-	r.Len(files, 1)
+	r.Empty(files)
 }
 
-func TestDownloadResourceRemovesArchiveThatFailsVerification(t *testing.T) {
+func TestDownloadResourceVerifiesWhileStreaming(t *testing.T) {
 	r := require.New(t)
 
 	fixture := newRepository(t)
@@ -75,12 +76,26 @@ func TestDownloadResourceRemovesArchiveThatFailsVerification(t *testing.T) {
 		Digest: &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: digest.FromString("other").Encoded()},
 	}
 
-	_, err := repo.DownloadResource(t.Context(), res, nil)
+	_, err := readResource(t.Context(), repo, res)
 	r.ErrorContains(err, "digest mismatch")
 
 	files, err := os.ReadDir(dir)
 	r.NoError(err)
-	r.Empty(files, "the archive that failed verification must be removed")
+	r.Empty(files)
+}
+
+// readResource downloads res and reads it to its end, which is when a download fails.
+func readResource(ctx context.Context, repo *repository.ResourceRepository, res *descriptor.Resource) ([]byte, error) {
+	b, err := repo.DownloadResource(ctx, res, nil)
+	if err != nil {
+		return nil, err
+	}
+	rc, err := b.ReadCloser()
+	if err != nil {
+		return nil, err
+	}
+	data, err := io.ReadAll(rc)
+	return data, errors.Join(err, rc.Close())
 }
 
 // TestResourceDigestLeavesRefUnchanged documents that digest processing pins the commit but
@@ -129,14 +144,8 @@ func TestResourceDigestVerification(t *testing.T) {
 		Type: runtime.NewVersionedType("Git", "v1"), Repository: fixture.Path, Commit: fixture.First.String(),
 	}}
 
-	b, err := repo.DownloadResource(t.Context(), res, nil)
+	compressed, err := readResource(t.Context(), repo, res)
 	r.NoError(err)
-
-	reader, err := b.ReadCloser()
-	r.NoError(err)
-	compressed, err := io.ReadAll(reader)
-	r.NoError(err)
-	r.NoError(reader.Close())
 	checksum := digest.FromBytes(compressed)
 
 	generated, err := repo.ProcessResourceDigest(t.Context(), res, nil)
@@ -166,7 +175,7 @@ func TestResourceDigestVerification(t *testing.T) {
 			}
 			before := preset.DeepCopy()
 
-			_, downloadErr := repo.DownloadResource(t.Context(), preset, nil)
+			_, downloadErr := readResource(t.Context(), repo, preset)
 			processed, processErr := repo.ProcessResourceDigest(t.Context(), preset, nil)
 			if tc.wantDownloadErr == "" {
 				r.NoError(downloadErr)

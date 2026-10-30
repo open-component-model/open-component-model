@@ -28,7 +28,8 @@ import (
 )
 
 const (
-	mediaTypeTGZ = "application/x-tgz"
+	// MediaType is the media type of the archives Download and Stream produce.
+	MediaType = "application/x-tgz"
 	// gitDir is the archive directory holding the Git storage next to the files.
 	gitDir = ".git"
 )
