@@ -27,8 +27,9 @@ import (
 // both the OCI pull and the HTTP/S download use its client, and that a CA of the input replaces
 // the roots of that configuration.
 func TestNewReadOnlyChartFromRemote_InputTLSOverridesHTTPConfig(t *testing.T) {
+	r := require.New(t)
 	tgz, err := os.ReadFile("../../testdata/mychart-0.1.0.tgz")
-	require.NoError(t, err)
+	r.NoError(err)
 
 	reg, manifest := newChartRegistry(t, "charts/mychart", "0.1.0", tgz, nil)
 	ociRef := "oci://" + strings.TrimPrefix(reg.URL, "https://") + "/charts/mychart:0.1.0"
@@ -78,12 +79,13 @@ func TestNewReadOnlyChartFromRemote_InputTLSOverridesHTTPConfig(t *testing.T) {
 // TestNewReadOnlyChartFromRemote_HTTPConfigKeepsOCICredentials pins that the registry client built
 // from an HTTP configuration authenticates the OCI chart pull with the resolved credentials.
 func TestNewReadOnlyChartFromRemote_HTTPConfigKeepsOCICredentials(t *testing.T) {
+	r := require.New(t)
 	tgz, err := os.ReadFile("../../testdata/mychart-0.1.0.tgz")
-	require.NoError(t, err)
+	r.NoError(err)
 
 	reg, _ := newChartRegistry(t, "charts/mychart", "0.1.0", tgz, nil)
 	target, err := url.Parse(reg.URL)
-	require.NoError(t, err)
+	r.NoError(err)
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.Transport = reg.Client().Transport
 	private := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
