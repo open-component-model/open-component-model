@@ -4,6 +4,7 @@ package input
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -61,9 +62,9 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 	return identityv1.IdentityFromURL(access.Repository)
 }
 
-// ProcessResource returns the selected repository snapshot as a gzip-compressed tar,
-// streamed lazily while it is read (see download.Blob), so nothing is stored. Errors
-// of the fetch surface on read.
+// ProcessResource returns the selected repository snapshot as a gzip-compressed tar.
+// The repository is fetched once and kept until the first read of the archive is closed
+// or ctx ends (see download.Blob); the archive itself is never stored.
 func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials runtime.Typed) (*constructor.ResourceInputMethodResult, error) {
 	spec, err := i.convertInput(resource)
 	if err != nil {
@@ -94,16 +95,21 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 	if err != nil {
 		return nil, fmt.Errorf("invalid git input spec: %w", err)
 	}
-	// The archive is hashed once to pin the commit and record digest and size, then
-	// streamed again whenever it is read, verified against them. Nothing is stored.
-	counter := &countingWriter{}
-	snapshot, err := download.Stream(ctx, access, creds, counter, opts)
+	// The snapshot is fetched once and hashed to record digest and size. The first read
+	// archives the kept clone again and removes it on close; later reads fetch the pinned
+	// commit. Every read is verified against digest and size.
+	clone, err := download.Fetch(ctx, access, creds, opts)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading git input: %w", err)
 	}
+	counter := &countingWriter{}
+	archiveDigest, err := clone.Archive(ctx, counter)
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("error downloading git input: %w", err), clone.Remove(ctx))
+	}
 	pinned := *access
-	pinned.Commit = snapshot.Commit
-	archive := verified.New(download.NewBlob(ctx, &pinned, creds, opts), verified.Metadata{Digest: snapshot.Digest, Size: counter.n})
+	pinned.Commit = clone.Commit
+	archive := verified.New(download.NewBlobFromClone(ctx, clone, &pinned, creds, opts), verified.Metadata{Digest: archiveDigest, Size: counter.n})
 
 	return &constructor.ResourceInputMethodResult{ProcessedBlobData: archive}, nil
 }

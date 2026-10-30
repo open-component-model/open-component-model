@@ -182,6 +182,51 @@ func TestDownloadArchive(t *testing.T) {
 	r.Equal(data, recompressed.Bytes())
 }
 
+func TestBlobFromClone(t *testing.T) {
+	t.Run("first read serves the clone and removes it", func(t *testing.T) {
+		r := require.New(t)
+		fixture := newRepository(t)
+		dir := t.TempDir()
+		access := &v1.Git{Repository: fixture.Path, Ref: "main"}
+		want, err := download(t.Context(), access, nil, Options{TempDir: dir})
+		r.NoError(err)
+
+		clone, err := Fetch(t.Context(), access, nil, Options{TempDir: dir})
+		r.NoError(err)
+		b := NewBlobFromClone(t.Context(), clone, access, nil, Options{TempDir: dir})
+		// Without the source, only the clone can serve the read.
+		r.NoError(os.RemoveAll(fixture.Path))
+		r.Equal(want.Data, readBlob(t, b))
+		files, err := os.ReadDir(dir)
+		r.NoError(err)
+		r.Empty(files, "closing the first reader removes the clone")
+
+		rc, err := b.ReadCloser()
+		r.NoError(err)
+		_, err = io.ReadAll(rc)
+		r.ErrorContains(errors.Join(err, rc.Close()), "cannot fetch git repository", "later reads fetch again")
+	})
+
+	t.Run("an unread clone is removed when the context ends", func(t *testing.T) {
+		r := require.New(t)
+		fixture := newRepository(t)
+		dir := t.TempDir()
+		ctx, cancel := context.WithCancel(t.Context())
+		clone, err := Fetch(ctx, &v1.Git{Repository: fixture.Path, Ref: "main"}, nil, Options{TempDir: dir})
+		r.NoError(err)
+		NewBlobFromClone(ctx, clone, &v1.Git{Repository: fixture.Path, Ref: "main"}, nil, Options{TempDir: dir})
+		files, err := os.ReadDir(dir)
+		r.NoError(err)
+		r.Len(files, 1)
+
+		cancel()
+		r.Eventually(func() bool {
+			files, err := os.ReadDir(dir)
+			return err == nil && len(files) == 0
+		}, 5*time.Second, 10*time.Millisecond)
+	})
+}
+
 // downloaded is a Result with the archive Stream wrote.
 type downloaded struct {
 	*Result
@@ -300,7 +345,7 @@ func TestDownloadInProgressCancellationCleanup(t *testing.T) {
 			r.NoError(err)
 			r.Len(files, 1)
 			r.True(files[0].IsDir())
-			r.True(strings.HasPrefix(files[0].Name(), "ocm-git-repository-"))
+			r.True(strings.HasPrefix(files[0].Name(), "ocm-git-"))
 
 			// Cancel only once the download has allocated storage and reached the server.
 			cancel()

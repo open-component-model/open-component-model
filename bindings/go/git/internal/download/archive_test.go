@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -46,7 +47,9 @@ func TestArchiveUsesGitTree(t *testing.T) {
 	r.NoError(err)
 
 	var buf bytes.Buffer
-	_, err = archive(t.Context(), repo, c, &buf, Options{TempDir: t.TempDir()})
+	carrier := filepath.Join(t.TempDir(), "carrier")
+	r.NoError(writeGitStorage(repo, commit, carrier))
+	_, err = archive(t.Context(), c, carrier, &buf, Options{})
 	r.NoError(err)
 
 	type entry struct {

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -34,33 +33,19 @@ const (
 	gitDir = ".git"
 )
 
-// archive writes the files of the selected commit and a Git storage with their
-// history as a reproducible tar.gz to w and returns its digest. The storage depends
-// on the commit only: its history in one packfile and HEAD detached at the commit.
-func archive(ctx context.Context, repo *git.Repository, selected *object.Commit, w io.Writer, opts Options) (digest.Digest, error) {
+// archive writes the files of the selected commit and the Git storage in carrier,
+// prepared by writeGitStorage, as a reproducible tar.gz to w and returns its digest.
+func archive(ctx context.Context, selected *object.Commit, carrier string, w io.Writer, opts Options) (digest.Digest, error) {
 	tree, err := selected.Tree()
 	if err != nil {
 		return "", fmt.Errorf("cannot read git tree: %w", err)
-	}
-
-	storage, err := os.MkdirTemp(opts.TempDir, "ocm-git-carrier-*")
-	if err != nil {
-		return "", fmt.Errorf("cannot create git carrier storage: %w", err)
-	}
-	defer func() {
-		if rmErr := os.RemoveAll(storage); rmErr != nil {
-			slog.WarnContext(ctx, "failed to remove temporary git carrier storage", "path", storage, "err", rmErr)
-		}
-	}()
-	if err := writeGitStorage(repo, selected.Hash, storage); err != nil {
-		return "", err
 	}
 
 	digester := digest.Canonical.Digester()
 	limited := &limitedWriter{Writer: w, limit: opts.MaxArchiveSize}
 	gz := gzippool.Get(io.MultiWriter(limited, digester.Hash()))
 	tw := tar.NewWriter(gz)
-	err = filesystem.WriteTar(ctx, carrierFS{files: treeFS{tree: tree}, git: filepath.Join(storage, gitDir)}, tw, filesystem.DirOptions{
+	err = filesystem.WriteTar(ctx, carrierFS{files: treeFS{tree: tree}, git: filepath.Join(carrier, gitDir)}, tw, filesystem.DirOptions{
 		Reproducible:         true,
 		PreserveSymlinks:     true,
 		OmitRoot:             true,
