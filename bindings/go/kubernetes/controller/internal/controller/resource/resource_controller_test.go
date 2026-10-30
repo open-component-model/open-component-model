@@ -70,6 +70,9 @@ var _ = Describe("Resource Controller", func() {
 			HELMChart     string
 			GithubRepoURL string
 			GitRepository string
+			// VerificationPolicy is Never where verifying would download a whole repository
+			// archive (git, GitHub); verification is tested in verification_test.go.
+			VerificationPolicy v1alpha1.VerificationPolicy
 		}
 
 		DescribeTable("reconciles a created resource",
@@ -125,6 +128,10 @@ var _ = Describe("Resource Controller", func() {
 				}
 
 				By("creating a resource")
+				var policy v1alpha1.VerificationPolicy
+				if tc != nil {
+					policy = tc.VerificationPolicy
+				}
 				resourceObj := &v1alpha1.Resource{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      resourceName,
@@ -140,6 +147,7 @@ var _ = Describe("Resource Controller", func() {
 							},
 						},
 						AdditionalStatusFields: additionalStatusFields,
+						VerificationPolicy:     policy,
 					},
 				}
 				Expect(k8sClient.Create(ctx, resourceObj)).To(Succeed())
@@ -257,6 +265,7 @@ var _ = Describe("Resource Controller", func() {
 											Version: "v1",
 										},
 										Data: mustMarshalJSON(map[string]any{
+											"type":           "helm/v1",
 											"helmChart":      "podinfo:6.9.1",
 											"helmRepository": "oci://ghcr.io/stefanprodan/charts",
 										}),
@@ -313,7 +322,8 @@ var _ = Describe("Resource Controller", func() {
 				}, ctfPath
 			},
 				&testCase{
-					GithubRepoURL: "https://github.com/open-component-model/ocm-k8s-toolkit",
+					GithubRepoURL:      "https://github.com/open-component-model/ocm-k8s-toolkit",
+					VerificationPolicy: v1alpha1.VerificationPolicyNever,
 				},
 			),
 			Entry("git access", func() ([]*descruntime.Descriptor, string) {
@@ -356,7 +366,8 @@ var _ = Describe("Resource Controller", func() {
 				}, ctfPath
 			},
 				&testCase{
-					GitRepository: "https://github.com/open-component-model/ocm-k8s-toolkit",
+					GitRepository:      "https://github.com/open-component-model/ocm-k8s-toolkit",
+					VerificationPolicy: v1alpha1.VerificationPolicyNever,
 				},
 			),
 			Entry("OCIImage v1 typed access", func() ([]*descruntime.Descriptor, string) {
@@ -728,6 +739,8 @@ var _ = Describe("Resource Controller", func() {
 					Namespace: namespace.GetName(),
 				},
 				Spec: v1alpha1.ResourceSpec{
+					// Status updates are tested here, verification in verification_test.go.
+					VerificationPolicy: v1alpha1.VerificationPolicyNever,
 					ComponentRef: corev1.LocalObjectReference{
 						Name: componentObj.GetName(),
 					},
@@ -844,6 +857,8 @@ var _ = Describe("Resource Controller", func() {
 					Namespace: namespace.GetName(),
 				},
 				Spec: v1alpha1.ResourceSpec{
+					// Status updates are tested here, verification in verification_test.go.
+					VerificationPolicy: v1alpha1.VerificationPolicyNever,
 					ComponentRef: corev1.LocalObjectReference{
 						Name: componentObj.GetName(),
 					},
@@ -971,6 +986,8 @@ var _ = Describe("Resource Controller", func() {
 					Namespace: namespace.GetName(),
 				},
 				Spec: v1alpha1.ResourceSpec{
+					// Status updates are tested here, verification in verification_test.go.
+					VerificationPolicy: v1alpha1.VerificationPolicyNever,
 					ComponentRef: corev1.LocalObjectReference{
 						Name: componentObj.GetName(),
 					},
@@ -1086,6 +1103,8 @@ var _ = Describe("Resource Controller", func() {
 					Namespace: namespace.GetName(),
 				},
 				Spec: v1alpha1.ResourceSpec{
+					// Status updates are tested here, verification in verification_test.go.
+					VerificationPolicy: v1alpha1.VerificationPolicyNever,
 					ComponentRef: corev1.LocalObjectReference{
 						Name: componentObj.GetName(),
 					},
@@ -1274,6 +1293,8 @@ var _ = Describe("Resource Controller", func() {
 					Namespace: namespace.GetName(),
 				},
 				Spec: v1alpha1.ResourceSpec{
+					// Reference paths are tested here, verification in verification_test.go.
+					VerificationPolicy: v1alpha1.VerificationPolicyNever,
 					ComponentRef: corev1.LocalObjectReference{
 						Name: componentObj.GetName(),
 					},
@@ -1521,6 +1542,8 @@ var _ = Describe("Resource Controller", func() {
 					Namespace: namespace.GetName(),
 				},
 				Spec: v1alpha1.ResourceSpec{
+					// Reference paths are tested here, verification in verification_test.go.
+					VerificationPolicy: v1alpha1.VerificationPolicyNever,
 					ComponentRef: corev1.LocalObjectReference{
 						Name: componentObj.GetName(),
 					},
@@ -1559,6 +1582,8 @@ var _ = Describe("Resource Controller", func() {
 					Namespace: namespace.GetName(),
 				},
 				Spec: v1alpha1.ResourceSpec{
+					// Reference paths are tested here, verification in verification_test.go.
+					VerificationPolicy: v1alpha1.VerificationPolicyNever,
 					ComponentRef: corev1.LocalObjectReference{
 						Name: componentObj.GetName(),
 					},
@@ -1696,6 +1721,8 @@ var _ = Describe("Resource Controller", func() {
 					Namespace: namespace.GetName(),
 				},
 				Spec: v1alpha1.ResourceSpec{
+					// Reference paths are tested here, verification in verification_test.go.
+					VerificationPolicy: v1alpha1.VerificationPolicyNever,
 					ComponentRef: corev1.LocalObjectReference{
 						Name: componentObj.GetName(),
 					},

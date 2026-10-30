@@ -13,23 +13,49 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/pkg/configuration"
+	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-var ErrPluginNotFound = errors.New("digest processor plugin not found")
+// IsLocalResource reports whether res is stored with its component version and is read
+// through the component version repository.
+func IsLocalResource(res *descriptor.Resource) bool {
+	return v2.IsLocalBlob(res.Access) || ociaccess.IsRelativeOCIReference(res.Access)
+}
+
+// VerifyLocalResource checks the content of res, a local resource of desc, against the
+// digest res records. It is only downloaded if the repository cannot check it against
+// what it is stored under (see [repository.VerifyLocalResource]).
+func VerifyLocalResource(ctx context.Context, resolver *resolution.Resolver, opts *resolution.Options, desc *descriptor.Descriptor, res *descriptor.Resource) error {
+	repoResolver, err := resolver.RepositoryResolver(ctx, opts)
+	if err != nil {
+		return fmt.Errorf("failed to create repository resolver: %w", err)
+	}
+	name, version := desc.Component.Name, desc.Component.Version
+	repo, err := repoResolver.GetComponentVersionRepositoryForComponent(ctx, name, version)
+	if err != nil {
+		return fmt.Errorf("failed to get repository for component %s:%s: %w", name, version, err)
+	}
+	if err := repository.VerifyLocalResource(ctx, repo, name, version, res); err != nil {
+		return fmt.Errorf("failed to verify local resource %q: %w", res.Name, err)
+	}
+	return nil
+}
 
 // VerifyResource verifies and processes the resource digest using the appropriate digest processor plugin.
 func VerifyResource(ctx context.Context, pm *manager.PluginManager, resource *descriptor.Resource, cfg *configuration.Configuration) (*descriptor.Resource, error) {
 	logger := log.FromContext(ctx)
 	logger.V(1).Info("processing resource digest")
 
+	if resource.Access == nil {
+		return nil, fmt.Errorf("resource %q has no access and cannot be verified", resource.Name)
+	}
 	digestProcessor, err := pm.DigestProcessorRegistry.GetPlugin(ctx, resource.Access)
 	if err != nil {
-		// Return the resource along with the error to allow further handling if needed
-		// (Currently, we just log the error and continue without digest verification because some resources may not
-		// have digest processors yet)
-		return resource, errors.Join(ErrPluginNotFound, err)
+		return nil, fmt.Errorf("resource %q of access type %s cannot be verified, set verificationPolicy Never to skip verification: %w",
+			resource.Name, resource.Access.GetType(), err)
 	}
 
 	var creds runtime.Typed

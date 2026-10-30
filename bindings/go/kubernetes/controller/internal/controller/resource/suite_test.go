@@ -2,12 +2,14 @@ package resource
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/go-logr/logr"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -18,20 +20,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
-	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
-	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
-	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
-	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
-	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
-	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // +kubebuilder:scaffold:imports
@@ -107,21 +101,10 @@ var _ = BeforeSuite(func() {
 		}
 	}()
 
-	// Setup plugin manager for new architecture
-	pm = manager.NewPluginManager(ctx)
-	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(repository.Scheme))
-	Expect(pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider)).To(Succeed())
-	signingHandler, err := handler.New(signingv1alpha1.Scheme, true)
+	// The plugins the controller registers in production, so verification covers the same
+	// access types.
+	pm, err = setup.NewPluginManager(ctx, nil, slog.New(logr.ToSlogHandler(GinkgoLogr)), setup.WithTempDir(GinkgoT().TempDir()))
 	Expect(err).ToNot(HaveOccurred())
-	Expect(pm.SigningRegistry.RegisterInternalComponentSignatureHandler(signingHandler)).To(Succeed())
-	Expect(pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(
-		&ocicredentials.OCICredentialRepository{},
-		[]ocmruntime.Type{v1.Type},
-	)).To(Succeed())
-
-	ociResourceRepoPlugin := ocires.NewResourceRepository(&filesystemv1alpha1.Config{})
-	Expect(pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(ociResourceRepoPlugin)).To(Succeed())
-	Expect(pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(ociResourceRepoPlugin)).To(Succeed())
 
 	resolutionLogger := logf.Log.WithName("resolution")
 	resolver := resolution.NewResolver(&resolutionLogger)
