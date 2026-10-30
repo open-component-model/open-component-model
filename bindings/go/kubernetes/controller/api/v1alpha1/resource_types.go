@@ -15,8 +15,9 @@ type VerificationPolicy string
 const (
 	// VerificationPolicyAlways verifies the resource digest. Content is checked against what it is
 	// addressed by where possible (an OCI manifest, the digest a local blob is stored under, a Helm
-	// repository index) and only downloaded otherwise. A resource that cannot be verified, because
-	// no digest processor supports its access type, fails.
+	// repository index, a checksum a wget server advertises) and downloaded otherwise, e.g. for
+	// git, gitHub and s3 accesses on every reconcile. A resource whose access type no digest
+	// processor supports fails.
 	VerificationPolicyAlways VerificationPolicy = "Always"
 	// VerificationPolicyNever skips resource digest verification unconditionally.
 	VerificationPolicyNever VerificationPolicy = "Never"
