@@ -27,6 +27,8 @@ USER 65532:65532
 # cosign's trust-root cache would go to /.sigstore under HOME=/, which the
 # user cannot create; keep it in the writable /tmp instead.
 ENV TUF_ROOT=/tmp/.sigstore/root
+# A CLI, not a service, and scratch has nothing a health check could run.
+HEALTHCHECK NONE
 ENTRYPOINT ["/ocm"]
 
 # Static cosign linked against the Go Cryptographic Module (GOFIPS140=certified,
@@ -49,4 +51,5 @@ COPY --from=slim /ocm /ocm
 USER 65532:65532
 # Cosign trust-root cache as in slim.
 ENV TUF_ROOT=/tmp/.sigstore/root
+HEALTHCHECK NONE
 ENTRYPOINT ["/ocm"]

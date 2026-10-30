@@ -1,0 +1,32 @@
+[
+  {
+    "name": "controller-reads-registry-credentials",
+    "reason": "The controller resolves OCI registry credentials from Secrets referenced in Repository and Resource custom resources, so its ClusterRole needs get/list/watch on Secrets. It does not grant create, update, or delete.",
+    "policyType": "postureExceptionPolicy",
+    "actions": ["alertOnly"],
+    "resources": [
+      {
+        "designatorType": "Attributes",
+        "attributes": { "kind": "ServiceAccount", "name": "ocm-k8s-toolkit-controller-manager", "namespace": "ocm-k8s-toolkit-system" }
+      }
+    ],
+    "posturePolicies": [{ "controlID": "C-0015" }]
+  },
+  {
+    "name": "controller-needs-api-access",
+    "reason": "The controller authenticates to the Kubernetes API with its service account token, so the token is mounted (C-0034) and the service account has RBAC bindings (C-0053 reports every bound service account). Mounting the token explicitly with automount disabled only moves the finding to Trivy KSV-0036.",
+    "policyType": "postureExceptionPolicy",
+    "actions": ["alertOnly"],
+    "resources": [
+      {
+        "designatorType": "Attributes",
+        "attributes": { "kind": "ServiceAccount", "name": "ocm-k8s-toolkit-controller-manager", "namespace": "ocm-k8s-toolkit-system" }
+      },
+      {
+        "designatorType": "Attributes",
+        "attributes": { "kind": "Deployment", "name": "ocm-k8s-toolkit-controller-manager", "namespace": "ocm-k8s-toolkit-system" }
+      }
+    ],
+    "posturePolicies": [{ "controlID": "C-0034" }, { "controlID": "C-0053" }]
+  }
+]
