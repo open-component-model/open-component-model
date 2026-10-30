@@ -186,6 +186,42 @@ func publishFile(staged, fileName string) error {
 	return nil
 }
 
+// publishBlob publishes the staged blob as fileName in the directory it was staged in,
+// unless a blob is already stored there: blobs are content-addressed, so an existing one
+// holds the same content and is kept. It consumes staged: the staged file is removed
+// whatever the outcome, a failure to remove it is reported.
+//
+// Concurrent writers of one blob race between their existence check and the publish, so
+// the publish itself must not replace: a hard link fails atomically if the name exists.
+// Replacing would be harmless on POSIX, but renaming over a blob a reader holds open fails
+// on Windows. Filesystems without hard links fall back to a rename, accepting the race
+// and succeeding when it is lost.
+func publishBlob(staged, fileName string) error {
+	target := filepath.Join(filepath.Dir(staged), fileName)
+	err := os.Link(staged, target)
+	switch {
+	case errors.Is(err, fs.ErrExist):
+		return os.Remove(staged)
+	case err != nil:
+		if err := publishFile(staged, fileName); err != nil {
+			if _, statErr := os.Stat(target); statErr == nil {
+				return os.Remove(staged)
+			}
+			return errors.Join(err, os.Remove(staged))
+		}
+		return nil
+	}
+	// The staged name is removed before the shared inode is made read-only, as Windows
+	// refuses to delete a read-only file.
+	if err := os.Remove(staged); err != nil {
+		return fmt.Errorf("unable to remove staged blob: %w", err)
+	}
+	if err := os.Chmod(target, 0o444); err != nil {
+		return fmt.Errorf("unable to make blob readonly: %w", err)
+	}
+	return nil
+}
+
 // DeleteBlob deletes the blob with the given digest from the CTF by removing the file from BlobsDirectoryName.
 func (c *FileSystemCTF) DeleteBlob(_ context.Context, digest string) (err error) {
 	if c.remFS == nil {
@@ -312,11 +348,9 @@ func (c *FileSystemCTF) SaveBlob(ctx context.Context, b blob.ReadOnlyBlob) (err 
 	if !writable {
 		return fmt.Errorf("unable to save blob %s to %T: %w", dig, c.fs, filesystem.ErrReadOnly)
 	}
-	if err := publishFile(staged, file); err != nil {
-		return err
-	}
+	err = publishBlob(staged, file)
 	staged = ""
-	return nil
+	return err
 }
 
 // ToBlobFileName converts a digest to a blob file name by replacing the ":" with ".", which is the

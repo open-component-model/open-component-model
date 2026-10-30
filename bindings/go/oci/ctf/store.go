@@ -54,10 +54,9 @@ func NewFromCTF(store ctf.CTF) *Store {
 // - Handle blob operations (Fetch, Exists, Push) through the CTF's blob archive
 // - Emulate an OCM OCI Repository for accessing component versions stored in the CTF
 type Store struct {
-	// mu protects concurrent access to the CTF archive, especially for index
-	// operations. A pointer to the mutex is shared with all oras oci store
-	// instances created for repositories within this CTF to ensure consistent
-	// locking.
+	// mu guards the CTF index (see repository for why blob writes do not take
+	// it). A pointer to the mutex is shared with all oras oci store instances
+	// created for repositories within this CTF to ensure consistent locking.
 	mu      sync.RWMutex
 	archive ctf.CTF
 }
@@ -94,6 +93,12 @@ func (s *Store) ComponentVersionReference(ctx context.Context, component, versio
 // Repository implements the spec.Store interface for a CTF OCI Repository.
 // Each repository instance shares the same mutex with its parent Store to ensure
 // consistent locking across all repositories within the same CTF archive.
+//
+// The mutex guards the archive index only. Blobs are content-addressed and published
+// atomically by ctf.SaveBlob, so they are written without it: no caller-supplied
+// stream is ever read while it is held. Holding it during a blob write would leave
+// every other writer's source unread for that long, and a server streaming such a
+// source may reset it (e.g. an HTTP/2 RST_STREAM once its send window stays full).
 type repository struct {
 	archive ctf.CTF
 	repo    string
@@ -176,9 +181,6 @@ func (s *repository) fetchReference(ctx context.Context, idx v1.Index, reference
 //
 // Push also updates referrers for manifests with a subject field.
 func (s *repository) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, data io.Reader) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if !introspection.IsOCICompliantMediaType(expected.MediaType) {
 		if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(direct.New(data), expected)); err != nil {
 			return fmt.Errorf("unable to save blob for descriptor %v: %w", expected, err)
@@ -186,7 +188,17 @@ func (s *repository) Push(ctx context.Context, expected ociImageSpecV1.Descripto
 		return nil
 	}
 
-	return s.pushManifest(ctx, expected, data)
+	// Buffer the manifest so its subject can be inspected. content.ReadAll
+	// also verifies the content against the expected size and digest, which
+	// SaveBlob alone does not (it trusts the descriptor's digest).
+	manifestJSON, err := content.ReadAll(data, expected)
+	if err != nil {
+		return fmt.Errorf("unable to read manifest content for descriptor %v: %w", expected, err)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.pushManifest(ctx, expected, manifestJSON)
 }
 
 // PushStreaming implements remotestore.StreamingPusher: it stores a blob whose digest
@@ -208,9 +220,6 @@ func (s *repository) PushStreaming(ctx context.Context, partial ociImageSpecV1.D
 		return ociImageSpecV1.Descriptor{}, err
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if err := s.archive.SaveBlob(ctx, b); err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("unable to save streamed blob of media type %s: %w", partial.MediaType, err)
 	}
@@ -218,17 +227,10 @@ func (s *repository) PushStreaming(ctx context.Context, partial ociImageSpecV1.D
 	return ociImageSpecV1.Descriptor{MediaType: partial.MediaType, Digest: digest.Digest(dig), Size: b.Size()}, nil
 }
 
-// pushManifest is the manifest branch of Push.
+// pushManifest saves the verified manifestJSON and indexes it.
 //
 // The caller MUST hold the write lock.
-func (s *repository) pushManifest(ctx context.Context, expected ociImageSpecV1.Descriptor, data io.Reader) error {
-	// Buffer the manifest so its subject can be inspected. content.ReadAll
-	// also verifies the content against the expected size and digest, which
-	// SaveBlob alone does not (it trusts the descriptor's digest).
-	manifestJSON, err := content.ReadAll(data, expected)
-	if err != nil {
-		return fmt.Errorf("unable to read manifest content for descriptor %v: %w", expected, err)
-	}
+func (s *repository) pushManifest(ctx context.Context, expected ociImageSpecV1.Descriptor, manifestJSON []byte) error {
 	if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(direct.NewFromBytes(manifestJSON), expected)); err != nil {
 		return fmt.Errorf("unable to save blob for descriptor %v: %w", expected, err)
 	}
