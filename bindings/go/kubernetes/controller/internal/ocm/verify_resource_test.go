@@ -150,6 +150,11 @@ var _ = Describe("VerifyResource", Ordered, func() {
 		_, err := ocm.VerifyResource(ctx, pm, res, nil)
 		Expect(err).To(MatchError(ContainSubstring("cannot be verified")))
 	})
+
+	It("fails a resource without access", func(ctx SpecContext) {
+		_, err := ocm.VerifyResource(ctx, pm, &descriptor.Resource{ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "data"}}}, nil)
+		Expect(err).To(MatchError(ContainSubstring("has no access")))
+	})
 })
 
 // serveOCIImage serves one image manifest of repo under tag, with its config blob.

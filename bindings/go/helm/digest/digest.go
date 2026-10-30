@@ -223,9 +223,11 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 	}
 
 	if cv.Digest == "" {
-		// The index does not vouch for the chart, so it is hashed as it is downloaded.
+		// The index does not vouch for the chart, so it is hashed as it is downloaded. The
+		// download is pinned to the version the index selected, also if none was requested.
 		slog.InfoContext(ctx, "helm repository index lists no digest for the chart; downloading it to compute one",
-			"chart", chartName, "version", version)
+			"chart", chartName, "version", cv.Version)
+		helm.HelmChart, helm.Version = chartName+":"+cv.Version, ""
 		return p.downloadChartDigest(ctx, helm, credentials, cacheDir)
 	}
 

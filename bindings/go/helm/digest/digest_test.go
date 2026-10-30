@@ -288,15 +288,17 @@ func TestProcessResourceDigest_HTTPIndexWithoutDigest(t *testing.T) {
 
 	for _, tc := range []struct {
 		name    string
+		chart   string
 		opts    []digest.Option
 		wantErr string
 	}{
-		{name: "with the HTTP configuration", opts: []digest.Option{digest.WithHTTPConfig(trusted)}},
-		{name: "without it", wantErr: "certificate"},
+		{name: "with the HTTP configuration", chart: "mychart:0.1.0", opts: []digest.Option{digest.WithHTTPConfig(trusted)}},
+		{name: "without a requested version, the version the index selects", chart: "mychart", opts: []digest.Option{digest.WithHTTPConfig(trusted)}},
+		{name: "without the HTTP configuration", chart: "mychart:0.1.0", wantErr: "certificate"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			result, err := digest.NewDigestProcessor(t.TempDir(), tc.opts...).ProcessResourceDigest(t.Context(), helmAccessResource(t, srv.URL, "mychart:0.1.0"), nil)
+			result, err := digest.NewDigestProcessor(t.TempDir(), tc.opts...).ProcessResourceDigest(t.Context(), helmAccessResource(t, srv.URL, tc.chart), nil)
 			if tc.wantErr != "" {
 				r.ErrorContains(err, tc.wantErr)
 				return

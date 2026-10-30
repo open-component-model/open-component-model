@@ -49,6 +49,9 @@ func VerifyResource(ctx context.Context, pm *manager.PluginManager, resource *de
 	logger := log.FromContext(ctx)
 	logger.V(1).Info("processing resource digest")
 
+	if resource.Access == nil {
+		return nil, fmt.Errorf("resource %q has no access and cannot be verified", resource.Name)
+	}
 	digestProcessor, err := pm.DigestProcessorRegistry.GetPlugin(ctx, resource.Access)
 	if err != nil {
 		return nil, fmt.Errorf("resource %q of access type %s cannot be verified, set verificationPolicy Never to skip verification: %w",
