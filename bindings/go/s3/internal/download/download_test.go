@@ -1,8 +1,11 @@
 package download
 
 import (
+	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"hash/crc32"
 	"io"
@@ -19,6 +22,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -188,36 +192,48 @@ func fakeCredentials() *credv1.S3Credentials {
 	}
 }
 
-// downloadFrom downloads req from srv with [fakeCredentials]. The fake serves no bucket
-// subdomains, so the request is addressed path-style.
-func downloadFrom(t *testing.T, srv *fakeS3, req Request, opts ...Option) (*Result, error) {
-	t.Helper()
-
+// at addresses req to srv. The fake serves no bucket subdomains, so the request is
+// addressed path-style.
+func at(srv *fakeS3, req Request) Request {
 	req.Endpoint = srv.URL
 	req.UsePathStyle = true
+	return req
+}
 
-	return Download(t.Context(), req, append([]Option{WithCredentials(fakeCredentials())}, opts...)...)
+// streamFrom streams req from srv with [fakeCredentials] and returns what was written.
+func streamFrom(t *testing.T, srv *fakeS3, req Request, opts ...Option) (*Result, []byte, error) {
+	t.Helper()
+
+	var buf bytes.Buffer
+	res, err := Stream(t.Context(), at(srv, req), &buf, append([]Option{WithCredentials(fakeCredentials())}, opts...)...)
+	return res, buf.Bytes(), err
+}
+
+// blobFrom returns req at srv as a lazy blob with [fakeCredentials].
+func blobFrom(t *testing.T, srv *fakeS3, req Request, opts ...Option) *Blob {
+	t.Helper()
+
+	return NewBlob(t.Context(), at(srv, req), append([]Option{WithCredentials(fakeCredentials())}, opts...)...)
 }
 
 func readBlob(t *testing.T, b blob.ReadOnlyBlob) []byte {
 	t.Helper()
+	r := require.New(t)
 	rc, err := b.ReadCloser()
-	require.NoError(t, err)
+	r.NoError(err)
 	defer func() { _ = rc.Close() }()
 	data, err := io.ReadAll(rc)
-	require.NoError(t, err)
+	r.NoError(err)
 	return data
 }
 
-func filesIn(t *testing.T, dir string) []string {
-	t.Helper()
-	entries, err := os.ReadDir(dir)
-	require.NoError(t, err)
-	names := make([]string, 0, len(entries))
-	for _, e := range entries {
-		names = append(names, e.Name())
+// methods returns the HTTP methods of requests, in order.
+func methods(requests []s3Request) []string {
+	out := make([]string, 0, len(requests))
+	for _, req := range requests {
+		out = append(out, req.method)
 	}
-	return names
+	return out
 }
 
 func TestDownload_RequiredFields(t *testing.T) {
@@ -245,67 +261,72 @@ func TestDownload_RequiredFields(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
 			srv := newFakeS3(t, s3Object{body: []byte("unused")})
 
-			_, err := downloadFrom(t, srv, tt.req, WithTempDir(t.TempDir()))
-			require.Error(t, err)
-			assert.Contains(t, err.Error(), tt.wantErr)
-			assert.Empty(t, srv.recorded(), "validation must happen before the object is requested")
+			_, _, err := streamFrom(t, srv, tt.req)
+			r.ErrorContains(err, tt.wantErr)
+
+			b := blobFrom(t, srv, tt.req)
+			_, err = b.ReadCloser()
+			r.ErrorContains(err, tt.wantErr)
+			r.Equal(blob.SizeUnknown, b.Size())
+
+			r.Empty(srv.recorded(), "validation must happen before the object is requested")
 		})
 	}
 }
 
-func TestDownload_ReturnsObjectBody(t *testing.T) {
+func TestStream_WritesObject(t *testing.T) {
+	r := require.New(t)
 	content := []byte("hello from s3")
-	srv := newFakeS3(t, s3Object{body: content, contentType: "text/plain"})
+	srv := newFakeS3(t, s3Object{body: content, contentType: "text/plain", versionID: "v-1"})
 
-	res, err := downloadFrom(t, srv, Request{BucketName: "my-bucket", ObjectKey: "path/blob.txt"},
-		WithTempDir(t.TempDir()))
-	require.NoError(t, err)
-	assert.Equal(t, content, readBlob(t, res.Blob))
+	res, written, err := streamFrom(t, srv, Request{BucketName: "my-bucket", ObjectKey: "path/blob.txt"},
+		WithDigestAlgorithm(digest.SHA256))
+	r.NoError(err)
+	r.Equal(content, written)
+	r.Equal(&Result{
+		VersionID: "v-1",
+		Digest:    digest.SHA256.FromBytes(content),
+		Size:      int64(len(content)),
+		MediaType: "text/plain",
+	}, res)
 
 	requests := srv.recorded()
-	require.Len(t, requests, 1)
-	assert.Equal(t, http.MethodGet, requests[0].method)
-	assert.Equal(t, "/my-bucket/path/blob.txt", requests[0].path)
-	assert.Empty(t, requests[0].versionID, "no version pinned means the latest object")
-	assert.NotEmpty(t, requests[0].header.Get("Authorization"), "the request must be signed")
+	r.Len(requests, 1)
+	r.Equal(http.MethodGet, requests[0].method)
+	r.Equal("/my-bucket/path/blob.txt", requests[0].path)
+	r.Empty(requests[0].versionID, "no version pinned means the latest object")
+	r.NotEmpty(requests[0].header.Get("Authorization"), "the request must be signed")
 }
 
-func TestDownload_BlobIsReReadable(t *testing.T) {
-	content := []byte("read me twice")
-	srv := newFakeS3(t, s3Object{body: content})
+func TestStream_DigestOnlyOnRequest(t *testing.T) {
+	r := require.New(t)
+	srv := newFakeS3(t, s3Object{body: []byte("content")})
 
-	res, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"}, WithTempDir(t.TempDir()))
-	require.NoError(t, err)
-
-	assert.Equal(t, content, readBlob(t, res.Blob))
-	assert.Equal(t, content, readBlob(t, res.Blob))
-}
-
-func TestDownload_BlobReportsSize(t *testing.T) {
-	content := []byte("sized content")
-	srv := newFakeS3(t, s3Object{body: content})
-
-	res, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"}, WithTempDir(t.TempDir()))
-	require.NoError(t, err)
-
-	assert.Equal(t, int64(len(content)), res.Blob.Size())
+	res, _, err := streamFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"})
+	r.NoError(err)
+	r.Empty(res.Digest)
 }
 
 func TestDownload_PinnedVersionIsForwarded(t *testing.T) {
+	r := require.New(t)
 	srv := newFakeS3(t, s3Object{body: []byte("versioned")})
+	req := Request{BucketName: "b", ObjectKey: "k", Version: "v-1"}
 
-	_, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k", Version: "v-1"},
-		WithTempDir(t.TempDir()))
-	require.NoError(t, err)
+	_, _, err := streamFrom(t, srv, req)
+	r.NoError(err)
+	readBlob(t, blobFrom(t, srv, req))
 
 	requests := srv.recorded()
-	require.Len(t, requests, 1)
-	assert.Equal(t, "v-1", requests[0].versionID)
+	r.Len(requests, 2)
+	for _, request := range requests {
+		r.Equal("v-1", request.versionID)
+	}
 }
 
-func TestDownload_ResolvedVersionIsReturned(t *testing.T) {
+func TestStream_ResolvedVersionIsReturned(t *testing.T) {
 	tests := []struct {
 		name      string
 		versionID string
@@ -330,11 +351,12 @@ func TestDownload_ResolvedVersionIsReturned(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
 			srv := newFakeS3(t, s3Object{body: []byte("content"), versionID: tt.versionID})
 
-			res, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"}, WithTempDir(t.TempDir()))
-			require.NoError(t, err)
-			assert.Equal(t, tt.want, res.VersionID)
+			res, _, err := streamFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"})
+			r.NoError(err)
+			r.Equal(tt.want, res.VersionID)
 		})
 	}
 }
@@ -371,56 +393,62 @@ func TestDownload_MediaType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
 			srv := newFakeS3(t, s3Object{body: []byte("content"), contentType: tt.contentType})
+			req := Request{BucketName: "b", ObjectKey: "k", MediaType: tt.mediaType}
 
-			res, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k", MediaType: tt.mediaType},
-				WithTempDir(t.TempDir()))
-			require.NoError(t, err)
+			res, _, err := streamFrom(t, srv, req)
+			r.NoError(err)
+			r.Equal(tt.want, res.MediaType)
 
-			got, known := res.Blob.MediaType()
-			assert.True(t, known)
-			assert.Equal(t, tt.want, got)
+			for name, b := range map[string]*Blob{"before a read": blobFrom(t, srv, req), "after a read": blobFrom(t, srv, req)} {
+				if name == "after a read" {
+					readBlob(t, b)
+				}
+				got, known := b.MediaType()
+				r.True(known, name)
+				r.Equal(tt.want, got, name)
+			}
 		})
 	}
 }
 
 func TestDownload_GetObjectErrorIsWrapped(t *testing.T) {
+	r := require.New(t)
 	srv := newFakeS3(t, s3Object{errStatus: http.StatusForbidden, errCode: "AccessDenied"})
+	req := Request{BucketName: "my-bucket", ObjectKey: "my-key"}
 
-	_, err := downloadFrom(t, srv, Request{BucketName: "my-bucket", ObjectKey: "my-key"}, WithTempDir(t.TempDir()))
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "error getting s3 object my-bucket/my-key")
-	assert.Contains(t, err.Error(), "AccessDenied", "the underlying cause must be preserved")
+	_, _, err := streamFrom(t, srv, req)
+	r.ErrorContains(err, "error getting s3 object my-bucket/my-key")
+	r.ErrorContains(err, "AccessDenied", "the underlying cause must be preserved")
+
+	_, err = blobFrom(t, srv, req).ReadCloser()
+	r.ErrorContains(err, "error getting s3 object my-bucket/my-key")
+	r.ErrorContains(err, "AccessDenied")
 }
 
-func TestDownload_BodyReadErrorIsWrappedAndFileRemoved(t *testing.T) {
-	tempDir := t.TempDir()
+func TestStream_BodyReadErrorIsWrapped(t *testing.T) {
+	r := require.New(t)
 	srv := newFakeS3(t, s3Object{body: []byte("0123456789"), abortAfter: new(5)})
 
-	_, err := downloadFrom(t, srv, Request{BucketName: "my-bucket", ObjectKey: "my-key"}, WithTempDir(tempDir))
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "error writing s3 object my-bucket/my-key")
-
-	assert.Empty(t, filesIn(t, tempDir), "a partial download must not leave a file behind")
+	_, _, err := streamFrom(t, srv, Request{BucketName: "my-bucket", ObjectKey: "my-key"})
+	r.ErrorContains(err, "error streaming s3 object my-bucket/my-key")
 }
 
-func TestDownload_StreamsIntoTempDir(t *testing.T) {
-	tempDir := t.TempDir()
-	content := []byte("streamed to disk")
-	srv := newFakeS3(t, s3Object{body: content})
+func TestStream_WriterErrorIsWrapped(t *testing.T) {
+	r := require.New(t)
+	srv := newFakeS3(t, s3Object{body: []byte("content")})
+	failed := errors.New("disk full")
 
-	res, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"}, WithTempDir(tempDir))
-	require.NoError(t, err)
-
-	names := filesIn(t, tempDir)
-	require.Len(t, names, 1, "the object must be streamed into exactly one file")
-	assert.True(t, strings.HasPrefix(names[0], "ocm-s3-download-"), "unexpected file name %q", names[0])
-
-	onDisk, err := os.ReadFile(filepath.Join(tempDir, names[0]))
-	require.NoError(t, err)
-	assert.Equal(t, content, onDisk)
-	assert.Equal(t, content, readBlob(t, res.Blob))
+	_, err := Stream(t.Context(), at(srv, Request{BucketName: "b", ObjectKey: "k"}), failingWriter{failed},
+		WithCredentials(fakeCredentials()))
+	r.ErrorIs(err, failed)
+	r.ErrorContains(err, "error streaming s3 object b/k")
 }
+
+type failingWriter struct{ err error }
+
+func (w failingWriter) Write([]byte) (int, error) { return 0, w.err }
 
 func TestDownload_MaxDownloadSize(t *testing.T) {
 	content := []byte("0123456789")
@@ -459,55 +487,169 @@ func TestDownload_MaxDownloadSize(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tempDir := t.TempDir()
 			object := tt.object
 			if object.body == nil {
 				object.body = content
 			}
 			srv := newFakeS3(t, object)
+			req := Request{BucketName: "my-bucket", ObjectKey: "my-key"}
 
-			opts := []Option{WithTempDir(tempDir)}
+			var opts []Option
 			if !tt.unset {
 				opts = append(opts, WithMaxDownloadSize(tt.maxSize))
 			}
 
-			res, err := downloadFrom(t, srv, Request{BucketName: "my-bucket", ObjectKey: "my-key"}, opts...)
-			if tt.wantErr {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), "exceeds maximum allowed size")
-				assert.Empty(t, filesIn(t, tempDir), "a rejected download must not leave a file behind")
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, content, readBlob(t, res.Blob))
+			t.Run("stream", func(t *testing.T) {
+				r := require.New(t)
+				_, written, err := streamFrom(t, srv, req, opts...)
+				if tt.wantErr {
+					r.ErrorContains(err, "s3 object my-bucket/my-key exceeds maximum allowed size")
+					return
+				}
+				r.NoError(err)
+				r.Equal(content, written)
+			})
+
+			t.Run("blob", func(t *testing.T) {
+				r := require.New(t)
+				rc, err := blobFrom(t, srv, req, opts...).ReadCloser()
+				if err == nil {
+					defer func() { _ = rc.Close() }()
+					var data []byte
+					data, err = io.ReadAll(rc)
+					if !tt.wantErr {
+						r.NoError(err)
+						r.Equal(content, data)
+						return
+					}
+					r.LessOrEqual(len(data), int(tt.maxSize), "no byte past the limit may be handed out")
+				}
+				r.True(tt.wantErr, "unexpected error: %v", err)
+				r.ErrorContains(err, "s3 object my-bucket/my-key exceeds maximum allowed size")
+			})
 		})
 	}
 }
 
-func TestDownload_TempDirUnwritable(t *testing.T) {
-	srv := newFakeS3(t, s3Object{body: []byte("content")})
-
-	_, err := downloadFrom(t, srv, Request{BucketName: "my-bucket", ObjectKey: "my-key"},
-		WithTempDir(filepath.Join(t.TempDir(), "does-not-exist")))
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "error creating temporary file for s3 object my-bucket/my-key")
-}
-
-func TestDownload_EmptyObject(t *testing.T) {
+func TestStream_EmptyObject(t *testing.T) {
+	r := require.New(t)
 	srv := newFakeS3(t, s3Object{body: []byte{}})
 
-	res, err := downloadFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"}, WithTempDir(t.TempDir()))
-	require.NoError(t, err)
-	assert.Empty(t, readBlob(t, res.Blob))
+	res, written, err := streamFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"})
+	r.NoError(err)
+	r.Empty(written)
+	r.Zero(res.Size)
 }
 
 func TestDownload_CredentialConversionErrorIsWrapped(t *testing.T) {
+	r := require.New(t)
 	unknown := &runtime.Raw{Type: runtime.NewVersionedType("Unknown", "v1"), Data: []byte("{}")}
+	req := Request{BucketName: "b", ObjectKey: "k"}
 
-	_, err := Download(t.Context(), Request{BucketName: "b", ObjectKey: "k"},
-		WithCredentials(unknown), WithTempDir(t.TempDir()))
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "error converting s3 credentials")
+	_, err := Stream(t.Context(), req, io.Discard, WithCredentials(unknown))
+	r.ErrorContains(err, "error converting s3 credentials")
+
+	_, err = NewBlob(t.Context(), req, WithCredentials(unknown)).ReadCloser()
+	r.ErrorContains(err, "error converting s3 credentials")
+}
+
+func TestBlob_EveryReadRequestsTheObject(t *testing.T) {
+	r := require.New(t)
+	content := []byte("read me twice")
+	srv := newFakeS3(t, s3Object{body: content})
+
+	b := blobFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"})
+	r.Empty(srv.recorded(), "creating the blob must not request the object")
+
+	r.Equal(content, readBlob(t, b))
+	r.Equal(content, readBlob(t, b))
+	r.Equal([]string{http.MethodGet, http.MethodGet}, methods(srv.recorded()))
+}
+
+func TestBlob_PinsVersionOfFirstRead(t *testing.T) {
+	tests := []struct {
+		name      string
+		versionID string
+		want      string
+	}{
+		{name: "a reported version is pinned", versionID: "v-1", want: "v-1"},
+		{name: "the unversioned placeholder pins nothing", versionID: UnversionedVersionID},
+		{name: "a store reporting no version pins nothing"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			srv := newFakeS3(t, s3Object{body: []byte("content"), versionID: tt.versionID})
+			b := blobFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"})
+
+			readBlob(t, b)
+			readBlob(t, b)
+			r.Equal(int64(len("content")), b.Size(), "the size is learned from the first read")
+
+			requests := srv.recorded()
+			r.Len(requests, 2, "size must not need a request of its own after a read")
+			r.Empty(requests[0].versionID)
+			r.Equal(tt.want, requests[1].versionID)
+		})
+	}
+}
+
+func TestBlob_DescribedByHeadBeforeRead(t *testing.T) {
+	r := require.New(t)
+	content := []byte("described")
+	srv := newFakeS3(t, s3Object{body: content, contentType: "text/plain"})
+	b := blobFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"})
+
+	r.Equal(int64(len(content)), b.Size())
+	mediaType, known := b.MediaType()
+	r.True(known)
+	r.Equal("text/plain", mediaType)
+	r.Equal([]string{http.MethodHead}, methods(srv.recorded()), "one HeadObject describes the object")
+
+	r.Equal(content, readBlob(t, b))
+	r.Equal([]string{http.MethodHead, http.MethodGet}, methods(srv.recorded()))
+}
+
+func TestBlob_PinsVersionDescribedByHead(t *testing.T) {
+	r := require.New(t)
+	srv := newFakeS3(t, s3Object{body: []byte("described"), versionID: "v-1"})
+	b := blobFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"})
+
+	r.Equal(int64(len("described")), b.Size())
+	readBlob(t, b)
+
+	requests := srv.recorded()
+	r.Equal([]string{http.MethodHead, http.MethodGet}, methods(requests))
+	r.Equal("v-1", requests[1].versionID, "reads serve the version the size describes")
+}
+
+func TestBlob_FailedHeadLeavesItUndescribed(t *testing.T) {
+	r := require.New(t)
+	srv := newFakeS3(t, s3Object{errStatus: http.StatusForbidden, errCode: "AccessDenied"})
+	b := blobFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"})
+
+	r.Equal(blob.SizeUnknown, b.Size())
+	_, known := b.MediaType()
+	r.False(known)
+	r.Equal([]string{http.MethodHead}, methods(srv.recorded()), "a failed HeadObject is not repeated")
+
+	withType := blobFrom(t, srv, Request{BucketName: "b", ObjectKey: "k", MediaType: "application/custom"})
+	mediaType, known := withType.MediaType()
+	r.True(known)
+	r.Equal("application/custom", mediaType)
+	r.Len(srv.recorded(), 1, "a media type of the request needs no request")
+}
+
+func TestBlob_ReadsAreBoundToContext(t *testing.T) {
+	r := require.New(t)
+	srv := newFakeS3(t, s3Object{body: []byte("content")})
+	ctx, cancel := context.WithCancel(t.Context())
+	b := NewBlob(ctx, at(srv, Request{BucketName: "b", ObjectKey: "k"}), WithCredentials(fakeCredentials()))
+	cancel()
+
+	_, err := b.ReadCloser()
+	r.ErrorIs(err, context.Canceled)
 }
 
 func TestHTTPConfig(t *testing.T) {

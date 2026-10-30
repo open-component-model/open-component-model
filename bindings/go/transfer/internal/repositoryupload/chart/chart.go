@@ -28,12 +28,16 @@ import (
 
 // Locate returns the packaged Helm chart (.tgz) in content: content itself when it is gzip, the
 // first .tgz of a tar (helm downloader output), or the chart layer of a Helm chart OCI layout.
+// Content whose media type declares a packaged chart is taken as is without reading it.
 // fromOCI reports that the chart came from an OCI artifact, so the source digest does not describe it.
 // The chart is located, not parsed: the target repository reads and validates it.
 func Locate(ctx context.Context, content blob.ReadOnlyBlob, mediaType string, id runtime.Identity) (chart blob.ReadOnlyBlob, fromOCI bool, err error) {
-	if layout.IsOCILayoutMediaType(mediaType) {
+	switch {
+	case layout.IsOCILayoutMediaType(mediaType):
 		chart, err := fromLayout(ctx, content, id)
 		return chart, true, err
+	case mediaType == registry.ChartLayerMediaType:
+		return content, false, nil
 	}
 	chart, err = fromArchive(content, id)
 	return chart, false, err
@@ -98,12 +102,27 @@ func fromLayout(ctx context.Context, b blob.ReadOnlyBlob, id runtime.Identity) (
 	return &descriptorBlob{data: data, desc: layer}, nil
 }
 
-// fromArchive opens b once and accepts a packaged chart (gzip) as is, or a tar whose first .tgz
-// regular file is the packaged chart (the helm downloader output: chart and provenance file).
+// fromArchive accepts a packaged chart (gzip) as is, or a tar whose first .tgz regular file
+// is the packaged chart (the helm downloader output: chart and provenance file). b is read
+// once here to find the chart and again on every read of the returned blob, which holds
+// nothing open in between.
 func fromArchive(b blob.ReadOnlyBlob, id runtime.Identity) (blob.ReadOnlyBlob, error) {
+	rc, size, err := openChart(b)
+	if err != nil {
+		return nil, fmt.Errorf("content of resource %s: %w", id, err)
+	}
+	// Only the start of the content was read to find the chart; a verifying source rejects
+	// that partial read on Close, which is expected. Every read of the returned blob is
+	// verified in full.
+	_ = rc.Close()
+	return &chartBlob{source: b, size: size}, nil
+}
+
+// openChart opens b and returns a reader of the packaged chart in it and its size.
+func openChart(b blob.ReadOnlyBlob) (io.ReadCloser, int64, error) {
 	rc, err := b.ReadCloser()
 	if err != nil {
-		return nil, fmt.Errorf("failed opening content of resource %s: %w", id, err)
+		return nil, 0, fmt.Errorf("failed opening content: %w", err)
 	}
 	r := bufio.NewReader(rc)
 	if magic, err := r.Peek(2); err == nil && magic[0] == 0x1f && magic[1] == 0x8b {
@@ -111,19 +130,45 @@ func fromArchive(b blob.ReadOnlyBlob, id runtime.Identity) (blob.ReadOnlyBlob, e
 		if sized, ok := b.(blob.SizeAware); ok {
 			size = sized.Size()
 		}
-		return &readerBlob{rc: readCloser{Reader: r, Closer: rc}, size: size}, nil
+		return readCloser{Reader: r, Closer: rc}, size, nil
 	}
 	tr := tar.NewReader(r)
 	for {
 		hdr, err := tr.Next()
 		if err != nil {
 			_ = rc.Close()
-			return nil, fmt.Errorf("content of resource %s is neither a packaged helm chart, a tar containing one, nor a helm chart OCI artifact", id)
+			return nil, 0, errors.New("neither a packaged helm chart, a tar containing one, nor a helm chart OCI artifact")
 		}
 		if hdr.Typeflag == tar.TypeReg && strings.HasSuffix(hdr.Name, ".tgz") {
-			return &readerBlob{rc: readCloser{Reader: tr, Closer: rc}, size: hdr.Size}, nil
+			return &tarChart{tr: tr, rest: r, Closer: rc}, hdr.Size, nil
 		}
 	}
+}
+
+// tarChart reads the chart entry of a tar. A source verifying its content checks it when
+// closed, which fails unless it was read to its end, so once the chart has been read
+// completely Close reads the rest of the tar before closing the source.
+type tarChart struct {
+	tr   *tar.Reader
+	rest io.Reader
+	io.Closer
+	done bool
+}
+
+func (c *tarChart) Read(p []byte) (int, error) {
+	n, err := c.tr.Read(p)
+	if errors.Is(err, io.EOF) {
+		c.done = true
+	}
+	return n, err
+}
+
+func (c *tarChart) Close() error {
+	var drainErr error
+	if c.done {
+		_, drainErr = io.Copy(io.Discard, c.rest)
+	}
+	return errors.Join(drainErr, c.Closer.Close())
 }
 
 func fetchJSON(ctx context.Context, store orascontent.Fetcher, desc ocispec.Descriptor, v any) error {
@@ -154,33 +199,20 @@ func (b *descriptorBlob) Size() int64 { return b.desc.Size }
 
 func (b *descriptorBlob) Digest() (string, bool) { return b.desc.Digest.String(), true }
 
-// readerBlob hands out an already opened stream exactly once.
-type readerBlob struct {
-	rc   io.ReadCloser
-	size int64
-	used bool
+// chartBlob is the packaged chart in source, located again on every read.
+type chartBlob struct {
+	source blob.ReadOnlyBlob
+	size   int64
 }
 
-var _ blob.SizeAware = (*readerBlob)(nil)
+var _ blob.SizeAware = (*chartBlob)(nil)
 
-func (b *readerBlob) ReadCloser() (io.ReadCloser, error) {
-	if b.used {
-		return nil, errors.New("chart stream can only be read once")
-	}
-	b.used = true
-	return b.rc, nil
+func (b *chartBlob) ReadCloser() (io.ReadCloser, error) {
+	rc, _, err := openChart(b.source)
+	return rc, err
 }
 
-func (b *readerBlob) Size() int64 { return b.size }
-
-// Close closes the stream if it was never handed out; once handed out, the reader owns it.
-func (b *readerBlob) Close() error {
-	if b.used {
-		return nil
-	}
-	b.used = true
-	return b.rc.Close()
-}
+func (b *chartBlob) Size() int64 { return b.size }
 
 type readCloser struct {
 	io.Reader

@@ -146,7 +146,7 @@ func Test_Integration_TransferS3Resource_LocalBlobUploader(t *testing.T) {
 	// An s3 resource is downloaded via the s3 resource repository. In the CLI this is a dynamic
 	// registry dispatching by access type; here the transfer only involves an s3 resource, so the
 	// s3 repository is the concrete repo to provide (mirrors the OCI tests passing the OCI repo).
-	resourceRepo := s3repository.NewResourceRepository(nil)
+	resourceRepo := s3repository.NewResourceRepository()
 	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
 	graph, err := b.BuildAndCheck(tgd)
 	r.NoError(err)

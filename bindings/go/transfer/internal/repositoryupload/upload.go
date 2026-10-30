@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"time"
 
@@ -97,14 +96,12 @@ func (u *Uploader) Upload(ctx context.Context, spec *uploadv1alpha1.RepositoryUp
 	if err != nil {
 		return nil, err
 	}
-	defer closeBlob(content)
 	fromOCI := ociSource(src, mediaType)
 	if st.Chart() {
 		located, layoutChart, err := chart.Locate(ctx, content, mediaType, src.ToIdentity())
 		if err != nil {
 			return nil, err
 		}
-		defer closeBlob(located)
 		content, fromOCI, mediaType = located, fromOCI || layoutChart, compression.MediaTypeGzip
 	} else {
 		mediaType = contentType(mediaType, spec.Resource)
@@ -160,13 +157,6 @@ func (u *Uploader) Upload(ctx context.Context, spec *uploadv1alpha1.RepositoryUp
 func discard(ctx context.Context, st Store, uploaded digest.Digest) {
 	if err := st.Discard(ctx, uploaded); err != nil {
 		slog.WarnContext(ctx, "failed removing uploaded content that must not be published", "url", client.RedactURL(st.URL()), "error", err)
-	}
-}
-
-// closeBlob releases a blob that holds an open stream or file.
-func closeBlob(b blob.ReadOnlyBlob) {
-	if closer, ok := b.(io.Closer); ok {
-		_ = closer.Close()
 	}
 }
 
