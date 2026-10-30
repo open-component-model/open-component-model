@@ -57,28 +57,40 @@ func New(src blob.ReadOnlyBlob, meta Metadata) *Blob {
 // exceeds the expected size, and from Close in any case, including a partial read.
 // Close always closes the source reader, also when verification fails.
 func (b *Blob) ReadCloser() (io.ReadCloser, error) {
-	expected := b.meta.Digest
-	var digester digest.Digester
-	if expected != "" {
+	if expected := b.meta.Digest; expected != "" {
 		if err := expected.Validate(); err != nil {
 			return nil, fmt.Errorf("invalid expected digest %q: %w", expected, err)
 		}
-		digester = expected.Algorithm().Digester()
 	}
 	rc, err := b.src.ReadCloser()
 	if err != nil {
 		return nil, fmt.Errorf("failed to open blob content: %w", err)
 	}
-	r := &reader{base: rc, digester: digester, expected: expected, size: b.meta.Size}
-	if r.size == blob.SizeUnknown {
+	var sourceSize func() int64
+	if b.meta.Size == blob.SizeUnknown {
 		// Asked only once content arrived: a source learning its size from the
 		// response it streams (e.g. a lazy HTTP download) would otherwise have to
 		// send an extra request before its content is even requested.
 		if sizeAware, ok := b.src.(blob.SizeAware); ok {
-			r.sourceSize = sizeAware.Size
+			sourceSize = sizeAware.Size
 		}
 	}
-	return r, nil
+	return newReader(rc, b.meta, sourceSize), nil
+}
+
+// NewReader returns rc wrapped so that everything read through it is counted and hashed
+// and compared against meta, exactly like the readers Blob.ReadCloser returns.
+// meta.Digest must be empty (not verified) or valid with an available algorithm.
+func NewReader(rc io.ReadCloser, meta Metadata) io.ReadCloser {
+	return newReader(rc, meta, nil)
+}
+
+func newReader(rc io.ReadCloser, meta Metadata, sourceSize func() int64) *reader {
+	var digester digest.Digester
+	if meta.Digest != "" {
+		digester = meta.Digest.Algorithm().Digester()
+	}
+	return &reader{base: rc, digester: digester, expected: meta.Digest, size: meta.Size, sourceSize: sourceSize}
 }
 
 // Digest returns the expected digest, if known.
@@ -139,6 +151,13 @@ func (r *reader) Read(p []byte) (int, error) {
 	}
 	if r.size != blob.SizeUnknown && r.read > r.size {
 		return n, r.verify()
+	}
+	// Readers handed the exact size (io.CopyN) never see EOF, so report a mismatch
+	// as soon as the expected size is complete.
+	if r.size != blob.SizeUnknown && r.read == r.size && n > 0 {
+		if mismatch := r.verify(); mismatch != nil {
+			return n, mismatch
+		}
 	}
 	if errors.Is(err, io.EOF) {
 		r.eof = true

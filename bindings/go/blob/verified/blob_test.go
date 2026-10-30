@@ -76,6 +76,16 @@ func TestBlob(t *testing.T) {
 		r.NoError(rc.Close())
 	})
 
+	t.Run("reading exactly the known size of tampered content fails on read", func(t *testing.T) {
+		r := require.New(t)
+		rc, err := verified.New(&opener{content: []byte("tampered blob content")}, meta).ReadCloser()
+		r.NoError(err)
+		// io.CopyN and io.ReadFull drop read errors once n bytes arrived; ReadAll does not.
+		_, err = io.ReadAll(io.LimitReader(rc, meta.Size))
+		r.ErrorContains(err, "digest mismatch")
+		r.ErrorContains(rc.Close(), "digest mismatch")
+	})
+
 	t.Run("a partial read fails on close and still releases the content", func(t *testing.T) {
 		r := require.New(t)
 		src := &opener{content: data}
