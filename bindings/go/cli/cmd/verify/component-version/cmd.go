@@ -20,6 +20,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/algorithms"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
@@ -58,7 +59,7 @@ func New() *cobra.Command {
 
 - Prefixes: {%[1]s|none} (default: %[1]q)  
 - Repo types: {%[2]s} (short: {%[3]s})
-- Digest: optional pin (see "ocm get cv --help"), "@sha256:<hex>" (OCI digest of the artifact the component version is stored as; the version may be omitted) or "@jsonNormalisation.v4alpha1+sha256:<hex>" (normalized: the digest signatures sign); the command fails unless the component version matches it
+- Digest: optional pin (see "ocm get cv --help"), "@sha256:<hex>" (OCI digest of the artifact the component version is stored as; the version may be omitted) or "@jsonNormalisation.v4alpha3+sha256:<hex>" (normalized: the digest signatures sign); the command fails unless the component version matches it
 
 ## OCM Verification explained in simple steps
 
@@ -448,7 +449,11 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 				}
 			}
 
-			return handler.Verify(verifyCtx, signature, verifierSpec, creds)
+			if err := handler.Verify(verifyCtx, signature, verifierSpec, creds); err != nil {
+				return err
+			}
+			algorithms.LogNonDefaultDigest(egctx, logger, slog.LevelWarn, signature.Digest.NormalisationAlgorithm, "name", signature.Name)
+			return nil
 		})
 	}
 

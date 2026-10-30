@@ -96,7 +96,7 @@ func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string, opts ..
 				return nil, nil, fmt.Errorf("error resolving local helm chart path %q in working directory %q: %w", helmSpec.Path, options.WorkingDirectory, err)
 			}
 		}
-		chart, err = newReadOnlyChart(path, tmpDir)
+		chart, err = newReadOnlyChart(path, options.WorkingDirectory, tmpDir)
 		if err != nil {
 			return nil, nil, fmt.Errorf("error loading local helm chart %q: %w", helmSpec.Path, err)
 		}
@@ -122,7 +122,9 @@ func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string, opts ..
 	return result.Blob, chart, nil
 }
 
-func newReadOnlyChart(path, tmpDirBase string) (result *ReadOnlyChart, err error) {
+// newReadOnlyChart loads the chart at path. If workingDir is set, the packaged chart and its
+// provenance file are read confined to workingDir, so neither can be a symlink leaving it.
+func newReadOnlyChart(path, workingDir, tmpDirBase string) (result *ReadOnlyChart, err error) {
 	// Load the chart from filesystem, the path can be either a helm chart directory or a tgz file.
 	// While loading the chart is also validated.
 	chart, err := loader.Load(path)
@@ -156,15 +158,23 @@ func newReadOnlyChart(path, tmpDirBase string) (result *ReadOnlyChart, err error
 		}
 	}
 
+	// A chart packaged from a directory lives in tmpDir, outside the working directory.
+	getBlob := filesystem.GetBlobFromOSPath
+	if workingDir != "" && !fi.IsDir() {
+		getBlob = func(p string) (*filesystem.Blob, error) {
+			return filesystem.GetBlobInWorkingDirectory(p, workingDir)
+		}
+	}
+
 	// Now we know that the path refers to a valid Helm chart packaged as a tgz file. Thus returning its contents.
-	if result.ChartBlob, err = filesystem.GetBlobFromOSPath(path); err != nil {
+	if result.ChartBlob, err = getBlob(path); err != nil {
 		return nil, fmt.Errorf("error creating blob from file %q: %w", path, err)
 	}
 
 	provName := path + ".prov" // foo.prov
 	if _, err := os.Stat(provName); err == nil {
-		if result.ProvBlob, err = filesystem.GetBlobFromOSPath(provName); err != nil {
-			return nil, fmt.Errorf("error creating blob from file %q: %w", path, err)
+		if result.ProvBlob, err = getBlob(provName); err != nil {
+			return nil, fmt.Errorf("error creating blob from provenance file %q: %w", provName, err)
 		}
 	}
 

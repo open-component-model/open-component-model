@@ -1,6 +1,7 @@
 package signing
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"encoding/hex"
@@ -11,12 +12,18 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha2"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestGetSupportedHash(t *testing.T) {
 	h, err := GetSupportedHash(crypto.SHA256.String())
+	require.NoError(t, err)
+	assert.Equal(t, crypto.SHA256, h)
+
+	// Older descriptors spell the hash "sha256"; it must resolve like "SHA-256".
+	h, err = GetSupportedHash("sha256")
 	require.NoError(t, err)
 	assert.Equal(t, crypto.SHA256, h)
 
@@ -28,9 +35,9 @@ func TestEnsureNormalisationAlgo(t *testing.T) {
 	logger := slog.New(slog.DiscardHandler)
 	ctx := context.Background()
 
-	// legacy should be translated to v4alpha1
+	// legacy v3 should be translated to v4alpha2 (its byte-exact re-implementation)
 	got := ensureNormalisationAlgo(ctx, LegacyNormalisationAlgo, logger)
-	assert.Equal(t, v4alpha1.Algorithm, got)
+	assert.Equal(t, v4alpha2.Algorithm, got)
 
 	// non-legacy should be returned unchanged
 	in := "someAlgo"
@@ -38,7 +45,7 @@ func TestEnsureNormalisationAlgo(t *testing.T) {
 	assert.Equal(t, in, got)
 
 	// jsonNormalisation/v1 is a real registered algorithm and must pass through
-	// unchanged (it must not be remapped to v4alpha1 like the v3 legacy value).
+	// unchanged (it must not be remapped to v4alpha2 like the v3 legacy value).
 	got = ensureNormalisationAlgo(ctx, "jsonNormalisation/v1", logger)
 	assert.Equal(t, "jsonNormalisation/v1", got)
 }
@@ -194,8 +201,8 @@ func TestGenerateDigest_LegacyNormalisation(t *testing.T) {
 	digest, err := GenerateDigest(ctx, d, logger, LegacyNormalisationAlgo, crypto.SHA256.String())
 	require.NoError(t, err)
 	require.NotNil(t, digest)
-	// ensure legacy was mapped to v4alpha1
-	assert.Equal(t, v4alpha1.Algorithm, digest.NormalisationAlgorithm)
+	// ensure legacy was mapped to v4alpha2
+	assert.Equal(t, v4alpha2.Algorithm, digest.NormalisationAlgorithm)
 }
 
 // Tests for VerifyDigestMatchesDescriptor
@@ -249,7 +256,7 @@ func TestVerifyDigestMatchesDescriptor_InvalidHex(t *testing.T) {
 
 	err := VerifyDigestMatchesDescriptor(ctx, d, sig, logger)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "decoding digest from signature failed")
+	assert.Contains(t, err.Error(), "digest mismatch")
 }
 
 func TestVerifyDigestMatchesDescriptor_UnsupportedHash(t *testing.T) {
@@ -284,4 +291,36 @@ func TestVerifyDigestMatchesDescriptor_LegacyNormalisation(t *testing.T) {
 	sig := descruntime.Signature{Name: "s4", Digest: *dg}
 
 	require.NoError(t, VerifyDigestMatchesDescriptor(ctx, d, sig, logger))
+}
+
+// A digest written with the legacy hash name "sha256" passes IsSafelyDigestible,
+// so verification (transfer, verify, controller) must accept it too.
+func TestVerifyDigestMatchesDescriptor_LegacyHashName(t *testing.T) {
+	r := require.New(t)
+	logger := slog.New(slog.DiscardHandler)
+
+	d := &descruntime.Descriptor{Component: descruntime.Component{ComponentMeta: descruntime.ComponentMeta{ObjectMeta: descruntime.ObjectMeta{Name: "legacy-hash"}}, Provider: descruntime.Provider{Name: "p"}}}
+
+	dg, err := GenerateDigest(t.Context(), d, logger, v4alpha1.Algorithm, crypto.SHA256.String())
+	r.NoError(err)
+
+	dg.HashAlgorithm = "sha256"
+	r.NoError(IsSafelyDigestible(&descruntime.Component{References: []descruntime.Reference{{Digest: *dg}}}))
+	r.NoError(VerifyDigestMatchesDescriptor(t.Context(), d, descruntime.Signature{Name: "s5", Digest: *dg}, logger))
+}
+
+// Resolving the jsonNormalisation/v3 alias is not itself worth a warning: the
+// places that trust a digest already warn about any non-default algorithm, and
+// a second line per v3 digest would only repeat that.
+func TestVerifyDigestMatchesDescriptor_LegacyAliasDoesNotWarn(t *testing.T) {
+	r := require.New(t)
+	d := &descruntime.Descriptor{Component: descruntime.Component{ComponentMeta: descruntime.ComponentMeta{ObjectMeta: descruntime.ObjectMeta{Name: "acme.org/c", Version: "1.0.0"}}, Provider: descruntime.Provider{Name: "p"}}}
+	dg, err := GenerateDigest(t.Context(), d, slog.New(slog.DiscardHandler), LegacyNormalisationAlgo, crypto.SHA256.String())
+	r.NoError(err)
+	dg.NormalisationAlgorithm = LegacyNormalisationAlgo
+
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn}))
+	r.NoError(VerifyDigestMatchesDescriptor(t.Context(), d, descruntime.Signature{Name: "s", Digest: *dg}, logger))
+	r.Empty(logs.String())
 }

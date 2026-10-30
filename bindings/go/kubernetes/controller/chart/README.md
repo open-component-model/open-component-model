@@ -68,6 +68,9 @@ Kubernetes: `>=1.26.0-0`
 | manager.cache.deployerDownloadSize | int | `1000` | Maximum size of the deployer download object LRU cache |
 | manager.concurrency.component | int | `4` | Number of active component controller workers |
 | manager.concurrency.deployer | int | `4` | Number of active workers per enabled deployer controller (Deployer and NamespacedDeployer) |
+| manager.concurrency.discovery | int | `4` | Number of active discovery controller workers |
+| manager.concurrency.replication | int | `4` | Number of active replication controller workers |
+| manager.concurrency.repository | int | `4` | Number of active repository controller workers |
 | manager.concurrency.resource | int | `4` | Number of active resource controller workers |
 | manager.deployer.enabled | bool | `true` | Run the controller for the cluster-scoped Deployer. It applies with the permissions of the controller itself. Deprecated: Use NamespacedDeployer instead. |
 | manager.env | list | `[]` | Environment variables for the controller |

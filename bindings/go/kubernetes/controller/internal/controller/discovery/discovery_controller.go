@@ -53,7 +53,7 @@ var _ ocm.Reconciler = (*Reconciler)(nil)
 const componentRefIndex = "spec.componentRef.name"
 
 // SetupWithManager sets up the Discovery controller with the Manager.
-func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, concurrency int) error {
 	// Build index for discoveries that reference a component to make sure that we
 	// get notified when a component changes.
 	if err := mgr.GetFieldIndexer().IndexField(ctx, &v1alpha1.Discovery{}, componentRefIndex, func(obj client.Object) []string {
@@ -74,7 +74,8 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 			handler.EnqueueRequestsFromMapFunc(r.mapComponentToDiscoveries),
 			builder.WithPredicates(ocm.ComponentInfoChangedPredicate{})).
 		WithOptions(controller.Options{
-			RateLimiter: r.RateLimit.Limiter(),
+			MaxConcurrentReconciles: concurrency,
+			RateLimiter:             r.RateLimit.Limiter(),
 		}).
 		Complete(r)
 }

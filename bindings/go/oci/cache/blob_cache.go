@@ -211,16 +211,20 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage,
 	}
 
 	always := c.opts.RemotePolicy == RemotePolicyAlways
-	if f := c.cached(ctx, target); f != nil {
-		if always {
-			if err := c.verifyRemoteAccess(ctx, upstream, target); err != nil {
-				_ = f.Close()
-				return nil, err
-			}
+
+	switch f := c.cached(ctx, target); {
+	case f != nil && always:
+		// if cached and we want to always verify it
+		if err := c.verifyRemoteAccess(ctx, upstream, target); err != nil {
+			_ = f.Close()
+			return nil, err
 		}
 		return f, nil
-	}
-	if always {
+	case f != nil:
+		// if cached, but no verification is required just return it
+		return f, nil
+	case always:
+		// not cached, fetch and populate
 		data, err := c.fetchAndPopulate(ctx, upstream, target)
 		if err != nil {
 			return nil, err
