@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"testing"
@@ -103,7 +104,7 @@ func TestLocate(t *testing.T) {
 		{
 			name:    "content that is no chart",
 			content: func(*testing.T) blob.ReadOnlyBlob { return fromBytes([]byte("not a chart")) },
-			wantErr: "is neither a packaged helm chart, a tar containing one, nor a helm chart OCI artifact",
+			wantErr: "neither a packaged helm chart, a tar containing one, nor a helm chart OCI artifact",
 		},
 	}
 	for _, tc := range tests {
@@ -116,12 +117,14 @@ func TestLocate(t *testing.T) {
 			}
 			r.NoError(err)
 			r.Equal(tc.wantFromOCI, fromOCI)
-			rc, err := chart.ReadCloser()
-			r.NoError(err)
-			defer func() { _ = rc.Close() }()
-			got, err := io.ReadAll(rc)
-			r.NoError(err)
-			r.Equal(tc.want, got)
+			// The located chart holds no open stream, so it can be read more than once.
+			for range 2 {
+				rc, err := chart.ReadCloser()
+				r.NoError(err)
+				got, err := io.ReadAll(rc)
+				r.NoError(errors.Join(err, rc.Close()))
+				r.Equal(tc.want, got)
+			}
 			if tc.wantFromOCI {
 				d, known := chart.(blob.DigestAware).Digest()
 				r.True(known, "the chart layer digest is known up front")
