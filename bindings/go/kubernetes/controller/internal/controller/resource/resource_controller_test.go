@@ -70,7 +70,8 @@ var _ = Describe("Resource Controller", func() {
 			HELMChart     string
 			GithubRepoURL string
 			GitRepository string
-			// VerificationPolicy is Never for access types the controller has no digest processor for.
+			// VerificationPolicy is Never where verifying would download a whole repository
+			// archive (git, GitHub); verification is tested in verification_test.go.
 			VerificationPolicy v1alpha1.VerificationPolicy
 		}
 

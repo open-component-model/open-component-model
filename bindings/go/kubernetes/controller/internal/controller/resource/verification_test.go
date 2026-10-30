@@ -106,8 +106,8 @@ var _ = Describe("Resource Controller verification", func() {
 		Entry("another recorded digest", true),
 	)
 
-	// Without a digest processor for its access type a resource cannot be verified, so it
-	// fails unless verification is skipped.
+	// Without a digest processor for its access type (here a type no plugin provides) a
+	// resource cannot be verified, so it fails unless verification is skipped.
 	It("fails a resource that cannot be verified", func(ctx SpecContext) {
 		componentName := "ocm.software/unverifiable"
 		namespace := test.NamespaceForTest(ctx)
@@ -123,8 +123,8 @@ var _ = Describe("Resource Controller verification", func() {
 					Type:        "blob",
 					Relation:    descruntime.ExternalRelation,
 					Access: &runtime.Raw{
-						Type: runtime.Type{Name: "git", Version: "v1"},
-						Data: []byte(`{"type":"git/v1","repository":"https://github.com/open-component-model/ocm-k8s-toolkit","ref":"refs/heads/main"}`),
+						Type: runtime.Type{Name: "unknownAccess", Version: "v1"},
+						Data: []byte(`{"type":"unknownAccess/v1"}`),
 					},
 				}},
 			},
