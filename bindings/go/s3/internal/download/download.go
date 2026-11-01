@@ -1,6 +1,8 @@
 // Package download contains the shared S3 download logic for the s3 bindings.
-// Callers convert their own specification into a [Request] and invoke [Download],
-// so client construction, credential handling and size limiting live in one place.
+// Callers convert their own specification into a [Request] and either [Stream] the
+// object once or wrap it in a lazy [Blob] with [NewBlob], so client construction,
+// credential handling and size limiting live in one place. Nothing is stored: every
+// read is a GetObject whose body is handed through.
 package download
 
 import (
@@ -8,10 +10,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"math"
 	"net/url"
-	"os"
+	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -19,7 +20,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/opencontainers/go-digest"
 
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/blob"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	credv1 "ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1"
@@ -31,7 +32,9 @@ const (
 	// it.
 	defaultRegion = "us-east-1"
 
-	tempFilePattern = "ocm-s3-download-*"
+	// defaultMediaType is reported for an object that neither the request nor the
+	// store gives a media type.
+	defaultMediaType = "application/octet-stream"
 
 	// UnversionedVersionID is the versionId S3 reports for objects that carry no real
 	// version. It is a valid input to GetObject but pins nothing — overwriting such an
@@ -39,19 +42,22 @@ const (
 	UnversionedVersionID = "null"
 )
 
-// Result is the outcome of a [Download].
+// errTooLarge marks an object rejected by the download size limit.
+var errTooLarge = errors.New("exceeds maximum allowed size")
+
+// Result describes the object a [Stream] wrote.
 type Result struct {
-	// Blob is the object body, backed by a file on disk.
-	Blob *filesystem.Blob
 	// VersionID is the object version that was read, as reported by S3. It is
 	// [UnversionedVersionID] for an unversioned object and empty for stores that do
 	// not report a version, so it identifies immutable content only when it is neither.
 	VersionID string
-	// Digest is the digest of the stored object, computed while it was written; empty
+	// Digest is the digest of the object, computed while it was streamed; empty
 	// without [WithDigestAlgorithm].
 	Digest digest.Digest
-	// Path is the file backing Blob; owned by the caller.
-	Path string
+	// Size is the number of bytes written.
+	Size int64
+	// MediaType is the media type of the object; see [Request.MediaType].
+	MediaType string
 }
 
 // Request describes a single S3 object download.
@@ -64,8 +70,8 @@ type Request struct {
 	BucketName string
 	// ObjectKey is the key of the object within the bucket.
 	ObjectKey string
-	// MediaType overrides the media type of the resulting blob. When empty the
-	// object's Content-Type is used, falling back to application/octet-stream.
+	// MediaType overrides the media type of the object. When empty the object's
+	// Content-Type is used, falling back to application/octet-stream.
 	MediaType string
 	// Version pins a specific S3 object version (versionId). Empty reads the latest.
 	Version string
@@ -75,28 +81,199 @@ type Request struct {
 	UsePathStyle bool
 }
 
-// Download fetches the object described by req and returns its body as a blob
-// backed by a file on disk, along with the object version that was read. Objects
-// are streamed rather than buffered, so memory use stays flat regardless of object
-// size; the file is created under the directory given by [WithTempDir], outlives
-// this call and is owned by the caller.
+// IsVersion reports whether versionID, as S3 reports it, names an immutable object
+// version: stores that report none and unversioned objects pin nothing.
+func IsVersion(versionID string) bool {
+	return versionID != "" && versionID != UnversionedVersionID
+}
+
+// Stream fetches the object described by req and writes its body to w as it
+// arrives. Nothing is stored, so memory use stays flat regardless of object size.
 //
 // The credentials and maximum size are supplied via options; see [WithCredentials]
 // and [WithMaxDownloadSize].
-func Download(ctx context.Context, req Request, opts ...Option) (*Result, error) {
-	o := &option{}
-	for _, opt := range opts {
-		opt(o)
+func Stream(ctx context.Context, req Request, w io.Writer, opts ...Option) (*Result, error) {
+	o := newOptions(opts)
+
+	obj, err := open(ctx, req, o)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = obj.body.Close() }()
+
+	var digester digest.Digester
+	if o.DigestAlgorithm != "" {
+		digester = o.DigestAlgorithm.Digester()
+		w = io.MultiWriter(w, digester.Hash())
 	}
 
+	written, err := io.Copy(w, obj.body)
+	if err != nil {
+		if errors.Is(err, errTooLarge) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("error streaming s3 object %s/%s: %w", req.BucketName, req.ObjectKey, err)
+	}
+
+	result := &Result{VersionID: obj.versionID, Size: written, MediaType: obj.mediaType}
+	if digester != nil {
+		result.Digest = digester.Digest()
+	}
+	return result, nil
+}
+
+// Blob is an S3 object as a lazy blob: every read sends a GetObject and hands its
+// body through, so nothing is stored. The first response that reports a real object
+// version pins it, so later reads serve the same object even if the key has been
+// overwritten meanwhile; an unversioned object is read at its latest state every time.
+// Reads are bound to the context the blob was created with.
+//
+// Size and media type are learned once: from the first response, or, if they are asked
+// for before any read, from a HeadObject. A failed HeadObject is not repeated and leaves
+// them unknown until a read succeeds; until then Size reports [blob.SizeUnknown] and
+// MediaType reports no media type, unless the request sets one.
+type Blob struct {
+	ctx context.Context
+	req Request
+	o   *option
+
+	mu        sync.Mutex
+	version   string
+	described bool
+	headed    bool
+	size      int64
+	mediaType string
+}
+
+var (
+	_ blob.ReadOnlyBlob   = (*Blob)(nil)
+	_ blob.SizeAware      = (*Blob)(nil)
+	_ blob.MediaTypeAware = (*Blob)(nil)
+)
+
+// NewBlob returns the object described by req as a lazy [Blob]. Errors of the
+// download surface on read.
+func NewBlob(ctx context.Context, req Request, opts ...Option) *Blob {
+	return &Blob{ctx: ctx, req: req, o: newOptions(opts), size: blob.SizeUnknown}
+}
+
+// ReadCloser requests the object and returns its body. Reading fails once the body
+// exceeds the maximum download size.
+func (b *Blob) ReadCloser() (io.ReadCloser, error) {
+	obj, err := open(b.ctx, b.request(), b.o)
+	if err != nil {
+		return nil, err
+	}
+
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.version == "" && IsVersion(obj.versionID) {
+		b.version = obj.versionID
+	}
+	if !b.described {
+		b.describe(obj.size, obj.mediaType)
+	}
+	return obj.body, nil
+}
+
+// Size returns the size of the object, or [blob.SizeUnknown] if it cannot be learned.
+func (b *Blob) Size() int64 {
+	if !b.learn() {
+		return blob.SizeUnknown
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.size
+}
+
+// MediaType returns the media type of the request, otherwise that of the object.
+func (b *Blob) MediaType() (string, bool) {
+	if b.req.MediaType != "" {
+		return b.req.MediaType, true
+	}
+	if !b.learn() {
+		return "", false
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.mediaType, true
+}
+
+// learn reports whether size and media type are known, asking the store with a
+// HeadObject if no read has told them yet. The lock is held across the request so
+// concurrent callers do not each send one.
+func (b *Blob) learn() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.described || b.headed {
+		return b.described
+	}
+	b.headed = true
+
+	req := b.req
+	if req.Version == "" {
+		req.Version = b.version
+	}
+	obj, err := head(b.ctx, req, b.o)
+	if err != nil {
+		return false
+	}
+	// Pin the described version so reads serve the bytes the size and media type describe.
+	if b.version == "" && IsVersion(obj.versionID) {
+		b.version = obj.versionID
+	}
+	b.describe(obj.size, obj.mediaType)
+	return true
+}
+
+// describe records what a response reported about the object. b.mu must be held.
+func (b *Blob) describe(size int64, mediaType string) {
+	b.described = true
+	b.size = size
+	b.mediaType = mediaType
+}
+
+// request returns the request, pinned to the version of an earlier read if there was one.
+func (b *Blob) request() Request {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	req := b.req
+	if req.Version == "" {
+		req.Version = b.version
+	}
+	return req
+}
+
+// object is one GetObject response, or a HeadObject response without a body.
+type object struct {
+	// body is the object body, failing once it exceeds the maximum download size.
+	body io.ReadCloser
+	// versionID is the version S3 reported; see [Result.VersionID].
+	versionID string
+	// size is the reported content length, or [blob.SizeUnknown].
+	size int64
+	// mediaType is the media type of the object; see [Request.MediaType].
+	mediaType string
+}
+
+func validate(req Request) error {
 	if req.BucketName == "" {
-		return nil, errors.New("bucketName is required")
+		return errors.New("bucketName is required")
 	}
 	if req.ObjectKey == "" {
-		return nil, errors.New("objectKey is required")
+		return errors.New("objectKey is required")
+	}
+	return nil
+}
+
+// open sends a GetObject for req. An object whose reported size exceeds the limit is
+// rejected before any of it is transferred; the caller closes the returned body.
+func open(ctx context.Context, req Request, o *option) (*object, error) {
+	if err := validate(req); err != nil {
+		return nil, err
 	}
 
-	getter, err := newClient(ctx, req, o)
+	client, err := newClient(ctx, req, o)
 	if err != nil {
 		return nil, err
 	}
@@ -109,94 +286,99 @@ func Download(ctx context.Context, req Request, opts ...Option) (*Result, error)
 		in.VersionId = new(req.Version)
 	}
 
-	out, err := getObject(ctx, getter, req, in)
+	out, err := getObject(ctx, client, req, in)
 	if err != nil {
 		return nil, fmt.Errorf("error getting s3 object %s/%s: %w", req.BucketName, req.ObjectKey, err)
 	}
-	defer func() { _ = out.Body.Close() }()
 
-	maxDownloadSize := DefaultMaxDownloadSize
-	if o.MaxDownloadSize != nil {
-		maxDownloadSize = *o.MaxDownloadSize
-	}
-
-	// S3 reports the size up front, so an oversized object is rejected before any
-	// of it is transferred.
+	maxDownloadSize := o.maxDownloadSize()
 	if maxDownloadSize > 0 && out.ContentLength != nil && *out.ContentLength > maxDownloadSize {
-		return nil, fmt.Errorf("s3 object %s/%s exceeds maximum allowed size of %d bytes", req.BucketName, req.ObjectKey, maxDownloadSize)
+		_ = out.Body.Close()
+		return nil, tooLarge(req, maxDownloadSize)
 	}
 
-	// A store that reports no length, or lies about it, is caught while streaming. The
-	// extra byte separates exceeding the limit from reaching it; MaxInt64 cannot be
-	// exceeded and incrementing it would overflow into a negative, empty bound.
-	body := io.Reader(out.Body)
+	// A store that reports no length, or lies about it, is caught while streaming.
+	body := out.Body
 	if maxDownloadSize > 0 {
-		limit := maxDownloadSize
-		if limit < math.MaxInt64 {
-			limit++
-		}
-		body = io.LimitReader(out.Body, limit)
+		body = &limitedBody{ReadCloser: out.Body, req: req, max: maxDownloadSize}
 	}
 
-	mediaType := req.MediaType
-	if mediaType == "" {
-		mediaType = aws.ToString(out.ContentType)
-	}
-	if mediaType == "" {
-		mediaType = "application/octet-stream"
-	}
-
-	file, err := os.CreateTemp(o.TempDir, tempFilePattern)
-	if err != nil {
-		return nil, fmt.Errorf("error creating temporary file for s3 object %s/%s: %w", req.BucketName, req.ObjectKey, err)
-	}
-
-	b, dig, err := storeObject(file, body, maxDownloadSize, req, o.DigestAlgorithm)
-	if err != nil {
-		if err := os.Remove(file.Name()); err != nil {
-			slog.WarnContext(ctx, "error removing temporary file after failed download", "file", file.Name(), "err", err)
-		}
-		return nil, err
-	}
-	b.SetMediaType(mediaType)
-
-	return &Result{Blob: b, VersionID: aws.ToString(out.VersionId), Digest: dig, Path: file.Name()}, nil
+	return &object{
+		body:      body,
+		versionID: aws.ToString(out.VersionId),
+		size:      contentLength(out.ContentLength),
+		mediaType: mediaType(req, out.ContentType),
+	}, nil
 }
 
-// storeObject streams body into file and returns a blob backed by it. It closes file
-// whether or not it succeeds, but never removes it; the caller does that in one place.
-func storeObject(file *os.File, body io.Reader, maxDownloadSize int64, req Request, alg digest.Algorithm) (*filesystem.Blob, digest.Digest, error) {
-	path := file.Name()
-
-	var dst io.Writer = file
-	var digester digest.Digester
-	if alg != "" {
-		digester = alg.Digester()
-		dst = io.MultiWriter(file, digester.Hash())
+// head sends a HeadObject for req and returns what it reports about the object; body is nil.
+func head(ctx context.Context, req Request, o *option) (*object, error) {
+	if err := validate(req); err != nil {
+		return nil, err
 	}
 
-	written, err := io.Copy(dst, body)
-	if closeErr := file.Close(); err == nil {
-		err = closeErr
-	}
+	client, err := newClient(ctx, req, o)
 	if err != nil {
-		return nil, "", fmt.Errorf("error writing s3 object %s/%s to %s: %w", req.BucketName, req.ObjectKey, path, err)
+		return nil, err
 	}
 
-	if maxDownloadSize > 0 && written > maxDownloadSize {
-		return nil, "", fmt.Errorf("s3 object %s/%s exceeds maximum allowed size of %d bytes", req.BucketName, req.ObjectKey, maxDownloadSize)
+	in := &s3.HeadObjectInput{
+		Bucket: new(req.BucketName),
+		Key:    new(req.ObjectKey),
+	}
+	if req.Version != "" {
+		in.VersionId = new(req.Version)
 	}
 
-	b, err := filesystem.GetBlobFromOSPath(path)
+	out, err := headObject(ctx, client, req, in)
 	if err != nil {
-		return nil, "", fmt.Errorf("error creating blob for s3 object %s/%s from %s: %w", req.BucketName, req.ObjectKey, path, err)
+		return nil, fmt.Errorf("error getting s3 object metadata %s/%s: %w", req.BucketName, req.ObjectKey, err)
 	}
+	return &object{
+		versionID: aws.ToString(out.VersionId),
+		size:      contentLength(out.ContentLength),
+		mediaType: mediaType(req, out.ContentType),
+	}, nil
+}
 
-	var dig digest.Digest
-	if digester != nil {
-		dig = digester.Digest()
+func contentLength(length *int64) int64 {
+	if length == nil {
+		return blob.SizeUnknown
 	}
-	return b, dig, nil
+	return *length
+}
+
+func mediaType(req Request, contentType *string) string {
+	if req.MediaType != "" {
+		return req.MediaType
+	}
+	if ct := aws.ToString(contentType); ct != "" {
+		return ct
+	}
+	return defaultMediaType
+}
+
+func tooLarge(req Request, maxDownloadSize int64) error {
+	return fmt.Errorf("s3 object %s/%s %w of %d bytes", req.BucketName, req.ObjectKey, errTooLarge, maxDownloadSize)
+}
+
+// limitedBody fails a read that takes the body past max bytes, rather than
+// truncating it, so that an oversized object is never mistaken for a complete one.
+type limitedBody struct {
+	io.ReadCloser
+	req  Request
+	max  int64
+	read int64
+}
+
+func (l *limitedBody) Read(p []byte) (int, error) {
+	n, err := l.ReadCloser.Read(p)
+	l.read += int64(n)
+	if l.read > l.max {
+		// Only the bytes up to the limit belong to the caller; a later call returns none.
+		return max(0, n-int(l.read-l.max)), tooLarge(l.req, l.max)
+	}
+	return n, err
 }
 
 // disableRetry is the maxRetries value that turns the ocm transport's retry off.

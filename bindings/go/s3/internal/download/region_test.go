@@ -1,6 +1,7 @@
 package download
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -81,9 +82,10 @@ func TestDownload_RegionCorrection(t *testing.T) {
 						}
 						return regionResponse(req, 200, "", ""), nil
 					})}
-					out, err := Download(t.Context(), Request{Region: "us-east-1", BucketName: "test-bucket", ObjectKey: "folder/a +%/object", Version: "pinned/+version", UsePathStyle: pathStyle}, WithHTTPClient(client), WithCredentials(creds), WithTempDir(t.TempDir()))
+					var written bytes.Buffer
+					out, err := Stream(t.Context(), Request{Region: "us-east-1", BucketName: "test-bucket", ObjectKey: "folder/a +%/object", Version: "pinned/+version", UsePathStyle: pathStyle}, &written, WithHTTPClient(client), WithCredentials(creds))
 					r.NoError(err)
-					r.Equal("regional object", string(readBlob(t, out.Blob)))
+					r.Equal("regional object", written.String())
 					r.Equal("pinned/+version", out.VersionID)
 					want := []string{"GET", "GET"}
 					if discovery {
@@ -136,10 +138,36 @@ func TestDownload_RegionCorrectionErrors(t *testing.T) {
 				}
 				return regionResponse(req, tt.status, tt.code, tt.hint), nil
 			})}
-			out, err := Download(t.Context(), Request{BucketName: "test-bucket", ObjectKey: "object", Endpoint: tt.endpoint}, WithHTTPClient(client), WithTempDir(t.TempDir()), WithCredentials(&credv1.S3Credentials{Type: credv1.S3CredentialsVersionedType, Anonymous: true}), WithHTTPConfig(&httpv1alpha1.Config{Retry: &httpv1alpha1.RetryConfig{MaxRetries: new(-1)}}))
+			out, err := Stream(t.Context(), Request{BucketName: "test-bucket", ObjectKey: "object", Endpoint: tt.endpoint}, io.Discard, WithHTTPClient(client), WithCredentials(&credv1.S3Credentials{Type: credv1.S3CredentialsVersionedType, Anonymous: true}), WithHTTPConfig(&httpv1alpha1.Config{Retry: &httpv1alpha1.RetryConfig{MaxRetries: new(-1)}}))
 			r.Nil(out)
 			r.ErrorContains(err, tt.wantError)
 			r.Equal(tt.wantMethods, methods)
 		})
 	}
+}
+
+// A HEAD response carries no body, so S3's PermanentRedirect reaches the SDK as a bare
+// 301; describing a blob before reading it must still follow the bucket region.
+func TestBlob_HeadRegionCorrection(t *testing.T) {
+	r := require.New(t)
+	withoutAWSEnvironment(t)
+	var hosts []string
+	client := &http.Client{Transport: regionTransport(func(req *http.Request) (*http.Response, error) {
+		r.Equal(http.MethodHead, req.Method)
+		hosts = append(hosts, req.URL.Host)
+		if len(hosts) == 1 {
+			return regionResponse(req, http.StatusMovedPermanently, "", "eu-west-1"), nil
+		}
+		header := http.Header{"Content-Length": {"42"}, "Content-Type": {"text/plain"}}
+		return &http.Response{StatusCode: http.StatusOK, Header: header, Body: http.NoBody, ContentLength: 42, Request: req}, nil
+	})}
+
+	b := NewBlob(t.Context(), Request{Region: "us-east-1", BucketName: "test-bucket", ObjectKey: "object"}, WithHTTPClient(client),
+		WithCredentials(&credv1.S3Credentials{Type: credv1.S3CredentialsVersionedType, Anonymous: true}),
+		WithHTTPConfig(&httpv1alpha1.Config{Retry: &httpv1alpha1.RetryConfig{MaxRetries: new(-1)}}))
+	r.Equal(int64(42), b.Size())
+	mediaType, known := b.MediaType()
+	r.True(known)
+	r.Equal("text/plain", mediaType)
+	r.Equal([]string{"test-bucket.s3.us-east-1.amazonaws.com", "test-bucket.s3.eu-west-1.amazonaws.com"}, hosts)
 }

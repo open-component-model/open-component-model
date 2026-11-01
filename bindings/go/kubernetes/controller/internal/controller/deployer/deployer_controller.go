@@ -50,6 +50,7 @@ import (
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -775,10 +776,12 @@ func (r *Reconciler) downloadResourceBlob(
 			return nil, fmt.Errorf("failed to get repository for component %s:%s: %w",
 				componentDescriptor.Component.Name, componentDescriptor.Component.Version, err)
 		}
-		blob, _, err := repo.GetLocalResource(ctx,
+		// The component version is read again by version, so the local resource must record
+		// the digest of the resolved one; otherwise a moved tag could substitute content.
+		blob, err := repository.GetLocalResource(ctx, repo,
 			componentDescriptor.Component.Name,
 			componentDescriptor.Component.Version,
-			resource.ToIdentity())
+			resource)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get local resource: %w", err)
 		}

@@ -215,7 +215,6 @@ func TestReferenceCache_Always_ConcurrentCallersResolveIndependently(t *testing.
 
 	started := make(chan struct{})
 	release := make(chan struct{})
-	t.Cleanup(func() { close(release) })
 	allowed := resolverFn(func(_ context.Context, _ string) (ociImageSpecV1.Descriptor, error) {
 		close(started)
 		<-release
@@ -225,7 +224,11 @@ func TestReferenceCache_Always_ConcurrentCallersResolveIndependently(t *testing.
 		return ociImageSpecV1.Descriptor{}, errors.New("access denied")
 	})
 
-	go func() { _, _ = c.Resolve(t.Context(), allowed, ref) }()
+	allowedErr := make(chan error, 1)
+	go func() {
+		_, err := c.Resolve(t.Context(), allowed, ref)
+		allowedErr <- err
+	}()
 	<-started
 
 	deniedErr := make(chan error, 1)
@@ -240,6 +243,11 @@ func TestReferenceCache_Always_ConcurrentCallersResolveIndependently(t *testing.
 	case <-time.After(5 * time.Second):
 		t.Fatal("denied caller waited on another caller's in-flight resolve")
 	}
+
+	// Join the allowed caller: its Add writes the snapshot into the TempDir,
+	// which must finish before the TempDir cleanup removes the directory.
+	close(release)
+	r.NoError(<-allowedErr)
 }
 
 // ---- Provider scope ----
