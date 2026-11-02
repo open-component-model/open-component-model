@@ -65,9 +65,11 @@ jobs:
         if: >-
           github.event_name != 'pull_request' &&
           steps.check.outputs.candidate-count != '' && steps.check.outputs.candidate-count != '0'
+        env:
+          WORKFLOW_NAME: ${{ github.workflow }}
         run: |
           {
-            echo "Automated by the \`${{ github.workflow }}\` workflow."
+            echo "Automated by the \`${WORKFLOW_NAME}\` workflow."
             echo
             echo "These overrides were removed because, per the current advisory database, removing them introduces no advisory that is not already present. Review the lockfile change and merge if correct."
             echo
