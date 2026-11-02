@@ -3,3 +3,9 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: sovereign-product
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sovereign-product-deployer
+  namespace: sovereign-product

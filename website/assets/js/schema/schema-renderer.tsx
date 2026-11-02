@@ -3,6 +3,7 @@ import type { ComponentChildren } from "preact";
 import { useState, useEffect } from "preact/hooks";
 import { jsonSchemaToModel } from "./json-schema-converter.ts";
 import { crdYamlToModels, isYamlUrl } from "./crd-yaml-converter.ts";
+import { parseDocText } from "./doc-text.ts";
 import type { SchemaField as SchemaFieldType, SchemaModel as SchemaModelType, FieldVariant as FieldVariantType } from "./schema-model.types.ts";
 
 // --- Helpers -----------------------------------------------------------------
@@ -28,11 +29,36 @@ function slugify(text: string): string {
 
 // --- Components --------------------------------------------------------------
 
+function DocText({ text, className }: { text: string; className?: string }) {
+    return (
+        <div className={className ? `sr-doc ${className}` : "sr-doc"}>
+            {parseDocText(text).map((block, i) => {
+                switch (block.kind) {
+                    case "code":
+                        return <pre key={i}><code>{block.text}</code></pre>;
+                    case "heading":
+                        return <p key={i} className="sr-doc__heading">{block.text}</p>;
+                    case "list": {
+                        const items = block.items.map((paras, j) => (
+                            <li key={j}>
+                                {paras.length === 1 ? paras[0] : paras.map((p, k) => <p key={k}>{p}</p>)}
+                            </li>
+                        ));
+                        return block.ordered ? <ol key={i}>{items}</ol> : <ul key={i}>{items}</ul>;
+                    }
+                    default:
+                        return <p key={i}>{block.text}</p>;
+                }
+            })}
+        </div>
+    );
+}
+
 function SchemaHeader({ meta }: { meta: SchemaModelType["meta"] }) {
     const hasGrid = meta.apiVersions?.length > 0 || meta.kind;
     return (
         <div className="sr-header">
-            {meta.description && <p className="sr-header__desc">{meta.description}</p>}
+            {meta.description && <DocText className="sr-header__desc" text={meta.description}/>}
             {hasGrid && (
                 <div className="sr-header__grid">
                     {meta.apiVersions?.length > 0 && (
@@ -63,7 +89,7 @@ function FieldRow({ field, depth = 0, parentPath = "" }: { field: SchemaFieldTyp
     const fieldPath = parentPath ? `${parentPath}-${slugify(field.name)}` : slugify(field.name);
 
     const descContent = field.description
-        ? <span>{field.description}</span>
+        ? <DocText text={field.description}/>
         : <span className="sr-no-desc">No description</span>;
 
     return (
@@ -143,7 +169,7 @@ function VariantRows({ variants, depth, parentPath = "" }: { variants: FieldVari
             {variant.description && (
                 <tr className="sr-variant-desc-row">
                     <td colSpan={3} className={`sr-variant-desc sr-depth-${Math.min(depth, 8)}`}>
-                        {variant.description}
+                        <DocText text={variant.description}/>
                     </td>
                 </tr>
             )}
@@ -161,7 +187,7 @@ function FieldTable({ title, description, fields, footer }: { title: string; des
     return (
         <div className="sr-section">
             <h3 id={slugify(title)}>{title}<a className="sr-anchor" href={`#${slugify(title)}`}>#</a></h3>
-            {description && <p className="sr-section__desc">{description}</p>}
+            {description && <DocText className="sr-section__desc" text={description}/>}
             <div className="sr-table-wrap">
                 <table className="sr-table">
                     <thead>

@@ -1,0 +1,167 @@
+{{- /*
+  changelog shortcode: render the project's stable GitHub releases as a version list.
+
+  Fetches the releases API at build time (resources.GetRemote, the same server-side
+  pattern used by person-card). Prereleases and drafts are excluded. The build never
+  fails on a fetch error: it logs a warning and renders a fallback link instead, so
+  offline / rate-limited builds still succeed.
+*/ -}}
+{{- $repo := "open-component-model/open-component-model" -}}
+{{- $apiURL := printf "https://api.github.com/repos/%s/releases?per_page=100" $repo -}}
+{{- $releasesURL := printf "https://github.com/%s/releases" $repo -}}
+{{- $opts := dict "headers" (dict "Accept" "application/vnd.github+json" "X-GitHub-Api-Version" "2022-11-28") -}}
+{{- $prereleaseTag := `(?i)-(rc|alpha|beta|pre|dev|snapshot)` -}}
+
+{{- $releases := slice -}}
+{{- $fetchFailed := false -}}
+{{- with try (resources.GetRemote $apiURL $opts) -}}
+  {{- with .Err -}}
+    {{- warnf "changelog: failed to fetch releases from %s: %s" $apiURL . -}}
+    {{- $fetchFailed = true -}}
+  {{- else with .Value -}}
+    {{- if ne .Data.StatusCode 200 -}}
+      {{- warnf "changelog: releases API returned HTTP %d from %s" .Data.StatusCode $apiURL -}}
+      {{- $fetchFailed = true -}}
+    {{- else -}}
+      {{- $releases = .Content | transform.Unmarshal -}}
+    {{- end -}}
+  {{- else -}}
+    {{- warnf "changelog: no response from %s" $apiURL -}}
+    {{- $fetchFailed = true -}}
+  {{- end -}}
+{{- end -}}
+
+{{- /* Determine the upper version bound from the selected content version.
+       A versioned build (e.g. "0.19") must only list releases up to that
+       minor; "main" and any non-numeric version (e.g. "legacy") are
+       unbounded and list every stable release. */ -}}
+{{- $versionName := $.Site.Version.Name -}}
+{{- $bounded := false -}}
+{{- $maxMajor := 0 -}}
+{{- $maxMinor := 0 -}}
+{{- $vm := findRE `^(\d+)\.(\d+)` $versionName 1 -}}
+{{- with $vm -}}
+  {{- $parts := split (index . 0) "." -}}
+  {{- $maxMajor = int (index $parts 0) -}}
+  {{- $maxMinor = int (index $parts 1) -}}
+  {{- $bounded = true -}}
+{{- end -}}
+
+{{- /* Keep only published stable releases, newest first, within the bound. */ -}}
+{{- $stable := slice -}}
+{{- range $releases -}}
+  {{- if and (not .draft) (not .prerelease) (not (findRE $prereleaseTag .tag_name)) -}}
+    {{- $include := true -}}
+    {{- if $bounded -}}
+      {{- $tm := findRE `^v?(\d+)\.(\d+)` .tag_name 1 -}}
+      {{- with $tm -}}
+        {{- $tp := split (index . 0) "." -}}
+        {{- $tj := int (replaceRE `^v` "" (index $tp 0)) -}}
+        {{- $tn := int (index $tp 1) -}}
+        {{- if or (gt $tj $maxMajor) (and (eq $tj $maxMajor) (gt $tn $maxMinor)) -}}
+          {{- $include = false -}}
+        {{- end -}}
+      {{- end -}}
+    {{- end -}}
+    {{- if $include -}}
+      {{- $stable = $stable | append . -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- $stable = sort $stable "published_at" "desc" -}}
+
+<div class="ocm-changelog" data-ocm-changelog data-page-size="10">
+{{- if $fetchFailed -}}
+  <div class="ocm-changelog-fallback">
+    <p>Release notes could not be loaded at build time. See the
+    <a href="{{ $releasesURL }}" target="_blank" rel="noopener noreferrer">GitHub releases page</a>
+    for the full version history.</p>
+  </div>
+{{- else if not $stable -}}
+  <div class="ocm-changelog-fallback">
+    <p>No stable releases found. See the
+    <a href="{{ $releasesURL }}" target="_blank" rel="noopener noreferrer">GitHub releases page</a>.</p>
+  </div>
+{{- else -}}
+  {{- range $stable -}}
+    {{- $tag := .tag_name -}}
+    {{- $anchor := anchorize $tag -}}
+    {{- $title := default $tag .name -}}
+    {{- $date := "" -}}
+    {{- with .published_at -}}{{ $date = (time.AsTime .).Format "2006-01-02" }}{{- end -}}
+    {{- $body := default "" .body -}}
+
+    {{- /* 1. Drop the duplicated install / community boilerplate. Release bodies
+           have used several headings over time ("Get This Release", "Quick
+           installation and usage guide"); cut from the first one onward. */ -}}
+    {{- $cut := index (findRE `(?si)\n#+\s+(Get This Release|Quick installation and usage guide|Install the OCM CLI|Community & Contributors).*$` $body 1) 0 -}}
+    {{- with $cut -}}{{ $body = replace $body . "" }}{{- end -}}
+
+    {{- /* 2. Drop a leading "> Promoted from ..." quote line and the duplicated
+           "## [x.y.z] - ..." version header (dates and "promoted from" forms). */ -}}
+    {{- $body = replaceRE `(?m)^>\s*Promoted from.*$` "" $body -}}
+    {{- $body = replaceRE `(?m)^#+\s*\[[^\]]+\].*$` "" $body -}}
+
+    {{- /* 3. Badge every [**breaking**] marker. */ -}}
+    {{- $body = replace $body "[**breaking**]" `<span class="ocm-changelog-breaking">breaking</span>` -}}
+
+    {{- /* 4. Linkify trailing PR references (#NNNN). */ -}}
+    {{- $body = replaceRE `\(#(\d+)\)` (printf `([#$1](https://github.com/%s/pull/$1))` $repo) $body -}}
+
+    {{- /* 5. Collapse the long Dependencies group behind a <details> disclosure.
+           Match "### ... Dependencies ..." plus its bullet body up to (but not
+           including) the next "### " heading or end of string, and wrap the body
+           in <details>. Blank lines keep the inner bullets parsed as markdown. */ -}}
+    {{- $depsRE := `(?s)\n###\s+([^\n]*Dependencies[^\n]*)\n(.*?)(\n###\s|$)` -}}
+    {{- $repl := "\n<details class=\"ocm-changelog-deps\">\n<summary>$1</summary>\n\n$2\n</details>\n$3" -}}
+    {{- $body = replaceRE $depsRE $repl $body 1 -}}
+
+    <section class="ocm-changelog-entry" id="{{ $anchor }}">
+      <h2 class="ocm-changelog-version">
+        <a href="https://github.com/{{ $repo }}/releases/tag/{{ $tag }}" target="_blank" rel="noopener noreferrer">{{ $title }}</a>
+        {{- with $date }}<time class="ocm-changelog-date" datetime="{{ . }}">{{ . }}</time>{{ end -}}
+      </h2>
+      <div class="ocm-changelog-body">
+        {{ $body | $.Page.RenderString (dict "display" "block") }}
+      </div>
+    </section>
+  {{- end -}}
+  <div class="ocm-changelog-more" hidden>
+    <button type="button" class="ocm-changelog-more-btn" data-ocm-changelog-more>Show older releases</button>
+  </div>
+{{- end -}}
+</div>
+{{- if not $fetchFailed -}}
+{{- if $stable -}}
+<script>
+(function () {
+  var root = document.currentScript.previousElementSibling;
+  if (!root || !root.hasAttribute("data-ocm-changelog")) { return; }
+  var size = parseInt(root.getAttribute("data-page-size"), 10) || 10;
+  var entries = Array.prototype.slice.call(root.querySelectorAll(".ocm-changelog-entry"));
+  var more = root.querySelector(".ocm-changelog-more");
+  var btn = root.querySelector("[data-ocm-changelog-more]");
+  if (entries.length <= size || !more || !btn) { return; }
+  var shown = size;
+  function render() {
+    entries.forEach(function (el, i) { el.hidden = i >= shown; });
+    var remaining = entries.length - shown;
+    if (remaining <= 0) {
+      more.hidden = true;
+    } else {
+      more.hidden = false;
+      var next = Math.min(size, remaining);
+      btn.textContent = "Show " + next + " older release" + (next === 1 ? "" : "s") + " (" + remaining + " remaining)";
+    }
+  }
+  btn.addEventListener("click", function () {
+    shown = Math.min(entries.length, shown + size);
+    render();
+    var first = entries[shown - size];
+    if (first) { first.setAttribute("tabindex", "-1"); first.focus({ preventScroll: true }); }
+  });
+  render();
+})();
+</script>
+{{- end -}}
+{{- end -}}

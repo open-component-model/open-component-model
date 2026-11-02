@@ -95,10 +95,50 @@ provider:
 			if tc.want != "" {
 				r.Contains(notice, "\nWARNING: "+tc.kind+" type "+tc.spelling+" is deprecated, "+tc.want+"\n")
 			} else {
-				r.NotContains(notice, "WARNING", "current spelling must not warn")
+				r.NotContains(notice, "is deprecated", "current spelling must not warn")
 			}
 		})
 	}
+}
+
+// Sources carry no digest, so add cv must warn loudly when a constructor
+// declares any, and stay silent when it only declares resources.
+func TestAddComponentVersionWarnsAboutSources(t *testing.T) {
+	const header = "WARNING: SOURCES ARE DEPRECATED AND UNSAFE"
+	t.Run("sources warn", func(t *testing.T) {
+		r := require.New(t)
+		notice := addComponentVersionNotice(t, `
+name: ocm.software/with-sources
+version: 1.0.0
+provider:
+  name: ocm.software
+sources:
+  - name: src
+    type: blob
+    input:
+      type: utf8/v1
+      text: hello
+`)
+		r.Contains(notice, header)
+		r.Contains(notice, "  - ocm.software/with-sources:1.0.0\n")
+		r.Contains(notice, "resources instead")
+	})
+	t.Run("resources only do not warn", func(t *testing.T) {
+		r := require.New(t)
+		notice := addComponentVersionNotice(t, `
+name: ocm.software/no-sources
+version: 1.0.0
+provider:
+  name: ocm.software
+resources:
+  - name: res
+    type: blob
+    input:
+      type: utf8/v1
+      text: hello
+`)
+		r.NotContains(notice, header)
+	})
 }
 
 // addComponentVersionNotice runs add cv on constructorYAML against a fresh CTF

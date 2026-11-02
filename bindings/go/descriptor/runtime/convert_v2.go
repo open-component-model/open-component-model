@@ -146,6 +146,7 @@ func ConvertFromV2Labels(labels []v2.Label) []Label {
 		n[i].Name = labels[i].Name
 		n[i].Value = bytes.Clone(labels[i].Value)
 		n[i].Signing = labels[i].Signing
+		n[i].Version = labels[i].Version
 	}
 	return n
 }
@@ -371,6 +372,7 @@ func ConvertToV2Labels(labels []Label) ([]v2.Label, error) {
 		n[i].Name = labels[i].Name
 		n[i].Value = bytes.Clone(labels[i].Value)
 		n[i].Signing = labels[i].Signing
+		n[i].Version = labels[i].Version
 	}
 	return n, nil
 }

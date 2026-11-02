@@ -13,6 +13,7 @@ import (
 	resourcev1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/repository/integrity"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -37,6 +38,17 @@ type ResourceRegistry struct {
 	internalPlugins    map[runtime.Type]Repository
 	scheme             *runtime.Scheme
 	constructedPlugins map[string]*constructedPlugin // running plugins
+	// artifactVerifier verifies OCI artifacts plugins deliver as archives; without it
+	// content recorded with an OCI artifact digest is unverifiable.
+	artifactVerifier integrity.ArtifactVerifier
+}
+
+// SetArtifactVerifier sets the verifier for OCI artifacts that external plugins deliver
+// as archives. It must be set before plugins are used.
+func (r *ResourceRegistry) SetArtifactVerifier(v integrity.ArtifactVerifier) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.artifactVerifier = v
 }
 
 // ResourceScheme returns the scheme used by the Resource registry.

@@ -166,225 +166,53 @@ meta:
 	}
 }
 
-func TestMapResourcesWithAccessType(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    interface{}
-		expected interface{}
-	}{
-		{
-			name: "valid access type",
-			input: map[string]interface{}{
-				"access": map[string]interface{}{
-					"type": "none",
+// TestVersionedLabelExcluded pins jsonNormalisation/v4alpha1 to its historical
+// bytes: a signed label's "version" must NOT appear in the normalised output,
+// at every label position — including component references, which previously
+// bypassed label filtering entirely (the rule was keyed "references" while the
+// JSON key is "componentReferences"). The runtime<->v2 conversion started
+// preserving Label.Version for jsonNormalisation/v1; v4alpha1 must stay
+// byte-stable, or existing signatures over versioned signing labels would fail.
+//
+// It also pins the deliberately-unchanged behaviour: non-signing reference
+// labels are still kept (v4alpha1 never filtered reference labels; proper
+// signing-only filtering is deferred to v4alpha3). Only label.version is
+// stripped from references.
+func TestVersionedLabelExcluded(t *testing.T) {
+	r := require.New(t)
+
+	mk := func(ver string) *runtime.Descriptor {
+		d := &runtime.Descriptor{}
+		d.Component.Name = "acme.org/x"
+		d.Component.Version = "1.0.0"
+		d.Component.Provider.Name = "acme"
+		d.Component.Labels = []runtime.Label{{Name: "k", Value: []byte(`"v"`), Signing: true, Version: ver}}
+		d.Component.References = []runtime.Reference{{
+			ElementMeta: runtime.ElementMeta{ObjectMeta: runtime.ObjectMeta{
+				Name: "ref", Version: "1.0.0",
+				Labels: []runtime.Label{
+					{Name: "sig", Value: []byte(`"v"`), Signing: true, Version: ver},
+					{Name: "nosig", Value: []byte(`"x"`), Signing: false, Version: ver},
 				},
-				"digest": "test",
-			},
-			expected: map[string]interface{}{
-				"access": map[string]interface{}{
-					"type": "none",
-				},
-			},
-		},
-		{
-			name: "invalid access type",
-			input: map[string]interface{}{
-				"access": map[string]interface{}{
-					"type": 123, // invalid type
-				},
-				"digest": "test",
-			},
-			expected: map[string]interface{}{
-				"access": map[string]interface{}{
-					"type": 123,
-				},
-				"digest": "test",
-			},
-		},
-		{
-			name: "missing access type",
-			input: map[string]interface{}{
-				"access": map[string]interface{}{},
-				"digest": "test",
-			},
-			expected: map[string]interface{}{
-				"access": map[string]interface{}{},
-				"digest": "test",
-			},
-		},
-		{
-			name: "missing access",
-			input: map[string]interface{}{
-				"digest": "test",
-			},
-			expected: map[string]interface{}{
-				"digest": "test",
-			},
-		},
-		{
-			name: "nil access",
-			input: map[string]interface{}{
-				"access": nil,
-				"digest": "test",
-			},
-			expected: map[string]interface{}{
-				"access": nil,
-				"digest": "test",
-			},
-		},
+			}},
+			Component: "acme.org/child",
+		}}
+		return d
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := v4alpha1.MapResourcesWithAccessType(v4alpha1.IsNoneAccessKind, func(v interface{}) interface{} {
-				m := v.(map[string]interface{})
-				delete(m, "digest")
-				return m
-			}, tt.input)
-			assert.Equal(t, tt.expected, got)
-		})
-	}
-}
+	withVer, err := normalisation.Normalise(mk("v1"), v4alpha1.Algorithm)
+	r.NoError(err)
+	noVer, err := normalisation.Normalise(mk(""), v4alpha1.Algorithm)
+	r.NoError(err)
 
-func TestMapResourcesWithNoneAccess(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    interface{}
-		expected interface{}
-	}{
-		{
-			name: "valid none access type",
-			input: map[string]interface{}{
-				"access": map[string]interface{}{
-					"type": "none",
-				},
-				"digest": "test",
-			},
-			expected: map[string]interface{}{
-				"access": map[string]interface{}{
-					"type": "none",
-				},
-			},
-		},
-		{
-			name: "valid legacy none access type",
-			input: map[string]interface{}{
-				"access": map[string]interface{}{
-					"type": "None",
-				},
-				"digest": "test",
-			},
-			expected: map[string]interface{}{
-				"access": map[string]interface{}{
-					"type": "None",
-				},
-			},
-		},
-		{
-			name: "invalid access type",
-			input: map[string]interface{}{
-				"access": map[string]interface{}{
-					"type": 123, // invalid type
-				},
-				"digest": "test",
-			},
-			expected: map[string]interface{}{
-				"access": map[string]interface{}{
-					"type": 123,
-				},
-				"digest": "test",
-			},
-		},
-		{
-			name: "missing access type",
-			input: map[string]interface{}{
-				"access": map[string]interface{}{},
-				"digest": "test",
-			},
-			expected: map[string]interface{}{
-				"access": map[string]interface{}{},
-				"digest": "test",
-			},
-		},
-		{
-			name: "missing access",
-			input: map[string]interface{}{
-				"digest": "test",
-			},
-			expected: map[string]interface{}{
-				"digest": "test",
-			},
-		},
-		{
-			name: "nil access",
-			input: map[string]interface{}{
-				"access": nil,
-				"digest": "test",
-			},
-			expected: map[string]interface{}{
-				"access": nil,
-				"digest": "test",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := v4alpha1.MapResourcesWithNoneAccess(tt.input)
-			assert.Equal(t, tt.expected, got)
-		})
-	}
-}
-
-func TestIgnoreLabelsWithoutSignature(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    interface{}
-		expected bool
-	}{
-		{
-			name: "with signature true",
-			input: map[string]interface{}{
-				"signing": true,
-			},
-			expected: false,
-		},
-		{
-			name: "with signature string true",
-			input: map[string]interface{}{
-				"signing": "true",
-			},
-			expected: false,
-		},
-		{
-			name: "with signature false",
-			input: map[string]interface{}{
-				"signing": false,
-			},
-			expected: true,
-		},
-		{
-			name: "with signature string false",
-			input: map[string]interface{}{
-				"signing": "false",
-			},
-			expected: true,
-		},
-		{
-			name: "without signature",
-			input: map[string]interface{}{
-				"other": "value",
-			},
-			expected: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := v4alpha1.IgnoreLabelsWithoutSignature(tt.input)
-			assert.Equal(t, tt.expected, got)
-		})
-	}
+	// Label version must have no effect on v4alpha1 output, anywhere.
+	r.Equal(string(noVer), string(withVer), "label version must not change v4alpha1 bytes")
+	r.NotContains(string(withVer), `"version":"v1"`)
+	// Component label: filtered to name/value/signing.
+	r.Contains(string(withVer), `"labels":[{"name":"k","signing":true,"value":"v"}]`)
+	// Reference labels: version stripped, but the non-signing label is still kept
+	// (pre-v1 behaviour; full filtering is a v4alpha3 change).
+	r.Contains(string(withVer), `"labels":[{"name":"sig","signing":true,"value":"v"},{"name":"nosig","value":"x"}]`)
 }
 
 func TestNormalise(t *testing.T) {

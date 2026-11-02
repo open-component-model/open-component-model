@@ -68,7 +68,7 @@ OCM operates in an environment where software artifacts are built, signed, store
 
 | Mitigation | Evidence |
 |------------|----------|
-| Component descriptors are normalized using a versioned algorithm (`jsonNormalisation/v4alpha1`) before hashing, ensuring a canonical representation that is tamper-evident. | `bindings/go/signing/digest.go` (`GenerateDigest`, `ensureNormalisationAlgo`), [ADR-0008](../adr/0008_signing_verification.md) |
+| Component descriptors are normalized using a versioned algorithm (`jsonNormalisation/v4alpha3`) before hashing, ensuring a canonical representation that is tamper-evident. | `bindings/go/signing/digest.go` (`GenerateDigest`, `ensureNormalisationAlgo`), [ADR-0008](../adr/0008_signing_verification.md) |
 | Verification recomputes the digest from the descriptor and compares it against the signed digest using `bytes.Equal`, rejecting any mismatch. | `bindings/go/signing/digest.go` (`VerifyDigestMatchesDescriptor`) |
 | `IsSafelyDigestible` enforces that all component references and accessible resources carry complete digests (hash algorithm, normalization algorithm, value). Resources without access must not have digests. | `bindings/go/signing/digest.go` (`IsSafelyDigestible`) |
 | Two-stage signing allows digest computation in CI and signing in a separate step, with the signing step pinning against the precomputed digest value to prevent substitution. | [ADR-0008](../adr/0008_signing_verification.md) |

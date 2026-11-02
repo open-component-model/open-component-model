@@ -19,6 +19,10 @@ const (
 	// NoDigest used in digest field for hashAlgorithm and value (in combination with ExcludeFromSignature for normalisationAlgorithm)
 	// to indicate the resource content should not be part of the signature.
 	NoDigest = "NO-DIGEST"
+	// GenericBlobDigestV1 normalises a resource to the raw bytes of its blob.
+	GenericBlobDigestV1 = "genericBlobDigest/v1"
+	// OCIArtifactDigestV1 normalises a resource to the manifest (or index) digest of its OCI artifact.
+	OCIArtifactDigestV1 = "ociArtifactDigest/v1"
 )
 
 // These constants describe identity attributes predefined by the

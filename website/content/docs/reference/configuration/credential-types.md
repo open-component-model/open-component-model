@@ -1,0 +1,678 @@
+---
+title: "Credential Types"
+description: "Reference for all built-in OCM credential types, their configuration fields, and the repositories or services each type authenticates to."
+icon: "🔑"
+weight: 3
+toc: true
+aliases:
+  - /docs/reference/credential-types/
+---
+
+This page is the technical reference for OCM's built-in credential types — the values you place in the `credentials:` field of a consumer entry. For a high-level introduction, see [Credential System]({{< relref "docs/concepts/credential-system.md" >}}).
+
+## Overview
+
+Every consumer entry in `.ocmconfig` has a `credentials:` list. Each entry in that list has a `type` that determines
+which fields are expected:
+
+```yaml
+consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: registry.example.com
+    credentials:
+      - type: <credential-type>
+        # ... type-specific fields
+```
+
+OCM ships with the following built-in credential types:
+
+| Credential Type                                            | Used With                                | Purpose                                                         |
+| ---------------------------------------------------------- | ---------------------------------------- | --------------------------------------------------------------- |
+| [`OCICredentials/v1`](#ocicredentialsv1)                   | `OCIRegistry` consumers                  | OCI registry username/password and token auth                   |
+| [`HelmHTTPCredentials/v1`](#helmhttpcredentialsv1)         | `HelmChartRepository` consumers (HTTP/S) | Helm HTTP repository auth and TLS client certs                  |
+| [`WgetCredentials/v1`](#wgetcredentialsv1)                 | `Wget` consumers                         | HTTP/S Basic Auth, bearer token, and mutual TLS                 |
+| [`S3Credentials/v1`](#s3credentialsv1)                     | `S3` consumers                           | S3 access keys and temporary STS credentials                    |
+| [`GitHubCredentials/v1`](#githubcredentialsv1)             | `GitHubRepository` consumers             | GitHub and GitHub Enterprise REST API token auth                |
+| [`GitHTTPSCredentials/v1`](#githttpscredentialsv1)         | `Git` consumers                          | Git over HTTPS with a password or access token                  |
+| [`GitBearerCredentials/v1`](#gitbearercredentialsv1)       | `Git` consumers                          | Advanced: Git servers requiring Bearer authentication           |
+| [`GitSSHCredentials/v1`](#gitsshcredentialsv1)             | `Git` consumers                          | Git over SSH with a key or SSH agent                            |
+| [`RSACredentials/v1`](#rsacredentialsv1)                   | `RSA/v1alpha1` consumers                 | RSA signing and verification key material                       |
+| [`GPGCredentials/v1alpha1`](#gpgcredentialsv1alpha1)       | `GPG/v1alpha1` consumers                 | GPG signing and verification key material                       |
+| [`OIDCIdentityToken/v1alpha1`](#oidcidentitytokenv1alpha1) | `SigstoreSigner/v1alpha1` consumers      | OIDC token for Sigstore keyless signing via Fulcio              |
+| [`TrustedRoot/v1alpha1`](#trustedrootv1alpha1)             | `SigstoreVerifier/v1alpha1` consumers    | Sigstore trust material for private infrastructure verification |
+| [`TSACredentials/v1alpha1`](#tsacredentialsv1alpha1)       | `TSA/v1alpha1` consumers                 | RFC 3161 timestamp verification root CA certificates            |
+| [`DirectCredentials/v1`](#directcredentialsv1)             | Any consumer                             | Legacy untyped key-value fallback (also `Credentials/v1`)       |
+
+All typed credential types use flat top-level fields. `DirectCredentials/v1` uses a nested `properties:` map — it is the
+universal fallback and all existing `.ocmconfig` files using `Credentials/v1` continue to work unchanged.
+
+---
+
+## Discovering Credential Types
+
+The `ocm describe types` command exposes the full set of credential types registered in your OCM installation, including
+any types introduced by installed plugins.
+
+**List all available credential types:**
+
+```bash
+ocm describe types credentials
+```
+
+**Inspect the fields of a specific credential type:**
+
+```bash
+ocm describe types credentials OCICredentials/v1
+```
+
+**Export the raw JSON Schema for a type** (useful for tooling and validation):
+
+```bash
+ocm describe types credentials OCICredentials/v1 -o jsonschema
+```
+
+---
+
+## OCICredentials/v1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/oci/v1/OCICredentials.schema.json" >}}
+
+### Example
+
+```yaml
+consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: registry.example.com
+    credentials:
+      - type: OCICredentials/v1
+        username: my-user
+        password: my-password
+```
+
+Token-based authentication:
+
+```yaml
+consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: registry.example.com
+    credentials:
+      - type: OCICredentials/v1
+        refreshToken: my-oauth2-refresh-token
+```
+
+### Used With
+
+[`OCIRegistry`]({{< relref "credential-consumer-identities.md#ociregistry" >}}) consumer identities. For OCI-backed Helm
+repositories, also use `OCICredentials/v1` (not `HelmHTTPCredentials/v1`).
+
+---
+
+## HelmHTTPCredentials/v1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/helm/v1/HelmHTTPCredentials.schema.json" >}}
+
+### Example
+
+Username/password:
+
+```yaml
+consumers:
+  - identity:
+      type: HelmChartRepository
+      hostname: charts.example.com
+      scheme: https
+    credentials:
+      - type: HelmHTTPCredentials/v1
+        username: helm-user
+        password: helm-password
+```
+
+Mutual TLS:
+
+```yaml
+consumers:
+  - identity:
+      type: HelmChartRepository
+      hostname: charts.internal
+      scheme: https
+    credentials:
+      - type: HelmHTTPCredentials/v1
+        certFile: /path/to/client.crt
+        keyFile: /path/to/client.key
+```
+
+### Used With
+
+[`HelmChartRepository`]({{< relref "credential-consumer-identities.md#helmchartrepository" >}}) consumer identities that
+use HTTP/S transport. For OCI-based Helm repositories, use `OCICredentials/v1` instead.
+
+---
+
+## WgetCredentials/v1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/wget/v1/WgetCredentials.schema.json" >}}
+
+### Example
+
+HTTP Basic Auth:
+
+```yaml
+consumers:
+  - identity:
+      type: Wget
+      hostname: downloads.example.com
+      scheme: https
+    credentials:
+      - type: WgetCredentials/v1
+        username: my-user
+        password: my-password
+```
+
+Bearer token:
+
+```yaml
+consumers:
+  - identity:
+      type: Wget
+      hostname: api.example.com
+      scheme: https
+      path: artifacts/*
+    credentials:
+      - type: WgetCredentials/v1
+        identityToken: eyJhbGciOi...
+```
+
+Mutual TLS with a private CA:
+
+```yaml
+consumers:
+  - identity:
+      type: Wget
+      hostname: artifacts.internal
+      scheme: https
+    credentials:
+      - type: WgetCredentials/v1
+        certificate: |
+          -----BEGIN CERTIFICATE-----
+          MIIDdzCCAl+gAwIBAgIEbGVnYWw...
+          -----END CERTIFICATE-----
+        privateKey: |
+          -----BEGIN PRIVATE KEY-----
+          MIIEvQIBADANBgkqhkiG9w0BAQ...
+          -----END PRIVATE KEY-----
+        certificateAuthority: |
+          -----BEGIN CERTIFICATE-----
+          MIIDQTCCAimgAwIBAgITBmyf...
+          -----END CERTIFICATE-----
+```
+
+{{< callout context="note" >}}
+`username`/`password` and `identityToken` both set the `Authorization` header and are mutually exclusive. When both are
+present, the bearer token is used and a warning is logged. The mutual TLS pair (`certificate` + `privateKey`) is a
+transport-layer credential and can be combined with either. `certificateAuthority` is only evaluated when `certificate`
+is set, and a client certificate has no effect on a plain `http://` URL.
+{{< /callout >}}
+
+### Used With
+
+[`Wget`]({{< relref "credential-consumer-identities.md#wget" >}}) consumer identities, covering both the
+[`Wget/v1` access type]({{< relref "input-and-access-types.md#wgetv1-access" >}}) and the
+[`Wget/v1` input type]({{< relref "input-and-access-types.md#wgetv1-input" >}}).
+
+---
+
+## S3Credentials/v1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/s3/v1/S3Credentials.schema.json" >}}
+
+Authentication fields are optional. `anonymous` is an optional boolean that defaults to `false`. When false or
+omitted, an entry with no access key, secret or session token uses the AWS default credential chain (environment,
+shared config and IAM roles). If any key or token field is set, OCM passes those static credentials to the AWS SDK.
+Incomplete or invalid credentials do not fall back to the default chain.
+
+Set `anonymous: true` to read public objects without signing, even when AWS credentials are available. It cannot
+be combined with `accessKeyId`, `secretAccessKey` or `sessionToken`, including their legacy aliases during conversion.
+Missing credentials and credential-provider or S3 authorization errors never trigger anonymous access.
+Authentication settings belong only in credentials, never in an access or input specification.
+
+### Example
+
+Explicit anonymous access to a public object:
+
+```yaml
+consumers:
+  - identity:
+      type: S3
+      path: public-bucket/path/to/object
+    credentials:
+      - type: S3Credentials/v1
+        anonymous: true
+```
+
+Static access keys for every bucket the account owns (`anonymous: false` is optional):
+
+```yaml
+consumers:
+  - identity:
+      type: S3
+    credentials:
+      - type: S3Credentials/v1
+        anonymous: false
+        accessKeyId: <access-key-id>
+        secretAccessKey: <secret-access-key>
+```
+
+Temporary STS credentials, scoped to one object:
+
+```yaml
+consumers:
+  - identity:
+      type: S3
+      path: acme-artifacts/datasets/reference/1.0.0/reference.parquet
+    credentials:
+      - type: S3Credentials/v1
+        accessKeyId: <temporary-access-key-id>
+        secretAccessKey: <temporary-secret-access-key>
+        sessionToken: <session-token>
+```
+
+A self-hosted MinIO, addressed by its endpoint:
+
+```yaml
+consumers:
+  - identity:
+      type: S3
+      scheme: https
+      hostname: minio.internal
+      port: "9000"
+    credentials:
+      - type: S3Credentials/v1
+        accessKeyId: minio-user
+        secretAccessKey: minio-password
+```
+
+{{< callout context="note" >}}
+OCM still accepts the OCM v1 property names `awsAccessKeyID`, `awsSecretAccessKey` and `token`, but only in an untyped
+[`Credentials/v1`](#directcredentialsv1) entry. There, OCM maps them to `accessKeyId`, `secretAccessKey` and
+`sessionToken`. `S3Credentials/v1` accepts the new names only.
+{{< /callout >}}
+
+### Used With
+
+[`S3`]({{< relref "credential-consumer-identities.md#s3" >}}) consumer identities. They cover both the
+[S3 access types (v1, v2 and unversioned)]({{< relref "input-and-access-types.md#s3v2-access" >}}) and the
+[`S3/v2` input type]({{< relref "input-and-access-types.md#s3v2-input" >}}).
+
+---
+
+## GitHubCredentials/v1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/github/v1/GitHubCredentials.schema.json" >}}
+
+### Example
+
+```yaml
+consumers:
+  - identity:
+      type: GitHubRepository
+      hostname: github.com
+    credentials:
+      - type: GitHubCredentials/v1
+        token: ghp_example_token
+```
+
+The legacy [`Credentials/v1`](#directcredentialsv1) fallback works as well, with `token` in its `properties` map:
+
+```yaml
+consumers:
+  - identity:
+      type: GitHubRepository
+      hostname: github.com
+    credentials:
+      - type: Credentials/v1
+        properties:
+          token: ghp_example_token
+```
+
+Configuring no consumer at all is valid: the GitHub REST API is then called anonymously.
+
+### Used With
+
+[`GitHubRepository`]({{< relref "credential-consumer-identities.md#githubrepository" >}}) consumer identities.
+
+---
+
+## Git Credentials
+
+### Git credential selection
+
+Use a credential type that matches the repository URL and the authentication method required by the Git server:
+
+- For most major Git hosts, use HTTPS with a personal access token in `password` (HTTP Basic):
+  [`GitHTTPSCredentials/v1`](#githttpscredentialsv1).
+- Use [`GitBearerCredentials/v1`](#gitbearercredentialsv1) only if the HTTPS server explicitly requires Bearer
+  authentication; major hosts typically do not enable it for Git operations.
+- For SSH with a private key or SSH agent, use [`GitSSHCredentials/v1`](#gitsshcredentialsv1).
+
+These three types work with [`Git`]({{< relref "credential-consumer-identities.md#git" >}}) consumers for both
+[`Git/v1` access]({{< relref "input-and-access-types.md#gitv1-access" >}}) and
+[`Git/v1` input]({{< relref "input-and-access-types.md#gitv1-input" >}}). Configure one authentication method per
+consumer lookup; multiple types are not an ordered list of authentication attempts. Include `scheme` in the identity
+to distinguish HTTPS and SSH credentials for the same host. Unknown or mixed fields on explicit credential types
+are rejected. HTTP credentials require HTTPS, and OCM rejects redirects that downgrade HTTPS to HTTP.
+Authenticated HTTPS redirects must retain the original scheme, hostname, and port; path changes within that origin
+are allowed.
+
+Configuring no consumer is valid: HTTPS requests are anonymous, and SSH uses the SSH agent.
+
+### GitHTTPSCredentials/v1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/git/v1/GitHTTPSCredentials.schema.json" >}}
+
+Use this for HTTPS cloning with a password or access token. Set the username required by your Git server and
+put your password, personal access token, or OAuth access token in `password`. You do not need an SSH key.
+
+OCM sends these credentials using HTTP Basic authentication. It does not infer server-specific usernames or
+authentication settings from the hostname or token format.
+
+```yaml
+consumers:
+  - identity:
+      type: Git/v1
+      hostname: git.example.com
+      scheme: https
+    credentials:
+      - type: GitHTTPSCredentials/v1
+        username: repository-user
+        password: example-access-token
+```
+
+For GitHub Git over HTTPS, provide a non-empty username and a PAT as `password`. For GitLab, a PAT also goes in
+`password`; for OAuth access tokens, GitLab recommends `oauth2` as the username. These are server conventions supplied
+by the configuration, not defaults applied by OCM. Token issuance and refresh belong to the credential provider.
+
+### GitBearerCredentials/v1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/git/v1/GitBearerCredentials.schema.json" >}}
+
+Advanced option: use this only when your Git server explicitly requires `Authorization: Bearer <token>` over HTTPS.
+For HTTPS cloning with a password or access token, use `GitHTTPSCredentials/v1`.
+
+```yaml
+consumers:
+  - identity:
+      type: Git/v1
+      hostname: git.example.com
+      scheme: https
+    credentials:
+      - type: GitBearerCredentials/v1
+        token: example-bearer-token
+```
+
+### GitSSHCredentials/v1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/git/v1/GitSSHCredentials.schema.json" >}}
+
+Requires an SSH repository URL. Supply either `privateKey` (a file path) or `privateKeyPEM` (inline PEM), with an
+optional `passphrase` to decrypt the key. Supplying both key fields is an error. Without a key, OCM uses the SSH agent.
+`username` defaults to the URL user, then `git`. Host key verification uses `known_hosts` unless the caller overrides it.
+
+```yaml
+consumers:
+  - identity:
+      type: Git/v1
+      hostname: git.example.com
+      scheme: ssh
+      port: "22"
+    credentials:
+      - type: GitSSHCredentials/v1
+        privateKey: /home/user/.ssh/id_ed25519
+        passphrase: example-key-passphrase
+```
+
+To use the SSH agent, omit the key and passphrase. Set `username` only to override the SSH user.
+
+---
+
+## RSACredentials/v1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/rsa/v1/RSACredentials.schema.json" >}}
+
+### Example
+
+File-based (recommended):
+
+```yaml
+consumers:
+  - identity:
+      type: RSA/v1alpha1
+      algorithm: RSASSA-PSS
+      signature: default
+    credentials:
+      - type: RSACredentials/v1
+        privateKeyPEMFile: /path/to/private-key.pem
+        publicKeyPEMFile: /path/to/public-key.pem
+```
+
+Inline keys:
+
+```yaml
+consumers:
+  - identity:
+      type: RSA/v1alpha1
+      algorithm: RSASSA-PSS
+      signature: default
+    credentials:
+      - type: RSACredentials/v1
+        privateKeyPEM: |
+          -----BEGIN RSA PRIVATE KEY-----
+          MIIEpAIBAAKCAQEA...
+          -----END RSA PRIVATE KEY-----
+        publicKeyPEM: |
+          -----BEGIN PUBLIC KEY-----
+          MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A...
+          -----END PUBLIC KEY-----
+```
+
+### Used With
+
+[`RSA/v1alpha1`]({{< relref "credential-consumer-identities.md#rsav1alpha1" >}}) consumer identities.
+
+---
+
+## GPGCredentials/v1alpha1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/gpg/v1alpha1/GPGCredentials.schema.json" >}}
+
+### Example
+
+```yaml
+consumers:
+  - identity:
+      type: GPG/v1alpha1
+      algorithm: application/vnd.ocm.signature.gpg
+      signature: default
+    credentials:
+      - type: GPGCredentials/v1alpha1
+        privateKeyPGPFile: /path/to/private.asc
+        publicKeyPGPFile: /path/to/public.asc
+        passphrase: my-passphrase
+```
+
+### Used With
+
+`GPG/v1alpha1` consumer identities (signing and verification with OpenPGP keys).
+
+---
+
+## OIDCIdentityToken/v1alpha1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1/OIDCIdentityToken.schema.json" >}}
+
+### Example
+
+```yaml
+consumers:
+  - identity:
+      type: SigstoreSigner/v1alpha1
+      signature: default
+    credentials:
+      - type: OIDCIdentityToken/v1alpha1
+        tokenFile: /path/to/oidc-token
+```
+
+### Used With
+
+`SigstoreSigner/v1alpha1` consumer identities (Sigstore keyless signing path only; not used during verification).
+
+---
+
+## TrustedRoot/v1alpha1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1/TrustedRoot.schema.json" >}}
+
+### Example
+
+```yaml
+consumers:
+  - identity:
+      type: SigstoreVerifier/v1alpha1
+      signature: default
+    credentials:
+      - type: TrustedRoot/v1alpha1
+        trustedRootJSONFile: /path/to/trusted-root.json
+```
+
+### Used With
+
+`SigstoreVerifier/v1alpha1` consumer identities (Sigstore verification path only; not used during signing).
+
+---
+
+## TSACredentials/v1alpha1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/tsa/v1alpha1/TSACredentials.schema.json" >}}
+
+### Example
+
+URL-specific TSA roots:
+
+```yaml
+consumers:
+  - identity:
+      type: TSA/v1alpha1
+      hostname: timestamp.digicert.com
+      scheme: http
+    credentials:
+      - type: TSACredentials/v1alpha1
+        rootCertsPEMFile: /path/to/digicert-tsa-root.pem
+```
+
+Inline PEM bundle, generic fallback (matches any TSA):
+
+```yaml
+consumers:
+  - identity:
+      type: TSA/v1alpha1
+    credentials:
+      - type: TSACredentials/v1alpha1
+        rootCertsPEM: |
+          -----BEGIN CERTIFICATE-----
+          MIIDdzCCAl+gAwIBAgIEbGVnYWw...
+          -----END CERTIFICATE-----
+```
+
+{{< callout context="note" >}}
+This credential is consumed **only** by the verification path, and only for signatures that carry an RFC 3161
+timestamp. The signing path selects the TSA server via the `--tsa` / `--tsa-url` flags and does not read credentials.
+Without a matching entry, timestamp verification falls back to structural-only mode with a warning. The legacy
+[`Credentials/v1`](#directcredentialsv1) fallback additionally accepts the deprecated snake_case keys
+`root_certs_pem` and `root_certs_pem_file`.
+{{< /callout >}}
+
+### Used With
+
+[`TSA/v1alpha1`]({{< relref "credential-consumer-identities.md#tsav1alpha1" >}}) consumer identities (RFC 3161
+timestamp verification only; not used during signing).
+
+---
+
+## DirectCredentials/v1
+
+{{< schema-renderer url="/schemas/bindings/go/credentials/direct/v1/DirectCredentials.schema.json" >}}
+
+### Example
+
+OCI registry with `Credentials/v1`:
+
+```yaml
+consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: registry.example.com
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: my-user
+          password: my-password
+```
+
+RSA signing with `Credentials/v1`:
+
+```yaml
+consumers:
+  - identity:
+      type: RSA/v1alpha1
+      algorithm: RSASSA-PSS
+      signature: default
+    credentials:
+      - type: Credentials/v1
+        properties:
+          privateKeyPEMFile: /path/to/private-key.pem
+          publicKeyPEMFile: /path/to/public-key.pem
+```
+
+{{< callout context="note" >}}
+`DirectCredentials/v1` property keys use the same **camelCase** names as the corresponding typed credential fields (
+e.g., `privateKeyPEMFile`, not `private_key_pem_file`). The RSA binding additionally accepts the old `snake_case` keys (
+`private_key_pem_file`, `public_key_pem_file`) as a deprecated backward-compatibility fallback — all other bindings
+require camelCase.
+{{< /callout >}}
+
+### When to use
+
+Use `Credentials/v1` / `DirectCredentials/v1` when:
+
+- Migrating from an existing configuration and you want no changes
+- Working with consumer identity types that do not yet have a corresponding typed credential type
+
+Use the typed alternatives (`OCICredentials/v1`, `HelmHTTPCredentials/v1`, `RSACredentials/v1`) for new configurations —
+they provide field validation at configuration parse time and clearer field names.
+
+---
+
+## Plugin-Declared Types
+
+Plugins can introduce additional credential types beyond the built-ins listed here. A plugin declares its custom types
+in the `customCredentialTypes` field of its capability spec. Those types are registered at plugin discovery time and
+available in `.ocmconfig` alongside the built-ins.
+
+External plugin credential types use a reverse-domain prefix by convention (e.g.,
+`com.hashicorp.vault.VaultCredentials/v1`). This prevents name collisions between independently developed plugins.
+
+For details on how plugins declare and register credential types, see
+[Plugin System]({{< relref "docs/concepts/plugin-system.md" >}}).
+
+---
+
+## Related Documentation
+
+- [Reference: Credential Consumer Identities]({{< relref "credential-consumer-identities.md" >}}) - identity types and
+  their attributes
+- [Concept: Credential System]({{< relref "docs/concepts/credential-system.md" >}}) - how credential resolution works
+  end-to-end
+- [Concept: Understand Credential Resolution]({{< relref "docs/concepts/credential-resolution.md" >}}) - step-by-step
+  matching examples

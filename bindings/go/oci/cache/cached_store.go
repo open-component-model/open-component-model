@@ -46,9 +46,11 @@ func (r *CachedStore) Resolve(ctx context.Context, reference string) (ociImageSp
 	return r.ReferenceCache.Resolve(ctx, r.Repository, ref)
 }
 
-// Unwrap exposes the raw *remote.Repository so oci/internal/pack's global-store detection can see through the cache decorator.
+// Unwrap exposes the backing [*remotestore.RemoteStore] so oci/internal/pack's
+// global-store detection can see through the cache decorator while keeping the
+// chunked-push-capable store in the chain.
 func (r *CachedStore) Unwrap() content.Storage {
-	return r.Repository
+	return r.RemoteStore
 }
 
 // Untag invalidates the reference cache after successful remote deletion so

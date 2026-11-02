@@ -21,7 +21,7 @@ Go bindings for the Open Component Model.
 | **descriptor/v2** | Defines the main objects that compose a component version descriptor |
 | **generator** | Contains the code generators of the Go bindings, including ocmtypegen and jsonschemagen |
 | **git** | Provides access to Git repositories as OCM resources and constructor inputs |
-| **github** | Provides access to GitHub repositories as OCM resources and sources |
+| **github** | Provides access to GitHub repositories as OCM resources |
 | **gpg** | Provides OpenPGP (GPG) signing and verification for OCM component descriptors |
 | **helm** | Provides Helm chart handling for OCM, including chart repositories, constructor input, and resource access |
 | **http** | Builds HTTP clients from the http.config.ocm.software configuration type |
@@ -59,10 +59,10 @@ import (
 The [`examples/`](examples/) directory contains runnable, tested examples for the most common OCM operations:
 
 - **Blobs** — creating in-memory and filesystem blobs, copying with digest verification
-- **Descriptors** — building component descriptors with resources, sources, references, and labels
+- **Descriptors** — building component descriptors with resources, references, and labels
 - **Credentials** — resolving credentials by identity using the static resolver
 - **Signing** — generating and verifying digests, RSA signing (plain and PEM), tamper detection
-- **Repository** — creating CTF-backed repositories, storing and retrieving component versions, resources, and sources
+- **Repository** — creating CTF-backed repositories, storing and retrieving component versions and resources
 - **OCI Registry** — full round-trip against a real OCI registry using testcontainers (skipped with `-short`)
 - **Transfer** — transferring component versions between CTF repositories using the transfer graph API
 

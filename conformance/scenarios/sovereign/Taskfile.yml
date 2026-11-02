@@ -19,7 +19,7 @@ vars:
   REGISTRY_NAME: "registry"
   REGISTRY_PORT: "5001"
   REGISTRY_INTERNAL_PORT: "5000"
-  KRO_VERSION: "0.9.0"
+  KRO_VERSION: "0.9.4"
   PLATFORMS: "linux/{{ARCH}}"
   ocm: >-
     docker run --rm
@@ -41,13 +41,12 @@ tasks:
   run:
     deps:
       - check
-      - clean
-    desc: Run the conformance scenario end-to-end with kind
+      - clean:cluster
+    desc: Run the conformance scenario end-to-end with kind (reuses CTF archives in tmp/; `task clean` forces a rebuild)
     cmds:
       - task: prepare
       - task: cluster:setup
-      - task: build:product
-      - task: transfer:airgap
+      - task: airgap
       - task: cluster:import
       - task: cluster:bootstrap
 
@@ -56,11 +55,7 @@ tasks:
     vars:
       NEW_VERSION: "1.1.0"
     cmds:
-      - cmd: rm -rf {{.CTF}} {{.AIRGAP_CTF}}
-      - task: build:product
-        vars:
-          VERSION: "{{.NEW_VERSION}}"
-      - task: transfer:airgap
+      - task: airgap
         vars:
           VERSION: "{{.NEW_VERSION}}"
       - task: cluster:import
@@ -68,6 +63,20 @@ tasks:
           VERSION: "{{.NEW_VERSION}}"
       - cmd: kubectl apply -f deploy/sample-product-1.1.0.yaml
       - cmd: kubectl wait --for=condition=Ready -n sovereign-product sovereignproduct/sovereign-product --timeout=300s
+
+  airgap:
+    desc: Build, sign and transfer VERSION into the air-gap CTF, unless that CTF already contains it
+    # The air-gap CTF is the cache: keeping it (task clean:cluster) skips the image build and
+    # the upstream image pulls on the next run. Versions accumulate, so run and upgrade both hit it.
+    status:
+      - '{{.ocm}} get cv {{.AIRGAP_CTF}}//{{.NAME}}:{{.VERSION}} >/dev/null 2>&1'
+    cmds:
+      - task: build:product
+        vars:
+          VERSION: "{{.VERSION}}"
+      - task: transfer:airgap
+        vars:
+          VERSION: "{{.VERSION}}"
 
   # === BUILD TASKS ===
   build:notes:
@@ -92,7 +101,6 @@ tasks:
       - cmd: |
           {{ .ocm }} add componentversion \
             --repository {{.CTF}} \
-            --component-version-conflict-policy=replace \
             --constructor component-constructor.yaml
 
   build:postgres:
@@ -105,7 +113,6 @@ tasks:
     cmd: |
       {{ .ocm }} add componentversion \
         --repository {{.CTF}} \
-        --component-version-conflict-policy=replace \
         --constructor component-constructor.yaml
 
   build:product:
@@ -128,7 +135,6 @@ tasks:
       - cmd: |
           {{ .ocm }} add componentversion \
             --repository {{.CTF}} \
-            --component-version-conflict-policy=replace \
             --constructor component-constructor.yaml
       - task: sign
         vars:
@@ -168,7 +174,7 @@ tasks:
     env:
       OCM_CONFIG: '{{ .OCM_CREDENTIALS_CONFIG }}'
     cmds:
-      - cmd: rm -rf {{.AIRGAP_CTF}}
+      # No wipe: the air-gap CTF accumulates versions so it can serve as a cache (see task airgap).
       - task: verify
         vars:
           COMPONENT: '{{.CTF}}//{{.NAME}}:{{.VERSION}}'
@@ -213,7 +219,8 @@ tasks:
                 kubeletExtraArgs:
                   node-labels: "ingress-ready=true"
             extraPortMappings:
-            - containerPort: 80
+            # sovereign-notes NodePort (set in the product RGD), reachable as http://localhost:8080
+            - containerPort: 30080
               hostPort: 8080
               protocol: TCP
             - containerPort: 443
@@ -284,6 +291,13 @@ tasks:
       - for: { var: PRELOAD_IMAGES }
         cmd: kind load image-archive {{.ITEM}} --name {{.CLUSTER_NAME}}
 
+  cluster:preload:kro:
+    desc: Pre-load kro controller image into kind cluster
+    cmd: |
+      docker pull --platform {{.PLATFORMS}} registry.k8s.io/kro/kro:v{{.KRO_VERSION}}
+      docker save registry.k8s.io/kro/kro:v{{.KRO_VERSION}} | \
+        docker exec -i {{.CLUSTER_NAME}}-control-plane ctr --namespace=k8s.io images import -
+
   cluster:setup:
     desc: Set up air-gapped kind cluster with registry, kro, and flux
     cmds:
@@ -291,6 +305,7 @@ tasks:
       - task: cluster:create
       - task: cluster:registry:configure
       - task: cluster:preload
+      - task: cluster:preload:kro
       - task: cluster:install:controllers
 
   cluster:import:
@@ -305,8 +320,8 @@ tasks:
   cluster:bootstrap:
     desc: Bootstrap Components and Wait for Product to be Ready
     cmds:
-    - cmd: kubectl apply -f deploy/rbac.yaml
     - cmd: kubectl apply -f deploy/namespace.yaml
+    - cmd: kubectl apply -f deploy/rbac.yaml
     # The controller takes verification from the central OCM configuration: the signing entry asks for
     # the "default" signature to be verified, the credentials entry supplies the key to check it with.
     - cmd: |
@@ -332,7 +347,7 @@ tasks:
         kubectl -n sovereign-product create secret generic acme-signing-key \
         --from-file=.ocmconfig=tmp/keys/verify.ocmconfig --dry-run=client -o yaml | kubectl apply -f -
     - cmd: kubectl apply -f deploy/bootstrap.yaml
-    - cmd: kubectl wait --for=condition=Ready deployer/sovereign-product-deployer --timeout=300s
+    - cmd: kubectl wait --for=condition=Ready -n sovereign-product namespaceddeployer/sovereign-product-deployer --timeout=300s
     - cmd: kubectl wait --for=condition=Ready ResourceGraphDefinition/sovereign-product --timeout=300s
     - cmd: kubectl apply -f deploy/sample-product-1.0.0.yaml
     - cmd: kubectl wait --for=condition=Ready -n sovereign-product sovereignproduct/sovereign-product --timeout=300s
@@ -352,23 +367,26 @@ tasks:
     silent: true
     cmds:
       - cmd: |
-          trap 'kill $PF_PID 2>/dev/null' EXIT
-          kubectl -n sovereign-product port-forward svc/sovereign-notes 8085:80 &>/dev/null &
-          PF_PID=$!
-          until curl -sf http://localhost:8085/readyz &>/dev/null; do sleep 0.5; done
+          # Through the sovereign-notes NodePort, which kind maps to localhost:8080. Unlike a port-forward,
+          # this goes through the Service and keeps working when pods are replaced.
+          for i in $(seq 1 60); do curl -sf --max-time 2 http://localhost:8080/readyz &>/dev/null && break; sleep 1; done
           for ep in readyz notes; do
-            curl -sf --max-time 5 "http://localhost:8085/${ep}" > /dev/null \
+            curl -sf --max-time 5 "http://localhost:8080/${ep}" > /dev/null \
               && echo "✅ /${ep}" || { echo "❌ /${ep}"; exit 1; }
           done
 
   # === CLEANUP TASKS ===
   clean:
-    desc: Clean up generated data
+    desc: Remove the cluster, registry and all generated data, including the CTF archives and signing keys
     cmds:
+      - task: clean:cluster
       - rm -rf {{ .OCM_TMPDIR }}
-      - rm -rf tmp/keys
+
+  clean:cluster:
+    desc: Remove the kind cluster and registry but keep tmp/ (CTF archives, signing keys) for a faster re-run
+    cmds:
       - kind delete cluster --name {{.CLUSTER_NAME}} || true
-      - docker rm -f registry || true
+      - docker rm -f {{.REGISTRY_NAME}} || true
 
   # === UTILITY TASKS ===
   prepare:credentials:
@@ -426,7 +444,7 @@ tasks:
       - kubectl get components  -A -oyaml
       - echo "=== Resources ==="
       - kubectl get resources -A -oyaml
-      - echo "=== Deployers ==="
-      - kubectl get deployers -A -oyaml
+      - echo "=== NamespacedDeployers ==="
+      - kubectl get namespaceddeployers -A -oyaml
       - echo "=== Kubernetes Native Objects (Product & Controller) ==="
       - kubectl cluster-info dump --namespaces sovereign-product

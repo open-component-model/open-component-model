@@ -283,7 +283,6 @@ jobs:
       cli_slim_image_digest: ${{ needs.build_and_test.outputs.cli_slim_image_digest }}
       controller_image_digest: ${{ needs.build_and_test.outputs.controller_image_digest }}
       controller_chart_digest: ${{ needs.build_and_test.outputs.controller_chart_digest }}
-      conflict_policy: replace
 
   # Announces the release candidate to Zulip. Same dispatch pattern as the final
   # notification in PHASE 2; fires once the RC pre-release and its published
@@ -712,7 +711,6 @@ jobs:
       cli_slim_image_digest: ${{ needs.build_and_test.outputs.cli_slim_image_digest }}
       controller_image_digest: ${{ needs.build_and_test.outputs.controller_image_digest }}
       controller_chart_digest: ${{ needs.promote_and_release_final.outputs.final_chart_digest }}
-      conflict_policy: replace
 
   # === Website version release ===
   # Dispatches website-release-pr.yml on main via gh workflow run so the

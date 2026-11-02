@@ -65,6 +65,12 @@ func cloneTransports(rt nethttp.RoundTripper, apply func(*nethttp.Transport)) (n
 			return nil, err
 		}
 		return &insecureWarnTransport{base: b}, nil
+	case *replayableBodyTransport:
+		b, err := cloneTransports(t.base, apply)
+		if err != nil {
+			return nil, err
+		}
+		return &replayableBodyTransport{base: b}, nil
 	case *userAgentTransport:
 		b, err := cloneTransports(t.base, apply)
 		if err != nil {

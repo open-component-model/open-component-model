@@ -296,6 +296,12 @@ jobs:
           awk -v p="$pct" -v f="$floor" 'BEGIN{exit (p+0 < f+0)}' \
             || { echo "::error::unit coverage ${pct}% is below the ${floor}% floor"; exit 1; }
 
+  govulncheck:
+    name: "govulncheck"
+    needs: changes
+    if: ${{ needs.changes.outputs.run_go == 'true' }}
+    uses: $/.github/workflows/govulncheck.yml
+
   generate:
     runs-on: ubuntu-26.04-arm
     name: "Code Generation"
@@ -339,6 +345,7 @@ jobs:
       - run_unit_tests
       - run_integration_tests
       - golangci_lint
+      - govulncheck
       - dependency_list_verify
     if: ${{ failure() }}
     steps:

@@ -1,0 +1,173 @@
+---
+title: "Resolver"
+description: "Complete reference for OCM resolver configuration: schema, supported repository types, and component name pattern-to-repository mappings."
+icon: "🔍"
+weight: 6
+toc: true
+aliases:
+  - /docs/reference/resolver-configuration/
+---
+
+This page is the technical reference for OCM resolver configuration. For a high-level introduction, see
+[OCM Resolvers]({{< relref "docs/concepts/resolvers.md" >}}).
+
+## Configuration File
+
+Resolvers are configured in the OCM configuration file. By default, the CLI searches for configuration in
+`$HOME/.ocmconfig`. You can also specify a configuration file explicitly with the `--config` flag.
+
+{{<callout context="tip">}}
+For more information about the OCM configuration file,
+see [.ocmconfig documentation](https://github.com/open-component-model/ocm/blob/main/docs/reference/ocm_configfile.md).
+{{</callout>}}
+
+The resolver configuration uses the type `resolvers.config.ocm.software/v1alpha1` inside a generic OCM configuration
+type:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: resolvers.config.ocm.software/v1alpha1
+    resolvers:
+      - repository:
+          type: OCIRepository/v1
+          baseUrl: ghcr.io
+          subPath: my-org/components
+        componentNamePattern: "example.com/services/*"
+        versionConstraint: ">=1.0.0 <2.0.0"
+```
+
+## Schema
+
+{{< schema-renderer url="/schemas/bindings/go/configuration/resolvers/v1alpha1/Config.schema.json" >}}
+
+## Repository Types
+
+The `repository` field accepts any OCM repository specification. The most common types are:
+
+{{< tabs >}}
+{{< tab "OCI Registry" >}}
+
+```yaml
+repository:
+  type: OCIRepository/v1
+  baseUrl: ghcr.io
+  subPath: my-org/components
+```
+
+| Field     | Required | Description                                                          |
+|-----------|----------|----------------------------------------------------------------------|
+| `type`    | Yes      | Repository type. Must be `OCIRepository/v1`.                         |
+| `baseUrl` | Yes      | Registry host and optional port (e.g., `ghcr.io`, `localhost:5000`). |
+| `subPath` | No       | Repository prefix path within the registry.                          |
+
+{{< /tab >}}
+{{< tab "CTF (File-based)" >}}
+
+```yaml
+repository:
+  type: CommonTransportFormat/v1
+  filePath: /path/to/ctf-archive
+```
+
+| Field        | Required | Description                                                                                      |
+|--------------|----------|--------------------------------------------------------------------------------------------------|
+| `type`       | Yes      | Repository type. Accepted values include `CommonTransportFormat/v1` and the short form `CTF/v1`. |
+| `filePath`   | Yes      | Path to the CTF archive file or directory.                                                       |
+| `accessMode` | No       | Access mode: `readonly`, `readwrite`, or `create`.                                               |
+
+{{< /tab >}}
+{{< /tabs >}}
+
+## Component Name Patterns
+
+Each resolver entry can include a `componentNamePattern` field that uses **glob patterns** to filter for certain
+component names.
+Only components matching the pattern will be routed to that repository.
+
+**Supported glob patterns:**
+
+| Pattern                  | Matches                                                              |
+|--------------------------|----------------------------------------------------------------------|
+| `example.com/services/*` | Any component whose name starts with `example.com/services/`         |
+| `example.com/core/**`    | Any component whose name starts with `example.com/core/`             |
+| `*`                      | All components (wildcard catch-all)                                  |
+
+**Pattern syntax:**
+
+- `*` — Matches any sequence of characters, including `/`
+- `**` — Equivalent to `*`; no path-separator semantics (the pattern compiler has no separator configured)
+- `?` — Matches any single character
+- `[abc]` — Matches any character in the set (a, b, or c)
+- `[a-z]` — Matches any character in the range
+
+{{<callout context="note">}}
+For more information on the supported glob syntax, see the [glob package documentation](https://github.com/gobwas/glob).
+{{</callout>}}
+
+## Version Constraints
+
+Each resolver entry can include a `versionConstraint` field that uses **semver constraints** to filter for certain
+component versions.
+Only components with versions satisfying the constraint will be routed to that repository.
+
+**Supported constraint syntax:**
+
+| Constraint       | Matches                                                       |
+|------------------|---------------------------------------------------------------|
+| `>=1.0.0 <2.0.0` | Versions from 1.0.0 (inclusive) up to but not including 2.0.0 |
+| `^1.2.0`         | Compatible with 1.2.0 (>=1.2.0 <2.0.0)                        |
+| `~1.2.0`         | Approximately 1.2.0 (>=1.2.0 <1.3.0)                          |
+| `1.2.3`          | Exactly version 1.2.3                                         |
+
+Multiple space-separated constraints are combined with AND logic (e.g., `>=1.0.0 <2.0.0` means both must be satisfied).
+
+{{<callout context="note">}}
+For more information on the supported semver constraint syntax, see
+the [Masterminds/semver documentation](https://github.com/Masterminds/semver#checking-version-constraints).
+{{</callout>}}
+
+## Validation
+
+Both `componentNamePattern` and `versionConstraint` are validated when the configuration is loaded. If a resolver entry
+contains an invalid glob pattern or an unparseable semver constraint, the configuration will fail to load with an error
+describing the offending entry.
+
+## Backward Compatibility
+
+The `versionConstraint` field is optional. Resolver entries that omit it continue to work exactly as before — they match
+any component version (or no version at all). Existing configurations that do not use `versionConstraint` require no
+changes.
+
+## Resolver Evaluation Order
+
+Resolvers are evaluated **in the order they are defined**.
+The first matching resolver wins. Place more specific patterns before broader ones.
+
+There is no fallback to a later resolver. Once a resolver matches, its repository is the only one used. If the
+component version does not exist in that repository, the lookup fails instead of continuing with the next matching
+resolver. This differs from the deprecated fallback resolvers, which tried every matching entry in turn.
+
+This is especially important when mixing constrained and unconstrained resolvers for the same component pattern.
+Resolvers with a `versionConstraint` should be listed **before** unconstrained catch-all entries, otherwise the
+catch-all matches first and the version constraint is never evaluated:
+
+```yaml
+resolvers:
+  # constrained entries first
+  - repository: ...
+    componentNamePattern: "my-org/*"
+    versionConstraint: ">=2.0.0"
+  # unconstrained catch-all last
+  - repository: ...
+    componentNamePattern: "my-org/*"
+```
+
+## Related Documentation
+
+- [Concept: OCM Resolvers]({{< relref "docs/concepts/resolvers.md" >}}) - High-level introduction to resolvers
+- [Guides: Add Component References]({{< relref "docs/guides/pack/add-component-references.md" >}}) - Hands-on walkthrough for
+  declaring component references and setting up resolvers for shared and multi-registry setups
+- [Changelog: Migrate from Deprecated Resolvers]({{< relref "docs/changelog/migrate-legacy-resolvers.md" >}}) - Replace
+  deprecated fallback
+  resolvers with glob-based resolvers

@@ -41,8 +41,29 @@
                 "concurrency": {
                     "type": "object",
                     "properties": {
+                        "component": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "deployer": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "discovery": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "replication": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
+                        "repository": {
+                            "type": "integer",
+                            "minimum": 1
+                        },
                         "resource": {
-                            "type": "integer"
+                            "type": "integer",
+                            "minimum": 1
                         }
                     }
                 },
@@ -185,6 +206,116 @@
                         }
                     }
                 },
+                "rateLimiter": {
+                    "type": "object",
+                    "properties": {
+                        "component": {
+                            "type": "object",
+                            "properties": {
+                                "burst": {
+                                    "type": "integer",
+                                    "minimum": 1
+                                },
+                                "qps": {
+                                    "type": [
+                                        "number",
+                                        "string"
+                                    ]
+                                }
+                            }
+                        },
+                        "deployer": {
+                            "type": "object",
+                            "properties": {
+                                "burst": {
+                                    "type": "integer",
+                                    "minimum": 1
+                                },
+                                "qps": {
+                                    "type": [
+                                        "number",
+                                        "string"
+                                    ]
+                                }
+                            }
+                        },
+                        "discovery": {
+                            "type": "object",
+                            "properties": {
+                                "burst": {
+                                    "type": "integer",
+                                    "minimum": 1
+                                },
+                                "qps": {
+                                    "type": [
+                                        "number",
+                                        "string"
+                                    ]
+                                }
+                            }
+                        },
+                        "namespacedDeployer": {
+                            "type": "object",
+                            "properties": {
+                                "burst": {
+                                    "type": "integer",
+                                    "minimum": 1
+                                },
+                                "qps": {
+                                    "type": [
+                                        "number",
+                                        "string"
+                                    ]
+                                }
+                            }
+                        },
+                        "replication": {
+                            "type": "object",
+                            "properties": {
+                                "burst": {
+                                    "type": "integer",
+                                    "minimum": 1
+                                },
+                                "qps": {
+                                    "type": [
+                                        "number",
+                                        "string"
+                                    ]
+                                }
+                            }
+                        },
+                        "repository": {
+                            "type": "object",
+                            "properties": {
+                                "burst": {
+                                    "type": "integer",
+                                    "minimum": 1
+                                },
+                                "qps": {
+                                    "type": [
+                                        "number",
+                                        "string"
+                                    ]
+                                }
+                            }
+                        },
+                        "resource": {
+                            "type": "object",
+                            "properties": {
+                                "burst": {
+                                    "type": "integer",
+                                    "minimum": 1
+                                },
+                                "qps": {
+                                    "type": [
+                                        "number",
+                                        "string"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
                 "readinessProbe": {
                     "type": "object",
                     "properties": {
@@ -204,23 +335,6 @@
                 },
                 "replicas": {
                     "type": "integer"
-                },
-                "resolver": {
-                    "type": "object",
-                    "properties": {
-                        "cacheTTL": {
-                            "type": "integer"
-                        },
-                        "subscriberBufferSize": {
-                            "type": "integer"
-                        },
-                        "workerCount": {
-                            "type": "integer"
-                        },
-                        "workerQueueLength": {
-                            "type": "integer"
-                        }
-                    }
                 },
                 "resources": {
                     "type": "object",

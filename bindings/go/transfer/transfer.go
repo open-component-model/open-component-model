@@ -23,7 +23,8 @@ import (
 // the first uploader whose match selects a resource handles it, and a selected
 // uploader that cannot handle the resource fails the build. A resource no uploader
 // selects follows the baseline: local blobs are copied as local blobs, everything
-// else stays by reference.
+// else stays by reference. How a resource no uploader selects is reported is
+// decided by cfg.UnmatchedResourcePolicy (Ignore, Warn by default, Fail).
 //
 // Each [Mapping] pairs source components with a target repository and a
 // resolver, enabling N:M routing where different sources feed different
@@ -58,6 +59,7 @@ func BuildGraphDefinition(
 	slog.DebugContext(ctx, "building transfer graph definition",
 		"roots", len(roots),
 		"recursive", resolved.Recursive,
+		"unmatchedResourcePolicy", resolved.UnmatchedResourcePolicy.Normalize(),
 		"uploaders", len(uploaders))
 
 	return internal.BuildGraphDefinition(ctx, roots, resolved, uploaders)

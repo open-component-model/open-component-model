@@ -1,10 +1,11 @@
 ---
 title: "Input and Access Types"
-description: "Reference for input and access types used to add resources to a component version."
-weight: 4
+description: "Reference for input and access types used to add resources to a component version: supported types, fields, and configuration examples."
+weight: 3
 toc: true
 aliases:
   - /docs/guides/input_and_access/
+  - /docs/reference/input-and-access-types/
 ---
 
 ## Overview
@@ -73,7 +74,7 @@ resources:
     mediaType: application/vnd.ocm.software.oci.layout.v1+tar
 ```
 
-See the [Working with OCI]({{< relref "docs/tutorials/working-with-oci" >}}) tutorial for a complete walkthrough.
+See the [Working with OCI]({{< relref "docs/guides/pack/add-oci-artifacts.md" >}}) tutorial for a complete walkthrough.
 
 ### `Helm/v1`
 
@@ -185,7 +186,7 @@ resources:
     body: eyJmb3JtYXQiOiJqc29uIn0=
 ```
 
-See [Tutorial: Work with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md" >}}) for media type
+See [Tutorial: Work with HTTP Resources]({{< relref "docs/guides/pack/add-http-resources.md" >}}) for media type
 resolution, redirects, download tuning, and credential configuration.
 
 #### Verifying a pinned digest {#wget-pinned-digest}
@@ -215,7 +216,7 @@ HTTP downloads can additionally be verified against a source-side checksum
 advertised in response headers, steered centrally by the
 `checksum.http.config.ocm.software/v1alpha1` configuration (the wget spec itself
 carries no checksum field). See
-[HTTP Checksum Configuration]({{< relref "checksum-http-configuration.md" >}})
+[HTTP Checksum Configuration]({{< relref "http-checksum.md" >}})
 for the schema, checksum modes, and the access-side pin-from-source fast path.
 
 ### `S3/v2` {#s3v2-input}
@@ -347,7 +348,7 @@ resources:
 References content stored alongside the component descriptor in the same repository. Legacy alias: `localBlob`.
 Typically created automatically when using input types or when transferring with a local blob uploader configuration.
 
-When stored in an OCI registry, local blobs with OCI-native media types (e.g. `application/vnd.oci.image.manifest.v1+json`, `application/vnd.oci.image.index.v1+json`) are mapped to native OCI manifests and can be accessed directly by digest using standard OCI tools. The `globalAccess` field provides the native image reference for direct access. See the [Working with OCI]({{< relref "docs/tutorials/working-with-oci" >}}) tutorial for details.
+When stored in an OCI registry, local blobs with OCI-native media types (e.g. `application/vnd.oci.image.manifest.v1+json`, `application/vnd.oci.image.index.v1+json`) are mapped to native OCI manifests and can be accessed directly by digest using standard OCI tools. The `globalAccess` field provides the native image reference for direct access. See the [Working with OCI]({{< relref "docs/guides/pack/add-oci-artifacts.md" >}}) tutorial for details.
 
 {{< schema-renderer url="/schemas/bindings/go/access/localblob/v1/LocalBlob.schema.json" >}}
 
@@ -408,7 +409,7 @@ Semantics:
 
 This type is **never emitted on write** by OCM v2. It is read like a local resource, and on transfer it is copied
 **by value** into the target (becoming a `LocalBlob/v1`), or **re-uploaded as an OCI image** when an
-[OCI uploader]({{< relref "transfer-configuration/oci-uploader" >}}) is configured.
+[OCI uploader]({{< relref "configuration/transfer-configuration/oci-uploader" >}}) is configured.
 
 **Example**
 
@@ -453,7 +454,7 @@ only supports HTTP/HTTPS-based chart repositories.
 
 {{< callout context="caution" >}}
 `GitHub/v1` is **deprecated** and will be removed in a future release. Use
-[`Git/v1`]({{< relref "docs/reference/input-and-access-types.md#gitv1-access" >}}) for new resources and sources. `ocm add componentversion` prints a
+[`Git/v1`]({{< relref "docs/reference/input-and-access-types.md#gitv1-access" >}}) for new resources. `ocm add componentversion` prints a
 warning when a constructor uses `GitHub/v1`. Existing component versions keep
 working, and a published resource must keep its type: see
 [`Git/v1` or `GitHub/v1`?]({{< relref "docs/reference/input-and-access-types.md#gitv1-or-githubv1" >}}).
@@ -466,8 +467,7 @@ REST API. Also usable unversioned as `GitHub`. Legacy aliases: `github`, `github
 {{< schema-renderer url="/schemas/bindings/go/access/github/v1/GitHub.schema.json" >}}
 
 At least one of `commit` or `ref` must be set. A resource may be authored with only a
-`ref`; its `commit` is pinned later during digest processing. A source is never pinned, so
-give it a `commit`.
+`ref`; its `commit` is pinned later during digest processing.
 
 **Example**
 
@@ -483,8 +483,9 @@ resources:
       commit: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2
 ```
 
-The same access works under `sources:`, where it stays a remote reference: sources carry no
-digest and no copy mode embeds them.
+Do not declare this access under `sources:`. Sources are deprecated: they carry no digest, so
+their content is not protected by the component version digest or a signature. Use a resource; see
+[Migrate from Sources to Resources]({{< relref "docs/changelog/migrate-from-sources.md" >}}).
 
 {{< callout context="note" >}}
 Any `repoUrl` host other than `github.com` is treated as GitHub Enterprise, with the REST API
@@ -506,7 +507,7 @@ Bitbucket and self-hosted servers, over HTTPS or SSH.
 {{< schema-renderer url="/schemas/bindings/go/access/git/v1/Git.schema.json" >}}
 
 At least one of `commit` or `ref` must be set. A resource may have only a `ref`. OCM adds the `commit` during digest
-processing. A source never goes through digest processing, so set its `commit` yourself.
+processing.
 
 **Example**
 
@@ -523,8 +524,9 @@ resources:
       commit: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2
 ```
 
-The same access works under `sources:`. A source always stays a remote reference. It has no digest, and a transfer
-never copies it into the component version.
+Do not declare this access under `sources:`. Sources are deprecated: they carry no digest, so their content is not
+protected by the component version digest or a signature. Use a resource; see
+[Migrate from Sources to Resources]({{< relref "docs/changelog/migrate-from-sources.md" >}}).
 
 #### Supported URL forms {#git-url-forms}
 
@@ -599,7 +601,7 @@ is downloaded, when its digest is computed, and when the component version is tr
 
 Because the content is not under your control, the expected digest can be pinned on the resource itself, using the
 `digest` field alongside `access` rather than inside it. It is then verified on every fetch. See
-[Tutorial: Work with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md#pin-a-digest" >}}).
+[Tutorial: Work with HTTP Resources]({{< relref "docs/guides/pack/add-http-resources.md#pin-a-digest" >}}).
 
 `Wget/v1` is the canonical type name. OCM also accepts `wget/v1`, `Wget`, `wget`, and the additional aliases
 `HTTP/v1`, `HTTP`, `http/v1`, and `http`. The fields are identical to those of the
@@ -638,17 +640,17 @@ location. Without a matching uploader, a `Wget/v1` access stays by reference in 
 local blob uploader downloads the content and stores it as a
 [`LocalBlob/v1`]({{< relref "input-and-access-types.md" >}}#localblobv1). An HTTP, Artifactory
 or Nexus uploader uploads the content to its configured target and publishes a new remote
-access there (see [Transfer Configuration]({{< relref "docs/reference/transfer-configuration/_index.md" >}})).
+access there (see [Transfer Configuration]({{< relref "docs/reference/configuration/transfer-configuration/_index.md" >}})).
 {{< /callout >}}
 
 The `checksum.http.config.ocm.software/v1alpha1` configuration can pin the
 access digest from source-advertised response headers via a single HEAD, with
 no body download. See
-[HTTP Checksum Configuration]({{< relref "checksum-http-configuration.md" >}}).
+[HTTP Checksum Configuration]({{< relref "http-checksum.md" >}}).
 
 For guidance on choosing between the input and the access type, and for media type resolution, redirects, download
 tuning, and credential configuration, see
-[How-To: Add Resources from HTTP URLs]({{< relref "docs/how-to/add-resources-from-http-urls.md" >}}).
+[How-To: Add Resources from HTTP URLs]({{< relref "docs/guides/pack/add-http-resources.md" >}}).
 
 ### `S3/v2` {#s3v2-access}
 

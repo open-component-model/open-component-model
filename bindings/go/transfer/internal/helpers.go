@@ -97,6 +97,71 @@ func chooseAddLocalResourceType(repo runtime.Typed) (runtime.Type, error) {
 	}
 }
 
+// isOCIRepository reports whether repo is an OCI registry (true) or a CTF (false).
+func isOCIRepository(repo runtime.Typed) (bool, error) {
+	concreteRepo, err := convertToConcreteRepo(repo)
+	if err != nil {
+		return false, fmt.Errorf("converting repository spec: %w", err)
+	}
+	switch concreteRepo.(type) {
+	case *oci.Repository:
+		return true, nil
+	case *ctfv1.Repository:
+		return false, nil
+	default:
+		return false, fmt.Errorf("unsupported repository type %T", concreteRepo)
+	}
+}
+
+// chooseTransferLocalBlobType returns the transformation that streams a local blob from a
+// component version in the from repository into the to repository.
+func chooseTransferLocalBlobType(from, to runtime.Typed) (runtime.Type, error) {
+	fromOCI, err := isOCIRepository(from)
+	if err != nil {
+		return runtime.Type{}, fmt.Errorf("source repository: %w", err)
+	}
+	toOCI, err := isOCIRepository(to)
+	if err != nil {
+		return runtime.Type{}, fmt.Errorf("target repository: %w", err)
+	}
+	switch {
+	case fromOCI && toOCI:
+		return ociv1alpha1.TransferOCILocalBlobToOCILocalBlobV1alpha1, nil
+	case fromOCI:
+		return ociv1alpha1.TransferOCILocalBlobToCTFLocalBlobV1alpha1, nil
+	case toOCI:
+		return ociv1alpha1.TransferCTFLocalBlobToOCILocalBlobV1alpha1, nil
+	default:
+		return ociv1alpha1.TransferCTFLocalBlobToCTFLocalBlobV1alpha1, nil
+	}
+}
+
+// chooseTransferLocalBlobToOCIArtifactType returns the transformation that streams a local
+// blob from a component version in the from repository into a separate OCI artifact.
+func chooseTransferLocalBlobToOCIArtifactType(from runtime.Typed) (runtime.Type, error) {
+	fromOCI, err := isOCIRepository(from)
+	if err != nil {
+		return runtime.Type{}, fmt.Errorf("source repository: %w", err)
+	}
+	if fromOCI {
+		return ociv1alpha1.TransferOCILocalBlobToOCIArtifactV1alpha1, nil
+	}
+	return ociv1alpha1.TransferCTFLocalBlobToOCIArtifactV1alpha1, nil
+}
+
+// chooseTransferOCIArtifactToLocalBlobType returns the transformation that streams an OCI
+// artifact into a component version in the to repository as a local blob.
+func chooseTransferOCIArtifactToLocalBlobType(to runtime.Typed) (runtime.Type, error) {
+	toOCI, err := isOCIRepository(to)
+	if err != nil {
+		return runtime.Type{}, fmt.Errorf("target repository: %w", err)
+	}
+	if toOCI {
+		return ociv1alpha1.TransferOCIArtifactToOCILocalBlobV1alpha1, nil
+	}
+	return ociv1alpha1.TransferOCIArtifactToCTFLocalBlobV1alpha1, nil
+}
+
 func getReferenceName(imageReference string) (string, error) {
 	if imageReference == "" {
 		return "", fmt.Errorf("cannot get reference name from empty image reference")

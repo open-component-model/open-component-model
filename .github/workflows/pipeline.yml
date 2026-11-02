@@ -30,9 +30,12 @@ on:
       - '.github/workflows/kubernetes-controller.yml'
       - '.github/workflows/conformance.yml'
       - '.github/workflows/e2e.yml'
+      - '.github/workflows/image-scan.yml'
+      - '.github/workflows/govulncheck.yml'
       - '.github/workflows/pipeline.yml'
       - 'Taskfile.yml'
       - '.env'
+      - '.github/stig/**'
   workflow_call:
     inputs:
       ref:
@@ -134,11 +137,25 @@ jobs:
       cli_artifact: ${{ needs.build_cli.outputs.artifact_name }}
   # === end ===
 
+  # Image scan of the CLI and controller images built above, per architecture:
+  # vulnerabilities (Trivy with govulncheck's OpenVEX), the DISA GPOS SRG as
+  # tailored in .github/stig, and the CIS Docker Benchmark. Gates publish.
+  image_scan:
+    name: Image scan
+    needs: [build_cli, build_controller]
+    uses: $/.github/workflows/image-scan.yml
+    permissions:
+      contents: read
+    with:
+      ref: ${{ inputs.ref }}
+      cli_artifact: ${{ needs.build_cli.outputs.artifact_name }}
+      controller_artifact: ${{ needs.build_controller.outputs.artifact_name }}
+
   # === New this part is a copy from cli.yml::build::branch-check + kubernetes-controller.yml::build::branch-check ===
   # Changes include things for the modified tag regex.
   decide_publish:
     name: Decide Publish
-    needs: [conformance, e2e]
+    needs: [conformance, e2e, image_scan]
     runs-on: ubuntu-26.04-arm
     outputs:
       publish: ${{ steps.check.outputs.publish }}
@@ -166,7 +183,7 @@ jobs:
   # === This is from cli.yml::publish verbatim a date on conformance ===
   publish_cli:
     name: Publish CLI
-    needs: [build_cli, decide_publish]
+    needs: [build_cli, decide_publish, image_scan]
     if: ${{ needs.decide_publish.outputs.publish == 'true' }}
     runs-on: ubuntu-26.04-arm
     outputs:
@@ -263,7 +280,7 @@ jobs:
   # === Same as above but for Kubernetes publish. ===
   publish_controller:
     name: Publish Controller
-    needs: [build_controller, decide_publish]
+    needs: [build_controller, decide_publish, image_scan]
     if: ${{ needs.decide_publish.outputs.publish == 'true' }}
     runs-on: ubuntu-26.04-arm
     outputs:

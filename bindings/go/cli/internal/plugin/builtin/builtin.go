@@ -63,7 +63,6 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		manager.DigestProcessorRegistry,
 		manager.CredentialTypeRegistry,
 		httpConfig,
-		filesystemConfig,
 		checksumHTTPConfig); err != nil {
 		return fmt.Errorf("could not register wget inbuilt plugin: %w", err)
 	}
@@ -98,7 +97,7 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		tempFolder = *filesystemConfig.TempFolder
 	}
 	if err := manager.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(
-		helmdigest.NewDigestProcessor(tempFolder),
+		helmdigest.NewDigestProcessor(tempFolder, helmdigest.WithHTTPConfig(httpConfig)),
 	); err != nil {
 		return fmt.Errorf("could not register helm digest processor plugin: %w", err)
 	}

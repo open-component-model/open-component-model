@@ -1,14 +1,14 @@
 // Step 2: Component Descriptors
 //
 // What you'll learn:
-//   - Building a component descriptor with resources, sources, and references
+//   - Building a component descriptor with resources and references
 //   - Using ExtraIdentity to distinguish platform-specific resources
 //   - Adding labels to components and resources
 //   - Creating and inspecting inter-component references
 //
 // A component descriptor is the metadata heart of OCM. It describes what a
-// component version contains (resources), where it came from (sources), and
-// what it depends on (references). In the next steps you'll store these
+// component version contains (resources) and what it depends on (references).
+// In the next steps you'll store these
 // descriptors in repositories and sign them — but first you need to know how
 // to build one.
 
@@ -25,7 +25,7 @@ import (
 )
 
 // TestExample_CreateDescriptor demonstrates building a complete component
-// descriptor with resources, sources, and references.
+// descriptor with resources and references.
 func TestExample_CreateDescriptor(t *testing.T) {
 	r := require.New(t)
 
@@ -48,14 +48,6 @@ func TestExample_CreateDescriptor(t *testing.T) {
 					Relation: descriptor.ExternalRelation,
 				},
 			},
-			Sources: []descriptor.Source{
-				{
-					ElementMeta: descriptor.ElementMeta{
-						ObjectMeta: descriptor.ObjectMeta{Name: "source-repo", Version: "1.0.0"},
-					},
-					Type: "git",
-				},
-			},
 			References: []descriptor.Reference{
 				{
 					ElementMeta: descriptor.ElementMeta{
@@ -71,7 +63,6 @@ func TestExample_CreateDescriptor(t *testing.T) {
 	r.Equal("1.0.0", desc.Component.Version)
 	r.Equal("acme.org", desc.Component.Provider.Name)
 	r.Len(desc.Component.Resources, 1)
-	r.Len(desc.Component.Sources, 1)
 	r.Len(desc.Component.References, 1)
 }
 

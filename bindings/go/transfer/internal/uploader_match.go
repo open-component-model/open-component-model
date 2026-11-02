@@ -11,6 +11,7 @@ import (
 	"cel.dev/cel-go/common/types/ref"
 	"cel.dev/cel-go/ext"
 
+	"ocm.software/open-component-model/bindings/go/ctf"
 	ocifunctions "ocm.software/open-component-model/bindings/go/oci/cel/functions"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -23,17 +24,40 @@ const (
 	// literal holding the target's type and its location fields.
 	targetAlias = "target"
 
-	isOCIManifestFunctionName = "isOCIManifest"
-	isTypeFunctionName        = "isType"
+	isArtifactSetMediaTypeFunctionName = "isArtifactSetMediaType"
+	isOCIManifestFunctionName          = "isOCIManifest"
+	isTypeFunctionName                 = "isType"
 )
 
 // EnvOptions are the CEL functions the transfer graph offers beyond the graph's base
 // environment: toOCI() exactly as the controller offers it (OCI image accesses), toGit()
 // (Git origins, see gitOrigin), the string extensions (split, join, ...) used to compose
-// image references, and
-// isOCIManifest() and <access>.isType() for uploader match expressions.
+// image references, isArtifactSetMediaType(), isOCIManifest(), and
+// <access>.isType() for uploader match expressions.
 func EnvOptions() []cel.EnvOption {
-	return []cel.EnvOption{ocifunctions.ToOCI(), toGitFunction(), ext.Strings(), isOCIManifestFunction(), isTypeFunction()}
+	return []cel.EnvOption{
+		ocifunctions.ToOCI(),
+		toGitFunction(),
+		ext.Strings(),
+		isArtifactSetMediaTypeFunction(),
+		isOCIManifestFunction(),
+		isTypeFunction(),
+	}
+}
+
+// isArtifactSetMediaTypeFunction declares isArtifactSetMediaType(string) bool.
+func isArtifactSetMediaTypeFunction() cel.EnvOption {
+	return cel.Function(isArtifactSetMediaTypeFunctionName,
+		cel.Overload(isArtifactSetMediaTypeFunctionName+"_string", []*cel.Type{cel.StringType}, cel.BoolType,
+			cel.UnaryBinding(func(v ref.Val) ref.Val {
+				s, ok := v.Value().(string)
+				if !ok {
+					return types.NewErr("%s() expects a string, got %T", isArtifactSetMediaTypeFunctionName, v.Value())
+				}
+				return types.Bool(ctf.IsArtifactSetMediaType(s))
+			}),
+		),
+	)
 }
 
 // isOCIManifestFunction declares isOCIManifest(string) bool: whether a media type is an

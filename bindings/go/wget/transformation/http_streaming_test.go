@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -234,6 +235,50 @@ func TestHTTPStreamingTransformer_UploadErrorRedactsQueryToken(t *testing.T) {
 	_, err = tr.Transform(context.Background(), step)
 	r.Error(err)
 	assert.NotContains(t, err.Error(), token, "the upload error must not leak the target URL query token")
+}
+
+// TestHTTPStreamingTransformer_NonIdempotentUploadFailureIsPermanent asserts that a
+// transport-level failure of a non-idempotent upload is marked permanent, so the graph
+// runtime does not re-run it and possibly upload twice; idempotent uploads stay retryable.
+func TestHTTPStreamingTransformer_NonIdempotentUploadFailureIsPermanent(t *testing.T) {
+	for _, tc := range []struct {
+		verb      string
+		permanent bool
+	}{
+		{http.MethodPut, false},
+		{http.MethodPost, true},
+		{"post", true},
+		{http.MethodPatch, true},
+	} {
+		t.Run(tc.verb, func(t *testing.T) {
+			r := require.New(t)
+			ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+			r.NoError(err)
+			addr := ln.Addr().String()
+			r.NoError(ln.Close())
+
+			source := wgetResourceV2("blob", "https://source.example/blob.tar", "", "", nil, nil)
+			target := wgetResourceV2("blob", "http://"+addr+"/blob.tar", "", "application/x-tar", nil, nil)
+			step := &v1alpha1.HTTPStreaming{
+				Type: v1alpha1.HTTPStreamingV1alpha1,
+				ID:   "upload",
+				Spec: &v1alpha1.HTTPStreamingSpec{
+					Resource:       source,
+					Request:        wgetRequest("http://"+addr+"/blob.tar", tc.verb, "application/x-tar", nil),
+					TargetResource: target,
+				},
+			}
+			tr := &HTTPStreamingTransformer{
+				Scheme:             newTransformerScheme(),
+				ResourceRepository: &stubResourceRepository{payload: []byte("x"), mediaType: "application/x-tar"},
+			}
+
+			_, err = tr.Transform(t.Context(), step)
+			r.Error(err)
+			var p interface{ Permanent() bool }
+			r.Equal(tc.permanent, errors.As(err, &p) && p.Permanent())
+		})
+	}
 }
 
 // TestHTTPStreamingTransformer_UserContentTypeHeaderPreserved asserts that an explicit

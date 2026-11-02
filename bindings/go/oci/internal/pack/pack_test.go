@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"sync/atomic"
 	"testing"
 
 	. "ocm.software/open-component-model/bindings/go/oci/internal/pack"
@@ -101,7 +102,6 @@ func TestNewResourceBlobOCILayer(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			require.NoError(t, resourceblob.UpdateArtifactWithInformationFromBlob(tt.res, tt.blob))
 			resourceBlob, err := resourceblob.NewArtifactBlob(tt.res, tt.blob)
 			require.NoError(t, err)
 
@@ -459,7 +459,6 @@ func TestResourceBlob(t *testing.T) {
 
 			v2.MustAddToScheme(tt.opts.AccessScheme)
 			oci.MustAddToScheme(tt.opts.AccessScheme)
-			require.NoError(t, resourceblob.UpdateArtifactWithInformationFromBlob(tt.resource, tt.blob))
 			resourceBlob, err := resourceblob.NewArtifactBlob(tt.resource, tt.blob)
 			require.NoError(t, err)
 			if tt.nilOutResourceBlobDigest {
@@ -548,8 +547,6 @@ func TestResourceLocalBlob(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			v2.MustAddToScheme(tt.opts.AccessScheme)
 			oci.MustAddToScheme(tt.opts.AccessScheme)
-
-			require.NoError(t, resourceblob.UpdateArtifactWithInformationFromBlob(tt.resource, tt.blob))
 
 			resourceBlob, err := resourceblob.NewArtifactBlob(tt.resource, tt.blob)
 			require.NoError(t, err)
@@ -692,7 +689,6 @@ func TestResourceLocalBlobMediaTypeDetection(t *testing.T) {
 			oci.MustAddToScheme(opts.AccessScheme)
 
 			resource := &descriptor.Resource{Access: tt.access}
-			require.NoError(t, resourceblob.UpdateArtifactWithInformationFromBlob(resource, tt.blob))
 
 			resourceBlob, err := resourceblob.NewArtifactBlob(resource, tt.blob)
 			require.NoError(t, err)
@@ -835,8 +831,6 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			v2.MustAddToScheme(tt.opts.AccessScheme)
 			oci.MustAddToScheme(tt.opts.AccessScheme)
-
-			require.NoError(t, resourceblob.UpdateArtifactWithInformationFromBlob(tt.resource, tt.blob))
 
 			resourceBlob, err := resourceblob.NewArtifactBlob(tt.resource, tt.blob)
 			require.NoError(t, err)
@@ -1013,7 +1007,6 @@ func TestPackingRejectsInvalidOCILayoutDigest(t *testing.T) {
 			source := &testBlob{
 				content: data, mediaType: layout.MediaTypeOCIImageLayoutTarV1, digest: digest.FromBytes(data),
 			}
-			r.NoError(resourceblob.UpdateArtifactWithInformationFromBlob(resource, source))
 			r.Equal(resourceDigest, resource.Digest)
 			artifact, err := resourceblob.NewArtifactBlob(resource, source)
 			r.NoError(err)
@@ -1023,21 +1016,22 @@ func TestPackingRejectsInvalidOCILayoutDigest(t *testing.T) {
 			r.ErrorContains(err, testCase.wantError)
 			r.Same(resourceDigest, resource.Digest)
 			if testCase.wantNoPush {
-				r.Zero(store.pushes)
+				r.Zero(store.pushes.Load())
 				r.Same(access, resource.Access)
 			}
 		})
 	}
 }
 
+// countingStorage counts Push calls; oras copies graph nodes concurrently.
 type countingStorage struct {
 	content.Storage
-	pushes  int
+	pushes  atomic.Int64
 	pushErr error
 }
 
 func (store *countingStorage) Push(ctx context.Context, desc ociImageSpecV1.Descriptor, reader io.Reader) error {
-	store.pushes++
+	store.pushes.Add(1)
 	if store.pushErr != nil {
 		return store.pushErr
 	}
@@ -1103,8 +1097,6 @@ func TestResourceLocalBlobOCILayout(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			v2.MustAddToScheme(tt.opts.AccessScheme)
 			oci.MustAddToScheme(tt.opts.AccessScheme)
-
-			require.NoError(t, resourceblob.UpdateArtifactWithInformationFromBlob(tt.resource, tt.blob))
 
 			resourceBlob, err := resourceblob.NewArtifactBlob(tt.resource, tt.blob)
 			require.NoError(t, err)
@@ -1378,7 +1370,7 @@ func TestResourceLocalBlobOCILayer_SkipsExistingBlob(t *testing.T) {
 				r.NoError(err)
 
 				desc, err := ResourceLocalBlobOCILayer(t.Context(), store, resourceBlob, &v2.LocalBlob{MediaType: mediaType}, newOpts())
-				r.Equal(tc.wantPushes, store.pushes)
+				r.EqualValues(tc.wantPushes, store.pushes.Load())
 				if tc.wantErr != "" {
 					r.ErrorContains(err, tc.wantErr)
 					r.ErrorIs(err, tc.pushErr)

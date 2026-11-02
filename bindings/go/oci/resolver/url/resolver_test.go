@@ -534,7 +534,8 @@ func TestURLPathResolver_DynamicCacheSwapping(t *testing.T) {
 	assert.IsType(t, &remotestore.RemoteStore{}, store)
 }
 
-// Regression: caching must preserve chunked/streaming pushes and an Unwrap chain to *remote.Repository for pack's global-store detection.
+// Regression: caching must preserve chunked/streaming pushes and keep an Unwrap
+// chain that pack's global-store detection can follow to a global store.
 func TestURLPathResolver_CachingPreservesStreamingPusher(t *testing.T) {
 	ctx := context.Background()
 	resolver, err := url.New(
@@ -549,10 +550,16 @@ func TestURLPathResolver_CachingPreservesStreamingPusher(t *testing.T) {
 
 	require.Implements(t, (*remotestore.StreamingPusher)(nil), store)
 
-	var reached *remote.Repository
+	// Mirror pack.backedByGlobalStore: the chain must reach a store it
+	// recognizes as global (the backing RemoteStore or its *remote.Repository).
+	var reachedGlobal bool
 	for cur := content.Storage(store); cur != nil; {
-		if r, ok := cur.(*remote.Repository); ok {
-			reached = r
+		if _, ok := cur.(*remotestore.RemoteStore); ok {
+			reachedGlobal = true
+			break
+		}
+		if _, ok := cur.(*remote.Repository); ok {
+			reachedGlobal = true
 			break
 		}
 		u, ok := cur.(interface{ Unwrap() content.Storage })
@@ -561,5 +568,5 @@ func TestURLPathResolver_CachingPreservesStreamingPusher(t *testing.T) {
 		}
 		cur = u.Unwrap()
 	}
-	require.NotNil(t, reached, "Unwrap chain must reach *remote.Repository")
+	require.True(t, reachedGlobal, "Unwrap chain must reach a global-detected store")
 }

@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -15,6 +16,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote"
 
 	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
+	"ocm.software/open-component-model/bindings/go/oci/spec"
 )
 
 func newCachedStore(inner *remote.Repository, blob *BlobCache, refs *ReferenceCache) *CachedStore {
@@ -97,8 +99,8 @@ func TestCachedStore_Resolve_WithFullReferenceAndNormalization(t *testing.T) {
 }
 
 func TestCachedStore_Unwrap_ReturnsEmbedded(t *testing.T) {
-	inner := &remote.Repository{}
-	repo := newCachedStore(inner, newTestCache(t, Options{}), nil)
+	inner := &remotestore.RemoteStore{Repository: &remote.Repository{}}
+	repo := &CachedStore{RemoteStore: inner, BlobCache: newTestCache(t, Options{})}
 	assert.Same(t, inner, repo.Unwrap())
 }
 
@@ -180,6 +182,43 @@ func plainHTTPRepo(t *testing.T, srv *httptest.Server) *remote.Repository {
 	repo.PlainHTTP = true
 	repo.Client = &http.Client{}
 	return repo
+}
+
+func TestCachedStore_KeepsStreamingChunkedPush(t *testing.T) {
+	r := require.New(t)
+
+	var mu sync.Mutex
+	var methods []string
+	var uploaded []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		body, _ := io.ReadAll(req.Body)
+		mu.Lock()
+		methods = append(methods, req.Method)
+		uploaded = append(uploaded, body...)
+		mu.Unlock()
+		w.Header().Set("Location", "/v2/test-repo/blobs/uploads/session")
+		if req.Method == http.MethodPut {
+			w.WriteHeader(http.StatusCreated)
+			return
+		}
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	t.Cleanup(srv.Close)
+
+	var store spec.Store = &CachedStore{
+		RemoteStore: &remotestore.RemoteStore{Repository: plainHTTPRepo(t, srv), ChunkSize: 4},
+		BlobCache:   newTestCache(t, Options{}),
+	}
+	pusher, ok := store.(remotestore.StreamingPusher)
+	r.True(ok, "the cache decorator must keep streaming push")
+
+	data := []byte("streamed-blob")
+	desc, err := pusher.PushStreaming(t.Context(), ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"}, bytes.NewReader(data))
+	r.NoError(err)
+	r.Equal(digest.FromBytes(data), desc.Digest)
+	r.Equal(int64(len(data)), desc.Size)
+	r.Equal([]string{http.MethodPost, http.MethodPatch, http.MethodPatch, http.MethodPatch, http.MethodPatch, http.MethodPut}, methods)
+	r.Equal(data, uploaded)
 }
 
 func TestCachedStore_Untag_SuccessInvalidatesCache(t *testing.T) {

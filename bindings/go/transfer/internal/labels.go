@@ -91,10 +91,11 @@ func convertLabel(c *descriptor.Component, resourceName string) string {
 	return fmt.Sprintf("%s [Convert %s to OCIArtifact]", componentLabel(c), resourceName)
 }
 
-// transferLabel renders the label for the OCI streaming path
-// e.g. "my-app@1.0.0 [Transfer icons to OCI ghcr.io/org]".
-func transferLabel(c *descriptor.Component, resourceName string, toSpec runtime.Typed) string {
-	return fmt.Sprintf("%s [Transfer %s to %s]", componentLabel(c), resourceName, targetName(toSpec))
+// transferLabel renders the label for a fused transformation that streams a resource
+// from its source into the target, e.g. "my-app@1.0.0 [Transfer icons as OCIArtifact to OCI ghcr.io/org]".
+// kind is what the resource is stored as in the target (LocalBlob or OCIArtifact).
+func transferLabel(c *descriptor.Component, resourceName, kind string, toSpec runtime.Typed) string {
+	return fmt.Sprintf("%s [Transfer %s as %s to %s]", componentLabel(c), resourceName, kind, targetName(toSpec))
 }
 
 // uploaderLabel renders the label for the HTTP streaming uploader path, which

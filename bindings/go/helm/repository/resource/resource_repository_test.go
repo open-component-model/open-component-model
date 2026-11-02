@@ -1,24 +1,35 @@
 package resource
 
 import (
+	"archive/tar"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/opencontainers/go-digest"
+	"github.com/opencontainers/image-spec/specs-go"
+	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"helm.sh/helm/v4/pkg/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -229,4 +240,211 @@ func downloadAndDigest(t *testing.T, ctx context.Context, repo *ResourceReposito
 	}
 
 	return ""
+}
+
+func TestDownloadResource_VerifiesChartDigest(t *testing.T) {
+	srv := httptest.NewServer(http.FileServer(http.Dir("../../testdata")))
+	t.Cleanup(srv.Close)
+
+	chart, err := os.ReadFile("../../testdata/mychart-0.1.0.tgz")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name    string
+		value   string
+		wantErr string
+	}{
+		{name: "matching digest", value: digest.FromBytes(chart).Encoded()},
+		{name: "wrong digest", value: digest.FromString("other").Encoded(), wantErr: "does not match the digest"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			res := helmResource(t, srv.URL, "mychart-0.1.0.tgz")
+			res.Name = "mychart"
+			res.Digest = &descriptor.Digest{
+				HashAlgorithm:          "SHA-256",
+				NormalisationAlgorithm: descriptor.GenericBlobDigestV1,
+				Value:                  tc.value,
+			}
+			b, err := NewResourceRepository(nil).DownloadResource(t.Context(), res, nil)
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.NotNil(b)
+		})
+	}
+}
+
+func TestDownloadResource_RealOCIRepo(t *testing.T) {
+	r := require.New(t)
+	if testing.Short() {
+		t.Skip("skipping real OCI registry test in short mode")
+	}
+	res := helmResource(t, "oci://ghcr.io/stefanprodan/charts", "podinfo:6.9.1")
+	res.Name = "podinfo"
+	processed, err := helmdigest.NewDigestProcessor("").ProcessResourceDigest(t.Context(), res, nil)
+	r.NoError(err)
+	r.Equal(descriptor.OCIArtifactDigestV1, processed.Digest.NormalisationAlgorithm)
+
+	repo := NewResourceRepository(nil)
+	b, err := repo.DownloadResource(t.Context(), processed, nil)
+	r.NoError(err)
+	rc, err := b.ReadCloser()
+	r.NoError(err)
+	t.Cleanup(func() { _ = rc.Close() })
+	var names []string
+	tr := tar.NewReader(rc)
+	for {
+		hdr, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		r.NoError(err)
+		names = append(names, hdr.Name)
+	}
+	r.Contains(names, "podinfo-6.9.1.tgz")
+
+	other := processed.DeepCopy()
+	other.Digest.Value = digest.FromString("other").Encoded()
+	_, err = repo.DownloadResource(t.Context(), other, nil)
+	r.ErrorContains(err, `error downloading chart "oci://ghcr.io/stefanprodan/charts/podinfo:6.9.1" version ""`)
+	r.ErrorContains(err, "not found")
+}
+
+func TestManifestPin(t *testing.T) {
+	tgz, err := os.ReadFile("../../testdata/mychart-0.1.0.tgz")
+	require.NoError(t, err)
+	srv, manifest := newChartRegistry(t, "charts/mychart", "0.1.0", tgz)
+	caPEM := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw}))
+	repo := NewResourceRepository(nil, WithHTTPConfig(&httpv1alpha1.Config{TLSConfig: httpv1alpha1.TLSConfig{RootCAsPEM: caPEM}}))
+	chartRef := "oci://" + strings.TrimPrefix(srv.URL, "https://") + "/charts/mychart:0.1.0"
+	other := digest.FromString("other")
+
+	tests := []struct {
+		name     string
+		chartRef string
+		digest   *descriptor.Digest
+		want     digest.Digest
+		wantErr  string
+	}{
+		{name: "no digest", digest: nil},
+		{
+			name:   "ociArtifactDigest/v1 pins without resolving",
+			digest: &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: descriptor.OCIArtifactDigestV1, Value: other.Encoded()},
+			want:   other,
+		},
+		{
+			name:   "genericBlobDigest/v1 naming the manifest pins",
+			digest: &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: descriptor.GenericBlobDigestV1, Value: manifest.Encoded()},
+			want:   manifest,
+		},
+		{
+			name:   "empty normalisation naming the manifest pins",
+			digest: &descriptor.Digest{HashAlgorithm: "SHA-256", Value: manifest.Encoded()},
+			want:   manifest,
+		},
+		{
+			name:   "genericBlobDigest/v1 naming the chart archive does not pin",
+			digest: &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: descriptor.GenericBlobDigestV1, Value: digest.FromBytes(tgz).Encoded()},
+		},
+		{
+			name:   "other normalisation does not pin",
+			digest: &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "jsonNormalisation/v1", Value: manifest.Encoded()},
+		},
+		{
+			name:   "non-SHA-256 genericBlobDigest/v1 does not pin",
+			digest: &descriptor.Digest{HashAlgorithm: "SHA-512", NormalisationAlgorithm: descriptor.GenericBlobDigestV1, Value: digest.SHA512.FromBytes(tgz).Encoded()},
+		},
+		{
+			name:     "unresolvable reference does not pin",
+			chartRef: "oci://" + strings.TrimPrefix(srv.URL, "https://") + "/charts/missing:0.1.0",
+			digest:   &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: descriptor.GenericBlobDigestV1, Value: manifest.Encoded()},
+		},
+		{
+			name:    "invalid digest fails",
+			digest:  &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: descriptor.OCIArtifactDigestV1, Value: "not-hex"},
+			wantErr: `resource "mychart": invalid digest`,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			res := &descriptor.Resource{Digest: tc.digest}
+			res.Name = "mychart"
+			ref := chartRef
+			if tc.chartRef != "" {
+				ref = tc.chartRef
+			}
+			got, err := repo.manifestPin(t.Context(), res, ref, nil)
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.Equal(tc.want, got)
+		})
+	}
+}
+
+// newChartRegistry serves tgz as a helm chart at repo:tag from a read-only OCI distribution
+// endpoint over TLS and returns the server and the chart's manifest digest.
+func newChartRegistry(t *testing.T, repo, tag string, tgz []byte) (*httptest.Server, digest.Digest) {
+	t.Helper()
+	config := []byte(`{"apiVersion":"v2","name":"mychart","version":"0.1.0"}`)
+	manifest, err := json.Marshal(ociImageSpecV1.Manifest{
+		Versioned: specs.Versioned{SchemaVersion: 2},
+		MediaType: ociImageSpecV1.MediaTypeImageManifest,
+		Config: ociImageSpecV1.Descriptor{
+			MediaType: registry.ConfigMediaType,
+			Digest:    digest.FromBytes(config),
+			Size:      int64(len(config)),
+		},
+		Layers: []ociImageSpecV1.Descriptor{{
+			MediaType: registry.ChartLayerMediaType,
+			Digest:    digest.FromBytes(tgz),
+			Size:      int64(len(tgz)),
+		}},
+	})
+	require.NoError(t, err)
+	manifestDigest := digest.FromBytes(manifest)
+
+	manifests := map[string][]byte{tag: manifest, manifestDigest.String(): manifest}
+	blobs := map[string][]byte{
+		digest.FromBytes(config).String(): config,
+		digest.FromBytes(tgz).String():    tgz,
+	}
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.URL.Path == "/v2/" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		rest, ok := strings.CutPrefix(req.URL.Path, "/v2/"+repo+"/")
+		if !ok {
+			http.NotFound(w, req)
+			return
+		}
+		var data []byte
+		mediaType := "application/octet-stream"
+		if ref, isManifest := strings.CutPrefix(rest, "manifests/"); isManifest {
+			data, mediaType = manifests[ref], ociImageSpecV1.MediaTypeImageManifest
+		} else if ref, isBlob := strings.CutPrefix(rest, "blobs/"); isBlob {
+			data = blobs[ref]
+		}
+		if data == nil {
+			http.NotFound(w, req)
+			return
+		}
+		w.Header().Set("Content-Type", mediaType)
+		w.Header().Set("Docker-Content-Digest", digest.FromBytes(data).String())
+		w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+		if req.Method == http.MethodHead {
+			return
+		}
+		_, _ = w.Write(data)
+	}))
+	t.Cleanup(srv.Close)
+	return srv, manifestDigest
 }

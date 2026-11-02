@@ -77,3 +77,17 @@ func TestSerializeVertexToDescriptorTree_TypedUnregisteredAccess(t *testing.T) {
 	r.NoError(err, "rendering a typed unregistered access must not fail")
 	r.Equal([]string{"ocm.software/repro/oci-access", "1.0.0", "ocm.software", "name=ocm.software/repro/oci-access,version=1.0.0"}, row.Cells)
 }
+
+func TestComponentVersionConflictPolicyFlagDefaultsToReplace(t *testing.T) {
+	r := require.New(t)
+
+	cmd := New()
+	flag := cmd.Flags().Lookup(FlagComponentVersionConflictPolicy)
+	r.NotNil(flag)
+	r.Equal(string(ComponentVersionConflictPolicyReplace), flag.DefValue, "an unset flag must replace an existing version")
+	r.NotEmpty(flag.Deprecated, "the flag is deprecated and must print a notice when used")
+
+	r.Equal(constructor.ComponentVersionConflictReplace, ComponentVersionConflictPolicy("").ToConstructorConflictPolicy())
+	r.Equal(constructor.ComponentVersionConflictAbortAndFail, ComponentVersionConflictPolicyAbortAndFail.ToConstructorConflictPolicy())
+	r.Equal(constructor.ComponentVersionConflictSkip, ComponentVersionConflictPolicySkip.ToConstructorConflictPolicy())
+}

@@ -664,6 +664,30 @@ func TestReference_Struct(t *testing.T) {
 	assert.Contains(t, string(jsonData), `"digest":{"hashAlgorithm":"SHA-256","normalisationAlgorithm":"JsonNormalization","value":"0123456789abcdef"}`)
 }
 
+// An undigested reference must not be serialised with an empty digest object:
+// consumers that check for presence (e.g. OCM v1) would read it as a set digest.
+func TestReference_UnsetDigestOmitted(t *testing.T) {
+	r := require.New(t)
+	reference := descriptorv2.Reference{
+		ElementMeta: descriptorv2.ElementMeta{
+			ObjectMeta: descriptorv2.ObjectMeta{Name: "child", Version: "1.0.0"},
+		},
+		Component: "acme.org/child",
+	}
+
+	jsonData, err := json.Marshal(reference)
+	r.NoError(err)
+	r.JSONEq(`{"name":"child","version":"1.0.0","componentName":"acme.org/child"}`, string(jsonData))
+
+	yamlData, err := yaml.Marshal(reference)
+	r.NoError(err)
+	r.NotContains(string(yamlData), "digest")
+
+	var roundTripped descriptorv2.Reference
+	r.NoError(json.Unmarshal(jsonData, &roundTripped))
+	r.Equal(reference, roundTripped)
+}
+
 func TestSignature_Struct(t *testing.T) {
 	// Setup
 	signature := descriptorv2.Signature{

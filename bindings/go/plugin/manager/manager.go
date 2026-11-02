@@ -38,6 +38,7 @@ import (
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	pluginruntime "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types/spec"
+	"ocm.software/open-component-model/bindings/go/repository/integrity"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -68,10 +69,23 @@ type PluginManager struct {
 	baseCtx context.Context
 }
 
+// Option configures a PluginManager.
+type Option func(*PluginManager)
+
+// WithArtifactVerifier sets the verifier for OCI artifacts (OCI layouts, artifact sets) that
+// external plugins deliver as archives. Without it, plugin content recorded with an OCI
+// artifact digest cannot be verified and is refused.
+func WithArtifactVerifier(v integrity.ArtifactVerifier) Option {
+	return func(pm *PluginManager) {
+		pm.ComponentVersionRepositoryRegistry.SetArtifactVerifier(v)
+		pm.ResourcePluginRegistry.SetArtifactVerifier(v)
+	}
+}
+
 // NewPluginManager initializes the PluginManager
 // the passed ctx is used for all plugins.
-func NewPluginManager(ctx context.Context) *PluginManager {
-	return &PluginManager{
+func NewPluginManager(ctx context.Context, opts ...Option) *PluginManager {
+	pm := &PluginManager{
 		ComponentVersionRepositoryRegistry: componentversionrepository.NewComponentVersionRepositoryRegistry(ctx),
 		ComponentListerRegistry:            componentlister.NewComponentListerRegistry(ctx),
 		CredentialPluginRegistry:           credentialplugin.NewRegistry(ctx),
@@ -84,6 +98,10 @@ func NewPluginManager(ctx context.Context) *PluginManager {
 		CredentialTypeRegistry:             credentialtyperepository.NewCredentialTypeRegistry(ctx),
 		baseCtx:                            ctx,
 	}
+	for _, opt := range opts {
+		opt(pm)
+	}
+	return pm
 }
 
 type RegistrationOptions struct {

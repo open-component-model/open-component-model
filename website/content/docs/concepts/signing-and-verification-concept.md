@@ -1,7 +1,7 @@
 ---
 title: "Signing and Verification"
-description: "Understanding how OCM ensures component integrity and authenticity through cryptographic signatures."
-weight: 3
+description: "How OCM ensures component integrity and authenticity through cryptographic signatures: signing workflows, verification, and trust anchors."
+weight: 12
 toc: true
 ---
 
@@ -56,8 +56,16 @@ OCM uses a two-layer approach to ensure consistent and reproducible digests:
 
 Before hashing, the component descriptor is normalized into a canonical form, eliminating any ambiguities
 that could cause the same logical descriptor to produce different digests. The default normalization
-algorithm ([`jsonNormalisation/v4alpha1`](https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/04-algorithms/component-descriptor-normalization-algorithms.md#normalization-algorithms)) defines exactly how this canonical form is derived, ensuring
+algorithm ([`jsonNormalisation/v4alpha3`](https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/04-algorithms/component-descriptor-normalization-algorithms.md#jsonnormalisationv4alpha3)) defines exactly how this canonical form is derived, ensuring
 identical component descriptors always yield the same digest.
+
+Digests computed with older algorithms keep verifying: `jsonNormalisation/v4alpha1`, `jsonNormalisation/v4alpha2`,
+the legacy `jsonNormalisation/v3` (computed as `jsonNormalisation/v4alpha2`, which reproduces it byte for byte), and
+`jsonNormalisation/v1`, which can only be verified, never used for new signatures or component reference digests.
+Older algorithms may sign less of the descriptor than the default, so OCM logs a warning whenever it trusts a digest
+computed with one (a signature, a digest pin or a component reference digest). To move to the default, see
+[Migrate Normalisation Algorithms]({{< relref "docs/changelog/migrate-normalisation-algorithms.md" >}}). No algorithm signs the whole
+descriptor: access information and labels without `signing: true` are never signed.
 
 This entire approach relies on the fact that **content digests** are preserved across transfers.
 Each resource's digest is computed from its actual content (not from where it is stored),
@@ -92,7 +100,7 @@ references:
     version: 1.0.0
     digest:
       hashAlgorithm: SHA-256
-      normalisationAlgorithm: jsonNormalisation/v4alpha1
+      normalisationAlgorithm: jsonNormalisation/v4alpha3
       value: 01c211f5c9cfd7c40e5b84d66a2fb7d19cb0...
 ```
 
@@ -156,7 +164,7 @@ signatures:
   - name: default
     digest:
       hashAlgorithm: SHA-256
-      normalisationAlgorithm: jsonNormalisation/v4alpha1
+      normalisationAlgorithm: jsonNormalisation/v4alpha3
       value: 91dd197868907487e62872695db1fa7b397fde300bcbae23e24abc188fb147ad
     signature:
       algorithm: RSASSA-PSS
@@ -174,7 +182,7 @@ signatures:
   - name: acme-release-signing
     digest:
       hashAlgorithm: SHA-256
-      normalisationAlgorithm: jsonNormalisation/v4alpha1
+      normalisationAlgorithm: jsonNormalisation/v4alpha3
       value: abc123...
     signature:
       algorithm: RSASSA-PSS
@@ -196,16 +204,16 @@ notation, optionally prefixed with a normalization algorithm (`/` written as `.`
 ```text
 ghcr.io/acme//acme.org/helloworld@sha256:<oci-digest>
 ghcr.io/acme//acme.org/helloworld:1.0.0@sha256:<oci-digest>
-ghcr.io/acme//acme.org/helloworld:1.0.0@jsonNormalisation.v4alpha1+sha256:<normalized-descriptor-digest>
+ghcr.io/acme//acme.org/helloworld:1.0.0@jsonNormalisation.v4alpha3+sha256:<normalized-descriptor-digest>
 ```
 
 `ocm get`, `ocm download`, `ocm verify`, `ocm sign` and `ocm transfer` fail if the component version they read does not
 match the pin, and `ocm download` verifies the downloaded content against the resource digests of the pinned
 descriptor. Both forms accept `sha256` and `sha512`.
 
-| | OCI digest `sha256:<hex>` | Normalized pin `jsonNormalisation.v4alpha1+sha256:<hex>` |
+| | OCI digest `sha256:<hex>` | Normalized pin `jsonNormalisation.v4alpha3+sha256:<hex>` |
 | --- | --- | --- |
-| Identifies | the OCI image index or manifest the component version is stored as, which is what its version tag resolves to | the descriptor normalized with `jsonNormalisation/v4alpha1` (see [Normalization and Digest Calculation](#normalization-and-digest-calculation)) |
+| Identifies | the OCI image index or manifest the component version is stored as, which is what its version tag resolves to | the descriptor normalized with `jsonNormalisation/v4alpha3` (see [Normalization and Digest Calculation](#normalization-and-digest-calculation)) |
 | Covers | the stored artifact graph: descriptor (including access information, all labels and signatures) and all local blobs | what signatures cover: no access information, no labels excluded from signing |
 | How it is checked | the component version is read from the artifact with that digest, never through the version tag; every node read is verified against its digest | the descriptor read through the version tag is normalized and hashed |
 | Version in the reference | optional; if given, the artifact must hold that version | required |
@@ -239,7 +247,7 @@ OCM's `signature.algorithm` field selects between two signing approaches: classi
 | RSA-PKCS#1 v1.5 | Asymmetric (RSA) | Public key or certificate chain | Deterministic, widely supported, compatible with legacy systems |
 | Sigstore (keyless, early access) | Asymmetric (ECDSA, ephemeral) | OIDC identity | Short-lived certificate from Fulcio bound to your OIDC identity, transparency-log entry in Rekor; no long-lived keys to manage |
 
-To override the default signing algorithm or encoding policy, add a `signing.config.ocm.software/v1alpha1` entry to your [`.ocmconfig`]({{< relref "configure-multiple-credentials.md" >}}) and put the signer under its `signer` field. See the [CLI reference]({{< relref "/docs/reference/ocm-cli/ocm_sign_component-version.md" >}}).
+To override the default signing algorithm or encoding policy, add a `signing.config.ocm.software/v1alpha1` entry to your [`.ocmconfig`]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) and put the signer under its `signer` field. See the [CLI reference]({{< relref "/docs/reference/ocm-cli/ocm_sign_component-version.md" >}}).
 The signer configures only the algorithm and encoding policy; credentials are always resolved separately from the credentials configuration.
 Give the entry a `signature` field to apply it to that one signature only, matching the `--signature` flag; without it the entry applies to every signature.
 The same entry carries the verification side under its `verifier` field, read by `ocm verify` (see the [CLI reference]({{< relref "/docs/reference/ocm-cli/ocm_verify_component-version.md" >}})).
@@ -401,7 +409,7 @@ The signer authenticates to an OIDC identity provider; Fulcio binds that identit
 | Audit trail | Build your own | Build your own | Built-in (Rekor) |
 | Recommended for | Simple setups, personal projects | Enterprise environments with existing PKI | Teams that want to skip key management entirely |
 
-For hands-on steps, see [Tutorial: Plain Signatures]({{< relref "docs/tutorials/signing/plain.md" >}}) and [Tutorial: Certificate Chains (PEM)]({{< relref "docs/tutorials/signing/pem.md" >}}).
+For hands-on steps, see [Tutorial: Plain Signatures]({{< relref "docs/guides/sign/sign-with-plain-rsa.md" >}}) and [Tutorial: Certificate Chains (PEM)]({{< relref "docs/guides/sign/sign-with-pem-certificate-chain.md" >}}).
 
 ## RFC 3161 Timestamping
 
@@ -452,7 +460,7 @@ flowchart TB
    The label is not signing-relevant, so the component digest stays the same and references to the component as well
    as other signatures remain valid.
 3. At verification, OCM reads the TSA URL from that label and resolves the TSA's root CA certificates from the
-   credential graph via a [`TSA/v1alpha1`]({{< relref "docs/reference/credential-consumer-identities.md#tsav1alpha1" >}})
+   credential graph via a [`TSA/v1alpha1`]({{< relref "docs/reference/configuration/credential-consumer-identities.md#tsav1alpha1" >}})
    consumer identity.
 4. The token's PKCS#7 chain is verified against those roots at its GenTime, its message imprint is checked against a
    hash of the signature value, and — only when the chain is trusted — the attested time is used to validate an RSA/PEM
@@ -480,7 +488,7 @@ Verification degrades gracefully across three levels:
 ### Configuring TSA Trust
 
 TSA root certificates are configured on the **verifier** side through the credential graph, using the typed
-[`TSACredentials/v1alpha1`]({{< relref "docs/reference/credential-types.md#tsacredentialsv1alpha1" >}}) credential:
+[`TSACredentials/v1alpha1`]({{< relref "docs/reference/configuration/credential-types.md#tsacredentialsv1alpha1" >}}) credential:
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -497,8 +505,8 @@ configurations:
 ```
 
 The signing side needs no TSA credentials; the TSA is chosen with the CLI flags. For the full attribute and field
-reference, see [Consumer Identities → TSA/v1alpha1]({{< relref "docs/reference/credential-consumer-identities.md#tsav1alpha1" >}})
-and [Credential Types → TSACredentials/v1alpha1]({{< relref "docs/reference/credential-types.md#tsacredentialsv1alpha1" >}}).
+reference, see [Consumer Identities → TSA/v1alpha1]({{< relref "docs/reference/configuration/credential-consumer-identities.md#tsav1alpha1" >}})
+and [Credential Types → TSACredentials/v1alpha1]({{< relref "docs/reference/configuration/credential-types.md#tsacredentialsv1alpha1" >}}).
 
 #### Two certificates, two mechanisms
 
@@ -507,8 +515,8 @@ by the same internal CA:
 
 | Certificate | Validated when | Trusted via |
 | ----------- | -------------- | ----------- |
-| The TSA's **token-signing** cert (PKCS#7 chain over the timestamp token) | Verifying | [`TSACredentials/v1alpha1`]({{< relref "docs/reference/credential-types.md#tsacredentialsv1alpha1" >}}) `rootCertsPEM` |
-| The TSA server's **HTTPS serving** cert (the TLS connection when requesting a timestamp) | Signing | [HTTP client config]({{< relref "docs/reference/http-client-configuration.md" >}}) `rootCAsPEM` (or `insecureSkipVerify` for dev) |
+| The TSA's **token-signing** cert (PKCS#7 chain over the timestamp token) | Verifying | [`TSACredentials/v1alpha1`]({{< relref "docs/reference/configuration/credential-types.md#tsacredentialsv1alpha1" >}}) `rootCertsPEM` |
+| The TSA server's **HTTPS serving** cert (the TLS connection when requesting a timestamp) | Signing | [HTTP client config]({{< relref "docs/reference/configuration/http-client.md" >}}) `rootCAsPEM` (or `insecureSkipVerify` for dev) |
 
 `TSACredentials` roots verify the *token*, not the *connection*. To make the signer trust a private TSA's HTTPS
 serving certificate, add its CA to the HTTP client configuration
@@ -521,10 +529,10 @@ For the complete trust analysis and design rationale, see ADR 0032 (RFC 3161 Tim
 
 ## Next Steps
 
-- [How-to: Generate Signing Keys]({{< relref "generate-signing-keys.md" >}}) - Step-by-step creating RSA key pairs.
-- [How-to: Configure Signing Credentials]({{< relref "configure-signing-credentials.md" >}}) - Set up OCM to use your keys for signing and verification
-- [How-to: Sign a Component Version]({{< relref "sign-component-version.md" >}}) - Step-by-step signing instructions
-- [How-to: Verify a Component Version]({{< relref "verify-component-version.md" >}}) - Step-by-step verification instructions
+- [Guides: Generate Signing Keys]({{< relref "generate-signing-keys.md" >}}) - Step-by-step creating RSA key pairs.
+- [Guides: Configure Signing Credentials]({{< relref "configure-signing-credentials.md" >}}) - Set up OCM to use your keys for signing and verification
+- [Guides: Sign a Component Version]({{< relref "docs/guides/sign/_index.md" >}}) - Step-by-step signing instructions
+- [Guides: Verify a Component Version]({{< relref "docs/guides/sign/_index.md#verify-a-signature" >}}) - Step-by-step verification instructions
 
 ## Related Documentation
 
