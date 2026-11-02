@@ -20,6 +20,7 @@ on:
 concurrency:
   group: controller-performance-${{ github.ref }}
   cancel-in-progress: false
+  queue: max
 
 permissions:
   contents: read
@@ -32,7 +33,8 @@ jobs:
   benchmark:
     name: Performance Benchmark
     runs-on: ubuntu-26.04-arm
-    timeout-minutes: 360 # let's try defining a longer timeout for a full run.
+    # The hosted runner maximum. Hitting it cancels the job, which skips the report steps.
+    timeout-minutes: 360
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -64,6 +66,8 @@ jobs:
         run: task ${{ env.CONTROLLER_DIR }}:test/performance/setup/local
 
       - name: Run benchmark
+        # Below the job timeout, so a timed-out benchmark still gets its summary and artifact.
+        timeout-minutes: 330
         env:
           SCENARIOS: ${{ inputs.scenarios }}
           OBJECTS: ${{ inputs.objects }}
