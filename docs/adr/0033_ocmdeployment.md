@@ -77,7 +77,8 @@ The steps below reference `spec` fields by path; the full
 The controller executes the following ordered steps each reconcile:
 
 1. Create a `Repository` from `spec.source.repositorySpec` and a `Component` from
-   `spec.source.component`+`spec.source.semver`
+   `spec.source.component`+`spec.source.semver`. These are ensured (created/updated) but not waited
+   on here; the first readiness gate is the deploy `Resource` in step 2.
 2. Create a `Resource` for the deploy resource (`spec.deployResource`); wait for its status to provide
    verified coordinates. The `Resource` controller resolves and verifies coordinates but does not
    download content. Two access shapes are supported: an OCI access (or a `LocalBlob`, reconstructed
@@ -138,8 +139,8 @@ with the `OCMDeployment` as owner reference and are garbage-collected with it, r
 `deletionPolicy` (the policy governs only the deploy objects).
 
 **Generated deploy objects** (`HelmRelease`/`Kustomization`/Argo `Application`) live in the
-`OCMDeployment`'s namespace and are applied and pruned via the `applyset` machinery (with its
-finalizer):
+`OCMDeployment`'s namespace and are applied and pruned via the `applyset` machinery, driven by the
+`OCMDeployment`'s finalizer on delete:
 
 * `Background`/`Foreground`: the finalizer prunes them; engine objects cascade-delete their
   workloads where the engine supports it (Kustomization rendered with `prune: true`, Argo rendered
@@ -161,8 +162,15 @@ The source (`OCIRepository` or `HelmRepository`) is an `applyset` member like th
 objects, so on `Orphan` it is left in place with them.
 
 A `Namespace` rendered for `namespace.createNamespace` is also an `applyset` member (cluster-scoped
-member of a namespaced parent; membership is the ApplySet label, not an owner reference), pruned on a
-non-`Orphan` `deletionPolicy` only when `spec.namespace.pruneNamespace` is true.
+member of a namespaced parent; membership is the ApplySet label, not an owner reference). It is
+handled identically for both engines — created and, on a non-`Orphan` `deletionPolicy`, deleted only
+when `spec.namespace.pruneNamespace` is true — entirely through the impersonated apply service
+account, never the controller's own identity; Argo's native `syncOptions: CreateNamespace` is
+deliberately not used, so there is a single SA-owned creator. The namespace delete on prune is an
+explicit `Delete` through that service account, not the ApplySet prune sweep (which covers the
+namespaced members). Consequently the SA-gone delete fallback — which strips labels with the
+controller's own client — releases only the namespaced engine members and leaves any `Namespace`
+member untouched; the controller holds no namespace-write RBAC.
 
 `namespace.targetNamespace` only selects where the engine places workloads, not where the deploy
 object lives, so there is no cross-namespace owner reference. Deploying to a different cluster
@@ -198,7 +206,7 @@ type OCMDeploymentSpec struct {
     Config          *apiextensionsv1.JSON `json:"config,omitempty"`   // inline config merged over ConfigResources (Helm values) or appended after them (kustomize patches); XPreserveUnknownFields
     OCMConfig       []OCMConfiguration `json:"ocmConfig,omitempty"`   // OCM credentials/config, as in all OCM CRs
     Interval        metav1.Duration `json:"interval"`                 // required; fallback cadence only (Owns watches drive reconciles)
-    Suspend         bool            `json:"suspend,omitempty"`        // stops reconciling; propagation to engine objects deferred
+    Suspend         bool            `json:"suspend,omitempty"`        // stops reconciling and propagates to engine objects (Flux spec.suspend; Argo syncPolicy.automated.enabled=false)
 }
 
 type NamespaceOptions struct {
@@ -219,7 +227,7 @@ type ComponentSource struct {
 // Fields inlined (not embedding ResourceID) to avoid inheriting future ResourceID additions.
 type OCMResourceRef struct {
     ByReference        ResourceReference  `json:"byReference"`                  // required; set referencePath only for a sub-component resource
-    VerificationPolicy VerificationPolicy `json:"verificationPolicy,omitempty"` // Enum=Always;Never; default Always (soft-fail if no processor plugin)
+    VerificationPolicy VerificationPolicy `json:"verificationPolicy,omitempty"` // Enum=Always;Never; default Always
 }
 
 type FluxOptions struct {
@@ -240,7 +248,7 @@ type OCMDeploymentStatus struct {
     DeployedComponentVersion string            `json:"deployedComponentVersion,omitempty"`
     DeployedResourceDigest   string            `json:"deployedResourceDigest,omitempty"` // anchor for a future re-match-gating optimization
     AppliedLocalizations []AppliedLocalization `json:"appliedLocalizations,omitempty"` // empty = no labelled image matched, not incomplete
-    LastApplyTime        *metav1.Time          `json:"lastApplyTime,omitempty"` // anchor for the Argo no-status timeout
+    LastApplyTime        *metav1.Time          `json:"lastApplyTime,omitempty"` // anchor for the Argo no-status timeout; set once on first apply, never reset
 }
 
 // AppliedLocalization fields are +required. DigestPinned=false ⇒ tag-only chart, image unverified (warning Event emitted).
@@ -267,8 +275,10 @@ message. The authoritative reason constants live in `condition_types.go`.
 
 A child that never becomes ready (an unresolvable deploy, config, or image `Resource`) is not a
 terminal failure: the `OCMDeployment` stays `Ready=False` with the child's reason and requeues on the
-controller's rate limit indefinitely — there is no per-deployment timeout, in contrast to the Argo
-`Application` no-status 5-minute bound (see [Negative Consequences](#negative-consequences)).
+controller's rate limit indefinitely — this child-resolution path has no timeout. The one bounded
+wait is Argo-specific: when `deployer: ArgoCD` and the rendered `Application` reports no status, the
+controller marks `Ready=False` after a 5-minute bound (`argoNoStatusTimeout`; see
+[Negative Consequences](#negative-consequences)).
 
 ### Managed resources
 
@@ -338,9 +348,8 @@ from the matched image's child `Resource` status.
   rewrites every container image matching a given name across all rendered manifests. One entry
   (`name` = original reference, `newName`/`newTag`/`digest` = current location) localizes the image
   without targeting a manifest path, because kustomize matches by image name. The equivalent
-  lower-level form is a JSON6902 patch on the container `image` field, as used in
-  [`examples/kustomize-configuration-localization/`](../../bindings/go/kubernetes/controller/examples/kustomize-configuration-localization/);
-  the transformer is preferred here precisely because it matches by name instead of a hardcoded path.
+  lower-level form is a JSON6902 patch on the container `image` field; the transformer is preferred
+  here precisely because it matches by name instead of a hardcoded path.
 
 #### Matching (Helm)
 
@@ -359,11 +368,11 @@ host form) and the **registry+repository** of the reconstructed reference is com
 `matchKey` registry+repository. The match key is deliberately registry+repository only: the tag or
 digest the value carries is not part of the key, because the label `matchKey` and the chart value
 originate from the same component build, and a chart that bumps only its image tag must still relocate
-to the same repository. Any tag (including an empty tag, where the chart falls back to
-`Chart.appVersion` in its template) matches, and the current location's tag/digest are written back on
-substitution. On a match the value is rewritten in place: a scalar becomes the full new reference; a
-map has its `repository`/`registry`/`tag` (and `digest` when the shape carries one) set to the current
-location.
+to the same repository. Any tag matches, including an empty tag (Helm itself falls back to
+`Chart.appVersion` at template-render time; the controller does not substitute appVersion). The
+current location's tag/digest are written back on substitution. On a match the value is rewritten
+in place: a scalar becomes the full new reference; a map has its `repository`/`registry`/`tag` (and
+`digest` when the shape carries one) set to the current location.
 
 A label that matches nothing is skipped, not an error: construction labels every localizable image,
 and a given deployment's chart references only some of them, so unused labels are expected. A single
@@ -372,9 +381,12 @@ error is a genuine conflict: a single value matched by two labels that resolve t
 
 Integrity comes from the digest, not the label. The resource `digest` is in the signed surface
 (normalization excludes `access`/`srcRefs`/unsigned labels, not `digest`), and `ocm add cv` computes
-it by default unless `--skip-reference-digest-processing` is set. The emitted override therefore
-**pins the signed digest when the chart's image field accepts a digest, and substitutes
-registry+repository+tag otherwise**. The label is the match key that survives transfer; the digest is
+it by default unless `--skip-reference-digest-processing` is set. The digest written on substitution
+is the **resolved post-transfer digest from the matched image's child `Resource` status** (that
+Resource is digest-verified against the signed descriptor), falling back to the signed label's
+`matchKey.digest` only when the status carries none. The emitted override therefore **pins that
+digest when the chart's image field accepts a digest, and substitutes registry+repository+tag
+otherwise**. The label is the match key that survives transfer; the digest is
 the tamper-evidence. Tag-only charts cannot be digest-pinned, so the substituted location rides on the
 unsigned (relocated) `access` with no digest to verify it, and Helm pulls by tag at runtime: this is
 unverified, not merely TOCTOU-weak. It is not fail-closed (the user chose a tag-only chart); instead
@@ -442,7 +454,8 @@ independent mechanisms.
 * **Configuration** uses JSON6902 / strategic-merge patches against the rendered manifests, rendered
   into the sibling field Flux `Kustomization.spec.patches` / Argo `source.kustomize.patches` (both
   engines support it; see
-  [`examples/kustomize-configuration-localization/`](../../bindings/go/kubernetes/controller/examples/kustomize-configuration-localization/)).
+  [`examples/deployment/flux-kustomize/`](../../bindings/go/kubernetes/controller/examples/deployment/flux-kustomize/)
+  and [`examples/deployment/argo-kustomize/`](../../bindings/go/kubernetes/controller/examples/deployment/argo-kustomize/)).
   `config` and `configResources` each carry a top-level `patches` list (`{patch: <string>, target:
   {…}}` entries, JSON6902 or strategic-merge) passed through verbatim into that field. Because `config`
   is typed `+kubebuilder:validation:Type=object`, inline kustomize config must be an object —
@@ -474,11 +487,17 @@ Localization input is identical across every source/engine combination; only the
 differs. Apply and prune of the generated deploy objects use the `applyset` utility directly (as the
 `NamespacedDeployer` does), not the deployer CRs themselves.
 
+The kustomize `images` field is shaped per engine because the CRDs differ: Flux's `Kustomization`
+types it as structured objects (`[{name, newName, newTag, digest}]`), Argo's `Application` types it
+as kustomize shorthand strings (`"name=newName:newTag@digest"`). Both encode the same localization;
+only the serialization the engine's API accepts differs.
+
 Argo `Application`s are rendered with `syncPolicy: {automated: {prune: true, selfHeal: true}}`
 so they sync automatically without operator intervention; without this block an `Application` does
-not sync on its own. Propagating `spec.suspend` to Argo (setting `syncPolicy.automated.enabled:
-false`) is not yet implemented — the controller currently returns early on suspend without updating
-the rendered `Application`; this is deferred work (see [Engine API versions](#engine-api-versions)).
+not sync on its own.
+`spec.suspend` propagates to both engines: Flux objects receive `spec.suspend: true`, and the Argo
+`Application` is rendered with `syncPolicy.automated.enabled: false` (which skips automated sync while
+keeping `prune`/`selfHeal` configured, restored intact on resume — supported since Argo CD 3.1.0).
 Flux and Argo engine-specific fields beyond those modelled (`timeout`, remediation, `certSecretRef`,
 `provider`, `retry`, `syncOptions`, `ignoreDifferences`) are not rendered; engine defaults apply and
 the fields can be added to the per-engine option blocks when real use cases arise.
