@@ -12,6 +12,9 @@ import {
   newlyIntroduced,
   classify,
   selectCombinedRemovals,
+  auditVariant,
+  ResolutionError,
+  RESOLUTION_FAILURE,
   renderMarkdown,
   applyRemovals,
   IGNORE,
@@ -197,6 +200,74 @@ test("renderMarkdown lists held-back overrides with the advisory they reintroduc
   });
   assert.match(md, /### Held back/);
   assert.match(md, /`b` together with the removal candidates reintroduces GHSA-XXXX-XXXX-XXXX/);
+});
+
+/**
+ * Run fn with process.stderr.write captured.
+ *
+ * @param {() => unknown} fn
+ * @returns {{ value: unknown, stderr: string }}
+ */
+function captureStderr(fn) {
+  const original = process.stderr.write;
+  let stderr = "";
+  process.stderr.write = /** @type {typeof process.stderr.write} */ ((chunk) => {
+    stderr += String(chunk);
+    return true;
+  });
+  try {
+    return { value: fn(), stderr };
+  } finally {
+    process.stderr.write = original;
+  }
+}
+
+test("auditVariant returns the audit result when the variant resolves", () => {
+  const ids = new Set(["GHSA-AAAA-BBBB-CCCC"]);
+  assert.strictEqual(auditVariant("Without x", () => ids), ids);
+});
+
+test("auditVariant reports a resolution failure as RESOLUTION_FAILURE and logs the variant", () => {
+  const { value, stderr } = captureStderr(() =>
+    auditVariant("Without x", () => {
+      throw new ResolutionError("npm install failed");
+    }),
+  );
+  assert.deepStrictEqual(value, new Set([RESOLUTION_FAILURE]));
+  assert.match(stderr, /Without x: npm install failed/);
+});
+
+test("auditVariant rethrows errors that are not resolution failures", () => {
+  assert.throws(
+    () =>
+      auditVariant("Without x", () => {
+        throw new Error("npm audit failed: registry down");
+      }),
+    /npm audit failed: registry down/,
+  );
+});
+
+test("an override whose removal breaks resolution is still required, not a candidate", () => {
+  const result = classify({
+    overrideKeys: ["peer-pin", "glob"],
+    introducedByKey: {
+      "peer-pin": newlyIntroduced(new Set(["GHSA-BASE-BASE-BASE"]), new Set([RESOLUTION_FAILURE])),
+      glob: [],
+    },
+    ignore: {},
+  });
+  assert.deepStrictEqual(result.candidates, ["glob"]);
+  assert.deepStrictEqual(result.protecting, [{ key: "peer-pin", advisories: [RESOLUTION_FAILURE] }]);
+  assert.match(renderMarkdown(result, {}), /`peer-pin` protects against a dependency resolution failure/);
+});
+
+test("selectCombinedRemovals holds back a candidate whose combined removal breaks resolution", () => {
+  const result = selectCombinedRemovals({
+    candidates: ["a", "b"],
+    baseline: new Set(),
+    auditWithout: (keys) => (keys.length > 1 ? new Set([RESOLUTION_FAILURE]) : new Set()),
+  });
+  assert.deepStrictEqual(result, { removable: ["a"], heldBack: [{ key: "b", advisories: [RESOLUTION_FAILURE] }] });
 });
 
 test("renderMarkdown lists removal candidates", () => {

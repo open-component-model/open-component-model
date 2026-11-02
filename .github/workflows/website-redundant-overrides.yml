@@ -30,6 +30,8 @@ jobs:
     runs-on: ubuntu-26.04-arm
     permissions:
       contents: read
+    env:
+      PUBLISH: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -45,26 +47,40 @@ jobs:
         with:
           node-version-file: website/package.json
 
+      # Node can bundle older npm versions than the one website/package.json declares.
+      # Use the declared one, so the refreshed lockfile matches what developers produce.
+      - name: Install declared npm
+        run: |
+          npm install --global "$(node -p "require('./website/package.json').packageManager.split('+')[0]")"
+          npm --version
+
       # Detection re-resolves lockfiles in a temp directory, so the checked-out
-      # files are untouched while auditing. On non-PR runs `--apply` then removes
+      # files are untouched while auditing. On publishing runs `--apply` then removes
       # the detected redundant overrides from website/package.json; the next step
       # refreshes the lockfile to match, and the PR step commits both.
       - name: Detect redundant overrides
         id: check
         shell: bash
-        run: node .github/scripts/check-redundant-overrides.js ${{ github.event_name != 'pull_request' && '--apply' || '' }} | tee "${RUNNER_TEMP}/report.md"
+        run: |
+          args=()
+          if [[ "${PUBLISH}" == "true" ]]; then args+=(--apply); fi
+          node .github/scripts/check-redundant-overrides.js "${args[@]}" | tee "${RUNNER_TEMP}/report.md"
 
       - name: Refresh lockfile
         if: >-
-          github.event_name != 'pull_request' &&
+          env.PUBLISH == 'true' &&
           steps.check.outputs.candidate-count != '' && steps.check.outputs.candidate-count != '0'
         working-directory: website
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
 
+      # The remaining steps also run with zero candidates: create-pull-request
+      # then finds no diff with main and, with delete-branch, deletes the branch,
+      # which closes a stale removal PR. An empty count means the detector
+      # failed, so nothing runs. body-path must exist in both cases.
       - name: Compose PR body
         if: >-
-          github.event_name != 'pull_request' &&
-          steps.check.outputs.candidate-count != '' && steps.check.outputs.candidate-count != '0'
+          env.PUBLISH == 'true' &&
+          steps.check.outputs.candidate-count != ''
         env:
           WORKFLOW_NAME: ${{ github.workflow }}
         run: |
@@ -81,8 +97,8 @@ jobs:
 
       - name: Generate ocmbot token
         if: >-
-          github.event_name != 'pull_request' &&
-          steps.check.outputs.candidate-count != '' && steps.check.outputs.candidate-count != '0'
+          env.PUBLISH == 'true' &&
+          steps.check.outputs.candidate-count != ''
         id: token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
@@ -92,10 +108,10 @@ jobs:
           permission-pull-requests: write
           permission-contents: write
 
-      - name: Open or update removal PR
+      - name: Open, update or close removal PR
         if: >-
-          github.event_name != 'pull_request' &&
-          steps.check.outputs.candidate-count != '' && steps.check.outputs.candidate-count != '0'
+          env.PUBLISH == 'true' &&
+          steps.check.outputs.candidate-count != ''
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
           token: ${{ steps.token.outputs.token }}

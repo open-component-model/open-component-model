@@ -19,6 +19,10 @@
  * also audited together, and a candidate that is only needed in combination
  * with others is held back, not reported as removable.
  *
+ * If npm cannot resolve the dependency tree without an override (for example
+ * ERESOLVE), that override is reported as still required, and the other
+ * overrides are still checked.
+ *
  * Not every override exists for a security advisory (for example a peer-dep
  * compatibility override). Those would always look removable, so the IGNORE
  * set below lists them, each with a reason. They are reported as ignored, not
@@ -204,8 +208,37 @@ export function parseAuditOutput(stdout) {
 }
 
 /**
+ * Reported in place of an advisory id when npm cannot resolve the dependency
+ * tree without an override. The override then counts as still required.
+ */
+export const RESOLUTION_FAILURE = "a dependency resolution failure";
+
+/** `npm install` failed for an overrides variant, for example with ERESOLVE. */
+export class ResolutionError extends Error {}
+
+/**
+ * Audit a removal variant. A variant that npm cannot resolve introduces
+ * RESOLUTION_FAILURE, so the removed overrides are kept and the run goes on.
+ * All other errors, such as a failed `npm audit`, still throw.
+ *
+ * @param {string} label - which variant, for the log.
+ * @param {() => Set<string>} audit
+ * @returns {Set<string>}
+ */
+export function auditVariant(label, audit) {
+  try {
+    return audit();
+  } catch (err) {
+    if (!(err instanceof ResolutionError)) throw err;
+    process.stderr.write(`${label}: ${err.message}. Keeping the override(s).\n`);
+    return new Set([RESOLUTION_FAILURE]);
+  }
+}
+
+/**
  * Run `npm audit --json` for a copy of the website package whose `overrides`
  * object is replaced by the given one, re-resolving a temp lockfile.
+ * Throws ResolutionError when `npm install` fails.
  *
  * @param {string} websiteDir - Absolute path to the website/ directory.
  * @param {Record<string, unknown>} overrides
@@ -221,10 +254,14 @@ function auditWithOverrides(websiteDir, overrides) {
     writeFileSync(join(tmp, "package.json"), JSON.stringify(pkg, null, 2));
     if (existsSync(lockPath)) copyFileSync(lockPath, join(tmp, "package-lock.json"));
 
-    execFileSync("npm", ["install", "--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund"], {
-      cwd: tmp,
-      stdio: ["ignore", "ignore", "inherit"],
-    });
+    try {
+      execFileSync("npm", ["install", "--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund"], {
+        cwd: tmp,
+        stdio: ["ignore", "ignore", "inherit"],
+      });
+    } catch (err) {
+      throw new ResolutionError("npm install failed, see the npm output above", { cause: err });
+    }
 
     // `npm audit --json` exits non-zero when vulnerabilities exist, which is
     // the normal case here, so read stdout regardless of exit code, but ensure
@@ -253,13 +290,14 @@ export function run(repoRoot) {
   const overrides = /** @type {Record<string, unknown>} */ (packageJson.overrides ?? {});
   const overrideKeys = Object.keys(overrides);
 
+  // The baseline must resolve, otherwise no comparison is possible.
   const baseline = auditWithOverrides(websiteDir, overrides);
 
   /** @type {Record<string, string[]>} */
   const introducedByKey = {};
   for (const key of overrideKeys) {
     if (key in IGNORE) continue;
-    const without = auditWithOverrides(websiteDir, removeOverrideKey(overrides, key));
+    const without = auditVariant(`Without ${key}`, () => auditWithOverrides(websiteDir, removeOverrideKey(overrides, key)));
     introducedByKey[key] = newlyIntroduced(baseline, without);
   }
 
@@ -267,7 +305,8 @@ export function run(repoRoot) {
   const { removable, heldBack } = selectCombinedRemovals({
     candidates: classified.candidates,
     baseline,
-    auditWithout: (keys) => auditWithOverrides(websiteDir, keys.reduce(removeOverrideKey, overrides)),
+    auditWithout: (keys) =>
+      auditVariant(`Without ${keys.join(", ")}`, () => auditWithOverrides(websiteDir, keys.reduce(removeOverrideKey, overrides))),
   });
 
   /** @type {Result} */
