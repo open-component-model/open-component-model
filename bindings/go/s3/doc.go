@@ -14,19 +14,18 @@
 // is the entry point. It resolves the access spec of a resource, builds an
 // aws-sdk-go-v2 client, performs a GetObject and returns the object body as a blob:
 //
-//	repo := repository.NewResourceRepository(filesystemConfig)
+//	repo := repository.NewResourceRepository()
 //	b, err := repo.DownloadResource(ctx, resource, credentials)
 //	if err != nil {
 //	    return err
 //	}
 //
-// Objects are streamed into a file under the TempFolder of the supplied filesystem
-// config (a nil config selects the OS temporary directory) rather than buffered, so
-// memory use does not scale with object size. That file outlives the call and is
-// owned by the caller. Upload is not supported yet (download-first, matching ocmv1),
-// and integrity uses OCM's own SHA-256 over the content (see ProcessResourceDigest)
-// rather than the S3 ETag, which is not a reliable whole-object hash for multipart
-// objects.
+// The returned blob is lazy: every read sends a GetObject and streams the body
+// through, so nothing is buffered or stored and memory use does not scale with object
+// size. The first read that reports a real object version pins it for later reads.
+// Upload is not supported yet (download-first, matching ocmv1), and integrity uses
+// OCM's own SHA-256 over the content (see ProcessResourceDigest) rather than the S3
+// ETag, which is not a reliable whole-object hash for multipart objects.
 //
 // Credentials are optional. When supplied as
 // [ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1.S3Credentials]
@@ -57,9 +56,12 @@
 //	    objectKey: path/to/blob.txt
 //
 // It downloads the object over the same path a resource download uses and hands it to
-// the constructor as local blob data, so the finished component version carries the
-// bytes and no longer resolves anything against the bucket. That is the difference to
-// the access type, which leaves the object where it is and fetches it on every read.
+// the constructor as local blob data: the object is downloaded once to learn its digest,
+// size and version, and that download is what the constructor stores. Any later read
+// requests the object again, pinned to that version and verified. The finished component
+// version carries the bytes and no longer resolves anything against the bucket. That is
+// the difference to the access type, which leaves the object where it is and fetches it
+// on every read.
 //
 // The input derives its credential consumer identity exactly as the access type does,
 // so one consumer entry serves a bucket whether its objects are referenced or taken in.

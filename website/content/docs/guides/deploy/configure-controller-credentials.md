@@ -1,6 +1,6 @@
 ---
 title: "Configure Controller Credentials"
-description: "Configure authentication for OCM Controllers to access private OCM repositories."
+description: "Configure authentication for OCM Controllers to access private OCM repositories: credential types, .ocmconfig, and Kubernetes secrets."
 weight: 10
 toc: true
 aliases:

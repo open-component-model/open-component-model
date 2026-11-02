@@ -8,6 +8,7 @@ import (
 	"net"
 	nethttp "net/http"
 	"os"
+	"slices"
 	"time"
 
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -21,10 +22,19 @@ const (
 	defaultKeepAlive   = 30 * time.Second
 )
 
+// HTTP/2 connection health checks. HTTP/2 multiplexes every request to a host
+// over one connection; without pings a connection that silently stops
+// delivering frames (NAT/LB idle drop, black-holed route) stalls all of them
+// until the kernel gives up retransmitting. Variables so tests can shorten them.
+var (
+	http2SendPingTimeout = 30 * time.Second
+	http2PingTimeout     = 15 * time.Second
+)
+
 // NewTransport returns an *http.Transport that starts as a clone of
 // http.DefaultTransport and selectively overrides timeouts from cfg.
-// A nil or empty cfg returns a clone of http.DefaultTransport with only
-// compression disabled.
+// A nil or empty cfg returns a clone of http.DefaultTransport with
+// compression disabled and HTTP/2 health-check pings enabled.
 //
 // Responses are returned as the server sent them: the transport adds no
 // Accept-Encoding header and never decodes gzip transparently, because OCM
@@ -47,6 +57,10 @@ func NewTransport(cfg *httpv1alpha1.TimeoutConfig) *nethttp.Transport {
 	}
 	transport := dt.Clone()
 	transport.DisableCompression = true
+	transport.HTTP2 = &nethttp.HTTP2Config{
+		SendPingTimeout: http2SendPingTimeout,
+		PingTimeout:     http2PingTimeout,
+	}
 
 	if cfg == nil {
 		return transport
@@ -111,6 +125,39 @@ func NewTransportWithTLS(cfg *httpv1alpha1.TimeoutConfig, tlsCfg *httpv1alpha1.T
 	return transport, nil
 }
 
+// newHostTransport builds the *http.Transport for one resolved host
+// configuration (global or per-host): timeouts, TLS and protocol selection.
+// A nil hc yields the defaults.
+func newHostTransport(hc *httpv1alpha1.HostConfig) (*nethttp.Transport, error) {
+	if hc == nil {
+		return NewTransport(nil), nil
+	}
+	transport, err := NewTransportWithTLS(&hc.TimeoutConfig, &hc.TLSConfig)
+	if err != nil {
+		return nil, err
+	}
+	applyProtocolConfig(transport, &hc.ProtocolConfig)
+	return transport, nil
+}
+
+// applyProtocolConfig restricts transport to HTTP/1.1 when DisableHTTP2 is set.
+// Restricting Transport.Protocols alone is not enough: the TLS config cloned
+// from http.DefaultTransport already advertises "h2" via ALPN, and a server
+// selecting it would then answer in a protocol the transport no longer speaks.
+func applyProtocolConfig(transport *nethttp.Transport, pc *httpv1alpha1.ProtocolConfig) {
+	if pc == nil || pc.DisableHTTP2 == nil || !*pc.DisableHTTP2 {
+		return
+	}
+	var protocols nethttp.Protocols
+	protocols.SetHTTP1(true)
+	transport.Protocols = &protocols
+	if transport.TLSClientConfig != nil {
+		tlsConf := transport.TLSClientConfig.Clone()
+		tlsConf.NextProtos = slices.DeleteFunc(slices.Clone(tlsConf.NextProtos), func(p string) bool { return p == "h2" })
+		transport.TLSClientConfig = tlsConf
+	}
+}
+
 // rootCAPoolFromTLSConfig builds an x509 pool for the transport from the custom
 // root CA material on tlsCfg, appended to a clone of the system trust pool so
 // public CAs keep working. It returns nil, nil when no custom roots are set.
@@ -167,15 +214,17 @@ func newDialer(cfg *httpv1alpha1.TimeoutConfig) *net.Dialer {
 // Timeout.
 //
 // NewClient produces a plain client with no retry behaviour. For the
-// retry-enabled client used for OCI registry traffic, use New.
+// retry-enabled client used for OCI registry traffic, use New. Seekable request
+// bodies are still made replayable so the transport can resend them after an
+// HTTP/2 GOAWAY (see replayableBodyTransport).
 func NewClient(cfg *httpv1alpha1.Config) *nethttp.Client {
-	build := func(tc *httpv1alpha1.TimeoutConfig, _ *httpv1alpha1.RetryConfig, tlsc *httpv1alpha1.TLSConfig) nethttp.RoundTripper {
-		base, err := NewTransportWithTLS(tc, tlsc)
+	build := func(hc *httpv1alpha1.HostConfig) nethttp.RoundTripper {
+		base, err := newHostTransport(hc)
 		if err != nil {
 			return errorRoundTripper{err: err}
 		}
-		rt := nethttp.RoundTripper(base)
-		if tlsc != nil && tlsc.InsecureSkipVerify != nil && *tlsc.InsecureSkipVerify {
+		rt := nethttp.RoundTripper(&replayableBodyTransport{base: base})
+		if insecureSkipVerify(hc) {
 			rt = &insecureWarnTransport{base: rt}
 		}
 		return rt
@@ -184,4 +233,8 @@ func NewClient(cfg *httpv1alpha1.Config) *nethttp.Client {
 		Transport: buildRoutingTransport(cfg, build),
 		Timeout:   clientLevelTimeout(cfg),
 	}
+}
+
+func insecureSkipVerify(hc *httpv1alpha1.HostConfig) bool {
+	return hc != nil && hc.InsecureSkipVerify != nil && *hc.InsecureSkipVerify
 }

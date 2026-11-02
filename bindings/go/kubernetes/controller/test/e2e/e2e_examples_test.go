@@ -5,7 +5,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -144,7 +146,8 @@ var _ = Describe("controller", func() {
 						By(fmt.Sprintf("confirming signature %q was verified by the controller", sig))
 						// signature names are based on the example names, so this should be enough to make sure it got
 						// verified
-						expected := fmt.Sprintf(`"verified signature","signature":%q`, sig)
+						// The log line carries the reconcile fields between the message and the signature.
+						expected := fmt.Sprintf(`"msg":"verified signature"[^\n]*"signature":%s`, regexp.QuoteMeta(strconv.Quote(sig)))
 						// The controller wraps every handler error (wrong key, missing
 						// credential, cosign/gpg failure) into this message. It is logged only
 						// after the descriptor and signature are fetched and verification
@@ -166,7 +169,7 @@ var _ = Describe("controller", func() {
 								StopTrying(fmt.Sprintf("controller reported a terminal verification failure for signature %q", sig)).Now()
 							}
 							return logs
-						}, timeout).Should(ContainSubstring(expected))
+						}, timeout).Should(MatchRegexp(expected))
 					}
 				}
 

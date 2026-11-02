@@ -7,6 +7,7 @@ toc: true
 aliases:
   - /docs/how-to/migrate-from-deprecated-resolvers/
   - /docs/how-to/migrate-from-fallback-to-deterministic-repository-resolvers/
+  - /docs/how-to/migration-guides/migrate-from-fallback-to-deterministic-repository-resolvers/
   - /docs/guides/migrate/migrate-legacy-resolvers/
 ---
 

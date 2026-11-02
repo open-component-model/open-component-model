@@ -1,6 +1,8 @@
 package internal
 
 import (
+	"bytes"
+	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -48,7 +50,7 @@ func TestProcessGit(t *testing.T) {
 			resource := v2desc.Component.Resources[0]
 			tgd := &transformv1alpha1.TransformationGraphDefinition{}
 			ids := map[int]string{0: "existing"}
-			exprs, err := processResource(resource, res.Access, "root", &discoveryValue{Descriptor: desc}, tgd, tt.target, ids, 1)
+			exprs, err := processResource(t.Context(), resource, res.Access, "root", &discoveryValue{Descriptor: desc}, tgd, tt.target, ids, 1)
 			r.NoError(err)
 			r.Len(tgd.Transformations, 2)
 			get, add := tgd.Transformations[0], tgd.Transformations[1]
@@ -68,21 +70,47 @@ func TestProcessGit(t *testing.T) {
 	}
 }
 
-func TestProcessGit_RejectsUnpinnedAccess(t *testing.T) {
-	r := require.New(t)
-	res := gitResource("")
-	desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{res}, nil)
-	v2desc, err := descriptor.ConvertToV2(scheme, desc)
-	r.NoError(err)
-	tgd := &transformv1alpha1.TransformationGraphDefinition{}
-	ids := map[int]string{}
-	exprs, err := processResource(v2desc.Component.Resources[0], res.Access, "root", &discoveryValue{Descriptor: desc}, tgd, testOCIRepo("ghcr.io/target"), ids, 0)
-	r.ErrorContains(err, "cannot process Git resource")
-	r.ErrorContains(err, "no pinned commit")
-	r.ErrorContains(err, "refs/heads/main")
-	r.Empty(tgd.Transformations)
-	r.Empty(ids)
-	r.Empty(exprs)
+func TestProcessGit_UnpinnedWarnsAndProceeds(t *testing.T) {
+	for _, tt := range []struct {
+		name     string
+		commit   string
+		wantWarn bool
+	}{
+		{"pinned commit proceeds without warning", "f58349914e3c775747dc1ee9af1bc83db4652266", false},
+		{"unpinned ref proceeds with a drift warning", "", true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			logs := captureWarnLogs(t)
+			res := gitResource(tt.commit)
+			desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{res}, nil)
+			v2desc, err := descriptor.ConvertToV2(scheme, desc)
+			r.NoError(err)
+			resource := v2desc.Component.Resources[0]
+			tgd := &transformv1alpha1.TransformationGraphDefinition{}
+			ids := map[int]string{}
+			exprs, err := processResource(t.Context(), resource, res.Access, "root", &discoveryValue{Descriptor: desc}, tgd, testOCIRepo("ghcr.io/target"), ids, 0)
+			// Transfer proceeds whether or not the access is pinned; only an unresolvable
+			// ref fails, and that happens later in the download step.
+			r.NoError(err)
+			r.Len(tgd.Transformations, 2)
+			get, add := tgd.Transformations[0], tgd.Transformations[1]
+			r.Equal(gitv1alpha1.GetGitResourceV1alpha1, get.Type)
+			r.Equal([]string{"${" + add.ID + ".spec.file}"}, exprs)
+			r.Equal(map[int]string{0: add.ID}, ids)
+			// The access is carried into the GetGitResource spec unchanged: a pinned commit
+			// stays as given and an unpinned ref is resolved by the download step, not here.
+			wantSpec, err := runtime.UnstructuredFromMixedData(map[string]any{"resource": resource})
+			r.NoError(err)
+			r.Equal(wantSpec.Data, get.Spec.Data)
+			if tt.wantWarn {
+				r.Contains(logs.String(), "not pinned")
+				r.Contains(logs.String(), "refs/heads/main")
+			} else {
+				r.Empty(logs.String(), "a pinned commit must not be re-resolved or warned about")
+			}
+		})
+	}
 }
 
 func TestBuildGraphDefinition_GitResource_PinnedByURLFragment(t *testing.T) {
@@ -112,7 +140,7 @@ func TestProcessGit_UnsupportedTargetDoesNotEmitNodes(t *testing.T) {
 	r.NoError(err)
 	tgd := &transformv1alpha1.TransformationGraphDefinition{}
 	ids := map[int]string{}
-	err = processGit(v2desc.Component.Resources[0], res.Access.(*gitv1.Git), "root", &discoveryValue{Descriptor: desc}, tgd, &runtime.Unstructured{}, ids, 0)
+	err = processGit(t.Context(), v2desc.Component.Resources[0], res.Access.(*gitv1.Git), "root", &discoveryValue{Descriptor: desc}, tgd, &runtime.Unstructured{}, ids, 0)
 	r.ErrorContains(err, "failed to create local resource upload transformation")
 	r.Empty(tgd.Transformations)
 	r.Empty(ids)
@@ -157,4 +185,15 @@ func TestBuildGraphDefinition_GitResource_WithoutUploaderKeepsUnpinnedByReferenc
 	r.Equal(ociv1alpha1.OCIAddComponentVersionV1alpha1, tgd.Transformations[0].Type)
 	_, err = NewDefaultBuilder(nil, nil, nil, nil).BuildAndCheck(tgd)
 	r.NoError(err)
+}
+
+// captureWarnLogs installs a WARN-level handler as the default slog logger for the test and
+// returns the buffer it writes to, restoring the previous logger on cleanup.
+func captureWarnLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	buf := &bytes.Buffer{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return buf
 }

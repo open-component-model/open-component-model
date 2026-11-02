@@ -1,6 +1,6 @@
 ---
 title: Reference
-description: "Browse reference documentation for the OCM CLI and OCM controllers."
+description: "Browse reference documentation for the OCM CLI, Kubernetes controllers, configuration file, and component descriptor format."
 icon: "💾"
 weight: 60
 toc: true

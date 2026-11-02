@@ -1,6 +1,7 @@
 package download
 
 import (
+	"bytes"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -66,16 +67,17 @@ func TestDownload_Credentials(t *testing.T) {
 					}
 					object := s3Object{body: []byte("public object"), errStatus: response.status, errCode: response.code}
 					srv := newFakeS3(t, object)
-					opts := []Option{WithTempDir(t.TempDir())}
+					var opts []Option
 					if source.credentials != nil {
 						opts = append(opts, WithCredentials(source.credentials))
 					}
-					out, err := Download(t.Context(), Request{
+					var written bytes.Buffer
+					out, err := Stream(t.Context(), Request{
 						BucketName: "bucket", ObjectKey: "object", Endpoint: srv.URL, UsePathStyle: true,
-					}, opts...)
+					}, &written, opts...)
 					if response.code == "" {
 						r.NoError(err)
-						r.Equal(object.body, readBlob(t, out.Blob))
+						r.Equal(object.body, written.Bytes())
 					} else {
 						r.ErrorContains(err, response.code)
 						r.Nil(out)
@@ -130,7 +132,7 @@ func TestDownload_CredentialErrorsDoNotBecomeAnonymous(t *testing.T) {
 			if creds != nil {
 				opts = append(opts, WithCredentials(creds))
 			}
-			out, err := downloadFrom(t, srv, Request{BucketName: "bucket", ObjectKey: "key"}, opts...)
+			out, _, err := streamFrom(t, srv, Request{BucketName: "bucket", ObjectKey: "key"}, opts...)
 			if tt.wantErr != "" {
 				r.ErrorContains(err, tt.wantErr)
 			} else {

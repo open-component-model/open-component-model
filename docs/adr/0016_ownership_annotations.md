@@ -322,7 +322,7 @@ After a resource is uploaded to the registry, push a second OCI manifest (the ow
 
 ##### Injection Point — Transfer
 
-`ocm transfer` currently does **not** copy ownership referrers. The transfer graph is built in [`graph.go`](https://github.com/open-component-model/open-component-model/blob/main/cli/cmd/transfer/component-version/internal/graph.go) `fillGraphDefinitionWithPrefetchedComponents`, which processes resources via `processLocalBlob` / `processOCIArtifact` but has no referrer discovery step.
+`ocm transfer` currently does **not** copy ownership referrers. The transfer graph is built in [`graph.go`](../../bindings/go/transfer/internal/graph.go) `fillGraphDefinitionWithPrefetchedComponents`, which processes resources via `processLocalBlob` / `processOCIArtifact` but has no referrer discovery step.
 
 Two strategies to handle referrers during transfer:
 

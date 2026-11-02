@@ -19,6 +19,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha3"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
@@ -121,7 +122,8 @@ var _ = Describe("Component Controller", func() {
 
 			By("checking that the component has been reconciled successfully")
 			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{
-				"Status.Component.Version": Version1,
+				"Status.Component.Version":                       Version1,
+				"Status.Component.Digest.NormalisationAlgorithm": v4alpha3.Algorithm,
 			})
 
 			By("delete resources manually")

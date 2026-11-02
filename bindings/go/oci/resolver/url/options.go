@@ -80,9 +80,8 @@ func WithReferenceCache(refs *cache.ReferenceCache) Option {
 // threshold <= 0 uses remotestore.DefaultChunkThreshold.
 //
 // Chunked upload also enables streaming pushes (see remotestore.StreamingPusher)
-// so blobs of unknown size or digest can be uploaded without buffering. Chunked
-// upload is bypassed when a blob or reference cache is active on the resolver,
-// because those wrap the raw *remote.Repository.
+// so blobs of unknown size or digest can be uploaded without buffering. It also
+// applies when a blob or reference cache is active on the resolver.
 func WithChunkedPush(chunkSize, threshold int64) Option {
 	return OptionFunc(func(resolver *CachingResolver) {
 		resolver.chunkSize = chunkSize

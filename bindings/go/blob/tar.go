@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"errors"
 	"fmt"
-	"io"
 )
 
 // DefaultArchiveBlobBufferSize is the default buffer size used to archive blobs.
@@ -14,8 +13,7 @@ const DefaultArchiveBlobBufferSize = 128 * 1024 // 128 KiB
 
 // ArchiveBlob archives a ReadOnlyBlob to the tar writer.
 // it assumes that size and digest are already known to compute its header.
-// The buffer is used to copy the blob data, if nil, a new buffer is allocated.
-func ArchiveBlob(name string, size int64, digest string, b ReadOnlyBlob, writer *tar.Writer, buf []byte) (err error) {
+func ArchiveBlob(name string, size int64, digest string, b ReadOnlyBlob, writer *tar.Writer) (err error) {
 	if err := writer.WriteHeader(&tar.Header{
 		Name: name,
 		Mode: 0o644,
@@ -31,11 +29,7 @@ func ArchiveBlob(name string, size int64, digest string, b ReadOnlyBlob, writer 
 		err = errors.Join(err, data.Close())
 	}()
 
-	if buf == nil {
-		buf = make([]byte, DefaultArchiveBlobBufferSize)
-	}
-
-	if _, err := io.CopyBuffer(writer, data, buf); err != nil {
+	if _, err := CopyReader(writer, data); err != nil {
 		return fmt.Errorf("unable to write blob: %w", err)
 	}
 

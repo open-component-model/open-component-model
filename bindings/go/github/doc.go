@@ -1,5 +1,4 @@
-// Package github provides access to GitHub repositories as OCM resources and
-// sources.
+// Package github provides access to GitHub repositories as OCM resources.
 //
 // # Deprecation
 //
@@ -48,7 +47,10 @@
 //
 // Sources may carry the same access spec, but only as provenance metadata:
 // component construction records it verbatim without digesting or fetching
-// anything, so this module implements no source download.
+// anything, so this module implements no source download. Sources are
+// deprecated: they carry no digest, so neither the component version digest
+// nor any signature covers their content. Declare such content as resources,
+// see https://ocm.software/docs/changelog/migrate-from-sources/.
 // [ocm.software/open-component-model/bindings/go/github/digest.DigestProcessor]
 // pins a ref-only access to the commit its ref resolves to and computes the
 // genericBlobDigest/v1 over the downloaded archive, so by-reference resources

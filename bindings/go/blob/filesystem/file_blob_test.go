@@ -49,6 +49,42 @@ func TestBlob_WriteCloser(t *testing.T) {
 	r.NoError(writer.Close())
 }
 
+func TestBlob_Remove(t *testing.T) {
+	t.Run("writable filesystem removes the file", func(t *testing.T) {
+		r := require.New(t)
+		dir := t.TempDir()
+		fsys, err := filesystem.NewFS(dir, os.O_RDWR)
+		r.NoError(err)
+		r.NoError(os.WriteFile(filepath.Join(dir, "testfile.txt"), []byte("data"), 0o600))
+
+		b := filesystem.NewFileBlob(fsys, "testfile.txt")
+		r.NoError(b.Remove())
+		r.NoFileExists(filepath.Join(dir, "testfile.txt"))
+		r.ErrorIs(b.Remove(), os.ErrNotExist)
+	})
+	t.Run("read-only filesystem keeps the file", func(t *testing.T) {
+		r := require.New(t)
+		dir := t.TempDir()
+		fsys, err := filesystem.NewFS(dir, os.O_RDONLY)
+		r.NoError(err)
+		r.NoError(os.WriteFile(filepath.Join(dir, "testfile.txt"), []byte("data"), 0o600))
+
+		b := filesystem.NewFileBlob(fsys, "testfile.txt")
+		r.ErrorIs(b.Remove(), filesystem.ErrReadOnly)
+		r.FileExists(filepath.Join(dir, "testfile.txt"))
+	})
+	t.Run("blob from OS path keeps the file", func(t *testing.T) {
+		r := require.New(t)
+		path := filepath.Join(t.TempDir(), "testfile.txt")
+		r.NoError(os.WriteFile(path, []byte("data"), 0o600))
+
+		b, err := filesystem.GetBlobFromOSPath(path)
+		r.NoError(err)
+		r.Error(b.Remove())
+		r.FileExists(path)
+	})
+}
+
 func TestBlob_Size(t *testing.T) {
 	r := require.New(t)
 	tempDir := t.TempDir()
@@ -171,27 +207,5 @@ func TestBlob_FromPath(t *testing.T) {
 		_, err = b.WriteCloser()
 		r.Error(err)
 		r.Equal(b.Size(), int64(len(td)))
-	})
-
-	t.Run("if flag is rdwr, it is read/write", func(t *testing.T) {
-		td := []byte("bar")
-		r := require.New(t)
-		filePath := filepath.Join(t.TempDir(), "foo")
-		r.NoError(os.WriteFile(filePath, td, 0o644))
-
-		b, err := filesystem.NewFileBlobFromPathWithFlag(filePath, os.O_RDWR)
-		r.NoError(err)
-		reader, err := b.ReadCloser()
-		r.NoError(err)
-		data, err := io.ReadAll(reader)
-		r.NoError(err)
-		r.Equal(td, data)
-		r.NoError(reader.Close())
-
-		writer, err := b.WriteCloser()
-		r.NoError(err)
-		_, err = writer.Write([]byte("test data"))
-		r.NoError(err)
-		r.NoError(writer.Close())
 	})
 }

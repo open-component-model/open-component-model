@@ -44,11 +44,10 @@ func TestProcessResourceUsesHTTPConfig(t *testing.T) {
 				},
 			}
 
-			result, err := method.ProcessResource(t.Context(), &constructorruntime.Resource{Input: &inputv1.Git{
+			err := processAndRead(t.Context(), method, &constructorruntime.Resource{Input: &inputv1.Git{
 				Type: inputspec.V1VersionedType, Repository: server.URL + "/repo.git",
 			}}, nil)
 			r.ErrorContains(err, tc.wantErr)
-			r.Nil(result)
 			r.Equal(tc.wantReached, reached.Load())
 		})
 	}

@@ -1,6 +1,6 @@
 ---
 title: "Verify Component Signatures on Deployment"
-description: "Configure the OCM controller to verify component version signatures on reconciliation."
+description: "Configure the OCM controller to verify component version signatures on reconciliation, ensuring only trusted components are deployed."
 weight: 70
 toc: true
 aliases:
@@ -170,6 +170,10 @@ kubectl apply -f component.yaml
 The Secret is looked up in the `Component`'s own namespace unless the reference sets a
 `namespace` field. The configuration also propagates: a `Resource` or `NamespacedDeployer` that references
 this `Component` inherits it and verifies the same signature.
+{{< /callout >}}
+
+{{< callout context="caution" title="Ensure component version verification" icon="outline/alert-triangle" >}}
+Specifying a different `ocmConfig` in an object referencing the `Component` (e.g. a `Resource`) drops the inherited config including the verifier configuration. As a result, the component version won't be verified again! To keep the verifier configuration and enforce component version verification, reference the parent objects, too.
 {{< /callout >}}
 
 {{< /step >}}

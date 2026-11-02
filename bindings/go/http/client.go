@@ -83,7 +83,7 @@ func retryPolicyFromConfig(rc *httpv1alpha1.RetryConfig) retry.Policy {
 //
 // Transport chain (outermost first):
 //
-//		http.Client → [userAgentTransport] → [hostRouter] → [insecureWarnTransport] → retry.Transport → http.Transport
+//		http.Client → [userAgentTransport] → [hostRouter] → [insecureWarnTransport] → replayableBodyTransport → retry.Transport → http.Transport
 //
 //	 1. userAgentTransport sets the User-Agent header (only when WithUserAgent
 //	    is given).
@@ -92,12 +92,15 @@ func retryPolicyFromConfig(rc *httpv1alpha1.RetryConfig) retry.Policy {
 //	    global chain. Omitted entirely when cfg has no per-host entries.
 //	 3. insecureWarnTransport (only when InsecureSkipVerify=true) emits a
 //	    slog.WarnContext on the first request per host.
-//	 4. retry.Transport retries transient failures using the default retry
+//	 4. replayableBodyTransport sets Request.GetBody for seekable bodies so
+//	    both retry.Transport and the HTTP/2 transport (after a GOAWAY) can
+//	    resend them.
+//	 5. retry.Transport retries transient failures using the default retry
 //	    policy. One instance exists per host (plus one for the global fallback)
 //	    so retry attempts share the per-host context deadline.
-//	 5. http.Transport carries the configured TCP/TLS/idle timeouts, merged
-//	    from the global config and the matching per-host overrides; responses
-//	    are raw unless WithCompression is set.
+//	 6. http.Transport carries the configured TCP/TLS/idle timeouts and
+//	    protocol selection, merged from the global config and the matching
+//	    per-host overrides; responses are raw unless WithCompression is set.
 //
 // Without per-host entries, the overall Timeout is applied as
 // http.Client.Timeout. With per-host entries it is applied per request inside
@@ -112,17 +115,20 @@ func New(opts ...Option) *nethttp.Client {
 		opt(options)
 	}
 
-	build := func(tc *httpv1alpha1.TimeoutConfig, rc *httpv1alpha1.RetryConfig, tlsc *httpv1alpha1.TLSConfig) nethttp.RoundTripper {
-		tr, err := NewTransportWithTLS(tc, tlsc)
+	build := func(hc *httpv1alpha1.HostConfig) nethttp.RoundTripper {
+		tr, err := newHostTransport(hc)
 		if err != nil {
 			return errorRoundTripper{err: err}
 		}
 		tr.DisableCompression = !options.compression
-		rt := nethttp.RoundTripper(retry.NewTransport(tr))
-		if p := retryPolicyFromConfig(rc); p != nil {
-			rt.(*retry.Transport).Policy = func() retry.Policy { return p }
+		retryTransport := retry.NewTransport(tr)
+		if hc != nil {
+			if p := retryPolicyFromConfig(hc.Retry); p != nil {
+				retryTransport.Policy = func() retry.Policy { return p }
+			}
 		}
-		if tlsc != nil && tlsc.InsecureSkipVerify != nil && *tlsc.InsecureSkipVerify {
+		rt := nethttp.RoundTripper(&replayableBodyTransport{base: retryTransport})
+		if insecureSkipVerify(hc) {
 			rt = &insecureWarnTransport{base: rt}
 		}
 		return rt
@@ -142,20 +148,26 @@ func New(opts ...Option) *nethttp.Client {
 }
 
 // buildRoutingTransport builds the transport chain that fronts every request
-// from a client built out of cfg. inner is invoked for each TimeoutConfig,
-// RetryConfig, and TLSConfig (global, then once per host entry) to produce the
-// innermost RoundTripper — callers use that to layer retry, instrumentation, etc.
+// from a client built out of cfg. inner is invoked for each resolved host
+// configuration (global, then once per host entry; nil when cfg is nil) to
+// produce the innermost RoundTripper — callers use that to layer retry,
+// instrumentation, etc.
 //
 // When cfg has no per-host entries the result is whatever inner returned for
 // the global config. With per-host entries the result is a hostRouter that
 // dispatches to a per-host inner chain, applying the per-host overall
 // Timeout via a context deadline so a per-host timeout can exceed the global.
-func buildRoutingTransport(cfg *httpv1alpha1.Config, inner func(*httpv1alpha1.TimeoutConfig, *httpv1alpha1.RetryConfig, *httpv1alpha1.TLSConfig) nethttp.RoundTripper) nethttp.RoundTripper {
+func buildRoutingTransport(cfg *httpv1alpha1.Config, inner func(*httpv1alpha1.HostConfig) nethttp.RoundTripper) nethttp.RoundTripper {
 	if cfg == nil {
-		return inner(nil, nil, nil)
+		return inner(nil)
 	}
 
-	globalChain := inner(&cfg.TimeoutConfig, cfg.Retry, &cfg.TLSConfig)
+	globalChain := inner(&httpv1alpha1.HostConfig{
+		TimeoutConfig:  cfg.TimeoutConfig,
+		TLSConfig:      cfg.TLSConfig,
+		ProtocolConfig: cfg.ProtocolConfig,
+		Retry:          cfg.Retry,
+	})
 	if len(cfg.Hosts) == 0 {
 		return globalChain
 	}
@@ -172,7 +184,7 @@ func buildRoutingTransport(cfg *httpv1alpha1.Config, inner func(*httpv1alpha1.Ti
 			continue
 		}
 		merged := cfg.ResolveHost(host)
-		hosts[host] = inner(&merged.TimeoutConfig, merged.Retry, &merged.TLSConfig)
+		hosts[host] = inner(&merged)
 		if merged.Timeout != nil {
 			hostTimeouts[host] = time.Duration(*merged.Timeout)
 		}

@@ -23,14 +23,14 @@ func TestNew(t *testing.T) {
 	t.Run("no options yields a retry client with no overall timeout", func(t *testing.T) {
 		c := ocmhttp.New()
 		require.NotNil(t, c)
-		_, ok := c.Transport.(*retry.Transport)
+		_, ok := ocmhttp.UnwrapReplayable(c.Transport).(*retry.Transport)
 		assert.True(t, ok, "expected *retry.Transport, got %T", c.Transport)
 		assert.Zero(t, c.Timeout)
 	})
 
 	t.Run("nil config behaves like no options", func(t *testing.T) {
 		c := ocmhttp.New(ocmhttp.WithConfig(nil))
-		_, ok := c.Transport.(*retry.Transport)
+		_, ok := ocmhttp.UnwrapReplayable(c.Transport).(*retry.Transport)
 		assert.True(t, ok)
 		assert.Zero(t, c.Timeout)
 	})
@@ -56,7 +56,7 @@ func TestNew(t *testing.T) {
 
 		assert.Equal(t, 90*time.Second, c.Timeout)
 
-		rt, ok := c.Transport.(*retry.Transport)
+		rt, ok := ocmhttp.UnwrapReplayable(c.Transport).(*retry.Transport)
 		require.True(t, ok)
 		base, ok := rt.Base.(*nethttp.Transport)
 		require.True(t, ok, "expected retry.Transport.Base to be *http.Transport, got %T", rt.Base)
@@ -265,7 +265,7 @@ func TestNew_NilHostEntry_Skipped(t *testing.T) {
 	assert.Equal(t, 30*time.Second, c.Timeout, "global Timeout must not be dropped when all host entries are nil")
 
 	// Transport must be a plain *http.Transport, not a hostRouter.
-	_, isTransport := c.Transport.(*nethttp.Transport)
+	_, isTransport := ocmhttp.UnwrapReplayable(c.Transport).(*nethttp.Transport)
 	assert.True(t, isTransport, "expected plain *http.Transport, not a hostRouter, got %T", c.Transport)
 
 	resp, err := getURL(t, c, srv.URL)

@@ -1,6 +1,6 @@
 ---
 title: "Guides"
-description: "Task-oriented guides organized by lifecycle phase: pack, sign, transport, and deploy."
+description: "Task-oriented guides organized by lifecycle phase: pack resources into components, sign them, transfer across registries, and deploy."
 icon: "🛠️"
 weight: 45
 aliases:

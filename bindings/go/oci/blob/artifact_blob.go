@@ -9,6 +9,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory/cache"
+	"ocm.software/open-component-model/bindings/go/blob/verified"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
@@ -60,8 +61,14 @@ func NewArtifactBlobWithMediaType(artifact descriptor.Artifact, b blob.ReadOnlyB
 						return nil, fmt.Errorf("resource blob digest mismatch: resource %s vs blob %s", resource.Digest.Value, blobDig)
 					}
 				} else if resource.Digest == nil {
-					resource.Digest = digestSpecFromDigest(digest.Digest(blobDig))
-					resource.Digest.NormalisationAlgorithm = internaldigest.GenericBlobDigestV1
+					digSpec, err := digestSpec(blobDig)
+					if err != nil {
+						return nil, fmt.Errorf("failed to parse digest spec from blob: %w", err)
+					}
+					if digSpec != nil {
+						digSpec.NormalisationAlgorithm = internaldigest.GenericBlobDigestV1
+					}
+					resource.Digest = digSpec
 				}
 			}
 		}
@@ -166,6 +173,12 @@ func (r *ArtifactBlob) HasPrecalculatedDigest() bool {
 	}
 	if precalculated, ok := r.ReadOnlyBlob.(blob.DigestPrecalculatable); ok && precalculated.HasPrecalculatedDigest() {
 		return true
+	}
+	// A verified blob's digest is fixed metadata, so asking for it reads nothing.
+	if v, ok := r.ReadOnlyBlob.(*verified.Blob); ok {
+		if _, known := v.Digest(); known {
+			return true
+		}
 	}
 	_, ok, err := r.resourceByteDigest()
 	return ok && err == nil

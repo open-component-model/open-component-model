@@ -151,6 +151,10 @@ func validateTarContents(t *testing.T, reader io.ReadCloser, expectedFiles []str
 
 	data, err := io.ReadAll(reader)
 	require.NoError(t, err, "Should be able to read all data from tar")
+	// archive/tar's reader tolerates a missing end-of-archive marker, so check it explicitly.
+	const tarTrailerSize = 2 * 512
+	require.GreaterOrEqual(t, len(data), tarTrailerSize, "tar must contain end-of-archive marker")
+	require.Equal(t, make([]byte, tarTrailerSize), data[len(data)-tarTrailerSize:], "tar must end with two zero blocks")
 
 	tarReader := tar.NewReader(bytes.NewReader(data))
 	foundFiles := make(map[string]bool)

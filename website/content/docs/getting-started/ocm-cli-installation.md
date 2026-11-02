@@ -1,6 +1,6 @@
 ---
 title: "Install the OCM CLI"
-description: "Learn how to install the OCM CLI on various platforms."
+description: "Learn how to install the OCM CLI on Linux, macOS, and Windows using package managers, the install script, or downloading the binary."
 icon: "💻"
 weight: 10
 toc: true

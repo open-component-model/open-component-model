@@ -28,6 +28,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	accessv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
+	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -37,8 +38,9 @@ type Options struct {
 	// AccessScheme is the scheme used for converting resource access types.
 	AccessScheme *runtime.Scheme
 
-	// CopyGraphOptions are the options for copying resource graphs when dealing with OCI layouts.
-	CopyGraphOptions oras.CopyGraphOptions
+	// ExtendedCopyGraphOptions are the options for copying resource graphs, including referrers, when dealing
+	// with OCI layouts.
+	ExtendedCopyGraphOptions oras.ExtendedCopyGraphOptions
 
 	// BaseReference is the base reference for the resource access that is used to update the resource.
 	BaseReference string
@@ -101,13 +103,14 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 		return finishResourceLayer(b, access, layer, opts, storage)
 	}
 
-	// Stream the blob directly when the storage supports streaming chunked
-	// upload and buffering would otherwise be required. Buffering happens
-	// (in PrepareArtifactBlobForOCI) whenever the size OR the digest is unknown,
-	// so we stream in either case: the digest and size are discovered/verified
-	// during the chunked upload instead of by reading the whole blob into memory
-	// first. Blobs that already expose both a size and a digest need no buffer
-	// and take the regular push path (which still chunks large blobs by size).
+	// Stream the blob directly when the storage supports streaming push (chunked
+	// upload to a registry, or a staged file renamed into a CTF) and buffering
+	// would otherwise be required. Buffering happens (in PrepareArtifactBlobForOCI)
+	// whenever the size OR the digest is unknown, so we stream in either case:
+	// the digest and size are discovered/verified while streaming instead of by
+	// reading the whole blob into memory first. Blobs that already expose both a
+	// size and a digest need no buffer and take the regular push path (which
+	// still chunks large blobs by size).
 	if pusher, ok := storage.(remotestore.StreamingPusher); ok {
 		if layer, streamed, err := streamResourceLayer(ctx, pusher, b, layerOpts); err != nil {
 			return ociImageSpecV1.Descriptor{}, err
@@ -207,7 +210,7 @@ func existingResourceLayer(ctx context.Context, storage content.Storage, b *ocib
 	return layer, true, nil
 }
 
-// streamResourceLayer attempts a streaming chunked upload of b, computing (and
+// streamResourceLayer attempts a streaming push of b, computing (and
 // verifying, if already known) the digest and size during upload so the blob is
 // never buffered into memory. It returns (descriptor, true, nil) on success.
 //
@@ -287,11 +290,12 @@ func finishResourceLayer(b *ociblob.ArtifactBlob, access *v2.LocalBlob, layer oc
 	return layer, nil
 }
 
+// ResourceLocalBlobOCILayout copies the OCI artifact in the layout blob b into storage. A blob
+// backed by an [ocistream.ResourceStream] is copied from its source store directly, so its
+// layout tar is never built.
 func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b *ociblob.ArtifactBlob, access *v2.LocalBlob, opts Options) (ociImageSpecV1.Descriptor, error) {
-	index, err := tar.CopyOCILayoutWithIndex(ctx, storage, b, tar.CopyOCILayoutWithIndexOptions{
-		ExtendedCopyGraphOptions: oras.ExtendedCopyGraphOptions{
-			CopyGraphOptions: opts.CopyGraphOptions,
-		},
+	copyOpts := tar.CopyOCILayoutWithIndexOptions{
+		ExtendedCopyGraphOptions: opts.ExtendedCopyGraphOptions,
 		MutateParentFunc: func(idx *ociImageSpecV1.Descriptor) error {
 			// Verify the selected root, not the archive checksum, before any graph writes.
 			if resource, ok := b.Artifact.(*descriptor.Resource); ok {
@@ -301,7 +305,16 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 			}
 			return identity.Adopt(idx, b.Artifact)
 		},
-	})
+	}
+	var (
+		index ociImageSpecV1.Descriptor
+		err   error
+	)
+	if rs, ok := b.ReadOnlyBlob.(ocistream.ResourceStream); ok {
+		index, err = tar.CopyGraphWithRoot(ctx, storage, rs, rs.Root(), copyOpts)
+	} else {
+		index, err = tar.CopyOCILayoutWithIndex(ctx, storage, b, copyOpts)
+	}
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to copy OCI layout: %w", err)
 	}

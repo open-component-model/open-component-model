@@ -120,6 +120,7 @@ Available functions:
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `resource.access.isType(string)`       | True when the access type matches the argument, with alias and version resolution (see below).                                                                            |
 | `resource.access.isType(list(string))` | True when the access type matches **any** element in the list.                                                                                                            |
+| `isArtifactSetMediaType(string)`       | True for legacy OCM OCI manifest/index artifact-set media types ending in `+tar+gzip`.                                                                                    |
 | `isOCIManifest(string)`                | True for OCI image manifest and index, and Docker manifest and manifest list media types.                                                                                 |
 | `toOCI()`                              | Returns a map with keys `host`, `registry`, `repository`, `tag`, `digest`, `reference` for OCI image accesses.                                                            |
 | `url(string)`                          | Parses a URL and returns a map with keys `scheme`, `host`, `hostname`, `port`, `path`, `rawPath`, `rawQuery`, `fragment`, `user`.                                         |
@@ -173,8 +174,9 @@ configurations:
     match: resource.access.isType("Wget/v1")
     targetURL: '${"https://artifacts.example.com/ocm" + url(resource.access.url).path}'
     method: PUT
-  # 3. OCI images, Helm charts and OCI-manifest local blobs become separate OCI
-  #    artifacts next to the component version (former --upload-as ociArtifact).
+  # 3. OCI images, Helm charts and OCI-manifest/artifact-set local blobs become
+  #    separate OCI artifacts next to the component version (former --upload-as
+  #    ociArtifact).
   #    Default match and imageReference.
   - type: oci.uploader.transfer.config.ocm.software/v1alpha1
   # 4. Everything the rules above did not select is embedded as a local blob

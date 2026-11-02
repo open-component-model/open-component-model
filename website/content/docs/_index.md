@@ -2,5 +2,5 @@
 title: "Documentation"
 icon: "📚"
 linkTitle: "Docs"
-description: "View all documentation sections at a glance."
+description: "Open Component Model documentation, including concepts, getting-started guides, how-to guides, tutorials, CLI reference, and API reference."
 ---

@@ -19,7 +19,7 @@ a target repository using an internally generated transformation graph.
 When a version is included in the source reference, exactly that version is transferred.
 A digest pins it (see "ocm get cv --help"). With an OCI digest, "@sha256:<hex>", the descriptor and all
 local resources are read from the source artifact with that digest instead of through the version tag,
-and the version may be omitted. With a normalized digest, "@jsonNormalisation.v4alpha1+sha256:<hex>"
+and the version may be omitted. With a normalized digest, "@jsonNormalisation.v4alpha3+sha256:<hex>"
 (the digest signatures sign), the transfer fails unless the source descriptor matches it. An OCI digest
 is specific to the source repository; a normalized digest also matches the transferred copy.
 When the version is omitted (and no OCI digest is given), all versions of the component are discovered and transferred.
@@ -47,7 +47,9 @@ component's references and transfers them too.
 
 Driving defaults from the OCM configuration:
   A transfer.config.ocm.software/v1alpha1 entry inside the central OCM configuration
-  (passed via --config) sets defaults for --recursive.
+  (passed via --config) sets defaults for --recursive. Its unmatchedResourcePolicy (Ignore, Warn,
+  Fail; default Warn) decides whether a resource no uploader selects is silently given the
+  baseline, logged as a warning, or fails the transfer.
   Explicit command-line flags always override the values from the configuration.
 
 Two-step workflow (generate, review, replay):

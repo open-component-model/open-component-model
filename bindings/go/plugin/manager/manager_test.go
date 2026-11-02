@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -103,7 +104,7 @@ func TestConfigurationPassedToPlugin(t *testing.T) {
 			},
 		},
 	}
-	writer := bytes.NewBuffer(nil)
+	writer := &syncBuffer{}
 	slog.SetDefault(slog.New(slog.NewTextHandler(writer, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	})))
@@ -280,7 +281,7 @@ func TestPluginManagerShutdownWithoutWait(t *testing.T) {
 			},
 		},
 	}
-	writer := bytes.NewBuffer(nil)
+	writer := &syncBuffer{}
 	slog.SetDefault(slog.New(slog.NewTextHandler(writer, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	})))
@@ -321,11 +322,7 @@ func TestPluginManagerShutdownWithoutWait(t *testing.T) {
 
 	// we need some time for the logs to be streamed back
 	require.Eventually(t, func() bool {
-		content, err := io.ReadAll(writer)
-		if err != nil {
-			return false
-		}
-		return strings.Contains(string(content), "gracefully shutting down plugin")
+		return strings.Contains(writer.String(), "gracefully shutting down plugin")
 	}, 1*time.Second, 100*time.Millisecond)
 }
 
@@ -448,4 +445,23 @@ func TestCredentialTypeRegistryPopulatedFromCredentialPluginCapability(t *testin
 
 	require.NoError(t, pm.addPlugin(ctx, config, testPlugin, bytes.NewBuffer(serialized)))
 	require.True(t, pm.CredentialTypeRegistry.GetCredentialTypeScheme().IsRegistered(credType))
+}
+
+// syncBuffer is safe for concurrent use: plugin log streamers write to the
+// default slog logger from their own goroutines while tests poll the output.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }

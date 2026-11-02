@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -12,12 +13,14 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobs"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/repository/integrity"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 type resourcePluginConverter struct {
-	externalPlugin v1.ReadWriteResourcePluginContract
-	scheme         *runtime.Scheme
+	externalPlugin   v1.ReadWriteResourcePluginContract
+	scheme           *runtime.Scheme
+	artifactVerifier integrity.ArtifactVerifier
 }
 
 func (r *resourcePluginConverter) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error) {
@@ -52,7 +55,14 @@ func (r *resourcePluginConverter) DownloadResource(ctx context.Context, resource
 		return nil, fmt.Errorf("failed to create blob data: %w", err)
 	}
 
-	return rBlob, nil
+	verified, err := integrity.Verify(ctx, resource.Digest, rBlob,
+		integrity.WithArtifactVerifier(r.artifactVerifier),
+		integrity.WithLogAttrs(slog.Any("resource", resource.ToIdentity())))
+	if err != nil {
+		return nil, fmt.Errorf("resource %q: %w", resource.Name, err)
+	}
+
+	return verified, nil
 }
 
 func (r *resourcePluginConverter) UploadResource(ctx context.Context, resource *descriptor.Resource, content blob.ReadOnlyBlob, credentials runtime.Typed) (result *descriptor.Resource, err error) {
@@ -92,7 +102,8 @@ var _ Repository = (*resourcePluginConverter)(nil)
 
 func (r *ResourceRegistry) externalToResourcePluginConverter(plugin v1.ReadWriteResourcePluginContract, scheme *runtime.Scheme) *resourcePluginConverter {
 	return &resourcePluginConverter{
-		externalPlugin: plugin,
-		scheme:         scheme,
+		externalPlugin:   plugin,
+		scheme:           scheme,
+		artifactVerifier: r.artifactVerifier,
 	}
 }

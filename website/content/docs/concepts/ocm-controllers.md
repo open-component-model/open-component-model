@@ -1,6 +1,6 @@
 ---
 title: Kubernetes Controllers
-description: "Learn about the OCM controllers and their capabilities."
+description: "Learn about the OCM Kubernetes controllers: what they do, how they interact, and how they automate component delivery into a cluster."
 icon: "🏁"
 weight: 6
 toc: true
@@ -71,6 +71,22 @@ A `Resource` selects a specific artifact from within a resolved component versio
 
 You can attach CEL expressions via `additionalStatusFields` to extract values from the descriptor and surface them in `status.additional`. This is useful when downstream tools like [Kro](https://kro.run/) need to wire specific values — such as an image reference or chart version — into their own resources without parsing the full descriptor themselves.
 
+With `verificationPolicy: Always` (the default), the controller checks the resource content against the digest in the
+descriptor. Where it can, it checks against what the content is addressed by, without downloading it:
+
+| Access | Verified against | Downloads the content |
+| --- | --- | --- |
+| `localBlob`, `relativeOciReference` | the digest the OCI repository or CTF archive stores it under | only for an OCI layout stored as one blob |
+| `OCIImage`, `OCIImageLayer` | the resolved manifest or layer descriptor | no |
+| `Helm` | the OCI manifest, or the digest in the Helm repository index | only if the index lists no digest |
+| `wget` | a checksum the server advertises | if the server advertises none |
+| `Git`, `GitHub`, `s3` | the content | on every reconcile |
+
+The accesses in the last row are not optimized yet: their content is downloaded and hashed on every reconciliation,
+which costs time and bandwidth for large repositories or objects. If a downstream step verifies the content anyway, for
+example Flux fetching a pinned commit, set `verificationPolicy: Never` for such resources. A resource whose access type
+the controller cannot verify at all fails unless verification is set to `Never`.
+
 [API reference]({{< relref "/docs/reference/kubernetes-api/resource.md" >}})
 
 ### Deployer
@@ -115,7 +131,7 @@ A few more things about replication:
 
 - The transferred version is the one recorded in the source `Component`'s *status*, meaning a version that has already been successfully reconciled (and verified, if verification is configured). It does not re-evaluate the `Component`'s semver constraint itself.
 - A successful transfer records the source digest in `status.lastTransferredDigest`. A reconciliation observing the same digest is a no-op, so re-applying or requeueing does not re-transfer unchanged content.
-- First, it walks the component's reference graph through the [resolution worker pool](#asynchronous-component-resolution), reporting `ResolutionInProgress` until every referenced descriptor is available. Then, it executes the transfer, reporting `TransferInProgress` until completion. Per-transformation failures are recorded in `status.lastFailedTransferEvents` and cleared on the next success.
+- First, it walks the component's reference graph to resolve every referenced descriptor. Then, it executes the transfer, reporting `TransferInProgress` until completion. Per-transformation failures are recorded in `status.lastFailedTransferEvents` and cleared on the next success.
 - Recursion depth, copy mode, upload type, and the credentials for the target registry are supplied as OCM configuration referenced from `spec.ocmConfig` (a `Secret` or a `ConfigMap` object carrying a `transfer.config.ocm.software` entry). See [Replicate Component Versions with the Controller]({{< relref "docs/guides/transfer/replicate-component-versions.md" >}}) for a concrete example.
 
 [API reference]({{< relref "/docs/reference/kubernetes-api/replication.md" >}})
@@ -127,12 +143,6 @@ A `Discovery` publishes a filtered, optionally projected view of the transitive 
 See [Kubernetes Component Discovery]({{< relref "/docs/concepts/component-discovery.md" >}}) for a full description and its querying behaviour.
 
 [API reference]({{< relref "/docs/reference/kubernetes-api/discovery.md" >}})
-
-## Asynchronous Component Resolution
-
-Component version resolution happens in a background worker pool. When a controller needs a component version, it submits a request and receives a sentinel error (`ErrResolutionInProgress`). The controller returns early without blocking. Once the worker finishes, it broadcasts an event that re-triggers reconciliation for all waiting objects.
-
-Requests for the same component version are deduplicated across multiple subscribers.
 
 ## Configuration Propagation
 

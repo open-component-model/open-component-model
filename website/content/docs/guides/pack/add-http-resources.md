@@ -1,6 +1,6 @@
 ---
 title: "Add HTTP Resources"
-description: "Add a file served over HTTP or HTTPS to a component version with the Wget input or access type, then understand media types, credentials, non-GET requests, download tuning, and v1 migration."
+description: "Add a file served over HTTP or HTTPS to a component version with the Wget input or access type: media types, credentials, non-GET requests, and v1 migration."
 weight: 20
 toc: true
 aliases:
@@ -457,10 +457,12 @@ resources:
 **Only successful responses are accepted.** OCM accepts a 2xx status and fails on anything else. Redirects are followed by
 default. If you set `noRedirect: true`, the request fails.
 
-**Downloads are streamed to disk, not held in memory.** The response body is written straight to a temporary file, so
-memory use stays flat no matter how big the file is. There is no size limit by default. That temporary file is created
-under the `tempFolder` of the `filesystem.config.ocm.software/v1alpha1` attribute in the .ocmconfig configuration file, falling back to the operating
-system's temp directory if no configuration is provided.
+**Downloads are streamed, not held in memory or on disk.** The response body flows straight to wherever OCM stores or
+uploads it, so memory use stays flat no matter how big the file is. There is no size limit by default. Checksum and
+digest checks run while the body is read, so a mismatch fails that read. The request is sent only when the body is
+read. When OCM needs the size, media type, or advertised checksum before reading, for example to pack the resource
+into an OCI layer, a `GET` download sends a single `HEAD` request first. If the server refuses `HEAD`, these stay
+unknown until the body is read.
 
 **Timeouts, retries, and per-host settings** come from the `http.config.ocm.software/v1alpha1` configuration and apply
 to every Wget request:
@@ -468,8 +470,6 @@ to every Wget request:
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
-  - type: filesystem.config.ocm.software/v1alpha1
-    tempFolder: /var/tmp/ocm
   - type: http.config.ocm.software/v1alpha1
     timeout: 2m
     retry:
@@ -481,6 +481,10 @@ configurations:
 
 See [HTTP Client Configuration]({{< relref "docs/reference/configuration/http-client.md" >}}) for the full schema,
 defaults, and how per-host settings are merged.
+
+Because the body is streamed, a per-host `timeout` on the source host covers reading the whole body, and that read runs
+for as long as the target takes to store or upload it. When you transfer a large file to a slow target, set the
+source host's `timeout` high enough for the entire transfer, not just the download.
 
 ## Verifying downloads against the source {#checksum-verification}
 

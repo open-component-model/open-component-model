@@ -1,0 +1,52 @@
+<!--
+  Slide deck viewer: shows one slide at a time with previous/next controls,
+  backed by the Bootstrap carousel (CSS ships with doks-core, JS is imported
+  in assets/js/custom.js).
+
+  Usage (in markdown, wrapped in the usual shortcode delimiters):
+    slides dir="images/my-talk-slides" title="My Talk" pdf="/slides/my-talk.pdf"
+
+  - dir:   assets directory holding one image per slide; slides are ordered by
+           file name, so zero-pad the numbers (slide-01.jpg, slide-02.jpg, ...).
+  - title: used for the accessible label and image alt texts.
+  - pdf:   optional link to download the full deck.
+
+  The carousel never auto-advances (data-bs-interval="false"); readers page
+  through it with the controls, the indicators, or the arrow keys.
+-->
+{{- $dir := .Get "dir" -}}
+{{- $title := .Get "title" | default "Slides" -}}
+{{- $slides := resources.Match (printf "%s/*" $dir) -}}
+{{- if not $slides -}}
+  {{- errorf "%q: slides shortcode found no images in assets/%s" .Page.Path $dir -}}
+{{- end -}}
+{{- $id := printf "slides-%d" .Ordinal -}}
+{{- $count := len $slides -}}
+<figure class="slide-deck">
+<div id="{{ $id }}" class="carousel slide" data-bs-interval="false" data-bs-keyboard="true" data-bs-touch="true" aria-roledescription="carousel" aria-label="{{ $title }}">
+  <div class="carousel-indicators">
+    {{- range $i, $_ := $slides }}
+    <button type="button" data-bs-target="#{{ $id }}" data-bs-slide-to="{{ $i }}"{{ if not $i }} class="active" aria-current="true"{{ end }} aria-label="Slide {{ add $i 1 }}"></button>
+    {{- end }}
+  </div>
+  <div class="carousel-inner">
+    {{- range $i, $img := $slides }}
+    {{- $webp := $img.Resize "1600x webp q80" }}
+    <div class="carousel-item{{ if not $i }} active{{ end }}" role="group" aria-roledescription="slide" aria-label="{{ add $i 1 }} of {{ $count }}">
+      <img src="{{ $webp.RelPermalink }}" width="{{ $webp.Width }}" height="{{ $webp.Height }}" class="d-block w-100" alt="{{ $title }}, slide {{ add $i 1 }} of {{ $count }}" {{ if $i }}loading="lazy" {{ end }}decoding="async">
+    </div>
+    {{- end }}
+  </div>
+  <button class="carousel-control-prev" type="button" data-bs-target="#{{ $id }}" data-bs-slide="prev">
+    <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+    <span class="visually-hidden">Previous slide</span>
+  </button>
+  <button class="carousel-control-next" type="button" data-bs-target="#{{ $id }}" data-bs-slide="next">
+    <span class="carousel-control-next-icon" aria-hidden="true"></span>
+    <span class="visually-hidden">Next slide</span>
+  </button>
+</div>
+{{- with .Get "pdf" }}
+<figcaption><a href="{{ . | relURL }}">Download the slides (PDF)</a></figcaption>
+{{- end }}
+</figure>

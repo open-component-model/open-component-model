@@ -44,6 +44,9 @@ type HTTPConfigGetterOpts struct {
 	baseURL string
 	// userAgent overrides the Go default User-Agent when non-empty.
 	userAgent string
+	// ctx bounds every request, since helm's Getter interface carries no context.
+	// Nil means no bound.
+	ctx context.Context
 }
 
 // NewHTTPConfigGetter creates a Getter backed by the provided client and opts.
@@ -55,7 +58,11 @@ func NewHTTPConfigGetter(client *http.Client, opts HTTPConfigGetterOpts) (getter
 
 // Get implements getter.Getter.
 func (g *httpConfigGetter) Get(href string, _ ...getter.Option) (*bytes.Buffer, error) {
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, href, nil)
+	ctx := g.opts.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, href, nil)
 	if err != nil {
 		return nil, err
 	}

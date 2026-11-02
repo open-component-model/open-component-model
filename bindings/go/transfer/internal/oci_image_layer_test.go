@@ -100,7 +100,7 @@ func TestProcessResource_OCIImageLayer(t *testing.T) {
 			tgd := &transformv1alpha1.TransformationGraphDefinition{}
 			resourceTransformIDs := map[int]string{}
 
-			files, err := processResource(resource, access, "comp1", layerDiscoveryValue(), tgd, toSpec, resourceTransformIDs, 0)
+			files, err := processResource(t.Context(), resource, access, "comp1", layerDiscoveryValue(), tgd, toSpec, resourceTransformIDs, 0)
 			r.NoError(err)
 
 			r.Len(tgd.Transformations, 1, "layer must not be skipped")

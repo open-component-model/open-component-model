@@ -2,12 +2,15 @@ package ctf
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -15,11 +18,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/errdef"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	v1 "ocm.software/open-component-model/bindings/go/ctf/index/v1"
 	"ocm.software/open-component-model/bindings/go/oci"
+	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
 )
 
@@ -147,6 +152,200 @@ func TestPush(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, exists)
 	})
+}
+
+func TestPushStreaming(t *testing.T) {
+	ctx := t.Context()
+	const mediaType = "application/octet-stream"
+	content := []byte("streamed layer")
+	want := digest.FromBytes(content)
+	wantSHA512 := digest.SHA512.FromBytes(content)
+
+	tests := []struct {
+		name        string
+		preexisting bool
+		partial     ociImageSpecV1.Descriptor
+		wantDigest  digest.Digest
+		wantErr     string
+	}{
+		{name: "unknown digest and size", wantDigest: want},
+		{name: "expected digest matches", partial: ociImageSpecV1.Descriptor{Digest: want}, wantDigest: want},
+		{name: "expected digest and size match", partial: ociImageSpecV1.Descriptor{Digest: want, Size: int64(len(content))}, wantDigest: want},
+		{name: "sha512 expected digest", partial: ociImageSpecV1.Descriptor{Digest: wantSHA512}, wantDigest: wantSHA512},
+		{name: "expected digest mismatches", partial: ociImageSpecV1.Descriptor{Digest: digest.FromString("other")}, wantErr: "does not match expected digest"},
+		{name: "expected size too large", partial: ociImageSpecV1.Descriptor{Size: int64(len(content) + 1)}, wantErr: "does not match expected size"},
+		{name: "expected size too small", partial: ociImageSpecV1.Descriptor{Size: int64(len(content) - 1)}, wantErr: "does not match expected size"},
+		{name: "already stored, unknown digest", preexisting: true, wantDigest: want},
+		{name: "already stored, expected digest", preexisting: true, partial: ociImageSpecV1.Descriptor{Digest: want}, wantDigest: want},
+		{name: "already stored, expected size mismatches", preexisting: true, partial: ociImageSpecV1.Descriptor{Digest: want, Size: int64(len(content) + 1)}, wantErr: "does not match expected size"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			archive := setupTestCTF(t)
+			store, err := NewFromCTF(archive).StoreForReference(ctx, "test-repo:test-tag")
+			r.NoError(err)
+			if tc.preexisting {
+				r.NoError(archive.SaveBlob(ctx, inmemory.New(bytes.NewReader(content))))
+			}
+
+			tc.partial.MediaType = mediaType
+			desc, err := store.(*repository).PushStreaming(ctx, tc.partial, bytes.NewReader(content))
+
+			var wantBlobs []string
+			if tc.preexisting {
+				wantBlobs = []string{want.String()}
+			}
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+			} else {
+				r.NoError(err)
+				r.Equal(ociImageSpecV1.Descriptor{MediaType: mediaType, Digest: tc.wantDigest, Size: int64(len(content))}, desc)
+				wantBlobs = []string{tc.wantDigest.String()}
+			}
+			blobs, err := archive.ListBlobs(ctx)
+			if wantBlobs == nil {
+				// The blobs directory may not even exist when nothing was stored.
+				r.Empty(blobs)
+				return
+			}
+			r.NoError(err)
+			r.Equal(wantBlobs, blobs, "only the content-addressed blob may remain, no staged file")
+
+			if tc.wantErr != "" {
+				return
+			}
+			rc, err := store.Fetch(ctx, desc)
+			r.NoError(err)
+			t.Cleanup(func() { _ = rc.Close() })
+			data, err := io.ReadAll(rc)
+			r.NoError(err)
+			r.Equal(content, data)
+		})
+	}
+
+	t.Run("manifest is not streamed", func(t *testing.T) {
+		r := require.New(t)
+		store, err := NewFromCTF(setupTestCTF(t)).StoreForReference(ctx, "test-repo:test-tag")
+		r.NoError(err)
+
+		data := bytes.NewReader(content)
+		_, err = store.(*repository).PushStreaming(ctx, ociImageSpecV1.Descriptor{MediaType: ociImageSpecV1.MediaTypeImageManifest}, data)
+		r.ErrorIs(err, remotestore.ErrStreamingUnavailable)
+		r.Equal(len(content), data.Len(), "content must not be consumed")
+	})
+}
+
+// gatedReader yields its content only after gate is closed, like a remote source the
+// server streams while the client is busy elsewhere. reading is closed once the first
+// Read starts, i.e. once the write reads its source.
+type gatedReader struct {
+	gate    <-chan struct{}
+	reading chan struct{}
+	once    sync.Once
+	r       io.Reader
+}
+
+func (g *gatedReader) Read(p []byte) (int, error) {
+	g.once.Do(func() { close(g.reading) })
+	<-g.gate
+	return g.r.Read(p)
+}
+
+// TestPush_StalledSourceDoesNotBlockOtherWriters pins that a blob write never holds the
+// archive lock while it reads its source: otherwise every other writer's source stays
+// unread until it finishes, and a server streaming one may reset it (HTTP/2 RST_STREAM).
+// Here the first write only finishes after all others did, which deadlocks under such a lock.
+func TestPush_StalledSourceDoesNotBlockOtherWriters(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+	archive := setupTestCTF(t)
+	store, err := NewFromCTF(archive).StoreForReference(ctx, "test-repo:test-tag")
+	r.NoError(err)
+	repo := store.(*repository)
+
+	stalled := []byte("stalled layer")
+	stalledDesc := ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: digest.FromBytes(stalled), Size: int64(len(stalled))}
+	gate := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(gate) }) }
+	t.Cleanup(release)
+
+	stalledDone := make(chan error, 1)
+	source := &gatedReader{gate: gate, reading: make(chan struct{}), r: bytes.NewReader(stalled)}
+	go func() {
+		stalledDone <- repo.Push(ctx, stalledDesc, source)
+	}()
+	// The other writes start only once the stalled one reads its source, so under a lock
+	// held while reading they always wait for it.
+	select {
+	case <-source.reading:
+	case err := <-stalledDone:
+		t.Fatalf("stalled write returned before reading its source: %v", err)
+	}
+
+	layer := []byte("other layer")
+	manifest := []byte(`{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.empty.v1+json","digest":"sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a","size":2},"layers":[]}`)
+	othersDone := make(chan error, 1)
+	go func() {
+		othersDone <- errors.Join(
+			repo.Push(ctx, ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: digest.FromBytes(layer), Size: int64(len(layer))}, bytes.NewReader(layer)),
+			func() error {
+				_, err := repo.PushStreaming(ctx, ociImageSpecV1.Descriptor{MediaType: "application/octet-stream"}, strings.NewReader("streamed layer"))
+				return err
+			}(),
+			repo.Push(ctx, ociImageSpecV1.Descriptor{MediaType: ociImageSpecV1.MediaTypeImageManifest, Digest: digest.FromBytes(manifest), Size: int64(len(manifest))}, bytes.NewReader(manifest)),
+		)
+	}()
+
+	select {
+	case err := <-othersDone:
+		r.NoError(err)
+	case <-time.After(10 * time.Second):
+		release()
+		t.Fatal("writes blocked behind a blob write whose source was not yet readable")
+	}
+	release()
+	r.NoError(<-stalledDone)
+
+	blobs, err := archive.ListBlobs(ctx)
+	r.NoError(err)
+	r.ElementsMatch([]string{
+		stalledDesc.Digest.String(),
+		digest.FromBytes(layer).String(),
+		digest.FromString("streamed layer").String(),
+		digest.FromBytes(manifest).String(),
+	}, blobs)
+}
+
+// savingOnlyCTF hides StageBlob, like a CTF implementation that cannot stage blobs.
+type savingOnlyCTF struct {
+	ctf.CTF
+	saves int
+}
+
+func (c *savingOnlyCTF) SaveBlob(ctx context.Context, b blob.ReadOnlyBlob) error {
+	c.saves++
+	return c.CTF.SaveBlob(ctx, b)
+}
+
+// An archive that cannot stage blobs is written with SaveBlob.
+func TestPush_ArchiveWithoutStaging(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+	archive := &savingOnlyCTF{CTF: setupTestCTF(t)}
+	_, staging := ctf.CTF(archive).(ctf.BlobStager)
+	r.False(staging)
+	store, err := NewFromCTF(archive).StoreForReference(ctx, "test-repo:test-tag")
+	r.NoError(err)
+
+	layer := []byte("layer")
+	desc := ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: digest.FromBytes(layer), Size: int64(len(layer))}
+	r.NoError(store.Push(ctx, desc, bytes.NewReader(layer)))
+	r.Equal(1, archive.saves)
+	exists, err := store.Exists(ctx, desc)
+	r.NoError(err)
+	r.True(exists)
 }
 
 func TestResolve(t *testing.T) {

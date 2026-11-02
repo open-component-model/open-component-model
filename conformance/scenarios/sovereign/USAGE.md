@@ -35,7 +35,7 @@ Override variables on the command line (e.g., `VERSION=2.0.0 task run`):
 | `REGISTRY_NAME`    | `registry`                                                     | Local registry container name                                    |
 | `REGISTRY_PORT`    | `5001`                                                         | Local registry host port                                         |
 | `PLATFORMS`        | `linux/<host arch>` (auto-detected)                            | Docker buildx target platform                                    |
-| `KRO_VERSION`      | `0.9.0`                                                        | kro Helm chart version                                           |
+| `KRO_VERSION`      | `0.9.4`                                                        | kro Helm chart version                                           |
 | `CLI_IMAGE`        | `ghcr.io/open-component-model/cli:main`                        | OCM CLI container image                                          |
 | `TOOLKIT_IMAGE`    | `ghcr.io/open-component-model/kubernetes/controller/chart:...` | OCM toolkit Helm chart OCI reference                             |
 
@@ -47,9 +47,9 @@ Override variables on the command line (e.g., `VERSION=2.0.0 task run`):
 
 Confirms that `docker`, `kubectl`, `kind`, `helm`, `flux`, and `openssl` are on PATH.
 
-### 2. `clean` — Remove prior state
+### 2. `clean:cluster` — Remove the previous cluster
 
-Deletes the `./tmp` directory, removes any existing Kind cluster, and stops the local registry container.
+Removes any existing Kind cluster and stops the local registry container. The `./tmp` directory (CTF archives and signing keys) is kept, so the next step can reuse them. Use `task clean` to also delete `./tmp` and force a full rebuild.
 
 ### 3. `prepare` — Initialize working directory
 
@@ -67,7 +67,11 @@ Runs four sub-tasks in sequence:
    - kro — ResourceGraphDefinition controller (Helm chart)
    - FluxCD — source-controller and helm-controller
 
-### 5. `build:product` — Build all OCM components
+### 5. `airgap` — Build, sign and transfer (skipped when cached)
+
+Skipped entirely if the air-gap CTF (`tmp/airgap-archive`) already contains the product at `VERSION`. That avoids the notes image build and pulling the upstream PostgreSQL image again. Otherwise it runs the two stages below.
+
+#### `build:product` — Build all OCM components
 
 Builds in parallel then assembles:
 
@@ -77,22 +81,22 @@ Builds in parallel then assembles:
 4. Assembles the product meta-component referencing both sub-components
 5. **`sign`** — Signs the product component with the generated RSA key
 
-### 6. `transfer:airgap` — Simulate air-gap transfer
+#### `transfer:airgap` — Simulate air-gap transfer
 
 1. Verifies the signature on the source CTF archive
-2. Copies the component with all resources into a separate air-gap CTF archive
+2. Copies the component with all resources into a separate air-gap CTF archive. The archive is not wiped first, so `1.0.0` and `1.1.0` accumulate there.
 
-### 7. `cluster:import` — Push into cluster registry
+### 6. `cluster:import` — Push into cluster registry
 
 Transfers components from the air-gap CTF archive into the in-cluster registry (`registry:5000`).
 
-### 8. `cluster:bootstrap` — Deploy to Kubernetes
+### 7. `cluster:bootstrap` — Deploy to Kubernetes
 
 1. Applies RBAC rules (`deploy/rbac.yaml`)
 2. Creates the `sovereign-product` namespace (`deploy/namespace.yaml`)
 3. Creates a Kubernetes secret with the public signing key
-4. Applies OCM bootstrap resources — Repository, Component, Resource, and Deployer CRs (`deploy/bootstrap.yaml`)
-5. Waits for the Deployer and ResourceGraphDefinition to become Ready
+4. Applies OCM bootstrap resources — Repository, Component, Resource, and NamespacedDeployer CRs (`deploy/bootstrap.yaml`)
+5. Waits for the NamespacedDeployer and ResourceGraphDefinition to become Ready
 6. Applies the SovereignProduct custom resource (`deploy/sample-product-1.0.0.yaml`)
 7. Waits for the SovereignProduct to become Ready
 
@@ -105,8 +109,7 @@ task check
 task clean
 task prepare
 task cluster:setup
-task build:product
-task transfer:airgap
+task airgap          # or build:product + transfer:airgap to force those stages
 task cluster:import
 task cluster:bootstrap
 task verify:deployment
@@ -131,16 +134,16 @@ The Dockerfile selects the correct entrypoint binary based on the `VERSION` buil
 
 ### What `task upgrade` does
 
-1. **Clears archives** — removes the existing CTF (`tmp/transport-archive`) and air-gap CTF (`tmp/airgap-archive`) so components are rebuilt from scratch
-2. **`build:product`** — rebuilds all three OCM components (notes, postgres, product) at version `1.1.0`, generates keys if missing, and signs the product
-3. **`transfer:airgap`** — verifies the v1.1.0 signature and copies resources into a fresh air-gap archive
-4. **`cluster:import`** — pushes the v1.1.0 components from the air-gap archive into the in-cluster registry
-5. **Applies `deploy/sample-product-1.1.0.yaml`** — updates the SovereignProduct CR, changing `spec.version` from `1.0.0` to `1.1.0`. This triggers the OCM Controller to reconcile the new component version, which causes:
+1. **`airgap`** with `VERSION=1.1.0` — unless the air-gap CTF already holds `1.1.0`:
+   - **`build:product`** — rebuilds all three OCM components (notes, postgres, product) at version `1.1.0`, generates keys if missing, and signs the product
+   - **`transfer:airgap`** — verifies the v1.1.0 signature and adds the resources to the air-gap archive, next to v1.0.0
+2. **`cluster:import`** — pushes the v1.1.0 components from the air-gap archive into the in-cluster registry
+3. **Applies `deploy/sample-product-1.1.0.yaml`** — updates the SovereignProduct CR, changing `spec.version` from `1.0.0` to `1.1.0`. This triggers the OCM Controller to reconcile the new component version, which causes:
    - The Component CR to fetch the updated descriptor
    - The Resource CRs to resolve new image references
    - FluxCD to deploy the updated Helm releases
    - The notes service to perform a rolling update with the database migration
-6. **Waits for readiness** — blocks until the SovereignProduct CR reports Ready (timeout: 300s)
+4. **Waits for readiness** — blocks until the SovereignProduct CR reports Ready (timeout: 300s)
 
 ### Prerequisites
 
@@ -169,7 +172,7 @@ task status
 task status
 ```
 
-Dumps all OCM custom resources (Repositories, Components, Resources, Deployers) and a full cluster-info dump of the `sovereign-product` namespace.
+Dumps all OCM custom resources (Repositories, Components, Resources, NamespacedDeployers) and a full cluster-info dump of the `sovereign-product` namespace.
 
 ### Test application connectivity
 
@@ -177,7 +180,9 @@ Dumps all OCM custom resources (Repositories, Components, Resources, Deployers) 
 task test:connectivity
 ```
 
-Port-forwards the notes service and verifies the `/readyz` and `/notes` endpoints respond successfully.
+Calls the notes service at <http://localhost:8080> and verifies the `/readyz` and `/notes` endpoints respond successfully.
+The service is a NodePort (`30080`) that the Kind cluster maps to host port `8080`, so it stays reachable while pods
+are replaced during an upgrade. Open <http://localhost:8080> in a browser for the notes UI.
 
 ### Verify component signatures
 
@@ -190,10 +195,16 @@ The `COMPONENT` variable is required and specifies the component reference to ve
 ## Cleanup
 
 ```bash
-task clean
+task clean:cluster   # remove the cluster and registry, keep ./tmp (CTF archives, keys)
+task clean           # also remove ./tmp
 ```
 
-This removes:
+`task clean:cluster` is the fast reset between runs: the next `task run` and `task upgrade` deploy straight from
+the kept air-gap CTF, without rebuilding images or pulling PostgreSQL from Docker Hub. The cluster controllers
+(OCM controller, kro, Flux) are still pulled fresh, because the Kind cluster is recreated.
+
+Use `task clean` after changing anything under `components/`: cached versions are reused as they are, and a
+changed component would not be rebuilt. It removes:
 
 - `./tmp` directory (CTF archives, credentials, keys)
 - The Kind cluster (`sovereign-conformance`)
@@ -213,8 +224,7 @@ kubectl -n sovereign-product describe pods
 kubectl logs -n ocm-k8s-toolkit-system -l app.kubernetes.io/name=ocm-k8s-toolkit --tail=50
 kubectl logs -n kro -l app.kubernetes.io/name=kro --tail=50
 
-# Test connectivity manually
-kubectl -n sovereign-product port-forward svc/sovereign-notes 8085:80
-curl http://localhost:8085/readyz
-curl http://localhost:8085/notes
+# Test connectivity manually (NodePort, mapped to the host by Kind)
+curl http://localhost:8080/readyz
+curl http://localhost:8080/notes
 ```

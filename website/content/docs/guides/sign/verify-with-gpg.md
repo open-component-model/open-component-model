@@ -1,6 +1,6 @@
 ---
 title: "Verify GPG"
-description: "Verify a GPG-signed component version using the signer's public key or keyring."
+description: "Verify a GPG-signed OCM component version using the signer's exported public key or a keyring, and understand what gets checked."
 weight: 110
 toc: true
 aliases:
