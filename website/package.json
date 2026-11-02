@@ -60,8 +60,8 @@
     "katex": "^0.19.0",
     "semver": "^7.5.4",
     "brace-expansion": "^5.0.8",
-    "minimatch": "^11.0.1",
-    "glob": "^14.0.2",
+    "minimatch@<11.0.1": "11.0.1",
+    "glob@>=9.0.0 <14.0.2": "14.0.2",
     "eslint-config-developit": {
       "eslint-plugin-compat": {
         "eslint": "$eslint"
