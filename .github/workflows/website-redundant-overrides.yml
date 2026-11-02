@@ -1,0 +1,107 @@
+name: "Website: Redundant Security Overrides"
+
+# npm `overrides` become stale over time. Usually they are added to alleviate
+# a specific CVE before the fixed version is adopted upstream. But nothing
+# triggers a removal of that override once it is no longer necessary.
+# This job tests each override in website/package.json by removing it,
+# re-resolving the lockfile and running `npm audit`.
+# An override whose removal introduces no new advisory is a removal candidate.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 04:17 on the 1st of each month (off the top of the hour).
+    - cron: '17 4 1 * *'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/website-redundant-overrides.yml'
+      - '.github/scripts/check-redundant-overrides.js'
+      - '.github/scripts/check-redundant-overrides.test.js'
+      - 'website/package.json'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check redundant overrides
+    runs-on: ubuntu-26.04-arm
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            .github/scripts
+            website/package.json
+            website/package-lock.json
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: website/package.json
+
+      # Detection re-resolves lockfiles in a temp directory, so the checked-out
+      # files are untouched while auditing. On non-PR runs `--apply` then removes
+      # the detected redundant overrides from website/package.json; the next step
+      # refreshes the lockfile to match, and the PR step commits both.
+      - name: Detect redundant overrides
+        id: check
+        shell: bash
+        run: node .github/scripts/check-redundant-overrides.js ${{ github.event_name != 'pull_request' && '--apply' || '' }} | tee "${RUNNER_TEMP}/report.md"
+
+      - name: Refresh lockfile
+        if: >-
+          github.event_name != 'pull_request' &&
+          steps.check.outputs.candidate-count != '' && steps.check.outputs.candidate-count != '0'
+        working-directory: website
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Compose PR body
+        if: >-
+          github.event_name != 'pull_request' &&
+          steps.check.outputs.candidate-count != '' && steps.check.outputs.candidate-count != '0'
+        run: |
+          {
+            echo "Automated by the \`${{ github.workflow }}\` workflow."
+            echo
+            echo "These overrides were removed because, per the current advisory database, removing them introduces no advisory that is not already present. Review the lockfile change and merge if correct."
+            echo
+            cat "${RUNNER_TEMP}/report.md"
+            echo
+            echo "---"
+            echo "_If a listed override is actually a non-security pin, do not merge: add it to the \`IGNORE\` set in \`.github/scripts/check-redundant-overrides.js\` and close this PR._"
+          } > "${RUNNER_TEMP}/pr-body.md"
+
+      - name: Generate ocmbot token
+        if: >-
+          github.event_name != 'pull_request' &&
+          steps.check.outputs.candidate-count != '' && steps.check.outputs.candidate-count != '0'
+        id: token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-pull-requests: write
+          permission-contents: write
+
+      - name: Open or update removal PR
+        if: >-
+          github.event_name != 'pull_request' &&
+          steps.check.outputs.candidate-count != '' && steps.check.outputs.candidate-count != '0'
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          token: ${{ steps.token.outputs.token }}
+          title: "chore(website): remove redundant npm overrides"
+          commit-message: "chore(website): remove redundant npm overrides"
+          branch: website/remove-redundant-overrides
+          delete-branch: true
+          sign-commits: true
+          labels: |
+            kind/chore
+          body-path: ${{ runner.temp }}/pr-body.md
