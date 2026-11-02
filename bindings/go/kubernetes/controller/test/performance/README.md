@@ -23,6 +23,12 @@ The flow mirrors the e2e tasks (`test/e2e/setup/local`, `test/e2e`, `test/e2e/se
 
 `go run ./test/performance --help` lists every flag.
 
+### In CI
+
+The `Controller: Performance Benchmark` workflow runs the same flow on demand (Actions, Run workflow). Its inputs
+map to `--scenarios`, `--objects` and `--repeats`; empty inputs use the benchmark defaults. The job summary shows
+`summary.md`, and the full results directory is uploaded as the `controller-performance-<run id>` artifact.
+
 ## Structure
 
 The benchmark is a standalone Go program, run with `go run`. It builds and measures the working tree only.

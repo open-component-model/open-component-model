@@ -1,0 +1,95 @@
+name: "Controller: Performance Benchmark"
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenarios:
+        description: "Comma-separated scenarios (cold, shared, update, complex, fanout). Empty runs all."
+        type: string
+        required: false
+      objects:
+        description: "Comma-separated object counts per run. Empty uses 100,500,1000."
+        type: string
+        required: false
+      repeats:
+        description: "Repetitions of every scenario and object count. Empty uses 3. Higher count means better averages."
+        type: string
+        required: false
+
+# Because runs can take long time we don't cancel an existing one, but wait instead.
+concurrency:
+  group: controller-performance-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  GO_MODULE_ROOT: "bindings/go"
+  CONTROLLER_DIR: "bindings/go/kubernetes/controller"
+
+jobs:
+  benchmark:
+    name: Performance Benchmark
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 360 # let's try defining a longer timeout for a full run.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: ${{ env.GO_MODULE_ROOT }}/go.mod
+          cache-dependency-path: ${{ env.GO_MODULE_ROOT }}/go.sum
+
+      - name: Install Task
+        uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup docker/buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          # renovate: datasource=github-releases depName=helm/helm
+          version: v4.3.0
+
+      - name: Set up cluster and registry
+        run: task ${{ env.CONTROLLER_DIR }}:test/performance/setup/local
+
+      - name: Run benchmark
+        env:
+          SCENARIOS: ${{ inputs.scenarios }}
+          OBJECTS: ${{ inputs.objects }}
+          REPEATS: ${{ inputs.repeats }}
+        run: |
+          args=()
+          [ -n "${SCENARIOS}" ] && args+=("--scenarios=${SCENARIOS}")
+          [ -n "${OBJECTS}" ] && args+=("--objects=${OBJECTS}")
+          [ -n "${REPEATS}" ] && args+=("--repeats=${REPEATS}")
+          task ${{ env.CONTROLLER_DIR }}:test/performance -- "${args[@]}"
+
+      # This step writes the job's summary.md to the summary page of the run.
+      - name: Publish summary
+        if: ${{ !cancelled() }}
+        run: |
+          summary="$(ls -d ${{ env.CONTROLLER_DIR }}/test/performance/results/*/summary.md 2>/dev/null | tail -n1)"
+          if [ -z "${summary}" ]; then
+            echo "### Controller performance: n/a (no run finished)" >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+          { echo "### Controller performance"; echo; cat "${summary}"; } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload results
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: controller-performance-${{ github.run_id }}
+          path: ${{ env.CONTROLLER_DIR }}/test/performance/results/
+          if-no-files-found: warn
