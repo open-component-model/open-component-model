@@ -28,8 +28,7 @@ could be confused, and *descriptor* on its own always means the component descri
 | ---- | ----- | ------- |
 | Component version | OCM | A versioned component. Stored as one OCI manifest or one OCI index. |
 | Component descriptor | OCM | The document that describes a component version: its resources, sources, references, and how to access them. Not an OCI descriptor. |
-| Descriptor manifest | OCM on OCI | The OCI manifest that holds the component descriptor and every local blob that is a plain file. |
-| Component config | OCM on OCI | The OCI config of the descriptor manifest. Points to the component descriptor layer. |
+| Component config | OCM on OCI | The OCI config of the component descriptor's OCI manifest. Points to the component descriptor layer. |
 | Local blob | OCM | A resource or source stored *by value*, next to the component descriptor. Stored as one OCI layer, or as a whole OCI artifact. |
 | Artifact (OCM) | OCM | A resource or source of a component version, as in the `software.ocm.artifact` annotation. |
 | OCM repository | OCM | Where component versions are stored: an OCI registry plus an optional path, or a CTF archive. Holds many components. |
@@ -61,16 +60,15 @@ needs, and readers accept both.
 {{< tabs "cv-storage-form" >}}
 {{< tab "Manifest" >}}
 
-Used when no local blob is an OCI artifact. The tag points directly to the **descriptor manifest**: an OCI manifest
-whose OCI config is the component config, and whose OCI layers are the component descriptor and one layer per local
-blob.
+Used when no local blob is an OCI artifact. The tag points directly to the **component descriptor's OCI manifest**. Its
+OCI config is the component config, and its OCI layers are the component descriptor and one layer per local blob.
 
 ```mermaid
 flowchart TD
     tag["OCI tag 1.0.0<br/>component-descriptors/github.com/acme.org/demo"] --> dm
 
     subgraph cv["Component version"]
-        dm["OCI manifest<br/>(descriptor manifest)"]
+        dm["OCI manifest<br/>of the component descriptor"]
         dm --> cfg["OCI config:<br/>component config"]
         dm --> cd["OCI layer:<br/>component descriptor"]
         dm --> lb["OCI layer:<br/>local blob settings"]
@@ -82,7 +80,7 @@ flowchart TD
 
 Boxes with a thick blue border hold content that OCM defines. All other boxes are plain OCI objects.
 
-{{< details "Example: descriptor manifest" >}}
+{{< details "Example: the component descriptor's OCI manifest" >}}
 
 The tag `1.0.0` resolves to this OCI manifest. Digests are shortened, and the `org.opencontainers.image.*` annotations
 are left out.
@@ -141,9 +139,9 @@ The component config holds nothing but the OCI descriptor of the component descr
 {{< tab "Index" >}}
 
 Used as soon as one local blob is an OCI artifact: an image, a Helm chart, or any OCI image layout. The tag points to an
-**OCI index**. Its first entry is the descriptor manifest, marked by the artifact type
+**OCI index**. Its first entry is the component descriptor's OCI manifest, marked by the artifact type
 `application/vnd.ocm.software.component-descriptor.v2`. Every further entry is the OCI manifest or OCI index of an
-embedded OCI artifact. Local blobs that are plain files stay OCI layers of the descriptor manifest.
+embedded OCI artifact. Local blobs that are plain files stay OCI layers of the component descriptor's OCI manifest.
 
 ```mermaid
 flowchart TD
@@ -151,7 +149,7 @@ flowchart TD
 
     subgraph cv["Component version"]
         idx["OCI index"]
-        idx --> dm["OCI manifest<br/>(descriptor manifest, first entry)"]
+        idx --> dm["OCI manifest<br/>of the component descriptor<br/>(first entry)"]
         idx --> img["OCI index<br/>(local blob app-image)"]
         dm --> cfg["OCI config:<br/>component config"]
         dm --> cd["OCI layer:<br/>component descriptor"]
@@ -175,7 +173,7 @@ left out.
   "schemaVersion": 2,
   "mediaType": "application/vnd.oci.image.index.v1+json",
   "manifests": [
-    // Always first: the descriptor manifest (see the Manifest tab),
+    // Always first: the component descriptor's OCI manifest (see the Manifest tab),
     // still holding the plain-file local blob "settings" as an OCI layer
     {
       "mediaType": "application/vnd.oci.image.manifest.v1+json",
@@ -236,7 +234,7 @@ How OCM stores a local blob depends on its content:
 
 | Content | Stored as | `localReference` is the digest of | `mediaType` in the access |
 | ------- | --------- | --------------------------------- | ------------------------- |
-| Plain file, directory archive, Git snapshot, … | An OCI layer of the descriptor manifest | the OCI layer | the content's media type, e.g. `text/plain` |
+| Plain file, directory archive, Git snapshot, … | An OCI layer of the component descriptor's OCI manifest | the OCI layer | the content's media type, e.g. `text/plain` |
 | OCI artifact: an OCI image layout added with `File/v1`, a chart added with `Helm/v1`, or an image copied by value during transfer | Its full graph of OCI manifests and OCI indexes, unpacked into the OCI repository | the root OCI manifest or OCI index | `application/vnd.oci.image.index.v1+json` or `…manifest.v1+json` |
 
 For OCI artifacts, OCM does not keep the layout archive. It ingests the whole graph — root OCI index, OCI manifests per
@@ -252,7 +250,7 @@ resources:
     type: blob
     access:
       type: LocalBlob/v1
-      localReference: sha256:5891b5b5…   # an OCI layer of the descriptor manifest
+      localReference: sha256:5891b5b5…   # an OCI layer of the component descriptor's OCI manifest
       mediaType: text/plain; charset=utf-8
   - name: app-image
     type: ociImage
@@ -286,7 +284,7 @@ transport-archive/
 ├── artifact-index.json          # OCI repository + tag → digest, like a registry's tag list
 └── blobs/
     ├── sha256.e940ef51…         # OCI index of the component version (tag 1.0.0)
-    ├── sha256.b293e5c8…         # descriptor manifest
+    ├── sha256.b293e5c8…         # OCI manifest of the component descriptor
     ├── sha256.58d34857…         # component config
     ├── sha256.e9a6352b…         # component descriptor
     ├── sha256.5891b5b5…         # local blob "settings" (OCI layer)
