@@ -333,8 +333,12 @@ Making the OCM resources first-class CRs (rather than resolving inline) means re
 verification happen once, cached and drift-tracked by the existing controllers and visible for
 debugging. Child objects are named after the `OCMDeployment` so same-version deployments do not
 collide; the controller passes `ocmConfig` through and performs no verification of its own. The
-deploy `Resource`'s digest pins the source, so the chart the controller inspects is the chart the
-engine deploys.
+deploy `Resource` is digest-verified by its controller (the chart is checked against the signed
+descriptor digest, for HTTP Helm charts as well as OCI), so the controller never inspects a tampered
+chart. For OCI the engine is pinned to that same digest, making the inspected and deployed chart
+identical; for a `Helm/v1` HTTP chart the engine pulls by reference, so a same-version upstream
+republish could still diverge on the engine side — acceptable because a chart published without a
+signed digest is an explicit opt-out of integrity.
 
 ### Localization
 
