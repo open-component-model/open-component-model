@@ -76,8 +76,10 @@ func TestUploadTagToEmptyRepositoryWarns(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			targetPath := filepath.Join(t.TempDir(), "target.git")
-			_, err := git.PlainInit(targetPath, true)
+			bare, err := git.PlainInit(targetPath, true)
 			r.NoError(err)
+			// PlainInit points HEAD at master; hosts point it at the first pushed branch.
+			r.NoError(bare.Storer.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, "refs/heads/main")))
 
 			if tc.seedBranch {
 				// Give the target a branch before the tag push so hasBranch(refs) is true;
@@ -113,6 +115,8 @@ func TestUploadTagToEmptyRepositoryWarns(t *testing.T) {
 				r.NotEmpty(msgs, "pushing a tag into a branchless repository must warn")
 				r.Contains(strings.Join(msgs, "\n"), "default branch")
 			} else {
+				_, err := target.Head()
+				r.NoError(err, "a silent case must leave the target with a resolvable HEAD")
 				r.Empty(capture.messages(), "pushing a branch must not warn")
 			}
 		})
