@@ -135,7 +135,8 @@ defaulting to that namespace's `default` SA when unset:
 * `applyServiceAccountName`: the controller impersonates this SA to create the Flux objects;
   it needs the engine-kind Role.
 * `flux.serviceAccountName`: Flux impersonates this SA to apply the workload; it needs
-  rights in `TargetNamespace` (via a RoleBinding when `TargetNamespace` differs).
+  rights in `targetNamespace` (via a RoleBinding when `targetNamespace` differs). When `flux.kubeConfig`
+  targets a remote cluster, this SA and its rights live on that remote cluster, not locally.
 
 For ArgoCD the workload-sync identity defaults to the Argo CD control-plane SA (cluster-admin-level).
 The operator narrows it (Argo CD 3.5+) by enabling `application.sync.impersonation.enabled` in
@@ -172,7 +173,7 @@ with the `OCMDeployment` as owner reference and are garbage-collected with it, r
 The engine object's *own* deletion behavior (whether removing the
 `HelmRelease`/`Kustomization`/`Application` also tears down its workload) is derived from the same
 `deletionPolicy`, not a separate field. It is expressible in the rendered object for Kustomize and
-Argo but not for Flux `HelmRelease` (see below).
+Argo but not for Flux `HelmRelease` (see the **Helm `Orphan` caveat** below).
 
 The source (`OCIRepository` or `HelmRepository`) is an `applyset` member like the other deploy
 objects, so on `Orphan` it is left in place with them.
@@ -188,10 +189,15 @@ namespaced members). Consequently the SA-gone delete fallback — which strips l
 controller's own client — releases only the namespaced engine members and leaves any `Namespace`
 member untouched; the controller holds no namespace-write RBAC.
 
-`namespace.targetNamespace` only selects where the engine places workloads, not where the deploy
-object lives, so there is no cross-namespace owner reference. Deploying to a different cluster
-(Flux `spec.kubeConfig`, Argo `destination.server`) follows the `NamespacedDeployer` model and is
-deferred.
+`namespace.targetNamespace` selects where the engine places workloads (Flux `HelmRelease`/`Kustomization`
+`spec.targetNamespace`; Argo `Application.spec.destination.namespace`), not where the deploy object
+lives — that stays in the `OCMDeployment`'s namespace, so there is no cross-namespace owner reference.
+A different target *cluster* is selected through the per-engine options: `flux.kubeConfig`
+(→ the engine object's `spec.kubeConfig`) and `argo.destination` (→ the cluster selector of `Application.spec.destination`,
+which `targetNamespace` completes with `destination.namespace`). The controller still creates and
+impersonate-applies the engine object on the local cluster; the engine then performs the remote apply
+with its own credential (the referenced kubeconfig, or the cluster Argo CD has registered), so the
+controller holds no remote-cluster RBAC of its own.
 
 **Helm `Orphan` caveat**: `Orphan` leaves the engine objects in place, so the workload keeps running
 — but it does not protect the workload from a *later* deletion of the retained object. Kustomization
@@ -249,11 +255,23 @@ type OCMResourceRef struct {
 type FluxOptions struct {
     ServiceAccountName string `json:"serviceAccountName,omitempty"` // SA Flux impersonates to sync the workload; distinct from ApplyServiceAccountName; default namespace default SA
     SourceSecretRef *corev1.LocalObjectReference `json:"sourceSecretRef,omitempty"` // → source secretRef (OCIRepository, or HelmRepository for a Helm/v1 source)
+    KubeConfig *FluxKubeConfig `json:"kubeConfig,omitempty"`        // → HelmRelease/Kustomization spec.kubeConfig; remote target cluster; referent lives in the OCMDeployment's namespace; unset = local cluster
+}
+
+type FluxKubeConfig struct {
+    SecretRef    *corev1.LocalObjectReference `json:"secretRef,omitempty"`    // Secret holding a static kubeconfig; mutually exclusive with ConfigMapRef
+    ConfigMapRef *corev1.LocalObjectReference `json:"configMapRef,omitempty"` // ConfigMap for a workload-identity kubeconfig (Flux-recommended); mutually exclusive with SecretRef
 }
 
 type ArgoOptions struct {
     Project string `json:"project,omitempty"`                       // → Application.spec.project; required in practice (default AppProject rejects non-control-plane namespaces)
     RepoCredentialsSecretRef *corev1.LocalObjectReference `json:"repoCredentialsSecretRef,omitempty"` // Argo-namespace Secret for a Helm/v1 HTTP repo (Argo resolves it out of band)
+    Destination *ArgoDestination `json:"destination,omitempty"`     // → Application.spec.destination cluster selector; combines with namespace.targetNamespace (→ destination.namespace); unset = in-cluster (https://kubernetes.default.svc)
+}
+
+type ArgoDestination struct {
+    Server string `json:"server,omitempty"` // target cluster API server URL; mutually exclusive with Name
+    Name   string `json:"name,omitempty"`   // name of a cluster registered with Argo CD; mutually exclusive with Server
 }
 
 type OCMDeploymentStatus struct {
@@ -589,5 +607,4 @@ Deliberate non-goals for this revision — accepted scope limits, not rejected d
 
 * only Flux and Argo are supported — the controller is not a pluggable, fully engine-agnostic deployer
   (the spec is engine-neutral, but the render/health paths are Flux/Argo-specific);
-* images declared in Helm subchart (dependency) values are not localized;
-* no cross-cluster deploys (Flux `kubeConfig` / Argo `destination.server`).
+* images declared in Helm subchart (dependency) values are not localized.
