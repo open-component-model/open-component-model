@@ -86,11 +86,15 @@ The controller executes the following ordered steps each reconcile:
    on here; the first readiness gate is the deploy `Resource` in step 2.
 2. Create a `Resource` for the deploy resource (`spec.deployResource`); wait for its status to provide
    verified coordinates. The `Resource` controller resolves and verifies coordinates but does not
-   download content. Two access shapes are supported: an OCI access (or a `LocalBlob`, reconstructed
-   as an OCI digest ref) → rendered as an `OCIRepository`/`oci://` source; and a `Helm/v1` access —
-   a chart in a classic HTTP/HTTPS Helm repository, which a by-reference transfer leaves pointing at
-   its upstream location → rendered as a native HTTP Helm source (see
-   [the artifact matrix](#deployer-engine-and-artifact-matrix)).
+   download content. The deploy resource's access (where the chart or manifests physically live) can
+   take two shapes, and the controller renders a matching source for each:
+   - an **OCI access** (or a `LocalBlob`, which is reconstructed into an OCI digest reference) →
+     rendered as an OCI source (`OCIRepository` for Flux, `oci://` for Argo);
+   - a **`Helm/v1` access** — a chart that lives in a classic HTTP/HTTPS Helm repository (the
+     component references it at its upstream location rather than copying it into OCM) → rendered as
+     a native HTTP Helm source.
+
+   See [the artifact matrix](#deployer-engine-and-artifact-matrix) for the full source/engine mapping.
 3. For a Helm deploy resource, download the chart and read its default `values.yaml` to discover image
    references; downloads are size-capped by the `--ocmdeployment-download-max-resource-size` flag
    (default `5Mi` — a generous bound for whole deploy artifacts like Helm charts, above the general
