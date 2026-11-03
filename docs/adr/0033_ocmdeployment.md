@@ -261,7 +261,6 @@ type OCMDeploymentStatus struct {
     DeployedComponentVersion string            `json:"deployedComponentVersion,omitempty"`
     DeployedResourceDigest   string            `json:"deployedResourceDigest,omitempty"` // anchor for a future re-match-gating optimization
     AppliedLocalizations []AppliedLocalization `json:"appliedLocalizations,omitempty"` // empty = no labelled image matched, not incomplete
-    LastApplyTime        *metav1.Time          `json:"lastApplyTime,omitempty"` // anchor for the Argo no-status timeout; set once on first apply, never reset
 }
 
 // AppliedLocalization fields are +required. DigestPinned=false ⇒ tag-only chart, image unverified (warning Event emitted).
@@ -288,10 +287,12 @@ message. The authoritative reason constants live in `condition_types.go`.
 
 A child that never becomes ready (an unresolvable deploy, config, or image `Resource`) is not a
 terminal failure: the `OCMDeployment` stays `Ready=False` with the child's reason and requeues on the
-controller's rate limit indefinitely — this child-resolution path has no timeout. The one bounded
-wait is Argo-specific: when `deployer: ArgoCD` and the rendered `Application` reports no status, the
-controller marks `Ready=False` after a 5-minute bound (`argoNoStatusTimeout`; see
-[Negative Consequences](#negative-consequences)).
+controller's rate limit indefinitely — there is no deploy timeout. For `deployer: ArgoCD` there is
+one engine-specific diagnostic: when the rendered `Application` carries no status at all, Argo CD has
+not reconciled it (most often because apps-in-any-namespace is not configured for its namespace), so
+the controller sets `Ready=False` with a message pointing at that prerequisite (see
+[Negative Consequences](#negative-consequences)). It is surfaced whenever the Application has no
+status and clears as soon as Argo writes any — no timer or persisted timestamp is involved.
 
 ### Managed resources
 
@@ -563,7 +564,8 @@ only explicit `Ready=False`.
   `AppProject`'s `sourceNamespaces` (Argo CD enforces both in `IsAppNamespacePermitted`; the `default`
   project ships an empty `sourceNamespaces` and must not be populated). An unset `argo.project`
   therefore fails unless a dedicated project is configured. The controller applies the `Application`
-  and, if it has no status after a fixed 5-minute timeout, sets `Ready=False` pointing at these prerequisites.
+  and, while it carries no status (Argo CD has not reconciled it), sets `Ready=False` pointing at
+  these prerequisites.
 * By default Argo CD syncs with its own control-plane SA (cluster-admin-equivalent); scoping it
   requires Argo CD 3.5 operator-side steps (see [Apply identity and RBAC](#apply-identity-and-rbac)).
 
