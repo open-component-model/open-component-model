@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -47,31 +46,12 @@ func GetContextItems(cmd *cobra.Command) (*manager.PluginManager, credentials.Re
 // DownloadResourceData downloads the content of res, a resource of desc, read through repo.
 //
 // The content is bound to the digest of res: resource repositories verify what they download
-// against the resource they are handed, and component version repositories verify a local
-// resource against the digest of the resource they return. That resource is read again by
-// version, so it must record the digest res records; otherwise a version tag that moved since
-// desc was resolved (or pinned) could substitute content.
-func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginManager, credentialGraph credentials.Resolver, desc *descriptor.Descriptor, repo repository.ComponentVersionRepository, res *descriptor.Resource, identity runtime.Identity) (blob.ReadOnlyBlob, error) {
+// against the resource they are handed, and local resources are bound by
+// [repository.GetLocalResource].
+func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginManager, credentialGraph credentials.Resolver, desc *descriptor.Descriptor, repo repository.ComponentVersionRepository, res *descriptor.Resource) (blob.ReadOnlyBlob, error) {
 	access := res.GetAccess()
 	if v2.IsLocalBlob(access) || ociaccess.IsRelativeOCIReference(access) {
-		name, version := desc.Component.Name, desc.Component.Version
-		data, got, err := repo.GetLocalResource(ctx, name, version, identity)
-		if err != nil {
-			return nil, err
-		}
-		var gotDigest *descriptor.Digest
-		if got != nil {
-			gotDigest = got.Digest
-		}
-		if !sameDigest(gotDigest, res.Digest) {
-			err := fmt.Errorf("local resource %q of %s:%s records digest %s, but the resolved component version records %s",
-				res.Name, name, version, fmtDigest(gotDigest), fmtDigest(res.Digest))
-			if closer, ok := data.(io.Closer); ok {
-				err = errors.Join(err, closer.Close())
-			}
-			return nil, err
-		}
-		return data, nil
+		return repository.GetLocalResource(ctx, repo, desc.Component.Name, desc.Component.Version, res)
 	}
 
 	if access == nil {
@@ -88,20 +68,6 @@ func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginMana
 		}
 	}
 	return plugin.DownloadResource(ctx, res, creds)
-}
-
-func sameDigest(a, b *descriptor.Digest) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	return *a == *b
-}
-
-func fmtDigest(d *descriptor.Digest) string {
-	if d == nil {
-		return "<none>"
-	}
-	return fmt.Sprintf("%s:%s (%s)", d.HashAlgorithm, d.Value, d.NormalisationAlgorithm)
 }
 
 // SaveBlobToFile writes blob data to file with directory creation

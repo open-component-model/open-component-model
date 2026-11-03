@@ -15,13 +15,11 @@ var (
 	_ blob.SizeAware      = (*digestBlob)(nil)
 	_ blob.DigestAware    = (*digestBlob)(nil)
 	_ blob.MediaTypeAware = (*digestBlob)(nil)
-	_ io.Closer           = (*digestBlob)(nil)
 
 	_ blob.ReadOnlyBlob   = (*artifactBlob)(nil)
 	_ blob.SizeAware      = (*artifactBlob)(nil)
 	_ blob.DigestAware    = (*artifactBlob)(nil)
 	_ blob.MediaTypeAware = (*artifactBlob)(nil)
-	_ io.Closer           = (*artifactBlob)(nil)
 )
 
 // digestBlob binds base to the digest of its raw bytes. It reports that digest without
@@ -54,11 +52,6 @@ func (b *digestBlob) Size() int64 {
 
 func (b *digestBlob) MediaType() (string, bool) {
 	return mediaTypeOf(b.base)
-}
-
-// Close releases what base holds, such as a temporary file.
-func (b *digestBlob) Close() error {
-	return closeBlob(b.base)
 }
 
 // artifactBlob binds an archive holding an OCI artifact to the digest of the artifact's
@@ -95,11 +88,6 @@ func (b *artifactBlob) MediaType() (string, bool) {
 	return mediaTypeOf(b.base)
 }
 
-// Close releases what base holds, such as a temporary file.
-func (b *artifactBlob) Close() error {
-	return closeBlob(b.base)
-}
-
 func sizeOf(b blob.ReadOnlyBlob) int64 {
 	if aware, ok := b.(blob.SizeAware); ok {
 		return aware.Size()
@@ -112,11 +100,4 @@ func mediaTypeOf(b blob.ReadOnlyBlob) (string, bool) {
 		return aware.MediaType()
 	}
 	return "", false
-}
-
-func closeBlob(b blob.ReadOnlyBlob) error {
-	if closer, ok := b.(io.Closer); ok {
-		return closer.Close()
-	}
-	return nil
 }

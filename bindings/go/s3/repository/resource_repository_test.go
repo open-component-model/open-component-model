@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	"hash/crc32"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -19,7 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/internal/download"
@@ -118,7 +117,7 @@ func servedBy(srv *fakeS3, spec *v2.S3) *v2.S3 {
 // own tests. What the repository adds is carrying the access spec into it, and
 // rejecting an access that names no object before it gets there.
 func Test_GetResourceCredentialConsumerIdentity(t *testing.T) {
-	repo := NewResourceRepository(nil)
+	repo := NewResourceRepository()
 
 	t.Run("the access spec is carried into the identity", func(t *testing.T) {
 		id, err := repo.GetResourceCredentialConsumerIdentity(context.Background(),
@@ -160,52 +159,55 @@ func Test_GetResourceCredentialConsumerIdentity(t *testing.T) {
 	}
 }
 
-func Test_DownloadResource(t *testing.T) {
-	content := []byte("hello from s3")
-	tempFolder := t.TempDir()
-	srv := newFakeS3(t, content, "")
-	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
+// read reads b to its end, also when reading fails, and closes it.
+func read(t *testing.T, b blob.ReadOnlyBlob) ([]byte, error) {
+	t.Helper()
+	rc, err := b.ReadCloser()
+	if err != nil {
+		return nil, err
+	}
+	got, err := io.ReadAll(rc)
+	return got, errors.Join(err, rc.Close())
+}
 
-	b, err := repo.DownloadResource(context.Background(),
+func Test_DownloadResource(t *testing.T) {
+	r := require.New(t)
+	content := []byte("hello from s3")
+	srv := newFakeS3(t, content, "")
+	repo := NewResourceRepository()
+
+	b, err := repo.DownloadResource(t.Context(),
 		s3Resource(servedBy(srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt", Version: "v-1"})),
 		fakeCredentials())
-	require.NoError(t, err)
+	r.NoError(err)
+	r.Empty(srv.recorded(), "the object is requested when the blob is read")
+
+	for range 2 {
+		got, err := read(t, b)
+		r.NoError(err)
+		r.Equal(content, got)
+	}
 
 	requests := srv.recorded()
-	require.Len(t, requests, 1)
-	require.Equal(t, "/my-bucket/path/blob.txt", requests[0].path)
-	require.Equal(t, "v-1", requests[0].versionID)
-
-	entries, err := os.ReadDir(tempFolder)
-	require.NoError(t, err)
-	require.Len(t, entries, 1, "the object must be streamed into the configured temp folder")
-
-	rc, err := b.ReadCloser()
-	require.NoError(t, err)
-	got, err := io.ReadAll(rc)
-	require.NoError(t, err)
-	require.NoError(t, rc.Close())
-	require.Equal(t, content, got)
-
-	entries, err = os.ReadDir(tempFolder)
-	require.NoError(t, err)
-	require.Len(t, entries, 1, "the downloaded file is owned by the caller and must outlive the download")
+	r.Len(requests, 2, "every read requests the object")
+	for _, request := range requests {
+		r.Equal("/my-bucket/path/blob.txt", request.path)
+		r.Equal("v-1", request.versionID)
+	}
 }
 
 func Test_DownloadResource_DigestVerification(t *testing.T) {
 	content := []byte("hello from s3")
 
 	// downloadWith serves body and downloads it for a resource carrying dig.
-	downloadWith := func(t *testing.T, body []byte, dig *descriptor.Digest) (blob.ReadOnlyBlob, error) {
+	downloadWith := func(t *testing.T, body []byte, dig *descriptor.Digest) (*fakeS3, blob.ReadOnlyBlob, error) {
 		t.Helper()
-		tempFolder := t.TempDir()
 		srv := newFakeS3(t, body, "")
-		repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
-
 		res := s3Resource(servedBy(srv, &v2.S3{BucketName: "b", ObjectKey: "k"}))
 		res.Digest = dig
 
-		return repo.DownloadResource(context.Background(), res, fakeCredentials())
+		b, err := NewResourceRepository().DownloadResource(t.Context(), res, fakeCredentials())
+		return srv, b, err
 	}
 
 	matching := &descriptor.Digest{
@@ -213,99 +215,68 @@ func Test_DownloadResource_DigestVerification(t *testing.T) {
 		NormalisationAlgorithm: genericBlobDigestV1,
 		Value:                  godigest.FromBytes(content).Encoded(),
 	}
+	sha512 := &descriptor.Digest{
+		HashAlgorithm:          "SHA-512",
+		NormalisationAlgorithm: genericBlobDigestV1,
+		Value:                  godigest.SHA512.FromBytes(content).Encoded(),
+	}
 
-	t.Run("accepts an object matching the resource digest", func(t *testing.T) {
-		b, err := downloadWith(t, content, matching)
-		require.NoError(t, err)
+	tests := []struct {
+		name   string
+		body   []byte
+		digest *descriptor.Digest
+		// wantErr is the error reading the blob fails with.
+		wantErr string
+	}{
+		{name: "accepts an object matching the resource digest", body: content, digest: matching},
+		{name: "serves an object unverified when the resource carries no digest", body: content},
+		{name: "accepts an object matching a SHA-512 resource digest", body: content, digest: sha512},
+		{
+			name:    "rejects an object that does not match the resource digest when it is read",
+			body:    []byte("not what was promised"),
+			digest:  matching,
+			wantErr: "digest mismatch",
+		},
+		{
+			name:    "rejects an object that does not match a SHA-512 resource digest when it is read",
+			body:    []byte("not what was promised"),
+			digest:  sha512,
+			wantErr: "digest mismatch",
+		},
+	}
 
-		rc, err := b.ReadCloser()
-		require.NoError(t, err)
-		got, err := io.ReadAll(rc)
-		require.NoError(t, err)
-		require.NoError(t, rc.Close())
-		require.Equal(t, content, got)
-	})
-
-	t.Run("rejects an object that does not match the resource digest", func(t *testing.T) {
-		r := require.New(t)
-		tempFolder := t.TempDir()
-		srv := newFakeS3(t, []byte("not what was promised"), "")
-		repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
-		res := s3Resource(servedBy(srv, &v2.S3{BucketName: "b", ObjectKey: "k"}))
-		res.Digest = matching
-
-		_, err := repo.DownloadResource(t.Context(), res, fakeCredentials())
-		r.ErrorContains(err, "digest mismatch")
-
-		entries, err := os.ReadDir(tempFolder)
-		r.NoError(err)
-		r.Empty(entries, "a rejected object must not be left behind")
-	})
-
-	t.Run("serves an object unverified when the resource carries no digest", func(t *testing.T) {
-		b, err := downloadWith(t, content, nil)
-		require.NoError(t, err)
-
-		rc, err := b.ReadCloser()
-		require.NoError(t, err)
-		got, err := io.ReadAll(rc)
-		require.NoError(t, err)
-		require.NoError(t, rc.Close())
-		require.Equal(t, content, got)
-	})
-
-	t.Run("verifies an object against a SHA-512 resource digest", func(t *testing.T) {
-		sha512 := &descriptor.Digest{
-			HashAlgorithm:          "SHA-512",
-			NormalisationAlgorithm: genericBlobDigestV1,
-			Value:                  godigest.SHA512.FromBytes(content).Encoded(),
-		}
-
-		t.Run("match", func(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
-			b, err := downloadWith(t, content, sha512)
+			_, b, err := downloadWith(t, tt.body, tt.digest)
 			r.NoError(err)
 
-			rc, err := b.ReadCloser()
+			got, err := read(t, b)
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
+				return
+			}
 			r.NoError(err)
-			got, err := io.ReadAll(rc)
-			r.NoError(err)
-			r.NoError(rc.Close())
 			r.Equal(content, got)
 		})
-
-		t.Run("mismatch", func(t *testing.T) {
-			_, err := downloadWith(t, []byte("not what was promised"), sha512)
-			require.ErrorContains(t, err, "digest mismatch")
-		})
-	})
+	}
 
 	t.Run("refuses an object when the digest is present but unusable", func(t *testing.T) {
 		r := require.New(t)
-		tempFolder := t.TempDir()
-		srv := newFakeS3(t, content, "")
-		repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
-		res := s3Resource(servedBy(srv, &v2.S3{BucketName: "b", ObjectKey: "k"}))
-		res.Digest = &descriptor.Digest{
+		srv, _, err := downloadWith(t, content, &descriptor.Digest{
 			HashAlgorithm:          "MD5",
 			NormalisationAlgorithm: genericBlobDigestV1,
 			Value:                  godigest.FromBytes(content).Encoded(),
-		}
-
-		_, err := repo.DownloadResource(t.Context(), res, fakeCredentials())
+		})
 		r.ErrorContains(err, "unsupported hash algorithm")
-
-		entries, err := os.ReadDir(tempFolder)
-		r.NoError(err)
-		r.Empty(entries, "a refused object must not be left behind")
+		r.Empty(srv.recorded(), "a refused object must not be requested")
 	})
 }
 
 func Test_ProcessResourceDigest(t *testing.T) {
 	content := []byte("digest me")
-	tempFolder := t.TempDir()
 	srv := newFakeS3(t, content, "")
-	repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
+	repo := NewResourceRepository()
 
 	res, err := repo.ProcessResourceDigest(context.Background(),
 		s3Resource(servedBy(srv, &v2.S3{BucketName: "b", ObjectKey: "k"})), fakeCredentials())
@@ -314,10 +285,6 @@ func Test_ProcessResourceDigest(t *testing.T) {
 	require.Equal(t, godigest.FromBytes(content).Encoded(), res.Digest.Value)
 	require.Equal(t, hashAlgorithmSHA256, res.Digest.HashAlgorithm)
 	require.Equal(t, genericBlobDigestV1, res.Digest.NormalisationAlgorithm)
-
-	entries, err := os.ReadDir(tempFolder)
-	require.NoError(t, err)
-	require.Empty(t, entries, "digest processing must clean up the object it downloaded")
 }
 
 // A hand-written digest cannot know the normalisation algorithm and need not restate the
@@ -363,8 +330,7 @@ func Test_ProcessResourceDigest_VerifiesLeniently(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			srv := newFakeS3(t, content, "")
-			tempFolder := t.TempDir()
-			repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
+			repo := NewResourceRepository()
 
 			resource := s3Resource(servedBy(srv, &v2.S3{BucketName: "b", ObjectKey: "k"}))
 			resource.Digest = tt.digest
@@ -455,8 +421,7 @@ func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			srv := newFakeS3(t, []byte("digest me"), tt.versionID)
-			tempFolder := t.TempDir()
-			repo := NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
+			repo := NewResourceRepository()
 
 			resource := s3Resource(servedBy(srv, &v2.S3{BucketName: "b", ObjectKey: "k", Version: tt.specVersion}))
 			res, err := repo.ProcessResourceDigest(context.Background(), resource, fakeCredentials())
@@ -486,25 +451,4 @@ func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 			require.NotNil(t, res.Digest)
 		})
 	}
-}
-
-func Test_NewResourceRepository_NilFilesystemConfig(t *testing.T) {
-	// Redirect the OS temp dir so the downloaded file is cleaned up with it.
-	osTempDir := t.TempDir()
-	t.Setenv("TMPDIR", osTempDir)
-
-	content := []byte("no config")
-	srv := newFakeS3(t, content, "")
-	repo := NewResourceRepository(nil)
-
-	b, err := repo.DownloadResource(context.Background(),
-		s3Resource(servedBy(srv, &v2.S3{BucketName: "b", ObjectKey: "k"})), fakeCredentials())
-	require.NoError(t, err)
-
-	rc, err := b.ReadCloser()
-	require.NoError(t, err)
-	defer func() { _ = rc.Close() }()
-	got, err := io.ReadAll(rc)
-	require.NoError(t, err)
-	require.Equal(t, content, got)
 }
