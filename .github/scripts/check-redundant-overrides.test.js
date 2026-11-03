@@ -80,16 +80,33 @@ test("parseAuditOutput rejects JSON that is not an audit report", () => {
 
 // --- advisory comparison ----------------------------------------------------
 
-test("extractAdvisoryIds collects GHSA and CVE ids anywhere in the report, upper-cased", () => {
+test("extractAdvisoryIds takes the GHSA id from each advisory url, upper-cased", () => {
   const audit = {
-    vulnerabilities: { minimatch: { via: [{ url: "https://github.com/advisories/GHSA-g3hv-75wg-m249" }] } },
-    advisories: { note: "see CVE-2026-118764" },
+    vulnerabilities: {
+      // Real entry; the title mentions a CVE that is not an advisory of this report.
+      "adm-zip": {
+        via: [
+          {
+            source: 1240032,
+            url: "https://github.com/advisories/GHSA-rcw4-f5rp-g42v",
+            title: "adm-zip: Decompression-bomb protection (fix for CVE-2026-39244) can be bypassed by declaring uncompressed size as 0",
+          },
+        ],
+      },
+      // A string names the vulnerable dependency, which has its own entry.
+      "some-parent": { via: ["adm-zip"] },
+    },
   };
-  assert.deepStrictEqual(extractAdvisoryIds(audit), new Set(["GHSA-G3HV-75WG-M249", "CVE-2026-118764"]));
+  assert.deepStrictEqual(extractAdvisoryIds(audit), new Set(["GHSA-RCW4-F5RP-G42V"]));
+});
+
+test("extractAdvisoryIds counts an advisory without a GHSA url by its npm source", () => {
+  const audit = { vulnerabilities: { legacy: { via: [{ source: 1096302, url: "https://npmjs.com/advisories/1096302" }] } } };
+  assert.deepStrictEqual(extractAdvisoryIds(audit), new Set(["npm:1096302"]));
 });
 
 test("extractAdvisoryIds returns an empty set for a clean audit", () => {
-  assert.strictEqual(extractAdvisoryIds({ vulnerabilities: {}, metadata: {} }).size, 0);
+  assert.strictEqual(extractAdvisoryIds({ vulnerabilities: {} }).size, 0);
 });
 
 test("newlyIntroduced returns the sorted ids that are not in the baseline", () => {
@@ -120,10 +137,10 @@ test("classify splits candidates, protecting and ignored, and ignore wins over c
   });
 });
 
-test("classify does not treat inherited Object properties as ignored", () => {
+test("classify does not read inherited Object properties from ignore or introducedByKey", () => {
   const result = classify({
     overrideKeys: ["constructor", "tostring"],
-    introducedByKey: { constructor: [], tostring: [] },
+    introducedByKey: {},
     ignore: {},
   });
   assert.deepStrictEqual(result.candidates, ["constructor", "tostring"]);

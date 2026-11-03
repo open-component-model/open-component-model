@@ -30,6 +30,9 @@ jobs:
     runs-on: ubuntu-26.04-arm
     permissions:
       contents: read
+    environment:
+      name: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && 'automation' || '' }}
+      deployment: false
     env:
       PUBLISH: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
     steps:

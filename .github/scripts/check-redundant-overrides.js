@@ -63,17 +63,24 @@ export function removeOverrideKey(overrides, key) {
 }
 
 /**
- * Extract every advisory identifier (GHSA-... and CVE-...) referenced anywhere
- * in an `npm audit --json` document.
+ * Collect the advisories of an `npm audit --json` (report version 2) document.
+ * Each advisory is a `via` object of a vulnerable package. Its id is the GHSA
+ * id from its `url`, or `npm:<source>` when the url has none, so every
+ * advisory is counted.
  *
- * @param {unknown} auditJson - Parsed `npm audit --json` output.
+ * @param {{ vulnerabilities: Record<string, any> }} auditJson - Parsed `npm audit --json` output.
  * @returns {Set<string>}
  */
 export function extractAdvisoryIds(auditJson) {
-  const text = JSON.stringify(auditJson ?? {});
   const ids = new Set();
-  const re = /(GHSA-[0-9a-z]{4}-[0-9a-z]{4}-[0-9a-z]{4}|CVE-\d{4}-\d{3,})/gi;
-  for (const m of text.matchAll(re)) ids.add(m[1].toUpperCase());
+  for (const vulnerability of Object.values(auditJson.vulnerabilities)) {
+    for (const via of vulnerability.via ?? []) {
+      // A string names another vulnerable package; its own entry holds the advisory.
+      if (typeof via !== "object") continue;
+      const ghsa = /GHSA(-[0-9a-z]{4}){3}/i.exec(via.url ?? "");
+      ids.add(ghsa ? ghsa[0].toUpperCase() : `npm:${via.source}`);
+    }
+  }
   return ids;
 }
 
@@ -106,7 +113,7 @@ export function classify({ overrideKeys, introducedByKey, ignore = IGNORE }) {
       ignored.push(key);
       continue;
     }
-    const advisories = introducedByKey[key] ?? [];
+    const advisories = Object.hasOwn(introducedByKey, key) ? introducedByKey[key] : [];
     if (advisories.length === 0) candidates.push(key);
     else protecting.push({ key, advisories });
   }
@@ -273,7 +280,13 @@ export function auditVariant(label, audit) {
  * @returns {string}
  */
 function npmJson(args, cwd) {
-  const result = spawnSync("npm", [...args, "--json"], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
+  const result = spawnSync("npm", [...args, "--json"], {
+    cwd,
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "inherit"],
+    // The default of 1 MiB would kill npm on a large audit report.
+    maxBuffer: 64 * 1024 * 1024,
+  });
   if (result.error) throw new Error(`could not run npm ${args[0]}`, { cause: result.error });
   return result.stdout;
 }
@@ -382,5 +395,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
 
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown + "\n");
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `candidate-count=${result.candidates.length}\n`);
-  process.exit(0);
 }
