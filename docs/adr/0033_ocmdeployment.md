@@ -451,11 +451,14 @@ Merge rules:
 * Maps deep-merge by key; later layers win on overlapping leaves.
 * An image block (the subtree a localization override wrote) is treated **atomically**: config
   either leaves it untouched or replaces the whole block. A deliberate whole-block image override in
-  config therefore wins (the escape hatch when localization matched wrong); a partial override
-  (config sets only `tag` while localization set `repository`+`tag`+`digest`) is not applied, because
-  it would produce a split, invalid reference. A whole-block override from inline `config` can replace
-  a digest-pinned image and bypass the signed-digest integrity below; that is accepted as an explicit,
-  operator-authored override, not a silent one.
+  config therefore wins (the escape hatch when localization matched wrong). A **partial** override
+  (config sets only `tag` while localization set `repository`+`tag`+`digest`) is **rejected** with
+  `Ready=False` (`reason: UnsupportedConfiguration`), not silently dropped: it cannot be applied
+  coherently — against a digest-pinned block the digest wins at runtime, so the new `tag` would be
+  silently ignored, and in every case the whole-block override is the supported way to change a
+  localized image. A whole-block override from inline `config` can replace a digest-pinned image and
+  bypass the signed-digest integrity below; that is accepted as an explicit, operator-authored
+  override, not a silent one.
 * Arrays are replaced, not merged.
 
 #### Kustomize
