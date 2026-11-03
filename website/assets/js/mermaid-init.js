@@ -61,11 +61,12 @@ const start = () => {
         return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default";
     };
 
-    // Mermaid measures text to lay out a diagram, and an element inside a
-    // hidden tab pane (display: none) measures as zero: the diagram renders as
-    // an empty 16x16 SVG. Render only what is visible, and render a pane's
-    // diagrams once Bootstrap has shown its tab. Unrendered elements keep
-    // their source text, so they are picked up whenever they become visible.
+    // Mermaid measures text to lay out a diagram, and an element that is not
+    // displayed (an inactive tab pane, a closed <details> in some browsers)
+    // measures as zero: the diagram renders as an empty 16x16 SVG. Render only
+    // what is visible, and render the rest once it becomes visible. Unrendered
+    // elements keep their source text, so they are picked up whenever they
+    // become visible.
     const renderVisible = (prefix) => {
         const nodes = Array.from(document.querySelectorAll(".mermaid:not([data-processed])")).filter(
             (el) => el.getClientRects().length > 0
@@ -98,6 +99,17 @@ const start = () => {
     // Bootstrap fires shown.bs.tab on the tab button after the pane is visible;
     // the event bubbles to the document.
     document.addEventListener("shown.bs.tab", () => renderVisible("mermaid render failed"));
+    // A <details> fires toggle when it opens or closes. toggle does not bubble,
+    // so listen in the capture phase.
+    document.addEventListener(
+        "toggle",
+        (event) => {
+            if (event.target instanceof HTMLDetailsElement && event.target.open) {
+                renderVisible("mermaid render failed");
+            }
+        },
+        true
+    );
 
     // doks-core's setTheme() writes data-bs-theme AND dispatches 'themeChanged'
     // for every toggle, so a naive listener + observer pair re-renders twice
