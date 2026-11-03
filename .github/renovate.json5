@@ -106,11 +106,14 @@
       // Docker base images into one weekly PR, regardless of image name
       // or file location. gomod is excluded so Go module digests keep
       // their own per-module PRs (no cross-module PR, go.sum post-upgrade
-      // step intact).
+      // step intact). custom.regex is included so the .env digest-pinned
+      // images (OPENSCAP_IMAGE, DOCKLE_IMAGE) batch here too, instead of
+      // falling through to the default "any time" schedule (PR #4142).
       matchManagers: [
         'github-actions',
         'dockerfile',
         'docker-compose',
+        'custom.regex',
       ],
       matchUpdateTypes: ['digest', 'pinDigest'],
       groupName: 'Digest pins',
