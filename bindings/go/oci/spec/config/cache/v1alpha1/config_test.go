@@ -12,27 +12,28 @@ import (
 
 func TestLookupConfig(t *testing.T) {
 	tests := []struct {
-		name    string
-		yaml    string
-		expect  cachespec.RemotePolicy
-		wantErr string
+		name      string
+		yaml      string
+		expect    cachespec.RemotePolicy
+		expectNil bool
+		wantErr   string
 	}{
 		{
-			name: "defaults to IfNotPresent without an entry",
+			name: "returns nil without an entry",
 			yaml: `
 type: generic.config.ocm.software/v1
 configurations: []
 `,
-			expect: cachespec.RemotePolicyIfNotPresent,
+			expectNil: true,
 		},
 		{
-			name: "defaults to IfNotPresent when the field is omitted",
+			name: "leaves the policy empty when the field is omitted",
 			yaml: `
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.cache.config.ocm.software/v1alpha1
 `,
-			expect: cachespec.RemotePolicyIfNotPresent,
+			expect: "",
 		},
 		{
 			name: "parses Always",
@@ -102,14 +103,19 @@ configurations:
 				return
 			}
 			r.NoError(err)
+			if tt.expectNil {
+				r.Nil(cfg)
+				return
+			}
+			r.NotNil(cfg)
 			r.Equal(tt.expect, cfg.RemotePolicy)
 		})
 	}
 
-	t.Run("nil config defaults to IfNotPresent", func(t *testing.T) {
+	t.Run("nil config returns nil", func(t *testing.T) {
 		r := require.New(t)
 		cfg, err := cachespec.LookupConfig(nil)
 		r.NoError(err)
-		r.Equal(cachespec.RemotePolicyIfNotPresent, cfg.RemotePolicy)
+		r.Nil(cfg)
 	})
 }

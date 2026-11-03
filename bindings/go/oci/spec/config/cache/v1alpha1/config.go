@@ -51,33 +51,35 @@ type Config struct {
 }
 
 // LookupConfig merges every OCI cache configuration in cfg and validates the result.
-// Without any entry, it returns a Config with [RemotePolicyIfNotPresent].
+// It returns nil if cfg holds no entry, so callers apply the default themselves.
 func LookupConfig(cfg *genericv1.Config) (*Config, error) {
-	cfgs := make([]*Config, 0)
-	if cfg != nil {
-		filtered, err := genericv1.Filter(cfg, &genericv1.FilterOptions{
-			ConfigTypes: []runtime.Type{
-				runtime.NewVersionedType(ConfigType, Version),
-				runtime.NewUnversionedType(ConfigType),
-			},
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to filter config: %w", err)
+	if cfg == nil {
+		return nil, nil
+	}
+	filtered, err := genericv1.Filter(cfg, &genericv1.FilterOptions{
+		ConfigTypes: []runtime.Type{
+			runtime.NewVersionedType(ConfigType, Version),
+			runtime.NewUnversionedType(ConfigType),
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to filter config: %w", err)
+	}
+	if len(filtered.Configurations) == 0 {
+		return nil, nil
+	}
+	cfgs := make([]*Config, 0, len(filtered.Configurations))
+	for _, entry := range filtered.Configurations {
+		var config Config
+		if err := Scheme.Convert(entry, &config); err != nil {
+			return nil, fmt.Errorf("failed to decode oci cache config: %w", err)
 		}
-		for _, entry := range filtered.Configurations {
-			var config Config
-			if err := Scheme.Convert(entry, &config); err != nil {
-				return nil, fmt.Errorf("failed to decode oci cache config: %w", err)
-			}
-			cfgs = append(cfgs, &config)
-		}
+		cfgs = append(cfgs, &config)
 	}
 
 	merged := Merge(cfgs...)
 	switch merged.RemotePolicy {
-	case "":
-		merged.RemotePolicy = RemotePolicyIfNotPresent
-	case RemotePolicyIfNotPresent, RemotePolicyAlways:
+	case "", RemotePolicyIfNotPresent, RemotePolicyAlways:
 	default:
 		return nil, fmt.Errorf("invalid oci cache configuration: unknown remotePolicy %q, must be %q or %q",
 			merged.RemotePolicy, RemotePolicyIfNotPresent, RemotePolicyAlways)

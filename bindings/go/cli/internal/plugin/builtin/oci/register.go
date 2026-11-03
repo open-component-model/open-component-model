@@ -37,9 +37,8 @@ func Register(
 	if filesystemConfig.TempFolder != nil {
 		tempDir = *filesystemConfig.TempFolder
 	}
-	// Empty falls back to the cache default.
-	var remotePolicy cache.RemotePolicy
-	if cacheConfig != nil {
+	remotePolicy := cache.RemotePolicyIfNotPresent
+	if cacheConfig != nil && cacheConfig.RemotePolicy != "" {
 		remotePolicy = cache.RemotePolicy(cacheConfig.RemotePolicy)
 	}
 	CachingComponentVersionRepositoryProvider := provider.NewComponentVersionRepositoryProvider(
