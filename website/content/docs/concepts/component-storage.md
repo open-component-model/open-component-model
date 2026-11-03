@@ -51,12 +51,68 @@ flowchart TD
     end
 ```
 
+{{< details "Example: descriptor manifest" >}}
+
+The tag `1.0.0` resolves to this manifest. Digests are shortened, and the `org.opencontainers.image.*` annotations are
+left out.
+
+```jsonc
+{
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.oci.image.manifest.v1+json",
+  // Marks the manifest as an OCM component version
+  "artifactType": "application/vnd.ocm.software.component-descriptor.v2",
+  // Points to the component descriptor layer
+  "config": {
+    "mediaType": "application/vnd.ocm.software.component.config.v1+json",
+    "digest": "sha256:bd673a28…",
+    "size": 196
+  },
+  "layers": [
+    // Always first: the component descriptor
+    {
+      "mediaType": "application/vnd.ocm.software.component-descriptor.v2+json",
+      "digest": "sha256:f58e55ab…",
+      "size": 594
+    },
+    // Local blob "config": its localReference is this digest
+    {
+      "mediaType": "text/plain; charset=utf-8",
+      "digest": "sha256:5891b5b5…",
+      "size": 6,
+      "annotations": {
+        // The resource or source the blob belongs to
+        "software.ocm.artifact": "[{\"identity\":{\"name\":\"config\",\"version\":\"1.0.0\"},\"kind\":\"resource\"}]"
+      }
+    }
+  ],
+  "annotations": {
+    "software.ocm.componentversion": "github.com/acme.org/demo:1.0.0"
+  }
+}
+```
+
+The config holds nothing but the reference to the descriptor layer:
+
+```json
+{
+  "componentDescriptorLayer": {
+    "mediaType": "application/vnd.ocm.software.component-descriptor.v2+json",
+    "digest": "sha256:f58e55ab…",
+    "size": 594
+  }
+}
+```
+
+{{< /details >}}
+
 {{< /tab >}}
 {{< tab "Index" >}}
 
 Used as soon as one local blob is an OCI artifact: an image, a Helm chart, or any OCI image layout. The tag points to an
-OCI **index**. Its entries are the descriptor manifest, annotated `software.ocm.descriptor`, and the manifest or index
-of each embedded artifact. Local blobs that are plain files stay layers of the descriptor manifest.
+OCI **index**. Its first entry is the descriptor manifest, marked by the artifact type
+`application/vnd.ocm.software.component-descriptor.v2`. Every further entry is the manifest or index of an embedded
+artifact. Local blobs that are plain files stay layers of the descriptor manifest.
 
 ```mermaid
 flowchart TD
@@ -64,7 +120,7 @@ flowchart TD
 
     subgraph cv["Component version"]
         idx["OCI index"]
-        idx --> dm["Descriptor manifest<br/>software.ocm.descriptor"]
+        idx --> dm["Descriptor manifest<br/>(first entry)"]
         idx --> img["Image index / manifest<br/>(local blob: app-image)"]
         dm --> cfg["Config<br/>component.config.v1+json"]
         dm --> cd["Layer: component descriptor"]
@@ -72,6 +128,51 @@ flowchart TD
         img --> imgm["Platform manifests,<br/>config, image layers"]
     end
 ```
+
+{{< details "Example: component version index" >}}
+
+The tag `1.0.0` resolves to this index. Digests are shortened, and the `org.opencontainers.image.*` annotations are left
+out.
+
+```jsonc
+{
+  "schemaVersion": 2,
+  "mediaType": "application/vnd.oci.image.index.v1+json",
+  "manifests": [
+    // Always first: the descriptor manifest (see the Manifest tab),
+    // still holding the plain-file local blob "config" as a layer
+    {
+      "mediaType": "application/vnd.oci.image.manifest.v1+json",
+      "artifactType": "application/vnd.ocm.software.component-descriptor.v2",
+      "digest": "sha256:b1a00ae7…",
+      "size": 1633,
+      "annotations": {
+        "software.ocm.componentversion": "github.com/acme.org/demo:1.0.0"
+      }
+    },
+    // Local blob "app-image": the original image index,
+    // its localReference is this digest
+    {
+      "mediaType": "application/vnd.oci.image.index.v1+json",
+      "digest": "sha256:262578cd…",
+      "size": 2385,
+      "annotations": {
+        // The resource or source the blob belongs to
+        "software.ocm.artifact": "[{\"identity\":{\"name\":\"app-image\",\"version\":\"6.9.1\"},\"kind\":\"resource\"}]"
+      }
+    }
+  ],
+  "annotations": {
+    "software.ocm.componentversion": "github.com/acme.org/demo:1.0.0"
+  }
+}
+```
+
+`sha256:262578cd…` is the image index of the source image, unchanged. It lists the platform manifests for
+`linux/amd64`, `linux/arm/v7`, and `linux/arm64` and their build attestations. Each of those references its own config
+and layers.
+
+{{< /details >}}
 
 {{< /tab >}}
 {{< /tabs >}}
@@ -144,10 +245,10 @@ a registry does. The blobs it stores are the same OCI manifests, indexes, and la
 transport-archive/
 ├── artifact-index.json          # repository + tag → digest, like a registry's tag list
 └── blobs/
-    ├── sha256.f0e1cca8…         # component version index (tag 1.0.0)
-    ├── sha256.56dc5644…         # descriptor manifest
-    ├── sha256.a618c5db…         # config
-    ├── sha256.2a1d3a8f…         # component descriptor
+    ├── sha256.933b1f62…         # component version index (tag 1.0.0)
+    ├── sha256.b1a00ae7…         # descriptor manifest
+    ├── sha256.d9aa27ad…         # config
+    ├── sha256.042cbbe9…         # component descriptor
     ├── sha256.5891b5b5…         # local blob "config" (layer)
     ├── sha256.262578cd…         # local blob "app-image" (image index)
     └── …                        # platform manifests, configs, and layers of the image
