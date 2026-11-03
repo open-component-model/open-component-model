@@ -589,9 +589,14 @@ var userinfo = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.\-]*://)[^/@\s]+@`)
 // unrecognised status into its error.
 const maxCauseLength = 512
 
+// RedactURL removes the credentials of every URL s contains, so s is safe to log.
+func RedactURL(s string) string {
+	return userinfo.ReplaceAllString(s, "${1}xxxxx@")
+}
+
 // redact removes the credentials of every URL the message quotes.
 func redact(err error) string {
-	message := userinfo.ReplaceAllString(err.Error(), "${1}xxxxx@")
+	message := RedactURL(err.Error())
 	if len(message) > maxCauseLength {
 		message = message[:maxCauseLength] + "..."
 	}
