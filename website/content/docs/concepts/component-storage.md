@@ -6,10 +6,12 @@ toc: true
 hasMermaid: true
 ---
 
-OCM has no storage format of its own. A component version is stored as an **OCI artifact graph**: an OCI manifest or
-index that carries the component descriptor and every resource stored *by value* (a local blob). The same graph is
-used in an OCI registry and in a **Common Transport Format (CTF)** archive. The CTF is a file-based repository format
-defined by OCM, but the artifacts it holds are plain OCI manifests, indexes, and layers.
+OCM has no storage format of its own. It is designed to store component versions in established storage technologies
+and to map its model onto each of them. Today, that technology is OCI: a component version is stored as an **OCI
+artifact graph**, an OCI manifest or index that carries the component descriptor and every resource stored *by value*
+(a local blob). The same graph is used in an OCI registry and in a **Common Transport Format (CTF)** archive. The CTF is
+a file-based repository format defined by OCM, but the artifacts it holds are plain OCI manifests, indexes, and layers.
+Other backends, such as object storage like S3, may follow.
 
 Knowing this graph explains what you see in a registry after `ocm add cv` or `ocm transfer cv`, and why an image
 embedded in a component version can be pulled with `docker`, `oras`, or `crane` and referenced from a Kubernetes Pod.
