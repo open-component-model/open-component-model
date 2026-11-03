@@ -76,9 +76,12 @@ flowchart TD
 
     classDef ocm stroke:#2563eb,stroke-width:3px
     class cfg,cd ocm
+    classDef content stroke:#16a34a,stroke-width:3px
+    class lb content
 ```
 
-Boxes with a thick blue border hold content that OCM defines. All other boxes are plain OCI objects.
+A **blue** border marks a document whose format OCM defines. A **green** border marks your own content, stored
+unchanged. Boxes without a colored border are the OCI structure that ties them together.
 
 {{< details "Example: the component descriptor's OCI manifest" >}}
 
@@ -159,9 +162,12 @@ flowchart TD
 
     classDef ocm stroke:#2563eb,stroke-width:3px
     class cfg,cd ocm
+    classDef content stroke:#16a34a,stroke-width:3px
+    class lb,img,imgm content
 ```
 
-Boxes with a thick blue border hold content that OCM defines. All other boxes are plain OCI objects.
+A **blue** border marks a document whose format OCM defines. A **green** border marks your own content, stored
+unchanged. Boxes without a colored border are the OCI structure that ties them together.
 
 {{< details "Example: component version index" >}}
 
