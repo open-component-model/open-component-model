@@ -24,10 +24,15 @@ and a config, and have the controller produce the low-level deploy objects with 
 values configured, without an orchestration layer.
 
 `OCMDeployment` is an addition, not a replacement. It renders the low-level Flux/Argo objects
-directly and applies them itself; it does not route through the `NamespacedDeployer` CR
-(which consumes an OCM resource and applies its contents, a different shape than objects rendered
-in-process from localization + merge). It reuses two building blocks those controllers also use,
-the `applyset` apply/prune utility and an impersonating client, plus shared API types
+directly and applies them itself; it does not route through the `NamespacedDeployer` CR. The
+`NamespacedDeployer` consumes an OCM resource and applies its decoded contents verbatim;
+`OCMDeployment`'s objects are rendered in-process (localization via signed labels, image-coordinate
+resolution from child `Resource` CRs, and config/values merge) and exist only in memory — there is
+no OCM resource to point a `ResourceRef` at, and a rendered `HelmRelease`/`Application` is not an
+OCM resource we would materialize just to re-download it. The apply/prune machinery is shared,
+though: both controllers go through the same `applyset` utility (one field manager,
+`delivery.ocm.software/applyset`) and an impersonating client; the orchestration around it should be
+factored into a shared helper rather than kept as parallel copies. It also reuses shared API types
 (`DeletionPolicy`, `DeployedObjectReference`) and the `Component`'s `DowngradePolicy`. Its primary
 purpose is to migrate v1 users to v2 and lower the adoption bar for the common case. We accept
 consciously that this is neither perfectly clean nor fully deployer-agnostic.
