@@ -320,7 +320,10 @@ engine deploys.
 
 ### Localization
 
-Localization knowledge is split so the signed component never names a chart values path.
+Localization knowledge is split: the signed component records only *which* image to localize (its
+coordinates and digest, via the label below), never *where* that image sits in a chart's values. The
+values-path binding is resolved at deploy time by inspecting the chart, so signing never depends on
+chart structure.
 
 A signed label is attached to each localizable image resource at construction. Presence is the opt-in
 marker; the value is the match key. The resource identity is implicit in which resource carries it.
