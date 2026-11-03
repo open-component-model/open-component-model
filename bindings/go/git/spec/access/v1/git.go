@@ -24,11 +24,12 @@ type Git struct {
 	Type runtime.Type `json:"type"`
 
 	// Repository is the Git repository URL: an http(s)://, ssh:// or git:// URL with a
-	// host and a path, the scp-like form user@host:path, or a local repository as
-	// file:///path or a plain path. A value without a scheme that is not scp-like is a
-	// local path, relative to the working directory unless absolute. A fragment may
-	// select the ref or commit with branch=<name>, tag=<name> or commit=<sha>, as in
+	// host and a path, or the scp-like form user@host:path. A fragment may select the ref
+	// or commit with branch=<name>, tag=<name> or commit=<sha>, as in
 	// https://github.com/org/repo.git#branch=main.
+	// Local repositories (file:// or plain paths) are not supported for declared git
+	// accesses; use a git input instead, which archives a local repository into a
+	// portable local blob at component version creation time.
 	Repository string `json:"repository"`
 
 	// Ref selects a branch, tag or full ref name. A bare name resolves to a
@@ -44,7 +45,11 @@ type Git struct {
 
 var commitSHA = regexp.MustCompile(`^[0-9a-fA-F]{40}$`)
 
-func (g *Git) Validate() error {
+// ValidateStructure checks that the access fields are structurally valid: the
+// repository parses as a known endpoint, the ref name is legal and at least one
+// of ref or commit is set. It is permissive about local repositories (file:// or
+// plain paths), because the fetch engine (used by git inputs) needs to clone them.
+func (g *Git) ValidateStructure() error {
 	g, err := g.Normalize()
 	if err != nil {
 		return err
@@ -72,6 +77,29 @@ func (g *Git) Validate() error {
 		}
 	}
 
+	return nil
+}
+
+// Validate checks that the access is structurally valid and that the repository
+// is not a local path or file:// URL. Local repositories are not supported for
+// declared git accesses because no remote consumer can reach them; use a git
+// input instead, which archives the local repository into a portable local blob.
+func (g *Git) Validate() error {
+	if err := g.ValidateStructure(); err != nil {
+		return err
+	}
+	normalized, err := g.Normalize()
+	if err != nil {
+		return err
+	}
+	ep, err := endpoint.Parse(normalized.Repository)
+	if err != nil {
+		return err
+	}
+	if ep.IsLocal() {
+		return fmt.Errorf("git access must not reference a local git repository " +
+			"(file:// or a local path); only remote repositories are supported")
+	}
 	return nil
 }
 

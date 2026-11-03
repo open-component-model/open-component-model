@@ -31,6 +31,7 @@ import (
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/git/transformation/spec/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/gittest"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -49,11 +50,11 @@ func gitResource(t *testing.T, url, ref, commit, accessType string) *v2.Resource
 	}
 }
 
-func localRepository(t *testing.T) (path, firstCommit string) {
+func localRepository(t *testing.T) (path, serverURL, firstCommit string) {
 	t.Helper()
 	r := require.New(t)
-	path = t.TempDir()
-	repo, err := git.PlainInit(path, false)
+	work := t.TempDir()
+	repo, err := git.PlainInit(work, false)
 	r.NoError(err)
 	// Ignore host signing settings when creating test fixtures.
 	cfg, err := repo.Config()
@@ -63,7 +64,7 @@ func localRepository(t *testing.T) (path, firstCommit string) {
 	worktree, err := repo.Worktree()
 	r.NoError(err)
 	for _, content := range []string{"original", "updated"} {
-		r.NoError(os.WriteFile(filepath.Join(path, "README"), []byte(content), 0o644))
+		r.NoError(os.WriteFile(filepath.Join(work, "README"), []byte(content), 0o644))
 		_, err = worktree.Add("README")
 		r.NoError(err)
 		hash, err := worktree.Commit(content, &git.CommitOptions{Author: &object.Signature{
@@ -74,12 +75,16 @@ func localRepository(t *testing.T) (path, firstCommit string) {
 			firstCommit = hash.String()
 		}
 	}
-	return path, firstCommit
+	// Bare-clone into a sibling so git-http-backend can serve it.
+	barePath := filepath.Join(t.TempDir(), "fixture.git")
+	_, err = git.PlainClone(barePath, &git.CloneOptions{URL: work, Bare: true})
+	r.NoError(err)
+	return barePath, gittest.ServeHTTP(t, barePath), firstCommit
 }
 
 func TestGetGitResourceLocalRepository(t *testing.T) {
 	r := require.New(t)
-	path, commit := localRepository(t)
+	_, serverURL, commit := localRepository(t)
 	r.NotEmpty(commit)
 	for _, tc := range []struct {
 		name, ref, commit, accessType, content string
@@ -92,7 +97,7 @@ func TestGetGitResourceLocalRepository(t *testing.T) {
 			r := require.New(t)
 			downloadDir, outputDir := t.TempDir(), t.TempDir()
 			repo := gitrepository.NewResourceRepository(&filesystemconfig.Config{TempFolder: &downloadDir})
-			resource := gitResource(t, path, tc.ref, tc.commit, tc.accessType)
+			resource := gitResource(t, serverURL, tc.ref, tc.commit, tc.accessType)
 			pinned, err := repo.ProcessResourceDigest(t.Context(), descriptor.ConvertFromV2Resource(resource), nil)
 			r.NoError(err)
 			// Keep the original access, including ref-only access, but require digest verification.
@@ -282,7 +287,7 @@ func TestGetGitResourceInvalidInput(t *testing.T) {
 
 func TestGetGitResourceRemovesOutputOnBufferFailure(t *testing.T) {
 	r := require.New(t)
-	path, commit := localRepository(t)
+	_, serverURL, commit := localRepository(t)
 	downloadDir, outDir := t.TempDir(), t.TempDir()
 	repo := gitrepository.NewResourceRepository(&filesystemconfig.Config{TempFolder: &downloadDir})
 	intercept := &testRepository{download: func(ctx context.Context, resource *descriptor.Resource, creds runtime.Typed) (blob.ReadOnlyBlob, error) {
@@ -301,7 +306,7 @@ func TestGetGitResourceRemovesOutputOnBufferFailure(t *testing.T) {
 	transformer := &GetGitResource{Scheme: v1alpha1.Scheme, ResourceRepository: intercept}
 	result, err := transformer.Transform(t.Context(), &v1alpha1.GetGitResource{
 		Type: v1alpha1.GetGitResourceV1alpha1,
-		Spec: &v1alpha1.GetGitResourceSpec{Resource: gitResource(t, path, "", commit, "Git/v1"), OutputPath: outDir},
+		Spec: &v1alpha1.GetGitResourceSpec{Resource: gitResource(t, serverURL, "", commit, "Git/v1"), OutputPath: outDir},
 	})
 	r.ErrorContains(err, "failed buffering git resource archive to file")
 	r.Nil(result)
@@ -312,9 +317,9 @@ func TestGetGitResourceRemovesOutputOnBufferFailure(t *testing.T) {
 
 func TestGetGitResourceRejectsWrongDigest(t *testing.T) {
 	r := require.New(t)
-	path, commit := localRepository(t)
+	_, serverURL, commit := localRepository(t)
 	downloadDir, outDir := t.TempDir(), t.TempDir()
-	resource := gitResource(t, path, "", commit, "Git/v1")
+	resource := gitResource(t, serverURL, "", commit, "Git/v1")
 	resource.Digest = &v2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: strings.Repeat("0", 64)}
 	transformer := &GetGitResource{Scheme: v1alpha1.Scheme, ResourceRepository: gitrepository.NewResourceRepository(&filesystemconfig.Config{TempFolder: &downloadDir})}
 	result, err := transformer.Transform(t.Context(), &v1alpha1.GetGitResource{

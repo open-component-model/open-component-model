@@ -245,7 +245,7 @@ func (c *Clone) Remove(ctx context.Context) error {
 }
 
 func fetch(ctx context.Context, access *accessv1.Git, creds runtime.Typed, opts Options) (_ *Clone, err error) {
-	if err := access.Validate(); err != nil {
+	if err := access.ValidateStructure(); err != nil {
 		return nil, fmt.Errorf("invalid git access: %w", err)
 	}
 	// go-git appends its request path to the URL, so a fragment must not reach it.
@@ -303,7 +303,7 @@ func fetch(ctx context.Context, access *accessv1.Git, creds runtime.Typed, opts 
 // HEAD as the commit of the branch it points to, an annotated tag as the commit it
 // peels to. An access with a commit is returned normalised and is not looked up.
 func Pin(ctx context.Context, access *accessv1.Git, creds runtime.Typed, opts Options) (*accessv1.Git, error) {
-	if err := access.Validate(); err != nil {
+	if err := access.ValidateStructure(); err != nil {
 		return nil, fmt.Errorf("invalid git access: %w", err)
 	}
 	pinned, err := access.Normalize()

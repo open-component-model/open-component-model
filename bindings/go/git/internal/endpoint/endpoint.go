@@ -109,6 +109,10 @@ func parseURL(repository string) (*url.URL, error) {
 	return transport.ParseURL(repository)
 }
 
+// IsLocal reports whether the endpoint refers to a local repository, i.e. a
+// file:// URL or a plain local path, which a remote consumer cannot reach.
+func (ep *Endpoint) IsLocal() bool { return ep.Protocol == protocolFile }
+
 func Port(ep *Endpoint) string {
 	if ep.Port != 0 {
 		return strconv.Itoa(ep.Port)
