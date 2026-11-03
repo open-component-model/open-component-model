@@ -14,6 +14,7 @@ import (
 
 	_ "crypto/sha1"
 	_ "crypto/sha256"
+	_ "crypto/sha512"
 
 	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
@@ -262,6 +263,40 @@ func TestDownloadResource_DigestVerification(t *testing.T) {
 		_, err := repo.DownloadResource(t.Context(), resource, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unsupported hash algorithm")
+	})
+
+	t.Run("accepts content matching a SHA-512 resource digest", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		repo, resource := serve(t, served)
+		resource.Digest = &descruntime.Digest{
+			HashAlgorithm:          "SHA-512",
+			NormalisationAlgorithm: "genericBlobDigest/v1",
+			Value:                  godigest.SHA512.FromString(served).Encoded(),
+		}
+
+		b, err := repo.DownloadResource(t.Context(), resource, nil)
+		r.NoError(err)
+		r.Equal([]byte(served), readBlob(t, b))
+	})
+
+	t.Run("rejects content that does not match a SHA-512 resource digest", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		repo, resource := serve(t, "not what was promised")
+		resource.Digest = &descruntime.Digest{
+			HashAlgorithm:          "SHA-512",
+			NormalisationAlgorithm: "genericBlobDigest/v1",
+			Value:                  godigest.SHA512.FromString(served).Encoded(),
+		}
+
+		b, err := repo.DownloadResource(t.Context(), resource, nil)
+		r.NoError(err)
+		rc, err := b.ReadCloser()
+		r.NoError(err)
+		_, err = io.ReadAll(rc)
+		r.ErrorContains(err, "digest mismatch")
+		r.ErrorContains(rc.Close(), "digest mismatch")
 	})
 }
 

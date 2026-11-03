@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	godigest "github.com/opencontainers/go-digest"
+	chartv2 "helm.sh/helm/v4/pkg/chart/v2"
 	"helm.sh/helm/v4/pkg/chart/v2/loader"
 	"helm.sh/helm/v4/pkg/downloader"
 	"helm.sh/helm/v4/pkg/getter"
@@ -23,6 +25,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/helm/internal"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 )
@@ -124,18 +127,13 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		password = opt.OCICredentials.AccessToken
 	}
 
-	var regClientOpts []registry.ClientOption
-	var httpClient *http.Client
-	if opt.HTTPConfig != nil {
-		// Build a single client from the full config (includes per-host routing).
-		// It is shared between the OCI registry client and the HTTP/S getter so
-		// both paths use the same timeout and per-host override behaviour.
-		httpClient = ocmhttp.New(ocmhttp.WithConfig(opt.HTTPConfig))
-		regClientOpts = append(regClientOpts, registry.ClientOptHTTPClient(httpClient))
-	}
-	regClient, err := registry.NewClient(regClientOpts...)
+	httpClient, indexClient, regClient, err := newClients(opt, caFile, username, password)
 	if err != nil {
-		return nil, fmt.Errorf("error creating registry client: %w", err)
+		return nil, err
+	}
+	if httpClient != nil {
+		// Without it, helm's OCI getter pulls the chart with a client of its own.
+		helmGetterOpts = append(helmGetterOpts, getter.WithRegistryClient(regClient))
 	}
 
 	cfgOpts := HTTPConfigGetterOpts{
@@ -167,10 +165,9 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		Keyring:          keyring,
 	}
 
-	// index.yaml is parsed, never hashed, and compresses up to ~18x.
 	indexProviders := providers
-	if opt.HTTPConfig != nil {
-		indexProviders = GetterProviders(ocmhttp.New(ocmhttp.WithConfig(opt.HTTPConfig), ocmhttp.WithCompression()), cfgOpts)
+	if indexClient != nil {
+		indexProviders = GetterProviders(indexClient, cfgOpts)
 	}
 
 	resolvedRepo, err := resolveHTTPChartURL(ctx, helmRepo, opt.Version, targetDir, indexProviders, &helmrepo.Entry{
@@ -193,19 +190,9 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		dl.Options = append(dl.Options, getter.WithBasicAuth(username, password))
 	}
 
-	version, err := getVersion(opt.Version, resolvedRepo)
+	savedPath, chart, err := pullChart(dl, helmRepo, resolvedRepo, opt.Version, chartDir, opt.OCIManifestDigest)
 	if err != nil {
-		return nil, fmt.Errorf("error determining chart version: %w", err)
-	}
-
-	savedPath, _, err := dl.DownloadTo(resolvedRepo, version, chartDir)
-	if err != nil {
-		return nil, fmt.Errorf("error downloading chart %q version %q: %w", helmRepo, version, err)
-	}
-
-	chart, err := loader.Load(savedPath)
-	if err != nil {
-		return nil, fmt.Errorf("error loading downloaded chart from %q: %w", savedPath, err)
+		return nil, err
 	}
 
 	result = &internal.ChartData{
@@ -225,6 +212,189 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 	}
 
 	return result, nil
+}
+
+// pullChart downloads the chart resolvedRepo names into chartDir and loads it. With a manifest
+// digest pin, an oci:// chart is pulled by that digest instead of by version, and its file is
+// named as a pull by version would name it.
+func pullChart(dl *downloader.ChartDownloader, helmRepo, resolvedRepo, wantVersion, chartDir string, pin godigest.Digest) (string, *chartv2.Chart, error) {
+	version := ""
+	pinnedName := ""
+	verifyAfterRename := false
+	var err error
+	if pin != "" {
+		if pinnedName, err = pinnedChartName(resolvedRepo, wantVersion); err != nil {
+			return "", nil, err
+		}
+		if resolvedRepo, err = pinOCIReference(resolvedRepo, pin); err != nil {
+			return "", nil, err
+		}
+		// Helm verifies before we rename, against a file named after the digest, which the
+		// .prov does not list; it only knows <name>-<version>.tgz.
+		if dl.Verify == downloader.VerifyIfPossible {
+			dl.Verify = downloader.VerifyLater
+			verifyAfterRename = true
+		}
+	} else if version, err = getVersion(wantVersion, resolvedRepo); err != nil {
+		return "", nil, fmt.Errorf("error determining chart version: %w", err)
+	}
+
+	savedPath, _, err := dl.DownloadTo(resolvedRepo, version, chartDir)
+	if err != nil {
+		return "", nil, fmt.Errorf("error downloading chart %q version %q: %w", helmRepo, version, err)
+	}
+
+	chart, err := loader.Load(savedPath)
+	if err != nil {
+		return "", nil, fmt.Errorf("error loading downloaded chart from %q: %w", savedPath, err)
+	}
+
+	if pin == "" {
+		return savedPath, chart, nil
+	}
+	if pinnedName == "" {
+		pinnedName = fmt.Sprintf("%s-%s.tgz", chart.Name(), chart.Metadata.Version)
+	}
+	// A digest pull names the file after the digest; give it the name a tag pull would have.
+	if savedPath, err = renameChart(savedPath, filepath.Join(chartDir, pinnedName)); err != nil {
+		return "", nil, err
+	}
+	if verifyAfterRename {
+		// Helm's VerifyIfPossible skips a chart without provenance; so do we.
+		if _, statErr := os.Stat(savedPath + ".prov"); statErr == nil {
+			if _, err := downloader.VerifyChart(savedPath, savedPath+".prov", dl.Keyring); err != nil {
+				return "", nil, fmt.Errorf("error verifying provenance of chart %q: %w", helmRepo, err)
+			}
+		}
+	}
+	return savedPath, chart, nil
+}
+
+// pinnedChartName returns the file name a pull of chartRef by tag produces, so that a digest
+// pull yields the same file name (and thus the same archive). It is "" when there is no tag.
+func pinnedChartName(chartRef, wantVersion string) (string, error) {
+	ref, err := looseref.ParseReference(strings.TrimPrefix(chartRef, "oci://"))
+	if err != nil {
+		return "", fmt.Errorf("error parsing OCI chart reference %q: %w", chartRef, err)
+	}
+	tag := wantVersion
+	if tag == "" {
+		tag = ref.Tag
+	}
+	if tag == "" {
+		return "", nil
+	}
+	return fmt.Sprintf("%s-%s.tgz", path.Base(ref.Repository), tag), nil
+}
+
+// pinOCIReference rewrites an oci:// chart reference to pull the manifest d, dropping any tag.
+func pinOCIReference(chartRef string, d godigest.Digest) (string, error) {
+	if !strings.HasPrefix(chartRef, "oci://") {
+		return "", fmt.Errorf("a manifest digest pins only oci:// chart references, got %q", chartRef)
+	}
+	ref, err := looseref.ParseReference(strings.TrimPrefix(chartRef, "oci://"))
+	if err != nil {
+		return "", fmt.Errorf("error parsing OCI chart reference %q: %w", chartRef, err)
+	}
+	return "oci://" + ref.Registry + "/" + ref.Repository + "@" + d.String(), nil
+}
+
+func renameChart(savedPath, target string) (string, error) {
+	if savedPath == target {
+		return savedPath, nil
+	}
+	if err := os.Rename(savedPath, target); err != nil {
+		return "", fmt.Errorf("error renaming downloaded chart %q: %w", savedPath, err)
+	}
+	if _, err := os.Stat(savedPath + ".prov"); err == nil {
+		if err := os.Rename(savedPath+".prov", target+".prov"); err != nil {
+			return "", fmt.Errorf("error renaming provenance file of chart %q: %w", savedPath, err)
+		}
+	}
+	return target, nil
+}
+
+// newClients builds the registry client and, with an HTTP configuration, the clients for
+// downloads and for index.yaml. One configuration (per-host routing, timeouts), with the TLS
+// material of the input or credentials overriding its own, then serves the OCI registry
+// client, the OCI chart pull and the HTTP/S getter alike. The registry client carries the
+// resolved credentials, because with an HTTP configuration it also performs the OCI chart pull.
+func newClients(opt *option, caFile, username, password string) (httpClient, indexClient *http.Client, regClient *registry.Client, err error) {
+	var regClientOpts []registry.ClientOption
+	if username != "" && password != "" {
+		regClientOpts = append(regClientOpts, registry.ClientOptBasicAuth(username, password))
+	}
+	if opt.HTTPConfig != nil {
+		if httpClient, err = overlayInputTLS(ocmhttp.New(ocmhttp.WithConfig(opt.HTTPConfig)),
+			caFile, opt.Credentials.CertFile, opt.Credentials.KeyFile); err != nil {
+			return nil, nil, nil, err
+		}
+		// index.yaml is parsed, never hashed, and compresses up to ~18x.
+		if indexClient, err = overlayInputTLS(ocmhttp.New(ocmhttp.WithConfig(opt.HTTPConfig), ocmhttp.WithCompression()),
+			caFile, opt.Credentials.CertFile, opt.Credentials.KeyFile); err != nil {
+			return nil, nil, nil, err
+		}
+		regClientOpts = append(regClientOpts, registry.ClientOptHTTPClient(httpClient))
+	}
+	if regClient, err = registry.NewClient(regClientOpts...); err != nil {
+		return nil, nil, nil, fmt.Errorf("error creating registry client: %w", err)
+	}
+	return httpClient, indexClient, regClient, nil
+}
+
+// ResolveOCIManifestDigest resolves the manifest digest an oci:// chart reference points to.
+func ResolveOCIManifestDigest(ctx context.Context, chartReference string, credentials *ocicredsv1.OCICredentials, httpConfig *httpv1alpha1.Config) (godigest.Digest, error) {
+	if err := ctx.Err(); err != nil {
+		return "", fmt.Errorf("context cancelled before resolving OCI digest: %w", err)
+	}
+
+	ref := strings.TrimPrefix(chartReference, "oci://")
+
+	var username, password string
+	if credentials != nil {
+		username = credentials.Username
+		password = credentials.Password
+		if password == "" {
+			password = credentials.AccessToken
+		}
+	}
+	var regClientOpts []registry.ClientOption
+	if username != "" && password != "" {
+		regClientOpts = append(regClientOpts, registry.ClientOptBasicAuth(username, password))
+	}
+	if httpConfig != nil {
+		regClientOpts = append(regClientOpts, registry.ClientOptHTTPClient(ocmhttp.New(ocmhttp.WithConfig(httpConfig))))
+	}
+	regClient, err := registry.NewClient(regClientOpts...)
+	if err != nil {
+		return "", fmt.Errorf("error creating registry client: %w", err)
+	}
+
+	// Helm's registry Resolve does not accept a context, so we run it in a
+	// goroutine and select on the context to allow cancellation.
+	type resolveResult struct {
+		digest godigest.Digest
+		err    error
+	}
+	ch := make(chan resolveResult, 1)
+	go func() {
+		desc, resolveErr := regClient.Resolve(ref)
+		if resolveErr != nil {
+			ch <- resolveResult{err: resolveErr}
+			return
+		}
+		ch <- resolveResult{digest: desc.Digest}
+	}()
+
+	select {
+	case <-ctx.Done():
+		return "", fmt.Errorf("context cancelled while resolving OCI chart reference %q: %w", ref, ctx.Err())
+	case res := <-ch:
+		if res.err != nil {
+			return "", fmt.Errorf("error resolving OCI chart reference %q: %w", ref, res.err)
+		}
+		return res.digest, nil
+	}
 }
 
 // GetterProviders returns the available getter providers.

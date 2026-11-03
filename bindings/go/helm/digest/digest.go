@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	godigest "github.com/opencontainers/go-digest"
-	"helm.sh/helm/v4/pkg/registry"
 	"helm.sh/helm/v4/pkg/repo/v1"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -97,7 +96,11 @@ func (p *DigestProcessor) ProcessResourceDigest(
 				return nil, fmt.Errorf("error converting credentials: %w", err)
 			}
 		}
-		resolvedDigest, err = p.resolveOCIDigest(ctx, helm, ociCreds)
+		var ref string
+		if ref, err = helm.ChartReference(); err != nil {
+			return nil, fmt.Errorf("error constructing chart reference: %w", err)
+		}
+		resolvedDigest, err = download.ResolveOCIManifestDigest(ctx, ref, ociCreds, nil)
 	} else {
 		var helmCreds *helmcredsv1.HelmHTTPCredentials
 		if credentials != nil {
@@ -209,65 +212,6 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 	}
 
 	return d, nil
-}
-
-func (p *DigestProcessor) resolveOCIDigest(ctx context.Context, helm helmv1.Helm, credentials *ocicredsv1.OCICredentials) (godigest.Digest, error) {
-	if err := ctx.Err(); err != nil {
-		return "", fmt.Errorf("context cancelled before resolving OCI digest: %w", err)
-	}
-
-	ref, err := helm.ChartReference()
-	if err != nil {
-		return "", fmt.Errorf("error constructing chart reference: %w", err)
-	}
-
-	// Strip the oci:// prefix for the registry client
-	ref = strings.TrimPrefix(ref, "oci://")
-
-	var username, password string
-	if credentials != nil {
-		username = credentials.Username
-		password = credentials.Password
-		if password == "" {
-			if token := credentials.AccessToken; token != "" {
-				password = token
-			}
-		}
-	}
-	var regClientOpts []registry.ClientOption
-	if username != "" && password != "" {
-		regClientOpts = append(regClientOpts, registry.ClientOptBasicAuth(username, password))
-	}
-	regClient, err := registry.NewClient(regClientOpts...)
-	if err != nil {
-		return "", fmt.Errorf("error creating registry client: %w", err)
-	}
-
-	// Helm's registry Resolve does not accept a context, so we run it in a
-	// goroutine and select on the context to allow cancellation.
-	type resolveResult struct {
-		digest godigest.Digest
-		err    error
-	}
-	ch := make(chan resolveResult, 1)
-	go func() {
-		desc, resolveErr := regClient.Resolve(ref)
-		if resolveErr != nil {
-			ch <- resolveResult{err: resolveErr}
-			return
-		}
-		ch <- resolveResult{digest: desc.Digest}
-	}()
-
-	select {
-	case <-ctx.Done():
-		return "", fmt.Errorf("context cancelled while resolving OCI chart reference %q: %w", ref, ctx.Err())
-	case res := <-ch:
-		if res.err != nil {
-			return "", fmt.Errorf("error resolving OCI chart reference %q: %w", ref, res.err)
-		}
-		return res.digest, nil
-	}
 }
 
 // parseDigest parses a digest string that may be either in the standard

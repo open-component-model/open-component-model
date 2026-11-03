@@ -3,6 +3,8 @@ package download
 import (
 	"net/http"
 
+	"github.com/opencontainers/go-digest"
+
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -18,6 +20,7 @@ type option struct {
 	MaxDownloadSize *int64
 	TempDir         string
 	HTTPConfig      *httpv1alpha1.Config
+	DigestAlgorithm digest.Algorithm
 }
 
 // Option configures a download.
@@ -54,4 +57,10 @@ func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 // apply to it. When unset, a client is built from the HTTP config instead.
 func WithHTTPClient(c *http.Client) Option {
 	return func(o *option) { o.HTTPClient = c }
+}
+
+// WithDigestAlgorithm makes [Download] compute the digest of the object with alg while
+// writing it, reported in [Result.Digest].
+func WithDigestAlgorithm(alg digest.Algorithm) Option {
+	return func(o *option) { o.DigestAlgorithm = alg }
 }

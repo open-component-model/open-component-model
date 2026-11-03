@@ -195,7 +195,6 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 			pluginManager:   pluginManager,
 			credentialGraph: credentialGraph,
 			logger:          logger,
-			ref:             ref,
 			repo:            repo,
 			descriptor:      desc,
 			resource:        res,
@@ -204,7 +203,7 @@ func DownloadResource(cmd *cobra.Command, args []string) error {
 		})
 	}
 
-	data, err := shared.DownloadResourceData(cmd.Context(), pluginManager, credentialGraph, ref, desc, repo, res, requestedIdentity)
+	data, err := shared.DownloadResourceData(cmd.Context(), pluginManager, credentialGraph, desc, repo, res, requestedIdentity)
 	if err != nil {
 		return fmt.Errorf("downloading resource for identity %q failed: %w", requestedIdentity, err)
 	}
