@@ -3,11 +3,9 @@ package repository_test
 import (
 	"context"
 	"log/slog"
-	"net/http/cgi"
-	"net/http/httptest"
-	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	git "github.com/go-git/go-git/v6"
@@ -17,6 +15,7 @@ import (
 
 // warnCapture is a slog.Handler that records Warn records so a test can assert on them.
 type warnCapture struct {
+	mu      sync.Mutex
 	records []slog.Record
 }
 
@@ -25,6 +24,8 @@ func (c *warnCapture) Enabled(_ context.Context, level slog.Level) bool {
 }
 
 func (c *warnCapture) Handle(_ context.Context, r slog.Record) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.records = append(c.records, r)
 	return nil
 }
@@ -33,6 +34,8 @@ func (c *warnCapture) WithAttrs(_ []slog.Attr) slog.Handler { return c }
 func (c *warnCapture) WithGroup(_ string) slog.Handler      { return c }
 
 func (c *warnCapture) messages() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	msgs := make([]string, 0, len(c.records))
 	for _, r := range c.records {
 		if r.Level == slog.LevelWarn {
@@ -49,23 +52,6 @@ func captureWarnings(t *testing.T) *warnCapture {
 	slog.SetDefault(slog.New(capture))
 	t.Cleanup(func() { slog.SetDefault(orig) })
 	return capture
-}
-
-// gitHTTPBackend serves root over the real git http-backend CGI (smart HTTP), the protocol
-// GitLab and GitHub speak. The local filesystem transport writes objects directly to the
-// store, so it cannot exhibit host-visible push behaviour; this does.
-func gitHTTPBackend(t *testing.T, root string) string {
-	t.Helper()
-	r := require.New(t)
-	execPath, err := exec.CommandContext(t.Context(), "git", "--exec-path").Output()
-	r.NoError(err)
-	handler := &cgi.Handler{
-		Path: filepath.Join(strings.TrimSpace(string(execPath)), "git-http-backend"),
-		Env:  []string{"GIT_PROJECT_ROOT=" + root, "GIT_HTTP_EXPORT_ALL=1"},
-	}
-	srv := httptest.NewServer(handler)
-	t.Cleanup(srv.Close)
-	return srv.URL
 }
 
 // TestUploadTagToEmptyRepositoryWarns documents the pitfall a user hit: pushing a tag into
@@ -89,24 +75,20 @@ func TestUploadTagToEmptyRepositoryWarns(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			root := t.TempDir()
-			targetPath := filepath.Join(root, "target.git")
+			targetPath := filepath.Join(t.TempDir(), "target.git")
 			_, err := git.PlainInit(targetPath, true)
 			r.NoError(err)
-			// git http-backend refuses receive-pack unless explicitly enabled.
-			r.NoError(exec.CommandContext(t.Context(), "git", "-C", targetPath, "config", "http.receivepack", "true").Run())
-			url := gitHTTPBackend(t, root) + "/target.git"
 
 			if tc.seedBranch {
 				// Give the target a branch before the tag push so hasBranch(refs) is true;
 				// this is what distinguishes "tag suppressed because a branch exists" from
 				// "no warning because the pushed ref is itself a branch".
-				_, err := uploader.UploadResource(t.Context(), targetResource(source, url, "refs/heads/main"), content, nil)
+				_, err := uploader.UploadResource(t.Context(), targetResource(source, targetPath, "refs/heads/main"), content, nil)
 				r.NoError(err)
 			}
 
 			capture := captureWarnings(t)
-			_, err = uploader.UploadResource(t.Context(), targetResource(source, url, tc.targetRef), content, nil)
+			_, err = uploader.UploadResource(t.Context(), targetResource(source, targetPath, tc.targetRef), content, nil)
 			r.NoError(err)
 
 			target, err := git.PlainOpen(targetPath)
