@@ -61,6 +61,24 @@ const start = () => {
         return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default";
     };
 
+    // Mermaid measures text to lay out a diagram, and an element inside a
+    // hidden tab pane (display: none) measures as zero: the diagram renders as
+    // an empty 16x16 SVG. Render only what is visible, and render a pane's
+    // diagrams once Bootstrap has shown its tab. Unrendered elements keep
+    // their source text, so they are picked up whenever they become visible.
+    const renderVisible = (prefix) => {
+        const nodes = Array.from(document.querySelectorAll(".mermaid:not([data-processed])")).filter(
+            (el) => el.getClientRects().length > 0
+        );
+        if (!nodes.length) {
+            return;
+        }
+        // mermaid.run() rejects on invalid diagram syntax; swallow the rejection
+        // to a console.error so a single bad diagram doesn't surface as an
+        // unhandled promise rejection on the page.
+        mermaid.run({ nodes }).catch(logMermaidError(prefix));
+    };
+
     const rerender = () => {
         document.querySelectorAll(".mermaid").forEach((el) => {
             const src = el.getAttribute("data-mermaid-source");
@@ -72,14 +90,14 @@ const start = () => {
             }
         });
         mermaid.initialize({ theme: getTheme() });
-        // mermaid.run() rejects on invalid diagram syntax; swallow the rejection
-        // to a console.error so a single bad diagram doesn't surface as an
-        // unhandled promise rejection on the page.
-        mermaid.run().catch(logMermaidError("mermaid re-render failed"));
+        renderVisible("mermaid re-render failed");
     };
 
     mermaid.initialize({ startOnLoad: false, theme: getTheme() });
-    mermaid.run().catch(logMermaidError("mermaid render failed"));
+    renderVisible("mermaid render failed");
+    // Bootstrap fires shown.bs.tab on the tab button after the pane is visible;
+    // the event bubbles to the document.
+    document.addEventListener("shown.bs.tab", () => renderVisible("mermaid render failed"));
 
     // doks-core's setTheme() writes data-bs-theme AND dispatches 'themeChanged'
     // for every toggle, so a naive listener + observer pair re-renders twice
