@@ -49,13 +49,16 @@ consciously that this is neither perfectly clean nor fully deployer-agnostic.
 
 1. **Status quo.** The user applies `Repository`, `Component`, `Resource`, a `NamespacedDeployer`, and an
    orchestration layer (e.g. Kro `ResourceGraphDefinition` or Crossplane Composition) that wires them
-   to the Flux or Argo objects. Flexible, but every deployment repeats the same wiring and the engine
-   leaks into what the component author bundles.
+   to the Flux or Argo objects. Flexible, but every deployment repeats the same wiring, the engine
+   leaks into what the component author bundles, and the up-front barrier (five resources plus an
+   orchestration layer) is disproportionate for the common single-chart-plus-image case.
 2. **CEL-chained `OCMDeployment`.** A single resource whose spec chains CEL functions (`repoByRef()`,
    `componentByReference()`, `resourceByIdentity()`) that implicitly create the child CRs. Rejected after
    user feedback ([ocm-project#1010](https://github.com/open-component-model/ocm-project/issues/1010)):
    the custom CEL dialect is not discoverable from the Kubernetes API, it replaces one form of wiring with
-   another, and it forces authors to embed registry URLs at definition time.
+   another, and it forces authors to embed registry URLs at definition time — and it still leaves
+   localization and configuration to the user, so the new abstraction does not lower the entry barrier
+   enough to justify itself.
 3. **Typed `OCMDeployment`.** This ADR. A single resource with a plain, versioned spec; the controller
    creates the child CRs and renders the engine objects.
 
@@ -283,7 +286,9 @@ rather than hidden behind a shared field.
 Status is the standard `Ready` condition: `True` once the rendered engine object is healthy (reaching
 that point implies every child `Resource` resolved and verified earlier in the same reconcile, since a
 not-ready child short-circuits the pipeline), `False` otherwise with a reason and a diagnostic
-message. The authoritative reason constants live in `condition_types.go`.
+message. The authoritative reason constants live in `condition_types.go`. Readiness is delegated to
+the deploy engine — `Ready=True` reflects the engine's own health verdict (Flux object `Ready`, Argo
+`Application` healthy) and the controller does not independently probe the workload's Pods.
 
 A child that never becomes ready (an unresolvable deploy, config, or image `Resource`) is not a
 terminal failure: the `OCMDeployment` stays `Ready=False` with the child's reason and requeues on the
