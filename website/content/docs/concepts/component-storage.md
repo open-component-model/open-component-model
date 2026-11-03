@@ -6,17 +6,15 @@ toc: true
 hasMermaid: true
 ---
 
-## What is component version storage?
-
-OCM has no storage format of its own. A component version is stored as an **OCI artifact graph**: an OCI manifest or
-index that carries the component descriptor and every resource stored *by value* (a local blob). The same graph is used
-in an OCI registry and in a Common Transport Format (CTF) archive, which is just the file system form of an OCI
-registry.
+OCM stores component versions as **OCI artifacts**. A component version is an OCI manifest or index that carries the
+component descriptor and every resource stored *by value* (a local blob). OCM uses this graph in two kinds of
+repository: an OCI registry, and a **Common Transport Format (CTF)** archive, a file-based repository format defined by
+OCM itself.
 
 Knowing this graph explains what you see in a registry after `ocm add cv` or `ocm transfer cv`, and why an image
 embedded in a component version can be pulled with `docker`, `oras`, or `crane` and referenced from a Kubernetes Pod.
 
-## Why does it exist?
+## Why Store Component Versions as OCI Artifacts?
 
 - **Reuse existing infrastructure:** Every environment that runs containers already operates an OCI registry, with
   access control, replication, and garbage collection. Storing component versions there means no extra storage
@@ -26,7 +24,7 @@ embedded in a component version can be pulled with `docker`, `oras`, or `crane` 
 - **Native consumption:** Since OCM v2, OCI artifacts stored by value keep their OCI shape. Tools that know nothing
   about OCM can consume them directly.
 
-## How it works
+## How It Works
 
 ```mermaid
 flowchart TD
@@ -49,7 +47,7 @@ chart, any OCI image layout) is stored as its own manifest or index, referenced 
 component version's **index**. The descriptor points to both kinds of local blob in the same way: `localReference` is
 the digest of the layer, manifest, or index that holds the content.
 
-### Repository and version mapping
+### Repository and Version Mapping
 
 A component name maps to an OCI repository below the repository's base path, and the version maps to a tag:
 
@@ -61,7 +59,7 @@ For example, `github.com/acme.org/demo` in version `1.0.0` in `ghcr.io/acme/ocm`
 `ghcr.io/acme/ocm/component-descriptors/github.com/acme.org/demo:1.0.0`. All versions of a component, and all local
 blobs of those versions, live in this one OCI repository.
 
-### Manifest or index
+### Manifest or Index
 
 A component version is stored in one of two forms:
 
@@ -71,7 +69,7 @@ A component version is stored in one of two forms:
 
 Readers accept both forms, so you don't choose one; OCM picks the form the content needs.
 
-### Two shapes of local blob
+### Two Shapes of Local Blob
 
 How OCM stores a local blob depends on its content:
 
@@ -102,7 +100,7 @@ resources:
       mediaType: application/vnd.oci.image.index.v1+json
 ```
 
-### Native access to embedded images
+### Native Access to Embedded Images
 
 Because `app-image` is a real OCI index in the component's OCI repository, its digest is a valid OCI reference:
 
@@ -113,9 +111,12 @@ ghcr.io/acme/ocm/component-descriptors/github.com/acme.org/demo@sha256:262578cd�
 Any OCI client can pull it, and a Kubernetes Pod can use it as `image:` directly. Downloading it with
 `ocm download resource` instead rebuilds an OCI image layout from the stored graph.
 
-### Storage in a CTF archive
+### Storage in a CTF Archive
 
-A CTF archive stores exactly the same graph, laid out on disk:
+The CTF is not an OCI standard. OCM defines it so that component versions can travel without a registry, as a
+directory or a TAR archive, for example into an air-gapped environment. It is also not an OCI image layout: instead of
+`index.json` and `oci-layout`, it has its own `artifact-index.json` that maps repositories and tags to digests, the way
+a registry does. The blobs it stores are the same OCI manifests, indexes, and layers as in a registry:
 
 ```text
 transport-archive/
@@ -154,7 +155,7 @@ standalone OCI image with an OCI uploader during transfer.
 In the other direction, the OCM v1 CLI reads local blobs stored in the v2 format starting with v0.36.0. Older v1
 releases cannot access them.
 
-## Key properties
+## Key Properties
 
 | Property | Description |
 | -------- | ----------- |
@@ -164,7 +165,7 @@ releases cannot access them.
 | **Self-contained** | All local blobs live in the component's own OCI repository, next to the descriptor that references them. |
 | **Native artifacts stay native** | OCI artifacts stored by value keep their structure and digest and are pullable by digest. |
 
-## Relationship to other concepts
+## Relationship to Other Concepts
 
 - **[Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}})** — Transfer with a local blob uploader
   converts external OCI references into local blobs in this format.
@@ -176,7 +177,7 @@ releases cannot access them.
 - **[Component Identity]({{< relref "docs/concepts/component-identity.md" >}})** — The component name and version
   determine the OCI repository and tag.
 
-## When to use it
+## When This Matters
 
 - You inspect a registry or CTF archive and want to understand the manifests, indexes, and tags you see.
 - You want to deploy an image embedded in a component version without the OCM CLI, e.g. from a Pod spec.
@@ -188,14 +189,14 @@ A local blob is not a hidden OCM format. In OCM v2, it is a regular layer or a r
 repository, addressed by its digest.
 {{< /callout >}}
 
-## Next steps
+## Next Steps
 
 - [Guide: Add OCI Artifacts]({{< relref "docs/guides/pack/add-oci-artifacts.md" >}}) — Embed OCI images in a component version
 - [Guide: Pull OCI Artifacts Natively]({{< relref "docs/guides/transfer/pull-oci-artifacts-natively.md" >}}) — Pull embedded images with `docker`, `oras`, or `crane`
 - [Guide: Upload OCI Images]({{< relref "docs/guides/transfer/upload-oci-images.md" >}}) — Store embedded images as standalone OCI artifacts instead
 
-## Related documentation
+## Related Documentation
 
 - [Reference: Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}) — `LocalBlob/v1` and other access types
 - [OCM Specification: OCI Registries](https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/03-storage-backends/oci.md) — Normative mapping of component versions to OCI
-- [OCM Specification: Common Transport Format](https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/03-storage-backends/ctf.md) — File system representation
+- [OCM Specification: Common Transport Format](https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/03-storage-backends/ctf.md) — Normative definition of the CTF format
