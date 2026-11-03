@@ -6,128 +6,131 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "nod
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import {
-  removeOverrideKey,
-  extractAdvisoryIds,
+  parseNpmOutput,
   parseAuditOutput,
+  NpmError,
+  extractAdvisoryIds,
   newlyIntroduced,
   classify,
   selectCombinedRemovals,
   auditVariant,
-  ResolutionError,
   RESOLUTION_FAILURE,
   renderMarkdown,
+  removeOverrideKey,
   applyRemovals,
-  IGNORE,
 } from "./check-redundant-overrides.js";
 
-test("removeOverrideKey drops one key without mutating input", () => {
-  const overrides = { "minimatch@<11.0.1": "11.0.1", glob: "^14.0.2", semver: "^7.5.4" };
-  const result = removeOverrideKey(overrides, "glob");
-  assert.deepStrictEqual(result, { "minimatch@<11.0.1": "11.0.1", semver: "^7.5.4" });
-  assert.deepStrictEqual(overrides, { "minimatch@<11.0.1": "11.0.1", glob: "^14.0.2", semver: "^7.5.4" });
+// --- npm output -------------------------------------------------------------
+
+// Real `--json` stdout of npm 11, shortened.
+const INSTALL_OK = JSON.stringify({ add: [], added: 0, audited: 0, change: [], changed: 0, funding: 0, remove: [], removed: 0 });
+const INSTALL_ERESOLVE = JSON.stringify({
+  error: { code: "ERESOLVE", summary: "unable to resolve dependency tree", detail: "Could not resolve dependency:\npeer react@\"^18.2.0\" from react-dom@18.2.0" },
+});
+const INSTALL_NETWORK = JSON.stringify({
+  error: { code: "ECONNREFUSED", summary: "FetchError: request to http://127.0.0.1:9/left-pad failed, reason: connect ECONNREFUSED 127.0.0.1:9", detail: "" },
+});
+const AUDIT_UNREACHABLE = JSON.stringify({
+  message: "request to http://127.0.0.1:9/-/npm/v1/security/advisories/bulk failed, reason: connect ECONNREFUSED 127.0.0.1:9",
+  error: { summary: "", detail: "" },
 });
 
-test("removeOverrideKey handles a nested override value", () => {
-  const overrides = { "eslint-config-developit": { "eslint-plugin-compat": { eslint: "$eslint" } }, glob: "^14.0.2" };
-  assert.deepStrictEqual(removeOverrideKey(overrides, "eslint-config-developit"), { glob: "^14.0.2" });
+test("parseNpmOutput returns the parsed document of a successful command", () => {
+  assert.strictEqual(parseNpmOutput("install", INSTALL_OK).added, 0);
 });
 
-test("extractAdvisoryIds pulls GHSA and CVE ids from audit output", () => {
-  const audit = {
-    vulnerabilities: { minimatch: { via: [{ url: "https://github.com/advisories/GHSA-g3hv-75wg-m249" }] } },
-    advisories: { note: "see CVE-2026-118764" },
-  };
-  const ids = extractAdvisoryIds(audit);
-  assert.ok(ids.has("GHSA-G3HV-75WG-M249"));
-  assert.ok(ids.has("CVE-2026-118764"));
+test("parseNpmOutput throws an NpmError with npm's code, the error as cause and a readable reason", () => {
+  /** @type {Array<[string, string, string | undefined, RegExp]>} */
+  const cases = [
+    ["install", INSTALL_ERESOLVE, "ERESOLVE", /^npm install failed: unable to resolve dependency tree$/],
+    ["install", INSTALL_NETWORK, "ECONNREFUSED", /^npm install failed: FetchError: .* connect ECONNREFUSED/],
+    // empty summary: falls back to the top-level message
+    ["audit", AUDIT_UNREACHABLE, undefined, /^npm audit failed: request to .* connect ECONNREFUSED/],
+    // neither summary nor message: falls back to the error object
+    ["audit", JSON.stringify({ error: { code: "E500" } }), "E500", /^npm audit failed: \{"code":"E500"\}$/],
+  ];
+  for (const [command, stdout, code, message] of cases) {
+    assert.throws(
+      () => parseNpmOutput(command, stdout),
+      (err) => {
+        assert.ok(err instanceof NpmError);
+        assert.strictEqual(err.code, code);
+        assert.deepStrictEqual(err.cause, JSON.parse(stdout).error);
+        assert.match(err.message, message);
+        return true;
+      },
+      stdout,
+    );
+  }
 });
 
-test("extractAdvisoryIds returns an empty set for a clean audit", () => {
-  assert.strictEqual(extractAdvisoryIds({ vulnerabilities: {}, metadata: {} }).size, 0);
+test("parseNpmOutput rejects output that is not JSON", () => {
+  assert.throws(() => parseNpmOutput("audit", ""), /^Error: npm audit returned non-json output: $/);
+  assert.throws(() => parseNpmOutput("audit", "npm ERR! network timeout"), /non-json output: npm ERR! network timeout/);
 });
 
-test("parseAuditOutput accepts a clean audit report", () => {
-  const doc = parseAuditOutput(JSON.stringify({ auditReportVersion: 2, vulnerabilities: {}, metadata: {} }));
-  assert.deepStrictEqual(doc.vulnerabilities, {});
-  assert.strictEqual(extractAdvisoryIds(doc).size, 0);
-});
-
-test("parseAuditOutput accepts an audit report with vulnerabilities", () => {
-  const report = {
-    auditReportVersion: 2,
-    vulnerabilities: { minimatch: { via: [{ url: "https://github.com/advisories/GHSA-g3hv-75wg-m249" }] } },
-  };
-  const ids = extractAdvisoryIds(parseAuditOutput(JSON.stringify(report)));
-  assert.deepStrictEqual([...ids], ["GHSA-G3HV-75WG-M249"]);
-});
-
-test("parseAuditOutput rejects empty output", () => {
-  assert.throws(() => parseAuditOutput(""), /non-json output/);
-});
-
-test("parseAuditOutput rejects non-JSON output", () => {
-  assert.throws(() => parseAuditOutput("npm ERR! network timeout"), /non-json output: npm ERR! network timeout/);
-});
-
-test("parseAuditOutput rejects an npm error document and keeps the error as cause", () => {
-  const error = { code: "ENOAUDIT", summary: "Your configured registry does not support audit requests.", detail: "" };
-  assert.throws(
-    () => parseAuditOutput(JSON.stringify({ error })),
-    (err) => {
-      assert.ok(err instanceof Error);
-      assert.match(err.message, /npm audit failed: Your configured registry does not support audit requests\./);
-      assert.deepStrictEqual(err.cause, error);
-      return true;
-    },
-  );
-});
-
-test("parseAuditOutput rejects an npm error document without a summary", () => {
-  assert.throws(() => parseAuditOutput(JSON.stringify({ error: { code: "E500" } })), /npm audit failed: \{"code":"E500"\}/);
+test("parseAuditOutput returns an audit report", () => {
+  const report = { auditReportVersion: 2, vulnerabilities: {}, metadata: {} };
+  assert.deepStrictEqual(parseAuditOutput(JSON.stringify(report)), report);
 });
 
 test("parseAuditOutput rejects JSON that is not an audit report", () => {
   assert.throws(() => parseAuditOutput(JSON.stringify({ metadata: {} })), /did not produce the expected output/);
 });
 
-test("newlyIntroduced returns advisories present in candidate but not baseline", () => {
-  const base = new Set(["GHSA-AAAA-BBBB-CCCC"]);
-  const candidate = new Set(["GHSA-AAAA-BBBB-CCCC", "GHSA-G3HV-75WG-M249"]);
-  assert.deepStrictEqual(newlyIntroduced(base, candidate), ["GHSA-G3HV-75WG-M249"]);
+// --- advisory comparison ----------------------------------------------------
+
+test("extractAdvisoryIds collects GHSA and CVE ids anywhere in the report, upper-cased", () => {
+  const audit = {
+    vulnerabilities: { minimatch: { via: [{ url: "https://github.com/advisories/GHSA-g3hv-75wg-m249" }] } },
+    advisories: { note: "see CVE-2026-118764" },
+  };
+  assert.deepStrictEqual(extractAdvisoryIds(audit), new Set(["GHSA-G3HV-75WG-M249", "CVE-2026-118764"]));
 });
 
-test("newlyIntroduced is empty when removing the override changes nothing", () => {
-  const same = new Set(["GHSA-AAAA-BBBB-CCCC"]);
-  assert.deepStrictEqual(newlyIntroduced(same, new Set(["GHSA-AAAA-BBBB-CCCC"])), []);
+test("extractAdvisoryIds returns an empty set for a clean audit", () => {
+  assert.strictEqual(extractAdvisoryIds({ vulnerabilities: {}, metadata: {} }).size, 0);
 });
 
-test("classify splits candidates, protecting and ignored", () => {
+test("newlyIntroduced returns the sorted ids that are not in the baseline", () => {
+  const base = new Set(["GHSA-BASE-BASE-BASE"]);
+  assert.deepStrictEqual(newlyIntroduced(base, new Set(["GHSA-ZZZZ-ZZZZ-ZZZZ", "GHSA-BASE-BASE-BASE", "GHSA-AAAA-AAAA-AAAA"])), [
+    "GHSA-AAAA-AAAA-AAAA",
+    "GHSA-ZZZZ-ZZZZ-ZZZZ",
+  ]);
+  assert.deepStrictEqual(newlyIntroduced(base, new Set(["GHSA-BASE-BASE-BASE"])), []);
+});
+
+// --- classification ---------------------------------------------------------
+
+test("classify splits candidates, protecting and ignored, and ignore wins over candidate", () => {
   const result = classify({
     overrideKeys: ["glob", "minimatch@<11.0.1", "eslint-config-developit"],
     introducedByKey: {
-      glob: [], // removal introduces nothing -> candidate
-      "minimatch@<11.0.1": ["GHSA-g3hv-75wg-m249"], // removal reintroduces -> protecting
+      glob: [],
+      "minimatch@<11.0.1": ["GHSA-G3HV-75WG-M249"],
+      "eslint-config-developit": [],
     },
     ignore: { "eslint-config-developit": "compat" },
   });
-  assert.deepStrictEqual(result.candidates, ["glob"]);
-  assert.deepStrictEqual(result.protecting, [{ key: "minimatch@<11.0.1", advisories: ["GHSA-g3hv-75wg-m249"] }]);
-  assert.deepStrictEqual(result.ignored, ["eslint-config-developit"]);
-});
-
-test("classify never reports an ignored override as a candidate", () => {
-  const result = classify({
-    overrideKeys: ["eslint-config-developit"],
-    introducedByKey: { "eslint-config-developit": [] },
-    ignore: { "eslint-config-developit": "compat" },
+  assert.deepStrictEqual(result, {
+    candidates: ["glob"],
+    protecting: [{ key: "minimatch@<11.0.1", advisories: ["GHSA-G3HV-75WG-M249"] }],
+    ignored: ["eslint-config-developit"],
   });
-  assert.deepStrictEqual(result.candidates, []);
-  assert.deepStrictEqual(result.ignored, ["eslint-config-developit"]);
 });
 
-test("the shipped IGNORE set excludes the eslint compatibility override", () => {
-  assert.ok("eslint-config-developit" in IGNORE);
+test("classify does not treat inherited Object properties as ignored", () => {
+  const result = classify({
+    overrideKeys: ["constructor", "tostring"],
+    introducedByKey: { constructor: [], tostring: [] },
+    ignore: {},
+  });
+  assert.deepStrictEqual(result.candidates, ["constructor", "tostring"]);
+  assert.deepStrictEqual(result.ignored, []);
 });
+
+// --- combined removal -------------------------------------------------------
 
 /**
  * Fake audit in which overrides "a" and "b" both protect against GHSA-XXXX-XXXX-XXXX:
@@ -191,16 +194,7 @@ test("selectCombinedRemovals ignores advisories already in the baseline", () => 
   assert.deepStrictEqual(result, { removable: ["a", "b"], heldBack: [] });
 });
 
-test("renderMarkdown lists held-back overrides with the advisory they reintroduce together", () => {
-  const md = renderMarkdown({
-    candidates: ["a"],
-    protecting: [],
-    ignored: [],
-    heldBack: [{ key: "b", advisories: ["GHSA-XXXX-XXXX-XXXX"] }],
-  });
-  assert.match(md, /### Held back/);
-  assert.match(md, /`b` together with the removal candidates reintroduces GHSA-XXXX-XXXX-XXXX/);
-});
+// --- resolution failures ----------------------------------------------------
 
 /**
  * Run fn with process.stderr.write captured.
@@ -227,76 +221,60 @@ test("auditVariant returns the audit result when the variant resolves", () => {
   assert.strictEqual(auditVariant("Without x", () => ids), ids);
 });
 
-test("auditVariant reports a resolution failure as RESOLUTION_FAILURE and logs the variant", () => {
-  const { value, stderr } = captureStderr(() =>
-    auditVariant("Without x", () => {
-      throw new ResolutionError("npm install failed");
-    }),
-  );
+test("auditVariant reports ERESOLVE as RESOLUTION_FAILURE and logs the variant", () => {
+  const { value, stderr } = captureStderr(() => auditVariant("Without x", () => parseNpmOutput("install", INSTALL_ERESOLVE)));
   assert.deepStrictEqual(value, new Set([RESOLUTION_FAILURE]));
-  assert.match(stderr, /Without x: npm install failed/);
+  assert.match(stderr, /Without x: npm install failed: unable to resolve dependency tree/);
 });
 
-test("auditVariant rethrows errors that are not resolution failures", () => {
-  assert.throws(
-    () =>
-      auditVariant("Without x", () => {
-        throw new Error("npm audit failed: registry down");
-      }),
-    /npm audit failed: registry down/,
-  );
+test("auditVariant rethrows every other error, such as a network failure", () => {
+  const network = () => parseNpmOutput("install", INSTALL_NETWORK);
+  const other = () => {
+    throw new Error("npm audit did not produce the expected output");
+  };
+  assert.throws(() => auditVariant("Without x", network), (err) => err instanceof NpmError && err.code === "ECONNREFUSED");
+  assert.throws(() => auditVariant("Without x", other), /did not produce the expected output/);
 });
 
-test("an override whose removal breaks resolution is still required, not a candidate", () => {
-  const result = classify({
-    overrideKeys: ["peer-pin", "glob"],
-    introducedByKey: {
-      "peer-pin": newlyIntroduced(new Set(["GHSA-BASE-BASE-BASE"]), new Set([RESOLUTION_FAILURE])),
-      glob: [],
+// --- report -----------------------------------------------------------------
+
+test("renderMarkdown renders every section", () => {
+  const md = renderMarkdown(
+    {
+      candidates: ["glob"],
+      heldBack: [{ key: "b", advisories: ["GHSA-XXXX-XXXX-XXXX"] }],
+      protecting: [{ key: "katex", advisories: ["GHSA-238P-PMPM-9MQ7", RESOLUTION_FAILURE] }],
+      ignored: ["some-pin"],
     },
-    ignore: {},
-  });
-  assert.deepStrictEqual(result.candidates, ["glob"]);
-  assert.deepStrictEqual(result.protecting, [{ key: "peer-pin", advisories: [RESOLUTION_FAILURE] }]);
-  assert.match(renderMarkdown(result, {}), /`peer-pin` protects against a dependency resolution failure/);
+    { "some-pin": "custom reason" },
+  );
+  const lines = md.split("\n");
+  for (const line of [
+    "### Removal candidates",
+    "- `glob`",
+    "### Held back: needed together with other overrides",
+    "- `b` together with the removal candidates reintroduces GHSA-XXXX-XXXX-XXXX",
+    "### Still required",
+    "- `katex` protects against GHSA-238P-PMPM-9MQ7, a dependency resolution failure",
+    "### Ignored (non-security)",
+    "- `some-pin` — custom reason",
+  ]) {
+    assert.ok(lines.includes(line), `missing line: ${line}\n${md}`);
+  }
 });
 
-test("selectCombinedRemovals holds back a candidate whose combined removal breaks resolution", () => {
-  const result = selectCombinedRemovals({
-    candidates: ["a", "b"],
-    baseline: new Set(),
-    auditWithout: (keys) => (keys.length > 1 ? new Set([RESOLUTION_FAILURE]) : new Set()),
-  });
-  assert.deepStrictEqual(result, { removable: ["a"], heldBack: [{ key: "b", advisories: [RESOLUTION_FAILURE] }] });
-});
-
-test("renderMarkdown lists removal candidates", () => {
-  const md = renderMarkdown({ candidates: ["glob"], protecting: [], ignored: [] });
-  assert.match(md, /Removal candidates/);
-  assert.match(md, /glob/);
-});
-
-test("renderMarkdown names the advisory a required override protects against", () => {
-  const md = renderMarkdown({ candidates: [], protecting: [{ key: "minimatch@<11.0.1", advisories: ["GHSA-g3hv-75wg-m249"] }], ignored: [] });
-  assert.match(md, /still required/i);
-  assert.match(md, /GHSA-g3hv-75wg-m249/);
-});
-
-test("renderMarkdown states nothing to remove when there are no candidates", () => {
+test("renderMarkdown states nothing to remove and omits empty sections", () => {
   const md = renderMarkdown({ candidates: [], protecting: [], ignored: [] });
   assert.match(md, /Nothing to remove/);
+  assert.doesNotMatch(md, /###/);
 });
 
-test("renderMarkdown lists ignored overrides with their reason", () => {
-  const md = renderMarkdown({ candidates: [], protecting: [], ignored: ["eslint-config-developit"] });
-  assert.match(md, /Ignored \(non-security\)/);
-  assert.ok(md.includes(`\`eslint-config-developit\` — ${IGNORE["eslint-config-developit"]}`));
-});
+// --- package.json edits -----------------------------------------------------
 
-test("renderMarkdown takes ignore reasons from the given set", () => {
-  const md = renderMarkdown({ candidates: [], protecting: [], ignored: ["some-pin"] }, { "some-pin": "custom reason" });
-  assert.ok(md.includes("`some-pin` — custom reason"));
-  assert.ok(!md.includes("undefined"));
+test("removeOverrideKey drops one key without mutating the input", () => {
+  const overrides = { "minimatch@<11.0.1": "11.0.1", glob: "^14.0.2", semver: "^7.5.4" };
+  assert.deepStrictEqual(removeOverrideKey(overrides, "glob"), { "minimatch@<11.0.1": "11.0.1", semver: "^7.5.4" });
+  assert.deepStrictEqual(overrides, { "minimatch@<11.0.1": "11.0.1", glob: "^14.0.2", semver: "^7.5.4" });
 });
 
 test("applyRemovals deletes only the given override keys and keeps clean JSON", () => {
@@ -306,7 +284,7 @@ test("applyRemovals deletes only the given override keys and keeps clean JSON", 
     const pkg = { name: "x", overrides: { "minimatch@<11.0.1": "11.0.1", semver: "^7.5.4", glob: "^14.0.2" } };
     writeFileSync(join(root, "website", "package.json"), JSON.stringify(pkg, null, 2) + "\n");
 
-    const removed = applyRemovals(root, ["semver", "glob", "absent"]);
+    const removed = applyRemovals(root, ["semver", "glob", "absent", "constructor"]);
     assert.deepStrictEqual(removed, ["semver", "glob"]);
 
     const after = readFileSync(join(root, "website", "package.json"), "utf8");

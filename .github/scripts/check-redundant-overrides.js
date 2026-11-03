@@ -19,9 +19,9 @@
  * also audited together, and a candidate that is only needed in combination
  * with others is held back, not reported as removable.
  *
- * If npm cannot resolve the dependency tree without an override (for example
- * ERESOLVE), that override is reported as still required, and the other
- * overrides are still checked.
+ * If npm cannot resolve the dependency tree without an override (ERESOLVE),
+ * that override is reported as still required, and the other overrides are
+ * still checked. Other install failures, such as network errors, stop the run.
  *
  * Not every override exists for a security advisory (for example a peer-dep
  * compatibility override). Those would always look removable, so the IGNORE
@@ -32,7 +32,7 @@
  *   node .github/scripts/check-redundant-overrides.js [repo-root]
  */
 
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, writeFileSync, copyFileSync, rmSync, existsSync, appendFileSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -102,7 +102,7 @@ export function classify({ overrideKeys, introducedByKey, ignore = IGNORE }) {
   const protecting = [];
   const ignored = [];
   for (const key of overrideKeys) {
-    if (key in ignore) {
+    if (Object.hasOwn(ignore, key)) {
       ignored.push(key);
       continue;
     }
@@ -184,6 +184,44 @@ export function renderMarkdown(result, ignore = IGNORE) {
   return lines.join("\n");
 }
 
+/** npm reported an error in its `--json` output. `code` is npm's error code, for example ERESOLVE. */
+export class NpmError extends Error {
+  /**
+   * @param {string} message
+   * @param {string | undefined} code
+   * @param {ErrorOptions} [options]
+   */
+  constructor(message, code, options) {
+    super(message, options);
+    this.name = "NpmError";
+    this.code = code;
+  }
+}
+
+/**
+ * Parse the stdout of an npm command run with `--json`. In JSON mode npm
+ * writes failures as `{ "error": { "code", "summary", "detail" } }` to stdout,
+ * so failures are read from there, not from the exit code.
+ *
+ * @param {string} command - npm subcommand, for messages.
+ * @param {string} stdout
+ * @returns {any}
+ */
+export function parseNpmOutput(command, stdout) {
+  let jsonStdout;
+  try {
+    jsonStdout = JSON.parse(stdout);
+  } catch {
+    throw new Error(`npm ${command} returned non-json output: ${stdout}`);
+  }
+  if (jsonStdout.error) {
+    // `npm audit` can leave `summary` empty and put the reason in a top-level `message`.
+    const reason = jsonStdout.error.summary || jsonStdout.message || JSON.stringify(jsonStdout.error);
+    throw new NpmError(`npm ${command} failed: ${reason}`, jsonStdout.error.code, { cause: jsonStdout.error });
+  }
+  return jsonStdout;
+}
+
 /**
  * Parse and validate `npm audit --json` stdout. Throws when the output is not
  * JSON, reports an npm error, or is not an audit report.
@@ -192,15 +230,7 @@ export function renderMarkdown(result, ignore = IGNORE) {
  * @returns {{ vulnerabilities: Record<string, unknown> }}
  */
 export function parseAuditOutput(stdout) {
-  let jsonStdout;
-  try {
-    jsonStdout = JSON.parse(stdout);
-  } catch {
-    throw new Error(`npm audit returned non-json output: ${stdout}`);
-  }
-  if (jsonStdout.error) {
-    throw new Error(`npm audit failed: ${jsonStdout.error.summary ?? JSON.stringify(jsonStdout.error)}`, { cause: jsonStdout.error });
-  }
+  const jsonStdout = parseNpmOutput("audit", stdout);
   if (!jsonStdout.vulnerabilities) {
     throw new Error(`npm audit did not produce the expected output ${stdout}`);
   }
@@ -213,13 +243,11 @@ export function parseAuditOutput(stdout) {
  */
 export const RESOLUTION_FAILURE = "a dependency resolution failure";
 
-/** `npm install` failed for an overrides variant, for example with ERESOLVE. */
-export class ResolutionError extends Error {}
-
 /**
- * Audit a removal variant. A variant that npm cannot resolve introduces
- * RESOLUTION_FAILURE, so the removed overrides are kept and the run goes on.
- * All other errors, such as a failed `npm audit`, still throw.
+ * Audit a removal variant. A variant that npm cannot resolve (ERESOLVE)
+ * introduces RESOLUTION_FAILURE, so the removed overrides are kept and the run
+ * goes on. All other errors, such as a network failure or a failed
+ * `npm audit`, still throw.
  *
  * @param {string} label - which variant, for the log.
  * @param {() => Set<string>} audit
@@ -229,16 +257,31 @@ export function auditVariant(label, audit) {
   try {
     return audit();
   } catch (err) {
-    if (!(err instanceof ResolutionError)) throw err;
+    if (!(err instanceof NpmError && err.code === "ERESOLVE")) throw err;
     process.stderr.write(`${label}: ${err.message}. Keeping the override(s).\n`);
     return new Set([RESOLUTION_FAILURE]);
   }
 }
 
 /**
+ * Run an npm command with `--json` and return its stdout. The exit code is
+ * not used: `npm audit` exits non-zero when it finds vulnerabilities, and
+ * real failures are in the JSON (see parseNpmOutput). stderr goes to the log.
+ *
+ * @param {string[]} args
+ * @param {string} cwd
+ * @returns {string}
+ */
+function npmJson(args, cwd) {
+  const result = spawnSync("npm", [...args, "--json"], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
+  if (result.error) throw new Error(`could not run npm ${args[0]}`, { cause: result.error });
+  return result.stdout;
+}
+
+/**
  * Run `npm audit --json` for a copy of the website package whose `overrides`
  * object is replaced by the given one, re-resolving a temp lockfile.
- * Throws ResolutionError when `npm install` fails.
+ * Throws NpmError when npm reports an error, for example ERESOLVE.
  *
  * @param {string} websiteDir - Absolute path to the website/ directory.
  * @param {Record<string, unknown>} overrides
@@ -254,25 +297,8 @@ function auditWithOverrides(websiteDir, overrides) {
     writeFileSync(join(tmp, "package.json"), JSON.stringify(pkg, null, 2));
     if (existsSync(lockPath)) copyFileSync(lockPath, join(tmp, "package-lock.json"));
 
-    try {
-      execFileSync("npm", ["install", "--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund"], {
-        cwd: tmp,
-        stdio: ["ignore", "ignore", "inherit"],
-      });
-    } catch (err) {
-      throw new ResolutionError("npm install failed, see the npm output above", { cause: err });
-    }
-
-    // `npm audit --json` exits non-zero when vulnerabilities exist, which is
-    // the normal case here, so read stdout regardless of exit code, but ensure
-    // the result does not contain an error.
-    let stdout = "";
-    try {
-      stdout = execFileSync("npm", ["audit", "--json"], { cwd: tmp, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
-    } catch (err) {
-      stdout = /** @type {{ stdout?: string }} */ (err).stdout ?? "";
-    }
-    return extractAdvisoryIds(parseAuditOutput(stdout));
+    parseNpmOutput("install", npmJson(["install", "--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund"], tmp));
+    return extractAdvisoryIds(parseAuditOutput(npmJson(["audit"], tmp)));
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
@@ -296,7 +322,7 @@ export function run(repoRoot) {
   /** @type {Record<string, string[]>} */
   const introducedByKey = {};
   for (const key of overrideKeys) {
-    if (key in IGNORE) continue;
+    if (Object.hasOwn(IGNORE, key)) continue;
     const without = auditVariant(`Without ${key}`, () => auditWithOverrides(websiteDir, removeOverrideKey(overrides, key)));
     introducedByKey[key] = newlyIntroduced(baseline, without);
   }
@@ -328,7 +354,7 @@ export function applyRemovals(repoRoot, keys) {
   const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
   const removed = [];
   for (const key of keys) {
-    if (pkg.overrides && key in pkg.overrides) {
+    if (pkg.overrides && Object.hasOwn(pkg.overrides, key)) {
       delete pkg.overrides[key];
       removed.push(key);
     }
