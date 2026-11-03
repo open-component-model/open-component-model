@@ -1,0 +1,11 @@
+component:
+  componentReferences: []
+  creationTime: "2026-10-19T06:03:59Z"
+  name: acme.org/archive
+  provider: acme.org
+  repositoryContexts: []
+  resources: []
+  sources: []
+  version: 1.0.0
+meta:
+  schemaVersion: v2
