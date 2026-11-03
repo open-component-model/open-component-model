@@ -245,8 +245,9 @@ How OCM stores a local blob depends on its content:
 
 For OCI artifacts, OCM does not keep the layout archive. It ingests the whole graph — root OCI index, OCI manifests per
 platform, OCI configs, and OCI layers — so the stored image is byte-for-byte the original image with the original
-digest. Every stored local blob also carries a `software.ocm.artifact` annotation that names the OCM artifact, the
-resource or source, it belongs to.
+digest. The OCI descriptor that references a stored local blob, an OCI layer entry or an OCI index entry, carries a
+`software.ocm.artifact` annotation. It names the OCM artifact, the resource or source, that the blob belongs to. The blob
+itself stays unchanged.
 
 The component descriptor that results from this lists both local blobs like this:
 
