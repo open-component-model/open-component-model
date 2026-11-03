@@ -29,6 +29,15 @@ The `Controller: Performance Benchmark` workflow runs the same flow on demand (A
 map to `--scenarios`, `--objects` and `--repeats`; empty inputs use the benchmark defaults. The job summary shows
 `summary.md`, and the full results directory is uploaded as the `controller-performance-<run id>` artifact.
 
+Maintainers can also benchmark a pull request's head commit with a comment whose first line is:
+
+```text
+/perf --scenarios=complex --objects=1000 --repeats=3
+```
+
+Every flag is optional. The workflow reacts with 👀 when it sees the command, 🚀 when the run is launched, and 😕 when
+the comment has an invalid argument. When the run ends, it replies with ✅ or 🛑 and a link to the run.
+
 ## Structure
 
 The benchmark is a standalone Go program, run with `go run`. It builds and measures the working tree only.

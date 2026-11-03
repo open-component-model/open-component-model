@@ -15,12 +15,9 @@ on:
         description: "Repetitions of every scenario and object count. Empty uses 3. Higher count means better averages."
         type: string
         required: false
-
-# Because runs can take long time we don't cancel an existing one, but wait instead.
-concurrency:
-  group: controller-performance-${{ github.ref }}
-  cancel-in-progress: false
-  queue: max
+  # A "/perf [--scenarios=...] [--objects=...] [--repeats=...]" comment on a pull request benchmarks its head commit.
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: read
@@ -30,8 +27,51 @@ env:
   CONTROLLER_DIR: "bindings/go/kubernetes/controller"
 
 jobs:
+  parse:
+    name: Parse /perf comment
+    if: >-
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/perf') &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      # For the comment.
+      pull-requests: write
+    outputs:
+      run: ${{ steps.parse.outputs.run }}
+      ref: ${{ steps.parse.outputs.ref }}
+      scenarios: ${{ steps.parse.outputs.scenarios }}
+      objects: ${{ steps.parse.outputs.objects }}
+      repeats: ${{ steps.parse.outputs.repeats }}
+    steps:
+      - name: Checkout scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Parse comment
+        id: parse
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/perf-command.js');
+            await script.default({ github, context, core });
+
   benchmark:
     name: Performance Benchmark
+    needs: parse
+    # A failed parse should not try to run the default branch.
+    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || (needs.parse.result == 'success' && needs.parse.outputs.run == 'true')) }}
+    # Job level concurrency settings prevent a comment that never started a run from joining the concurrency group.
+    # Because runs can take long time we do not cancel an existing one.
+    concurrency:
+      group: controller-performance-${{ needs.parse.outputs.ref || github.ref }}
+      cancel-in-progress: false
+      queue: max
     runs-on: ubuntu-26.04-arm
     # The hosted runner maximum. Hitting it cancels the job, which skips the report steps, so the step
     # limits below add up to 355 (5 x 5 tools, 25 setup, 290 benchmark, 5 + 10 report), leaving 5 for the runner.
@@ -41,6 +81,8 @@ jobs:
         timeout-minutes: 5
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Empty for workflow_dispatch, which checks out the selected branch.
+          ref: ${{ needs.parse.outputs.ref }}
           persist-credentials: false
 
       - name: Setup Go
@@ -49,6 +91,8 @@ jobs:
         with:
           go-version-file: ${{ env.GO_MODULE_ROOT }}/go.mod
           cache-dependency-path: ${{ env.GO_MODULE_ROOT }}/go.sum
+          # Disable the cache for issue comment runs so we don't pollute the pull-request cache.
+          cache: ${{ github.event_name != 'issue_comment' }}
 
       - name: Install Task
         timeout-minutes: 5
@@ -75,9 +119,9 @@ jobs:
       - name: Run benchmark
         timeout-minutes: 290
         env:
-          SCENARIOS: ${{ inputs.scenarios }}
-          OBJECTS: ${{ inputs.objects }}
-          REPEATS: ${{ inputs.repeats }}
+          SCENARIOS: ${{ needs.parse.outputs.scenarios || inputs.scenarios }}
+          OBJECTS: ${{ needs.parse.outputs.objects || inputs.objects }}
+          REPEATS: ${{ needs.parse.outputs.repeats || inputs.repeats }}
         run: |
           args=()
           [ -n "${SCENARIOS}" ] && args+=("--scenarios=${SCENARIOS}")
@@ -105,3 +149,30 @@ jobs:
           name: controller-performance-${{ github.run_id }}
           path: ${{ env.CONTROLLER_DIR }}/test/performance/results/
           if-no-files-found: warn
+
+  report:
+    name: Report to pull request
+    needs: [parse, benchmark]
+    if: ${{ always() && needs.parse.result == 'success' && needs.parse.outputs.run == 'true' }}
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 5
+    permissions:
+      # for the comment.
+      pull-requests: write
+    steps:
+      - name: Comment result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.issue.number }}
+          RESULT: ${{ needs.benchmark.result }}
+          SHA: ${{ needs.parse.outputs.ref }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          case "${RESULT}" in
+            success) status="✅ Performance run passed" ;;
+            cancelled) status="🛑 Performance run was cancelled" ;;
+            *) status="🛑 Performance run failed" ;;
+          esac
+          gh api --method POST "repos/${REPO}/issues/${PR}/comments" \
+            -f body="${status} for ${SHA:0:7}: ${RUN_URL}" > /dev/null
