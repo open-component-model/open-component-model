@@ -10,21 +10,36 @@ import (
 )
 
 // DefaultMaxDownloadSize is the default maximum object size. Zero means unlimited:
-// bodies are streamed to disk rather than held in memory, so an object is bounded
-// by free disk rather than by RAM. Use [WithMaxDownloadSize] to cap it.
+// bodies are streamed through rather than held in memory or stored, so object size
+// costs neither RAM nor disk. Use [WithMaxDownloadSize] to cap it.
 const DefaultMaxDownloadSize int64 = 0
 
 type option struct {
 	HTTPClient      *http.Client
 	Credentials     runtime.Typed
 	MaxDownloadSize *int64
-	TempDir         string
 	HTTPConfig      *httpv1alpha1.Config
 	DigestAlgorithm digest.Algorithm
 }
 
 // Option configures a download.
 type Option func(*option)
+
+func newOptions(opts []Option) *option {
+	o := &option{}
+	for _, opt := range opts {
+		opt(o)
+	}
+	return o
+}
+
+// maxDownloadSize returns the configured limit; zero or negative means unlimited.
+func (o *option) maxDownloadSize() int64 {
+	if o.MaxDownloadSize != nil {
+		return *o.MaxDownloadSize
+	}
+	return DefaultMaxDownloadSize
+}
 
 // WithCredentials sets the OCM credentials used to build the S3 client. When nil,
 // the AWS default credential chain is used. Anonymous access requires credentials
@@ -37,13 +52,6 @@ func WithCredentials(c runtime.Typed) Option {
 // Zero (the default) means unlimited.
 func WithMaxDownloadSize(size int64) Option {
 	return func(o *option) { o.MaxDownloadSize = &size }
-}
-
-// WithTempDir sets the directory the downloaded object is written to. Empty uses
-// the OS temporary directory. The file backing the returned blob is created here
-// and outlives [Download], so the caller owns its lifetime.
-func WithTempDir(dir string) Option {
-	return func(o *option) { o.TempDir = dir }
 }
 
 // WithHTTPConfig sets the HTTP configuration used to build the S3 client's underlying
@@ -59,8 +67,8 @@ func WithHTTPClient(c *http.Client) Option {
 	return func(o *option) { o.HTTPClient = c }
 }
 
-// WithDigestAlgorithm makes [Download] compute the digest of the object with alg while
-// writing it, reported in [Result.Digest].
+// WithDigestAlgorithm makes [Stream] compute the digest of the object with alg while
+// streaming it, reported in [Result.Digest]. A [Blob] ignores it.
 func WithDigestAlgorithm(alg digest.Algorithm) Option {
 	return func(o *option) { o.DigestAlgorithm = alg }
 }

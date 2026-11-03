@@ -4,15 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"strings"
 
 	godigest "github.com/opencontainers/go-digest"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -35,28 +34,21 @@ var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 // ResourceRepository implements the ResourceRepository interface for the S3
 // access type.
 type ResourceRepository struct {
-	maxDownloadSize  *int64
-	httpConfig       *httpv1alpha1.Config
-	httpClient       *http.Client
-	filesystemConfig *filesystemv1alpha1.Config
+	maxDownloadSize *int64
+	httpConfig      *httpv1alpha1.Config
+	httpClient      *http.Client
 }
 
-// NewResourceRepository creates a new S3 resource repository. If filesystemConfig
-// is non-nil, its TempFolder is used for the files downloaded objects are streamed
-// into; otherwise os.CreateTemp's default directory is used.
-func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...Option) *ResourceRepository {
-	if filesystemConfig == nil {
-		filesystemConfig = &filesystemv1alpha1.Config{}
-	}
+// NewResourceRepository creates a new S3 resource repository.
+func NewResourceRepository(opts ...Option) *ResourceRepository {
 	options := &Options{}
 	for _, opt := range opts {
 		opt(options)
 	}
 	return &ResourceRepository{
-		maxDownloadSize:  options.MaxDownloadSize,
-		httpConfig:       options.HTTPConfig,
-		httpClient:       options.HTTPClient,
-		filesystemConfig: filesystemConfig,
+		maxDownloadSize: options.MaxDownloadSize,
+		httpConfig:      options.HTTPConfig,
+		httpClient:      options.HTTPClient,
 	}
 }
 
@@ -78,43 +70,23 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(ctx context.C
 	return identityv1.IdentityFromObject(spec.BucketName, spec.ObjectKey, spec.Endpoint)
 }
 
-// DownloadResource downloads a resource from the bucket/key described by the
-// S3 access spec.
-//
-// The object is streamed into a file under the configured TempFolder, and the
-// returned blob reads from that file, which outlives this call and is owned by the
-// caller.
+// DownloadResource returns the object at the bucket/key described by the S3 access
+// spec as a lazy blob: every read requests the object and streams it through, nothing
+// is stored. Reads after the first serve the object version the first one reported, if
+// the store reports a real one; they are bound to ctx.
 //
 // The content is bound to the digest the resource declares, which is the digest over
-// exactly these bytes; it is hashed while it is written, so an object that differs
-// fails the download and its file is removed.
+// exactly these bytes; it is hashed while it is read, so an object that differs fails
+// the read rather than this call.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
 	spec, err := r.convertAccess(resource)
 	if err != nil {
 		return nil, err
 	}
 
-	var tempFolder string
-	if r.filesystemConfig.TempFolder != nil {
-		tempFolder = *r.filesystemConfig.TempFolder
-	}
-
-	var extra []download.Option
-	if alg, ok := integrity.PrecomputeAlgorithm(resource.Digest); ok {
-		extra = append(extra, download.WithDigestAlgorithm(alg))
-	}
-
-	result, err := r.download(ctx, spec, credentials, tempFolder, extra...)
-	if err != nil {
-		return nil, err
-	}
-
-	b, err := integrity.VerifyPrecomputed(ctx, resource.Digest, result.Digest, result.Blob,
+	b, err := integrity.Verify(ctx, resource.Digest, download.NewBlob(ctx, request(spec), r.options(credentials)...),
 		integrity.WithLogAttrs(slog.Any("resource", resource.ToIdentity())))
 	if err != nil {
-		if rmErr := os.Remove(result.Path); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
-			slog.WarnContext(ctx, "error removing downloaded s3 object that failed verification", "file", result.Path, "err", rmErr)
-		}
 		return nil, fmt.Errorf("resource %q: %w", resource.Name, err)
 	}
 	return b, nil
@@ -139,13 +111,9 @@ func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v2.S
 	return spec, nil
 }
 
-// download streams the object described by spec into tempDir and returns it as a
-// file-backed blob. The file outlives this call and is owned by the caller.
-func (r *ResourceRepository) download(ctx context.Context, spec *v2.S3, credentials runtime.Typed, tempDir string, extra ...download.Option) (*download.Result, error) {
-	opts := []download.Option{
-		download.WithCredentials(credentials),
-		download.WithTempDir(tempDir),
-	}
+// options returns the download options of the repository for credentials.
+func (r *ResourceRepository) options(credentials runtime.Typed, extra ...download.Option) []download.Option {
+	opts := []download.Option{download.WithCredentials(credentials)}
 	if r.maxDownloadSize != nil {
 		opts = append(opts, download.WithMaxDownloadSize(*r.maxDownloadSize))
 	}
@@ -155,9 +123,11 @@ func (r *ResourceRepository) download(ctx context.Context, spec *v2.S3, credenti
 	if r.httpClient != nil {
 		opts = append(opts, download.WithHTTPClient(r.httpClient))
 	}
-	opts = append(opts, extra...)
+	return append(opts, extra...)
+}
 
-	return download.Download(ctx, download.Request{
+func request(spec *v2.S3) download.Request {
+	return download.Request{
 		Region:       spec.Region,
 		BucketName:   spec.BucketName,
 		ObjectKey:    spec.ObjectKey,
@@ -165,7 +135,7 @@ func (r *ResourceRepository) download(ctx context.Context, spec *v2.S3, credenti
 		Version:      spec.Version,
 		Endpoint:     spec.Endpoint,
 		UsePathStyle: spec.UsePathStyle,
-	}, opts...)
+	}
 }
 
 // UploadResource is not supported by the S3 access type, which is
@@ -182,8 +152,8 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 	return r.GetResourceCredentialConsumerIdentity(ctx, resource)
 }
 
-// ProcessResourceDigest computes the digest of an S3 resource by downloading the
-// referenced object and taking the SHA-256 the downloaded blob carries, which is the
+// ProcessResourceDigest computes the digest of an S3 resource by streaming the
+// referenced object and hashing it with SHA-256 on the way, which is the
 // source of truth rather than the S3 ETag. When the resource already carries a digest,
 // the computed value is verified against it.
 //
@@ -195,35 +165,11 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 		return nil, err
 	}
 
-	tempFolder := ""
-	if r.filesystemConfig.TempFolder != nil {
-		tempFolder = *r.filesystemConfig.TempFolder
-	}
-
-	tempDir, err := os.MkdirTemp(tempFolder, "ocm-s3-digest-*")
-	if err != nil {
-		return nil, fmt.Errorf("error creating temporary directory for digest processing: %w", err)
-	}
-	defer func() {
-		if rmErr := os.RemoveAll(tempDir); rmErr != nil {
-			slog.WarnContext(ctx, "failed to remove temporary directory after digest processing", "path", tempDir, "err", rmErr)
-		}
-	}()
-
-	result, err := r.download(ctx, spec, credentials, tempDir)
+	result, err := download.Stream(ctx, request(spec), io.Discard, r.options(credentials, download.WithDigestAlgorithm(godigest.SHA256))...)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading resource for digest processing: %w", err)
 	}
-
-	raw, ok := result.Blob.Digest()
-	if !ok {
-		return nil, fmt.Errorf("error computing digest of downloaded s3 object %s/%s", spec.BucketName, spec.ObjectKey)
-	}
-	resolved, err := godigest.Parse(raw)
-	if err != nil {
-		return nil, fmt.Errorf("downloaded s3 object %s/%s has an unparsable digest %q: %w", spec.BucketName, spec.ObjectKey, raw, err)
-	}
-	resolvedValue := resolved.Encoded()
+	resolvedValue := result.Digest.Encoded()
 
 	resource = resource.DeepCopy()
 	if resource.Digest == nil {
@@ -282,9 +228,9 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 	return resource, nil
 }
 
-// pinningVersion returns versionID unless it is the unversioned placeholder, which pins nothing.
+// pinningVersion returns versionID if it names an object version, otherwise empty.
 func pinningVersion(versionID string) string {
-	if versionID == download.UnversionedVersionID {
+	if !download.IsVersion(versionID) {
 		return ""
 	}
 	return versionID
