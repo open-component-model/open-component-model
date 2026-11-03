@@ -7,8 +7,8 @@ hasMermaid: true
 ---
 
 OCM has no storage format of its own. It is designed to store component versions in established storage technologies.
-Today, that technology is **OCI**: component versions live in OCI registries, or in a **Common Transport Format (CTF)**
-archive, OCM's file system representation of an OCI registry.
+Today, that technology is **[OCI](https://github.com/opencontainers/image-spec)**: component versions live in OCI
+registries, or in a **Common Transport Format (CTF)** archive, OCM's file system representation of an OCI registry.
 
 This page explains how a component version and its local blobs map to OCI artifacts, what you see in a registry after
 `ocm add cv` or `ocm transfer cv`, and why an embedded image can be pulled with `docker`, `oras`, or `crane`.
@@ -204,5 +204,7 @@ repository, addressed by its digest.
 ## Related Documentation
 
 - [Reference: Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}) — `LocalBlob/v1` and other access types
+- [OCI Image Format Specification](https://github.com/opencontainers/image-spec) — Manifests, indexes, layers, and image layouts
+- [OCI Distribution Specification](https://github.com/opencontainers/distribution-spec) — How registries store and serve them
 - [OCM Specification: OCI Registries](https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/03-storage-backends/oci.md) — Normative mapping of component versions to OCI
 - [OCM Specification: Common Transport Format](https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/03-storage-backends/ctf.md) — Normative definition of the CTF format
