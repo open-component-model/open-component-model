@@ -18,7 +18,6 @@ on:
     paths:
       - '.github/workflows/website-redundant-overrides.yml'
       - '.github/scripts/check-redundant-overrides.js'
-      - '.github/scripts/check-redundant-overrides.test.js'
       - 'website/package.json'
 
 permissions:
