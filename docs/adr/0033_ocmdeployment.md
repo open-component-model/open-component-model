@@ -84,9 +84,9 @@ The steps below reference `spec` fields by path; the full
 
 The controller executes the following ordered steps on **every** reconcile, not once at creation.
 Each step is idempotent: "create a `Resource`" means ensure it exists (create if absent, otherwise
-reuse the existing one), and the controller re-derives localization and re-applies the engine objects
-every pass (the chart download in step 3 is cached by digest, so it is not repeated unless the
-resolved artifact changes).
+update its spec to the current reference), and the controller re-derives localization and re-applies
+the engine objects every pass (the chart download in step 3 is cached by digest, so it is not
+repeated unless the resolved artifact changes).
 
 1. Create a `Repository` from `spec.source.repositorySpec` and a `Component` from
    `spec.source.component`+`spec.source.semver`. These are ensured (created/updated) but not waited
