@@ -29,7 +29,7 @@ could be confused, and *descriptor* on its own always means the component descri
 | Component version | OCM | A versioned component. Stored as one OCI manifest or one OCI index. |
 | Component descriptor | OCM | The document that describes a component version: its resources, sources, references, and how to access them. Not an OCI descriptor. |
 | Local blob | OCM | A resource or source stored *by value*, next to the component descriptor. Stored as one OCI layer, or as a whole OCI artifact. |
-| Artifact (OCM) | OCM | A resource or source of a component version, as in the `software.ocm.artifact` annotation. |
+| OCM artifact | OCM | A resource or source of a component version, as in the `software.ocm.artifact` annotation. |
 | OCM repository | OCM | Where component versions are stored: an OCI registry plus an optional path, or a CTF archive. Holds many components. |
 | OCI repository | OCI | One named repository inside a registry. OCM uses one per component, holding all of its versions. |
 | OCI descriptor | OCI | A reference to content by `mediaType`, `digest`, and `size`, as used in a manifest's `config` and `layers`. |
