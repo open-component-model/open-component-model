@@ -37,7 +37,11 @@
                             "type": "integer"
                         },
                         "ociRemotePolicy": {
-                            "type": "string"
+                            "type": "string",
+                            "enum": [
+                                "IfNotPresent",
+                                "Always"
+                            ]
                         }
                     }
                 },

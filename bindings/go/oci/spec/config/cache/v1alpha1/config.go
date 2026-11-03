@@ -50,7 +50,18 @@ type Config struct {
 	RemotePolicy RemotePolicy `json:"remotePolicy,omitempty"`
 }
 
-// LookupConfig merges every OCI cache configuration in cfg and validates the result.
+// Validate rejects a RemotePolicy that is neither empty nor a known policy.
+func (c *Config) Validate() error {
+	switch c.RemotePolicy {
+	case "", RemotePolicyIfNotPresent, RemotePolicyAlways:
+		return nil
+	default:
+		return fmt.Errorf("unknown remotePolicy %q, must be %q or %q",
+			c.RemotePolicy, RemotePolicyIfNotPresent, RemotePolicyAlways)
+	}
+}
+
+// LookupConfig validates every OCI cache configuration in cfg and merges them.
 // It returns nil if cfg holds no entry, so callers apply the default themselves.
 func LookupConfig(cfg *genericv1.Config) (*Config, error) {
 	if cfg == nil {
@@ -74,17 +85,12 @@ func LookupConfig(cfg *genericv1.Config) (*Config, error) {
 		if err := Scheme.Convert(entry, &config); err != nil {
 			return nil, fmt.Errorf("failed to decode oci cache config: %w", err)
 		}
+		if err := config.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid oci cache config: %w", err)
+		}
 		cfgs = append(cfgs, &config)
 	}
-
-	merged := Merge(cfgs...)
-	switch merged.RemotePolicy {
-	case "", RemotePolicyIfNotPresent, RemotePolicyAlways:
-	default:
-		return nil, fmt.Errorf("invalid oci cache configuration: unknown remotePolicy %q, must be %q or %q",
-			merged.RemotePolicy, RemotePolicyIfNotPresent, RemotePolicyAlways)
-	}
-	return merged, nil
+	return Merge(cfgs...), nil
 }
 
 // Merge merges the provided configs into a single config. The last non-empty value wins.

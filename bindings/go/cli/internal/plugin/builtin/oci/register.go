@@ -37,10 +37,7 @@ func Register(
 	if filesystemConfig.TempFolder != nil {
 		tempDir = *filesystemConfig.TempFolder
 	}
-	remotePolicy := cache.RemotePolicyIfNotPresent
-	if cacheConfig != nil && cacheConfig.RemotePolicy != "" {
-		remotePolicy = cache.RemotePolicy(cacheConfig.RemotePolicy)
-	}
+	remotePolicy := remotePolicyFromConfig(cacheConfig)
 	CachingComponentVersionRepositoryProvider := provider.NewComponentVersionRepositoryProvider(
 		provider.WithTempDir(tempDir),
 		provider.WithUserAgent(creator),
@@ -76,4 +73,16 @@ func Register(
 			&CTFComponentListerPlugin{},
 		),
 	)
+}
+
+func remotePolicyFromConfig(cfg *ocicachev1alpha1.Config) cache.RemotePolicy {
+	if cfg == nil {
+		return cache.RemotePolicyIfNotPresent
+	}
+	switch cfg.RemotePolicy {
+	case ocicachev1alpha1.RemotePolicyAlways:
+		return cache.RemotePolicyAlways
+	default:
+		return cache.RemotePolicyIfNotPresent
+	}
 }

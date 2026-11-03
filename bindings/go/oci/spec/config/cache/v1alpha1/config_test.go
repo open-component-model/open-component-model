@@ -88,6 +88,18 @@ configurations:
 `,
 			wantErr: `unknown remotePolicy "always"`,
 		},
+		{
+			name: "rejects an unknown policy that a later entry overrides",
+			yaml: `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.cache.config.ocm.software/v1alpha1
+    remotePolicy: Never
+  - type: oci.cache.config.ocm.software/v1alpha1
+    remotePolicy: Always
+`,
+			wantErr: `unknown remotePolicy "Never"`,
+		},
 	}
 
 	for _, tt := range tests {

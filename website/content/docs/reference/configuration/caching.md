@@ -153,12 +153,18 @@ configurations:
     remotePolicy: Always
 ```
 
-| Field          | Type   | Default        | Description                                                         |
-|----------------|--------|----------------|---------------------------------------------------------------------|
-| `remotePolicy` | string | `IfNotPresent` | `IfNotPresent` or `Always`. Any other value makes the CLI fail.     |
+`remotePolicy` defaults to `IfNotPresent`. Any value other than `IfNotPresent` or `Always` makes the CLI fail, even
+if a later entry overrides it. If the configuration file contains more than one
+`oci.cache.config.ocm.software/v1alpha1` entry, the last `remotePolicy` that is set wins.
 
-If the configuration file contains more than one `oci.cache.config.ocm.software/v1alpha1` entry, the last
-`remotePolicy` that is set wins.
+The schema below defines the full structure of the `oci.cache.config.ocm.software/v1alpha1` type as specified by
+[JSON Schema 2020-12](https://json-schema.org/draft/2020-12/schema).
+
+---
+
+{{< schema-renderer url="/schemas/bindings/go/oci/cache/v1alpha1/Config.schema.json" >}}
+
+---
 
 ### Remote Policy in the Controller
 
@@ -172,7 +178,15 @@ manager:
     ociRemotePolicy: Always
 ```
 
-Any value other than `IfNotPresent` or `Always` stops the controller from starting.
+`ociRemotePolicy` is an enum with the following two values: `IfNotPresent` or `Always`. If you set the flag directly,
+any other value stops the controller from starting.
+
+{{< callout context="caution" title="IfNotPresent shares cached content across namespaces" icon="outline/alert-triangle" >}}
+The blob cache key is the digest, not the credentials. With `IfNotPresent`, a blob that one namespace fetched with its
+credentials is, potentially, read from the cache by another with the same digest, but no credentials.
+On a cluster where namespaces MUST NOT read each other's blobs, use `Always`. Every cache hit is then checked against
+the registry with the credentials of the requesting object.
+{{< /callout >}}
 
 ## Clearing the Cache
 

@@ -83,7 +83,7 @@ manager:
     # -- Maximum size of a single downloadable resource as a Kubernetes resource.Quantity (e.g. "2Mi", "512Ki"). "0" disables the limit.
     deployerDownloadMaxResourceSize: "2Mi"
     # -- When the shared OCI blob cache contacts the registry on a cache hit: IfNotPresent or Always.
-    ociRemotePolicy: IfNotPresent
+    ociRemotePolicy: IfNotPresent # @schema enum:[IfNotPresent, Always]
   ## Logging configuration (zap logger)
   logging:
     # -- Zap log level: 'debug', 'info', 'error', 'panic' or integer > 0

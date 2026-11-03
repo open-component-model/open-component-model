@@ -174,6 +174,13 @@ The controller accepts a fixed set of OCM configuration types and silently drops
 remote policy is set for the whole controller instead, see
 [Caching]({{< relref "docs/reference/configuration/caching.md#remote-policy-in-the-controller" >}}).
 
+{{<callout context="caution" title="Shared OCI cache" icon="outline/alert-triangle">}}
+One OCI blob cache serves every namespace. With the default remote policy `IfNotPresent`, cached manifests and
+component descriptors are returned without checking the registry first, so an object can read blobs that, potentially,
+it doesn't have credentials for. Use `Always` when namespaces MUST NOT share registry access. With `Always`, the cache
+will verify access, before serving a cached blob.
+{{</callout>}}
+
 ## Additional Status Fields
 
 The `Resource` object supports `additionalStatusFields`, a map of field names to [CEL](https://github.com/google/cel-spec) expressions evaluated against the resource descriptor:
