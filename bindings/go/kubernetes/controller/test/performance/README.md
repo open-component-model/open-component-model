@@ -25,18 +25,21 @@ The flow mirrors the e2e tasks (`test/e2e/setup/local`, `test/e2e`, `test/e2e/se
 
 ### In CI
 
-The `Controller: Performance Benchmark` workflow runs the same flow on demand (Actions, Run workflow). Its inputs
-map to `--scenarios`, `--objects` and `--repeats`; empty inputs use the benchmark defaults. The job summary shows
-`summary.md`, and the full results directory is uploaded as the `controller-performance-<run id>` artifact.
+The `Controller: Performance Benchmark` workflow runs the same flow in four ways. Every run shows `summary.md` in
+its job summary and uploads the results directory as an artifact.
 
-Maintainers can also benchmark a pull request's head commit with a comment whose first line is:
+| Trigger                   | Suite                                                                |
+|---------------------------|----------------------------------------------------------------------|
+| Nightly on `main`         | The standard suite: `--scenarios=complex --objects=1000 --repeats=3` |
+| Weekly on `main` (Sunday) | The full suite                                                       |
+| Actions, Run workflow     | Any `--scenarios`, `--objects` and `--repeats`                       |
+| `/perf` comment on a PR   | The standard suite, for the PR and for its base branch               |
 
-```text
-/perf --scenarios=complex --objects=1000 --repeats=3
-```
-
-Every flag is optional. The workflow reacts with 👀 when it sees the command, 🚀 when the run is launched, and 😕 when
-the comment has an invalid argument. When the run ends, it replies with ✅ or 🛑 and a link to the run.
+`/perf` takes no arguments, so every comparison runs the same suite. The workflow reacts with 👀 when it sees the
+command, 🚀 when the runs are launched, and 😕 when the comment has arguments. When both runs end, it replies with a
+table of the medians of both sides and the difference. Rows marked `*` depend on the runner, because the two sides
+run on different machines. A new `/perf` on the same pull request cancels the runs of the previous one. Only
+maintainers can trigger it.
 
 ## Structure
 

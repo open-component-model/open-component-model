@@ -15,9 +15,14 @@ on:
         description: "Repetitions of every scenario and object count. Empty uses 3. Higher count means better averages."
         type: string
         required: false
-  # A "/perf [--scenarios=...] [--objects=...] [--repeats=...]" comment on a pull request benchmarks its head commit.
+  # A "/perf" comment on a pull request benchmarks its head commit against the head of its base branch.
   issue_comment:
     types: [created]
+  schedule:
+    # Nightly: shorter run, ~30 minutes. This is also executed by the PR runs.
+    - cron: "0 2 * * 1-6"
+    # Weekly: the full suite..
+    - cron: "0 2 * * 0"
 
 permissions:
   contents: read
@@ -25,6 +30,8 @@ permissions:
 env:
   GO_MODULE_ROOT: "bindings/go"
   CONTROLLER_DIR: "bindings/go/kubernetes/controller"
+  # This is the configuration that is executed by the `/perf` command and the nightly run.
+  STANDARD_SUITE: "--scenarios=complex --objects=1000 --repeats=3"
 
 jobs:
   parse:
@@ -38,14 +45,13 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      # For the comment.
+      # For the reactions.
       pull-requests: write
     outputs:
       run: ${{ steps.parse.outputs.run }}
-      ref: ${{ steps.parse.outputs.ref }}
-      scenarios: ${{ steps.parse.outputs.scenarios }}
-      objects: ${{ steps.parse.outputs.objects }}
-      repeats: ${{ steps.parse.outputs.repeats }}
+      base_ref: ${{ steps.parse.outputs.base_ref }}
+      base_sha: ${{ steps.parse.outputs.base_sha }}
+      pr_sha: ${{ steps.parse.outputs.pr_sha }}
     steps:
       - name: Checkout scripts
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -62,16 +68,22 @@ jobs:
             await script.default({ github, context, core });
 
   benchmark:
-    name: Performance Benchmark
+    name: Performance Benchmark (${{ matrix.side }})
     needs: parse
     # A failed parse should not try to run the default branch.
-    if: ${{ !cancelled() && (github.event_name == 'workflow_dispatch' || (needs.parse.result == 'success' && needs.parse.outputs.run == 'true')) }}
+    if: ${{ !cancelled() && (github.event_name != 'issue_comment' || (needs.parse.result == 'success' && needs.parse.outputs.run == 'true')) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # /perf benchmarks the base branch and the pull request side by side, everything else runs once.
+        side: ${{ fromJSON(github.event_name == 'issue_comment' && '["base", "pr"]' || '["run"]') }}
     # Job level concurrency settings prevent a comment that never started a run from joining the concurrency group.
-    # Because runs can take long time we do not cancel an existing one.
+    # A new /perf on the same pull request cancels the previous one to preserve resources.
     concurrency:
-      group: controller-performance-${{ needs.parse.outputs.ref || github.ref }}
-      cancel-in-progress: false
-      queue: max
+      group: controller-performance-${{ github.event.issue.number && format('pr-{0}-{1}', github.event.issue.number, matrix.side) || github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'issue_comment' }}
+      # GitHub rejects queue: max together with cancel-in-progress: true.
+      queue: ${{ github.event_name == 'issue_comment' && 'single' || 'max' }}
     runs-on: ubuntu-26.04-arm
     # The hosted runner maximum. Hitting it cancels the job, which skips the report steps, so the step
     # limits below add up to 355 (5 x 5 tools, 25 setup, 290 benchmark, 5 + 10 report), leaving 5 for the runner.
@@ -81,8 +93,8 @@ jobs:
         timeout-minutes: 5
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # Empty for workflow_dispatch, which checks out the selected branch.
-          ref: ${{ needs.parse.outputs.ref }}
+          # Empty outside of /perf, which checks out the selected or scheduled branch.
+          ref: ${{ matrix.side == 'base' && needs.parse.outputs.base_sha || needs.parse.outputs.pr_sha }}
           persist-credentials: false
 
       - name: Setup Go
@@ -119,14 +131,21 @@ jobs:
       - name: Run benchmark
         timeout-minutes: 290
         env:
-          SCENARIOS: ${{ needs.parse.outputs.scenarios || inputs.scenarios }}
-          OBJECTS: ${{ needs.parse.outputs.objects || inputs.objects }}
-          REPEATS: ${{ needs.parse.outputs.repeats || inputs.repeats }}
+          EVENT: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
+          SCENARIOS: ${{ inputs.scenarios }}
+          OBJECTS: ${{ inputs.objects }}
+          REPEATS: ${{ inputs.repeats }}
         run: |
           args=()
-          [ -n "${SCENARIOS}" ] && args+=("--scenarios=${SCENARIOS}")
-          [ -n "${OBJECTS}" ] && args+=("--objects=${OBJECTS}")
-          [ -n "${REPEATS}" ] && args+=("--repeats=${REPEATS}")
+          if [ "${EVENT}" = "workflow_dispatch" ]; then
+            [ -n "${SCENARIOS}" ] && args+=("--scenarios=${SCENARIOS}")
+            [ -n "${OBJECTS}" ] && args+=("--objects=${OBJECTS}")
+            [ -n "${REPEATS}" ] && args+=("--repeats=${REPEATS}")
+          elif [ "${SCHEDULE}" != "0 2 * * 0" ]; then
+            # Everything but the weekly full suite.
+            read -r -a args <<< "${STANDARD_SUITE}"
+          fi
           task ${{ env.CONTROLLER_DIR }}:test/performance -- "${args[@]}"
 
       # This step writes the job's summary.md to the summary page of the run.
@@ -146,33 +165,52 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: controller-performance-${{ github.run_id }}
+          name: controller-performance-${{ github.run_id }}-${{ matrix.side }}
           path: ${{ env.CONTROLLER_DIR }}/test/performance/results/
           if-no-files-found: warn
 
   report:
     name: Report to pull request
     needs: [parse, benchmark]
-    if: ${{ always() && needs.parse.result == 'success' && needs.parse.outputs.run == 'true' }}
+    # A cancelled run was replaced by a newer /perf, which reports instead.
+    if: ${{ always() && needs.parse.result == 'success' && needs.parse.outputs.run == 'true' && needs.benchmark.result != 'cancelled' }}
     runs-on: ubuntu-26.04-arm
     timeout-minutes: 5
     permissions:
-      # for the comment.
+      contents: read
+      actions: read
+      # For the comment.
       pull-requests: write
     steps:
-      - name: Comment result
+      - name: Checkout scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Download base results
+        if: needs.benchmark.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: controller-performance-${{ github.run_id }}-base
+          path: results/base
+
+      - name: Download pull request results
+        if: needs.benchmark.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: controller-performance-${{ github.run_id }}-pr
+          path: results/pr
+
+      - name: Comment comparison
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          PR: ${{ github.event.issue.number }}
+          BASE_REF: ${{ needs.parse.outputs.base_ref }}
+          BASE_SHA: ${{ needs.parse.outputs.base_sha }}
+          PR_SHA: ${{ needs.parse.outputs.pr_sha }}
           RESULT: ${{ needs.benchmark.result }}
-          SHA: ${{ needs.parse.outputs.ref }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          case "${RESULT}" in
-            success) status="✅ Performance run passed" ;;
-            cancelled) status="🛑 Performance run was cancelled" ;;
-            *) status="🛑 Performance run failed" ;;
-          esac
-          gh api --method POST "repos/${REPO}/issues/${PR}/comments" \
-            -f body="${status} for ${SHA:0:7}: ${RUN_URL}" > /dev/null
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/perf-compare.js');
+            await script.default({ github, context });

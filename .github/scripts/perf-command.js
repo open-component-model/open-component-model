@@ -1,43 +1,28 @@
 // @ts-check
 
-// Comment flags and the benchmark flag each one sets.
-/** @type {Record<string, string>} */
-const FLAGS = {
-  "--scenarios": "scenarios",
-  "--scenario": "scenarios",
-  "--objects": "objects",
-  "--repeats": "repeats",
-};
-
 /**
- * Parse a "/perf [--scenarios=...] [--objects=...] [--repeats=...]" comment.
+ * Check whether a comment is the "/perf" command. Only the first line is read.
  *
- * @param {string} body - The comment body. Only the first line is read.
- * @returns {Record<string,string> | null} The given flags, or null when the comment is not a /perf command.
+ * @param {string} body - The comment body.
+ * @returns {boolean} true for "/perf", false for any other comment.
+ * @throws when "/perf" has arguments: the suite is fixed so every run is comparable.
  */
-export function parsePerfCommand(body) {
+export function isPerfCommand(body) {
   const [command, ...args] = body.split("\n")[0].trim().split(/\s+/);
   if (command !== "/perf") {
-    return null;
+    return false;
   }
-
-  /** @type {Record<string, string>} */
-  const flags = {};
-  for (const arg of args) {
-    const [name, value] = arg.split("=", 2);
-    if (!Object.hasOwn(FLAGS, name) || !value) {
-      throw new Error(`invalid argument: ${arg}`);
-    }
-    flags[FLAGS[name]] = value;
+  if (args.length > 0) {
+    throw new Error(`/perf takes no arguments, got: ${args.join(" ")}`);
   }
-  return flags;
+  return true;
 }
 
 /**
- * github-script entry point: turn a /perf comment into the benchmark job's inputs.
+ * github-script entry point: turn a /perf comment into the two commits to benchmark.
  *
- * Sets the outputs run, ref, scenarios, objects and repeats, and reacts to the
- * comment: 👀 when seen, 🚀 when launched, 😕 when invalid.
+ * Sets the outputs run, base_ref, base_sha and pr_sha, and reacts to the comment:
+ * 👀 when seen, 🚀 when launched, 😕 when invalid.
  *
  * @param {object} deps
  * @param {import("@actions/github-script").AsyncFunctionArguments["github"]} deps.github
@@ -51,25 +36,24 @@ export default async function perfCommand({ github, context, core }) {
   const react = (content) =>
     github.rest.reactions.createForIssueComment({ owner, repo, comment_id: comment.id, content });
 
-  let flags;
+  let run;
   try {
-    flags = parsePerfCommand(comment.body);
+    run = isPerfCommand(comment.body);
   } catch (err) {
     await react("confused");
     core.setFailed(String(err));
     return;
   }
-  if (!flags) {
-    core.setOutput("run", "false");
+  core.setOutput("run", String(run));
+  if (!run) {
     return;
   }
   await react("eyes");
 
   const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: issue.number });
-  core.setOutput("run", "true");
-  core.setOutput("ref", pr.head.sha);
-  for (const name of ["scenarios", "objects", "repeats"]) {
-    core.setOutput(name, flags[name] ?? "");
-  }
+  const { data: base } = await github.rest.repos.getBranch({ owner, repo, branch: pr.base.ref });
+  core.setOutput("base_ref", pr.base.ref);
+  core.setOutput("base_sha", base.commit.sha);
+  core.setOutput("pr_sha", pr.head.sha);
   await react("rocket");
 }
