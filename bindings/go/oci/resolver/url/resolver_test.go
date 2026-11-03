@@ -537,7 +537,7 @@ func TestURLPathResolver_DynamicCacheSwapping(t *testing.T) {
 // Regression: caching must preserve chunked/streaming pushes and keep an Unwrap
 // chain that pack's global-store detection can follow to a global store.
 func TestURLPathResolver_CachingPreservesStreamingPusher(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	resolver, err := url.New(
 		url.WithBaseURL("http://example.com"),
 		url.WithChunkedPush(4<<20, 8<<20),
