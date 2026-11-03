@@ -8,7 +8,8 @@
  * @throws when "/perf" has arguments: the suite is fixed so every run is comparable.
  */
 export function isPerfCommand(body) {
-  const [command, ...args] = body.split("\n")[0].trim().split(/\s+/);
+  // trimEnd, not trim: the workflow only starts this job for comments that begin with "/perf".
+  const [command, ...args] = body.split("\n")[0].trimEnd().split(/\s+/);
   if (command !== "/perf") {
     return false;
   }

@@ -11,6 +11,7 @@ test("/perf is a command, also with more lines below", () => {
 test("other comments are not commands", () => {
   assert.strictEqual(isPerfCommand("/performance is great"), false);
   assert.strictEqual(isPerfCommand("lgtm"), false);
+  assert.strictEqual(isPerfCommand(" /perf"), false);
 });
 
 test("arguments are rejected", () => {
