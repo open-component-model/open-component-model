@@ -6,9 +6,11 @@ toc: true
 hasMermaid: true
 ---
 
-OCM has no storage format of its own. It is designed to store component versions in established storage technologies.
-Today, that technology is **[OCI](https://github.com/opencontainers/image-spec)**: component versions live in OCI
-registries, or in a **Common Transport Format (CTF)** archive, OCM's file system representation of an OCI registry.
+OCM has no storage format of its own. It is designed to store component versions in established content-addressable
+storage technologies. Currently, the only supported technology is **[OCI](https://github.com/opencontainers/image-spec)**.
+
+Component versions live in **[OCI registries](https://github.com/opencontainers/distribution-spec/)**, or in a
+**Common Transport Format (CTF)** archive, OCM's file system representation of an OCI registry.
 
 This page explains how a component version and its local blobs map to OCI artifacts, what you see in a registry after
 `ocm add cv` or `ocm transfer cv`, and why an embedded image can be pulled with `docker`, `oras`, or `crane`.
