@@ -35,6 +35,9 @@
                         },
                         "deployerDownloadSize": {
                             "type": "integer"
+                        },
+                        "ociRemotePolicy": {
+                            "type": "string"
                         }
                     }
                 },

@@ -170,7 +170,9 @@ The controller accepts a fixed set of OCM configuration types and silently drops
 | `transfer.config.ocm.software`    | replication settings                                                                                                           |
 | `http.config.ocm.software`        | HTTP client timeouts, retries, per-host overrides, and `insecureSkipVerify` for local registries with self-signed certificates |
 
-`filesystem.config.ocm.software` is deliberately **not** accepted.
+`filesystem.config.ocm.software` and `oci.cache.config.ocm.software` are deliberately **not** accepted. The OCI cache
+remote policy is set for the whole controller instead, see
+[Caching]({{< relref "docs/reference/configuration/caching.md#remote-policy-in-the-controller" >}}).
 
 ## Additional Status Fields
 

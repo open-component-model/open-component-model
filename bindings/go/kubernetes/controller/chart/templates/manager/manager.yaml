@@ -146,6 +146,9 @@ spec:
                     {{- if hasKey . "deployerDownloadMaxResourceSize" }}
                     - --deployer-download-max-resource-size={{ .deployerDownloadMaxResourceSize }}
                     {{- end }}
+                    {{- if .ociRemotePolicy }}
+                    - --oci-cache-remote-policy={{ .ociRemotePolicy }}
+                    {{- end }}
                     {{- end }}
                     {{- /* Deployers */}}
                     {{- /* dig: a helm upgrade --reuse-values from a release without these keys must not fail */}}

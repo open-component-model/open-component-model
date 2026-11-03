@@ -11,10 +11,10 @@ aliases:
 This page is the technical reference for the on-disk caches OCM uses when it reads component versions from OCI
 registries.
 
-{{< callout context="note" title="No dedicated configuration type" >}}
-OCM has no caching configuration type. The CLI and the controller enable caching by default, and the
-limits and remote policy are fixed. The only thing you can set is **where** the cache lives, through the
-temporary folder described in [Cache Location](#cache-location).
+{{< callout context="note" title="What you can configure" >}}
+The CLI and the controller enable caching by default, and the limits are fixed. You can set **where** the cache
+lives, through the temporary folder described in [Cache Location](#cache-location), and the
+[remote policy](#remote-policy).
 {{< /callout >}}
 
 ## Caches
@@ -34,6 +34,8 @@ writes the blob to disk.
 The reference cache has one instance per repository location (`hostname[:port]/path`). Credentials are not part of
 the key, so rotating short-lived tokens does not make the cache useless. Use the `Always` [remote policy](#remote-policy)
 when every access must be authorized by the registry.
+
+The controller uses only the blob cache. One instance serves every namespace.
 
 Resource layers, such as the image layers of an OCI image resource, are **not** cached. Only the blobs listed in
 [Admission Rules](#admission-rules) are cached.
@@ -93,17 +95,17 @@ The controller does not accept `filesystem.config.ocm.software` (see
 operating system, so the cache is stored under `$TMPDIR` (or `/tmp`) of the controller container.
 
 If the root filesystem of the container is read-only, mount a writable volume at that path, or set `TMPDIR` to a
-writable volume. If the cache directory cannot be created, the controller logs a warning and continues without caching.
+writable volume. If the cache directory cannot be created, the controller does not start.
 
 ## Limits
 
 Each cache applies these limits:
 
-| Limit             | Value   | Applies to                       | Behaviour                                                            |
-|-------------------|---------|----------------------------------|----------------------------------------------------------------------|
-| Maximum entries   | `256`   | Blob cache, each reference cache | When the limit is reached, the least recently used entry is removed. |
-| Time to live      | `10m`   | Blob cache, each reference cache | Entries older than this are removed.                                 |
-| Maximum blob size | `4 MiB` | Blob cache                       | Larger blobs are downloaded as usual but not cached.                 |
+| Limit             | Value                                     | Applies to                       | Behaviour                                                            |
+|-------------------|-------------------------------------------|----------------------------------|----------------------------------------------------------------------|
+| Maximum entries   | `100000` (blob), `10000` (each reference) | Blob cache, each reference cache | When the limit is reached, the least recently used entry is removed. |
+| Time to live      | `10m`                                     | Blob cache, each reference cache | Entries older than this are removed.                                 |
+| Maximum blob size | `20 MiB`                                  | Blob cache                       | Larger blobs are downloaded as usual but not cached.                 |
 
 When the blob cache removes an entry, it also deletes the file. When a reference cache is loaded from disk,
 entries resolved more than `10m` ago are not loaded. When the blob cache is loaded from disk, every valid file is
@@ -122,13 +124,8 @@ All other blobs are downloaded from the registry every time.
 
 ## Remote Policy
 
-The remote policy decides whether OCM contacts the registry when it finds an entry in the cache. It is fixed per
-component:
-
-| Component  | Policy         |
-|------------|----------------|
-| CLI        | `IfNotPresent` |
-| Controller | `Always`       |
+The remote policy decides whether OCM contacts the registry when it finds an entry in the cache. The default is
+`IfNotPresent` for both the CLI and the controller.
 
 | Policy         | Blob cache hit                                                                                                                                                 | Reference cache                                                                              |
 |----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------|
@@ -139,10 +136,43 @@ With `IfNotPresent`, anyone who can read the cache directory can read cached man
 without registry access. On macOS `$TMPDIR` is per user, but on Linux the default `/tmp` is shared by all users. On
 shared machines, set `tempFolder` or `--temp-folder` to a directory that only you can read.
 
-With `Always`, the controller asks the registry to authorize every access, but does not download cached content again.
+With `Always`, OCM asks the registry to authorize every access, but does not download cached content again.
 
 A tag that has been moved to a new digest is never served from the cache under either policy, because tags are always
 resolved against the registry.
+
+### Remote Policy in the CLI
+
+Set the policy with the `oci.cache.config.ocm.software/v1alpha1` configuration type. It applies to the blob cache and
+every reference cache.
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: oci.cache.config.ocm.software/v1alpha1
+    remotePolicy: Always
+```
+
+| Field          | Type   | Default        | Description                                                         |
+|----------------|--------|----------------|---------------------------------------------------------------------|
+| `remotePolicy` | string | `IfNotPresent` | `IfNotPresent` or `Always`. Any other value makes the CLI fail.     |
+
+If the configuration file contains more than one `oci.cache.config.ocm.software/v1alpha1` entry, the last
+`remotePolicy` that is set wins.
+
+### Remote Policy in the Controller
+
+The controller does not accept `oci.cache.config.ocm.software`, because one blob cache serves every namespace and a
+configuration referenced by a single object must not change it. Set the policy for the whole controller with the
+`manager.cache.ociRemotePolicy` Helm value, which sets the `--oci-cache-remote-policy` flag:
+
+```yaml
+manager:
+  cache:
+    ociRemotePolicy: Always
+```
+
+Any value other than `IfNotPresent` or `Always` stops the controller from starting.
 
 ## Clearing the Cache
 

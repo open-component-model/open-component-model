@@ -67,13 +67,14 @@ func WithBlobCache(bc *ocicache.BlobCache) PluginOption {
 
 // NewBlobCache creates the blob cache to pass to [WithBlobCache]. There is no reference cache:
 // it never serves tag lookups from cache, and those are what the controller resolves.
-func NewBlobCache(tempDir string) (*ocicache.BlobCache, error) {
+// An empty remotePolicy uses the cache default.
+func NewBlobCache(tempDir string, remotePolicy ocicache.RemotePolicy) (*ocicache.BlobCache, error) {
 	if tempDir == "" {
 		tempDir = os.TempDir()
 	}
 	return ocicache.NewBlobCache(ocicache.Options{
 		Dir:          filepath.Join(tempDir, "ocm-oci-cas"),
-		RemotePolicy: ocicache.RemotePolicyIfNotPresent,
+		RemotePolicy: remotePolicy,
 	})
 }
 

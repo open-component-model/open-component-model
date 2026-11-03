@@ -98,7 +98,7 @@ func startResourceController(t *testing.T) client.Client {
 	// sharing one blob cache.
 	pluginLogger := slog.New(logr.ToSlogHandler(logger))
 	tempDir := t.TempDir()
-	blobCache, err := setup.NewBlobCache(tempDir)
+	blobCache, err := setup.NewBlobCache(tempDir, "")
 	r.NoError(err)
 	newPluginManager := func(ctx context.Context, cfg *genericv1.Config) (*manager.PluginManager, error) {
 		return setup.NewPluginManager(ctx, cfg, pluginLogger, setup.WithTempDir(tempDir), setup.WithBlobCache(blobCache))

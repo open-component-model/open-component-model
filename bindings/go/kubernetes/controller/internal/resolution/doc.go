@@ -6,7 +6,7 @@
 // Create a [Resolver] during controller setup using [NewResolver].
 //
 //	resolver := resolution.NewResolver(logger)
-//	blobCache, err := setup.NewBlobCache(tempDir) // one per process
+//	blobCache, err := setup.NewBlobCache(tempDir, "") // one per process
 //
 // To fetch a component version, call [Resolver.GetComponentVersion] with [Options] and a [Verification]:
 //

@@ -40,6 +40,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
+	ocicache "ocm.software/open-component-model/bindings/go/oci/cache"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 )
@@ -77,6 +78,7 @@ func main() {
 		enableHTTP2               bool
 		deployerDownloadCacheSize int
 		deployerMaxResourceSize   string
+		ociCacheRemotePolicy      string
 		repositoryConcurrency     int
 		componentConcurrency      int
 		resourceConcurrency       int
@@ -118,6 +120,8 @@ func main() {
 		"The maximum size of the deployer download object LRU cache.")
 	flag.StringVar(&deployerMaxResourceSize, "deployer-download-max-resource-size", defaultMaxResourceSize,
 		"Maximum size of a single downloadable resource as a Kubernetes resource.Quantity (e.g. \"2Mi\", \"512Ki\"). \"0\" disables the limit.")
+	flag.StringVar(&ociCacheRemotePolicy, "oci-cache-remote-policy", string(ocicache.RemotePolicyIfNotPresent),
+		"When the OCI blob cache contacts the registry on a cache hit: IfNotPresent or Always.")
 	flag.IntVar(&repositoryConcurrency, "repository-controller-concurrency", 4, //nolint:mnd // no magic number
 		"The repository controller concurrency. This is the number of active repository controller workers that can be kept alive.")
 	flag.IntVar(&componentConcurrency, "component-controller-concurrency", 4, //nolint:mnd // no magic number
@@ -272,7 +276,7 @@ func main() {
 	// Plugins use object config so they need to be request based.
 	pluginLogger := slog.New(logr.ToSlogHandler(setupLog))
 	// The blob cache owns its directory on disk, so the per-request plugin managers share one instance.
-	blobCache, err := setup.NewBlobCache("")
+	blobCache, err := setup.NewBlobCache("", ocicache.RemotePolicy(ociCacheRemotePolicy))
 	if err != nil {
 		setupLog.Error(err, "failed to create OCI blob cache")
 		os.Exit(1)
