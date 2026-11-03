@@ -104,7 +104,7 @@ flowchart LR
 7. **Reject partial digests**: A digest must be complete or absent. Missing fields are never inferred.
 8. **Digests never change on transfer**: A transfer copies every digest unchanged into the target descriptor, including its absence and the exclusion marker, and rejects a partial one. A transfer whose target content would need a different digest, such as converting a Helm chart into an OCI artifact or an OCI artifact into a file on a non-OCI target, fails. The child descriptor therefore never changes, so a parent's reference digest stays valid.
 
-Packing verifies a blob digest against the packed bytes and an OCI artifact digest against the root manifest of the layout; the descriptor digests in that manifest cover every other blob in the archive while it is copied. A digest with an unknown label can be verified neither when packing nor when downloading, so it is rejected rather than kept as an unverifiable claim or replaced, which would change signed metadata.
+Packing verifies a blob digest against the packed bytes, and an OCI artifact digest against the root manifest of the layout or artifact set, never against the archive bytes. Copying the artifact walks its graph and checks every node against its descriptor digest, so a matching root cannot vouch for substituted layers. A digest with an unknown label can be verified neither when packing nor when downloading, so it is rejected rather than kept as an unverifiable claim or replaced, which would change signed metadata.
 
 #### Out of Scope
 
