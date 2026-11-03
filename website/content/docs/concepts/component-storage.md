@@ -29,15 +29,41 @@ Other storage technologies, such as object storage like S3, might be supported i
 
 ## How It Works
 
-A component version is stored as an **OCI artifact graph**: an OCI manifest or index that carries the component
-descriptor and every resource stored *by value* (a local blob).
+A component version is stored as an **OCI artifact graph** that carries the component descriptor and every resource
+stored *by value* (a local blob). The graph takes one of two forms, depending on the local blobs. OCM picks the form
+the content needs, and readers accept both.
+
+{{< tabs "cv-storage-form" >}}
+{{< tab "Manifest" >}}
+
+Used when no local blob is an OCI artifact. The tag points directly to the **descriptor manifest**, which holds a
+config, the component descriptor as a layer, and one layer per local blob.
+
+```mermaid
+flowchart TD
+    tag["Tag 1.0.0<br/>component-descriptors/github.com/acme.org/demo"] --> dm
+
+    subgraph cv["Component version"]
+        dm["Descriptor manifest"]
+        dm --> cfg["Config<br/>component.config.v1+json"]
+        dm --> cd["Layer: component descriptor"]
+        dm --> lb["Layer: local blob<br/>(plain file, directory, …)"]
+    end
+```
+
+{{< /tab >}}
+{{< tab "Index" >}}
+
+Used as soon as one local blob is an OCI artifact: an image, a Helm chart, or any OCI image layout. The tag points to an
+OCI **index**. Its entries are the descriptor manifest, annotated `software.ocm.descriptor`, and the manifest or index
+of each embedded artifact. Local blobs that are plain files stay layers of the descriptor manifest.
 
 ```mermaid
 flowchart TD
     tag["Tag 1.0.0<br/>component-descriptors/github.com/acme.org/demo"] --> idx
 
     subgraph cv["Component version"]
-        idx["OCI index<br/>(component version)"]
+        idx["OCI index"]
         idx --> dm["Descriptor manifest<br/>software.ocm.descriptor"]
         idx --> img["Image index / manifest<br/>(local blob: app-image)"]
         dm --> cfg["Config<br/>component.config.v1+json"]
@@ -47,11 +73,11 @@ flowchart TD
     end
 ```
 
-A tag resolves to the component version. The **descriptor manifest** holds the component descriptor as a layer, plus
-one layer per local blob that is a plain file. Each local blob that is itself an OCI artifact (an image, a Helm
-chart, any OCI image layout) is stored as its own manifest or index, referenced next to the descriptor manifest in the
-component version's **index**. The descriptor points to both kinds of local blob in the same way: `localReference` is
-the digest of the layer, manifest, or index that holds the content.
+{{< /tab >}}
+{{< /tabs >}}
+
+In both forms, the descriptor points to a local blob the same way: `localReference` is the digest of the layer,
+manifest, or index that holds the content.
 
 ### Repository and Version Mapping
 
@@ -64,16 +90,6 @@ A component name maps to an OCI repository below the repository's base path, and
 For example, `github.com/acme.org/demo` in version `1.0.0` in `ghcr.io/acme/ocm` is stored at
 `ghcr.io/acme/ocm/component-descriptors/github.com/acme.org/demo:1.0.0`. All versions of a component, and all local
 blobs of those versions, live in this one OCI repository.
-
-### Manifest or Index
-
-A component version is stored in one of two forms:
-
-- **Manifest:** used when no local blob is an OCI artifact. The tag points directly to the descriptor manifest.
-- **Index:** used as soon as one local blob is an OCI artifact. The tag points to an OCI index whose entries are the
-  descriptor manifest (annotated `software.ocm.descriptor`) and the manifests or indexes of the embedded artifacts.
-
-Readers accept both forms, so you don't choose one; OCM picks the form the content needs.
 
 ### Two Shapes of Local Blob
 
