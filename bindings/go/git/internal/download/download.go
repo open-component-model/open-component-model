@@ -582,8 +582,10 @@ func TransportError(ctx context.Context, operation string, err error) error {
 	}
 }
 
-// userinfo matches the credentials a quoted remote URL carries into an error.
-var userinfo = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.\-]*://)[^/@\s]+@`)
+// userinfo matches the credentials a quoted remote URL carries into an error. Like
+// url.Parse it ends userinfo at the last @ of the authority, so a password holding @ is
+// redacted whole.
+var userinfo = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.\-]*://)[^/?#\s]+@`)
 
 // maxCauseLength bounds the cause: go-git puts the whole response body of an
 // unrecognised status into its error.
