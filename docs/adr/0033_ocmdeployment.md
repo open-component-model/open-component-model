@@ -501,13 +501,10 @@ independent mechanisms.
 * **Localization** uses the `images` transformer, not patches (see [Localization](#localization)).
 * **Configuration** uses JSON6902 / strategic-merge patches against the rendered manifests, rendered
   into the sibling field Flux `Kustomization.spec.patches` / Argo `source.kustomize.patches` (both
-  engines support it; see
-  [`examples/deployment/flux-kustomize/`](../../bindings/go/kubernetes/controller/examples/deployment/flux-kustomize/)
-  and [`examples/deployment/argo-kustomize/`](../../bindings/go/kubernetes/controller/examples/deployment/argo-kustomize/)).
-  `config` and `configResources` each carry a top-level `patches` list (`{patch: <string>, target:
-  {…}}` entries, JSON6902 or strategic-merge) passed through verbatim into that field. Because `config`
-  is typed `+kubebuilder:validation:Type=object`, inline kustomize config must be an object —
-  `{"patches": [ … ]}`, never a bare top-level array.
+  engines support it). `config` and `configResources` each carry a top-level `patches` list
+  (`{patch: <string>, target: {…}}` entries, JSON6902 or strategic-merge) passed through verbatim into
+  that field. Because `config` is typed `+kubebuilder:validation:Type=object`, inline kustomize config
+  must be an object — `{"patches": [ … ]}`, never a bare top-level array.
 
 Patch ordering: entries from `configResources` come first (in spec order), then entries from inline
 `config` last — later patches apply after earlier ones. A config source that does not contain a valid
