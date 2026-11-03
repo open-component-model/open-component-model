@@ -58,9 +58,6 @@
   },
   "overrides": {
     "adm-zip": "0.6.1",
-    "katex": "^0.19.0",
-    "semver": "^7.5.4",
-    "brace-expansion": "^5.0.8",
     "minimatch@<11.0.1": "11.0.1",
     "eslint-config-developit": {
       "eslint-plugin-compat": {
