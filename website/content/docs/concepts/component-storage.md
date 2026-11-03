@@ -28,7 +28,6 @@ could be confused, and *descriptor* on its own always means the component descri
 | ---- | ----- | ------- |
 | Component version | OCM | A versioned component. Stored as one OCI manifest or one OCI index. |
 | Component descriptor | OCM | The document that describes a component version: its resources, sources, references, and how to access them. Not an OCI descriptor. |
-| Component config | OCM on OCI | The OCI config of the component descriptor's OCI manifest. Points to the component descriptor layer. |
 | Local blob | OCM | A resource or source stored *by value*, next to the component descriptor. Stored as one OCI layer, or as a whole OCI artifact. |
 | Artifact (OCM) | OCM | A resource or source of a component version, as in the `software.ocm.artifact` annotation. |
 | OCM repository | OCM | Where component versions are stored: an OCI registry plus an optional path, or a CTF archive. Holds many components. |
@@ -61,7 +60,8 @@ needs, and readers accept both.
 {{< tab "Manifest" >}}
 
 Used when no local blob is an OCI artifact. The tag points directly to the **component descriptor's OCI manifest**. Its
-OCI config is the component config, and its OCI layers are the component descriptor and one layer per local blob.
+OCI layers are the component descriptor and one layer per local blob, and its OCI config points to the component
+descriptor layer.
 
 ```mermaid
 flowchart TD
@@ -69,7 +69,7 @@ flowchart TD
 
     subgraph cv["Component version"]
         dm["OCI manifest<br/>of the component descriptor"]
-        dm --> cfg["OCI config:<br/>component config"]
+        dm --> cfg["OCI config<br/>(points to the<br/>component descriptor)"]
         dm --> cd["OCI layer:<br/>component descriptor"]
         dm --> lb["OCI layer:<br/>local blob settings"]
     end
@@ -91,7 +91,7 @@ are left out.
   "mediaType": "application/vnd.oci.image.manifest.v1+json",
   // Marks the OCI manifest as an OCM component version
   "artifactType": "application/vnd.ocm.software.component-descriptor.v2",
-  // OCI descriptor of the component config
+  // OCI descriptor of the OCI config, which points to the component descriptor layer
   "config": {
     "mediaType": "application/vnd.ocm.software.component.config.v1+json",
     "digest": "sha256:207bdf5c…",
@@ -121,7 +121,7 @@ are left out.
 }
 ```
 
-The component config holds nothing but the OCI descriptor of the component descriptor layer:
+The OCI config holds nothing but the OCI descriptor of the component descriptor layer:
 
 ```json
 {
@@ -151,7 +151,7 @@ flowchart TD
         idx["OCI index"]
         idx --> dm["OCI manifest<br/>of the component descriptor<br/>(first entry)"]
         idx --> img["OCI index<br/>(local blob app-image)"]
-        dm --> cfg["OCI config:<br/>component config"]
+        dm --> cfg["OCI config<br/>(points to the<br/>component descriptor)"]
         dm --> cd["OCI layer:<br/>component descriptor"]
         dm --> lb["OCI layer:<br/>local blob settings"]
         img --> imgm["OCI manifests, configs,<br/>and layers of the image"]
@@ -285,7 +285,7 @@ transport-archive/
 └── blobs/
     ├── sha256.e940ef51…         # OCI index of the component version (tag 1.0.0)
     ├── sha256.b293e5c8…         # OCI manifest of the component descriptor
-    ├── sha256.58d34857…         # component config
+    ├── sha256.58d34857…         # OCI config of that OCI manifest
     ├── sha256.e9a6352b…         # component descriptor
     ├── sha256.5891b5b5…         # local blob "settings" (OCI layer)
     ├── sha256.262578cd…         # local blob "app-image" (OCI index)
