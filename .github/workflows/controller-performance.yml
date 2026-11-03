@@ -33,41 +33,47 @@ jobs:
   benchmark:
     name: Performance Benchmark
     runs-on: ubuntu-26.04-arm
-    # The hosted runner maximum. Hitting it cancels the job, which skips the report steps.
+    # The hosted runner maximum. Hitting it cancels the job, which skips the report steps, so the step
+    # limits below add up to 355 (5 x 5 tools, 25 setup, 290 benchmark, 5 + 10 report), leaving 5 for the runner.
     timeout-minutes: 360
     steps:
       - name: Checkout
+        timeout-minutes: 5
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Setup Go
+        timeout-minutes: 5
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: ${{ env.GO_MODULE_ROOT }}/go.mod
           cache-dependency-path: ${{ env.GO_MODULE_ROOT }}/go.sum
 
       - name: Install Task
+        timeout-minutes: 5
         uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup docker/buildx
+        timeout-minutes: 5
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       - name: Install Helm
+        timeout-minutes: 5
         uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
           # renovate: datasource=github-releases depName=helm/helm
           version: v4.3.0
 
       - name: Set up cluster and registry
+        timeout-minutes: 25
         run: task ${{ env.CONTROLLER_DIR }}:test/performance/setup/local
 
       - name: Run benchmark
-        # Below the job timeout, so a timed-out benchmark still gets its summary and artifact.
-        timeout-minutes: 330
+        timeout-minutes: 290
         env:
           SCENARIOS: ${{ inputs.scenarios }}
           OBJECTS: ${{ inputs.objects }}
@@ -81,6 +87,7 @@ jobs:
 
       # This step writes the job's summary.md to the summary page of the run.
       - name: Publish summary
+        timeout-minutes: 5
         if: ${{ !cancelled() }}
         run: |
           summary="$(ls -d ${{ env.CONTROLLER_DIR }}/test/performance/results/*/summary.md 2>/dev/null | tail -n1)"
@@ -91,6 +98,7 @@ jobs:
           { echo "### Controller performance"; echo; cat "${summary}"; } >> "${GITHUB_STEP_SUMMARY}"
 
       - name: Upload results
+        timeout-minutes: 10
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
