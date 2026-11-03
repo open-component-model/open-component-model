@@ -187,7 +187,8 @@ deliberately not used, so there is a single SA-owned creator. The namespace dele
 explicit `Delete` through that service account, not the ApplySet prune sweep (which covers the
 namespaced members). Consequently the SA-gone delete fallback — which strips labels with the
 controller's own client — releases only the namespaced engine members and leaves any `Namespace`
-member untouched; the controller holds no namespace-write RBAC.
+member untouched; the controller holds no namespace-write RBAC, so an operator must remove the
+namespace manually in this case.
 
 `namespace.targetNamespace` selects where the engine places workloads (Flux `HelmRelease`/`Kustomization`
 `spec.targetNamespace`; Argo `Application.spec.destination.namespace`), not where the deploy object
