@@ -513,3 +513,21 @@ func newRepository(t *testing.T) repositoryFixture {
 		Second: second,
 	}
 }
+
+func TestRedactURL(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"https://user:token@example.invalid/org/repo.git", "https://xxxxx@example.invalid/org/repo.git"},
+		{"https://token@example.invalid/org/repo.git", "https://xxxxx@example.invalid/org/repo.git"},
+		{"ssh://git@example.invalid/org/repo.git", "ssh://xxxxx@example.invalid/org/repo.git"},
+		{"https://user:p@ss@example.invalid/org/repo.git", "https://xxxxx@example.invalid/org/repo.git"},
+		{"https://example.invalid/org/a@b.git", "https://example.invalid/org/a@b.git"},
+		{"https://example.invalid?ref=a@b", "https://example.invalid?ref=a@b"},
+		{"https://example.invalid/org/repo.git", "https://example.invalid/org/repo.git"},
+		{"/srv/git/repo.git", "/srv/git/repo.git"},
+	} {
+		t.Run(tc.in, func(t *testing.T) {
+			r := require.New(t)
+			r.Equal(tc.want, RedactURL(tc.in))
+		})
+	}
+}
