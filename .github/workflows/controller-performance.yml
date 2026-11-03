@@ -19,10 +19,8 @@ on:
   issue_comment:
     types: [created]
   schedule:
-    # Nightly: shorter run, ~30 minutes. This is also executed by the PR runs.
-    - cron: "0 2 * * 1-6"
-    # Weekly: the full suite..
-    - cron: "0 2 * * 0"
+    # Nightly: the standard suite, ~30 minutes, the same one /perf runs. Sundays run the full suite instead.
+    - cron: "0 2 * * *"
 
 permissions:
   contents: read
@@ -84,6 +82,8 @@ jobs:
       cancel-in-progress: ${{ github.event_name == 'issue_comment' }}
       # GitHub rejects queue: max together with cancel-in-progress: true.
       queue: ${{ github.event_name == 'issue_comment' && 'single' || 'max' }}
+    # /perf runs pull request code in the default branch cache scope, so this job must never save a cache.
+    cache-mode: read
     runs-on: ubuntu-26.04-arm
     # The hosted runner maximum. Hitting it cancels the job, which skips the report steps, so the step
     # limits below add up to 355 (5 x 5 tools, 25 setup, 290 benchmark, 5 + 10 report), leaving 5 for the runner.
@@ -103,8 +103,6 @@ jobs:
         with:
           go-version-file: ${{ env.GO_MODULE_ROOT }}/go.mod
           cache-dependency-path: ${{ env.GO_MODULE_ROOT }}/go.sum
-          # Disable the cache for issue comment runs so we don't pollute the pull-request cache.
-          cache: ${{ github.event_name != 'issue_comment' }}
 
       - name: Install Task
         timeout-minutes: 5
@@ -132,7 +130,6 @@ jobs:
         timeout-minutes: 290
         env:
           EVENT: ${{ github.event_name }}
-          SCHEDULE: ${{ github.event.schedule }}
           SCENARIOS: ${{ inputs.scenarios }}
           OBJECTS: ${{ inputs.objects }}
           REPEATS: ${{ inputs.repeats }}
@@ -142,8 +139,8 @@ jobs:
             [ -n "${SCENARIOS}" ] && args+=("--scenarios=${SCENARIOS}")
             [ -n "${OBJECTS}" ] && args+=("--objects=${OBJECTS}")
             [ -n "${REPEATS}" ] && args+=("--repeats=${REPEATS}")
-          elif [ "${SCHEDULE}" != "0 2 * * 0" ]; then
-            # Everything but the weekly full suite.
+          elif [ "${EVENT}" != "schedule" ] || [ "$(date -u +%u)" != 7 ]; then
+            # Everything but the Sunday full suite.
             read -r -a args <<< "${STANDARD_SUITE}"
           fi
           task ${{ env.CONTROLLER_DIR }}:test/performance -- "${args[@]}"
