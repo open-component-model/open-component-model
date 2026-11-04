@@ -106,28 +106,38 @@ export function newlyIntroduced(base, candidate) {
 }
 
 /**
- * Classify every override key against the advisories its removal introduces.
+ * Split override keys into those to audit and those in the ignore set.
+ *
+ * @param {string[]} overrideKeys - keys of package.json `overrides`.
+ * @param {Record<string, string>} [ignore] - keys to treat as non-security.
+ * @returns {{ audited: string[], ignored: string[] }}
+ */
+export function partitionIgnored(overrideKeys, ignore = IGNORE) {
+  /** @type {string[]} */
+  const audited = [];
+  /** @type {string[]} */
+  const ignored = [];
+  for (const key of overrideKeys) (Object.hasOwn(ignore, key) ? ignored : audited).push(key);
+  return { audited, ignored };
+}
+
+/**
+ * Classify audited override keys by the advisories their removal introduces.
  *
  * @param {object} args
- * @param {string[]} args.overrideKeys - keys of package.json `overrides`.
+ * @param {string[]} args.keys - audited override keys, see partitionIgnored.
  * @param {Record<string, string[]>} args.introducedByKey - key -> advisory ids its removal introduces.
- * @param {Record<string, string>} [args.ignore] - keys to treat as non-security.
- * @returns {{ candidates: string[], protecting: Array<{ key: string, advisories: string[] }>, ignored: string[] }}
+ * @returns {{ candidates: string[], protecting: Array<{ key: string, advisories: string[] }> }}
  */
-export function classify({ overrideKeys, introducedByKey, ignore = IGNORE }) {
+export function classify({ keys, introducedByKey }) {
   const candidates = [];
   const protecting = [];
-  const ignored = [];
-  for (const key of overrideKeys) {
-    if (Object.hasOwn(ignore, key)) {
-      ignored.push(key);
-      continue;
-    }
+  for (const key of keys) {
     const advisories = Object.hasOwn(introducedByKey, key) ? introducedByKey[key] : [];
     if (advisories.length === 0) candidates.push(key);
     else protecting.push({ key, advisories });
   }
-  return { candidates, protecting, ignored };
+  return { candidates, protecting };
 }
 
 /**
@@ -161,14 +171,18 @@ export function selectCombinedRemovals({ candidates, baseline, auditWithout }) {
 }
 
 /**
- * @typedef {ReturnType<typeof classify> & { heldBack?: Array<{ key: string, advisories: string[] }> }} Result
+ * @typedef {object} Result
+ * @property {string[]} candidates - safe to remove, also together.
+ * @property {Array<{ key: string, advisories: string[] }>} protecting
+ * @property {string[]} ignored
+ * @property {Array<{ key: string, advisories: string[] }>} [heldBack]
  */
 
 /**
  * Render a Markdown report for the classification result.
  *
  * @param {Result} result
- * @param {Record<string, string>} [ignore] - reasons for ignored keys, same set as passed to classify.
+ * @param {Record<string, string>} [ignore] - reasons for ignored keys, same set as passed to partitionIgnored.
  * @param {string} [packageFile] - the package.json the report is about, for the heading and hints.
  * @returns {string}
  */
@@ -282,9 +296,16 @@ export function auditVariant(label, audit) {
 }
 
 /**
+ * Upper limit for one npm call. A normal install or audit takes seconds, so
+ * this only stops a hung call, for example on a stalled registry.
+ */
+const NPM_TIMEOUT_MS = 5 * 60 * 1000;
+
+/**
  * Run an npm command with `--json` and return its stdout. The exit code is
  * not used: `npm audit` exits non-zero when it finds vulnerabilities, and
  * real failures are in the JSON (see parseNpmOutput). stderr goes to the log.
+ * Throws when npm cannot be run or exceeds NPM_TIMEOUT_MS.
  *
  * @param {string[]} args
  * @param {string} cwd
@@ -297,8 +318,13 @@ function npmJson(args, cwd) {
     stdio: ["ignore", "pipe", "inherit"],
     // The default of 1 MiB would kill npm on a large audit report.
     maxBuffer: 64 * 1024 * 1024,
+    timeout: NPM_TIMEOUT_MS,
   });
-  if (result.error) throw new Error(`could not run npm ${args[0]}`, { cause: result.error });
+  if (result.error) {
+    const timedOut = /** @type {NodeJS.ErrnoException} */ (result.error).code === "ETIMEDOUT";
+    const reason = timedOut ? `timed out after ${NPM_TIMEOUT_MS / 60_000} minutes` : "could not be run";
+    throw new Error(`npm ${args[0]} ${reason}`, { cause: result.error });
+  }
   return result.stdout;
 }
 
@@ -308,17 +334,16 @@ function npmJson(args, cwd) {
  * Throws NpmError when npm reports an error, for example ERESOLVE.
  *
  * @param {string} packageDir - Absolute path to the package directory.
+ * @param {Record<string, unknown>} pkg - parsed package.json, not mutated.
  * @param {Record<string, unknown>} overrides
  * @returns {Set<string>} advisory ids present.
  */
-function auditWithOverrides(packageDir, overrides) {
-  const pkg = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8"));
-  pkg.overrides = overrides;
+function auditWithOverrides(packageDir, pkg, overrides) {
   const lockPath = join(packageDir, "package-lock.json");
 
   const tmp = mkdtempSync(join(tmpdir(), "ocm-override-check-"));
   try {
-    writeFileSync(join(tmp, "package.json"), JSON.stringify(pkg, null, 2));
+    writeFileSync(join(tmp, "package.json"), JSON.stringify({ ...pkg, overrides }, null, 2));
     if (existsSync(lockPath)) copyFileSync(lockPath, join(tmp, "package-lock.json"));
 
     parseNpmOutput("install", npmJson(["install", "--package-lock-only", "--ignore-scripts", "--no-audit", "--no-fund"], tmp));
@@ -339,29 +364,29 @@ export function run(repoRoot, packageDir = "website") {
   const absPackageDir = join(repoRoot, packageDir);
   const packageJson = JSON.parse(readFileSync(join(absPackageDir, "package.json"), "utf8"));
   const overrides = /** @type {Record<string, unknown>} */ (packageJson.overrides ?? {});
-  const overrideKeys = Object.keys(overrides);
+  const { audited, ignored } = partitionIgnored(Object.keys(overrides));
+  /** @param {Record<string, unknown>} variant */
+  const audit = (variant) => auditWithOverrides(absPackageDir, packageJson, variant);
 
   // The baseline must resolve, otherwise no comparison is possible.
-  const baseline = auditWithOverrides(absPackageDir, overrides);
+  const baseline = audit(overrides);
 
   /** @type {Record<string, string[]>} */
   const introducedByKey = {};
-  for (const key of overrideKeys) {
-    if (Object.hasOwn(IGNORE, key)) continue;
-    const without = auditVariant(`${packageDir}: without ${key}`, () => auditWithOverrides(absPackageDir, removeOverrideKey(overrides, key)));
+  for (const key of audited) {
+    const without = auditVariant(`${packageDir}: without ${key}`, () => audit(removeOverrideKey(overrides, key)));
     introducedByKey[key] = newlyIntroduced(baseline, without);
   }
 
-  const classified = classify({ overrideKeys, introducedByKey });
+  const { candidates, protecting } = classify({ keys: audited, introducedByKey });
   const { removable, heldBack } = selectCombinedRemovals({
-    candidates: classified.candidates,
+    candidates,
     baseline,
-    auditWithout: (keys) =>
-      auditVariant(`${packageDir}: without ${keys.join(", ")}`, () => auditWithOverrides(absPackageDir, keys.reduce(removeOverrideKey, overrides))),
+    auditWithout: (keys) => auditVariant(`${packageDir}: without ${keys.join(", ")}`, () => audit(keys.reduce(removeOverrideKey, overrides))),
   });
 
   /** @type {Result} */
-  const result = { ...classified, candidates: removable, heldBack };
+  const result = { candidates: removable, heldBack, protecting, ignored };
   return { result, markdown: renderMarkdown(result, IGNORE, `${packageDir}/package.json`) };
 }
 

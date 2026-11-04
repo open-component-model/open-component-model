@@ -11,6 +11,7 @@ import {
   NpmError,
   extractAdvisoryIds,
   newlyIntroduced,
+  partitionIgnored,
   classify,
   selectCombinedRemovals,
   auditVariant,
@@ -121,31 +122,28 @@ test("newlyIntroduced returns the sorted ids that are not in the baseline", () =
 
 // --- classification ---------------------------------------------------------
 
-test("classify splits candidates, protecting and ignored, and ignore wins over candidate", () => {
+test("partitionIgnored splits keys into audited and ignored, keeping their order", () => {
+  const result = partitionIgnored(["glob", "eslint-config-developit", "semver"], { "eslint-config-developit": "compat" });
+  assert.deepStrictEqual(result, { audited: ["glob", "semver"], ignored: ["eslint-config-developit"] });
+});
+
+test("partitionIgnored does not treat inherited Object properties as ignored", () => {
+  assert.deepStrictEqual(partitionIgnored(["constructor", "tostring"], {}), { audited: ["constructor", "tostring"], ignored: [] });
+});
+
+test("classify splits audited keys into candidates and protecting", () => {
   const result = classify({
-    overrideKeys: ["glob", "minimatch@<11.0.1", "eslint-config-developit"],
-    introducedByKey: {
-      glob: [],
-      "minimatch@<11.0.1": ["GHSA-G3HV-75WG-M249"],
-      "eslint-config-developit": [],
-    },
-    ignore: { "eslint-config-developit": "compat" },
+    keys: ["glob", "minimatch@<11.0.1"],
+    introducedByKey: { glob: [], "minimatch@<11.0.1": ["GHSA-G3HV-75WG-M249"] },
   });
   assert.deepStrictEqual(result, {
     candidates: ["glob"],
     protecting: [{ key: "minimatch@<11.0.1", advisories: ["GHSA-G3HV-75WG-M249"] }],
-    ignored: ["eslint-config-developit"],
   });
 });
 
-test("classify does not read inherited Object properties from ignore or introducedByKey", () => {
-  const result = classify({
-    overrideKeys: ["constructor", "tostring"],
-    introducedByKey: {},
-    ignore: {},
-  });
-  assert.deepStrictEqual(result.candidates, ["constructor", "tostring"]);
-  assert.deepStrictEqual(result.ignored, []);
+test("classify does not read inherited Object properties from introducedByKey", () => {
+  assert.deepStrictEqual(classify({ keys: ["constructor"], introducedByKey: {} }), { candidates: ["constructor"], protecting: [] });
 });
 
 // --- combined removal -------------------------------------------------------
