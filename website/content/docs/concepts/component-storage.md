@@ -242,11 +242,8 @@ How OCM stores a local blob depends on its content:
 | Plain file, directory archive, Git snapshot, … | One OCI layer, listed in the component descriptor's OCI manifest | the OCI layer | the content's media type, e.g. `text/plain` |
 | OCI artifact: an OCI image layout added with `File/v1`, a chart added with `Helm/v1`, or an image copied by value during transfer | Its full graph of OCI manifests and OCI indexes, unpacked into the OCI repository | the root OCI manifest or OCI index | `application/vnd.oci.image.index.v1+json` or `…manifest.v1+json` |
 
-For OCI artifacts, OCM does not keep the layout archive. It ingests the whole graph — root OCI index, OCI manifests per
-platform, OCI configs, and OCI layers — so the stored image is byte-for-byte the original image with the original
-digest. The OCI descriptor that references a stored local blob, an OCI layer entry or an OCI index entry, carries a
-`software.ocm.artifact` annotation. It names the resource that the blob belongs to. The blob
-itself stays unchanged.
+An OCI artifact is not stored as the archive it was added from. OCM copies its OCI indexes, OCI manifests, OCI configs,
+and OCI layers into the OCI repository unchanged, so the image keeps its original digest.
 
 The component descriptor that results from this lists both local blobs like this:
 
