@@ -96,7 +96,7 @@ Kubernetes: `>=1.26.0-0`
 | manager.networkPolicy.enabled | bool | `false` | Enable NetworkPolicy for the controller manager |
 | manager.networkPolicy.ingress | list | `[]` | Extra ingress rules appended after the default rule, which admits the health-probe port and, if enabled, the metrics and webhook ports |
 | manager.nodeSelector | object | `{}` | Node selector for pod scheduling |
-| manager.ocmConfig | object | `{}` | OCM configuration for the whole controller, read once at startup. Only `oci.cache.config.ocm.software` is accepted. `type` defaults to `generic.config.ocm.software/v1`. Example: `{configurations: [{type: oci.cache.config.ocm.software/v1alpha1, remotePolicy: Always}]}` |
+| manager.ocmConfig | object | `{}` | OCM configuration for the whole controller. Loaded _once_ at startup. Only `oci.cache.config.ocm.software` is accepted at the moment of this writing. `type` defaults to `generic.config.ocm.software/v1`. Example: `{configurations: [{type: oci.cache.config.ocm.software/v1alpha1, remotePolicy: Always}]}` |
 | manager.podSecurityContext | object | `{"runAsGroup":65532,"runAsNonRoot":true,"runAsUser":65532,"seccompProfile":{"type":"RuntimeDefault"}}` | Pod-level security context |
 | manager.rateLimiter.component.burst | int | `100` | Requeues the Component controller admits at once before qps applies. Must be at least 1. |
 | manager.rateLimiter.component.qps | float | `10` | Requeues per second the Component controller admits once its burst is used up. A float greater than 0, e.g. 0.1. |
