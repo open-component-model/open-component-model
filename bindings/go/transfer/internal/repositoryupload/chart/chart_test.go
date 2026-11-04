@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"testing"
@@ -17,6 +18,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/blob/verified"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -62,6 +64,23 @@ func TestLocate(t *testing.T) {
 	fromBytes := func(data []byte) blob.ReadOnlyBlob {
 		return inmemory.New(bytes.NewReader(data), inmemory.WithSize(int64(len(data))))
 	}
+	// A tar whose content continues well past the chart, so locating the chart reads only a
+	// prefix of it.
+	var paddedTar bytes.Buffer
+	tw = tar.NewWriter(&paddedTar)
+	for _, f := range []struct {
+		name string
+		data []byte
+	}{{"mychart-0.1.0.tgz", chartTGZ}, {"padding", bytes.Repeat([]byte{'x'}, 64<<10)}} {
+		require.NoError(t, tw.WriteHeader(&tar.Header{Name: f.name, Size: int64(len(f.data)), Mode: 0o644}))
+		_, err := tw.Write(f.data)
+		require.NoError(t, err)
+	}
+	require.NoError(t, tw.Close())
+	// verifiedBytes rejects a partial read on Close, as sources verifying their content do.
+	verifiedBytes := func(data []byte) blob.ReadOnlyBlob {
+		return verified.New(fromBytes(data), verified.Metadata{Digest: digest.FromBytes(data), Size: int64(len(data))})
+	}
 
 	tests := []struct {
 		name        string
@@ -79,6 +98,11 @@ func TestLocate(t *testing.T) {
 		{
 			name:    "first .tgz of a helm downloader tar",
 			content: func(*testing.T) blob.ReadOnlyBlob { return fromBytes(helmTar.Bytes()) },
+			want:    chartTGZ,
+		},
+		{
+			name:    "chart in a verified source read only in part to locate it",
+			content: func(*testing.T) blob.ReadOnlyBlob { return verifiedBytes(paddedTar.Bytes()) },
 			want:    chartTGZ,
 		},
 		{
@@ -103,7 +127,7 @@ func TestLocate(t *testing.T) {
 		{
 			name:    "content that is no chart",
 			content: func(*testing.T) blob.ReadOnlyBlob { return fromBytes([]byte("not a chart")) },
-			wantErr: "is neither a packaged helm chart, a tar containing one, nor a helm chart OCI artifact",
+			wantErr: "neither a packaged helm chart, a tar containing one, nor a helm chart OCI artifact",
 		},
 	}
 	for _, tc := range tests {
@@ -116,12 +140,14 @@ func TestLocate(t *testing.T) {
 			}
 			r.NoError(err)
 			r.Equal(tc.wantFromOCI, fromOCI)
-			rc, err := chart.ReadCloser()
-			r.NoError(err)
-			defer func() { _ = rc.Close() }()
-			got, err := io.ReadAll(rc)
-			r.NoError(err)
-			r.Equal(tc.want, got)
+			// The located chart holds no open stream, so it can be read more than once.
+			for range 2 {
+				rc, err := chart.ReadCloser()
+				r.NoError(err)
+				got, err := io.ReadAll(rc)
+				r.NoError(errors.Join(err, rc.Close()))
+				r.Equal(tc.want, got)
+			}
 			if tc.wantFromOCI {
 				d, known := chart.(blob.DigestAware).Digest()
 				r.True(known, "the chart layer digest is known up front")
@@ -129,4 +155,18 @@ func TestLocate(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLocate_DeclaredChartIsNotRead(t *testing.T) {
+	r := require.New(t)
+	opened := 0
+	content := blob.ReadOnlyBlobFunc(func() (io.ReadCloser, error) {
+		opened++
+		return io.NopCloser(bytes.NewReader([]byte("chart"))), nil
+	})
+	chart, fromOCI, err := Locate(t.Context(), content, registry.ChartLayerMediaType, runtime.Identity{"name": "mychart"})
+	r.NoError(err)
+	r.False(fromOCI)
+	r.Zero(opened, "a declared packaged chart needs no probe")
+	r.NotNil(chart)
 }

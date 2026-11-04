@@ -6,8 +6,13 @@ package input
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 
+	"github.com/opencontainers/go-digest"
+
+	"ocm.software/open-component-model/bindings/go/blob/verified"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -31,10 +36,8 @@ type InputMethod struct {
 	// MaxDownloadSize caps the number of bytes read from an object. Nil uses the
 	// download package default, which is unlimited.
 	MaxDownloadSize *int64
-	// TempFolder is the directory the downloaded object is streamed into. When empty,
-	// the OS temporary directory is used. The file backing the returned blob is created
-	// here and outlives ProcessResource, because it holds the content the constructor
-	// stores as a local blob.
+	// TempFolder is the directory an object is downloaded to until it is first read. Empty
+	// uses the OS temporary directory.
 	TempFolder string
 }
 
@@ -54,21 +57,21 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 	return identityv1.IdentityFromObject(spec.BucketName, spec.ObjectKey, spec.Endpoint)
 }
 
-// ProcessResource downloads the object described by the S3 input specification
-// and returns it as local blob data to be stored in the component version.
+// ProcessResource returns the object described by the S3 input specification as
+// local blob data to be stored in the component version.
 //
-// The object is streamed into a file under [InputMethod.TempFolder], and the returned
-// blob reads from that file, which outlives this call and is owned by the caller.
+// The object is downloaded once, to a file under [InputMethod.TempFolder], to learn its
+// version, digest, size and media type. The first read of the returned blob is served from
+// that file and removes it when closed; if nothing reads the blob, the file is removed when
+// ctx ends. Later reads request the object again, pinned to the version the store reported
+// if it is a real one. Every read is verified against the digest and size of the download.
 func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials runtime.Typed) (*constructor.ResourceInputMethodResult, error) {
 	spec, err := i.convertInput(resource)
 	if err != nil {
 		return nil, err
 	}
 
-	opts := []download.Option{
-		download.WithCredentials(credentials),
-		download.WithTempDir(i.TempFolder),
-	}
+	opts := []download.Option{download.WithCredentials(credentials)}
 	if i.MaxDownloadSize != nil {
 		opts = append(opts, download.WithMaxDownloadSize(*i.MaxDownloadSize))
 	}
@@ -76,7 +79,7 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		opts = append(opts, download.WithHTTPConfig(i.HTTPConfig))
 	}
 
-	result, err := download.Download(ctx, download.Request{
+	req := download.Request{
 		Region:       spec.Region,
 		BucketName:   spec.BucketName,
 		ObjectKey:    spec.ObjectKey,
@@ -84,13 +87,26 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		Version:      spec.Version,
 		Endpoint:     spec.Endpoint,
 		UsePathStyle: spec.UsePathStyle,
-	}, opts...)
+	}
+	file, err := os.CreateTemp(i.TempFolder, "ocm-s3-input-*")
 	if err != nil {
+		return nil, fmt.Errorf("error creating file for s3 input from %s: %w", spec.String(), err)
+	}
+	result, err := download.Stream(ctx, req, file, append(opts, download.WithDigestAlgorithm(digest.SHA256))...)
+	if err = errors.Join(err, file.Close()); err != nil {
+		removeFile(ctx, file.Name())
 		return nil, fmt.Errorf("error downloading s3 input from %s: %w", spec.String(), err)
+	}
+	if req.Version == "" && download.IsVersion(result.VersionID) {
+		req.Version = result.VersionID
 	}
 
 	return &constructor.ResourceInputMethodResult{
-		ProcessedBlobData: result.Blob,
+		ProcessedBlobData: verified.New(newKeptBlob(ctx, file.Name(), download.NewBlob(ctx, req, opts...)), verified.Metadata{
+			Digest:    result.Digest,
+			Size:      result.Size,
+			MediaType: result.MediaType,
+		}),
 	}, nil
 }
 

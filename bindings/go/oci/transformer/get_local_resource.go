@@ -101,7 +101,6 @@ func (t *GetLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 		return nil, fmt.Errorf("failed getting local resource %v from component %s:%s: %w",
 			resourceIdentity, component, version, err)
 	}
-	defer releaseBlob(ctx, blobContent)
 
 	// Determine output path
 	if outputPath, err = DetermineOutputPath(outputPath, "resource"); err != nil {

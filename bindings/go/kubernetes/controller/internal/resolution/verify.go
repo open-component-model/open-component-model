@@ -10,6 +10,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/algorithms"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/verification"
@@ -124,6 +125,9 @@ func verifySignatures(
 		}
 
 		logger.Info("verified signature", "signature", v.Signature, "verifier", v.Verifier.GetType())
+		// Debug: resolution runs on every reconcile and only the publisher can re-sign.
+		algorithms.LogNonDefaultDigest(ctx, slog.New(logr.ToSlogHandler(logger)), slog.LevelDebug, descSig.Digest.NormalisationAlgorithm,
+			"component", desc.Component.Name, "version", desc.Component.Version, "signature", descSig.Name)
 	}
 
 	return desc, nil
@@ -170,18 +174,15 @@ func compareDigest(ctx context.Context, desc *descriptor.Descriptor, digest *v2.
 	logger.Info("verifying integrity with provided digest",
 		"component", desc.Component.Name, "version", desc.Component.Version)
 
-	digestDesc, err := signing.GenerateDigest(ctx, desc, slog.New(logr.ToSlogHandler(logger)),
-		digest.NormalisationAlgorithm, digest.HashAlgorithm)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate digest for component version %s:%s: %w",
-			desc.Component.Name, desc.Component.Version, err)
+	expected := descriptor.Signature{Digest: *descriptor.ConvertFromV2Digest(digest)}
+	if err := signing.VerifyDigestMatchesDescriptor(ctx, desc, expected, slog.New(logr.ToSlogHandler(logger))); err != nil {
+		return nil, fmt.Errorf("verifying digest (%s/%s) of component version %s:%s failed: %w",
+			digest.NormalisationAlgorithm, digest.HashAlgorithm, desc.Component.Name, desc.Component.Version, err)
 	}
-
-	if digestDesc.Value != digest.Value {
-		return nil, fmt.Errorf("digest mismatch (%s/%s) for component version %s:%s: expected %s, got %s",
-			digest.NormalisationAlgorithm, digest.HashAlgorithm, desc.Component.Name, desc.Component.Version,
-			digest.Value, digestDesc.Value)
-	}
+	// The digest is a component reference digest. Debug: resolution runs on every
+	// reconcile and only the publisher can rebuild the referencing version.
+	algorithms.LogNonDefaultReferenceDigest(ctx, slog.New(logr.ToSlogHandler(logger)), slog.LevelDebug, expected.Digest,
+		"component", desc.Component.Name, "version", desc.Component.Version)
 
 	return desc, nil
 }

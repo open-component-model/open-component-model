@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -28,58 +27,36 @@ import (
 )
 
 const (
-	mediaTypeTGZ = "application/x-tgz"
+	// MediaType is the media type of the archives Download and Stream produce.
+	MediaType = "application/x-tgz"
 	// gitDir is the archive directory holding the Git storage next to the files.
 	gitDir = ".git"
 )
 
-// archive writes the files of the selected commit and a Git storage with their
-// history as a reproducible tar.gz into file and closes it. The storage depends
-// on the commit only: its history in one packfile and HEAD detached at the commit.
-// The file belongs to the caller.
-func archive(ctx context.Context, repo *git.Repository, selected *object.Commit, file *os.File, opts Options) (*filesystem.Blob, digest.Digest, error) {
+// archive writes the files of the selected commit and the Git storage in carrier,
+// prepared by writeGitStorage, as a reproducible tar.gz to w and returns its digest.
+func archive(ctx context.Context, selected *object.Commit, carrier string, w io.Writer, opts Options) (digest.Digest, error) {
 	tree, err := selected.Tree()
 	if err != nil {
-		return nil, "", errors.Join(fmt.Errorf("cannot read git tree: %w", err), file.Close())
-	}
-
-	storage, err := os.MkdirTemp(opts.TempDir, "ocm-git-carrier-*")
-	if err != nil {
-		return nil, "", errors.Join(fmt.Errorf("cannot create git carrier storage: %w", err), file.Close())
-	}
-	defer func() {
-		if rmErr := os.RemoveAll(storage); rmErr != nil {
-			slog.WarnContext(ctx, "failed to remove temporary git carrier storage", "path", storage, "err", rmErr)
-		}
-	}()
-	if err := writeGitStorage(repo, selected.Hash, storage); err != nil {
-		return nil, "", errors.Join(err, file.Close())
+		return "", fmt.Errorf("cannot read git tree: %w", err)
 	}
 
 	digester := digest.Canonical.Digester()
-	limited := &limitedWriter{Writer: file, limit: opts.MaxArchiveSize}
+	limited := &limitedWriter{Writer: w, limit: opts.MaxArchiveSize}
 	gz := gzippool.Get(io.MultiWriter(limited, digester.Hash()))
 	tw := tar.NewWriter(gz)
-	err = filesystem.WriteTar(ctx, carrierFS{files: treeFS{tree: tree}, git: filepath.Join(storage, gitDir)}, tw, filesystem.DirOptions{
+	err = filesystem.WriteTar(ctx, carrierFS{files: treeFS{tree: tree}, git: filepath.Join(carrier, gitDir)}, tw, filesystem.DirOptions{
 		Reproducible:         true,
 		PreserveSymlinks:     true,
 		OmitRoot:             true,
 		OmitDirTrailingSlash: true,
 	})
-	err = errors.Join(err, tw.Close(), gz.Close(), file.Close())
+	err = errors.Join(err, tw.Close(), gz.Close())
 	gzippool.Put(gz)
 	if err != nil {
-		return nil, "", fmt.Errorf("cannot create git archive: %w", err)
+		return "", fmt.Errorf("cannot create git archive: %w", err)
 	}
-
-	b, err := filesystem.GetBlobFromOSPath(file.Name())
-	if err != nil {
-		return nil, "", fmt.Errorf("cannot open git archive file %q: %w", file.Name(), err)
-	}
-
-	b.SetMediaType(mediaTypeTGZ)
-
-	return b, digester.Digest(), nil
+	return digester.Digest(), nil
 }
 
 // writeGitStorage initialises a repository in dir, stores the history of commit

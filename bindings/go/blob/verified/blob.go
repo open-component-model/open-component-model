@@ -16,9 +16,12 @@ import (
 type Metadata struct {
 	// Digest of the content. Empty if unknown; the digest is then not verified.
 	Digest digest.Digest
-	// Size of the content in bytes, or blob.SizeUnknown if unknown; the size is then not verified.
+	// Size of the content in bytes, or blob.SizeUnknown to take the size the
+	// source reports, if any. Content is verified against the size the blob
+	// reports; an unknown size is not verified.
 	Size int64
-	// MediaType of the content. Empty if unknown.
+	// MediaType of the content. Empty to take the media type the source
+	// reports, if any.
 	MediaType string
 }
 
@@ -62,14 +65,15 @@ type nopCloser struct{ *reader }
 func (nopCloser) Close() error { return nil }
 
 // Blob reports digest, size and media type from Metadata and verifies the content
-// read from its source against them.
+// read from its source against them. Size and media type left unknown in the
+// Metadata are asked from the source each time, so a source that learns them
+// lazily is not forced to do so up front.
 //
 // The blob holds no open resources: every ReadCloser opens fresh content from the
 // source, so it can be read repeatedly and needs no Close as long as the source
 // does not either (e.g. a [blob.ReadOnlyBlobFunc] that opens a stream on demand).
 //
-// The metadata is fixed at construction, so content is always verified against
-// what the blob reports.
+// Content is always verified against what the blob reports.
 type Blob struct {
 	src  blob.ReadOnlyBlob
 	meta Metadata
@@ -85,19 +89,40 @@ func New(src blob.ReadOnlyBlob, meta Metadata) *Blob {
 // exceeds the expected size, and from Close in any case, including a partial read.
 // Close always closes the source reader, also when verification fails.
 func (b *Blob) ReadCloser() (io.ReadCloser, error) {
-	expected := b.meta.Digest
-	var digester digest.Digester
-	if expected != "" {
+	if expected := b.meta.Digest; expected != "" {
 		if err := expected.Validate(); err != nil {
 			return nil, fmt.Errorf("invalid expected digest %q: %w", expected, err)
 		}
-		digester = expected.Algorithm().Digester()
 	}
 	rc, err := b.src.ReadCloser()
 	if err != nil {
 		return nil, fmt.Errorf("failed to open blob content: %w", err)
 	}
-	return &reader{base: rc, digester: digester, expected: expected, size: b.meta.Size}, nil
+	var sourceSize func() int64
+	if b.meta.Size == blob.SizeUnknown {
+		// Asked only once content arrived: a source learning its size from the
+		// response it streams (e.g. a lazy HTTP download) would otherwise have to
+		// send an extra request before its content is even requested.
+		if sizeAware, ok := b.src.(blob.SizeAware); ok {
+			sourceSize = sizeAware.Size
+		}
+	}
+	return newReader(rc, b.meta, sourceSize), nil
+}
+
+// NewReader returns rc wrapped so that everything read through it is counted and hashed
+// and compared against meta, exactly like the readers Blob.ReadCloser returns.
+// meta.Digest must be empty (not verified) or valid with an available algorithm.
+func NewReader(rc io.ReadCloser, meta Metadata) io.ReadCloser {
+	return newReader(rc, meta, nil)
+}
+
+func newReader(rc io.ReadCloser, meta Metadata, sourceSize func() int64) *reader {
+	var digester digest.Digester
+	if meta.Digest != "" {
+		digester = meta.Digest.Algorithm().Digester()
+	}
+	return &reader{base: rc, digester: digester, expected: meta.Digest, size: meta.Size, sourceSize: sourceSize}
 }
 
 // Digest returns the expected digest, if known.
@@ -105,14 +130,28 @@ func (b *Blob) Digest() (string, bool) {
 	return b.meta.Digest.String(), b.meta.Digest != ""
 }
 
-// Size returns the expected size, or blob.SizeUnknown.
+// Size returns the expected size: the one from the Metadata, otherwise the one
+// the source reports, otherwise blob.SizeUnknown.
 func (b *Blob) Size() int64 {
-	return b.meta.Size
+	if b.meta.Size != blob.SizeUnknown {
+		return b.meta.Size
+	}
+	if sizeAware, ok := b.src.(blob.SizeAware); ok {
+		return sizeAware.Size()
+	}
+	return blob.SizeUnknown
 }
 
-// MediaType returns the media type, if known.
+// MediaType returns the media type from the Metadata, otherwise the one the
+// source reports, if known.
 func (b *Blob) MediaType() (string, bool) {
-	return b.meta.MediaType, b.meta.MediaType != ""
+	if b.meta.MediaType != "" {
+		return b.meta.MediaType, true
+	}
+	if mediaTypeAware, ok := b.src.(blob.MediaTypeAware); ok {
+		return mediaTypeAware.MediaType()
+	}
+	return "", false
 }
 
 // reader counts and hashes everything read through it and compares the result
@@ -122,14 +161,19 @@ type reader struct {
 	digester digest.Digester // nil if the digest is unknown
 	expected digest.Digest
 	size     int64
-	read     int64
-	eof      bool
+	// sourceSize, if set, is asked once for the size left unknown by the metadata.
+	sourceSize func() int64
+	read       int64
+	eof        bool
 }
 
 // Read also reports a mismatch, not only Close, so that a caller ignoring the
 // Close error (_ = rc.Close()) cannot skip verification.
 func (r *reader) Read(p []byte) (int, error) {
 	n, err := r.base.Read(p)
+	if n > 0 || errors.Is(err, io.EOF) {
+		r.resolveSize()
+	}
 	if n > 0 {
 		r.read += int64(n)
 		if r.digester != nil {
@@ -139,6 +183,13 @@ func (r *reader) Read(p []byte) (int, error) {
 	}
 	if r.size != blob.SizeUnknown && r.read > r.size {
 		return n, r.verify()
+	}
+	// Readers handed the exact size (io.CopyN) never see EOF, so report a mismatch
+	// as soon as the expected size is complete.
+	if r.size != blob.SizeUnknown && r.read == r.size && n > 0 {
+		if mismatch := r.verify(); mismatch != nil {
+			return n, mismatch
+		}
 	}
 	if errors.Is(err, io.EOF) {
 		r.eof = true
@@ -157,6 +208,7 @@ func (r *reader) Close() error {
 // Content of known size counts as complete once that size is read, because readers
 // handed the exact size (e.g. io.CopyN in blob.Copy) stop before the source reports EOF.
 func (r *reader) verify() error {
+	r.resolveSize()
 	switch {
 	case r.size != blob.SizeUnknown && r.read != r.size:
 		return fmt.Errorf("size mismatch: expected %d bytes, read %d", r.size, r.read)
@@ -166,4 +218,11 @@ func (r *reader) verify() error {
 		return fmt.Errorf("digest mismatch: expected %s, got %s", r.expected, r.digester.Digest())
 	}
 	return nil
+}
+
+func (r *reader) resolveSize() {
+	if r.sourceSize != nil {
+		r.size = r.sourceSize()
+		r.sourceSize = nil
+	}
 }

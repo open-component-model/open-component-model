@@ -21,6 +21,7 @@ func ConvertFromV1Labels(labels []v1.Label) []Label {
 			Name:    label.Name,
 			Value:   label.Value,
 			Signing: label.Signing,
+			Version: label.Version,
 		}
 	}
 	return result
@@ -38,6 +39,7 @@ func ConvertToV1Labels(labels []Label) []v1.Label {
 			Name:    label.Name,
 			Value:   label.Value,
 			Signing: label.Signing,
+			Version: label.Version,
 		}
 	}
 	return result

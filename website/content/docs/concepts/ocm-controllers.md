@@ -71,6 +71,22 @@ A `Resource` selects a specific artifact from within a resolved component versio
 
 You can attach CEL expressions via `additionalStatusFields` to extract values from the descriptor and surface them in `status.additional`. This is useful when downstream tools like [Kro](https://kro.run/) need to wire specific values — such as an image reference or chart version — into their own resources without parsing the full descriptor themselves.
 
+With `verificationPolicy: Always` (the default), the controller checks the resource content against the digest in the
+descriptor. Where it can, it checks against what the content is addressed by, without downloading it:
+
+| Access | Verified against | Downloads the content |
+| --- | --- | --- |
+| `localBlob`, `relativeOciReference` | the digest the OCI repository or CTF archive stores it under | only for an OCI layout stored as one blob |
+| `OCIImage`, `OCIImageLayer` | the resolved manifest or layer descriptor | no |
+| `Helm` | the OCI manifest, or the digest in the Helm repository index | only if the index lists no digest |
+| `wget` | a checksum the server advertises | if the server advertises none |
+| `Git`, `GitHub`, `s3` | the content | on every reconcile |
+
+The accesses in the last row are not optimized yet: their content is downloaded and hashed on every reconciliation,
+which costs time and bandwidth for large repositories or objects. If a downstream step verifies the content anyway, for
+example Flux fetching a pinned commit, set `verificationPolicy: Never` for such resources. A resource whose access type
+the controller cannot verify at all fails unless verification is set to `Never`.
+
 [API reference]({{< relref "/docs/reference/kubernetes-api/resource.md" >}})
 
 ### Deployer

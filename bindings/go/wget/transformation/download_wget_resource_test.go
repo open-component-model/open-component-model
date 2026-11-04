@@ -67,7 +67,7 @@ func TestDownloadWgetResource_Transform(t *testing.T) {
 
 		transform := &transformation.DownloadWgetResource{
 			Scheme:             scheme,
-			ResourceRepository: repository.NewResourceRepository(nil),
+			ResourceRepository: repository.NewResourceRepository(),
 		}
 
 		spec := &v1alpha1.DownloadWgetResource{
@@ -107,7 +107,7 @@ func TestDownloadWgetResource_Transform(t *testing.T) {
 
 		transform := &transformation.DownloadWgetResource{
 			Scheme:             scheme,
-			ResourceRepository: repository.NewResourceRepository(nil),
+			ResourceRepository: repository.NewResourceRepository(),
 		}
 
 		spec := &v1alpha1.DownloadWgetResource{
@@ -144,7 +144,7 @@ func TestDownloadWgetResource_Transform(t *testing.T) {
 
 		transform := &transformation.DownloadWgetResource{
 			Scheme:             scheme,
-			ResourceRepository: repository.NewResourceRepository(nil),
+			ResourceRepository: repository.NewResourceRepository(),
 		}
 
 		spec := &v1alpha1.DownloadWgetResource{
@@ -172,7 +172,7 @@ func TestDownloadWgetResource_Transform(t *testing.T) {
 
 		transform := &transformation.DownloadWgetResource{
 			Scheme:             scheme,
-			ResourceRepository: repository.NewResourceRepository(nil),
+			ResourceRepository: repository.NewResourceRepository(),
 		}
 
 		spec := &v1alpha1.DownloadWgetResource{
@@ -194,7 +194,7 @@ func TestDownloadWgetResource_Transform(t *testing.T) {
 
 		transform := &transformation.DownloadWgetResource{
 			Scheme:             scheme,
-			ResourceRepository: repository.NewResourceRepository(nil),
+			ResourceRepository: repository.NewResourceRepository(),
 		}
 
 		spec := &v1alpha1.DownloadWgetResource{

@@ -46,7 +46,7 @@ func TestDownloadClosesSSHAgentOnFailure(t *testing.T) {
 				closed <- struct{}{}
 			}()
 			t.Setenv("SSH_AUTH_SOCK", listener.Addr().String())
-			_, err = Download(t.Context(), &accessv1.Git{Repository: "ssh://git@127.0.0.1/repo", Ref: "HEAD"}, tc.creds, Options{TempDir: filepath.Join(t.TempDir(), "missing", "directory")})
+			_, err = download(t.Context(), &accessv1.Git{Repository: "ssh://git@127.0.0.1/repo", Ref: "HEAD"}, tc.creds, Options{TempDir: filepath.Join(t.TempDir(), "missing", "directory")})
 			r.ErrorContains(err, "cannot create git storage")
 			select {
 			case <-closed:

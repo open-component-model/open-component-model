@@ -2,12 +2,14 @@ package replication
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/go-logr/logr"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
@@ -22,11 +24,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
-	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
-	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
+	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 )
 
 // +kubebuilder:scaffold:imports
@@ -93,18 +93,9 @@ var _ = BeforeSuite(func() {
 		}
 	}()
 
-	pm := manager.NewPluginManager(ctx)
-	ocmScheme := ocmruntime.NewScheme()
-	ocmScheme.MustRegisterWithAlias(&ctfv1.Repository{},
-		ocmruntime.NewVersionedType(ctfv1.Type, ctfv1.Version),
-		ocmruntime.NewUnversionedType(ctfv1.Type),
-		ocmruntime.NewVersionedType(ctfv1.ShortType, ctfv1.Version),
-		ocmruntime.NewUnversionedType(ctfv1.ShortType),
-		ocmruntime.NewVersionedType(ctfv1.ShortType2, ctfv1.Version),
-		ocmruntime.NewUnversionedType(ctfv1.ShortType2),
-	)
-	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(ocmScheme))
-	Expect(pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider)).To(Succeed())
+	// The plugins and repository scheme the controller uses in production.
+	pm, err := setup.NewPluginManager(ctx, nil, slog.New(logr.ToSlogHandler(GinkgoLogr)), setup.WithTempDir(GinkgoT().TempDir()))
+	Expect(err).ToNot(HaveOccurred())
 
 	resolutionLogger := logf.Log.WithName("resolution")
 	resolver := resolution.NewResolver(&resolutionLogger)
@@ -117,7 +108,7 @@ var _ = BeforeSuite(func() {
 			NewPluginManager: test.StaticPluginManager(pm),
 		},
 		Resolver:         resolver,
-		RepositoryScheme: ocmScheme,
+		RepositoryScheme: ocirepository.Scheme,
 	}).SetupWithManager(ctx, k8sManager, 1)).To(Succeed())
 
 	mgrDone := make(chan struct{})

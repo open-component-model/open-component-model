@@ -83,11 +83,11 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	// where the ref points today, and every branch that moves past the pinned
 	// commit (or is deleted after a merge) would break verification of a
 	// component version that has not changed.
+	gitHubCredentials, err := credsv1.ConvertToGitHubCredentials(credentials)
+	if err != nil {
+		return nil, fmt.Errorf("error resolving github credentials: %w", err)
+	}
 	if gitHub.Commit == "" {
-		gitHubCredentials, err := credsv1.ConvertToGitHubCredentials(credentials)
-		if err != nil {
-			return nil, fmt.Errorf("error resolving github credentials: %w", err)
-		}
 		resolved, err := p.resourceRepository.ResolveCommit(ctx, gitHub, gitHubCredentials)
 		if err != nil {
 			return nil, fmt.Errorf("error resolving github ref to commit: %w", err)
@@ -102,16 +102,6 @@ func (p *DigestProcessor) ProcessResourceDigest(
 		res.Access = pinned
 	}
 
-	// Download the pinned commit directly. The commit is authoritative now — we
-	// just resolved the ref, or the caller pinned it — so carrying the ref into
-	// the download would only make DownloadResource re-resolve it to check for
-	// drift, a redundant API call on the digest path. The returned resource
-	// keeps the ref informationally; the download copy drops it.
-	dlAccess := gitHub.DeepCopy()
-	dlAccess.Ref = ""
-	dlResource := res.DeepCopy()
-	dlResource.Access = dlAccess
-
 	// A hand-written resource.Digest in a component constructor cannot know the
 	// normalisation algorithm — the blob is never normalised — and need not
 	// restate the hash. An unset field means "fill it in with what we compute";
@@ -122,8 +112,7 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	//
 	// Checked before the download: neither comparison needs the archive, and a
 	// digest pinned to another algorithm can never match what is computed here,
-	// so fetching it would be a guaranteed waste. It also keeps such a digest from
-	// reaching the verifying blob, which would refuse to be built over it.
+	// so fetching it would be a guaranteed waste.
 	if res.Digest != nil {
 		if res.Digest.HashAlgorithm != "" && !strings.EqualFold(res.Digest.HashAlgorithm, hashAlgorithmSHA256) {
 			return nil, fmt.Errorf("hash algorithm mismatch: expected %s, got %s", hashAlgorithmSHA256, res.Digest.HashAlgorithm)
@@ -139,10 +128,9 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	slog.WarnContext(ctx, "computing the digest of a github resource downloads the full commit archive and discards it after hashing",
 		"repoUrl", gitHub.RepoURL, "commit", gitHub.Commit)
 
-	// Downloaded by resource, and never read through the verifying reader: the digest
-	// is taken from the blob itself, which reports what it holds rather than what the
-	// resource claims. So nothing here is checked against the digest being computed.
-	downloaded, err := p.resourceRepository.DownloadResource(ctx, dlResource, credentials)
+	// The archive is downloaded without a resource digest to check against: this is
+	// where that digest is computed, and it is compared below.
+	downloaded, err := p.resourceRepository.DownloadArchive(ctx, gitHub, gitHubCredentials)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading github resource for digest processing: %w", err)
 	}
