@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json/v2"
+	"strings"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -43,29 +44,19 @@ func Test_Integration_OCIRepository_NexusHostedRepositories(t *testing.T) {
 
 	nexus := startNexus(t, t.Context())
 
-	for _, repository := range []struct {
-		format    string
-		name      string
-		connector string
-		strict    bool
-	}{
-		{format: nexusFormatOCI, name: nexusOCIRepository, connector: nexusOCIConnector, strict: false},
-		{format: nexusFormatOCI, name: nexusStrictOCIRepository, connector: nexusStrictOCIConnector, strict: true},
-		{format: nexusFormatDocker, name: nexusDockerRepository, connector: nexusDockerConnector, strict: false},
-		{format: nexusFormatDocker, name: nexusStrictDockerRepository, connector: nexusStrictDockerConnector, strict: true},
-	} {
-		resolver, repo, endpoint := nexus.addHostedRepository(t, t.Context(), repository.format, repository.name, repository.connector, repository.strict)
+	for _, repository := range nexusHostedRepositories {
+		resolver, repo, endpoint := nexus.addHostedRepository(t, t.Context(), repository)
 
 		t.Run(repository.name, func(t *testing.T) {
 			t.Run("component version", func(t *testing.T) {
 				r := require.New(t)
 				ctx := t.Context()
 
-				const component, version = "ocm.software/nexus-docker-test", "v1.0.0"
+				const component, version = "ocm.software/nexus-hosted-test", "v1.0.0"
 				uploadDownloadBarebonesComponentVersion(t, repo, component, version)
 
 				// Record what Nexus stored: OCM writes an OCI image manifest. If this holds, a
-				// Nexus docker repository accepts OCM component versions without format conversion.
+				// Nexus hosted repository accepts OCM component versions without format conversion.
 				ref := resolver.ComponentVersionReference(ctx, component, version)
 				store, err := resolver.StoreForReference(ctx, ref)
 				r.NoError(err)
@@ -75,18 +66,15 @@ func Test_Integration_OCIRepository_NexusHostedRepositories(t *testing.T) {
 				r.Equal(ociImageSpecV1.MediaTypeImageManifest, desc.MediaType)
 			})
 
-			for _, image := range []struct {
-				name string
-				path string
-				list bool
-			}{
-				{name: "docker manifest", path: "legacy/manifest", list: false},
-				{name: "docker manifest list", path: "legacy/manifest-list", list: true},
+			for _, image := range []struct{ name, path, rootMediaType string }{
+				{name: "docker manifest", path: "legacy/manifest", rootMediaType: dockerManifestMediaType},
+				{name: "docker manifest list", path: "legacy/manifest-list", rootMediaType: dockerManifestListMediaType},
+				{name: "oci index over docker manifest", path: "legacy/oci-index", rootMediaType: ociImageSpecV1.MediaTypeImageIndex},
 			} {
 				t.Run(image.name, func(t *testing.T) {
 					r := require.New(t)
 					ctx := t.Context()
-					set := newDockerArtifactSet(t, image.list)
+					set := newDockerArtifactSet(t, image.rootMediaType)
 
 					target := endpoint + "/" + image.path + ":1.0.0"
 					res := &descriptor.Resource{
@@ -119,8 +107,9 @@ func Test_Integration_OCIRepository_NexusHostedRepositories(t *testing.T) {
 	}
 }
 
-// dockerArtifactSet is a legacy OCM artifact set holding a Docker image, as the OCM library
-// synthesizes it for docker and dockermulti inputs.
+// dockerArtifactSet is a legacy OCM artifact set holding a Docker manifest. The OCM library
+// synthesizes the manifest root for docker inputs, the OCI index root for dockermulti inputs,
+// and the manifest list root for resources whose source is a manifest list.
 type dockerArtifactSet struct {
 	mediaType string
 	archive   []byte
@@ -133,11 +122,14 @@ type dockerImageContent struct {
 	data []byte
 }
 
-// newDockerArtifactSet builds an artifact set whose root is a Docker schema2 manifest or, for
-// list, a manifest list. Its content is valid for its media types, since Nexus can inspect it
-// under strict content type validation, and unique per test, so that no subtest finds its blobs
-// or manifests already stored by another one.
-func newDockerArtifactSet(t *testing.T, list bool) *dockerArtifactSet {
+func newDockerImageContent(mediaType string, data []byte) dockerImageContent {
+	return dockerImageContent{desc: content.NewDescriptorFromBytes(mediaType, data), data: data}
+}
+
+// newDockerArtifactSet builds an artifact set whose root has rootMediaType: the Docker schema2
+// manifest itself, or an index of that type referencing it. Its content is unique per test, so
+// that no subtest finds its blobs or manifests already stored by another one.
+func newDockerArtifactSet(t *testing.T, rootMediaType string) *dockerArtifactSet {
 	t.Helper()
 	r := require.New(t)
 
@@ -152,10 +144,7 @@ func newDockerArtifactSet(t *testing.T, list bool) *dockerArtifactSet {
 	_, err = gzipWriter.Write(uncompressed.Bytes())
 	r.NoError(err)
 	r.NoError(gzipWriter.Close())
-	layer := dockerImageContent{
-		desc: content.NewDescriptorFromBytes(dockerLayerMediaType, compressed.Bytes()),
-		data: compressed.Bytes(),
-	}
+	layer := newDockerImageContent(dockerLayerMediaType, compressed.Bytes())
 
 	configData, err := json.Marshal(ociImageSpecV1.Image{
 		Architecture: "amd64",
@@ -163,7 +152,7 @@ func newDockerArtifactSet(t *testing.T, list bool) *dockerArtifactSet {
 		RootFS:       ociImageSpecV1.RootFS{Type: "layers", DiffIDs: []digest.Digest{digest.FromBytes(uncompressed.Bytes())}},
 	})
 	r.NoError(err)
-	config := dockerImageContent{desc: content.NewDescriptorFromBytes(dockerConfigMediaType, configData), data: configData}
+	config := newDockerImageContent(dockerConfigMediaType, configData)
 
 	manifestData, err := json.Marshal(ociImageSpecV1.Manifest{
 		Versioned: specs.Versioned{SchemaVersion: 2},
@@ -172,24 +161,23 @@ func newDockerArtifactSet(t *testing.T, list bool) *dockerArtifactSet {
 		Layers:    []ociImageSpecV1.Descriptor{layer.desc},
 	})
 	r.NoError(err)
-	manifest := dockerImageContent{desc: content.NewDescriptorFromBytes(dockerManifestMediaType, manifestData), data: manifestData}
+	manifest := newDockerImageContent(dockerManifestMediaType, manifestData)
 
 	set := &dockerArtifactSet{
-		mediaType: "application/vnd.docker.distribution.manifest.v2" + ctf.SynthesizedBlobFormatSuffix,
+		mediaType: strings.TrimSuffix(rootMediaType, "+json") + ctf.SynthesizedBlobFormatSuffix,
 		root:      manifest.desc,
 		contents:  []dockerImageContent{layer, config, manifest},
 	}
-	if list {
+	if rootMediaType != dockerManifestMediaType {
 		entry := manifest.desc
 		entry.Platform = &ociImageSpecV1.Platform{Architecture: "amd64", OS: "linux"}
-		listData, err := json.Marshal(ociImageSpecV1.Index{
+		rootData, err := json.Marshal(ociImageSpecV1.Index{
 			Versioned: specs.Versioned{SchemaVersion: 2},
-			MediaType: dockerManifestListMediaType,
+			MediaType: rootMediaType,
 			Manifests: []ociImageSpecV1.Descriptor{entry},
 		})
 		r.NoError(err)
-		root := dockerImageContent{desc: content.NewDescriptorFromBytes(dockerManifestListMediaType, listData), data: listData}
-		set.mediaType = "application/vnd.docker.distribution.manifest.list.v2" + ctf.SynthesizedBlobFormatSuffix
+		root := newDockerImageContent(rootMediaType, rootData)
 		set.root = root.desc
 		set.contents = append(set.contents, root)
 	}
