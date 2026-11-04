@@ -22,7 +22,11 @@ and the digest of every resource and reference are byte-equal to the source,
 that the component is otherwise unchanged, and that the target still verifies.
 It also downloads the resource bytes and checks the recorded digest. The third
 version contains v1 Helm, OCI, Git, and S3 access specifications; OCM v2 reads
-each one and checks its type and fields. OCM v1 creates that version with
+each one and checks its type and fields. It is shaped like the transports users
+migrate: a structured image-vector label on the component and on a reference
+(Gardener), a resource type spelled as a media type, a Helm resource version
+carrying semver build metadata (RBSC), and the legacy `ociRegistry` access
+spelling next to the current `ociArtifact` one. OCM v1 creates that version with
 digest generation disabled because its external resources are deliberately
 not contacted. The fourth version uses local Helm and Git inputs; OCM v2 reads
 their generated local-blob access and digest metadata, and downloads the Git
