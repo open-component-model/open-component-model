@@ -308,6 +308,21 @@ components:
 		assert.True(t, hasExternalResource, "external component's local resource should be added to repository")
 	})
 
+	t.Run("external local blobs are read while their context lasts", func(t *testing.T) {
+		// Repositories may bind a blob's reads to the context it was fetched with, and
+		// discovery's context ends before processing uploads the blobs.
+		target := &readingTargetRepository{mockTargetRepository: newMockTargetRepository()}
+		opts := Options{
+			SourceInputMethodProvider:           sourceProvider,
+			ResourceInputMethodProvider:         resourceProvider,
+			TargetRepositoryProvider:            &mockTargetRepositoryProvider{repo: target},
+			ExternalComponentRepositoryProvider: RepositoryAsExternalComponentVersionRepositoryProvider(contextBoundRepository{externalRepo}),
+			ExternalComponentVersionCopyPolicy:  ExternalComponentVersionCopyPolicyCopyOrFail,
+		}
+		require.NoError(t, NewDefaultConstructor(converted, opts).Construct(t.Context()))
+		require.JSONEq(t, `{"external": "resource data"}`, string(target.read["external-local-resource"]))
+	})
+
 	t.Run("skip external references", func(t *testing.T) {
 		mockRepo := newMockTargetRepository()
 		opts := Options{

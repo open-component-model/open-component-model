@@ -145,10 +145,6 @@ func (m *MockCTF) SaveBlob(ctx context.Context, blob blob.ReadOnlyBlob) error {
 	panic("not implemented")
 }
 
-func (m *MockCTF) StageBlob(ctx context.Context, blob blob.ReadOnlyBlob) (ctf.StagedBlob, error) {
-	panic("not implemented")
-}
-
 func (m *MockCTF) DeleteBlob(ctx context.Context, digest string) error {
 	panic("not implemented")
 }

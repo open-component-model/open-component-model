@@ -3,9 +3,9 @@ package repository
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/opencontainers/go-digest"
@@ -20,6 +20,7 @@ import (
 	gitcreds "ocm.software/open-component-model/bindings/go/git/spec/credentials"
 	identityv1 "ocm.software/open-component-model/bindings/go/git/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/repository/integrity"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -106,39 +107,32 @@ func (r *ResourceRepository) GetResourceCredentialConsumerIdentity(_ context.Con
 	return identityv1.IdentityFromURL(spec.Repository)
 }
 
-// DownloadResource returns the archive of the resolved commit. It is backed by a
-// file under the configured TempFolder, which outlives this call and is owned by
-// the caller.
+// DownloadResource returns the archive of the resolved commit as a lazy blob (see
+// [download.Blob]): nothing is stored and nothing is left to clean up. A ref-only access
+// is pinned here to the commit the ref names (see [download.Pin]), so every read serves
+// the same snapshot; a ref that cannot be resolved fails here. Reads are verified against
+// res.Digest and bound to ctx (see package repository). Errors of the fetch surface on read.
 func (r *ResourceRepository) DownloadResource(ctx context.Context, res *descriptor.Resource, creds runtime.Typed) (blob.ReadOnlyBlob, error) {
 	spec, err := accessFrom(res)
 	if err != nil {
 		return nil, err
 	}
-
-	result, err := r.download(ctx, spec, res.Digest, creds, r.tempFolder())
-	if err != nil {
-		return nil, err
-	}
-
-	return result.Blob, nil
-}
-
-func (r *ResourceRepository) download(ctx context.Context, spec *accessv1.Git, expected *descriptor.Digest, creds runtime.Typed, tempDir string) (*download.Result, error) {
 	typed, err := convertGitCredentials(creds)
 	if err != nil {
 		return nil, err
 	}
 
-	result, err := download.Download(ctx, spec, typed, r.downloadOptions(tempDir))
+	opts := r.downloadOptions(r.tempFolder())
+	pinned, err := download.Pin(ctx, spec, typed, opts)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resource %q: %w", res.Name, err)
 	}
-
-	if err := verifyDigest(expected, result.Digest); err != nil {
-		return nil, err
+	archive := download.NewBlob(ctx, pinned, typed, opts)
+	b, err := integrity.Verify(ctx, res.Digest, archive, integrity.WithLogAttrs(slog.Any("resource", res.ToIdentity())))
+	if err != nil {
+		return nil, fmt.Errorf("resource %q: %w", res.Name, err)
 	}
-
-	return result, nil
+	return b, nil
 }
 
 func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentity(ctx context.Context, res *descriptor.Resource) (runtime.Identity, error) {
@@ -146,27 +140,23 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 }
 
 // ProcessResourceDigest pins the access and hashes the same snapshot in one download.
-// Pinning records the commit (see [download.WithRepository]).
-// The archive is only read here, so it is downloaded into a directory of its own
-// that this call removes again.
+// Pinning records the commit (see [download.Clone]).
+// The archive is only hashed here, so it is never stored (see [download.Stream]).
 func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *descriptor.Resource, creds runtime.Typed) (*descriptor.Resource, error) {
-	tempDir, err := os.MkdirTemp(r.tempFolder(), "ocm-git-digest-*")
-	if err != nil {
-		return nil, fmt.Errorf("cannot create temporary directory for digest processing: %w", err)
-	}
-	defer func() {
-		if rmErr := os.RemoveAll(tempDir); rmErr != nil {
-			slog.WarnContext(ctx, "failed to remove temporary directory after digest processing", "path", tempDir, "err", rmErr)
-		}
-	}()
-
 	spec, err := accessFrom(res)
 	if err != nil {
 		return nil, err
 	}
-
-	downloaded, err := r.download(ctx, spec, res.Digest, creds, tempDir)
+	typed, err := convertGitCredentials(creds)
 	if err != nil {
+		return nil, err
+	}
+
+	downloaded, err := download.Stream(ctx, spec, typed, io.Discard, r.downloadOptions(r.tempFolder()))
+	if err != nil {
+		return nil, err
+	}
+	if err := verifyDigest(res.Digest, downloaded.Digest); err != nil {
 		return nil, err
 	}
 
@@ -181,7 +171,7 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *des
 
 	result := res.DeepCopy()
 	result.Access = pinned
-	// r.download already rejected a set digest that does not match this archive.
+	// verifyDigest already rejected a set digest that does not match this archive.
 	result.Digest = &descriptor.Digest{
 		HashAlgorithm:          hashAlgorithmSHA256,
 		NormalisationAlgorithm: genericBlobDigestV1,

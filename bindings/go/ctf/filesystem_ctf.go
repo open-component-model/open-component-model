@@ -186,6 +186,31 @@ func publishFile(staged, fileName string) error {
 	return nil
 }
 
+// publishBlobFile makes the staged file read-only and stores it as fileName in the
+// directory it was staged in, unless that file exists: blobs are content-addressed, so an
+// existing file holds the same content and is kept. A hard link creates the name only if
+// it is absent, also against a concurrent publish, and then the staged name is removed.
+// Where hard links are not supported, the staged file is renamed; that can replace a
+// blob published concurrently (or fail to on Windows), so callers serialize publishing.
+// published reports whether the staged file is gone; otherwise the caller removes it.
+func publishBlobFile(staged, fileName string) (published bool, err error) {
+	if err := os.Chmod(staged, 0o444); err != nil {
+		return false, fmt.Errorf("unable to make temp file readonly: %w", err)
+	}
+	target := filepath.Join(filepath.Dir(staged), fileName)
+	linkErr := os.Link(staged, target)
+	switch {
+	case linkErr == nil:
+		return true, os.Remove(staged)
+	case errors.Is(linkErr, fs.ErrExist):
+		return false, nil
+	}
+	if err := os.Rename(staged, target); err != nil {
+		return false, fmt.Errorf("unable to rename temp file: %w", errors.Join(err, linkErr))
+	}
+	return true, nil
+}
+
 // DeleteBlob deletes the blob with the given digest from the CTF by removing the file from BlobsDirectoryName.
 func (c *FileSystemCTF) DeleteBlob(_ context.Context, digest string) (err error) {
 	if c.remFS == nil {
@@ -239,7 +264,8 @@ func (c *FileSystemCTF) ListBlobs(_ context.Context) (digests []string, err erro
 
 	digests = make([]string, 0, len(dir))
 	for _, entry := range dir {
-		if entry.Type().IsRegular() {
+		// Blobs being written are staged under hidden names (see StageBlob).
+		if entry.Type().IsRegular() && !strings.HasPrefix(entry.Name(), ".") {
 			digests = append(digests, ToDigest(entry.Name()))
 		}
 	}
@@ -248,7 +274,8 @@ func (c *FileSystemCTF) ListBlobs(_ context.Context) (digests []string, err erro
 }
 
 // SaveBlob stores b under its digest in BlobsDirectoryName without buffering it in memory.
-// It is StageBlob followed by StagedBlob.Publish.
+// It is StageBlob followed by StagedBlob.Publish, so concurrent saves of one blob keep
+// the first one stored.
 func (c *FileSystemCTF) SaveBlob(ctx context.Context, b blob.ReadOnlyBlob) error {
 	staged, err := c.StageBlob(ctx, b)
 	if err != nil {
@@ -316,20 +343,25 @@ func (c *FileSystemCTF) StageBlob(ctx context.Context, b blob.ReadOnlyBlob) (_ S
 type stagedBlob struct {
 	ctf      *FileSystemCTF
 	writable bool
-	path     string // OS path of the staged file; empty once published or discarded
+	path     string // OS path of the staged file; empty once it is gone
 	digest   string
 	file     string // blob file name in BlobsDirectoryName
+	done     bool   // Publish or Discard was called
 }
 
 func (s *stagedBlob) Digest() string { return s.digest }
 
-// Publish renames the staged file to its content address. Blobs are content-addressed,
-// so an already stored blob holds the same content and is kept, dropping the staged
-// copy. Not replacing it also means a blob is never renamed over while a reader may hold
-// it open: readers do not lock against writers for the whole read, and renaming over an
-// open file fails on Windows. For the same reason a CTF that cannot be written to still
-// accepts a blob it already stores.
+// Publish stores the staged file under its content address (see publishBlobFile).
+// Blobs are content-addressed, so an already stored blob holds the same content and is
+// kept, dropping the staged copy. Not replacing it also means a blob is never replaced
+// while a reader may hold it open: readers do not lock against writers for the whole
+// read, and replacing an open file fails on Windows. For the same reason a CTF that
+// cannot be written to still accepts a blob it already stores.
 func (s *stagedBlob) Publish() error {
+	if s.done {
+		return errors.New("staged blob was already published or discarded")
+	}
+	s.done = true
 	if s.ctf.statFS != nil {
 		if _, err := s.ctf.statFS.Stat(filepath.Join(BlobsDirectoryName, s.file)); err == nil {
 			return nil
@@ -338,17 +370,15 @@ func (s *stagedBlob) Publish() error {
 	if !s.writable {
 		return fmt.Errorf("unable to save blob %s to %T: %w", s.digest, s.ctf.fs, filesystem.ErrReadOnly)
 	}
-	if s.path == "" {
-		return errors.New("staged blob was already published or discarded")
+	published, err := publishBlobFile(s.path, s.file)
+	if published {
+		s.path = ""
 	}
-	if err := publishFile(s.path, s.file); err != nil {
-		return err
-	}
-	s.path = ""
-	return nil
+	return err
 }
 
 func (s *stagedBlob) Discard() error {
+	s.done = true
 	if s.path == "" {
 		return nil
 	}

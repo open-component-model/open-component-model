@@ -159,21 +159,19 @@ func newReadOnlyChart(path, workingDir, tmpDirBase string) (result *ReadOnlyChar
 	}
 
 	// A chart packaged from a directory lives in tmpDir, outside the working directory.
-	getBlob := filesystem.GetBlobFromOSPath
+	var opts []filesystem.OSPathOption
 	if workingDir != "" && !fi.IsDir() {
-		getBlob = func(p string) (*filesystem.Blob, error) {
-			return filesystem.GetBlobInWorkingDirectory(p, workingDir)
-		}
+		opts = append(opts, filesystem.InWorkingDirectory(workingDir))
 	}
 
 	// Now we know that the path refers to a valid Helm chart packaged as a tgz file. Thus returning its contents.
-	if result.ChartBlob, err = getBlob(path); err != nil {
+	if result.ChartBlob, err = filesystem.GetBlobFromOSPath(path, opts...); err != nil {
 		return nil, fmt.Errorf("error creating blob from file %q: %w", path, err)
 	}
 
 	provName := path + ".prov" // foo.prov
 	if _, err := os.Stat(provName); err == nil {
-		if result.ProvBlob, err = getBlob(provName); err != nil {
+		if result.ProvBlob, err = filesystem.GetBlobFromOSPath(provName, opts...); err != nil {
 			return nil, fmt.Errorf("error creating blob from provenance file %q: %w", provName, err)
 		}
 	}
