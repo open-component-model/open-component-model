@@ -35,7 +35,12 @@
 //     content-addressed [BlobCache] does not need this scoping
 //     because blobs are identified by digest, but the tag-mutable
 //     [ReferenceCache] does — see the provider package for the
-//     canonical wiring.
+//     canonical wiring. Under [RemotePolicyIfNotPresent] this means
+//     whoever knows a digest gets a cached blob. Under
+//     [RemotePolicyAlways] a [BlobCache] hit requires that the
+//     caller's repository served the blob before and still allows
+//     access to it. What a repository served is persisted through a
+//     [ReferenceCache] of its own under `<Options.Dir>/served/`.
 //
 // Scope and intent:
 //
