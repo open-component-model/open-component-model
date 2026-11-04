@@ -1,5 +1,4 @@
-// Package integrity binds downloaded content to the digest a component descriptor
-// records for it.
+// Package integrity binds content to the digest a component descriptor records for it.
 //
 // Repositories hand the content they download to [Verify] together with the digest of
 // the resource. The returned blob fails, at the latest when it is read to its end, if

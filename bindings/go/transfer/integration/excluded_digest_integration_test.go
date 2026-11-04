@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"testing"
 
+	ocispecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/content"
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
@@ -29,8 +32,9 @@ import (
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
-// A resource excluded from the signature has no digest to verify, so uploading it as an OCI
-// artifact must succeed and keep the digest: rewriting it would change the signed descriptor.
+// Test_Integration_TransferOCIArtifact_ExcludedFromSignature transfers a resource excluded from
+// the signature as an OCI artifact. It has no digest to verify, so the upload must succeed and
+// keep the digest: rewriting it would change the signed descriptor.
 func Test_Integration_TransferOCIArtifact_ExcludedFromSignature(t *testing.T) {
 	t.Parallel()
 
@@ -53,7 +57,12 @@ func Test_Integration_TransferOCIArtifact_ExcludedFromSignature(t *testing.T) {
 				var archive bytes.Buffer
 				writer, err := ocitar.NewOCILayoutWriterWithTempFile(&archive, t.TempDir())
 				r.NoError(err)
-				_, err = oras.PackManifest(t.Context(), writer, oras.PackManifestVersion1_1, "application/vnd.ocm.test", oras.PackManifestOptions{})
+				layer := []byte("test layer content")
+				layerDesc := content.NewDescriptorFromBytes(ocispecv1.MediaTypeImageLayer, layer)
+				r.NoError(writer.Push(t.Context(), layerDesc, bytes.NewReader(layer)))
+				_, err = oras.PackManifest(t.Context(), writer, oras.PackManifestVersion1_1, "application/vnd.ocm.test", oras.PackManifestOptions{
+					Layers: []ocispecv1.Descriptor{layerDesc},
+				})
 				r.NoError(err)
 				r.NoError(writer.Close())
 
@@ -169,7 +178,13 @@ func Test_Integration_TransferOCIArtifact_ExcludedFromSignature(t *testing.T) {
 			r.NoError(err)
 			r.NoError(json.Unmarshal(raw, &access))
 			r.Contains(access.ImageReference, targetAddr, "the artifact must be uploaded to the target registry")
-			_, err = targetRepo.DownloadResource(ctx, &got.Component.Resources[0])
+			// Downloading is lazy, so only reading it proves the artifact arrived in full.
+			downloaded, err := targetRepo.DownloadResource(ctx, &got.Component.Resources[0])
+			r.NoError(err)
+			reader, err := downloaded.ReadCloser()
+			r.NoError(err)
+			t.Cleanup(func() { r.NoError(reader.Close()) })
+			_, err = io.Copy(io.Discard, reader)
 			r.NoError(err, "the uploaded artifact must be readable from the target registry")
 		})
 	}
