@@ -3,6 +3,7 @@ package provider
 import (
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
+	ocicachev1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/cache/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -45,6 +46,10 @@ type Options struct {
 	// sane defaults — only Dir is auto-derived from TempDir when left
 	// empty. Leave nil to disable reference caching entirely.
 	ReferenceCacheOptions *cache.Options
+
+	// CacheConfig, when non-nil, is applied on top of BlobCacheOptions and
+	// ReferenceCacheOptions. It does not enable a cache that is disabled.
+	CacheConfig *ocicachev1alpha1.Config
 
 	// BlobCache, when non-nil, is used instead of building a blob cache from
 	// BlobCacheOptions, so callers that create many providers can share one.
@@ -99,6 +104,15 @@ func WithBlobCacheOptions(opts *cache.Options) Option {
 	}
 }
 
+// WithOCICacheConfig applies cfg to both the blob and the reference cache.
+// The caches still have to be enabled with [WithBlobCacheOptions] and
+// [WithReferenceCacheOptions]; cfg does not apply to a cache set with [WithBlobCache].
+func WithOCICacheConfig(cfg *ocicachev1alpha1.Config) Option {
+	return func(o *Options) {
+		o.CacheConfig = cfg
+	}
+}
+
 // WithBlobCache makes the provider use bc instead of building its own blob cache.
 // It takes precedence over [WithBlobCacheOptions]. The caller owns bc.
 func WithBlobCache(bc *cache.BlobCache) Option {
@@ -117,4 +131,14 @@ func WithReferenceCacheOptions(opts *cache.Options) Option {
 	return func(o *Options) {
 		o.ReferenceCacheOptions = opts
 	}
+}
+
+// applyCacheConfig returns a copy of opts so options shared between providers are not mutated.
+func applyCacheConfig(opts *cache.Options, cfg *ocicachev1alpha1.Config) *cache.Options {
+	if opts == nil || cfg == nil || cfg.RemotePolicy == "" {
+		return opts
+	}
+	applied := *opts
+	applied.RemotePolicy = cache.RemotePolicy(cfg.RemotePolicy)
+	return &applied
 }

@@ -182,7 +182,9 @@ manager:
 
 The chart stores this configuration in a `ConfigMap`, mounts it into the controller, and passes it with the
 `--ocm-config` flag automatically. `type` defaults to `generic.config.ocm.software/v1`. The controller reads the file
-once at startup. Using `checksum/ocm-config` annotation on the deployment, if the config changes, the pod will be restarted.
+once at startup. The chart sets a `checksum/ocm-config` annotation on the controller pods, which Helm computes when it
+renders the chart. A `helm upgrade` that changes `manager.ocmConfig` therefore restarts the pods. Editing the `ConfigMap`
+directly, for example with `kubectl edit`, restarts nothing: the controller picks up the change only on its next restart.
 
 `oci.cache.config.ocm.software` is the only type accepted here. Any other type, or an invalid `remotePolicy`, results in
 a startup error.
