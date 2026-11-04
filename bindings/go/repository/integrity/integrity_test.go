@@ -339,6 +339,15 @@ func TestVerifyOCIArtifact(t *testing.T) {
 		{name: "matching root", expected: withNormalisation(root, descriptor.OCIArtifactDigestV1)},
 		{name: "matching root labelled as generic blob", expected: generic(root)},
 		{
+			name:     "matching root with the OCI hash spelling",
+			expected: &descriptor.Digest{HashAlgorithm: "sha256", NormalisationAlgorithm: descriptor.OCIArtifactDigestV1, Value: root.Encoded()},
+		},
+		{
+			name:     "hash algorithm contradicting the value",
+			expected: &descriptor.Digest{HashAlgorithm: "SHA-512", NormalisationAlgorithm: descriptor.OCIArtifactDigestV1, Value: root.Encoded()},
+			wantErr:  "invalid digest",
+		},
+		{
 			name:     "other root",
 			expected: withNormalisation(digest.FromString("other"), descriptor.OCIArtifactDigestV1),
 			wantErr:  "OCI artifact digest mismatch: expected " + digest.FromString("other").String() + ", got " + root.String(),

@@ -30,6 +30,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
+	"ocm.software/open-component-model/bindings/go/repository/integrity"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -299,7 +300,7 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 		MutateParentFunc: func(idx *ociImageSpecV1.Descriptor) error {
 			// Verify the selected root, not the archive checksum, before any graph writes.
 			if resource, ok := b.Artifact.(*descriptor.Resource); ok {
-				if err := verifyLayoutRootDigest(resource.Digest, idx.Digest); err != nil {
+				if err := verifyLayoutRootDigest(ctx, resource.Digest, idx.Digest); err != nil {
 					return fmt.Errorf("failed to verify resource OCI artifact digest: %w", err)
 				}
 			}
@@ -330,7 +331,7 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 // verifyLayoutRootDigest checks a resource digest against the selected layout root without
 // modifying it. Incomplete digests must be completable from the root; complete digests with
 // another normalisation are preserved unverified.
-func verifyLayoutRootDigest(d *descriptor.Digest, root digest.Digest) error {
+func verifyLayoutRootDigest(ctx context.Context, d *descriptor.Digest, root digest.Digest) error {
 	if !internaldigest.IsComplete(d) {
 		var completed descriptor.Digest
 		if d != nil {
@@ -340,7 +341,7 @@ func verifyLayoutRootDigest(d *descriptor.Digest, root digest.Digest) error {
 	}
 	switch d.NormalisationAlgorithm {
 	case internaldigest.OCIArtifactDigestV1, internaldigest.GenericBlobDigestV1:
-		return internaldigest.VerifyOCIArtifact(d, root)
+		return integrity.VerifyOCIArtifact(ctx, d, root)
 	}
 	return nil
 }
