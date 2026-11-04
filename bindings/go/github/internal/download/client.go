@@ -2,6 +2,7 @@ package download
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/google/go-github/v92/github"
 
+	"ocm.software/open-component-model/bindings/go/credentials"
+	githubinternal "ocm.software/open-component-model/bindings/go/github/internal"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
@@ -55,15 +58,9 @@ func ownerRepo(u *url.URL, repoURL string) (owner, repo string, err error) {
 // that never reached the client makes a private repository answer 404 rather
 // than an auth error.
 //
-// A token is bound to the repository host rather than handed to go-github,
-// which would attach it to whatever host the client ends up addressing:
-// GetResourceCredentialConsumerIdentity resolves the token from repoUrl alone,
-// while APIHostname — part of the same, untrusted access spec — decides where
-// the API calls go. An access that points its API at an unrelated host is
-// rejected instead of being served anonymously, so a GitHub Enterprise
-// deployment with a misconfigured apiHostname fails with its cause named
-// rather than with a 404.
-func clientFor(gitHub *v1.GitHub, u *url.URL, credentials *credsv1.GitHubCredentials, httpClient *http.Client) (*github.Client, error) {
+// The token is served per host by credentialSource instead of being handed to
+// go-github, which attaches it to whatever host the client ends up addressing.
+func clientFor(gitHub *v1.GitHub, u *url.URL, creds *credsv1.GitHubCredentials, httpClient *http.Client, resolver credentials.Resolver) (*github.Client, error) {
 	if httpClient == nil {
 		httpClient = defaultHTTPClient()
 	}
@@ -82,42 +79,65 @@ func clientFor(gitHub *v1.GitHub, u *url.URL, credentials *credsv1.GitHubCredent
 	// stays untouched and a token cannot leak across downloads
 	// (TestFetch_SharedClientDoesNotLeakToken pins this against future
 	// go-github bumps).
-	newClient := func(client *http.Client) (*github.Client, error) {
-		opts := append([]github.ClientOptionsFunc{github.WithHTTPClient(client)}, enterpriseURLs...)
-		gh, err := github.NewClient(opts...)
-		if err != nil {
-			return nil, fmt.Errorf("error building github client for %q: %w", gitHub.RepoURL, err)
-		}
-		return gh, nil
-	}
-
-	gh, err := newClient(httpClient)
+	client := ocmhttp.WithCredentialSource(httpClient, credentialSource(u, creds, resolver))
+	opts := append([]github.ClientOptionsFunc{github.WithHTTPClient(client)}, enterpriseURLs...)
+	gh, err := github.NewClient(opts...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error building github client for %q: %w", gitHub.RepoURL, err)
 	}
-	if credentials == nil || credentials.Token == "" {
-		return gh, nil
-	}
+	return gh, nil
+}
 
-	// Ask go-github which hosts it resolved rather than deriving them again:
-	// the public API and upload hosts are its defaults, not ours.
-	for _, apiURL := range []string{gh.BaseURL(), gh.UploadURL()} {
-		parsed, err := url.Parse(apiURL)
-		if err != nil {
-			return nil, fmt.Errorf("error parsing the github api url %q of %q: %w", apiURL, gitHub.RepoURL, err)
-		}
-		if !ocmhttp.BoundToHost(u.Host, parsed.Host) {
-			return nil, fmt.Errorf("refusing to use the github credential of %q with api host %q: "+
-				"the credential is resolved for the repository host and must not be sent to another host", u.Host, parsed.Host)
-		}
+// credentialSource serves the token every request the GitHub client makes
+// carries, for the host that request addresses.
+//
+// The repository host, and any subdomain of it, is served the token the caller
+// already resolved: the consumer identity comes from repoUrl, and the public
+// API lives on api.github.com while the token is configured for github.com.
+//
+// Any other host is a host this access steers to on its own — the APIHostname
+// override, or a redirect — and gets whatever the configuration holds for it
+// under the same GitHubRepository consumer type. Without a resolver, or with
+// nothing configured for that host, the request goes out unauthenticated
+// rather than carrying a token resolved for somewhere else.
+func credentialSource(u *url.URL, creds *credsv1.GitHubCredentials, resolver credentials.Resolver) ocmhttp.CredentialSource {
+	var upfront ocmhttp.Credential
+	if creds != nil && creds.Token != "" {
+		upfront = ocmhttp.BearerToken(creds.Token)
 	}
-	return newClient(ocmhttp.BindCredential(httpClient, ocmhttp.BearerToken(credentials.Token), u.Host))
+	return func(ctx context.Context, host string) (ocmhttp.Credential, error) {
+		if ocmhttp.BoundToHost(u.Host, host) {
+			return upfront, nil
+		}
+		if resolver == nil {
+			return nil, nil
+		}
+		identity, err := githubinternal.CredentialConsumerIdentity((&url.URL{Scheme: u.Scheme, Host: host}).String())
+		if err != nil {
+			return nil, fmt.Errorf("error building a github consumer identity for %q: %w", host, err)
+		}
+		resolved, err := resolver.Resolve(ctx, identity)
+		if err != nil {
+			if errors.Is(err, credentials.ErrNotFound) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("error resolving github credentials for %q: %w", host, err)
+		}
+		hostCreds, err := credsv1.ConvertToGitHubCredentials(resolved)
+		if err != nil {
+			return nil, fmt.Errorf("error converting the github credentials of %q: %w", host, err)
+		}
+		if hostCreds == nil || hostCreds.Token == "" {
+			return nil, nil
+		}
+		return ocmhttp.BearerToken(hostCreds.Token), nil
+	}
 }
 
 // ResolveCommit resolves the access's git reference (a branch, tag, or fully
 // qualified ref like refs/heads/main) to its full commit SHA via the GitHub
 // REST API. credentials and httpClient may be nil; see clientFor.
-func ResolveCommit(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHubCredentials, httpClient *http.Client) (string, error) {
+func ResolveCommit(ctx context.Context, gitHub *v1.GitHub, creds *credsv1.GitHubCredentials, httpClient *http.Client, resolver credentials.Resolver) (string, error) {
 	u, err := parseRepoURL(gitHub.RepoURL)
 	if err != nil {
 		return "", err
@@ -126,7 +146,7 @@ func ResolveCommit(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.
 	if err != nil {
 		return "", err
 	}
-	gh, err := clientFor(gitHub, u, credentials, httpClient)
+	gh, err := clientFor(gitHub, u, creds, httpClient, resolver)
 	if err != nil {
 		return "", err
 	}
@@ -144,7 +164,7 @@ func ResolveCommit(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.
 //
 // The same client serves the API call and the archive download; the link is a
 // short-lived, pre-signed URL that needs no auth.
-func fetch(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHubCredentials, httpClient *http.Client) (io.ReadCloser, error) {
+func fetch(ctx context.Context, gitHub *v1.GitHub, creds *credsv1.GitHubCredentials, httpClient *http.Client, resolver credentials.Resolver) (io.ReadCloser, error) {
 	if httpClient == nil {
 		httpClient = defaultHTTPClient()
 	}
@@ -156,7 +176,7 @@ func fetch(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHubCr
 	if err != nil {
 		return nil, err
 	}
-	gh, err := clientFor(gitHub, u, credentials, httpClient)
+	gh, err := clientFor(gitHub, u, creds, httpClient, resolver)
 	if err != nil {
 		return nil, err
 	}

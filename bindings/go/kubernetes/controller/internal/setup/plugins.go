@@ -11,6 +11,7 @@ import (
 	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	githubdigest "ocm.software/open-component-model/bindings/go/github/digest"
 	githubrepository "ocm.software/open-component-model/bindings/go/github/repository/resource"
@@ -100,6 +101,11 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 
 	pm := manager.NewPluginManager(ctx, manager.WithArtifactVerifier(ocitar.LayoutVerifier{}))
 
+	// Filled once every credential type is registered below, because the graph ingests those
+	// types; plugins whose access can address a host beyond the one their consumer identity
+	// names look that host up through it.
+	credentialResolver := &credentials.LazyResolver{}
+
 	providerOpts := []provider.Option{
 		provider.WithScheme(ocirepository.Scheme),
 		provider.WithUserAgent(creator),
@@ -134,8 +140,12 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 	// Resources of these access types are downloaded to be verified, and by the Deployer.
 	httpClient := httpclient.New(httpclient.WithConfig(httpCfg))
 	gitRepository := gitrepository.NewResourceRepository(fsCfg, gitrepository.WithHTTPClient(httpClient))
-	gitHubRepository := githubrepository.NewResourceRepository(githubrepository.WithHTTPClient(httpClient))
-	gitHubDigestProcessor := githubdigest.NewDigestProcessor(githubrepository.WithHTTPClient(httpClient))
+	gitHubRepository := githubrepository.NewResourceRepository(
+		githubrepository.WithHTTPClient(httpClient),
+		githubrepository.WithCredentialResolver(credentialResolver))
+	gitHubDigestProcessor := githubdigest.NewDigestProcessor(
+		githubrepository.WithHTTPClient(httpClient),
+		githubrepository.WithCredentialResolver(credentialResolver))
 	wgetRepository := wgetrepository.NewResourceRepository(wgetrepository.WithHTTPClient(httpClient), wgetrepository.WithChecksumConfig(checksumCfg))
 	s3Repository := s3repository.NewResourceRepository(s3repository.WithHTTPConfig(httpCfg))
 
@@ -179,6 +189,12 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 	); err != nil {
 		return nil, fmt.Errorf("failed to register credential types: %w", err)
 	}
+
+	graph, err := NewCredentialGraph(ctx, cfg, CredentialGraphOptions{PluginManager: pm})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create credential graph: %w", err)
+	}
+	credentialResolver.Set(graph)
 
 	return pm, nil
 }

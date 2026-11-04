@@ -39,7 +39,12 @@ func OCMConfig(cmd *cobra.Command) error {
 	return nil
 }
 
-func PluginManager(cmd *cobra.Command) error {
+// PluginManager builds the plugin manager and registers the builtin plugins. It returns the
+// resolver those plugins look up credentials through for a host beyond the one their consumer
+// identity names; CredentialGraph fills it, which cannot happen earlier because the graph
+// ingests the credential types these registrations contribute.
+func PluginManager(cmd *cobra.Command) (*credentials.LazyResolver, error) {
+	credentialResolver := &credentials.LazyResolver{}
 	pluginManager := manager.NewPluginManager(cmd.Context(), manager.WithArtifactVerifier(ocitar.LayoutVerifier{}))
 
 	if cfg := ocmctx.FromContext(cmd.Context()).Configuration(); cfg == nil {
@@ -47,7 +52,7 @@ func PluginManager(cmd *cobra.Command) error {
 	} else {
 		pluginCfg, err := v2alpha1.LookupConfig(cfg)
 		if err != nil {
-			return fmt.Errorf("could not get plugin configuration: %w", err)
+			return nil, fmt.Errorf("could not get plugin configuration: %w", err)
 		}
 
 		if defaultDir, err := cmd.Flags().GetString(ocmcmd.PluginDirectoryFlag); err == nil {
@@ -69,7 +74,7 @@ func PluginManager(cmd *cobra.Command) error {
 				continue
 			}
 			if err != nil {
-				return err
+				return nil, err
 			}
 
 			loadedAnyPlugins = true
@@ -84,7 +89,7 @@ func PluginManager(cmd *cobra.Command) error {
 	filesystemConfig := ocmContext.FilesystemConfig()
 	httpConfig, err := httpv1alpha1.ResolveHTTPConfig(ocmContext.Configuration())
 	if err != nil {
-		return fmt.Errorf("could not get http configuration: %w", err)
+		return nil, fmt.Errorf("could not get http configuration: %w", err)
 	}
 	slog.DebugContext(cmd.Context(), "http config resolved",
 		slog.String("timeout", timeoutString(httpConfig.Timeout)),
@@ -93,15 +98,15 @@ func PluginManager(cmd *cobra.Command) error {
 	)
 	checksumHTTPConfig, err := checksumhttpv1alpha1.LookupConfig(ocmContext.Configuration())
 	if err != nil {
-		return fmt.Errorf("could not get checksum-http configuration: %w", err)
+		return nil, fmt.Errorf("could not get checksum-http configuration: %w", err)
 	}
-	if err := builtin.Register(pluginManager, filesystemConfig, httpConfig, checksumHTTPConfig, slog.Default()); err != nil {
-		return fmt.Errorf("could not register builtin plugins: %w", err)
+	if err := builtin.Register(pluginManager, filesystemConfig, httpConfig, checksumHTTPConfig, credentialResolver, slog.Default()); err != nil {
+		return nil, fmt.Errorf("could not register builtin plugins: %w", err)
 	}
 
 	ctx, err := ocmctx.WithPluginManager(cmd.Context(), pluginManager)
 	if err != nil {
-		return fmt.Errorf("could not initialize plugin manager context: %w", err)
+		return nil, fmt.Errorf("could not initialize plugin manager context: %w", err)
 	}
 	cmd.SetContext(ctx)
 
@@ -113,10 +118,10 @@ func PluginManager(cmd *cobra.Command) error {
 		}
 	})
 
-	return nil
+	return credentialResolver, nil
 }
 
-func CredentialGraph(cmd *cobra.Command) error {
+func CredentialGraph(cmd *cobra.Command, credentialResolver *credentials.LazyResolver) error {
 	pluginManager := ocmctx.FromContext(cmd.Context()).PluginManager()
 	if pluginManager == nil {
 		return fmt.Errorf("could not get plugin manager to initialize credential graph")
@@ -147,6 +152,7 @@ func CredentialGraph(cmd *cobra.Command) error {
 		return fmt.Errorf("could not create credential graph: %w", err)
 	}
 
+	credentialResolver.Set(graph)
 	cmd.SetContext(ocmctx.WithCredentialGraph(cmd.Context(), graph))
 
 	return nil

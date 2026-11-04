@@ -23,6 +23,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote/auth"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/helm/internal"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
@@ -128,13 +129,9 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		password = opt.OCICredentials.AccessToken
 	}
 
-	httpClient, indexClient, regClient, err := newClients(opt, helmRepo, caFile, username, password)
+	httpClient, indexClient, err := newHTTPClients(opt, caFile)
 	if err != nil {
 		return nil, err
-	}
-	if httpClient != nil {
-		// Without it, helm's OCI getter pulls the chart with a client of its own.
-		helmGetterOpts = append(helmGetterOpts, getter.WithRegistryClient(regClient))
 	}
 
 	cfgOpts := HTTPConfigGetterOpts{
@@ -154,19 +151,6 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 
 	providers := GetterProviders(httpClient, cfgOpts)
 
-	dl := &downloader.ChartDownloader{
-		Out:     os.Stderr,
-		Verify:  verify,
-		Getters: providers,
-		// set by ocm v1 originally.
-		RepositoryCache:  filepath.Join(cacheDir, ".helmcache"),
-		RepositoryConfig: filepath.Join(cacheDir, ".helmrepo"),
-		ContentCache:     filepath.Join(cacheDir, ".helmcontent"),
-		RegistryClient:   regClient,
-		Options:          helmGetterOpts,
-		Keyring:          keyring,
-	}
-
 	indexProviders := providers
 	if indexClient != nil {
 		indexProviders = GetterProviders(indexClient, cfgOpts)
@@ -184,11 +168,42 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		return nil, fmt.Errorf("error resolving chart URL %q via index.yaml: %w", helmRepo, err)
 	}
 
+	// The registry client is built only now: the chart URL the index resolved decides which
+	// registry it reaches, and so which credentials it must hold. Helm's registry client
+	// discards the caller's context (it calls context.Background() internally), so the lookup
+	// for that registry happens here rather than from a credential callback.
+	registryCredentials, err := registryCredentialsFor(ctx, opt.CredentialResolver, helmRepo, resolvedRepo, username, password)
+	if err != nil {
+		return nil, err
+	}
+	regClient, err := newRegistryClient(httpClient, registryCredentials)
+	if err != nil {
+		return nil, err
+	}
+	if httpClient != nil {
+		// Without it, helm's OCI getter pulls the chart with a client of its own.
+		helmGetterOpts = append(helmGetterOpts, getter.WithRegistryClient(regClient))
+	}
+
+	dl := &downloader.ChartDownloader{
+		Out:     os.Stderr,
+		Verify:  verify,
+		Getters: providers,
+		// set by ocm v1 originally.
+		RepositoryCache:  filepath.Join(cacheDir, ".helmcache"),
+		RepositoryConfig: filepath.Join(cacheDir, ".helmrepo"),
+		ContentCache:     filepath.Join(cacheDir, ".helmcontent"),
+		RegistryClient:   regClient,
+		Options:          helmGetterOpts,
+		Keyring:          keyring,
+	}
+
 	// Credentials belong to the host of helmRepo. The providers built above scope them to it, and
 	// so does the registry client's authorizer, so a chart URL resolved to another host (e.g. the
 	// upstream URL in the index.yaml of an Artifactory remote repository, which may name an
-	// oci:// registry) is fetched without them. For the standard getter.HTTPGetter path (no custom
-	// client), credentials are forwarded via dl.Options only for the same host.
+	// oci:// registry) is fetched with whatever the configuration holds for that host instead.
+	// For the standard getter.HTTPGetter path (no custom client), credentials are forwarded via
+	// dl.Options only for the same host.
 	if httpClient == nil && username != "" && password != "" && sameHost(helmRepo, resolvedRepo) {
 		dl.Options = append(dl.Options, getter.WithBasicAuth(username, password))
 	}
@@ -317,59 +332,128 @@ func renameChart(savedPath, target string) (string, error) {
 	return target, nil
 }
 
-// newClients builds the registry client and, with an HTTP configuration, the clients for
-// downloads and for index.yaml. One configuration (per-host routing, timeouts), with the TLS
-// material of the input or credentials overriding its own, then serves the OCI registry
-// client, the OCI chart pull and the HTTP/S getter alike. The registry client carries the
-// resolved credentials, because with an HTTP configuration it also performs the OCI chart pull;
-// helmRepo is the repository those credentials belong to, and scopedAuthorizer keeps them there.
-func newClients(opt *option, helmRepo, caFile, username, password string) (httpClient, indexClient *http.Client, regClient *registry.Client, err error) {
-	var regClientOpts []registry.ClientOption
-	if opt.HTTPConfig != nil {
-		if httpClient, err = overlayInputTLS(ocmhttp.New(ocmhttp.WithConfig(opt.HTTPConfig)),
-			caFile, opt.Credentials.CertFile, opt.Credentials.KeyFile); err != nil {
-			return nil, nil, nil, err
-		}
-		// index.yaml is parsed, never hashed, and compresses up to ~18x.
-		if indexClient, err = overlayInputTLS(ocmhttp.New(ocmhttp.WithConfig(opt.HTTPConfig), ocmhttp.WithCompression()),
-			caFile, opt.Credentials.CertFile, opt.Credentials.KeyFile); err != nil {
-			return nil, nil, nil, err
-		}
-		regClientOpts = append(regClientOpts, registry.ClientOptHTTPClient(httpClient))
+// newHTTPClients builds, with an HTTP configuration, the clients for downloads and for
+// index.yaml. One configuration (per-host routing, timeouts), with the TLS material of the
+// input or credentials overriding its own, then serves the OCI registry client, the OCI chart
+// pull and the HTTP/S getter alike. Without an HTTP configuration both are nil and helm's own
+// defaults apply.
+func newHTTPClients(opt *option, caFile string) (httpClient, indexClient *http.Client, err error) {
+	if opt.HTTPConfig == nil {
+		return nil, nil, nil
 	}
-	if username != "" && password != "" {
-		authorizer, err := scopedAuthorizer(helmRepo, httpClient, username, password)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		regClientOpts = append(regClientOpts, registry.ClientOptAuthorizer(authorizer))
+	if httpClient, err = overlayInputTLS(ocmhttp.New(ocmhttp.WithConfig(opt.HTTPConfig)),
+		caFile, opt.Credentials.CertFile, opt.Credentials.KeyFile); err != nil {
+		return nil, nil, err
 	}
-	if regClient, err = registry.NewClient(regClientOpts...); err != nil {
-		return nil, nil, nil, fmt.Errorf("error creating registry client: %w", err)
+	// index.yaml is parsed, never hashed, and compresses up to ~18x.
+	if indexClient, err = overlayInputTLS(ocmhttp.New(ocmhttp.WithConfig(opt.HTTPConfig), ocmhttp.WithCompression()),
+		caFile, opt.Credentials.CertFile, opt.Credentials.KeyFile); err != nil {
+		return nil, nil, err
 	}
-	return httpClient, indexClient, regClient, nil
+	return httpClient, indexClient, nil
 }
 
-// scopedAuthorizer builds the registry authorizer that sends username and password to the
-// registry of ref and to no other. registry.ClientOptBasicAuth would hand them to whatever
-// registry the client ends up talking to, and the chart URL an index.yaml resolves to need
-// not be the repository the credentials were resolved for: a remote or virtual repository
-// names the upstream registry there, so the index decides where the credentials go.
+// newRegistryClient builds the OCI registry client, serving each registry in credentials the
+// credentials recorded for it and every other registry none.
 //
-// client may be nil, in which case the OCM http defaults (retries, transport timeouts) apply
-// instead of the http.DefaultClient oras would otherwise fall back to.
-func scopedAuthorizer(ref string, client *http.Client, username, password string) (auth.Client, error) {
-	host, err := registryHost(ref)
-	if err != nil {
-		return auth.Client{}, err
-	}
+// registry.ClientOptBasicAuth installs a credential function that ignores the registry it is
+// asked about, so it hands one set of credentials to whatever registry the client ends up
+// talking to. client may be nil, in which case the OCM http defaults (retries, transport
+// timeouts) apply instead of the http.DefaultClient oras would otherwise fall back to.
+func newRegistryClient(client *http.Client, credentials map[string]auth.Credential) (*registry.Client, error) {
 	if client == nil {
 		client = ocmhttp.New()
 	}
-	return auth.Client{
-		Client:     client,
-		Credential: auth.StaticCredential(host, auth.Credential{Username: username, Password: password}),
-	}, nil
+	regClient, err := registry.NewClient(
+		registry.ClientOptHTTPClient(client),
+		registry.ClientOptAuthorizer(auth.Client{
+			Client: client,
+			Credential: func(_ context.Context, registry string) (auth.Credential, error) {
+				if cred, ok := credentials[registry]; ok {
+					return cred, nil
+				}
+				return auth.EmptyCredential, nil
+			},
+		}),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error creating registry client: %w", err)
+	}
+	return regClient, nil
+}
+
+// registryCredentialsFor records which credentials each registry the chart pull may reach is
+// served. helmRepo is the repository username and password were resolved for; resolvedRepo is
+// the chart URL its index.yaml produced, which for a remote or virtual repository names the
+// upstream registry instead.
+//
+// A resolvedRepo on another host is served whatever the configuration holds for that host
+// under the OCIRegistry consumer type — the same lookup the GitHub binding performs per host,
+// done eagerly here because helm's registry client discards the context it is called with and
+// so cannot ask a credential callback at request time. Without a resolver, or with nothing
+// configured for that host, it is served nothing rather than credentials resolved for the
+// repository.
+func registryCredentialsFor(ctx context.Context, resolver credentials.Resolver, helmRepo, resolvedRepo, username, password string) (map[string]auth.Credential, error) {
+	repoHost, err := registryHost(helmRepo)
+	if err != nil {
+		return nil, err
+	}
+	registryCredentials := map[string]auth.Credential{}
+	if username != "" || password != "" {
+		registryCredentials[repoHost] = auth.Credential{Username: username, Password: password}
+	}
+
+	resolvedHost, err := registryHost(resolvedRepo)
+	if err != nil {
+		return nil, err
+	}
+	if resolvedHost == "" || resolvedHost == repoHost {
+		return registryCredentials, nil
+	}
+
+	resolved, err := resolveRegistryCredential(ctx, resolver, resolvedHost)
+	if err != nil {
+		return nil, err
+	}
+	if resolved != auth.EmptyCredential {
+		registryCredentials[resolvedHost] = resolved
+	}
+	return registryCredentials, nil
+}
+
+// resolveRegistryCredential resolves the credentials configured for registry under the
+// OCIRegistry consumer type, returning auth.EmptyCredential when there is no resolver or
+// nothing configured for that registry.
+func resolveRegistryCredential(ctx context.Context, resolver credentials.Resolver, registry string) (auth.Credential, error) {
+	if resolver == nil {
+		return auth.EmptyCredential, nil
+	}
+	identity, err := internal.CredentialConsumerIdentity("oci://" + registry)
+	if err != nil {
+		return auth.EmptyCredential, fmt.Errorf("error building an OCI consumer identity for %q: %w", registry, err)
+	}
+	resolved, err := resolver.Resolve(ctx, identity)
+	if err != nil {
+		if errors.Is(err, credentials.ErrNotFound) {
+			return auth.EmptyCredential, nil
+		}
+		return auth.EmptyCredential, fmt.Errorf("error resolving OCI credentials for %q: %w", registry, err)
+	}
+	ociCreds, err := helmcredsv1.ConvertToOCICredentials(resolved)
+	if err != nil {
+		return auth.EmptyCredential, fmt.Errorf("error converting the OCI credentials of %q: %w", registry, err)
+	}
+	if ociCreds == nil {
+		return auth.EmptyCredential, nil
+	}
+	password := ociCreds.Password
+	if password == "" {
+		password = ociCreds.AccessToken
+	}
+	if ociCreds.Username == "" && password == "" {
+		return auth.EmptyCredential, nil
+	}
+	return auth.Credential{Username: ociCreds.Username, Password: password}, nil
 }
 
 // registryHost returns the host (including a port) of a Helm repository reference, which may
@@ -401,24 +485,19 @@ func ResolveOCIManifestDigest(ctx context.Context, chartReference string, creden
 			password = credentials.AccessToken
 		}
 	}
-	var (
-		regClientOpts []registry.ClientOption
-		client        *http.Client
-	)
+	var client *http.Client
 	if httpConfig != nil {
 		client = ocmhttp.New(ocmhttp.WithConfig(httpConfig))
-		regClientOpts = append(regClientOpts, registry.ClientOptHTTPClient(client))
 	}
-	if username != "" && password != "" {
-		authorizer, err := scopedAuthorizer(ref, client, username, password)
-		if err != nil {
-			return "", err
-		}
-		regClientOpts = append(regClientOpts, registry.ClientOptAuthorizer(authorizer))
-	}
-	regClient, err := registry.NewClient(regClientOpts...)
+	// The reference is the repository the credentials were resolved for, so no other
+	// registry is reached here and none is recorded.
+	registryCredentials, err := registryCredentialsFor(ctx, nil, chartReference, chartReference, username, password)
 	if err != nil {
-		return "", fmt.Errorf("error creating registry client: %w", err)
+		return "", err
+	}
+	regClient, err := newRegistryClient(client, registryCredentials)
+	if err != nil {
+		return "", err
 	}
 
 	// Helm's registry Resolve does not accept a context, so we run it in a
@@ -488,7 +567,7 @@ func IndexGetterProviders(ctx context.Context, helmRepo string, credentials *hel
 	if credentials == nil {
 		credentials = &helmcredsv1.HelmHTTPCredentials{}
 	}
-	_, indexClient, _, err := newClients(&option{Credentials: credentials, HTTPConfig: httpConfig}, helmRepo, "", credentials.Username, credentials.Password)
+	_, indexClient, err := newHTTPClients(&option{Credentials: credentials, HTTPConfig: httpConfig}, "")
 	if err != nil {
 		return nil, err
 	}

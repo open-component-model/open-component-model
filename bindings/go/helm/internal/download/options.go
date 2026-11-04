@@ -6,6 +6,7 @@ import (
 	godigest "github.com/opencontainers/go-digest"
 	"helm.sh/helm/v4/pkg/getter"
 
+	"ocm.software/open-component-model/bindings/go/credentials"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
@@ -60,6 +61,11 @@ type option struct {
 	// Accepts the serialisable config type so that external plugins can round-trip it over
 	// the wire and reconstruct an equivalent client.
 	HTTPConfig *httpv1alpha1.Config
+
+	// CredentialResolver looks up credentials for a registry the chart URL resolves to that is
+	// not the repository the credentials were resolved for. Nil leaves such a registry
+	// unauthenticated.
+	CredentialResolver credentials.Resolver
 
 	// OCIManifestDigest pins an oci:// chart to this manifest digest: the chart is pulled by
 	// digest instead of by tag, so the registry client verifies it against the manifest.
@@ -128,6 +134,17 @@ func WithAlwaysDownloadProv(dl bool) Option {
 func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 	return func(t *option) {
 		t.HTTPConfig = cfg
+	}
+}
+
+// WithCredentialResolver sets the resolver used to look up credentials for a registry the
+// chart URL resolves to that is not the Helm repository — the upstream registry named in the
+// index.yaml of a remote or virtual repository. Credentials are looked up under the
+// OCIRegistry consumer type, so such a registry is served only what the configuration holds
+// for it, never the repository's credentials.
+func WithCredentialResolver(resolver credentials.Resolver) Option {
+	return func(t *option) {
+		t.CredentialResolver = resolver
 	}
 }
 

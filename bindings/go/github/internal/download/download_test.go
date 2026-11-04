@@ -46,7 +46,7 @@ func TestDownload(t *testing.T) {
 		downloaded, err := Download(t.Context(), &v1.GitHub{
 			RepoURL: server.URL + "/octocat/Hello-World",
 			Commit:  downloadTestCommit,
-		}, nil, nil)
+		}, nil, nil, nil)
 		require.NoError(t, err)
 
 		reader, err := downloaded.ReadCloser()
@@ -68,7 +68,7 @@ func TestDownload(t *testing.T) {
 		_, err := Download(t.Context(), &v1.GitHub{
 			RepoURL: "https://github.com/octocat/Hello-World",
 			Ref:     "main",
-		}, nil, nil)
+		}, nil, nil, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "pinned commit")
 	})
@@ -80,7 +80,7 @@ func TestDownload(t *testing.T) {
 		_, err := Download(t.Context(), &v1.GitHub{
 			RepoURL: server.URL + "/octocat/No-Such-Repo",
 			Commit:  downloadTestCommit,
-		}, nil, nil)
+		}, nil, nil, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "error resolving github archive link")
 	})

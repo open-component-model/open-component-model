@@ -20,13 +20,18 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/wget"
 	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	helmresource "ocm.software/open-component-model/bindings/go/helm/repository/resource"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 )
 
-func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alpha1.Config, httpConfig *httpv1alpha1.Config, checksumHTTPConfig *checksumhttpv1alpha1.Config, logger *slog.Logger) error {
+// Register wires the builtin plugins into manager. credentialResolver is handed to the
+// plugins whose access can address a host beyond the one their consumer identity names; it is
+// filled once the credential graph exists, because the graph ingests the credential types
+// these same registrations contribute.
+func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alpha1.Config, httpConfig *httpv1alpha1.Config, checksumHTTPConfig *checksumhttpv1alpha1.Config, credentialResolver credentials.Resolver, logger *slog.Logger) error {
 	if err := ocicredentialplugin.Register(manager.CredentialRepositoryRegistry); err != nil {
 		return fmt.Errorf("could not register OCI inbuilt credential plugin: %w", err)
 	}
@@ -70,7 +75,8 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	if err := github.Register(manager.ResourcePluginRegistry,
 		manager.DigestProcessorRegistry,
 		manager.CredentialTypeRegistry,
-		httpConfig); err != nil {
+		httpConfig,
+		credentialResolver); err != nil {
 		return fmt.Errorf("could not register github inbuilt plugin: %w", err)
 	}
 
@@ -102,7 +108,9 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		return fmt.Errorf("could not register helm digest processor plugin: %w", err)
 	}
 	if err := manager.ResourcePluginRegistry.RegisterInternalResourcePlugin(
-		helmresource.NewResourceRepository(filesystemConfig, helmresource.WithHTTPConfig(httpConfig)),
+		helmresource.NewResourceRepository(filesystemConfig,
+			helmresource.WithHTTPConfig(httpConfig),
+			helmresource.WithCredentialResolver(credentialResolver)),
 	); err != nil {
 		return fmt.Errorf("could not register helm resource repository plugin: %w", err)
 	}

@@ -3,6 +3,7 @@ package github
 import (
 	"fmt"
 
+	"ocm.software/open-component-model/bindings/go/credentials"
 	githubdigest "ocm.software/open-component-model/bindings/go/github/digest"
 	githubrepository "ocm.software/open-component-model/bindings/go/github/repository/resource"
 	httpclient "ocm.software/open-component-model/bindings/go/http"
@@ -18,10 +19,13 @@ func Register(resourcePluginRegistry *resource.ResourceRegistry,
 	digestProcessorRegistry *digestprocessor.RepositoryRegistry,
 	credentialTypeRegistry *credentialtyperepository.CredentialTypeRegistry,
 	httpConfig *httpv1alpha1.Config,
+	credentialResolver credentials.Resolver,
 ) error {
 	httpClient := httpclient.New(httpclient.WithConfig(httpConfig))
 
-	repository := githubrepository.NewResourceRepository(githubrepository.WithHTTPClient(httpClient))
+	repository := githubrepository.NewResourceRepository(
+		githubrepository.WithHTTPClient(httpClient),
+		githubrepository.WithCredentialResolver(credentialResolver))
 	if err := credentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(repository); err != nil {
 		return fmt.Errorf("could not register github credential types: %w", err)
 	}
@@ -29,7 +33,9 @@ func Register(resourcePluginRegistry *resource.ResourceRegistry,
 		return fmt.Errorf("could not register github resource repository plugin: %w", err)
 	}
 
-	digestProcessor := githubdigest.NewDigestProcessor(githubrepository.WithHTTPClient(httpClient))
+	digestProcessor := githubdigest.NewDigestProcessor(
+		githubrepository.WithHTTPClient(httpClient),
+		githubrepository.WithCredentialResolver(credentialResolver))
 	if err := digestProcessorRegistry.RegisterInternalDigestProcessorPlugin(digestProcessor); err != nil {
 		return fmt.Errorf("could not register github digest processor plugin: %w", err)
 	}

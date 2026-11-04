@@ -1,17 +1,15 @@
 package download
 
 import (
-	"encoding/pem"
-	"net/http"
-	"net/http/httptest"
-	"strings"
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/registry/remote/auth"
 
-	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
-	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/credentials"
+	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const (
@@ -19,73 +17,131 @@ const (
 	testPassword = "VICTIM-SHARED-REPOSITORY-PASSWORD"
 )
 
-func TestScopedAuthorizer(t *testing.T) {
+// staticResolver resolves the hostnames it was given and reports ErrNotFound for anything
+// else, standing in for the credential graph built from an ocmconfig.
+type staticResolver struct {
+	byHostname map[string]auth.Credential
+}
+
+func (r *staticResolver) Resolve(_ context.Context, identity runtime.Identity) (runtime.Typed, error) {
+	cred, ok := r.byHostname[identity[runtime.IdentityAttributeHostname]]
+	if !ok {
+		return nil, credentials.ErrNotFound
+	}
+	return &ocicredsv1.OCICredentials{
+		Type:     runtime.NewVersionedType(ocicredsv1.OCICredentialsType, ocicredsv1.Version),
+		Username: cred.Username,
+		Password: cred.Password,
+	}, nil
+}
+
+// TestRegistryCredentialsFor covers which credentials each registry the chart pull may reach
+// is served. The repository the credentials were resolved for gets them; a chart URL the
+// index resolved to another host gets whatever the configuration holds for that host, and
+// nothing when it holds none — never the repository's credentials.
+func TestRegistryCredentialsFor(t *testing.T) {
+	const repo = "https://repo.example.com/charts/mychart:1.0.0"
+	repoCred := auth.Credential{Username: testUser, Password: testPassword}
+	upstreamCred := auth.Credential{Username: "upstream-user", Password: "upstream-password"}
+
 	tests := []struct {
-		name      string
-		helmRepo  string
-		target    string
-		wantCreds bool
+		name         string
+		helmRepo     string
+		resolvedRepo string
+		resolver     credentials.Resolver
+		want         map[string]auth.Credential
 	}{
-		{name: "http repository host", helmRepo: "https://repo.example.com/charts/mychart:1.0.0", target: "repo.example.com", wantCreds: true},
-		{name: "oci repository host", helmRepo: "oci://registry.example.com/charts/mychart:1.0.0", target: "registry.example.com", wantCreds: true},
-		{name: "repository host with a port", helmRepo: "https://repo.example.com:8443/charts", target: "repo.example.com:8443", wantCreds: true},
-		{name: "bare oci reference", helmRepo: "registry.example.com/charts/mychart:1.0.0", target: "registry.example.com", wantCreds: true},
-		{name: "chart resolved to another registry", helmRepo: "https://repo.example.com/charts/mychart:1.0.0", target: "attacker.invalid"},
-		{name: "same host on another port", helmRepo: "https://repo.example.com/charts", target: "repo.example.com:1234"},
+		{
+			name:         "chart served by the repository itself",
+			helmRepo:     repo,
+			resolvedRepo: "https://repo.example.com/charts/mychart-1.0.0.tgz",
+			want:         map[string]auth.Credential{"repo.example.com": repoCred},
+		},
+		{
+			name:         "oci repository",
+			helmRepo:     "oci://registry.example.com/charts/mychart:1.0.0",
+			resolvedRepo: "oci://registry.example.com/charts/mychart:1.0.0",
+			want:         map[string]auth.Credential{"registry.example.com": repoCred},
+		},
+		{
+			name:         "another registry without a resolver is served nothing",
+			helmRepo:     repo,
+			resolvedRepo: "oci://upstream.invalid/evil/mychart:1.0.0",
+			want:         map[string]auth.Credential{"repo.example.com": repoCred},
+		},
+		{
+			name:         "another registry absent from the configuration is served nothing",
+			helmRepo:     repo,
+			resolvedRepo: "oci://upstream.invalid/evil/mychart:1.0.0",
+			resolver:     &staticResolver{byHostname: map[string]auth.Credential{"repo.example.com": repoCred}},
+			want:         map[string]auth.Credential{"repo.example.com": repoCred},
+		},
+		{
+			name:         "another registry is served what the configuration holds for it",
+			helmRepo:     repo,
+			resolvedRepo: "oci://upstream.invalid/charts/mychart:1.0.0",
+			resolver:     &staticResolver{byHostname: map[string]auth.Credential{"upstream.invalid": upstreamCred}},
+			want: map[string]auth.Credential{
+				"repo.example.com": repoCred,
+				"upstream.invalid": upstreamCred,
+			},
+		},
+		{
+			name:         "a port distinguishes registries",
+			helmRepo:     "https://repo.example.com:8443/charts/mychart:1.0.0",
+			resolvedRepo: "oci://repo.example.com:9999/charts/mychart:1.0.0",
+			resolver:     &staticResolver{byHostname: map[string]auth.Credential{"repo.example.com": upstreamCred}},
+			want: map[string]auth.Credential{
+				"repo.example.com:8443": repoCred,
+				"repo.example.com:9999": upstreamCred,
+			},
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			authorizer, err := scopedAuthorizer(tc.helmRepo, nil, testUser, testPassword)
+			got, err := registryCredentialsFor(t.Context(), tc.resolver, tc.helmRepo, tc.resolvedRepo, testUser, testPassword)
 			r.NoError(err)
-
-			cred, err := authorizer.Credential(t.Context(), tc.target)
-			r.NoError(err)
-			if tc.wantCreds {
-				r.Equal(auth.Credential{Username: testUser, Password: testPassword}, cred)
-				return
-			}
-			r.Equal(auth.EmptyCredential, cred)
+			r.Equal(tc.want, got)
 		})
 	}
 }
 
-// TestNewClients_RegistryCredentialsStayOnTheRepositoryHost covers the credentials the
-// registry client carries. Credentials are resolved for the Helm repository, but the chart
-// URL an index.yaml resolves to need not live there: a remote or virtual repository names
-// the upstream registry, so an index entry of "oci://<other host>/..." decides where the
-// registry client sends them.
-func TestNewClients_RegistryCredentialsStayOnTheRepositoryHost(t *testing.T) {
-	r := require.New(t)
-
-	var authSeen []string
-	registrySrv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		authSeen = append(authSeen, req.Header.Get("Authorization"))
-		// The challenge is what makes an oras client resolve and send its
-		// credentials for this host.
-		w.Header().Set("WWW-Authenticate", `Basic realm="registry"`)
-		w.WriteHeader(http.StatusUnauthorized)
-	}))
-	defer registrySrv.Close()
-
-	caPEM := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: registrySrv.Certificate().Raw}))
-	opt := &option{
-		Credentials: &helmcredsv1.HelmHTTPCredentials{Username: testUser, Password: testPassword},
-		HTTPConfig:  &httpv1alpha1.Config{TLSConfig: httpv1alpha1.TLSConfig{RootCAsPEM: caPEM}},
+// TestNewRegistryClient_SendsOnlyRecordedCredentials drives the real registry client against
+// a registry it holds no credentials for, as a chart URL resolved to another host produces.
+func TestNewRegistryClient_SendsOnlyRecordedCredentials(t *testing.T) {
+	tests := []struct {
+		name     string
+		recorded func(host string) map[string]auth.Credential
+		wantAuth string
+	}{
+		{
+			name: "a registry with no recorded credentials is reached unauthenticated",
+			recorded: func(string) map[string]auth.Credential {
+				return map[string]auth.Credential{"repo.invalid": {Username: testUser, Password: testPassword}}
+			},
+		},
+		{
+			name: "a registry with recorded credentials is reached with them",
+			recorded: func(host string) map[string]auth.Credential {
+				return map[string]auth.Credential{host: {Username: "upstream-user", Password: "upstream-password"}}
+			},
+			wantAuth: "Basic " + basicAuthHeader("upstream-user", "upstream-password"),
+		},
 	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			seen, host, client := challengingRegistry(t)
 
-	// The credentials belong to this repository, which is never dialled; the
-	// chart they resolve to is served by registrySrv instead.
-	const helmRepo = "https://repo.invalid/charts/mychart:0.1.0"
-	_, _, regClient, err := newClients(opt, helmRepo, "", testUser, testPassword)
-	r.NoError(err)
+			regClient, err := newRegistryClient(client, tc.recorded(host))
+			r.NoError(err)
 
-	resolved := strings.TrimPrefix(registrySrv.URL, "https://") + "/charts/mychart:0.1.0"
-	_, err = regClient.Resolve(resolved)
-	r.Error(err, "the registry answers 401 to every request")
-
-	r.NotEmpty(authSeen, "the registry client must have reached the resolved host")
-	for _, header := range authSeen {
-		r.Empty(header, "the Helm repository credentials must not be sent to the resolved chart host")
+			_, err = regClient.Resolve(host + "/charts/mychart:0.1.0")
+			r.Error(err, "the registry answers 401 to every request")
+			r.NotEmpty(*seen, "the registry client must have reached the host")
+			last := (*seen)[len(*seen)-1]
+			r.Equal(tc.wantAuth, last)
+		})
 	}
 }

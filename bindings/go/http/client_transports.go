@@ -77,12 +77,12 @@ func cloneTransports(rt nethttp.RoundTripper, apply func(*nethttp.Transport)) (n
 			return nil, err
 		}
 		return &userAgentTransport{base: b, userAgent: t.userAgent}, nil
-	case *boundCredentialTransport:
+	case *credentialSourceTransport:
 		b, err := cloneTransports(t.base, apply)
 		if err != nil {
 			return nil, err
 		}
-		return &boundCredentialTransport{base: b, hosts: t.hosts, cred: t.cred}, nil
+		return &credentialSourceTransport{base: b, src: t.src}, nil
 	case *hostRouter:
 		global, err := cloneTransports(t.globalRT, apply)
 		if err != nil {

@@ -2,6 +2,8 @@ package http_test
 
 import (
 	"context"
+	"encoding/base64"
+	"errors"
 	"net"
 	nethttp "net/http"
 	"net/http/httptest"
@@ -134,6 +136,87 @@ func TestBindCredential(t *testing.T) {
 		bound := ocmhttp.BindCredential(base, ocmhttp.BearerToken("secret"), "example.invalid")
 		r.NotSame(base, bound)
 		r.Same(transport, base.Transport, "binding a credential must not re-wire the shared client")
+	})
+}
+
+func TestWithCredentialSource(t *testing.T) {
+	t.Run("serves each host what the source holds for it", func(t *testing.T) {
+		r := require.New(t)
+		seen := seenAuth{}
+		first := httptest.NewServer(seen.handler())
+		defer first.Close()
+		second := httptest.NewServer(seen.handler())
+		defer second.Close()
+
+		client := clientDialing(map[string]string{
+			"first.invalid:80":  serverAddr(t, first),
+			"second.invalid:80": serverAddr(t, second),
+		})
+		client = ocmhttp.WithCredentialSource(client, func(_ context.Context, host string) (ocmhttp.Credential, error) {
+			switch host {
+			case "first.invalid":
+				return ocmhttp.BearerToken("first-token"), nil
+			case "second.invalid":
+				return ocmhttp.BearerToken("second-token"), nil
+			}
+			return nil, nil
+		})
+
+		for _, url := range []string{"http://first.invalid/a", "http://second.invalid/b"} {
+			resp, err := get(t, client, url)
+			r.NoError(err)
+			r.NoError(resp.Body.Close())
+		}
+		r.Equal("Bearer first-token", seen["first.invalid"])
+		r.Equal("Bearer second-token", seen["second.invalid"])
+	})
+
+	t.Run("asks for the redirect target, not the host the call started on", func(t *testing.T) {
+		r := require.New(t)
+		seen := seenAuth{}
+		var asked []string
+
+		elsewhere := httptest.NewServer(seen.handler())
+		defer elsewhere.Close()
+		start := httptest.NewServer(nethttp.HandlerFunc(func(w nethttp.ResponseWriter, req *nethttp.Request) {
+			seen.record(req)
+			nethttp.Redirect(w, req, "http://elsewhere.invalid/chart", nethttp.StatusFound)
+		}))
+		defer start.Close()
+
+		client := clientDialing(map[string]string{
+			"start.invalid:80":     serverAddr(t, start),
+			"elsewhere.invalid:80": serverAddr(t, elsewhere),
+		})
+		client = ocmhttp.WithCredentialSource(client, func(_ context.Context, host string) (ocmhttp.Credential, error) {
+			asked = append(asked, host)
+			// The redirect target has its own credential configured, as an
+			// ocmconfig entry for that host would give it.
+			if host == "elsewhere.invalid" {
+				return ocmhttp.BasicAuth("user", "elsewhere-password"), nil
+			}
+			return ocmhttp.BearerToken("start-token"), nil
+		})
+
+		resp, err := get(t, client, "http://start.invalid/chart")
+		r.NoError(err)
+		r.NoError(resp.Body.Close())
+		r.Equal([]string{"start.invalid", "elsewhere.invalid"}, asked)
+		r.Equal("Bearer start-token", seen["start.invalid"])
+		r.Equal(nethttp.Header{"Authorization": []string{"Basic " + base64.StdEncoding.EncodeToString([]byte("user:elsewhere-password"))}}.Get("Authorization"),
+			seen["elsewhere.invalid"], "the redirect target must get its own credential")
+	})
+
+	t.Run("fails the request when the source fails", func(t *testing.T) {
+		r := require.New(t)
+		server := httptest.NewServer(seenAuth{}.handler())
+		defer server.Close()
+
+		client := ocmhttp.WithCredentialSource(server.Client(), func(_ context.Context, _ string) (ocmhttp.Credential, error) {
+			return nil, errors.New("resolver exploded")
+		})
+		_, err := get(t, client, server.URL)
+		r.ErrorContains(err, "resolver exploded")
 	})
 }
 

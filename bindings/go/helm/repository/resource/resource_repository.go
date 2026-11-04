@@ -13,6 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory/cache"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	helminternal "ocm.software/open-component-model/bindings/go/helm/internal"
 	helmdownload "ocm.software/open-component-model/bindings/go/helm/internal/download"
@@ -32,10 +33,22 @@ import (
 type ResourceRepository struct {
 	filesystemConfig *filesystemv1alpha1.Config
 	httpConfig       *httpv1alpha1.Config
+	resolver         credentials.Resolver
 }
 
 // Option configures a ResourceRepository.
 type Option func(*ResourceRepository)
+
+// WithCredentialResolver sets the resolver used to look up credentials for a registry the
+// chart URL resolves to that is not the repository GetResourceCredentialConsumerIdentity
+// names — the upstream registry an index.yaml names. Credentials are looked up under the
+// OCIRegistry consumer type, so such a registry is served only what the configuration holds
+// for it. Without a resolver it is addressed unauthenticated.
+func WithCredentialResolver(resolver credentials.Resolver) Option {
+	return func(r *ResourceRepository) {
+		r.resolver = resolver
+	}
+}
 
 // WithHTTPConfig sets the HTTP client configuration used for chart downloads and OCI registry access.
 // The repository builds its internal client from cfg on each download. When nil, the default Helm
@@ -125,7 +138,10 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	slog.DebugContext(ctx, "Created temporary download directory", "dir", downloadDir)
 
 	isOCI := strings.HasPrefix(helmURL, "oci://")
-	opts := []helmdownload.Option{helmdownload.WithAlwaysDownloadProv(true)}
+	opts := []helmdownload.Option{
+		helmdownload.WithAlwaysDownloadProv(true),
+		helmdownload.WithCredentialResolver(r.resolver),
+	}
 	var ociCreds *ocicredsv1.OCICredentials
 	if credentials != nil {
 		if isOCI {
