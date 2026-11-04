@@ -168,18 +168,24 @@ The schema below defines the full structure of the `oci.cache.config.ocm.softwar
 
 ### Remote Policy in the Controller
 
-The controller does not accept `oci.cache.config.ocm.software`, because one blob cache serves every namespace and a
-configuration referenced by a single object must not change it. Set the policy for the whole controller with the
-`manager.cache.ociRemotePolicy` Helm value, which sets the `--oci-cache-remote-policy` flag:
+The controller does not accept `oci.cache.config.ocm.software` in `spec.ocmConfig` for individual objects. One blob
+cache serves every namespace so a single object should not be able to configure it. Instead, set the policy for the whole
+controller with the `manager.ocmConfig` Helm value like this:
 
 ```yaml
 manager:
-  cache:
-    ociRemotePolicy: Always
+  ocmConfig:
+    configurations:
+      - type: oci.cache.config.ocm.software/v1alpha1
+        remotePolicy: Always
 ```
 
-`ociRemotePolicy` is an enum with the following two values: `IfNotPresent` or `Always`. If you set the flag directly,
-any other value stops the controller from starting.
+The chart stores this configuration in a `ConfigMap`, mounts it into the controller, and passes it with the
+`--ocm-config` flag automatically. `type` defaults to `generic.config.ocm.software/v1`. The controller reads the file
+once at startup. Using `checksum/ocm-config` annotation on the deployment, if the config changes, the pod will be restarted.
+
+`oci.cache.config.ocm.software` is the only type accepted here. Any other type, or an invalid `remotePolicy`, results in
+a startup error.
 
 {{< callout context="caution" title="IfNotPresent shares cached content across namespaces" icon="outline/alert-triangle" >}}
 The blob cache key is the digest, not the credentials. With `IfNotPresent`, a blob that one namespace fetched with its

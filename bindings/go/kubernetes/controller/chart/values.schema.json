@@ -35,13 +35,6 @@
                         },
                         "deployerDownloadSize": {
                             "type": "integer"
-                        },
-                        "ociRemotePolicy": {
-                            "type": "string",
-                            "enum": [
-                                "IfNotPresent",
-                                "Always"
-                            ]
                         }
                     }
                 },
@@ -189,6 +182,9 @@
                     }
                 },
                 "nodeSelector": {
+                    "type": "object"
+                },
+                "ocmConfig": {
                     "type": "object"
                 },
                 "podSecurityContext": {
