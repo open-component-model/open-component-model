@@ -987,8 +987,8 @@ func TestPackingRejectsInvalidOCILayoutDigest(t *testing.T) {
 		wantError  string
 		wantNoPush bool
 	}{
-		{name: "wrong root", hash: "SHA-256", value: other.Digest.Encoded(), wantError: "digest value mismatch", wantNoPush: true},
-		{name: "wrong hash", hash: "SHA-512", value: root.Digest.Encoded(), wantError: "hash algorithm mismatch", wantNoPush: true},
+		{name: "wrong root", hash: "SHA-256", value: other.Digest.Encoded(), wantError: "OCI artifact digest mismatch", wantNoPush: true},
+		{name: "wrong hash", hash: "SHA-512", value: root.Digest.Encoded(), wantError: "invalid digest", wantNoPush: true},
 		{name: "corrupt layer", hash: "SHA-256", value: root.Digest.Encoded(), corrupt: true, wantError: "mismatched digest"},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
