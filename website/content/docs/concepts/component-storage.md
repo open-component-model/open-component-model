@@ -27,9 +27,8 @@ could be confused, and *descriptor* on its own always means the component descri
 | Term | Model | Meaning |
 | ---- | ----- | ------- |
 | Component version | OCM | A versioned component. Stored as one OCI manifest or one OCI index. |
-| Component descriptor | OCM | The document that describes a component version: its resources, sources, references, and how to access them. Not an OCI descriptor. |
-| Local blob | OCM | A resource or source stored *by value*, next to the component descriptor. Stored as one OCI layer, or as a whole OCI artifact. |
-| OCM artifact | OCM | A resource or source of a component version, as in the `software.ocm.artifact` annotation. |
+| Component descriptor | OCM | The document that describes a component version: its resources, references, and how to access them. Not an OCI descriptor. |
+| Local blob | OCM | A resource stored *by value*, next to the component descriptor. Stored as one OCI layer, or as a whole OCI artifact. |
 | OCM repository | OCM | Where component versions are stored: an OCI registry plus an optional path, or a CTF archive. Holds many components. |
 | OCI repository | OCI | One named repository inside a registry. OCM uses one per component, holding all of its versions. |
 | OCI descriptor | OCI | A reference to content by `mediaType`, `digest`, and `size`, as used in a manifest's `config` and `layers`. |
@@ -42,9 +41,8 @@ could be confused, and *descriptor* on its own always means the component descri
 
 ## Why Store Component Versions as OCI Artifacts?
 
-- **Reuse existing infrastructure:** Every environment that runs containers already operates an OCI registry, with
-  access control, replication, and garbage collection. Storing component versions there means no extra storage
-  backend.
+- **Reuse existing infrastructure:** Most teams that ship containers already operate an OCI registry, with access
+  control, replication, and garbage collection. Storing component versions there means no extra storage backend.
 - **Content addressing:** OCI identifies every layer, manifest, and index by its digest. OCM uses those digests as the
   `localReference` of a local blob, so storage, deduplication, and integrity checks come for free.
 - **Native consumption:** Since OCM v2, OCI artifacts stored by value keep their OCI shape. Tools that know nothing
@@ -71,7 +69,7 @@ flowchart TD
         dm["OCI manifest<br/>of the component descriptor"]
         dm --> cfg["OCI config<br/>(points to the<br/>component descriptor)"]
         dm --> cd["OCI layer:<br/>component descriptor"]
-        dm --> lb["OCI layer:<br/>local blob settings"]
+        dm --> lb["OCI layer:<br/>local blob (a file)"]
     end
 
     classDef ocm stroke:#2563eb,stroke-width:3px
@@ -113,7 +111,7 @@ are left out.
       "digest": "sha256:5891b5b5…",
       "size": 6,
       "annotations": {
-        // The OCM artifact (resource or source) the local blob belongs to
+        // The resource the local blob belongs to
         "software.ocm.artifact": "[{\"identity\":{\"name\":\"settings\",\"version\":\"1.0.0\"},\"kind\":\"resource\"}]"
       }
     }
@@ -153,10 +151,10 @@ flowchart TD
     subgraph cv["Component version"]
         idx["OCI index"]
         idx --> dm["OCI manifest<br/>of the component descriptor<br/>(first entry)"]
-        idx --> img["OCI index<br/>(local blob app-image)"]
+        idx --> img["OCI index:<br/>local blob (an image)"]
         dm --> cfg["OCI config<br/>(points to the<br/>component descriptor)"]
         dm --> cd["OCI layer:<br/>component descriptor"]
-        dm --> lb["OCI layer:<br/>local blob settings"]
+        dm --> lb["OCI layer:<br/>local blob (a file)"]
         img --> imgm["OCI manifests, configs,<br/>and layers of the image"]
     end
 
@@ -197,7 +195,7 @@ left out.
       "digest": "sha256:262578cd…",
       "size": 2385,
       "annotations": {
-        // The OCM artifact (resource or source) the local blob belongs to
+        // The resource the local blob belongs to
         "software.ocm.artifact": "[{\"identity\":{\"name\":\"app-image\",\"version\":\"6.9.1\"},\"kind\":\"resource\"}]"
       }
     }
@@ -222,9 +220,10 @@ layer, OCI manifest, or OCI index that holds the content.
 
 ### Repository and Version Mapping
 
-An OCM repository in an OCI registry is a registry plus an optional path, for example `ghcr.io/acme/ocm` (`baseUrl` and
-`subPath` of an `OCIRepository/v1`). Each component gets its own OCI repository below that path, and each component
-version is a tag in it:
+The location of a component version follows from three things: the OCM repository, the component name, and the
+version. An OCM repository in a registry is a registry host with an optional path below it, for example
+`ghcr.io/acme/ocm` (`baseUrl` and `subPath` of an `OCIRepository/v1`). Each component gets its own OCI repository below
+that path, and each component version is a tag in it:
 
 ```text
 <registry>/<subPath>/component-descriptors/<component-name>:<version>
@@ -240,13 +239,13 @@ How OCM stores a local blob depends on its content:
 
 | Content | Stored as | `localReference` is the digest of | `mediaType` in the access |
 | ------- | --------- | --------------------------------- | ------------------------- |
-| Plain file, directory archive, Git snapshot, … | An OCI layer of the component descriptor's OCI manifest | the OCI layer | the content's media type, e.g. `text/plain` |
+| Plain file, directory archive, Git snapshot, … | One OCI layer, listed in the component descriptor's OCI manifest | the OCI layer | the content's media type, e.g. `text/plain` |
 | OCI artifact: an OCI image layout added with `File/v1`, a chart added with `Helm/v1`, or an image copied by value during transfer | Its full graph of OCI manifests and OCI indexes, unpacked into the OCI repository | the root OCI manifest or OCI index | `application/vnd.oci.image.index.v1+json` or `…manifest.v1+json` |
 
 For OCI artifacts, OCM does not keep the layout archive. It ingests the whole graph — root OCI index, OCI manifests per
 platform, OCI configs, and OCI layers — so the stored image is byte-for-byte the original image with the original
 digest. The OCI descriptor that references a stored local blob, an OCI layer entry or an OCI index entry, carries a
-`software.ocm.artifact` annotation. It names the OCM artifact, the resource or source, that the blob belongs to. The blob
+`software.ocm.artifact` annotation. It names the resource that the blob belongs to. The blob
 itself stays unchanged.
 
 The component descriptor that results from this lists both local blobs like this:
@@ -257,7 +256,7 @@ resources:
     type: blob
     access:
       type: LocalBlob/v1
-      localReference: sha256:5891b5b5…   # an OCI layer of the component descriptor's OCI manifest
+      localReference: sha256:5891b5b5…   # one OCI layer, listed in the component descriptor's OCI manifest
       mediaType: text/plain; charset=utf-8
   - name: app-image
     type: ociImage
@@ -350,12 +349,8 @@ releases cannot access them.
 - You inspect a registry or CTF archive and want to understand the OCI manifests, OCI indexes, and tags you see.
 - You want to deploy an image embedded in a component version without the OCM CLI, e.g. from a Pod spec.
 - You migrate from OCM v1 and need to know why older embedded images are not pullable.
-- You can ignore the details if you only use OCM commands to add, transfer, and download component versions.
 
-{{< callout context="tip" >}}
-A local blob is not a hidden OCM format. In OCM v2, it is a regular OCI layer or a regular OCI image in the component's
-OCI repository, addressed by its digest.
-{{< /callout >}}
+If you only add, transfer, and download component versions with OCM commands, OCM handles this layout for you.
 
 ## Next Steps
 
