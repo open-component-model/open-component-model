@@ -108,6 +108,17 @@ func runOCMv2Command(t *testing.T, configPath string, arguments ...string) []byt
 	return output
 }
 
+// runFailingOCMv2Command returns the combined output of a command that must
+// fail, so a case can assert the message a user sees.
+func runFailingOCMv2Command(t *testing.T, configPath string, arguments ...string) string {
+	t.Helper()
+	r := require.New(t)
+	output, err := ocmV2Command(t, configPath, arguments...)
+	r.Error(err, "command unexpectedly succeeded: %s", output)
+
+	return string(output)
+}
+
 func ocmV2Command(t *testing.T, configPath string, arguments ...string) ([]byte, error) {
 	t.Helper()
 	binary := os.Getenv("OCM_V2_BIN")
@@ -125,6 +136,23 @@ func readCompatDescriptor(t *testing.T, configPath, reference string) ocmv1Descr
 	r.Len(descriptors, 1)
 
 	return descriptors[0]
+}
+
+// readOCMv1Descriptor renders a descriptor with the v1 CLI. Cases that assert
+// what v2 wrote for a v1 consumer need the v1 view, not the v2 one.
+func readOCMv1Descriptor(t *testing.T, configPath, reference string) ocmv1Descriptor {
+	t.Helper()
+	r := require.New(t)
+	output := runCompatibilityTool(t, os.Getenv("OCM_V1_BIN"), "--config", configPath,
+		"get", "cv", reference, "-o", "json")
+	// The v1 CLI wraps its listing in an "items" envelope.
+	var listing struct {
+		Items []ocmv1Descriptor `json:"items"`
+	}
+	r.NoError(json.Unmarshal(output, &listing))
+	r.Len(listing.Items, 1)
+
+	return listing.Items[0]
 }
 
 func runCompatibilityTool(t *testing.T, binary string, arguments ...string) []byte {
@@ -146,4 +174,26 @@ func addOCMv1ComponentVersion(t *testing.T, v1Config, repository, constructor st
 	r.NoError(os.WriteFile(path, []byte(constructor), 0o600))
 	arguments = append([]string{"--config", v1Config, "add", "cv", "--create", "--file", repository}, arguments...)
 	runCompatibilityTool(t, os.Getenv("OCM_V1_BIN"), append(arguments, path)...)
+}
+
+// knownGap links a case to the issue whose fix will turn it into a regular case.
+func knownGap(t *testing.T, issue int) {
+	t.Helper()
+	t.Logf("asserts unfixed behaviour of open-component-model/ocm-project#%d", issue)
+}
+
+func plainTextConstructor(component string) string {
+	return fmt.Sprintf(`name: %s
+version: %s
+provider:
+  name: ocm.software
+resources:
+  - name: text
+    version: %s
+    type: plainText
+    relation: local
+    input:
+      type: utf8
+      text: OCM v1 compatibility fixture
+`, component, ocmv1Version, ocmv1Version)
 }
