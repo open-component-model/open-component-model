@@ -12,15 +12,19 @@ CI runs this scenario alongside the sovereign scenario in the conformance
 workflow after the shared builds. It downloads that build's artifact and runs
 `task conformance/compatibility:test OCM_V2_BIN=<path>` without rebuilding the CLI.
 
-The test invokes OCM v1 to create three component versions in temporary CTFs.
-The signed version uses an uppercase prerelease and contains a local text resource.
+The test invokes OCM v1 to create four component versions in temporary CTFs.
+The signed version uses an uppercase prerelease, contains a local text resource
+and references a second version, so the v1 signature covers a reference digest.
 OCM v2 reads and verifies it, then lists and transfers the whole v1-produced TGZ
-repository. It verifies the transferred signature, downloads the resource bytes,
-and checks the recorded digest. The second
+repository. It transfers that repository recursively, both by reference and with
+the deprecated `--copy-resources`, and asserts for each run that the signatures
+and the digest of every resource and reference are byte-equal to the source,
+that the component is otherwise unchanged, and that the target still verifies.
+It also downloads the resource bytes and checks the recorded digest. The third
 version contains v1 Helm, OCI, Git, and S3 access specifications; OCM v2 reads
 each one and checks its type and fields. OCM v1 creates that version with
 digest generation disabled because its external resources are deliberately
-not contacted. The third version uses local Helm and Git inputs; OCM v2 reads
+not contacted. The fourth version uses local Helm and Git inputs; OCM v2 reads
 their generated local-blob access and digest metadata, and downloads the Git
 archive to check its recorded digest. Generated artifacts and keys are
 temporary; the repository does not commit v1-generated blob trees.
