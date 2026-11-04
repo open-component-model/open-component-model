@@ -46,12 +46,10 @@ func PreRunEWithConfig(cmd *cobra.Command, cfg Config) error {
 	setup.FilesystemConfig(cmd, cfg.FilesystemConfigOptions)
 
 	// Remaining setup
-	credentialResolver, err := setup.PluginManager(cmd)
-	if err != nil {
+	// PluginManager also builds the credential graph, between declaring the credential types
+	// it is ingested against and registering the plugins that resolve through it.
+	if err := setup.PluginManager(cmd); err != nil {
 		return fmt.Errorf("setup plugin manager: %w", err)
-	}
-	if err := setup.CredentialGraph(cmd, credentialResolver); err != nil {
-		return fmt.Errorf("setup credential graph: %w", err)
 	}
 	ocmctx.Register(cmd)
 

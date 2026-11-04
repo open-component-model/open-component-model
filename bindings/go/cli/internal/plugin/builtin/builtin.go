@@ -27,11 +27,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 )
 
-// Register wires the builtin plugins into manager. credentialResolver is handed to the
-// plugins whose access can address a host beyond the one their consumer identity names; it is
-// filled once the credential graph exists, because the graph ingests the credential types
-// these same registrations contribute.
-func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alpha1.Config, httpConfig *httpv1alpha1.Config, checksumHTTPConfig *checksumhttpv1alpha1.Config, credentialResolver credentials.Resolver, logger *slog.Logger) error {
+// Register wires the builtin plugins into manager and declares every credential type they
+// consume, so that a credential graph can be ingested against them. The plugins that need the
+// finished graph are registered afterwards by RegisterCredentialAwarePlugins.
+func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alpha1.Config, httpConfig *httpv1alpha1.Config, checksumHTTPConfig *checksumhttpv1alpha1.Config, logger *slog.Logger) error {
 	if err := ocicredentialplugin.Register(manager.CredentialRepositoryRegistry); err != nil {
 		return fmt.Errorf("could not register OCI inbuilt credential plugin: %w", err)
 	}
@@ -72,12 +71,8 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		return fmt.Errorf("could not register wget inbuilt plugin: %w", err)
 	}
 
-	if err := github.Register(manager.ResourcePluginRegistry,
-		manager.DigestProcessorRegistry,
-		manager.CredentialTypeRegistry,
-		httpConfig,
-		credentialResolver); err != nil {
-		return fmt.Errorf("could not register github inbuilt plugin: %w", err)
+	if err := github.RegisterCredentialTypes(manager.CredentialTypeRegistry); err != nil {
+		return fmt.Errorf("could not register github credential types: %w", err)
 	}
 
 	if err := s3.Register(manager.InputRegistry,
@@ -107,13 +102,6 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	); err != nil {
 		return fmt.Errorf("could not register helm digest processor plugin: %w", err)
 	}
-	if err := manager.ResourcePluginRegistry.RegisterInternalResourcePlugin(
-		helmresource.NewResourceRepository(filesystemConfig,
-			helmresource.WithHTTPConfig(httpConfig),
-			helmresource.WithCredentialResolver(credentialResolver)),
-	); err != nil {
-		return fmt.Errorf("could not register helm resource repository plugin: %w", err)
-	}
 	if err := rsa.Register(manager.SigningRegistry, manager.CredentialTypeRegistry, filesystemConfig); err != nil {
 		return fmt.Errorf("could not register RSA signing plugin: %w", err)
 	}
@@ -128,6 +116,29 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	}
 	if err := tsa.Register(manager.CredentialTypeRegistry); err != nil {
 		return fmt.Errorf("could not register TSA credential types: %w", err)
+	}
+
+	return nil
+}
+
+// RegisterCredentialAwarePlugins wires the builtin plugins whose access can address a host
+// beyond the one its consumer identity names, so they need the finished credential graph:
+// the GitHub API host an access may override, and the registry a Helm index may resolve a
+// chart to. It runs after Register, whose credential types the graph was ingested against.
+func RegisterCredentialAwarePlugins(manager *manager.PluginManager, filesystemConfig *filesystemv1alpha1.Config, httpConfig *httpv1alpha1.Config, credentialResolver credentials.Resolver) error {
+	if err := github.Register(manager.ResourcePluginRegistry,
+		manager.DigestProcessorRegistry,
+		httpConfig,
+		credentialResolver); err != nil {
+		return fmt.Errorf("could not register github inbuilt plugin: %w", err)
+	}
+
+	if err := manager.ResourcePluginRegistry.RegisterInternalResourcePlugin(
+		helmresource.NewResourceRepository(filesystemConfig,
+			helmresource.WithHTTPConfig(httpConfig),
+			helmresource.WithCredentialResolver(credentialResolver)),
+	); err != nil {
+		return fmt.Errorf("could not register helm resource repository plugin: %w", err)
 	}
 
 	return nil

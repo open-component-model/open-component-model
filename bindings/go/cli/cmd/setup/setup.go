@@ -39,12 +39,11 @@ func OCMConfig(cmd *cobra.Command) error {
 	return nil
 }
 
-// PluginManager builds the plugin manager and registers the builtin plugins. It returns the
-// resolver those plugins look up credentials through for a host beyond the one their consumer
-// identity names; CredentialGraph fills it, which cannot happen earlier because the graph
-// ingests the credential types these registrations contribute.
-func PluginManager(cmd *cobra.Command) (*credentials.LazyResolver, error) {
-	credentialResolver := &credentials.LazyResolver{}
+// PluginManager builds the plugin manager, registers the builtin plugins and the credential
+// graph they resolve through, in that order: the graph is ingested against the credential
+// types the registrations declare, and the plugins that address a host beyond the one their
+// consumer identity names are then registered with the finished graph.
+func PluginManager(cmd *cobra.Command) error {
 	pluginManager := manager.NewPluginManager(cmd.Context(), manager.WithArtifactVerifier(ocitar.LayoutVerifier{}))
 
 	if cfg := ocmctx.FromContext(cmd.Context()).Configuration(); cfg == nil {
@@ -52,7 +51,7 @@ func PluginManager(cmd *cobra.Command) (*credentials.LazyResolver, error) {
 	} else {
 		pluginCfg, err := v2alpha1.LookupConfig(cfg)
 		if err != nil {
-			return nil, fmt.Errorf("could not get plugin configuration: %w", err)
+			return fmt.Errorf("could not get plugin configuration: %w", err)
 		}
 
 		if defaultDir, err := cmd.Flags().GetString(ocmcmd.PluginDirectoryFlag); err == nil {
@@ -74,7 +73,7 @@ func PluginManager(cmd *cobra.Command) (*credentials.LazyResolver, error) {
 				continue
 			}
 			if err != nil {
-				return nil, err
+				return err
 			}
 
 			loadedAnyPlugins = true
@@ -89,7 +88,7 @@ func PluginManager(cmd *cobra.Command) (*credentials.LazyResolver, error) {
 	filesystemConfig := ocmContext.FilesystemConfig()
 	httpConfig, err := httpv1alpha1.ResolveHTTPConfig(ocmContext.Configuration())
 	if err != nil {
-		return nil, fmt.Errorf("could not get http configuration: %w", err)
+		return fmt.Errorf("could not get http configuration: %w", err)
 	}
 	slog.DebugContext(cmd.Context(), "http config resolved",
 		slog.String("timeout", timeoutString(httpConfig.Timeout)),
@@ -98,17 +97,27 @@ func PluginManager(cmd *cobra.Command) (*credentials.LazyResolver, error) {
 	)
 	checksumHTTPConfig, err := checksumhttpv1alpha1.LookupConfig(ocmContext.Configuration())
 	if err != nil {
-		return nil, fmt.Errorf("could not get checksum-http configuration: %w", err)
+		return fmt.Errorf("could not get checksum-http configuration: %w", err)
 	}
-	if err := builtin.Register(pluginManager, filesystemConfig, httpConfig, checksumHTTPConfig, credentialResolver, slog.Default()); err != nil {
-		return nil, fmt.Errorf("could not register builtin plugins: %w", err)
+	if err := builtin.Register(pluginManager, filesystemConfig, httpConfig, checksumHTTPConfig, slog.Default()); err != nil {
+		return fmt.Errorf("could not register builtin plugins: %w", err)
+	}
+
+	// Every credential type is declared now, so the configuration can be ingested and
+	// validated; a malformed credential fails the command here rather than mid-download.
+	graph, err := credentialGraph(cmd, pluginManager)
+	if err != nil {
+		return err
+	}
+	if err := builtin.RegisterCredentialAwarePlugins(pluginManager, filesystemConfig, httpConfig, graph); err != nil {
+		return fmt.Errorf("could not register credential-aware builtin plugins: %w", err)
 	}
 
 	ctx, err := ocmctx.WithPluginManager(cmd.Context(), pluginManager)
 	if err != nil {
-		return nil, fmt.Errorf("could not initialize plugin manager context: %w", err)
+		return fmt.Errorf("could not initialize plugin manager context: %w", err)
 	}
-	cmd.SetContext(ctx)
+	cmd.SetContext(ocmctx.WithCredentialGraph(ctx, graph))
 
 	cobra.OnFinalize(func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -118,15 +127,12 @@ func PluginManager(cmd *cobra.Command) (*credentials.LazyResolver, error) {
 		}
 	})
 
-	return credentialResolver, nil
+	return nil
 }
 
-func CredentialGraph(cmd *cobra.Command, credentialResolver *credentials.LazyResolver) error {
-	pluginManager := ocmctx.FromContext(cmd.Context()).PluginManager()
-	if pluginManager == nil {
-		return fmt.Errorf("could not get plugin manager to initialize credential graph")
-	}
-
+// credentialGraph ingests the credential configuration against the credential types
+// pluginManager holds. It is called once every builtin plugin has declared its types.
+func credentialGraph(cmd *cobra.Command, pluginManager *manager.PluginManager) (credentials.Resolver, error) {
 	opts := credentials.Options{
 		RepositoryPluginProvider:       pluginManager.CredentialRepositoryRegistry,
 		CredentialPluginProvider:       pluginManager.CredentialPluginRegistry,
@@ -140,7 +146,7 @@ func CredentialGraph(cmd *cobra.Command, credentialResolver *credentials.LazyRes
 	if cfg := ocmctx.FromContext(cmd.Context()).Configuration(); cfg == nil {
 		slog.WarnContext(cmd.Context(), "could not get configuration to initialize credential graph")
 	} else if credCfg, err = credentialsRuntime.LookupCredentialConfig(cfg); err != nil {
-		return fmt.Errorf("could not get credential configuration: %w", err)
+		return nil, fmt.Errorf("could not get credential configuration: %w", err)
 	}
 
 	if credCfg == nil {
@@ -149,13 +155,10 @@ func CredentialGraph(cmd *cobra.Command, credentialResolver *credentials.LazyRes
 
 	graph, err := credentials.ToGraph(cmd.Context(), credCfg, opts)
 	if err != nil {
-		return fmt.Errorf("could not create credential graph: %w", err)
+		return nil, fmt.Errorf("could not create credential graph: %w", err)
 	}
 
-	credentialResolver.Set(graph)
-	cmd.SetContext(ocmctx.WithCredentialGraph(cmd.Context(), graph))
-
-	return nil
+	return graph, nil
 }
 
 func Syscalls(cmd *cobra.Command) {
