@@ -14,7 +14,8 @@ It provides controllers for:
 - **Repository** - OCM repository references
 - **Component** - OCM component version tracking
 - **Resource** - OCM resource extraction
-- **Deployer** - Resource deployment automation
+- **NamespacedDeployer** - Resource deployment with the permissions of a service account in its namespace
+- **Deployer** - Resource deployment with the controller's permissions (deprecated, use NamespacedDeployer)
 
 ## Installation
 
@@ -39,7 +40,7 @@ helm uninstall ocm-k8s-toolkit --namespace ocm-system
 
 > **Note:** CRDs are kept by default when uninstalling. To remove them:
 > ```bash
-> kubectl delete crd components.delivery.ocm.software deployers.delivery.ocm.software repositories.delivery.ocm.software resources.delivery.ocm.software
+> kubectl delete crd components.delivery.ocm.software deployers.delivery.ocm.software namespaceddeployers.delivery.ocm.software repositories.delivery.ocm.software resources.delivery.ocm.software
 > ```
 
 {{ template "chart.maintainersSection" . }}

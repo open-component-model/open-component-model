@@ -118,7 +118,7 @@ func Test_callbackHandler(t *testing.T) {
 			errCh := make(chan error, 1)
 			handler := callbackHandler(tt.state, tt.issuer, codeCh, errCh)
 
-			req := httptest.NewRequest(tt.method, "/auth/callback?"+tt.query, nil)
+			req := httptest.NewRequestWithContext(t.Context(), tt.method, "/auth/callback?"+tt.query, nil)
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
 
@@ -152,12 +152,12 @@ func Test_callbackHandler_DuplicateCallback(t *testing.T) {
 	errCh := make(chan error, 1)
 	handler := callbackHandler("test-state", "https://issuer.example.com", codeCh, errCh)
 
-	req1 := httptest.NewRequest(http.MethodGet, "/auth/callback?state=test-state&code=first-code", nil)
+	req1 := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/auth/callback?state=test-state&code=first-code", nil)
 	rec1 := httptest.NewRecorder()
 	handler.ServeHTTP(rec1, req1)
 	r.Equal(http.StatusOK, rec1.Code)
 
-	req2 := httptest.NewRequest(http.MethodGet, "/auth/callback?state=test-state&code=second-code", nil)
+	req2 := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/auth/callback?state=test-state&code=second-code", nil)
 	rec2 := httptest.NewRecorder()
 	handler.ServeHTTP(rec2, req2)
 	r.Equal(http.StatusConflict, rec2.Code)

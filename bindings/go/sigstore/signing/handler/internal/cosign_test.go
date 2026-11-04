@@ -72,10 +72,9 @@ func (rt *recordingTransport) RoundTrip(*http.Request) (*http.Response, error) {
 func TestResolveBinary_NoCosignOnPath(t *testing.T) {
 	tests := []struct {
 		mode         string
-		wantFIPSErr  bool
 		wantDownload bool
 	}{
-		{mode: "only", wantFIPSErr: true},
+		{mode: "only", wantDownload: true},
 		{mode: "on", wantDownload: true},
 		{mode: "off", wantDownload: true},
 	}
@@ -95,7 +94,6 @@ func TestResolveBinary_NoCosignOnPath(t *testing.T) {
 
 			_, err := b.resolveBinary(t.Context())
 			r.Error(err)
-			r.Equal(tc.wantFIPSErr, errors.Is(err, ErrCosignDownloadInFIPSMode))
 			r.Equal(tc.wantDownload, transport.called)
 		})
 	}

@@ -129,9 +129,12 @@ func uploaderOutcomes(t *testing.T, tgd *transformv1alpha1.TransformationGraphDe
 				continue
 			}
 			switch tr.Type {
-			case ociv1alpha1.TransferOCIArtifactV1alpha1, addOCIArtifact:
+			case ociv1alpha1.TransferOCIArtifactV1alpha1, ociv1alpha1.TransferOCILocalBlobToOCIArtifactV1alpha1, ociv1alpha1.TransferCTFLocalBlobToOCIArtifactV1alpha1, addOCIArtifact:
 				outcome = "oci " + evaluateTemplate(t, tgd, specImageReference(t, tr))
-			case ociv1alpha1.OCIAddLocalResourceV1alpha1, ociv1alpha1.CTFAddLocalResourceV1alpha1:
+			case ociv1alpha1.OCIAddLocalResourceV1alpha1, ociv1alpha1.CTFAddLocalResourceV1alpha1,
+				ociv1alpha1.TransferOCILocalBlobToOCILocalBlobV1alpha1, ociv1alpha1.TransferOCILocalBlobToCTFLocalBlobV1alpha1,
+				ociv1alpha1.TransferCTFLocalBlobToOCILocalBlobV1alpha1, ociv1alpha1.TransferCTFLocalBlobToCTFLocalBlobV1alpha1,
+				ociv1alpha1.TransferOCIArtifactToOCILocalBlobV1alpha1, ociv1alpha1.TransferOCIArtifactToCTFLocalBlobV1alpha1:
 				outcome = "local blob"
 			case wgetv1alpha1.HTTPStreamingV1alpha1:
 				outcome = "http"
@@ -199,7 +202,9 @@ configurations:
     match: >-
       target.type == "OCIRepository"
       && resource.access.isType("LocalBlob")
-      && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType)
+      && has(resource.access.mediaType)
+      && (isOCIManifest(resource.access.mediaType)
+        || isArtifactSetMediaType(resource.access.mediaType))
       && has(resource.access.referenceName)
     imageReference: |-
 %s
@@ -226,7 +231,7 @@ configurations:
 			},
 		},
 		{
-			name: "E4 OCI-manifest local blobs only",
+			name: "E4 OCI-manifest and artifact-set local blobs only",
 			configYAML: `
 type: generic.config.ocm.software/v1
 configurations:
@@ -234,7 +239,9 @@ configurations:
     match: >-
       target.type == "OCIRepository"
       && resource.access.isType("LocalBlob")
-      && has(resource.access.mediaType) && isOCIManifest(resource.access.mediaType)
+      && has(resource.access.mediaType)
+      && (isOCIManifest(resource.access.mediaType)
+        || isArtifactSetMediaType(resource.access.mediaType))
       && has(resource.access.referenceName)
 `,
 			target: oci,
@@ -343,7 +350,7 @@ configurations:
 			wantErr:   "oci uploader cannot upload access type Wget/v1",
 		},
 		{
-			name: "E9 selected local blob that is not an OCI manifest",
+			name: "E9 selected local blob that is not an OCI manifest or artifact set",
 			configYAML: `
 type: generic.config.ocm.software/v1
 configurations:
@@ -352,7 +359,7 @@ configurations:
 `,
 			target:    oci,
 			resources: []string{"notes"},
-			wantErr:   "not an OCI manifest",
+			wantErr:   "not an OCI manifest or artifact set",
 		},
 		{
 			name: "E9 match that does not compile",

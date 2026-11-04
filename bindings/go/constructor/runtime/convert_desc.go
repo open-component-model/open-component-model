@@ -20,6 +20,7 @@ func ConvertToDescriptorLabels(labels []Label) []descriptor.Label {
 		n[i].Name = labels[i].Name
 		n[i].Value = labels[i].Value
 		n[i].Signing = labels[i].Signing
+		n[i].Version = labels[i].Version
 	}
 	return n
 }
@@ -35,6 +36,7 @@ func ConvertFromDescriptorLabels(labels []descriptor.Label) []Label {
 		n[i].Name = labels[i].Name
 		n[i].Value = labels[i].Value
 		n[i].Signing = labels[i].Signing
+		n[i].Version = labels[i].Version
 	}
 	return n
 }

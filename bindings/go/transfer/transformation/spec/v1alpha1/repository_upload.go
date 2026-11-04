@@ -79,6 +79,10 @@ type RepositoryUploadComponentVersion struct {
 	Component string `json:"component"`
 	// Version is the component version.
 	Version string `json:"version"`
+	// Digest is the OCI digest of the source artifact the component version is pinned to;
+	// local blobs are then read from that artifact instead of through the version tag.
+	// Set only together with Repository.
+	Digest string `json:"digest,omitempty"`
 }
 
 // RepositoryUploadOutput is the output of the ArtifactoryUpload and NexusUpload transformations.

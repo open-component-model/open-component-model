@@ -12,7 +12,7 @@ const LocalBlobUploaderConfigType = "localblob.uploader.transfer.config.ocm.soft
 // is set: every access type the transfer can download.
 //
 // Writing it explicitly into a config is equivalent to omitting match.
-const DefaultLocalBlobUploaderMatch = `resource.access.isType(["LocalBlob", "OCIImage", "Helm", "Wget", "S3/v2", "GitHub", "Git"])`
+const DefaultLocalBlobUploaderMatch = `resource.access.isType(["LocalBlob", "OCIImage", "OCIImageLayer", "Helm", "Wget", "S3/v2", "GitHub", "Git"])`
 
 func init() {
 	Scheme.MustRegisterWithAlias(&LocalBlobUploaderConfig{},

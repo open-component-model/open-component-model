@@ -1,0 +1,52 @@
+{{- /*
+  docref shortcode: a version-stable cross-reference to a docs page.
+
+  Unlike {{< relref >}}, which resolves the target within the *current*
+  version site and fails the build when that version's frozen snapshot lacks
+  the page (or uses an older layout), docref always resolves the target in the
+  "main" version site (the live working-tree docs) and emits its canonical
+  "/main/..." permalink.
+
+  This is needed by the migration guides under docs/changelog. Their changelog
+  index is fanned from main into every version site, and once a release ships
+  the section the guides also render inside that release's frozen snapshot. A
+  guide's cross-references must therefore stay valid regardless of which
+  version site renders it, including snapshots whose older layout is missing a
+  referenced page. Resolving against main (not the configured default version,
+  which is itself a frozen release snapshot) keeps every link pointing at the
+  live docs.
+
+  Usage:
+    {{< docref "docs/concepts/resolvers.md" >}}
+    {{< docref "docs/concepts/resolvers.md#component-name-patterns" >}}
+
+  The build fails if the target page does not exist in the main site, so
+  broken references are still caught at build time.
+*/ -}}
+{{- $arg := .Get 0 -}}
+{{- if not $arg -}}
+  {{- errorf "docref: missing page path argument (%s)" .Position -}}
+{{- end -}}
+{{- $parts := split $arg "#" -}}
+{{- $path := index $parts 0 -}}
+{{- $anchor := "" -}}
+{{- if gt (len $parts) 1 -}}
+  {{- $anchor = printf "#%s" (index $parts 1) -}}
+{{- end -}}
+{{- /* Resolve the target in the "main" version site, which tracks the live
+       working-tree docs. The configured default version is a frozen release
+       snapshot (older layout) that may lack pages the current changelog /
+       migration guides reference, so IsDefault is not usable here. */ -}}
+{{- $href := "" -}}
+{{- range site.Home.Rotate "version" -}}
+  {{- if eq .Site.Version.Name "main" -}}
+    {{- with .Site.GetPage $path -}}
+      {{- $href = printf "%s%s" .Permalink $anchor -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- if $href -}}
+  {{- $href -}}
+{{- else -}}
+  {{- errorf "docref: page %q not found in the main version site" $path -}}
+{{- end -}}

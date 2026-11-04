@@ -15,61 +15,30 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/git/internal/endpoint"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestAuthModes(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
 		repository string
-		creds      *credsv1.GitCredentials
+		creds      runtime.Typed
 		want       any
 		wantErr    string
 	}{
 		{name: "anonymous HTTPS", repository: "https://example.com/repo"},
+		{name: "explicit HTTPS token", repository: "https://example.com/repo", creds: &credsv1.GitHTTPSCredentials{Username: "user", Password: "oauth-token"}, want: &githttp.BasicAuth{Username: "user", Password: "oauth-token"}},
+		{name: "explicit bearer", repository: "https://example.com/repo", creds: &credsv1.GitBearerCredentials{Token: "token"}, want: &githttp.TokenAuth{Token: "token"}},
+		{name: "explicit HTTPS on HTTP", repository: "http://example.com/repo", creds: &credsv1.GitHTTPSCredentials{Username: "user", Password: "token"}, wantErr: "username/password authentication requires an HTTPS repository"},
+		{name: "explicit bearer on HTTP", repository: "http://example.com/repo", creds: &credsv1.GitBearerCredentials{Token: "token"}, wantErr: "tokens require an HTTPS repository"},
+		{name: "explicit HTTPS on SSH", repository: "git@example.com:repo", creds: &credsv1.GitHTTPSCredentials{Username: "user", Password: "token"}, wantErr: "username/password authentication requires an HTTPS repository"},
+		{name: "explicit bearer on SSH", repository: "git@example.com:repo", creds: &credsv1.GitBearerCredentials{Token: "token"}, wantErr: "tokens require an HTTPS repository"},
+		{name: "explicit SSH on HTTPS", repository: "https://example.com/repo", creds: &credsv1.GitSSHCredentials{}, wantErr: "SSH credentials require an SSH repository"},
+
 		{name: "anonymous HTTP", repository: "http://example.com/repo"},
-		{
-			name: "token over basic", repository: "https://example.com/repo",
-			creds: &credsv1.GitCredentials{Token: "token", Username: "ignored", Password: "ignored"},
-			want:  &githttp.TokenAuth{Token: "token"},
-		},
-		{
-			name: "basic", repository: "https://example.com/repo",
-			creds: &credsv1.GitCredentials{Username: "user", Password: "password"},
-			want:  &githttp.BasicAuth{Username: "user", Password: "password"},
-		},
-		{
-			name: "password without username", repository: "https://example.com/repo",
-			creds:   &credsv1.GitCredentials{Password: "missing-user"},
-			wantErr: "password requires a username or SSH private key",
-		},
-		{
-			name: "SSH key on HTTPS", repository: "https://example.com/repo",
-			creds:   &credsv1.GitCredentials{PrivateKey: "/keys/key"},
-			wantErr: "SSH private keys require an SSH repository",
-		},
-		{
-			name: "token on HTTP", repository: "http://example.com/repo",
-			creds:   &credsv1.GitCredentials{Token: "token"},
-			wantErr: "tokens require an HTTPS repository",
-		},
-		{
-			name: "basic on HTTP", repository: "http://example.com/repo",
-			creds:   &credsv1.GitCredentials{Username: "user", Password: "password"},
-			wantErr: "username/password authentication requires an HTTPS repository",
-		},
 		{
 			name: "userinfo on HTTP", repository: "http://user:secret@example.com/repo",
 			wantErr: "the repository URL contains credentials; use an HTTPS repository so they are not sent in clear text",
-		},
-		{
-			name: "token on SSH", repository: "git@example.com:repo",
-			creds:   &credsv1.GitCredentials{Token: "token"},
-			wantErr: "tokens require an HTTPS repository",
-		},
-		{
-			name: "basic on SSH", repository: "git@example.com:repo",
-			creds:   &credsv1.GitCredentials{Username: "user", Password: "password"},
-			wantErr: "username/password authentication requires an HTTPS repository",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -88,21 +57,12 @@ func TestAuthModes(t *testing.T) {
 		})
 	}
 
-	t.Run("default agent", func(t *testing.T) {
-		r := require.New(t)
-		ep, err := endpoint.Parse("git@example.com:repo")
-		r.NoError(err)
-		auth, err := authMethod(ep, nil, Options{})
-		r.NoError(err)
-		r.Nil(auth, "without a host key callback go-git builds the SSH agent auth itself")
-	})
-
 	t.Run("missing agent", func(t *testing.T) {
 		r := require.New(t)
 		t.Setenv("SSH_AUTH_SOCK", "")
 		ep, err := endpoint.Parse("git@example.com:repo")
 		r.NoError(err)
-		auth, err := authMethod(ep, nil, Options{HostKeyCallback: ssh.InsecureIgnoreHostKey()})
+		auth, err := authMethod(ep, nil, Options{})
 		r.ErrorContains(err, "cannot use SSH agent:")
 		r.Nil(auth)
 	})
@@ -115,36 +75,34 @@ func TestAuthSSHKeys(t *testing.T) {
 	block, err := ssh.MarshalPrivateKey(private, "")
 	r.NoError(err)
 	keyPEM := string(pem.EncodeToMemory(block))
+	block, err = ssh.MarshalPrivateKeyWithPassphrase(private, "", []byte("key-passphrase"))
+	r.NoError(err)
+	encryptedKeyPEM := string(pem.EncodeToMemory(block))
 
 	for _, tc := range []struct {
 		name       string
 		repository string
-		creds      credsv1.GitCredentials
+		creds      credsv1.GitSSHCredentials
 		wantUser   string
 	}{
 		{
-			name: "inline key over file", repository: "url-user@example.com:repo",
-			creds:    credsv1.GitCredentials{PrivateKeyPEM: keyPEM, PrivateKey: "/does/not/exist"},
-			wantUser: "url-user",
-		},
-		{
-			name: "key over token", repository: "url-user@example.com:repo",
-			creds:    credsv1.GitCredentials{PrivateKeyPEM: keyPEM, Token: "ignored"},
-			wantUser: "url-user",
+			name: "encrypted key", repository: "url-user@example.com:repo",
+			creds:    credsv1.GitSSHCredentials{PrivateKeyPEM: encryptedKeyPEM, Username: "credential-user", Passphrase: "key-passphrase"},
+			wantUser: "credential-user",
 		},
 		{
 			name: "credential username over URL", repository: "url-user@example.com:repo",
-			creds:    credsv1.GitCredentials{PrivateKeyPEM: keyPEM, Username: "credential-user"},
+			creds:    credsv1.GitSSHCredentials{PrivateKeyPEM: keyPEM, Username: "credential-user"},
 			wantUser: "credential-user",
 		},
 		{
 			name: "URL username", repository: "url-user@example.com:repo",
-			creds:    credsv1.GitCredentials{PrivateKeyPEM: keyPEM},
+			creds:    credsv1.GitSSHCredentials{PrivateKeyPEM: keyPEM},
 			wantUser: "url-user",
 		},
 		{
 			name: "default username", repository: "ssh://example.com/repo",
-			creds:    credsv1.GitCredentials{PrivateKeyPEM: keyPEM},
+			creds:    credsv1.GitSSHCredentials{PrivateKeyPEM: keyPEM},
 			wantUser: "git",
 		},
 	} {

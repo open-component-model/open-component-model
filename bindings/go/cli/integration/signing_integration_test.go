@@ -36,8 +36,8 @@ func Test_Integration_Signing(t *testing.T) {
 	require.NoError(t, err)
 	priv := x509.MarshalPKCS1PrivateKey(k)
 	pub := x509.MarshalPKCS1PublicKey(&rsa.PublicKey{
-		N: k.PublicKey.N,
-		E: k.PublicKey.E,
+		N: k.N,
+		E: k.E,
 	})
 	require.NoError(t, err)
 	privPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: priv})
@@ -113,8 +113,7 @@ configurations:
 			"--config",
 			cfgPath,
 		}
-		signArgsWithDryRun := append(signArgs, "--dry-run")
-		signCMD.SetArgs(signArgsWithDryRun)
+		signCMD.SetArgs(append(signArgs, "--dry-run"))
 		r.NoError(signCMD.ExecuteContext(t.Context()))
 
 		verifyCMD := cmd.New()

@@ -4,7 +4,8 @@ import (
 	"archive/tar"
 	"bytes"
 	"io"
-	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,10 +46,10 @@ func TestArchiveUsesGitTree(t *testing.T) {
 	c, err := repo.CommitObject(commit)
 	r.NoError(err)
 
-	file, err := os.CreateTemp(t.TempDir(), "archive-*.tar.gz")
-	r.NoError(err)
-
-	b, _, err := archive(t.Context(), c, file, Options{})
+	var buf bytes.Buffer
+	carrier := filepath.Join(t.TempDir(), "carrier")
+	r.NoError(writeGitStorage(repo, commit, carrier))
+	_, err = archive(t.Context(), c, carrier, &buf, Options{})
 	r.NoError(err)
 
 	type entry struct {
@@ -58,7 +59,8 @@ func TestArchiveUsesGitTree(t *testing.T) {
 	}
 	got := map[string]entry{}
 	var names []string
-	compressed := readBlob(t, b)
+	var head string
+	compressed := buf.Bytes()
 	uncompressed := gunzipArchive(t, compressed)
 
 	tr := tar.NewReader(bytes.NewReader(uncompressed))
@@ -79,6 +81,13 @@ func TestArchiveUsesGitTree(t *testing.T) {
 		if h.Typeflag == tar.TypeSymlink {
 			data = []byte(h.Linkname)
 		}
+		if h.Name == ".git/HEAD" {
+			head = string(data)
+		}
+		if h.Name == ".git" || strings.HasPrefix(h.Name, ".git/") {
+			r.Contains([]int64{0o644, 0o755}, h.Mode, h.Name)
+			continue
+		}
 		names = append(names, h.Name)
 		got[h.Name] = entry{h.Typeflag, h.Mode, string(data)}
 	}
@@ -97,4 +106,5 @@ func TestArchiveUsesGitTree(t *testing.T) {
 		"dir/file":   {tar.TypeReg, 0o644, "nested"},
 		"vendor":     {tar.TypeDir, 0o755, ""},
 	}, got)
+	r.Equal(commit.String()+"\n", head, "HEAD is detached at the commit")
 }

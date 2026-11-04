@@ -9,6 +9,15 @@ import (
 	_ "embed"
 )
 
+//go:embed schemas/AddGitResource.schema.json
+var schemaAddGitResource []byte
+
+//go:embed schemas/AddGitResourceOutput.schema.json
+var schemaAddGitResourceOutput []byte
+
+//go:embed schemas/AddGitResourceSpec.schema.json
+var schemaAddGitResourceSpec []byte
+
 //go:embed schemas/GetGitResource.schema.json
 var schemaGetGitResource []byte
 
@@ -17,6 +26,21 @@ var schemaGetGitResourceOutput []byte
 
 //go:embed schemas/GetGitResourceSpec.schema.json
 var schemaGetGitResourceSpec []byte
+
+// JSONSchema returns the JSON Schema for AddGitResource.
+func (AddGitResource) JSONSchema() []byte {
+	return schemaAddGitResource
+}
+
+// JSONSchema returns the JSON Schema for AddGitResourceOutput.
+func (AddGitResourceOutput) JSONSchema() []byte {
+	return schemaAddGitResourceOutput
+}
+
+// JSONSchema returns the JSON Schema for AddGitResourceSpec.
+func (AddGitResourceSpec) JSONSchema() []byte {
+	return schemaAddGitResourceSpec
+}
 
 // JSONSchema returns the JSON Schema for GetGitResource.
 func (GetGitResource) JSONSchema() []byte {

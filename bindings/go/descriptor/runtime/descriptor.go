@@ -19,6 +19,10 @@ const (
 	// NoDigest used in digest field for hashAlgorithm and value (in combination with ExcludeFromSignature for normalisationAlgorithm)
 	// to indicate the resource content should not be part of the signature.
 	NoDigest = "NO-DIGEST"
+	// GenericBlobDigestV1 normalises a resource to the raw bytes of its blob.
+	GenericBlobDigestV1 = "genericBlobDigest/v1"
+	// OCIArtifactDigestV1 normalises a resource to the manifest (or index) digest of its OCI artifact.
+	OCIArtifactDigestV1 = "ociArtifactDigest/v1"
 )
 
 // These constants describe identity attributes predefined by the
@@ -331,6 +335,23 @@ type Signature struct {
 	// Signature is the metadata and cryptographic payload proving the authenticity
 	// of the digest. It includes details on the algorithm, encoding, and issuer.
 	Signature SignatureInfo `json:"-"`
+
+	// Timestamp optionally holds an RFC 3161 timestamp token proving when the signature was created.
+	// If present, it can be used to verify that the signature was created while the signing
+	// certificate was still valid, even if it has since expired.
+	Timestamp *TimestampSpec `json:"-"`
+}
+
+// TimestampSpec provides an RFC 3161 timestamp token and the parsed generation time.
+// The Value field contains a PEM-encoded timestamp token; the Time field carries the
+// parsed generation time for informational / display purposes.
+//
+// +k8s:deepcopy-gen=true
+type TimestampSpec struct {
+	// Value contains the PEM-encoded RFC 3161 timestamp token.
+	Value string `json:"-"`
+	// Time is the parsed generation time from the TSA response.
+	Time CreationTime `json:"-"`
 }
 
 // SignatureInfo provides the metadata and cryptographic material for a signature.

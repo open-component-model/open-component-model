@@ -1,0 +1,101 @@
+# The namespace the NamespacedDeployer deploys into besides its own.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k8s-manifest-cross-namespace-monitoring
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Repository
+metadata:
+  name: k8s-manifest-cross-namespace-repository
+spec:
+  repositorySpec:
+    # Adjust to your OCM repository
+    baseUrl: http://ocm-e2e-image-registry:5000
+    type: OCIRegistry
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Component
+metadata:
+  name: k8s-manifest-cross-namespace-component
+spec:
+  component: ocm.software/ocm-k8s-toolkit/examples/k8s-manifest-cross-namespace
+  repositoryRef:
+    name: k8s-manifest-cross-namespace-repository
+  semver: 1.0.0
+  interval: 10m
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: k8s-manifest-cross-namespace-resource
+spec:
+  componentRef:
+    name: k8s-manifest-cross-namespace-component
+  resource:
+    byReference:
+      resource:
+        name: k8s-manifest-resource
+---
+# The NamespacedDeployer applies and prunes with the permissions of this service account.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k8s-manifest-cross-namespace-deployer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: k8s-manifest-cross-namespace-deployer
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: k8s-manifest-cross-namespace-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: k8s-manifest-cross-namespace-deployer
+subjects:
+  - kind: ServiceAccount
+    name: k8s-manifest-cross-namespace-deployer
+---
+# The owner of the other namespace decides what the service account may do there. Without this Role and
+# RoleBinding the NamespacedDeployer cannot apply into that namespace.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: k8s-manifest-cross-namespace-deployer
+  namespace: k8s-manifest-cross-namespace-monitoring
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: k8s-manifest-cross-namespace-deployer
+  namespace: k8s-manifest-cross-namespace-monitoring
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: k8s-manifest-cross-namespace-deployer
+subjects:
+  - kind: ServiceAccount
+    name: k8s-manifest-cross-namespace-deployer
+    namespace: default
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: NamespacedDeployer
+metadata:
+  name: k8s-manifest-cross-namespace-deployer
+spec:
+  resourceRef:
+    name: k8s-manifest-cross-namespace-resource
+  serviceAccountName: k8s-manifest-cross-namespace-deployer

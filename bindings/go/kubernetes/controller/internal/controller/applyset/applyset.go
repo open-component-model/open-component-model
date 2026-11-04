@@ -82,6 +82,8 @@ type PruneOptions struct {
 	Scope *PruneScope
 	// Concurrency limits parallel delete operations. 0 = len(candidates).
 	Concurrency int
+	// PropagationPolicy is passed to every delete. Nil uses the API server's default.
+	PropagationPolicy *metav1.DeletionPropagation
 }
 
 // PruneScope defines the search space for orphan detection.
@@ -363,7 +365,7 @@ func (a *ApplySet) Prune(ctx context.Context, opts PruneOptions) (*PruneResult, 
 	}
 
 	// List and delete orphans
-	pruned, err := a.prune(ctx, pruneMappings, scopeNamespaces, opts.KeepUIDs, opts.Concurrency)
+	pruned, err := a.prune(ctx, pruneMappings, scopeNamespaces, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -524,9 +526,14 @@ func (a *ApplySet) prune(
 	ctx context.Context,
 	mappings []*meta.RESTMapping,
 	namespaces sets.Set[string],
-	keepUIDs sets.Set[types.UID],
-	concurrency int,
+	opts PruneOptions,
 ) ([]PruneResultItem, error) {
+	keepUIDs, concurrency := opts.KeepUIDs, opts.Concurrency
+	var deleteOpts []client.DeleteOption
+	if opts.PropagationPolicy != nil {
+		deleteOpts = append(deleteOpts, client.PropagationPolicy(*opts.PropagationPolicy))
+	}
+
 	// Track candidates for deletion
 	type pruneCandidate struct {
 		obj *unstructured.Unstructured
@@ -620,7 +627,15 @@ func (a *ApplySet) prune(
 
 	for _, c := range candidates {
 		eg.Go(func() error {
-			err := a.client.Delete(egCtx, c.obj)
+			// A terminating object is still pending, deleting it again until it is gone only adds API calls.
+			if c.obj.GetDeletionTimestamp() != nil {
+				mu.Lock()
+				results = append(results, PruneResultItem{Object: c.obj})
+				mu.Unlock()
+				return nil
+			}
+
+			err := a.client.Delete(egCtx, c.obj, deleteOpts...)
 			if err != nil && !apierrors.IsNotFound(err) {
 				return fmt.Errorf("delete %s/%s: %w", c.obj.GetNamespace(), c.obj.GetName(), err)
 			}

@@ -12,11 +12,11 @@
     },
     "ref": {
       "type": "string",
-      "description": "Ref selects a branch, tag or full ref name. A bare name resolves to a\nmatching branch first and then to a tag, so use refs/tags/v1.0.0 to select\nthat tag unambiguously. Digest processing resolves it to a commit."
+      "description": "Ref selects a branch, tag or full ref name. A bare name resolves to a\nmatching branch first and then to a tag, so use refs/tags/v1.0.0 to select\nthat tag unambiguously. Digest processing resolves it to a commit and pins the\ncommit; the ref is recorded as written, not expanded to its full name."
     },
     "repository": {
       "type": "string",
-      "description": "Repository is the Git repository URL: an http(s)://, ssh:// or git:// URL with a\nhost and a path, the scp-like form user@host:path, or a local repository as\nfile:///path or a plain path. A value without a scheme that is not scp-like is a\nlocal path, relative to the working directory unless absolute."
+      "description": "Repository is the Git repository URL: an http(s)://, ssh:// or git:// URL with a\nhost and a path, the scp-like form user@host:path, or a local repository as\nfile:///path or a plain path. A value without a scheme that is not scp-like is a\nlocal path, relative to the working directory unless absolute. A fragment may\nselect the ref or commit with branch=\u003cname\u003e, tag=\u003cname\u003e or commit=\u003csha\u003e, as in\nhttps://github.com/org/repo.git#branch=main."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",

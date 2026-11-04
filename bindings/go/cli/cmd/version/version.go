@@ -11,7 +11,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"ocm.software/open-component-model/bindings/go/cli/cmd/configuration"
 	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
 )
 
@@ -47,9 +46,6 @@ func New() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "version",
 		Short: "Retrieve the build version of the OCM CLI",
-
-		// Never uses configuration, so piped stdin must not be read.
-		Annotations: map[string]string{configuration.SkipStdinConfigAnnotation: ""},
 
 		Long: fmt.Sprintf(`The version command retrieves the build version of the OCM CLI.
 

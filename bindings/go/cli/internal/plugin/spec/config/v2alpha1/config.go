@@ -18,7 +18,10 @@ const (
 var scheme = runtime.NewScheme()
 
 func init() {
-	scheme.MustRegisterWithAlias(&Config{}, runtime.NewVersionedType(ConfigType, Version))
+	scheme.MustRegisterWithAlias(&Config{},
+		runtime.NewVersionedType(ConfigType, Version),
+		runtime.NewUnversionedType(ConfigType),
+	)
 }
 
 // Config represents the top-level configuration for the plugin manager.

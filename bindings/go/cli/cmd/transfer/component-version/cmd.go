@@ -61,7 +61,12 @@ func New() *cobra.Command {
 a target repository using an internally generated transformation graph.
 
 When a version is included in the source reference, exactly that version is transferred.
-When the version is omitted, all versions of the component are discovered and transferred.
+A digest pins it (see "ocm get cv --help"). With an OCI digest, "@sha256:<hex>", the descriptor and all
+local resources are read from the source artifact with that digest instead of through the version tag,
+and the version may be omitted. With a normalized digest, "@jsonNormalisation.v4alpha3+sha256:<hex>"
+(the digest signatures sign), the transfer fails unless the source descriptor matches it. An OCI digest
+is specific to the source repository; a normalized digest also matches the transferred copy.
+When the version is omitted (and no OCI digest is given), all versions of the component are discovered and transferred.
 When the source is a repository reference (without a component), every component version
 the repository contains is transferred (component listing is currently CTF-only).
 Use --constraint to restrict which versions are selected, and --latest to transfer
@@ -74,6 +79,7 @@ By default, local blobs are copied and all other resources stay by reference (th
 is unchanged in the target). Uploader configurations in the OCM configuration decide
 what happens to a resource: oci.uploader.transfer.config.ocm.software/v1alpha1 (separate OCI
 artifacts), http.uploader.transfer.config.ocm.software/v1alpha1 (custom HTTP targets),
+git.uploader.transfer.config.ocm.software/v1alpha1 (push Git history into an existing Git repository),
 localblob.uploader.transfer.config.ocm.software/v1alpha1 (copy as local blobs) and
 reference.uploader.transfer.config.ocm.software/v1alpha1 (keep by reference). Each selects
 resources with a CEL match expression over resource and target (test access types with
@@ -85,7 +91,9 @@ component's references and transfers them too.
 
 Driving defaults from the OCM configuration:
   A transfer.config.ocm.software/v1alpha1 entry inside the central OCM configuration
-  (passed via --config) sets defaults for --recursive.
+  (passed via --config) sets defaults for --recursive. Its unmatchedResourcePolicy (Ignore, Warn,
+  Fail; default Warn) decides whether a resource no uploader selects is silently given the
+  baseline, logged as a warning, or fails the transfer.
   Explicit command-line flags always override the values from the configuration.
 
 Two-step workflow (generate, review, replay):
@@ -105,7 +113,8 @@ How the graph is built:
     1. CTFGetComponentVersion -> OCIGetComponentVersion
     2. CTFAddComponentVersion -> OCIAddComponentVersion
     3. GetOCIArtifact -> OCIAddLocalResource, or TransferOCIArtifact (OCI uploader)
-    4. GetHelmChart -> ConvertHelmToOCI -> OCIAddLocalResource / AddOCIArtifact (OCI uploader)`,
+    4. GetHelmChart -> ConvertHelmToOCI -> OCIAddLocalResource / AddOCIArtifact (OCI uploader)
+    5. GetGitResource -> OCIAddLocalResource, or GetGitResource / OCIGetLocalResource -> AddGitResource (Git uploader)`,
 		Example: strings.TrimSpace(`
 # Transfer a component version from a CTF archive to an OCI registry
 transfer component-version ctf::./my-archive//ocm.software/mycomponent:1.0.0 ghcr.io/my-org/ocm
@@ -167,7 +176,7 @@ transfer component-version --transfer-spec spec.yaml
 	cmd.Flags().Bool(FlagDryRun, false, "build and validate the graph but do not execute")
 	cmd.Flags().BoolP(FlagRecursive, "r", false, "recursively discover and transfer component versions")
 	registerLegacyFlags(cmd.Flags())
-	cmd.Flags().String(FlagTransferSpec, "", "path to a transfer specification file (use \"-\" for stdin). The input must hold exactly one transfer spec document; with \"-\", OCM configuration documents in stdin are applied as configuration")
+	cmd.Flags().String(FlagTransferSpec, "", "path to a transfer specification file (use \"-\" for stdin). The input must hold exactly one transfer spec document; OCM configuration documents in the same stdin stream are rejected unless --config - is also given")
 	cmd.Flags().String(FlagConstraint, "", "version constraint evaluated by each version's configured scheme; versions with no applicable scheme are retained (e.g. \">= 1.0.0, < 2.0.0\"); only used when no version is specified in the reference")
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is transferred; only used when no version is specified in the reference")
 	cmd.Flags().Int(FlagConcurrency, 4, "maximum number of transformation nodes processed in parallel; independent nodes run concurrently while dependency ordering is preserved. Increase it to speed up large graphs, decrease it to reduce load on the registry")
@@ -370,17 +379,17 @@ func loadTransferSpec(path string, stdin io.Reader) (*transformv1alpha1.Transfor
 	return tgd, nil
 }
 
-// transferSpecDocument returns the only document of a transfer spec. OCM configuration
-// piped with --transfer-spec - is taken out of stdin before the command runs, so any
-// configuration left here came from a spec file, where it would not be applied.
-// A plain yaml.Unmarshal would silently take the first document and run an empty graph.
+// transferSpecDocument returns the only document of a transfer spec. With --config -,
+// OCM configuration is taken out of stdin before the command runs, so any configuration
+// left here would silently not be applied. A plain yaml.Unmarshal would also silently
+// take the first document and run an empty graph.
 func transferSpecDocument(data []byte) ([]byte, error) {
 	configs, specs, err := configuration.SplitConfigStream(bytes.NewReader(data))
 	if err != nil {
 		return nil, err
 	}
 	if len(configs) > 0 {
-		return nil, errors.New("OCM configuration is not allowed in a transfer spec file, pass it with --config or on stdin")
+		return nil, errors.New("OCM configuration is not allowed in a transfer spec, pass it with --config (use --config - for stdin)")
 	}
 	switch len(specs) {
 	case 0:
@@ -538,14 +547,32 @@ func collectComponentIDs(
 
 	repositorySource := sourceComponents != nil
 
-	if !repositorySource && fromSpec.Version != "" {
+	if !repositorySource && (fromSpec.Version != "" || fromSpec.Digest != "") {
+		// The transfer verifies a digest pin against the descriptor it transfers.
+		pinned, err := ocm.DigestPin(fromSpec)
+		if err != nil {
+			return nil, err
+		}
 		if cmd.Flags().Changed(FlagConstraint) {
 			slog.WarnContext(ctx, fmt.Sprintf("--%s has no effect when a version is already specified in the reference", FlagConstraint))
 		}
 		if cmd.Flags().Changed(FlagLatest) {
 			slog.WarnContext(ctx, fmt.Sprintf("--%s has no effect when a version is already specified in the reference", FlagLatest))
 		}
-		return []transfer.ComponentID{{Component: fromSpec.Component, Version: fromSpec.Version}}, nil
+		version := fromSpec.Version
+		if version == "" {
+			// A reference pinned to an OCI digest may omit the version: take it from the pinned artifact.
+			repo, err := repoProvider.GetComponentVersionRepositoryForComponent(ctx, fromSpec.Component, "")
+			if err != nil {
+				return nil, fmt.Errorf("could not access ocm repository: %w", err)
+			}
+			_, desc, err := ocm.GetPinnedComponentVersion(ctx, repo, fromSpec)
+			if err != nil {
+				return nil, fmt.Errorf("resolving the version of the pinned component failed: %w", err)
+			}
+			version = desc.Component.Version
+		}
+		return []transfer.ComponentID{{Component: fromSpec.Component, Version: version, Digest: pinned}}, nil
 	}
 
 	registry, err := versioningspec.RegistryFromConfig(cfg)

@@ -130,15 +130,22 @@ func TestGetGitResourceLocalRepository(t *testing.T) {
 			gz, err := gzip.NewReader(bytes.NewReader(archive))
 			r.NoError(err)
 			defer gz.Close()
+			files := map[string]string{}
 			tr := tar.NewReader(gz)
-			header, err := tr.Next()
-			r.NoError(err)
-			r.Equal("README", header.Name)
-			content, err := io.ReadAll(tr)
-			r.NoError(err)
-			r.Equal(tc.content, string(content))
-			_, err = tr.Next()
-			r.ErrorIs(err, io.EOF)
+			for {
+				header, err := tr.Next()
+				if err == io.EOF {
+					break
+				}
+				r.NoError(err)
+				if header.Name == ".git" || strings.HasPrefix(header.Name, ".git/") {
+					continue
+				}
+				content, err := io.ReadAll(tr)
+				r.NoError(err)
+				files[header.Name] = string(content)
+			}
+			r.Equal(map[string]string{"README": tc.content}, files)
 		})
 	}
 }
@@ -178,7 +185,7 @@ func (b *testBlob) ReadCloser() (io.ReadCloser, error) {
 func TestGetGitResourceCredentialsAndCleanup(t *testing.T) {
 	r := require.New(t)
 	failure := errors.New("test failure")
-	resolved := &credsv1.GitCredentials{Token: "test-token"}
+	resolved := &credsv1.GitBearerCredentials{Token: "test-token"}
 	r.NotNil(resolved)
 	for _, tc := range []struct {
 		name                                          string
@@ -281,9 +288,6 @@ func TestGetGitResourceRemovesOutputOnBufferFailure(t *testing.T) {
 	intercept := &testRepository{download: func(ctx context.Context, resource *descriptor.Resource, creds runtime.Typed) (blob.ReadOnlyBlob, error) {
 		b, err := repo.DownloadResource(ctx, resource, creds)
 		r.NoError(err)
-		files, err := os.ReadDir(downloadDir)
-		r.NoError(err)
-		r.Len(files, 1, "buffer a real downloaded archive")
 		// Make the already-created output path unwritable as a file, without
 		// depending on permission checks that behave differently under root.
 		outputs, err := os.ReadDir(outDir)

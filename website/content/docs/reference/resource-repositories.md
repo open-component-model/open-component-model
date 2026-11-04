@@ -1,8 +1,10 @@
 ---
 title: "Resource Repositories"
 description: "Technical reference for built-in resource repositories: supported access types, credential resolution, and capabilities."
-weight: 6
+weight: 4
 toc: true
+aliases:
+  - /docs/reference/resource-repositories/
 ---
 
 This page is the technical reference for built-in resource repositories. For an introduction to what resource
@@ -171,14 +173,17 @@ See [Credential Consumer Identities: Wget / HTTP]({{< relref "credential-consume
 
 ### Download Behavior
 
-Performs the request described by the access specification (`verb`, `header`, `body`, `noRedirect`) and returns the
-response body as a file-backed blob. Only 2xx responses are accepted. The body is streamed to a file under the
-`tempFolder` of the `filesystem.config.ocm.software/v1alpha1` configuration type rather than buffered in memory, and
-there is no size limit by default. The media type of the blob is taken from `mediaType`, falling back to the response
-`Content-Type` and then to `application/octet-stream`.
+Performs the request described by the access specification (`verb`, `header`, `body`, `noRedirect`) and returns a blob
+that streams the response body. Only 2xx responses are accepted. Nothing is buffered in memory or on disk, and there is
+no size limit by default. The request is sent when the blob is read, and every read sends it again; for methods other
+than `GET` and `HEAD` a second read is refused, because repeating the request may have side effects. A reader closed
+before it reads any content sends no request. Size, media type, and advertised checksum are learned once: from a
+`HEAD` request when they are needed before the first read (`GET` and `HEAD` downloads only), otherwise from the first
+response. Every later response must match the learned size. The media type of the blob is taken from `mediaType`,
+falling back to the `Content-Type` learned this way and then to `application/octet-stream`.
 
 Request timeouts, retries, and per-host settings come from the
-[HTTP client configuration]({{< relref "http-client-configuration.md" >}}).
+[HTTP client configuration]({{< relref "http-client.md" >}}).
 
 ### Digest Processing
 
@@ -190,7 +195,7 @@ changes will not verify against a previously recorded digest.
 A resource can carry a digest before it has ever been fetched: setting the optional `digest` field on the resource in
 `component-constructor.yaml` turns the recorded value into an assertion, so `ocm add cv` fails rather than recording
 whatever the server returned. See
-[Tutorial: Work with HTTP Resources]({{< relref "docs/tutorials/wget-http-resources.md#pin-a-digest" >}}).
+[Tutorial: Work with HTTP Resources]({{< relref "docs/guides/pack/add-http-resources.md#pin-a-digest" >}}).
 
 ---
 
@@ -249,7 +254,7 @@ limit by default. The media type of the blob comes from `mediaType`. If `mediaTy
 `Content-Type` of the object, and then `application/octet-stream`.
 
 Requests go through the shared OCM HTTP client, so timeouts, TLS settings and per-host overrides come from the
-[HTTP client configuration]({{< relref "http-client-configuration.md" >}}). The AWS SDK does the retries. It retries
+[HTTP client configuration]({{< relref "http-client.md" >}}). The AWS SDK does the retries. It retries
 the whole operation and signs each attempt again. The configured `retry.maxRetries` sets its attempt count. The SDK
 resolves the request host for AWS, so a per-host retry entry takes effect only for a custom `endpoint`. For AWS, the
 global setting applies.
@@ -270,6 +275,12 @@ See
 ## GitHub Resource Repository
 
 Handles source archives of a pinned commit in a GitHub (or GitHub Enterprise) repository.
+
+{{< callout context="caution" >}}
+The `GitHub/v1` access type is **deprecated**. Use the
+[Git Resource Repository](#git-resource-repository) with `Git/v1` for new resources. This
+repository stays so component versions published with `GitHub/v1` keep working.
+{{< /callout >}}
 
 ### Supported Access Types
 
@@ -377,9 +388,8 @@ is `Git`.
 | `port`     | `443`                                |
 | `path`     | `example-group/example-project.git`  |
 
-Credentials are optional. Without them, HTTPS requests are anonymous, and SSH uses the SSH agent. When credentials
-resolve, OCM uses an SSH private key first, then a token, then a username and password. See
-[`GitCredentials/v1`]({{< relref "credential-types.md#gitcredentialsv1" >}}).
+Credentials are optional. See [Git credential selection]({{< relref "credential-types.md#git-credential-selection" >}})
+for supported authentication methods.
 
 See [Credential Consumer Identities: Git]({{< relref "credential-consumer-identities.md" >}}#git) for how each URL form
 maps to the identity, and for matching rules.
@@ -433,11 +443,11 @@ plugins.
 
 ## Related Documentation
 
-- [Concept: Resource Repositories]({{< relref "docs/concepts/resource-repositories.md" >}}): why resource repositories
+- [Concept: Resource Repositories]({{< relref "docs/concepts/resource-repositories.md" >}}) - why resource repositories
   exist and how they fit into OCM
-- [Reference: Input and Access Types]({{< relref "input-and-access-types.md" >}}): access type specifications handled by
+- [Reference: Input and Access Types]({{< relref "input-and-access-types.md" >}}) - access type specifications handled by
   resource repositories
-- [Reference: Credential Consumer Identities]({{< relref "credential-consumer-identities.md" >}}): identity types and
+- [Reference: Credential Consumer Identities]({{< relref "credential-consumer-identities.md" >}}) - identity types and
   matching rules for credential resolution
-- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}): how resource repositories
+- [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) - how resource repositories
   enable artifact transfer

@@ -204,7 +204,7 @@ configurations:
     idleConnTimeout: 90s
 `)
 		c := ocmhttp.NewClient(cfg)
-		tr, ok := c.Transport.(*nethttp.Transport)
+		tr, ok := ocmhttp.UnwrapReplayable(c.Transport).(*nethttp.Transport)
 		require.True(t, ok, "expected *http.Transport, got %T", c.Transport)
 		assert.Equal(t, 7*time.Second, tr.TLSHandshakeTimeout)
 		assert.Equal(t, 90*time.Second, tr.IdleConnTimeout)

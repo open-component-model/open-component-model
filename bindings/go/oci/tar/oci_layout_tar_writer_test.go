@@ -488,7 +488,7 @@ func TestOCILayoutTarWriter_ConcurrentPush(t *testing.T) {
 
 func TestOCILayoutTarWriter_ScratchClosedOnClose(t *testing.T) {
 	// When scratch implements io.Closer (like *os.File), Close() calls it.
-	tmpFile, err := os.CreateTemp("", "oci-layout-test-*")
+	tmpFile, err := os.CreateTemp(t.TempDir(), "oci-layout-test-*")
 	require.NoError(t, err)
 	tmpPath := tmpFile.Name()
 	defer os.Remove(tmpPath)
@@ -509,7 +509,7 @@ func TestOCILayoutWriterWithTempFile_RemovesOnClose(t *testing.T) {
 
 	// Peek at the underlying file path via the removingCloser
 	rc := writer.buf.(*removingCloser)
-	tmpPath := rc.File.Name()
+	tmpPath := rc.Name()
 
 	_, err = os.Stat(tmpPath)
 	require.NoError(t, err, "temp file should exist before Close")
@@ -523,7 +523,7 @@ func TestOCILayoutWriterWithTempFile_RemovesOnClose(t *testing.T) {
 
 func TestOCILayoutWriter_DirectConstructor(t *testing.T) {
 	// Verify the direct constructor works with a caller-managed temp file
-	tmpFile, err := os.CreateTemp("", "oci-layout-test-*")
+	tmpFile, err := os.CreateTemp(t.TempDir(), "oci-layout-test-*")
 	require.NoError(t, err)
 	defer func() {
 		tmpFile.Close()
@@ -596,7 +596,7 @@ func BenchmarkOCILayoutWriter_Push_Sequential(b *testing.B) {
 			b.ResetTimer()
 
 			for range b.N {
-				tmpFile, err := os.CreateTemp("", "bench-seq-*")
+				tmpFile, err := os.CreateTemp(b.TempDir(), "bench-seq-*")
 				if err != nil {
 					b.Fatal(err)
 				}

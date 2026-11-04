@@ -1,0 +1,116 @@
+/*
+ * OCM Changelog
+ *
+ * Styles for the changelog shortcode output (docs/changelog). Renders the
+ * GitHub release list as a vertical version timeline with a breaking-change
+ * badge and a collapsible dependencies group.
+ */
+
+.ocm-changelog {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.ocm-changelog-entry {
+  border: 1px solid var(--ocm-card-border);
+  border-radius: var(--ocm-card-border-radius);
+  background: var(--ocm-card-bg);
+  padding: 1.25rem 1.5rem;
+}
+
+.ocm-changelog-version {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  margin: 0 0 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--ocm-card-border);
+
+  a {
+    text-decoration: none;
+  }
+}
+
+.ocm-changelog-date {
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: var(--lp-c-text-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.ocm-changelog-body {
+  h3 {
+    font-size: 1rem;
+    margin-top: 1.25rem;
+  }
+
+  ul {
+    margin-bottom: 0.5rem;
+  }
+}
+
+.ocm-changelog-breaking {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  padding: 0.15em 0.5em;
+  margin-right: 0.35em;
+  border-radius: 4px;
+  color: var(--warning-text);
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  vertical-align: middle;
+}
+
+.ocm-changelog-deps {
+  margin: 0.5rem 0 1rem;
+
+  > summary {
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--lp-c-text-1);
+    list-style-position: inside;
+  }
+
+  &[open] > summary {
+    margin-bottom: 0.5rem;
+  }
+}
+
+.ocm-changelog-fallback {
+  border: 1px solid var(--ocm-card-border);
+  border-radius: var(--ocm-card-border-radius);
+  background: var(--ocm-card-bg);
+  padding: 1rem 1.25rem;
+  color: var(--lp-c-text-2);
+}
+
+.ocm-changelog-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+
+.ocm-changelog-more-btn {
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 0.5rem 1.25rem;
+  border-radius: var(--ocm-card-border-radius);
+  color: var(--lp-c-text-1);
+  background: var(--ocm-card-bg);
+  border: 1px solid var(--ocm-card-border);
+  transition: background 0.15s ease, border-color 0.15s ease;
+
+  &:hover,
+  &:focus-visible {
+    border-color: var(--lp-c-brand, var(--ocm-card-border));
+    background: var(--lp-c-bg-soft, var(--ocm-card-bg));
+  }
+}

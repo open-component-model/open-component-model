@@ -16,13 +16,6 @@
   },
   'updateNotScheduled': true, // Update branches that have already been created
   'minimumReleaseAge': '28 days',
-  'internalChecksFilter': 'strict',
-  'prCreation': 'not-pending',
-  // CI runs only on pull_request, so renovate/* branches never get real check
-  // statuses. Count internal checks (e.g. renovate/stability-days) as success
-  // so prCreation='not-pending' does not defer PR creation indefinitely.
-  // See https://docs.renovatebot.com/configuration-options/#suppress-branchpr-creation-for-x-days
-  'internalChecksAsSuccess': true,
   // config:best-practices this is usually disabled by default.
   // https://github.com/google/docsy/blob/9f8acf7a4547cb1c5d1b88b3db588793bfd6eb25/renovate.json5#L7
   // Also, disabling this means that transitive dependencies that aren't 28 days old at least,
@@ -41,9 +34,6 @@
   automergeType: "pr",
   separateMinorPatch: true,
   separateMultipleMajor: true,
-  // Grouped fast-moving deps inherit the youngest member's release age, so
-  // under global 'strict' + 28d the PR is never created. Below groups opt into
-  // internalChecksFilter='flexible' to unblock. See renovatebot/renovate#7603.
   packageRules: [
     {
       matchFileNames: ['bindings/go/kubernetes/controller/chart/**'],
@@ -55,8 +45,61 @@
       ],
     },
     {
+      // Garden Linux FIPS base image (CLI + controller). Only follow the
+      // multi-arch `<major>.<patch>` tags, not the per-arch `amd64-*`/`arm64-*` ones.
+      matchDatasources: ['docker'],
+      matchPackageNames: ['ghcr.io/gardenlinux/gardenlinux/fips'],
+      allowedVersions: '/^\\d+\\.\\d+$/',
+      versioning: 'loose',
+    },
+    {
       matchUpdateTypes: ['minor','patch'],
       automerge: true,
+    },
+    {
+      // GitHub Actions version bumps (patch/minor/major) follow the same weekly
+      // cadence as the digest pins below; without this only digest-only
+      // re-pins were scheduled and version bumps landed any day of the week.
+      // Kept above 'Digest pins' (general before specific).
+      // separateMinorPatch is off so minor and patch bumps share the group
+      // below. It lives here, not there: rules with matchUpdateTypes are only
+      // evaluated after the update type is known, too late for this option.
+      // Majors are unaffected (they stay separate via separateMultipleMajor).
+      matchManagers: ['github-actions'],
+      separateMinorPatch: false,
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ],
+    },
+    {
+      // Batch non-breaking Action bumps into one weekly PR. Majors are left out
+      // on purpose: they get their own PR (separateMultipleMajor) so a breaking
+      // change can be reviewed and reverted on its own. Digest-only updates are
+      // disjoint from these types and stay in 'Digest pins' below.
+      matchManagers: ['github-actions'],
+      matchUpdateTypes: ['minor', 'patch'],
+      groupName: 'GitHub Actions',
+      groupSlug: 'github-actions',
+    },
+    {
+      // npm bumps (website/ and .github/scripts/) used to open a PR per
+      // package on any day of the week. Same split as for the Actions above:
+      // separateMinorPatch is off here because the group rule below carries
+      // matchUpdateTypes and is evaluated too late for that option.
+      matchManagers: ['npm'],
+      separateMinorPatch: false,
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ],
+    },
+    {
+      // Batch non-breaking npm bumps into one weekly PR. Majors stay out and
+      // get their own PR (separateMultipleMajor) to be reviewed and reverted
+      // alone.
+      matchManagers: ['npm'],
+      matchUpdateTypes: ['minor', 'patch'],
+      groupName: 'npm dependencies',
+      groupSlug: 'npm-deps',
     },
     {
       // Collapse digest-only re-pins (same tag, new SHA) for Actions and
@@ -69,6 +112,20 @@
         'dockerfile',
         'docker-compose',
       ],
+      matchUpdateTypes: ['digest', 'pinDigest'],
+      groupName: 'Digest pins',
+      groupSlug: 'digest-pins',
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ],
+    },
+    {
+      // Collapse digest-only re-pins for .env-file Docker image pins managed
+      // by custom.regex (datasource=docker — e.g. OPENSCAP_IMAGE, DOCKLE_IMAGE)
+      // into the same weekly 'Digest pins' PR. Scoped to docker datasource only
+      // so envtest and other non-docker custom managers are unaffected.
+      matchManagers: ['custom.regex'],
+      matchDatasources: ['docker'],
       matchUpdateTypes: ['digest', 'pinDigest'],
       groupName: 'Digest pins',
       groupSlug: 'digest-pins',
@@ -112,7 +169,6 @@
       ],
       groupName: 'Kubernetes dependencies',
       groupSlug: 'kubernetes-deps',
-      internalChecksFilter: 'flexible',
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ],
@@ -123,10 +179,58 @@
       matchPackageNames: [
         'github.com/docker/{/,}**',
       ],
-      internalChecksFilter: 'flexible',
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ]
+    },
+    {
+      // Garden Linux images (the CA bundle source of the CLI and controller images) are updated together in one PR.
+      groupName: 'Garden Linux images',
+      groupSlug: 'gardenlinux-images',
+      matchPackageNames: [
+        'ghcr.io/gardenlinux/gardenlinux/{/,}**',
+      ],
+    },
+    {
+      // OCM's FIPS cosign build is pinned twice: the release (and the digest of
+      // its cosign_checksums.txt) in the sigstore handler's .env (auto-download,
+      // integration tests) and the image in the CLI Containerfile and controller
+      // Dockerfile. Bump all in one PR; pin_sync_test.go fails if they diverge.
+      // The release is tagged vX.Y.Z+ocm.N, the image vX.Y.Z-ocm.N (OCI tags
+      // allow no "+"). Regex versioning reads ocm.N as a build number in both,
+      // not a prerelease or docker compatibility suffix.
+      groupName: 'OCM cosign',
+      groupSlug: 'ocm-cosign',
+      matchPackageNames: [
+        'open-component-model/cosign',
+        'ghcr.io/open-component-model/cosign',
+      ],
+      versioning: 'regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)[-+]ocm\\.(?<build>\\d+)$',
+      // Our own fork; releases are gated by its CI. The global 28-day age would
+      // hold every release back, so the run its release workflow dispatches
+      // would find nothing.
+      minimumReleaseAge: '0 days',
+    },
+    {
+      // Keep the helm CLI pin (azure/setup-helm `version:` in the workflows,
+      // tracked as github-releases helm/helm) and the helm.sh/helm/v4 Go module
+      // moving together so CI's helm binary never drifts from the library.
+      // separateMinorPatch off so both land in one PR per bump.
+      groupName: 'Helm',
+      groupSlug: 'helm',
+      matchPackageNames: [
+        'helm.sh/helm/v4',
+        'helm/helm',
+      ],
+      // Grouping the gomod bump with the github-releases helm pin drops the
+      // golang-category gomodTidy; force it on the group so go.sum stays tidy.
+      postUpdateOptions: [
+        'gomodTidy',
+      ],
+      separateMinorPatch: false,
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ],
     },
     {
       groupName: 'Golang X Repositories',
@@ -134,7 +238,6 @@
       matchPackageNames: [
         'golang.org/x/{/,}**'
       ],
-      internalChecksFilter: 'flexible',
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ]
@@ -145,21 +248,9 @@
       matchPackageNames: [
         'google.golang.org/{/,}**'
       ],
-      internalChecksFilter: 'flexible',
       schedule: [
         '* * * * 0' // At every minute on Sunday it is allowed to create branches
       ]
-    },
-    {
-      // Monorepos grouped by the extends presets (aws-sdk-go-v2, opentelemetry,
-      // moby, go-openapi). Same 'flexible' rationale as the local groups above.
-      matchPackageNames: [
-        'github.com/aws/aws-sdk-go-v2{/,}**',
-        'go.opentelemetry.io/{/,}**',
-        'github.com/moby/{/,}**',
-        'github.com/go-openapi/{/,}**',
-      ],
-      internalChecksFilter: 'flexible',
     },
     {
       groupName: 'spf13 repositories',
@@ -235,22 +326,6 @@
       enabled: false,
     },
     {
-      // Batch non-major controller bumps. The chart subtree is excluded so the
-      // dedicated 'Kubernetes Controller chart' group above is not overwritten
-      // by this later rule (Renovate merges matching rules in order; last write
-      // wins on conflicting fields like groupName).
-      matchFileNames: [
-        'bindings/go/kubernetes/controller/**',
-        '!bindings/go/kubernetes/controller/chart/**',
-      ],
-      matchUpdateTypes: ['minor', 'patch'],
-      groupName: 'Kubernetes Controller dependencies (non-major)',
-      groupSlug: 'kubernetes-controller-deps',
-      schedule: [
-        '* * * * 0' // At every minute on Sunday it is allowed to create branches
-      ],
-    },
-    {
       // Batch all bumps (incl. majors) for the Hugo CLI-docs generator module.
       // separateMinorPatch overridden so minor+patch share one branch; majors
       // still get their own branches via separateMultipleMajor (global).
@@ -302,6 +377,18 @@
   },
   customManagers: [
     {
+      // Track the azure/setup-helm `version:` input as the helm/helm release,
+      // so the Helm group above moves it in lockstep with helm.sh/helm/v4.
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^\\.github/workflows/[^/]+\\.ya?ml$/',
+      ],
+      matchStrings: [
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+version: (?<currentValue>\\S+)',
+      ],
+      versioningTemplate: 'semver',
+    },
+    {
       customType: 'regex',
       managerFilePatterns: [
         '/(^|/)\\.env(\\.local)?$/',
@@ -333,9 +420,34 @@
         '/(^|/)\\.env(\\.local)?$/',
       ],
       matchStrings: [
-        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+.*?_VERSION=v?(?<currentValue>\\d+\\.\\d+\\.\\d+)',
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+.*?_VERSION=v?(?<currentValue>\\d+\\.\\d+\\.\\d+)(?:\\s|$)',
       ],
       versioningTemplate: 'semver',
+    },
+    {
+      // OCM cosign release pin (vX.Y.Z+ocm.N) plus the SHA256 of that release's
+      // cosign_checksums.txt. The generic .env manager above skips it (only plain
+      // semver), so the full tag is captured here for the "OCM cosign" group's
+      // regex versioning; github-release-attachments recomputes the digest from
+      // the new release's cosign_checksums.txt.
+      customType: 'regex',
+      managerFilePatterns: [
+        '/(^|/)\\.env(\\.local)?$/',
+      ],
+      matchStrings: [
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>open-component-model/cosign)\\s+COSIGN_VERSION=(?<currentValue>v\\d+\\.\\d+\\.\\d+\\+ocm\\.\\d+)\\s+COSIGN_CHECKSUMS_SHA256=(?<currentDigest>[0-9a-f]{64})',
+      ],
+    },
+    {
+      // Digest-pinned images in .env files, e.g. OPENSCAP_IMAGE (tag@sha256:...).
+      customType: 'regex',
+      managerFilePatterns: [
+        '/(^|/)\\.env(\\.local)?$/',
+      ],
+      matchStrings: [
+        '# renovate: datasource=docker depName=(?<depName>\\S+)\\s+\\w+_IMAGE=\\S+?:(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})',
+      ],
+      datasourceTemplate: 'docker',
     },
     {
       // Automatic version bump for GO_VERSION, NPM_VERSION and NODE_VERSION in Netlify.
@@ -348,17 +460,21 @@
       ],
       versioningTemplate: 'semver',
     },
+    {
+      // Generic in-file `# renovate: datasource=... depName=...` markers for
+      // free-form fields that no manager parses natively: YAML `semver:` in
+      // test fixtures and workflows. The marker and the value must sit on
+      // consecutive lines. Tool/binary versions belong in `.env`, not here.
+      customType: 'regex',
+      managerFilePatterns: [
+        '/\\.ya?ml$/',
+      ],
+      matchStrings: [
+        '# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)\\s+[^\\n]*?[:= ]v?(?<currentValue>\\d+\\.\\d+\\.\\d+)',
+      ],
+      versioningTemplate: 'semver',
+    },
   ],
-  postUpgradeTasks: {
-    commands: [
-      './.github/scripts/renovate-post-upgrade.sh',
-    ],
-    fileFilters: [
-      '**/go.mod',
-      '**/go.sum',
-    ],
-    executionMode: 'branch',
-  },
   // Prevent a transient npm registry hiccup from aborting the whole run.
   // See renovatebot/renovate#26196.
   hostRules: [

@@ -1,11 +1,12 @@
 package v1
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/opencontainers/go-digest"
-	"oras.land/oras-go/v2/registry"
 
+	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -43,19 +44,23 @@ type OCIImageLayer struct {
 	Size int64 `json:"size"`
 }
 
+// Validate checks the digest, nonnegative size, and a reference without a tag.
 func (t *OCIImageLayer) Validate() error {
 	if err := t.Digest.Validate(); err != nil {
-		return err
+		return fmt.Errorf("invalid digest %q: %w", t.Digest, err)
 	}
 	if t.Size < 0 {
-		return fmt.Errorf("size %d is invalid, must be greater than 0", t.Size)
+		return fmt.Errorf("size %d is invalid, must not be negative", t.Size)
 	}
 	if t.Reference == "" {
-		return fmt.Errorf("reference is empty")
+		return errors.New(`reference is empty, set it in field "ref"`)
 	}
-	ref, err := registry.ParseReference(t.Reference)
+	ref, err := looseref.ParseReference(t.Reference)
 	if err != nil {
 		return fmt.Errorf("invalid reference %q: %w", t.Reference, err)
+	}
+	if ref.Tag != "" {
+		return fmt.Errorf("reference %q must not contain a tag: a layer is addressed by its digest", t.Reference)
 	}
 	if dig, err := ref.Digest(); err == nil && dig != t.Digest {
 		return fmt.Errorf("digest field value %q does not match digest contained in reference %q", t.Digest, t.Reference)

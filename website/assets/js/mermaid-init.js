@@ -10,7 +10,7 @@
  * upstream is needed (and no drift risk on doks-core bumps).
  */
 
-import mermaid from 'mermaid';
+import mermaid from "mermaid";
 
 // Distinguish per-diagram syntax errors (expected, per-element) from systemic
 // failures (unexpected: bad config, DOM exception, esbuild corruption). Both
@@ -18,9 +18,9 @@ import mermaid from 'mermaid';
 // the message differs so systemic failures are not mistaken for one bad diagram.
 const logMermaidError = (prefix) => (err) => {
     const isSyntax =
-        err?.name === 'UnknownDiagramError' ||
-    err?.message?.includes('No diagram type detected') ||
-    err?.message?.includes('Parse error');
+        err?.name === "UnknownDiagramError" ||
+    err?.message?.includes("No diagram type detected") ||
+    err?.message?.includes("Parse error");
     if (isSyntax) {
         console.error(`${prefix} (diagram syntax):`, err);
     } else {
@@ -35,7 +35,7 @@ const logMermaidError = (prefix) => (err) => {
 //   .mermaid blocks as raw text. Drive run() ourselves and gate on
 //   document.readyState instead.
 const start = () => {
-    const elements = Array.from(document.querySelectorAll('.mermaid'));
+    const elements = Array.from(document.querySelectorAll(".mermaid"));
     if (!elements.length) {
         return;
     }
@@ -45,29 +45,29 @@ const start = () => {
     // mermaid processes an element, its textContent becomes the rendered SVG
     // and the original source is lost.
     elements.forEach((el) => {
-        el.setAttribute('data-mermaid-source', el.textContent);
+        el.setAttribute("data-mermaid-source", el.textContent);
     });
 
     const getTheme = () => {
-        const t = document.documentElement.getAttribute('data-bs-theme');
-        if (t === 'dark') {
-            return 'dark';
+        const t = document.documentElement.getAttribute("data-bs-theme");
+        if (t === "dark") {
+            return "dark";
         }
-        if (t === 'light') {
-            return 'default';
+        if (t === "light") {
+            return "default";
         }
         // "auto" - fall back to the OS-level preference so the initial render
         // matches what doks-core's theme toggle would resolve to.
-        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
+        return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "default";
     };
 
     const rerender = () => {
-        document.querySelectorAll('.mermaid').forEach((el) => {
-            const src = el.getAttribute('data-mermaid-source');
+        document.querySelectorAll(".mermaid").forEach((el) => {
+            const src = el.getAttribute("data-mermaid-source");
             if (src) {
                 // Undo mermaid's "already rendered" guard and restore the source so
                 // mermaid.run() picks the element up again with the new theme.
-                el.removeAttribute('data-processed');
+                el.removeAttribute("data-processed");
                 el.textContent = src;
             }
         });
@@ -75,11 +75,11 @@ const start = () => {
         // mermaid.run() rejects on invalid diagram syntax; swallow the rejection
         // to a console.error so a single bad diagram doesn't surface as an
         // unhandled promise rejection on the page.
-        mermaid.run().catch(logMermaidError('mermaid re-render failed'));
+        mermaid.run().catch(logMermaidError("mermaid re-render failed"));
     };
 
     mermaid.initialize({ startOnLoad: false, theme: getTheme() });
-    mermaid.run().catch(logMermaidError('mermaid render failed'));
+    mermaid.run().catch(logMermaidError("mermaid render failed"));
 
     // doks-core's setTheme() writes data-bs-theme AND dispatches 'themeChanged'
     // for every toggle, so a naive listener + observer pair re-renders twice
@@ -98,7 +98,7 @@ const start = () => {
         });
     };
 
-    document.addEventListener('themeChanged', scheduleRerender);
+    document.addEventListener("themeChanged", scheduleRerender);
 
     // attributeFilter narrows the observation to the one attribute we care
     // about, so the callback isn't woken for unrelated <html> attribute writes
@@ -106,12 +106,12 @@ const start = () => {
     const observer = new MutationObserver(scheduleRerender);
     observer.observe(document.documentElement, {
         attributes: true,
-        attributeFilter: ['data-bs-theme'],
+        attributeFilter: ["data-bs-theme"]
     });
 };
 
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', start, { once: true });
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start, { once: true });
 } else {
     start();
 }

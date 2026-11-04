@@ -49,11 +49,11 @@ spec:
         name: product-rgd
 ---
 apiVersion: delivery.ocm.software/v1alpha1
-kind: Deployer
+kind: NamespacedDeployer
 metadata:
   name: sovereign-product-deployer
   namespace: sovereign-product
 spec:
+  serviceAccountName: sovereign-product-deployer
   resourceRef:
     name: sovereign-product-resource-rgd
-    namespace: sovereign-product

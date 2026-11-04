@@ -48,6 +48,14 @@ func WithOCICredentials(credentials *ocicredsv1.OCICredentials) Option {
 	}
 }
 
+// WithWorkingDirectory sets the directory against which a relative local chart path is resolved.
+// The chart path must not escape this directory. When empty, the path is used as given.
+func WithWorkingDirectory(dir string) Option {
+	return func(options *Options) {
+		options.WorkingDirectory = dir
+	}
+}
+
 // WithHTTPConfig sets the HTTP client configuration used for chart downloads and OCI registry access.
 // The download layer builds its internal client from cfg. When nil, the default Helm client is used.
 func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
@@ -57,9 +65,10 @@ func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 }
 
 type Options struct {
-	Credentials    *helmcredsv1.HelmHTTPCredentials
-	OCICredentials *ocicredsv1.OCICredentials
-	HTTPConfig     *httpv1alpha1.Config
+	Credentials      *helmcredsv1.HelmHTTPCredentials
+	OCICredentials   *ocicredsv1.OCICredentials
+	HTTPConfig       *httpv1alpha1.Config
+	WorkingDirectory string
 }
 
 // GetV1HelmBlob creates a ReadOnlyBlob from a v1.Helm specification.
@@ -81,7 +90,13 @@ func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string, opts ..
 
 	switch {
 	case helmSpec.Path != "":
-		chart, err = newReadOnlyChart(helmSpec.Path, tmpDir)
+		path := helmSpec.Path
+		if options.WorkingDirectory != "" {
+			if path, err = filesystem.EnsurePathInWorkingDirectory(path, options.WorkingDirectory); err != nil {
+				return nil, nil, fmt.Errorf("error resolving local helm chart path %q in working directory %q: %w", helmSpec.Path, options.WorkingDirectory, err)
+			}
+		}
+		chart, err = newReadOnlyChart(path, options.WorkingDirectory, tmpDir)
 		if err != nil {
 			return nil, nil, fmt.Errorf("error loading local helm chart %q: %w", helmSpec.Path, err)
 		}
@@ -107,7 +122,9 @@ func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string, opts ..
 	return result.Blob, chart, nil
 }
 
-func newReadOnlyChart(path, tmpDirBase string) (result *ReadOnlyChart, err error) {
+// newReadOnlyChart loads the chart at path. If workingDir is set, the packaged chart and its
+// provenance file are read confined to workingDir, so neither can be a symlink leaving it.
+func newReadOnlyChart(path, workingDir, tmpDirBase string) (result *ReadOnlyChart, err error) {
 	// Load the chart from filesystem, the path can be either a helm chart directory or a tgz file.
 	// While loading the chart is also validated.
 	chart, err := loader.Load(path)
@@ -141,15 +158,21 @@ func newReadOnlyChart(path, tmpDirBase string) (result *ReadOnlyChart, err error
 		}
 	}
 
+	// A chart packaged from a directory lives in tmpDir, outside the working directory.
+	var opts []filesystem.OSPathOption
+	if workingDir != "" && !fi.IsDir() {
+		opts = append(opts, filesystem.InWorkingDirectory(workingDir))
+	}
+
 	// Now we know that the path refers to a valid Helm chart packaged as a tgz file. Thus returning its contents.
-	if result.ChartBlob, err = filesystem.GetBlobFromOSPath(path); err != nil {
+	if result.ChartBlob, err = filesystem.GetBlobFromOSPath(path, opts...); err != nil {
 		return nil, fmt.Errorf("error creating blob from file %q: %w", path, err)
 	}
 
 	provName := path + ".prov" // foo.prov
 	if _, err := os.Stat(provName); err == nil {
-		if result.ProvBlob, err = filesystem.GetBlobFromOSPath(provName); err != nil {
-			return nil, fmt.Errorf("error creating blob from file %q: %w", path, err)
+		if result.ProvBlob, err = filesystem.GetBlobFromOSPath(provName, opts...); err != nil {
+			return nil, fmt.Errorf("error creating blob from provenance file %q: %w", provName, err)
 		}
 	}
 

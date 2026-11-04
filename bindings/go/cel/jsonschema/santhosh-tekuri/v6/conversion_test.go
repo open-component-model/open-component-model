@@ -2,6 +2,7 @@ package jsonschema_test
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"os/exec"
 	"strings"
@@ -18,7 +19,7 @@ import (
 var rootDir string
 
 func init() {
-	if out, err := exec.Command("git", "rev-parse", "--show-toplevel").Output(); err == nil {
+	if out, err := exec.CommandContext(context.Background(), "git", "rev-parse", "--show-toplevel").Output(); err == nil {
 		rootDir = strings.TrimSpace(string(out))
 	}
 }

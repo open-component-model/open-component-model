@@ -4,14 +4,16 @@ package input
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
 
 	"golang.org/x/crypto/ssh"
 
+	"ocm.software/open-component-model/bindings/go/blob/verified"
 	"ocm.software/open-component-model/bindings/go/constructor"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	"ocm.software/open-component-model/bindings/go/git/internal/download"
-	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	gitcreds "ocm.software/open-component-model/bindings/go/git/spec/credentials"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/git/spec/identity/v1"
@@ -26,9 +28,8 @@ var _ constructor.ResourceInputMethod = (*InputMethod)(nil)
 
 // InputMethod implements the [constructor.ResourceInputMethod] interface for Git inputs.
 type InputMethod struct {
-	// TempFolder holds temporary Git storage and the returned archive. When empty,
-	// the OS temporary directory is used. The archive outlives ProcessResource
-	// and is owned by the caller.
+	// TempFolder holds temporary Git storage while a snapshot is archived. When empty,
+	// the OS temporary directory is used. The archive itself is never stored.
 	TempFolder string
 	// HTTPConfig configures the HTTP client that serves http(s) repositories.
 	// Nil uses the shared client's defaults.
@@ -53,20 +54,26 @@ func (i *InputMethod) GetResourceCredentialConsumerIdentity(_ context.Context, r
 	if err != nil {
 		return nil, err
 	}
+	access, err := spec.ToAccess()
+	if err != nil {
+		return nil, err
+	}
 
-	return identityv1.IdentityFromURL(spec.Repository)
+	return identityv1.IdentityFromURL(access.Repository)
 }
 
 // ProcessResource returns the selected repository snapshot as a gzip-compressed tar.
+// The repository is fetched once and kept until the first read of the archive is closed
+// or ctx ends (see download.Blob); the archive itself is never stored.
 func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructorruntime.Resource, credentials runtime.Typed) (*constructor.ResourceInputMethodResult, error) {
 	spec, err := i.convertInput(resource)
 	if err != nil {
 		return nil, err
 	}
 
-	var creds *credsv1.GitCredentials
+	var creds runtime.Typed
 	if credentials != nil {
-		creds, err = credsv1.ConvertToGitCredentials(credentials)
+		creds, err = credsv1.ConvertCredentials(credentials)
 		if err != nil {
 			return nil, err
 		}
@@ -84,21 +91,38 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		opts.HTTPClient = httpclient.New(httpclient.WithConfig(i.HTTPConfig))
 	}
 
-	ref := spec.Ref
-	if ref == "" && spec.Commit == "" {
-		ref = "HEAD"
+	access, err := spec.ToAccess()
+	if err != nil {
+		return nil, fmt.Errorf("invalid git input spec: %w", err)
 	}
-	result, err := download.Download(ctx, &accessv1.Git{
-		Repository: spec.Repository,
-		Ref:        ref,
-		Commit:     spec.Commit,
-	}, creds, opts)
+	// The snapshot is fetched once and hashed to record digest and size. The first read
+	// archives the kept clone again and removes it on close; later reads fetch the pinned
+	// commit. Every read is verified against digest and size.
+	clone, err := download.Fetch(ctx, access, creds, opts)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading git input: %w", err)
 	}
+	counter := &countingWriter{}
+	archiveDigest, err := clone.Archive(ctx, counter)
+	if err != nil {
+		return nil, errors.Join(fmt.Errorf("error downloading git input: %w", err), clone.Remove(ctx))
+	}
+	pinned := *access
+	pinned.Commit = clone.Commit
+	archive := verified.New(download.NewBlobFromClone(ctx, clone, &pinned, creds, opts), verified.Metadata{Digest: archiveDigest, Size: counter.n})
 
-	return &constructor.ResourceInputMethodResult{ProcessedBlobData: result.Blob}, nil
+	return &constructor.ResourceInputMethodResult{ProcessedBlobData: archive}, nil
 }
+
+// countingWriter discards what is written to it and counts it.
+type countingWriter struct{ n int64 }
+
+func (w *countingWriter) Write(p []byte) (int, error) {
+	w.n += int64(len(p))
+	return len(p), nil
+}
+
+var _ io.Writer = (*countingWriter)(nil)
 
 func (i *InputMethod) convertInput(resource *constructorruntime.Resource) (*v1.Git, error) {
 	if resource == nil {

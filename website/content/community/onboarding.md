@@ -1,8 +1,6 @@
 ---
 title: "Developer Onboarding"
-description: >-
-  New to the project? Understand what OCM is, how the repo is structured,
-  and where to start.
+description: "New to the Open Component Model project? Understand what OCM is, how the repository is structured, and where to start contributing."
 slug: "onboarding"
 toc: true
 hasMermaid: true

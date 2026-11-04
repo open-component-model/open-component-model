@@ -12,23 +12,70 @@ manager:
     # -- Controller image repository
     repository: ghcr.io/open-component-model/kubernetes/controller
     # -- Controller image tag
-    tag: latest@sha256:0901f1c523c3de736b1fb7a4c58c44e47bdaa4c1b425ce528c4250c46a0dd611
+    tag: latest@sha256:8dc6df07e4ac6a4eab85aac4afec67580bc40e961a058d59f34f5e0a26602a00
     # -- Image pull policy
     pullPolicy: IfNotPresent
+  ## Cluster-scoped Deployer
+  deployer:
+    # -- Run the controller for the cluster-scoped Deployer. It applies with the permissions of the controller itself.
+    # Deprecated: Use NamespacedDeployer instead.
+    enabled: true
+  ## NamespacedDeployer
+  namespacedDeployer:
+    # -- Run the controller for the NamespacedDeployer and grant the controller permission to impersonate service accounts. A NamespacedDeployer without spec.serviceAccountName impersonates the default service account of its namespace.
+    enabled: true
   ## Controller concurrency settings
   concurrency:
+    # -- Number of active repository controller workers
+    repository: 4 # @schema minimum:1
+    # -- Number of active component controller workers
+    component: 4 # @schema minimum:1
     # -- Number of active resource controller workers
-    resource: 4
-  ## Resolver settings
-  resolver:
-    # -- Number of active resolver workers
-    workerCount: 10
-    # -- Maximum work items in queue for component version resolution
-    workerQueueLength: 1000
-    # -- Buffer size for each subscriber's event channel. Larger values reduce dropped resolution events under load. Monitor resolver_event_channel_drops_total metric.
-    subscriberBufferSize: 100
-    # -- The time-to-live (TTL) for the resolver cache entries in minutes. Setting TTL to less than 30 minutes is discouraged in productive use as it can lead to unintended performance issues.
-    cacheTTL: 30
+    resource: 4 # @schema minimum:1
+    # -- Number of active workers per enabled deployer controller (Deployer and NamespacedDeployer)
+    deployer: 4 # @schema minimum:1
+    # -- Number of active replication controller workers
+    replication: 4 # @schema minimum:1
+    # -- Number of active discovery controller workers
+    discovery: 4 # @schema minimum:1
+  ## Workqueue rate limiter of every controller.
+  ## New objects pass through it once, and so do retries after an error.
+  rateLimiter:
+    repository:
+      # -- (float) Requeues per second the Repository controller admits once its burst is used up. A float greater than 0, e.g. 0.1.
+      qps: 10 # @schema type:[number, string]
+      # -- Requeues the Repository controller admits at once before qps applies. Must be at least 1.
+      burst: 100 # @schema minimum:1
+    component:
+      # -- (float) Requeues per second the Component controller admits once its burst is used up. A float greater than 0, e.g. 0.1.
+      qps: 10 # @schema type:[number, string]
+      # -- Requeues the Component controller admits at once before qps applies. Must be at least 1.
+      burst: 100 # @schema minimum:1
+    resource:
+      # -- (float) Requeues per second the Resource controller admits once its burst is used up. A float greater than 0, e.g. 0.1.
+      qps: 10 # @schema type:[number, string]
+      # -- Requeues the Resource controller admits at once before qps applies. Must be at least 1.
+      burst: 100 # @schema minimum:1
+    replication:
+      # -- (float) Requeues per second the Replication controller admits once its burst is used up. A float greater than 0, e.g. 0.1.
+      qps: 10 # @schema type:[number, string]
+      # -- Requeues the Replication controller admits at once before qps applies. Must be at least 1.
+      burst: 100 # @schema minimum:1
+    discovery:
+      # -- (float) Requeues per second the Discovery controller admits once its burst is used up. A float greater than 0, e.g. 0.1.
+      qps: 10 # @schema type:[number, string]
+      # -- Requeues the Discovery controller admits at once before qps applies. Must be at least 1.
+      burst: 100 # @schema minimum:1
+    deployer:
+      # -- (float) Requeues per second the Deployer controller admits once its burst is used up. A float greater than 0, e.g. 0.1.
+      qps: 10 # @schema type:[number, string]
+      # -- Requeues the Deployer controller admits at once before qps applies. Must be at least 1.
+      burst: 100 # @schema minimum:1
+    namespacedDeployer:
+      # -- (float) Requeues per second the NamespacedDeployer controller admits once its burst is used up. A float greater than 0, e.g. 0.1.
+      qps: 10 # @schema type:[number, string]
+      # -- Requeues the NamespacedDeployer controller admits at once before qps applies. Must be at least 1.
+      burst: 100 # @schema minimum:1
   ## Cache settings
   cache:
     # -- Maximum size of the deployer download object LRU cache
@@ -87,9 +134,14 @@ manager:
   # -- Pod-level security context
   podSecurityContext:
     runAsNonRoot: true
+    runAsUser: 65532
+    runAsGroup: 65532
+    seccompProfile:
+      type: RuntimeDefault
   # -- Container-level security context
   securityContext:
     allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
     capabilities:
       drop:
         - ALL
@@ -107,6 +159,14 @@ manager:
   nodeSelector: {}
   # -- Pod tolerations
   tolerations: []
+  ## Network policy for the controller manager pods
+  networkPolicy:
+    # -- Enable NetworkPolicy for the controller manager
+    enabled: false
+    # -- Extra ingress rules appended after the default rule, which admits the health-probe port and, if enabled, the metrics and webhook ports
+    ingress: []
+    # -- Egress rules replacing the defaults (DNS on 53, TCP 443 and 6443 to any destination). Set this to reach registries on other ports; it replaces all defaults, so include DNS. Leave empty to keep defaults
+    egress: []
 ## Helper RBAC roles for managing custom resources
 rbacHelpers:
   # -- Install convenience admin/editor/viewer roles for CRDs

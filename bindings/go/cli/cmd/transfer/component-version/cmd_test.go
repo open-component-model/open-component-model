@@ -286,7 +286,7 @@ configurations:
 			spec := dryRunTransferSpec(t, sourceRef, fmt.Sprintf("ctf::%s", toPath))
 
 			_, err := test.OCM(t,
-				test.WithArgs("transfer", "component-version", "--transfer-spec", "-"),
+				test.WithArgs("transfer", "component-version", "--transfer-spec", "-", "--config", "-"),
 				test.WithInput(bytes.NewBufferString(tt.stdin(spec))),
 				test.WithOutput(new(bytes.Buffer)),
 				test.WithErrorOutput(test.NewJSONLogReader()),
@@ -301,15 +301,27 @@ configurations:
 }
 
 // TestTransferComponentVersionWithTransferSpecStdinAppliesConfig proves that configuration in
-// stdin is loaded: a broken configuration document fails the command.
+// stdin is loaded with --config -: a broken configuration document fails the command.
 func TestTransferComponentVersionWithTransferSpecStdinAppliesConfig(t *testing.T) {
 	_, err := test.OCM(t,
-		test.WithArgs("transfer", "component-version", "--transfer-spec", "-"),
+		test.WithArgs("transfer", "component-version", "--transfer-spec", "-", "--config", "-"),
 		test.WithInput(bytes.NewBufferString("type: generic.config.ocm.software/v1\nconfigurations: notalist\n")),
 		test.WithOutput(new(bytes.Buffer)),
 		test.WithErrorOutput(test.NewJSONLogReader()),
 	)
-	require.ErrorContains(t, err, "could not load configuration from stdin")
+	require.ErrorContains(t, err, "could not load configuration: stdin:")
+}
+
+// TestTransferComponentVersionWithTransferSpecStdinRejectsConfigWithoutFlag proves that
+// configuration in stdin is not applied silently: without --config - it is an error.
+func TestTransferComponentVersionWithTransferSpecStdinRejectsConfigWithoutFlag(t *testing.T) {
+	_, err := test.OCM(t,
+		test.WithArgs("transfer", "component-version", "--transfer-spec", "-"),
+		test.WithInput(bytes.NewBufferString("type: generic.config.ocm.software/v1\nconfigurations: []\n---\nenvironment: {}\ntransformations: []\n")),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(test.NewJSONLogReader()),
+	)
+	require.ErrorContains(t, err, "configuration is not allowed in a transfer spec")
 }
 
 func TestTransferComponentVersionWithTransferSpecFileNotFound(t *testing.T) {
@@ -441,7 +453,7 @@ func TestTransferComponentVersionRecursive(t *testing.T) {
 
 	// the graph construction phase must report one completed item per
 	// transformation node of the graph (the upload of parent and child)
-	for _, label := range []string{"parent-component@1.0.0 [Upload to CTF]", "child-component@0.0.1 [Upload to CTF]"} {
+	for _, label := range []string{"parent-component@1.0.0 [Upload to CTF " + toPath + "]", "child-component@0.0.1 [Upload to CTF " + toPath + "]"} {
 		require.Contains(t, completedOperationItems(logEntries, "Building transformation graph"), label,
 			"expected build progress for %s", label)
 	}
@@ -854,12 +866,12 @@ func TestTransferUploaderConfig(t *testing.T) {
 		{
 			name:        "oci config alone does not select an image for a CTF target",
 			args:        []string{"--config", ociConfig},
-			notContains: []string{"GetOCIArtifact"},
+			notContains: []string{"TransferOCIArtifactToCTFLocalBlob"},
 		},
 		{
 			name:     "oci and localblob config copies the image to a CTF target",
 			args:     []string{"--config", ociAndLocalBlobConfig},
-			contains: []string{"GetOCIArtifact", "CTFAddLocalResource"},
+			contains: []string{"TransferOCIArtifactToCTFLocalBlob", "CTFAddComponentVersion"},
 		},
 		{
 			name:    "http without match fails validation",
@@ -870,24 +882,25 @@ func TestTransferUploaderConfig(t *testing.T) {
 		{
 			name:     "deprecated --copy-resources copies the image like a local blob uploader",
 			args:     []string{"--copy-resources"},
-			contains: []string{"GetOCIArtifact", "CTFAddLocalResource"},
+			contains: []string{"TransferOCIArtifactToCTFLocalBlob", "CTFAddComponentVersion"},
 		},
 		{
 			name:        "deprecated --copy-resources comes after configured uploaders",
 			args:        []string{"--config", referenceConfig, "--copy-resources"},
-			notContains: []string{"GetOCIArtifact"},
+			notContains: []string{"TransferOCIArtifactToCTFLocalBlob"},
 		},
 		{
 			name:        "deprecated --upload-as ociArtifact alone keeps an OCI image by reference",
 			args:        []string{"--upload-as", "ociArtifact"},
 			target:      "ghcr.io/target-org/ocm",
-			notContains: []string{"TransferOCIArtifact", "GetOCIArtifact"},
+			notContains: []string{"TransferOCIArtifact"},
 		},
 		{
-			name:     "deprecated --copy-resources --upload-as ociArtifact uploads an OCI image as an artifact",
-			args:     []string{"--copy-resources", "--upload-as", "ociArtifact"},
-			target:   "ghcr.io/target-org/ocm",
-			contains: []string{"TransferOCIArtifact"},
+			name:        "deprecated --copy-resources --upload-as ociArtifact uploads an OCI image as an artifact",
+			args:        []string{"--copy-resources", "--upload-as", "ociArtifact"},
+			target:      "ghcr.io/target-org/ocm",
+			contains:    []string{"TransferOCIArtifact/v1alpha1"},
+			notContains: []string{"TransferOCIArtifactToOCILocalBlob"},
 		},
 		{
 			name:    "deprecated --upload-as rejects unknown values",

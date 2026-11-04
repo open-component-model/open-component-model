@@ -49,6 +49,7 @@ func TestProcessResource(t *testing.T) {
 	t.Parallel()
 
 	t.Run("downloads resource as local blob", func(t *testing.T) {
+		t.Parallel()
 		content := []byte("hello world")
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, http.MethodGet, r.Method)
@@ -76,6 +77,7 @@ func TestProcessResource(t *testing.T) {
 	})
 
 	t.Run("mediaType from spec overrides Content-Type", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/plain")
 			_, _ = w.Write([]byte("data"))
@@ -96,6 +98,7 @@ func TestProcessResource(t *testing.T) {
 	})
 
 	t.Run("applies basic auth credentials", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			user, pass, ok := r.BasicAuth()
 			assert.True(t, ok)
@@ -119,6 +122,7 @@ func TestProcessResource(t *testing.T) {
 	})
 
 	t.Run("enforces max download size", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte("this body is definitely larger than the limit"))
 		}))
@@ -127,12 +131,14 @@ func TestProcessResource(t *testing.T) {
 		method := &input.InputMethod{MaxDownloadSize: 8}
 		resource := wgetInputResource(t, map[string]any{"url": server.URL + "/resource"})
 
-		_, err := method.ProcessResource(t.Context(), resource, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "exceeds maximum allowed size")
+		result, err := method.ProcessResource(t.Context(), resource, nil)
+		require.NoError(t, err)
+		readErr, _ := readErrs(t, result.ProcessedBlobData)
+		assert.ErrorContains(t, readErr, "exceeds maximum allowed size")
 	})
 
 	t.Run("errors on non-2xx status", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNotFound)
 		}))
@@ -141,12 +147,14 @@ func TestProcessResource(t *testing.T) {
 		method := &input.InputMethod{}
 		resource := wgetInputResource(t, map[string]any{"url": server.URL + "/missing"})
 
-		_, err := method.ProcessResource(t.Context(), resource, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "404")
+		result, err := method.ProcessResource(t.Context(), resource, nil)
+		require.NoError(t, err)
+		readErr, _ := readErrs(t, result.ProcessedBlobData)
+		assert.ErrorContains(t, readErr, "404")
 	})
 
 	t.Run("errors on missing url", func(t *testing.T) {
+		t.Parallel()
 		method := &input.InputMethod{}
 		resource := wgetInputResource(t, map[string]any{"mediaType": "text/plain"})
 
@@ -156,6 +164,7 @@ func TestProcessResource(t *testing.T) {
 	})
 
 	t.Run("errors on unsupported scheme", func(t *testing.T) {
+		t.Parallel()
 		method := &input.InputMethod{}
 		resource := wgetInputResource(t, map[string]any{"url": "ftp://example.com/file"})
 
@@ -169,6 +178,7 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 	t.Parallel()
 
 	t.Run("derives identity from url", func(t *testing.T) {
+		t.Parallel()
 		method := &input.InputMethod{}
 		resource := wgetInputResource(t, map[string]any{"url": "https://example.com/path/file.tar.gz"})
 
@@ -180,6 +190,7 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 	})
 
 	t.Run("errors on missing url", func(t *testing.T) {
+		t.Parallel()
 		method := &input.InputMethod{}
 		resource := wgetInputResource(t, map[string]any{"mediaType": "text/plain"})
 
@@ -188,6 +199,7 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 	})
 
 	t.Run("errors on malformed url", func(t *testing.T) {
+		t.Parallel()
 		method := &input.InputMethod{}
 		resource := wgetInputResource(t, map[string]any{"url": "ht!tp://invalid-url"})
 
@@ -197,6 +209,7 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 	})
 
 	t.Run("errors on non-http scheme", func(t *testing.T) {
+		t.Parallel()
 		urls := []string{
 			"ftp://example.com/file",
 			"//missing-scheme.com",
@@ -204,6 +217,7 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 
 		for _, u := range urls {
 			t.Run(u, func(t *testing.T) {
+				t.Parallel()
 				method := &input.InputMethod{}
 				resource := wgetInputResource(t, map[string]any{"url": u})
 				_, err := method.GetResourceCredentialConsumerIdentity(t.Context(), resource)
@@ -214,6 +228,7 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 	})
 
 	t.Run("accepts url with query string", func(t *testing.T) {
+		t.Parallel()
 		method := &input.InputMethod{}
 		resource := wgetInputResource(t, map[string]any{"url": "https://example.com/file?v=1&token=abc"})
 

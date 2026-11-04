@@ -4,9 +4,11 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/cgi"
@@ -14,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,6 +27,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // trustServerCertificate changes process-global state; callers and their ancestors must not run in parallel.
@@ -76,6 +82,20 @@ func newHTTPSServer(t *testing.T, path, authorization string) (url string, ca []
 	return server.URL + "/" + filepath.Base(path), pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw})
 }
 
+// downloadError downloads res and reads it to its end, which is when a download fails.
+func downloadError(ctx context.Context, repo *gitrepository.ResourceRepository, res *descriptor.Resource, creds runtime.Typed) error {
+	b, err := repo.DownloadResource(ctx, res, creds)
+	if err != nil {
+		return err
+	}
+	rc, err := b.ReadCloser()
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(io.Discard, rc)
+	return errors.Join(err, rc.Close())
+}
+
 func assertArchive(t *testing.T, content blob.ReadOnlyBlob, expectedReadme string) []byte {
 	t.Helper()
 
@@ -91,15 +111,22 @@ func assertArchive(t *testing.T, content blob.ReadOnlyBlob, expectedReadme strin
 	gz, err := gzip.NewReader(bytes.NewReader(data))
 	r.NoError(err)
 	defer func() { r.NoError(gz.Close()) }()
+	files := map[string]string{}
 	tr := tar.NewReader(gz)
-	header, err := tr.Next()
-	r.NoError(err)
-	r.Equal("README.md", header.Name)
-	payload, err := io.ReadAll(tr)
-	r.NoError(err)
-	r.Equal(expectedReadme, string(payload))
-	_, err = tr.Next()
-	r.ErrorIs(err, io.EOF)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		r.NoError(err)
+		if header.Name == ".git" || strings.HasPrefix(header.Name, ".git/") {
+			continue
+		}
+		payload, err := io.ReadAll(tr)
+		r.NoError(err)
+		files[header.Name] = string(payload)
+	}
+	r.Equal(map[string]string{"README.md": expectedReadme}, files)
 
 	return data
 }

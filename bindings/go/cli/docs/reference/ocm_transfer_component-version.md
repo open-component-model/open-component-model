@@ -17,7 +17,12 @@ Transfer component version(s) from a source repository to
 a target repository using an internally generated transformation graph.
 
 When a version is included in the source reference, exactly that version is transferred.
-When the version is omitted, all versions of the component are discovered and transferred.
+A digest pins it (see "ocm get cv --help"). With an OCI digest, "@sha256:<hex>", the descriptor and all
+local resources are read from the source artifact with that digest instead of through the version tag,
+and the version may be omitted. With a normalized digest, "@jsonNormalisation.v4alpha3+sha256:<hex>"
+(the digest signatures sign), the transfer fails unless the source descriptor matches it. An OCI digest
+is specific to the source repository; a normalized digest also matches the transferred copy.
+When the version is omitted (and no OCI digest is given), all versions of the component are discovered and transferred.
 When the source is a repository reference (without a component), every component version
 the repository contains is transferred (component listing is currently CTF-only).
 Use --constraint to restrict which versions are selected, and --latest to transfer
@@ -30,6 +35,7 @@ By default, local blobs are copied and all other resources stay by reference (th
 is unchanged in the target). Uploader configurations in the OCM configuration decide
 what happens to a resource: oci.uploader.transfer.config.ocm.software/v1alpha1 (separate OCI
 artifacts), http.uploader.transfer.config.ocm.software/v1alpha1 (custom HTTP targets),
+git.uploader.transfer.config.ocm.software/v1alpha1 (push Git history into an existing Git repository),
 localblob.uploader.transfer.config.ocm.software/v1alpha1 (copy as local blobs) and
 reference.uploader.transfer.config.ocm.software/v1alpha1 (keep by reference). Each selects
 resources with a CEL match expression over resource and target (test access types with
@@ -41,7 +47,9 @@ component's references and transfers them too.
 
 Driving defaults from the OCM configuration:
   A transfer.config.ocm.software/v1alpha1 entry inside the central OCM configuration
-  (passed via --config) sets defaults for --recursive.
+  (passed via --config) sets defaults for --recursive. Its unmatchedResourcePolicy (Ignore, Warn,
+  Fail; default Warn) decides whether a resource no uploader selects is silently given the
+  baseline, logged as a warning, or fails the transfer.
   Explicit command-line flags always override the values from the configuration.
 
 Two-step workflow (generate, review, replay):
@@ -62,6 +70,7 @@ How the graph is built:
     2. CTFAddComponentVersion -> OCIAddComponentVersion
     3. GetOCIArtifact -> OCIAddLocalResource, or TransferOCIArtifact (OCI uploader)
     4. GetHelmChart -> ConvertHelmToOCI -> OCIAddLocalResource / AddOCIArtifact (OCI uploader)
+    5. GetGitResource -> OCIAddLocalResource, or GetGitResource / OCIGetLocalResource -> AddGitResource (Git uploader)
 
 ```
 ocm transfer component-version {reference} {target} [flags]
@@ -134,7 +143,7 @@ transfer component-version --transfer-spec spec.yaml
   -o, --output enum             output format of the component descriptors
                                 (must be one of [json ndjson yaml]) (default yaml)
   -r, --recursive               recursively discover and transfer component versions
-      --transfer-spec string    path to a transfer specification file (use "-" for stdin). The input must hold exactly one transfer spec document; with "-", OCM configuration documents in stdin are applied as configuration
+      --transfer-spec string    path to a transfer specification file (use "-" for stdin). The input must hold exactly one transfer spec document; OCM configuration documents in the same stdin stream are rejected unless --config - is also given
   -u, --upload-as enum          deprecated: define whether copied resources should be uploaded as OCI artifacts
                                 (must be one of [localBlob ociArtifact]) (default localBlob)
 ```
@@ -161,7 +170,9 @@ transfer component-version --transfer-spec spec.yaml
                                            If multiple configuration files are found, they will be merged in the order they are discovered.
                                            Later entries have higher priority.
                                            Using the option, the specified configuration file(s) will be used instead of the lookup above.
-                                           Configuration documents piped into stdin are applied last, on top of these files.
+                                           Use "-" to read configuration documents from stdin. It is an entry like any other: on its own it
+                                           replaces the lookup above, so add --config <file> to keep a file, and a repeated "-" is ignored.
+                                           Other documents on stdin stay there for commands that read it, such as transfer with --transfer-spec -.
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output

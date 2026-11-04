@@ -718,7 +718,7 @@ func testInspector(resources []string, functions []string) (*Inspector, error) {
 
 	env, err := cel.NewEnv(decls...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create CEL environment: %v", err)
+		return nil, fmt.Errorf("failed to create CEL environment: %w", err)
 	}
 
 	return &Inspector{

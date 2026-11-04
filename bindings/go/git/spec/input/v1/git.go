@@ -22,7 +22,9 @@ type Git struct {
 	// Repository is the Git repository URL: an http(s)://, ssh:// or git:// URL with a
 	// host and a path, the scp-like form user@host:path, or a local repository as
 	// file:///path or a plain path. A value without a scheme that is not scp-like is a
-	// local path, relative to the working directory unless absolute.
+	// local path, relative to the working directory unless absolute. A fragment may
+	// select the ref or commit with branch=<name>, tag=<name> or commit=<sha>, as in
+	// https://github.com/org/repo.git#branch=main.
 	Repository string `json:"repository"`
 
 	// Ref selects a branch, tag or full ref name (for example main, v1.0.0 or
@@ -39,14 +41,29 @@ func (g *Git) String() string {
 }
 
 func (g *Git) Validate() error {
+	access, err := g.ToAccess()
+	if err != nil {
+		return err
+	}
+
+	return access.Validate()
+}
+
+// ToAccess returns the normalized Git access that selects the input snapshot.
+func (g *Git) ToAccess() (*accessv1.Git, error) {
 	if g == nil {
-		return errors.New("git input is required")
+		return nil, errors.New("git input is required")
+	}
+
+	access, err := (&accessv1.Git{Repository: g.Repository, Ref: g.Ref, Commit: g.Commit}).Normalize()
+	if err != nil {
+		return nil, err
 	}
 
 	// Inputs may follow remote HEAD, unlike access specs which require a selector.
-	ref := g.Ref
-	if ref == "" && g.Commit == "" {
-		ref = "HEAD"
+	if access.Ref == "" && access.Commit == "" {
+		access.Ref = "HEAD"
 	}
-	return (&accessv1.Git{Repository: g.Repository, Ref: ref, Commit: g.Commit}).Validate()
+
+	return access, nil
 }

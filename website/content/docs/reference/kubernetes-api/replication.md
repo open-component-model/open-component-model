@@ -1,8 +1,10 @@
 ---
 title: Replication
-description: "API reference for the Replication custom resource (delivery.ocm.software/v1alpha1)"
+description: "API reference for the Replication custom resource (delivery.ocm.software/v1alpha1): spec, source, target, interval, and status fields."
 weight: 5
 toc: false
+aliases:
+  - /docs/reference/kubernetes-api/replication/
 ---
 
 A **Replication** transfers a component version from one OCM repository to

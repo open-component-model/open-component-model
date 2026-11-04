@@ -319,3 +319,56 @@ func digests(descs []v1.Descriptor) []string {
 	}
 	return out
 }
+
+type closeTrackingBlob struct {
+	data   []byte
+	closed bool
+}
+
+func (b *closeTrackingBlob) ReadCloser() (io.ReadCloser, error) {
+	return b, nil
+}
+
+func (b *closeTrackingBlob) Read(p []byte) (int, error) {
+	n := copy(p, b.data)
+	b.data = b.data[n:]
+	if n == 0 {
+		return 0, io.EOF
+	}
+	return n, nil
+}
+
+func (b *closeTrackingBlob) Close() error {
+	b.closed = true
+	return nil
+}
+
+func TestReadOCILayout_ClosesSourceOnError(t *testing.T) {
+	r := require.New(t)
+	var gzipped bytes.Buffer
+	gw := gzip.NewWriter(&gzipped)
+	_, err := gw.Write([]byte("not a tarball"))
+	r.NoError(err)
+	r.NoError(gw.Close())
+
+	for name, data := range map[string][]byte{
+		"empty":              {},
+		"invalid gzip":       {0x1F, 0x8B, 0x00},
+		"invalid tarball":    []byte("not a tarball"),
+		"gzipped no tarball": gzipped.Bytes(),
+		"missing oci-layout": func() []byte {
+			var buf bytes.Buffer
+			tw := tar.NewWriter(&buf)
+			r.NoError(tw.Close())
+			return buf.Bytes()
+		}(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := require.New(t)
+			src := &closeTrackingBlob{data: data}
+			_, err := ReadOCILayout(t.Context(), src)
+			r.Error(err)
+			r.True(src.closed, "source must be closed on error")
+		})
+	}
+}

@@ -94,7 +94,7 @@ configurations:
 	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
 	tempDir := t.TempDir()
-	outputPath := filepath.Join(tempDir)
+	outputPath := tempDir
 
 	downloadCMD := cmd.New()
 	downloadCMD.SetArgs([]string{
@@ -143,7 +143,7 @@ configurations:
 	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
 	tempDir := t.TempDir()
-	outputPath := filepath.Join(tempDir)
+	outputPath := tempDir
 
 	downloadCMD := cmd.New()
 	downloadCMD.SetArgs([]string{

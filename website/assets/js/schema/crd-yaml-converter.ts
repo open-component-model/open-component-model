@@ -14,7 +14,7 @@ function extractCrdMeta(crd: CrdDocument, version: CrdVersion): SchemaMeta {
     return {
         description: (schema as Record<string, unknown>).description as string || "",
         apiVersions: [`${crd.spec.group}/${version.name}`],
-        kind: crd.spec.names?.kind || "",
+        kind: crd.spec.names?.kind || ""
     };
 }
 

@@ -19,7 +19,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     steps:
       - name: Checkout scripts
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -36,7 +36,8 @@ jobs:
               "refactor":["kind/chore"],
               "docs":["kind/chore","area/documentation"],
               "test":["kind/chore","area/quality"],
-              "perf":["kind/chore","area/quality"]
+              "perf":["kind/chore","area/quality"],
+              "revert":["kind/chore"]
             }
           SCOPE_TO_LABEL: |
             {
@@ -54,7 +55,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     steps:
       # No checkout needed: actions/labeler@v6 reads the configuration from the
       # base repository via the GitHub API when the file is not present on disk.

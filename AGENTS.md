@@ -33,6 +33,8 @@ task bindings/go/cli:build   # build ocm CLI into bindings/go/cli/tmp/bin/ocm
 
 Controller e2e (own flow): `task bindings/go/kubernetes/controller:test/e2e -- --focus=<scenario>` (Ginkgo CLI, 4 parallel processes; `--procs=1` for serial), with Kind setup/teardown under the same `test/e2e/*` tasks.
 
+Controller performance benchmark (own Kind cluster `ocm-perf`): same flow as e2e: `task bindings/go/kubernetes/controller:test/performance/setup/local`, then `:test/performance`, then `:test/performance/setup/teardown`. See `bindings/go/kubernetes/controller/test/performance/README.md`.
+
 Website (from `website/`): `npm ci && npm run dev` serves <http://localhost:1313> live (`npm run dev:drafts` includes drafts); `npm run lint` = eslint + stylelint + markdownlint; `npm test` runs register-docs-version tests. New docs: classify per Diataxis, start from `website/content_templates/` (templates carry the required frontmatter), and use `{{< relref >}}` for internal links — see `website/CONTRIBUTING.md` and `website/README.md`.
 
 ## Project Structure
@@ -68,7 +70,7 @@ Read a package's `doc.go` (if present) and `README.md` before changing it.
 ## Git & PR Workflow
 
 - **DCO sign-off mandatory**: commit with `-s`. Every commit ahead of the base must carry a `Signed-off-by:` trailer before push.
-- **Conventional Commits** (CI-enforced on PR titles). Types: `feat`, `fix`, `chore`, `docs`, `test`, `perf`. Breaking: `!`. Use `chore:`, never `ci:`.
+- **Conventional Commits** (CI-enforced on PR titles; allowlist = `TYPE_TO_LABEL` in `.github/workflows/pull-request.yaml`). Types: `feat`, `fix`, `chore`, `refactor`, `docs`, `test`, `perf`, `revert`. Breaking: `!`. Use `chore:`, never `ci:`. Reverts: `revert: <reverted title>` with `Refs: <sha>` in the body — rename GitHub's default `Revert "..."` title, it fails the check.
 
   ```text
   Good:  feat(cli): add component version command
@@ -84,7 +86,7 @@ Read a package's `doc.go` (if present) and `README.md` before changing it.
 
 ## Boundaries
 
-- **Before finishing**: run the affected area's lint + tests (`task tools:lint`, `task <module>:test`).
+- **Before finishing**: run the affected area's lint + tests (`task tools:lint`, `task <module>:test`). `task tools:lint` is Go-only; if you touched markdown, also lint the files you changed (the full `task tools:markdownlint` globs all ~360 `.md` and is slow): `git diff --name-only --diff-filter=ACMR HEAD -- '*.md' ':!website/**' | xargs -r npx markdownlint-cli2 --config .github/config/.markdownlint-cli2.yaml` (use `website.markdownlint-cli2.yaml` for `website/**`). CI enforces MD022/MD032.
 - **Ask first**: adding a dependency; changing a public API, CRD, or reconciliation path with broad blast radius; force-pushing (destructive).
 - **Never commit** secrets or credentials.
 - **Never hand-edit generated output** — run `task generate` and commit the result. Covers deepcopy, controller manifests, the **CLI reference** (`bindings/go/cli/docs/reference/` → mounted at `content/docs/reference/ocm-cli/`), and **JSON schemas** (generated from `bindings/go/` into the website's `static/schemas/`). The other `content/docs/reference/*.md` are hand-authored prose you edit directly — but they embed the generated schemas via a `{{< schema-renderer >}}` shortcode, so to change a documented schema field, edit the Go source and regenerate, not the page.
@@ -99,7 +101,7 @@ Read a package's `doc.go` (if present) and `README.md` before changing it.
 
 Coupled files — editing one without the other breaks CI or behavior:
 
-- **Tool/binary versions live in per-area `.env` files (renovate-managed)**: root `.env` (golangci-lint, deepcopy-gen, markdownlint-cli2), `bindings/go/kubernetes/controller/.env` (controller-tools, envtest, kind node), `bindings/go/sigstore/signing/handler/internal/.env` (cosign), `bindings/go/sigstore/integration/.env` (scaffolding). Taskfiles source these — never hardcode a version in a Taskfile or script. Exception: explicit bash fallbacks for tools without an `.env` pin (controller Taskfile: `HELM_DOCS_VERSION`, `YQ_VERSION`); keep those documented in the Taskfile and don't extend the pattern. Cross-dir coupling: `sigstore/integration/Taskfile.yml` reads `COSIGN_VERSION` from `signing/handler/internal/.env`.
+- **Tool/binary versions live in per-area `.env` files (renovate-managed)**: root `.env` (golangci-lint, deepcopy-gen, markdownlint-cli2), `bindings/go/kubernetes/controller/.env` (controller-tools, envtest, kind node, perf registry), `bindings/go/sigstore/signing/handler/internal/.env` (OCM cosign fork release `COSIGN_VERSION` plus `COSIGN_CHECKSUMS_SHA256` of its `cosign_checksums.txt`; the same release is pinned as the `ghcr.io/open-component-model/cosign` image in the CLI Containerfile and controller Dockerfile — Renovate group "OCM cosign", enforced by `pin_sync_test.go` there), `bindings/go/sigstore/integration/.env` (scaffolding). Taskfiles source these — never hardcode a version in a Taskfile or script. Exception: explicit bash fallbacks for tools without an `.env` pin (controller Taskfile: `HELM_DOCS_VERSION`, `YQ_VERSION`); keep those documented in the Taskfile and don't extend the pattern. Cross-dir coupling: `sigstore/integration/Taskfile.yml` reads `COSIGN_VERSION` and `COSIGN_CHECKSUMS_SHA256` from `signing/handler/internal/.env`.
 - `ENVTEST_K8S_VERSION` (`controller/.env`) ↔ `DefaultEnvTestVersion` (`.../internal/test/envtest.go`) — keep equal.
 - Docs version ↔ `hugo.yaml` + `module.yaml` — only via `npm run register-docs-version`.
 - Website Node/npm floors — check the `engines` field in `website/package.json`, don't restate here.

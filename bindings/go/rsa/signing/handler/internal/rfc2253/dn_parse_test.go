@@ -54,6 +54,7 @@ func TestParse_WithOptions(t *testing.T) {
 	t.Parallel()
 
 	t.Run("Strict rejects unknown", func(t *testing.T) {
+		t.Parallel()
 		_, err := dn.ParseWithOptions("FOO=bar", dn.Options{Strict: true})
 		if err == nil {
 			t.Fatalf("expected error for unknown attribute in strict mode")
@@ -61,6 +62,7 @@ func TestParse_WithOptions(t *testing.T) {
 	})
 
 	t.Run("NonStrict allows unknown but drops it", func(t *testing.T) {
+		t.Parallel()
 		got, err := dn.ParseWithOptions("FOO=bar", dn.Options{Strict: false})
 		require.NoError(t, err)
 		if len(got.ExtraNames) != 0 {
@@ -69,6 +71,7 @@ func TestParse_WithOptions(t *testing.T) {
 	})
 
 	t.Run("Fallback disabled leaves empty Name", func(t *testing.T) {
+		t.Parallel()
 		got, err := dn.ParseWithOptions("   ", dn.Options{FallbackToCN: false})
 		if err == nil {
 			t.Fatalf("expected error for empty DN")
@@ -83,6 +86,7 @@ func TestParse_WithOptions(t *testing.T) {
 	})
 
 	t.Run("Fallback enabled puts whole string into CN", func(t *testing.T) {
+		t.Parallel()
 		got, err := dn.ParseWithOptions("plainstring", dn.Options{FallbackToCN: true})
 		require.NoError(t, err)
 		if got.CommonName != "plainstring" {

@@ -32,11 +32,40 @@ spec:
       resource:
         name: kro-rgd
 ---
+# The NamespacedDeployer applies the cluster-scoped ResourceGraphDefinition with the permissions of this
+# service account, so it needs a ClusterRole for ResourceGraphDefinitions.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kustomize-configuration-localization-deployer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kustomize-configuration-localization-deployer
+rules:
+  - apiGroups: ["kro.run"]
+    resources: ["resourcegraphdefinitions"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kustomize-configuration-localization-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kustomize-configuration-localization-deployer
+subjects:
+  - kind: ServiceAccount
+    name: kustomize-configuration-localization-deployer
+    namespace: default
+---
 apiVersion: delivery.ocm.software/v1alpha1
-kind: Deployer
+kind: NamespacedDeployer
 metadata:
   name: kustomize-configuration-localization-deployer
 spec:
   resourceRef:
     name: kustomize-configuration-localization-resource-rgd
-    namespace: default
+  serviceAccountName: kustomize-configuration-localization-deployer

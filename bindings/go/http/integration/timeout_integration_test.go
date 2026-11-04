@@ -295,7 +295,7 @@ func reusesConnection(t *testing.T, ctx context.Context, client *nethttp.Client,
 // performs the TLS handshake, and returns an https URL pointing at it.
 func stalledTLSServer(t *testing.T) string {
 	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	require.NoError(t, err, "listen for stalled TLS server")
 
 	var mu sync.Mutex

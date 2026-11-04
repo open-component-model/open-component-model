@@ -44,8 +44,8 @@ configuration files and display the merged effective configuration as a single o
   # Display effective config from a specific config file
   ocm get config --config ./my-ocm-config.yaml
 
-  # Add config from stdin on top of the config files
-  ocm get config <<EOF
+  # Read config from stdin, on top of a config file
+  ocm get config --config ./my-ocm-config.yaml --config - <<EOF
   type: generic.config.ocm.software/v1
   configurations:
   - type: credentials.config.ocm.software

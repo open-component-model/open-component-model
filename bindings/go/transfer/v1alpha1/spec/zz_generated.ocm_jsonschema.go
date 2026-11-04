@@ -15,6 +15,9 @@ var schemaArtifactoryUploaderConfig []byte
 //go:embed schemas/Config.schema.json
 var schemaConfig []byte
 
+//go:embed schemas/GitUploaderConfig.schema.json
+var schemaGitUploaderConfig []byte
+
 //go:embed schemas/HTTPUploaderConfig.schema.json
 var schemaHTTPUploaderConfig []byte
 
@@ -33,6 +36,9 @@ var schemaRecursive []byte
 //go:embed schemas/ReferenceUploaderConfig.schema.json
 var schemaReferenceUploaderConfig []byte
 
+//go:embed schemas/UnmatchedResourcePolicy.schema.json
+var schemaUnmatchedResourcePolicy []byte
+
 // JSONSchema returns the JSON Schema for ArtifactoryUploaderConfig.
 func (ArtifactoryUploaderConfig) JSONSchema() []byte {
 	return schemaArtifactoryUploaderConfig
@@ -41,6 +47,11 @@ func (ArtifactoryUploaderConfig) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for Config.
 func (Config) JSONSchema() []byte {
 	return schemaConfig
+}
+
+// JSONSchema returns the JSON Schema for GitUploaderConfig.
+func (GitUploaderConfig) JSONSchema() []byte {
+	return schemaGitUploaderConfig
 }
 
 // JSONSchema returns the JSON Schema for HTTPUploaderConfig.
@@ -71,4 +82,9 @@ func (Recursive) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for ReferenceUploaderConfig.
 func (ReferenceUploaderConfig) JSONSchema() []byte {
 	return schemaReferenceUploaderConfig
+}
+
+// JSONSchema returns the JSON Schema for UnmatchedResourcePolicy.
+func (UnmatchedResourcePolicy) JSONSchema() []byte {
+	return schemaUnmatchedResourcePolicy
 }

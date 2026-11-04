@@ -218,6 +218,8 @@ func TestUploaderConfig_EffectiveMatch(t *testing.T) {
 		{"localblob with match replaces the default", &spec.LocalBlobUploaderConfig{Match: match}, match},
 		{"reference without match uses the default", &spec.ReferenceUploaderConfig{}, spec.DefaultReferenceUploaderMatch},
 		{"reference with match replaces the default", &spec.ReferenceUploaderConfig{Match: match}, match},
+		{name: "git without match uses the default", uploader: &spec.GitUploaderConfig{}, want: spec.DefaultGitUploaderMatch},
+		{name: "git with match replaces the default", uploader: &spec.GitUploaderConfig{Match: match}, want: match},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			require.New(t).Equal(tc.want, tc.uploader.EffectiveMatch())
@@ -262,5 +264,5 @@ func TestUploaderTypes(t *testing.T) {
 		r.True(strings.HasSuffix(typ.Name, ".uploader.transfer.config.ocm.software"), typ.String())
 		r.Equal(spec.Version, typ.Version)
 	}
-	r.Len(spec.UploaderTypes(), 6)
+	r.Len(spec.UploaderTypes(), 7)
 }

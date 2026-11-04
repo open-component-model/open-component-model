@@ -1,9 +1,9 @@
 # [Website] of the OCM project
 
-[![REUSE status](https://api.reuse.software/badge/github.com/open-component-model/ocm-website)](https://api.reuse.software/info/github.com/open-component-model/ocm-website)
-[![publish site status](https://github.com/open-component-model/ocm-website/actions/workflows/publish-site.yaml/badge.svg)](https://github.com/open-component-model/ocm-website/actions/workflows/publish-site.yaml)
+[![REUSE status](https://api.reuse.software/badge/github.com/open-component-model/open-component-model)](https://api.reuse.software/info/github.com/open-component-model/open-component-model)
+[![publish site status](https://github.com/open-component-model/open-component-model/actions/workflows/website-publish-site.yaml/badge.svg)](https://github.com/open-component-model/open-component-model/actions/workflows/website-publish-site.yaml)
 
-This repository contains the sources used to build the Open Component Model website at [https://ocm.software][Website].
+This folder contains the sources used to build the Open Component Model website at [https://ocm.software][Website].
 
 <!-- TOC -->
 - [Content Structure](#content-structure)

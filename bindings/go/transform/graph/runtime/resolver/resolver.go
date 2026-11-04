@@ -183,7 +183,7 @@ func (r *Resolver) GetValueFromPath(path fieldpath.Path) (interface{}, error) {
 			}
 
 			if *segment.Index >= len(array) {
-				return nil, fmt.Errorf("array index out of bounds: %d", segment.Index)
+				return nil, fmt.Errorf("array index out of bounds: %d", *segment.Index)
 			}
 
 			current = array[*segment.Index]

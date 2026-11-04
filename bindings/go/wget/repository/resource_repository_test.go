@@ -4,15 +4,17 @@ import (
 	"crypto"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	_ "crypto/sha1"
 	_ "crypto/sha256"
+	_ "crypto/sha512"
 
 	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
@@ -20,11 +22,10 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/repository"
-	"ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
+	v1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
 
@@ -51,6 +52,7 @@ func TestDownloadResource(t *testing.T) {
 	t.Parallel()
 
 	t.Run("downloads resource with GET", func(t *testing.T) {
+		t.Parallel()
 		content := []byte("hello world")
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, http.MethodGet, r.Method)
@@ -59,7 +61,7 @@ func TestDownloadResource(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()))
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
 		resource := wgetResource(t, server.URL, map[string]any{
 			"url": server.URL + "/resource",
 		})
@@ -79,6 +81,7 @@ func TestDownloadResource(t *testing.T) {
 	})
 
 	t.Run("forwards credentials to the downloader", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			user, pass, ok := r.BasicAuth()
 			assert.True(t, ok)
@@ -88,7 +91,7 @@ func TestDownloadResource(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()))
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
 		resource := wgetResource(t, server.URL, map[string]any{
 			"url": server.URL + "/resource",
 		})
@@ -104,58 +107,35 @@ func TestDownloadResource(t *testing.T) {
 	})
 
 	t.Run("passes the max download size to the downloader", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte("hello world")) // 11 bytes, limit is 10
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithMaxDownloadSize(10),
 		)
 		resource := wgetResource(t, server.URL, map[string]any{
 			"url": server.URL + "/resource",
 		})
 
-		_, err := repo.DownloadResource(t.Context(), resource, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "exceeds maximum allowed size")
-	})
-
-	t.Run("closing the downloaded blob reclaims the temporary file", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_, _ = w.Write([]byte("hello world"))
-		}))
-		defer server.Close()
-
-		tempFolder := t.TempDir()
-		repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder},
-			repository.WithHTTPClient(server.Client()))
-
-		b, err := repo.DownloadResource(t.Context(), wgetResource(t, server.URL, map[string]any{}), nil)
+		b, err := repo.DownloadResource(t.Context(), resource, nil)
 		require.NoError(t, err)
-
-		entries, err := os.ReadDir(tempFolder)
-		require.NoError(t, err)
-		require.Len(t, entries, 1, "the body must be streamed into the configured temp folder")
-
-		closer, ok := b.(io.Closer)
-		require.True(t, ok, "the downloaded blob must be closeable so callers can reclaim it")
-		require.NoError(t, closer.Close())
-
-		entries, err = os.ReadDir(tempFolder)
-		require.NoError(t, err)
-		assert.Empty(t, entries, "closing the blob must remove the temporary file")
+		assert.ErrorContains(t, readError(t, b), "exceeds maximum allowed size")
 	})
 
 	t.Run("returns error for nil resource", func(t *testing.T) {
-		repo := repository.NewResourceRepository(nil)
+		t.Parallel()
+		repo := repository.NewResourceRepository()
 		_, err := repo.DownloadResource(t.Context(), nil, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "resource is required")
 	})
 
 	t.Run("returns error for nil access", func(t *testing.T) {
-		repo := repository.NewResourceRepository(nil)
+		t.Parallel()
+		repo := repository.NewResourceRepository()
 		resource := &descruntime.Resource{}
 		resource.Name = "test"
 		_, err := repo.DownloadResource(t.Context(), resource, nil)
@@ -177,11 +157,12 @@ func TestDownloadResource_DigestVerification(t *testing.T) {
 		}))
 		t.Cleanup(server.Close)
 
-		return repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client())),
+		return repository.NewResourceRepository(repository.WithHTTPClient(server.Client())),
 			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 	}
 
 	t.Run("accepts content matching the resource digest", func(t *testing.T) {
+		t.Parallel()
 		repo, resource := serve(t, served)
 		resource.Digest = &descruntime.Digest{
 			HashAlgorithm:          "SHA-256",
@@ -195,6 +176,7 @@ func TestDownloadResource_DigestVerification(t *testing.T) {
 	})
 
 	t.Run("rejects content that does not match the resource digest", func(t *testing.T) {
+		t.Parallel()
 		repo, resource := serve(t, "not what was promised")
 		resource.Digest = &descruntime.Digest{
 			HashAlgorithm:          "SHA-256",
@@ -214,6 +196,7 @@ func TestDownloadResource_DigestVerification(t *testing.T) {
 	})
 
 	t.Run("serves content unverified when the resource carries no digest", func(t *testing.T) {
+		t.Parallel()
 		repo, resource := serve(t, served)
 		resource.Digest = nil
 
@@ -223,6 +206,7 @@ func TestDownloadResource_DigestVerification(t *testing.T) {
 	})
 
 	t.Run("serves content unverified when the resource is excluded from signing", func(t *testing.T) {
+		t.Parallel()
 		repo, resource := serve(t, served)
 		resource.Digest = &descruntime.Digest{
 			HashAlgorithm:          descruntime.NoDigest,
@@ -235,7 +219,40 @@ func TestDownloadResource_DigestVerification(t *testing.T) {
 		assert.Equal(t, []byte(served), readBlob(t, b))
 	})
 
+	t.Run("reads without a HEAD request and keeps the metadata of the GET response", func(t *testing.T) {
+		t.Parallel()
+		var heads atomic.Int32
+		// Like a presigned URL, the server answers GET only.
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodHead {
+				heads.Add(1)
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte(served))
+		}))
+		t.Cleanup(server.Close)
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()))
+		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
+		resource.Digest = &descruntime.Digest{
+			HashAlgorithm:          "SHA-256",
+			NormalisationAlgorithm: "genericBlobDigest/v1",
+			Value:                  godigest.FromString(served).Encoded(),
+		}
+
+		b, err := repo.DownloadResource(t.Context(), resource, nil)
+		require.NoError(t, err)
+		assert.Equal(t, []byte(served), readBlob(t, b))
+		assert.Zero(t, heads.Load())
+		assert.Equal(t, int64(len(served)), b.(blob.SizeAware).Size())
+		mediaType, ok := b.(blob.MediaTypeAware).MediaType()
+		assert.True(t, ok)
+		assert.Equal(t, "text/plain", mediaType)
+	})
+
 	t.Run("refuses content when the digest is present but unusable", func(t *testing.T) {
+		t.Parallel()
 		repo, resource := serve(t, served)
 		resource.Digest = &descruntime.Digest{
 			HashAlgorithm:          "MD5",
@@ -247,34 +264,70 @@ func TestDownloadResource_DigestVerification(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "unsupported hash algorithm")
 	})
+
+	t.Run("accepts content matching a SHA-512 resource digest", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		repo, resource := serve(t, served)
+		resource.Digest = &descruntime.Digest{
+			HashAlgorithm:          "SHA-512",
+			NormalisationAlgorithm: "genericBlobDigest/v1",
+			Value:                  godigest.SHA512.FromString(served).Encoded(),
+		}
+
+		b, err := repo.DownloadResource(t.Context(), resource, nil)
+		r.NoError(err)
+		r.Equal([]byte(served), readBlob(t, b))
+	})
+
+	t.Run("rejects content that does not match a SHA-512 resource digest", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		repo, resource := serve(t, "not what was promised")
+		resource.Digest = &descruntime.Digest{
+			HashAlgorithm:          "SHA-512",
+			NormalisationAlgorithm: "genericBlobDigest/v1",
+			Value:                  godigest.SHA512.FromString(served).Encoded(),
+		}
+
+		b, err := repo.DownloadResource(t.Context(), resource, nil)
+		r.NoError(err)
+		rc, err := b.ReadCloser()
+		r.NoError(err)
+		_, err = io.ReadAll(rc)
+		r.ErrorContains(err, "digest mismatch")
+		r.ErrorContains(rc.Close(), "digest mismatch")
+	})
 }
 
 func TestUploadResource(t *testing.T) {
 	t.Parallel()
 
-	repo := repository.NewResourceRepository(nil)
+	repo := repository.NewResourceRepository()
 	_, err := repo.UploadResource(t.Context(), nil, nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not supported")
 }
 
 func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
+	r := require.New(t)
 	t.Parallel()
 
-	repo := repository.NewResourceRepository(nil)
+	repo := repository.NewResourceRepository()
 
 	resource := &descruntime.Resource{}
 	resource.Name = "test"
 	resource.Version = "1.0.0"
 	resource.Type = "blob"
-	raw, _ := json.Marshal(map[string]any{"url": "https://example.com:443/path/file.tar.gz"})
+	raw, err := json.Marshal(map[string]any{"url": "https://example.com:443/path/file.tar.gz"})
+	r.NoError(err)
 	resource.Access = &runtime.Raw{
 		Type: runtime.NewVersionedType("wget", v1.Version),
 		Data: raw,
 	}
 
 	identity, err := repo.GetResourceCredentialConsumerIdentity(t.Context(), resource)
-	require.NoError(t, err)
+	r.NoError(err)
 	assert.Equal(t, "Wget", identity["type"])
 	assert.Equal(t, "https", identity["scheme"])
 	assert.Equal(t, "example.com", identity["hostname"])
@@ -285,7 +338,7 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 func TestGetResourceRepositoryScheme(t *testing.T) {
 	t.Parallel()
 
-	repo := repository.NewResourceRepository(nil)
+	repo := repository.NewResourceRepository()
 	scheme := repo.GetResourceRepositoryScheme()
 	require.NotNil(t, scheme)
 	assert.True(t, scheme.IsRegistered(runtime.NewVersionedType("wget", v1.Version)))
@@ -304,10 +357,21 @@ func readBlob(t *testing.T, b blob.ReadOnlyBlob) []byte {
 	return data
 }
 
+// readError fully reads b and returns the error of the read and of closing the
+// reader: the download sends its request only when it is read.
+func readError(t *testing.T, b blob.ReadOnlyBlob) error {
+	t.Helper()
+	rc, err := b.ReadCloser()
+	require.NoError(t, err)
+	_, readErr := io.ReadAll(rc)
+	return errors.Join(readErr, rc.Close())
+}
+
 func TestProcessResourceDigest(t *testing.T) {
 	t.Parallel()
 
 	t.Run("computes digest by downloading the content once", func(t *testing.T) {
+		t.Parallel()
 		content := []byte("hello digest world")
 		var hits int
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -316,7 +380,7 @@ func TestProcessResourceDigest(t *testing.T) {
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 
@@ -330,33 +394,15 @@ func TestProcessResourceDigest(t *testing.T) {
 		assert.Nil(t, resource.Digest, "the input resource must not be mutated")
 	})
 
-	t.Run("leaves no temporary file behind", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			_, _ = w.Write([]byte("hello digest world"))
-		}))
-		defer server.Close()
-
-		tempFolder := t.TempDir()
-		repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder},
-			repository.WithHTTPClient(server.Client()),
-			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
-
-		_, err := repo.ProcessResourceDigest(t.Context(), wgetResource(t, server.URL, map[string]any{}), nil)
-		require.NoError(t, err)
-
-		entries, err := os.ReadDir(tempFolder)
-		require.NoError(t, err)
-		assert.Empty(t, entries, "digest processing must reclaim the file it downloaded")
-	})
-
 	t.Run("verifies a matching pre-existing digest", func(t *testing.T) {
+		t.Parallel()
 		content := []byte("verify me")
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write(content)
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 		resource.Digest = &descruntime.Digest{
@@ -370,12 +416,13 @@ func TestProcessResourceDigest(t *testing.T) {
 	})
 
 	t.Run("fails on digest mismatch", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write([]byte("actual content"))
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 		resource.Digest = &descruntime.Digest{
@@ -390,13 +437,14 @@ func TestProcessResourceDigest(t *testing.T) {
 	})
 
 	t.Run("fails on unsupported hash algorithm", func(t *testing.T) {
+		t.Parallel()
 		content := []byte("verify me")
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write(content)
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 		resource.Digest = &descruntime.Digest{
@@ -411,13 +459,14 @@ func TestProcessResourceDigest(t *testing.T) {
 	})
 
 	t.Run("fails on unsupported normalisation algorithm", func(t *testing.T) {
+		t.Parallel()
 		content := []byte("verify me")
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write(content)
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 		resource.Digest = &descruntime.Digest{
@@ -446,8 +495,9 @@ func TestProcessResourceDigest_ConfigDriven(t *testing.T) {
 	sha256 := godigest.FromBytes(content).Encoded()
 
 	t.Run("default policy verifies the RFC-9530 header source", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("x-checksum-sha256", sha256)
+			w.Header().Set("X-Checksum-Sha256", sha256)
 			_, _ = w.Write(content)
 		}))
 		defer server.Close()
@@ -455,8 +505,7 @@ func TestProcessResourceDigest_ConfigDriven(t *testing.T) {
 		cfg := &checksumhttpv1alpha1.Config{
 			Mode: checksumhttpv1alpha1.ChecksumModeRequire,
 		}
-		repo := repository.NewResourceRepository(nil,
-			repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(cfg),
 		)
 		resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
@@ -467,8 +516,9 @@ func TestProcessResourceDigest_ConfigDriven(t *testing.T) {
 	})
 
 	t.Run("host override wins over default", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("x-checksum-sha256", sha256)
+			w.Header().Set("X-Checksum-Sha256", sha256)
 			_, _ = w.Write(content)
 		}))
 		defer server.Close()
@@ -485,8 +535,7 @@ func TestProcessResourceDigest_ConfigDriven(t *testing.T) {
 				host: {Mode: checksumhttpv1alpha1.ChecksumModeRequire},
 			},
 		}
-		repo := repository.NewResourceRepository(nil,
-			repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(cfg),
 		)
 		processed, err := repo.ProcessResourceDigest(t.Context(),
@@ -509,7 +558,7 @@ func TestProcessResourceDigest_AcceptsPrefixedPinnedDigest(t *testing.T) {
 	}))
 	defer server.Close()
 
-	repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+	repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 		repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
 	resource := wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"})
 	resource.Digest = &descruntime.Digest{
@@ -551,14 +600,14 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 	}
 
 	t.Run("SHA-256 header pins the resource digest without a body download", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(noBodyGET(map[string]string{"x-checksum-sha256": sha256}))
 		defer server.Close()
 
 		cfg := &checksumhttpv1alpha1.Config{
 			Mode: checksumhttpv1alpha1.ChecksumModeRequire,
 		}
-		repo := repository.NewResourceRepository(nil,
-			repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(cfg),
 		)
 		processed, err := repo.ProcessResourceDigest(t.Context(),
@@ -571,11 +620,11 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 	})
 
 	t.Run("SHA-512 header pins the resource digest without a body download", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(noBodyGET(map[string]string{"x-checksum-sha512": sha512}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil,
-			repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}),
 		)
 		processed, err := repo.ProcessResourceDigest(t.Context(),
@@ -587,18 +636,19 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 	})
 
 	t.Run("Require aborts when only a weak (SHA-1) digest is advertised", func(t *testing.T) {
+		t.Parallel()
 		// The access-side pin becomes the resource digest, which OCM/OCI
 		// storage accepts only as SHA-256. A source advertising only SHA-1 has
 		// no usable pin, so Require must abort rather than leak SHA-1 into the
 		// descriptor (which would make the component un-transferable by value).
+
 		server := httptest.NewServer(noBodyGET(map[string]string{"x-checksum-sha1": sha1}))
 		defer server.Close()
 
 		cfg := &checksumhttpv1alpha1.Config{
 			Mode: checksumhttpv1alpha1.ChecksumModeRequire,
 		}
-		repo := repository.NewResourceRepository(nil,
-			repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(cfg),
 		)
 		_, err := repo.ProcessResourceDigest(t.Context(),
@@ -608,19 +658,20 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 	})
 
 	t.Run("Prefer falls back to SHA-256 download when only a weak digest is advertised", func(t *testing.T) {
+		t.Parallel()
 		// Under Prefer, a SHA-1/MD5-only source is treated as "not advertised"
 		// on the access fast path, so the processor downloads the body and pins
 		// SHA-256 — keeping the descriptor transferable by value.
+
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("x-checksum-sha1", sha1)
+			w.Header().Set("X-Checksum-Sha1", sha1)
 			if r.Method != http.MethodHead {
 				_, _ = w.Write(content)
 			}
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil,
-			repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModePrefer}),
 		)
 		processed, err := repo.ProcessResourceDigest(t.Context(),
@@ -632,6 +683,7 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 	})
 
 	t.Run("SHA-256 preferred over SHA-1 when both are advertised", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(noBodyGET(map[string]string{
 			"x-checksum-sha1":   sha1,
 			"x-checksum-sha256": sha256,
@@ -641,8 +693,7 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 		cfg := &checksumhttpv1alpha1.Config{
 			Mode: checksumhttpv1alpha1.ChecksumModeRequire,
 		}
-		repo := repository.NewResourceRepository(nil,
-			repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(cfg),
 		)
 		processed, err := repo.ProcessResourceDigest(t.Context(),
@@ -653,14 +704,14 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 	})
 
 	t.Run("missing advertised digest with onMissing=fail aborts without downloading", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(noBodyGET(nil))
 		defer server.Close()
 
 		cfg := &checksumhttpv1alpha1.Config{
 			Mode: checksumhttpv1alpha1.ChecksumModeRequire,
 		}
-		repo := repository.NewResourceRepository(nil,
-			repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(cfg),
 		)
 		_, err := repo.ProcessResourceDigest(t.Context(),
@@ -670,14 +721,14 @@ func TestProcessResourceDigest_AccessFastPath(t *testing.T) {
 	})
 
 	t.Run("pinned digest of a matching algorithm passes; mismatch fails", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(noBodyGET(map[string]string{"x-checksum-sha256": sha256}))
 		defer server.Close()
 
 		cfg := &checksumhttpv1alpha1.Config{
 			Mode: checksumhttpv1alpha1.ChecksumModeRequire,
 		}
-		repo := repository.NewResourceRepository(nil,
-			repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(cfg),
 		)
 
@@ -708,13 +759,14 @@ func TestDownloadResource_ChecksumPolicy(t *testing.T) {
 	sha256 := godigest.FromBytes(content).Encoded()
 
 	t.Run("Require verifies the advertised checksum over the downloaded bytes", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("x-checksum-sha256", sha256)
+			w.Header().Set("X-Checksum-Sha256", sha256)
 			_, _ = w.Write(content)
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
 		b, err := repo.DownloadResource(t.Context(),
 			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
@@ -723,41 +775,59 @@ func TestDownloadResource_ChecksumPolicy(t *testing.T) {
 	})
 
 	t.Run("Require aborts a transfer whose advertised checksum mismatches the bytes", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("x-checksum-sha256", strings.Repeat("0", 64))
+			w.Header().Set("X-Checksum-Sha256", strings.Repeat("0", 64))
 			_, _ = w.Write(content)
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
-		_, err := repo.DownloadResource(t.Context(),
+		b, err := repo.DownloadResource(t.Context(),
 			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "checksum verification failed")
+		require.NoError(t, err, "a mismatch can only be detected once the bytes are read")
+
+		rc, err := b.ReadCloser()
+		require.NoError(t, err)
+		_, readErr := io.ReadAll(rc)
+		require.Error(t, readErr)
+		assert.Contains(t, readErr.Error(), "checksum verification failed")
+		closeErr := rc.Close()
+		require.Error(t, closeErr)
+		assert.Contains(t, closeErr.Error(), "checksum verification failed")
 	})
 
 	t.Run("Require aborts a transfer when no checksum is advertised", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write(content)
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
-		_, err := repo.DownloadResource(t.Context(),
+		b, err := repo.DownloadResource(t.Context(),
 			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
+		require.NoError(t, err)
+
+		rc, err := b.ReadCloser()
+		require.NoError(t, err)
+		n, err := rc.Read(make([]byte, len(content)))
 		require.Error(t, err, "Require must not transfer bytes with no source-advertised checksum")
 		assert.Contains(t, err.Error(), "checksum verification failed")
+		assert.Zero(t, n)
+		require.NoError(t, rc.Close())
 	})
 
 	t.Run("Skip performs no verification", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, _ = w.Write(content)
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}))
 		b, err := repo.DownloadResource(t.Context(),
 			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
@@ -775,6 +845,7 @@ func TestProcessResourceDigest_PeekRedirectSafety(t *testing.T) {
 	sha256 := godigest.FromBytes(content).Encoded()
 
 	t.Run("credentialed HEAD does not follow a redirect that would leak Authorization", func(t *testing.T) {
+		t.Parallel()
 		var leaked, downstreamHit bool
 		// downstream records whether the redirect was followed and whether
 		// Authorization survived it.
@@ -783,7 +854,7 @@ func TestProcessResourceDigest_PeekRedirectSafety(t *testing.T) {
 			if r.Header.Get("Authorization") != "" {
 				leaked = true
 			}
-			w.Header().Set("x-checksum-sha256", sha256)
+			w.Header().Set("X-Checksum-Sha256", sha256)
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer downstream.Close()
@@ -793,7 +864,7 @@ func TestProcessResourceDigest_PeekRedirectSafety(t *testing.T) {
 		}))
 		defer origin.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(downstream.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(downstream.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
 		creds := &credv1.WgetCredentials{
 			Type:          runtime.NewVersionedType(credv1.WgetCredentialsType, credv1.Version),
@@ -812,6 +883,7 @@ func TestProcessResourceDigest_PeekRedirectSafety(t *testing.T) {
 	})
 
 	t.Run("HEAD mirrors representation-selecting headers from the access spec", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodHead {
 				http.Error(w, "fast path must not download the body", http.StatusInternalServerError)
@@ -819,13 +891,13 @@ func TestProcessResourceDigest_PeekRedirectSafety(t *testing.T) {
 			}
 			// The advertised checksum is served only to the selected variant.
 			if r.Header.Get("Accept") == "application/vnd.custom" {
-				w.Header().Set("x-checksum-sha256", sha256)
+				w.Header().Set("X-Checksum-Sha256", sha256)
 			}
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer server.Close()
 
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 			repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
 		resource := wgetResource(t, server.URL, map[string]any{
 			"url":    server.URL + "/resource",

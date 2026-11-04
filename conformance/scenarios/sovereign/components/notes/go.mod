@@ -2,7 +2,7 @@ module github.com/open-component-model/open-component-model/conformance/scenario
 
 go 1.27.0
 
-toolchain go1.27.1
+toolchain go1.27.3
 
 require (
 	github.com/gorilla/mux v1.8.1

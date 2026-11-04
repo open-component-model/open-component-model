@@ -17,16 +17,16 @@ Creates or update cryptographic signatures on component descriptors.
 
 ## Reference Format
 
-	[type::]{repository}/[valid-prefix]/{component}[:version]
+	[type::]{repository}/[valid-prefix]/{component}[:version][@digest]
 
 - Prefixes: {component-descriptors|none} (default: "component-descriptors")  
 - Repo types: {OCIRepository|CommonTransportFormat} (short: {OCI|oci|CTF|ctf})  
+- Digest: optional pin (see "ocm get cv --help"), "@sha256:<hex>" (OCI digest of the artifact the component version is stored as; the version may be omitted) or "@jsonNormalisation.v4alpha3+sha256:<hex>" (normalized: the digest signatures sign); the command fails unless the component version matches it. The signed component version is written to its version tag; with an OCI digest pin, signing fails if the tag no longer resolves to the pinned artifact, rather than overwriting it
 
 ## OCM Signing explained in simple steps
 
 - Resolve OCM repository
 - Fetch component version  
-- Verify digests (--verify-digest-consistency)
 - Normalise descriptor (--normalisation)
 - Hash normalised descriptor (--hash)
 - Sign hash (signer from the OCM configuration)
@@ -220,11 +220,14 @@ sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --s
       --force                   overwrite existing signatures under the same name
       --hash string             hash algorithm to use (SHA256, SHA512) (default "SHA-256")
   -h, --help                    help for component-version
-      --normalisation string    normalisation algorithm to use (default jsonNormalisation/v4alpha1) (default "jsonNormalisation/v4alpha1")
+      --normalisation enum      normalisation algorithm of the new signature
+                                (must be one of [jsonNormalisation/v4alpha1 jsonNormalisation/v4alpha2 jsonNormalisation/v4alpha3]) (default jsonNormalisation/v4alpha3)
   -o, --output enum             output format of the resulting signature
                                 (must be one of [json yaml]) (default yaml)
       --signature string        name of the signature to create or update. defaults to "default" (default "default")
       --signer-spec string      DEPRECATED: no longer supported, configure the signer in the OCM configuration instead (signing.config.ocm.software/v1alpha1, field "signer")
+      --tsa                     request an RFC 3161 timestamp from a TSA server (default: http://timestamp.digicert.com); not supported for Sigstore signers
+      --tsa-url string          custom TSA server URL (implies --tsa); not supported for Sigstore signers
 ```
 
 ### Options inherited from parent commands
@@ -249,7 +252,9 @@ sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --s
                                            If multiple configuration files are found, they will be merged in the order they are discovered.
                                            Later entries have higher priority.
                                            Using the option, the specified configuration file(s) will be used instead of the lookup above.
-                                           Configuration documents piped into stdin are applied last, on top of these files.
+                                           Use "-" to read configuration documents from stdin. It is an entry like any other: on its own it
+                                           replaces the lookup above, so add --config <file> to keep a file, and a repeated "-" is ignored.
+                                           Other documents on stdin stay there for commands that read it, such as transfer with --transfer-spec -.
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output

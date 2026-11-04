@@ -14,7 +14,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/repository"
@@ -85,12 +84,12 @@ func Test_Integration_S3RegionRedirect(t *testing.T) {
 						status = http.StatusMovedPermanently
 						body = `<Error><Code>PermanentRedirect</Code><Message>Use the bucket region</Message></Error>`
 						w.Header().Set("Content-Type", "application/xml")
-						w.Header().Set("x-amz-bucket-region", region)
+						w.Header().Set("X-Amz-Bucket-Region", region)
 					case len(exchanges) == 1 && req.Host == correctHost:
 						status, body = http.StatusOK, wantContent
 					}
 				}
-				exchanges = append(exchanges, exchange{req.Clone(req.Context()), status, w.Header().Get("x-amz-bucket-region")})
+				exchanges = append(exchanges, exchange{req.Clone(req.Context()), status, w.Header().Get("X-Amz-Bucket-Region")})
 				mu.Unlock()
 				w.WriteHeader(status)
 				if _, err := io.WriteString(w, body); err != nil {
@@ -111,10 +110,7 @@ func Test_Integration_S3RegionRedirect(t *testing.T) {
 			client.Transport = transport
 			t.Cleanup(transport.CloseIdleConnections)
 
-			// The repository's file-backed blob is removed by TempDir cleanup.
-			tempDir := t.TempDir()
-			repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir},
-				repository.WithHTTPClient(client), repository.WithMaxDownloadSize(64*1024))
+			repo := repository.NewResourceRepository(repository.WithHTTPClient(client), repository.WithMaxDownloadSize(64*1024))
 			resource := &descriptor.Resource{}
 			resource.Access = tt.access
 			before := resource.DeepCopy()

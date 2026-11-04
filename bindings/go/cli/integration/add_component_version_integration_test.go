@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -593,10 +594,11 @@ func Test_Integration_HelmInput_LocalPath(t *testing.T) {
     type: helmChart
     input:
       type: helm/v1
-      path: %s
-`, componentName, componentVersion, chartPath)
+      path: mychart
+`, componentName, componentVersion)
 
 	tempDir := t.TempDir()
+	r.NoError(os.CopyFS(filepath.Join(tempDir, "mychart"), os.DirFS(chartPath)))
 	constructorPath := filepath.Join(tempDir, "constructor.yaml")
 	r.NoError(os.WriteFile(constructorPath, []byte(constructor), os.ModePerm))
 
@@ -1364,7 +1366,7 @@ components:
 	var stored map[string]string
 	r.NoError(json.Unmarshal(raw, &stored))
 	r.Equal(commit, stored["commit"], "the digest processor must resolve the ref and pin the commit it points at")
-	r.Equal("main", stored["ref"], "the ref stays informational next to the pinned commit")
+	r.Equal("main", stored["ref"], "the digest processor leaves the ref as authored, it does not expand a short name")
 
 	// download resource resolves the git access via the registered git resource repository.
 	output := filepath.Join(t.TempDir(), "archive.tgz")
@@ -1389,15 +1391,24 @@ components:
 	r.NoError(err)
 	defer func() { r.NoError(gz.Close()) }()
 	tr := tar.NewReader(gz)
-	header, err := tr.Next()
-	r.NoError(err)
-	r.Equal("README.md", header.Name)
-	content, err := io.ReadAll(tr)
-	r.NoError(err)
-	r.Equal("hello from git access\n", string(content))
-	r.Equal(int64(len(content)), header.Size)
-	_, err = tr.Next()
-	r.ErrorIs(err, io.EOF)
+	files := map[string]string{}
+	var history []string
+	for {
+		header, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		r.NoError(err)
+		if header.Name == ".git" || strings.HasPrefix(header.Name, ".git/") {
+			history = append(history, header.Name)
+			continue
+		}
+		content, err := io.ReadAll(tr)
+		r.NoError(err)
+		files[header.Name] = string(content)
+	}
+	r.Equal(map[string]string{"README.md": "hello from git access\n"}, files)
+	r.Contains(history, ".git/HEAD", "the archive carries the commit history")
 }
 
 // startS3WithObject starts RustFS holding content at bucket/key and writes an ocmconfig

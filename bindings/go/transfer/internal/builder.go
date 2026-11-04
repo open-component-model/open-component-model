@@ -1,8 +1,11 @@
 package internal
 
 import (
+	"time"
+
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	gitaccess "ocm.software/open-component-model/bindings/go/git/spec/access"
 	gittransformer "ocm.software/open-component-model/bindings/go/git/transformation"
 	gitv1alpha1 "ocm.software/open-component-model/bindings/go/git/transformation/spec/v1alpha1"
 	githubtransformer "ocm.software/open-component-model/bindings/go/github/transformation"
@@ -10,6 +13,7 @@ import (
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
 	helmtransformer "ocm.software/open-component-model/bindings/go/helm/transformation"
 	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
@@ -24,6 +28,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/transfer/internal/repositoryupload/nexus"
 	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transform/graph/builder"
+	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
 	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	wgettransformer "ocm.software/open-component-model/bindings/go/wget/transformation"
 	wgetv1alpha1 "ocm.software/open-component-model/bindings/go/wget/transformation/spec/v1alpha1"
@@ -49,6 +54,7 @@ func NewDefaultBuilder(
 	transformerScheme.MustRegisterScheme(gitv1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(wgetaccess.Scheme)
 	transformerScheme.MustRegisterScheme(helmaccess.Scheme)
+	transformerScheme.MustRegisterScheme(gitaccess.Scheme)
 	transformerScheme.MustRegisterScheme(uploadv1alpha1.Scheme)
 
 	ociGet := &ocitransformer.GetComponentVersion{
@@ -71,6 +77,23 @@ func NewDefaultBuilder(
 	ociAddResource := &ocitransformer.AddLocalResource{
 		Scheme:             transformerScheme,
 		RepoProvider:       repoProvider,
+		CredentialProvider: credentialProvider,
+	}
+	transferLocalBlob := &ocitransformer.TransferLocalBlob{
+		Scheme:             transformerScheme,
+		RepoProvider:       repoProvider,
+		CredentialProvider: credentialProvider,
+	}
+	transferLocalBlobToOCIArtifact := &ocitransformer.TransferLocalBlobToOCIArtifact{
+		Scheme:             transformerScheme,
+		RepoProvider:       repoProvider,
+		Repository:         resourceRepo,
+		CredentialProvider: credentialProvider,
+	}
+	transferOCIArtifactToLocalBlob := &ocitransformer.TransferOCIArtifactToLocalBlob{
+		Scheme:             transformerScheme,
+		RepoProvider:       repoProvider,
+		Repository:         resourceRepo,
 		CredentialProvider: credentialProvider,
 	}
 
@@ -146,6 +169,13 @@ func NewDefaultBuilder(
 		CredentialProvider: credentialProvider,
 	}
 
+	// Git upload transformer (git uploader configurations)
+	addGitResource := &gittransformer.AddGitResource{
+		Scheme:             transformerScheme,
+		ResourceRepository: resourceRepo,
+		CredentialProvider: credentialProvider,
+	}
+
 	// HTTP streaming transformer (uploader configurations)
 	httpStreaming := &wgettransformer.HTTPStreamingTransformer{
 		Scheme:             transformerScheme,
@@ -171,6 +201,7 @@ func NewDefaultBuilder(
 
 	return builder.NewBuilder(transformerScheme).
 		WithEnvOptions(EnvOptions()...).
+		WithRetry(transientRetryPolicy()).
 		WithTransformer(&ociv1alpha1.OCIGetComponentVersion{}, ociGet).
 		WithTransformer(&ociv1alpha1.OCIAddComponentVersion{}, ociAdd).
 		WithTransformer(&ociv1alpha1.CTFGetComponentVersion{}, ociGet).
@@ -182,14 +213,38 @@ func NewDefaultBuilder(
 		WithTransformer(&ociv1alpha1.GetOCIArtifact{}, ociGetOCIArtifact).
 		WithTransformer(&ociv1alpha1.AddOCIArtifact{}, ociAddOCIArtifact).
 		WithTransformer(&ociv1alpha1.TransferOCIArtifact{}, ociTransferOCIArtifact).
+		WithTransformer(&ociv1alpha1.TransferOCILocalBlobToOCILocalBlob{}, transferLocalBlob).
+		WithTransformer(&ociv1alpha1.TransferOCILocalBlobToCTFLocalBlob{}, transferLocalBlob).
+		WithTransformer(&ociv1alpha1.TransferCTFLocalBlobToOCILocalBlob{}, transferLocalBlob).
+		WithTransformer(&ociv1alpha1.TransferCTFLocalBlobToCTFLocalBlob{}, transferLocalBlob).
+		WithTransformer(&ociv1alpha1.TransferOCILocalBlobToOCIArtifact{}, transferLocalBlobToOCIArtifact).
+		WithTransformer(&ociv1alpha1.TransferCTFLocalBlobToOCIArtifact{}, transferLocalBlobToOCIArtifact).
+		WithTransformer(&ociv1alpha1.TransferOCIArtifactToOCILocalBlob{}, transferOCIArtifactToLocalBlob).
+		WithTransformer(&ociv1alpha1.TransferOCIArtifactToCTFLocalBlob{}, transferOCIArtifactToLocalBlob).
 		WithTransformer(&helmv1alpha1.GetHelmChart{}, getHelmChart).
 		WithTransformer(&helmv1alpha1.ConvertHelmToOCI{}, convertHelmToOCI).
 		WithTransformer(&wgetv1alpha1.DownloadWgetResource{}, downloadWget).
 		WithTransformer(&s3v1alpha1.DownloadS3Resource{}, downloadS3).
 		WithTransformer(&githubv1alpha1.GetGitHubCommit{}, getGitHubCommit).
 		WithTransformer(&gitv1alpha1.GetGitResource{}, getGitResource).
+		WithTransformer(&gitv1alpha1.AddGitResource{}, addGitResource).
 		WithTransformer(&wgetv1alpha1.HTTPStreaming{}, httpStreaming).
 		WithTransformer(&uploadv1alpha1.ArtifactoryUpload{}, &artifactory.Transformer{Uploader: repositoryUpload}).
 		WithTransformer(&uploadv1alpha1.NexusUpload{}, &nexus.Transformer{Uploader: repositoryUpload}).
 		WithTransformer(&FileCleanupTransformation{}, fileCleanup)
+}
+
+// transientRetryPolicy re-runs a transfer node that failed with a transient
+// network error. The HTTP transport only replays requests whose body can be
+// rewound and only up to the response headers; a connection lost while a blob
+// streams between registries surfaces here instead. Transfer nodes are safe to
+// re-run: they write content-addressed data, streaming transformers reopen the
+// source on every call, and buffering a blob to a file removes the partial
+// file when the copy fails. Timeouts are not retried (see IsTransientError).
+func transientRetryPolicy() *graphRuntime.RetryPolicy {
+	return &graphRuntime.RetryPolicy{
+		MaxAttempts: 3,
+		Backoff:     2 * time.Second,
+		Retryable:   ocmhttp.IsTransientError,
+	}
 }

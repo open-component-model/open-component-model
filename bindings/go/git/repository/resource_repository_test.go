@@ -1,6 +1,8 @@
 package repository_test
 
 import (
+	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -44,24 +46,119 @@ func TestResourceDigestPinning(t *testing.T) {
 	r.Equal("SHA-256", pinned.Digest.HashAlgorithm)
 	r.Equal("genericBlobDigest/v1", pinned.Digest.NormalisationAlgorithm)
 
-	// Digest processing downloads into a directory of its own and removes it again.
+	// Digest processing only hashes the archive and discards it again.
 	files, err := os.ReadDir(dir)
 	r.NoError(err)
 	r.Empty(files)
 	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/main", fixture.Second)))
 
-	b, err := repo.DownloadResource(t.Context(), pinned, nil)
+	_, err = readResource(t.Context(), repo, pinned)
 	r.NoError(err)
-	r.NotNil(b)
 
 	verified, err := repo.ProcessResourceDigest(t.Context(), pinned, nil)
 	r.NoError(err)
 	r.Equal(pinned, verified)
 
-	// Only the archive handed to the caller by DownloadResource is left behind.
+	// Downloads stream the archive, so nothing is left behind.
 	files, err = os.ReadDir(dir)
 	r.NoError(err)
-	r.Len(files, 1)
+	r.Empty(files)
+}
+
+// A ref-only access without digest is pinned by DownloadResource, so a ref that moves
+// before the blob is read does not change what it serves.
+func TestDownloadResourcePinsRefOnDownload(t *testing.T) {
+	r := require.New(t)
+	fixture := newRepository(t)
+	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{})
+
+	atSecond, err := readResource(t.Context(), repo, &descriptor.Resource{Access: &v1.Git{
+		Type: runtime.NewVersionedType(v1.Type, v1.Version), Repository: fixture.Path, Commit: fixture.Second.String(),
+	}})
+	r.NoError(err)
+
+	b, err := repo.DownloadResource(t.Context(), &descriptor.Resource{Access: &v1.Git{
+		Type: runtime.NewVersionedType(v1.Type, v1.Version), Repository: fixture.Path, Ref: "main",
+	}}, nil)
+	r.NoError(err)
+	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/main", fixture.First)))
+
+	rc, err := b.ReadCloser()
+	r.NoError(err)
+	data, err := io.ReadAll(rc)
+	r.NoError(err)
+	r.NoError(rc.Close())
+	r.Equal(atSecond, data)
+}
+
+func TestDownloadResourceVerifiesWhileStreaming(t *testing.T) {
+	r := require.New(t)
+
+	fixture := newRepository(t)
+	dir := t.TempDir()
+	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &dir})
+	res := &descriptor.Resource{
+		Access: &v1.Git{Type: runtime.NewUnversionedType("git"), Repository: fixture.Path, Commit: fixture.First.String()},
+		Digest: &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: digest.FromString("other").Encoded()},
+	}
+
+	_, err := readResource(t.Context(), repo, res)
+	r.ErrorContains(err, "digest mismatch")
+
+	files, err := os.ReadDir(dir)
+	r.NoError(err)
+	r.Empty(files)
+}
+
+// readResource downloads res and reads it to its end, which is when a download fails.
+func readResource(ctx context.Context, repo *repository.ResourceRepository, res *descriptor.Resource) ([]byte, error) {
+	b, err := repo.DownloadResource(ctx, res, nil)
+	if err != nil {
+		return nil, err
+	}
+	rc, err := b.ReadCloser()
+	if err != nil {
+		return nil, err
+	}
+	data, err := io.ReadAll(rc)
+	return data, errors.Join(err, rc.Close())
+}
+
+// TestResourceDigestLeavesRefUnchanged documents that digest processing pins the commit but
+// records the ref as authored: it does not expand a short name or HEAD to a full ref, which
+// could be ambiguous between a branch and a tag of the same name.
+func TestResourceDigestLeavesRefUnchanged(t *testing.T) {
+	fixture := newRepository(t)
+	dir := t.TempDir()
+	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &dir})
+
+	for _, tc := range []struct {
+		name       string
+		ref        string
+		commit     plumbing.Hash
+		wantCommit plumbing.Hash
+	}{
+		{name: "short branch", ref: "main", wantCommit: fixture.Second},
+		{name: "short tag", ref: "annotated", wantCommit: fixture.First},
+		{name: "short tag next to a pinned commit", ref: "annotated", commit: fixture.Second, wantCommit: fixture.Second},
+		{name: "HEAD", ref: "HEAD", wantCommit: fixture.Second},
+		{name: "full ref", ref: "refs/tags/annotated", wantCommit: fixture.First},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			gitAccess := &v1.Git{Type: runtime.NewVersionedType(v1.Type, v1.Version), Repository: fixture.Path, Ref: tc.ref}
+			if !tc.commit.IsZero() {
+				gitAccess.Commit = tc.commit.String()
+			}
+			pinned, err := repo.ProcessResourceDigest(t.Context(), &descriptor.Resource{Access: gitAccess}, nil)
+			r.NoError(err)
+
+			var spec v1.Git
+			r.NoError(access.Scheme.Convert(pinned.Access, &spec))
+			r.Equal(tc.ref, spec.Ref, "ref must be recorded as authored, not expanded")
+			r.Equal(tc.wantCommit.String(), spec.Commit)
+		})
+	}
 }
 
 func TestResourceDigestVerification(t *testing.T) {
@@ -73,14 +170,8 @@ func TestResourceDigestVerification(t *testing.T) {
 		Type: runtime.NewVersionedType("Git", "v1"), Repository: fixture.Path, Commit: fixture.First.String(),
 	}}
 
-	b, err := repo.DownloadResource(t.Context(), res, nil)
+	compressed, err := readResource(t.Context(), repo, res)
 	r.NoError(err)
-
-	reader, err := b.ReadCloser()
-	r.NoError(err)
-	compressed, err := io.ReadAll(reader)
-	r.NoError(err)
-	r.NoError(reader.Close())
 	checksum := digest.FromBytes(compressed)
 
 	generated, err := repo.ProcessResourceDigest(t.Context(), res, nil)
@@ -90,12 +181,12 @@ func TestResourceDigestVerification(t *testing.T) {
 	}, generated.Digest)
 
 	for _, tc := range []struct {
-		name, value, hashAlgorithm, normalisation, wantErr string
+		name, value, hashAlgorithm, normalisation, wantErr, wantDownloadErr string
 	}{
 		{name: "compressed digest", value: checksum.Encoded()},
-		{name: "wrong digest", value: strings.Repeat("0", 64), wantErr: "digest mismatch"},
-		{name: "unsupported hash", value: checksum.Encoded(), hashAlgorithm: "SHA-512", wantErr: "unsupported git hash algorithm"},
-		{name: "unsupported normalisation", value: checksum.Encoded(), normalisation: "other", wantErr: "unsupported git normalisation"},
+		{name: "wrong digest", value: strings.Repeat("0", 64), wantErr: "digest mismatch", wantDownloadErr: "digest mismatch"},
+		{name: "unsupported hash", value: checksum.Encoded(), hashAlgorithm: "SHA-512", wantErr: "unsupported git hash algorithm", wantDownloadErr: "invalid digest"},
+		{name: "unsupported normalisation", value: checksum.Encoded(), normalisation: "other", wantErr: "unsupported git normalisation", wantDownloadErr: "unsupported normalisation algorithm"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
@@ -110,18 +201,48 @@ func TestResourceDigestVerification(t *testing.T) {
 			}
 			before := preset.DeepCopy()
 
-			_, downloadErr := repo.DownloadResource(t.Context(), preset, nil)
+			_, downloadErr := readResource(t.Context(), repo, preset)
 			processed, processErr := repo.ProcessResourceDigest(t.Context(), preset, nil)
-			if tc.wantErr == "" {
+			if tc.wantDownloadErr == "" {
 				r.NoError(downloadErr)
+			} else {
+				r.ErrorContains(downloadErr, tc.wantDownloadErr)
+			}
+			if tc.wantErr == "" {
 				r.NoError(processErr)
 				r.Equal(preset.Digest, processed.Digest)
 			} else {
-				r.ErrorContains(downloadErr, tc.wantErr)
 				r.ErrorContains(processErr, tc.wantErr)
 				r.Nil(processed)
 			}
 			r.Equal(before, preset)
+		})
+	}
+}
+
+func TestResourceDigestMovesURLFragmentIntoFields(t *testing.T) {
+	fixture := newRepository(t)
+	for _, tc := range []struct {
+		name, fragment, wantRef string
+	}{
+		{name: "branch", fragment: "branch=main", wantRef: "refs/heads/main"},
+		{name: "commit", fragment: "commit=" + fixture.First.String()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			repo := repository.NewResourceRepository(nil)
+			res := &descriptor.Resource{Access: &v1.Git{
+				Type: runtime.NewVersionedType("Git", "v1"), Repository: fixture.Path + "#" + tc.fragment,
+			}}
+
+			pinned, err := repo.ProcessResourceDigest(t.Context(), res, nil)
+			r.NoError(err)
+
+			var spec v1.Git
+			r.NoError(access.Scheme.Convert(pinned.Access, &spec))
+			r.Equal(fixture.Path, spec.Repository)
+			r.Equal(tc.wantRef, spec.Ref)
+			r.NotEmpty(spec.Commit)
 		})
 	}
 }
@@ -160,7 +281,7 @@ func TestInvalidResource(t *testing.T) {
 	}
 
 	_, err := repo.UploadResource(t.Context(), nil, nil, nil)
-	r.ErrorContains(err, "do not support upload")
+	r.ErrorContains(err, "resource is required")
 	r.Same(access.Scheme, repo.GetResourceRepositoryScheme())
 }
 
@@ -188,7 +309,7 @@ func newRepository(t *testing.T) repositoryFixture {
 	work := t.TempDir()
 	repo, err := git.PlainInit(work, false)
 	r.NoError(err)
-	// go-git reads the global Git config; a host commit.gpgSign must not sign fixtures.
+	// go-git reads the global Git config; a host commit.gpgSign or tag.gpgSign must not sign fixtures.
 	cfg, err := repo.Config()
 	r.NoError(err)
 	cfg.Commit.GpgSign = config.OptBoolFalse
@@ -216,6 +337,10 @@ func newRepository(t *testing.T) repositoryFixture {
 	path := filepath.Join(t.TempDir(), "fixture.git")
 	bare, err := git.PlainClone(path, &git.CloneOptions{URL: work, Bare: true})
 	r.NoError(err)
+	bareCfg, err := bare.Config()
+	r.NoError(err)
+	bareCfg.Tag.GpgSign = config.OptBoolFalse
+	r.NoError(bare.SetConfig(bareCfg))
 
 	_, err = bare.CreateTag("annotated", first, &git.CreateTagOptions{Tagger: signature, Message: "release\n"})
 	r.NoError(err)

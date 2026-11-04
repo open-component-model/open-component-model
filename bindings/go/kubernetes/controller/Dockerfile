@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+
 # Build the manager binary
-FROM --platform=${BUILDPLATFORM} golang:1.27.1@sha256:e0174e51e81218523251d85d248a90d24c3d5e81543b4f07a5d66229397db190 AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.27.3@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
@@ -41,11 +42,36 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     --mount=type=cache,target=/root/.cache/go-build,sharing=locked \
     CGO_ENABLED=0 GOTOOLCHAIN=local GOFIPS140="${GOFIPS140:?GOFIPS140 build arg is required, see root .env}" GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -tags "${GO_TAGS}" -o manager ./kubernetes/controller/cmd
 
-# Use distroless as minimal base image to package the manager binary
-# Refer to https://github.com/GoogleContainerTools/distroless for more details
-FROM gcr.io/distroless/static:nonroot@sha256:e2e927ec666bae08560abb3c55d0659eceabb657f56b6782ab500a9fc7f555e3
-WORKDIR /
-COPY --from=builder /workspace/manager .
+# Static cosign linked against the Go Cryptographic Module (GOFIPS140=certified,
+# fips140=on by default), built and published from
+# https://github.com/open-component-model/cosign. Same release as COSIGN_VERSION in
+# bindings/go/sigstore/signing/handler/internal/.env (Renovate group "OCM cosign";
+# pin_sync_test.go there fails if they diverge). The sigstore signing handler in
+# bindings/go/sigstore shells out to this binary.
+FROM ghcr.io/open-component-model/cosign:v3.1.4-ocm.6@sha256:275824e5d82a53f28571406ad2bbe93484fd7f3d78e566eb04aefcc43cb0681c AS cosign
+
+# Garden Linux FIPS image: source of the CA bundle for OCI/registry TLS, which
+# the final image copies by its path so nothing else from this image reaches
+# it.
+FROM --platform=${BUILDPLATFORM} ghcr.io/gardenlinux/gardenlinux/fips:1877.25@sha256:74ae1f81d0723434024f591d8c2872852201b99b9f18c0fbe10221b16e60e01d AS certs
+
+# manager and cosign are static (CGO_ENABLED=0), so the image needs no libc.
+FROM scratch
+# scratch defines no PATH; the sigstore signing handler looks up cosign on PATH.
+ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY --from=builder /workspace/manager /manager
+# No GODEBUG needed: GOFIPS140 already makes fips140=on the default of both the
+# manager and cosign (DefaultGODEBUG in their build info).
+COPY --from=cosign /cosign /usr/local/bin/cosign
+# cosign caches the Sigstore TUF trust root under $HOME/.sigstore. scratch sets
+# no HOME, which resolves to / and is not writable by the nonroot user, so point
+# it at /tmp. The manager and cosign also write temporary files there
+# (os.TempDir()); scratch has no /tmp, and WORKDIR creates it owned by USER, so
+# only UID 65532 can write to it.
+ENV HOME=/tmp
 USER 65532:65532
+WORKDIR /tmp
+WORKDIR /
 
 ENTRYPOINT ["/manager"]

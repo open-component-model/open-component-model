@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
@@ -195,6 +197,35 @@ func TestBuildGraphDefinition_RepositoryUploaders(t *testing.T) {
 		r.Equal("1.0.0", cv["version"])
 		r.Equal("OCIRepository/v1", cv["repository"].(map[string]any)["type"])
 		r.Nil(findCleanupTransformation(tgd), "nothing is buffered, so there is nothing to clean up")
+	})
+
+	t.Run("pinned LocalBlob carries digest", func(t *testing.T) {
+		r := require.New(t)
+		desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{localBlobResource("chart", "1.0.0")}, nil)
+		pinnableRepo := &mockPinnableCVRepo{mockCVRepo: mockCVRepo{descriptors: map[string]*descriptor.Descriptor{"ocm.software/test:1.0.0": desc}}}
+		key := "ocm.software/test:1.0.0"
+		resolver := &mockCVRepoResolver{
+			specs: map[string]runtime.Typed{key: testOCIRepo("ghcr.io/source")},
+			repos: map[string]repository.ComponentVersionRepository{key: pinnableRepo},
+		}
+		roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
+		root := roots[key]
+		root.ExpectedDigest = &descriptor.Digest{HashAlgorithm: "SHA-256", Value: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
+		roots[key] = root
+		u := artifactoryUploader(runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion))
+
+		tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, []transferv1alpha1.UploaderConfig{u, &transferv1alpha1.LocalBlobUploaderConfig{}})
+		r.NoError(err)
+
+		var uploads []transformv1alpha1.GenericTransformation
+		for _, tr := range tgd.Transformations {
+			if tr.Type == uploadv1alpha1.ArtifactoryUploadV1alpha1 {
+				uploads = append(uploads, tr)
+			}
+		}
+		r.Len(uploads, 1)
+		cv := uploads[0].Spec.Data["componentVersion"].(map[string]any)
+		r.Equal("sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", cv["digest"])
 	})
 
 	t.Run("matches an alias of the source access type", func(t *testing.T) {
@@ -607,4 +638,18 @@ func TestAccessTypeIs_MatchesEveryAliasOfTheAccessType(t *testing.T) {
 			}
 		})
 	}
+}
+
+// mockPinnableCVRepo wraps mockCVRepo and implements [repository.DigestPinnableRepository]
+// so that OCI digest pins propagate through [BuildGraphDefinition].
+type mockPinnableCVRepo struct {
+	mockCVRepo
+}
+
+func (m *mockPinnableCVRepo) PinComponentVersion(_, _, _ string) (repository.ComponentVersionRepository, error) {
+	return m, nil
+}
+
+func (m *mockPinnableCVRepo) ResolveComponentVersionDigest(_ context.Context, _, _ string) (string, error) {
+	return "", nil
 }

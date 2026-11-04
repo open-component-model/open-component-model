@@ -17,8 +17,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/descriptor/v2"
+	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -43,33 +43,31 @@ func GetContextItems(cmd *cobra.Command) (*manager.PluginManager, credentials.Re
 	return pluginManager, credentialGraph, logger, nil
 }
 
-// DownloadResourceData handles the actual data download from repository
-func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginManager, credentialGraph credentials.Resolver, component, version string, repo repository.ComponentVersionRepository, res *descriptor.Resource, identity runtime.Identity) (blob.ReadOnlyBlob, error) {
+// DownloadResourceData downloads the content of res, a resource of desc, read through repo.
+//
+// The content is bound to the digest of res: resource repositories verify what they download
+// against the resource they are handed, and local resources are bound by
+// [repository.GetLocalResource].
+func DownloadResourceData(ctx context.Context, pluginManager *manager.PluginManager, credentialGraph credentials.Resolver, desc *descriptor.Descriptor, repo repository.ComponentVersionRepository, res *descriptor.Resource) (blob.ReadOnlyBlob, error) {
 	access := res.GetAccess()
-	var data blob.ReadOnlyBlob
-	var err error
-
-	if v2.IsLocalBlob(access) {
-		data, _, err = repo.GetLocalResource(ctx, component, version, identity)
-	} else {
-		if access == nil {
-			return nil, fmt.Errorf("access was empty for resource %s", res.Name)
-		}
-		var plugin resource.Repository
-		plugin, err = pluginManager.ResourcePluginRegistry.GetResourcePlugin(ctx, access)
-		if err != nil {
-			return nil, fmt.Errorf("getting resource plugin for access %q failed: %w", access.GetType(), err)
-		}
-		var creds runtime.Typed
-		if credIdentity, err := plugin.GetResourceCredentialConsumerIdentity(ctx, res); err == nil {
-			if creds, err = credentialGraph.Resolve(ctx, credIdentity); err != nil && !errors.Is(err, credentials.ErrNotFound) {
-				return nil, fmt.Errorf("getting credentials for resource %q failed: %w", res.Name, err)
-			}
-		}
-		data, err = plugin.DownloadResource(ctx, res, creds)
+	if v2.IsLocalBlob(access) || ociaccess.IsRelativeOCIReference(access) {
+		return repository.GetLocalResource(ctx, repo, desc.Component.Name, desc.Component.Version, res)
 	}
 
-	return data, err
+	if access == nil {
+		return nil, fmt.Errorf("access was empty for resource %s", res.Name)
+	}
+	plugin, err := pluginManager.ResourcePluginRegistry.GetResourcePlugin(ctx, access)
+	if err != nil {
+		return nil, fmt.Errorf("getting resource plugin for access %q failed: %w", access.GetType(), err)
+	}
+	var creds runtime.Typed
+	if credIdentity, err := plugin.GetResourceCredentialConsumerIdentity(ctx, res); err == nil {
+		if creds, err = credentialGraph.Resolve(ctx, credIdentity); err != nil && !errors.Is(err, credentials.ErrNotFound) {
+			return nil, fmt.Errorf("getting credentials for resource %q failed: %w", res.Name, err)
+		}
+	}
+	return plugin.DownloadResource(ctx, res, creds)
 }
 
 // SaveBlobToFile writes blob data to file with directory creation

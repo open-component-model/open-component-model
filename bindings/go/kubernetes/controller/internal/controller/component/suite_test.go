@@ -2,13 +2,14 @@ package component
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/hashicorp/golang-lru/v2/expirable"
+	"github.com/go-logr/logr"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
@@ -23,17 +24,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution/workerpool"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
-	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
-	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
-	v1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
-	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
-	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
-	"ocm.software/open-component-model/bindings/go/rsa/signing/handler"
-	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
-	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // +kubebuilder:scaffold:imports
@@ -109,55 +102,12 @@ var _ = BeforeSuite(func() {
 		}
 	}()
 
-	pm = manager.NewPluginManager(ctx)
-	scheme := ocmruntime.NewScheme()
-	scheme.MustRegisterWithAlias(&ociv1.Repository{},
-		ocmruntime.NewVersionedType(ociv1.Type, ociv1.Version),
-		ocmruntime.NewUnversionedType(ociv1.Type),
-		ocmruntime.NewVersionedType(ociv1.ShortType, ociv1.Version),
-		ocmruntime.NewUnversionedType(ociv1.ShortType),
-		ocmruntime.NewVersionedType(ociv1.ShortType2, ociv1.Version),
-		ocmruntime.NewUnversionedType(ociv1.ShortType2),
-		ocmruntime.NewVersionedType(ociv1.LegacyRegistryType, ociv1.Version),
-		ocmruntime.NewUnversionedType(ociv1.LegacyRegistryType),
-		ocmruntime.NewVersionedType(ociv1.LegacyRegistryType2, ociv1.Version),
-		ocmruntime.NewUnversionedType(ociv1.LegacyRegistryType2),
-	)
-	scheme.MustRegisterWithAlias(&ctfv1.Repository{},
-		ocmruntime.NewVersionedType(ctfv1.Type, ctfv1.Version),
-		ocmruntime.NewUnversionedType(ctfv1.Type),
-		ocmruntime.NewVersionedType(ctfv1.ShortType, ctfv1.Version),
-		ocmruntime.NewUnversionedType(ctfv1.ShortType),
-		ocmruntime.NewVersionedType(ctfv1.ShortType2, ctfv1.Version),
-		ocmruntime.NewUnversionedType(ctfv1.ShortType2),
-	)
-	repositoryProvider := provider.NewComponentVersionRepositoryProvider(provider.WithScheme(scheme))
-	Expect(pm.ComponentVersionRepositoryRegistry.RegisterInternalComponentVersionRepositoryPlugin(repositoryProvider)).To(Succeed())
-	signingHandler, err := handler.New(signingv1alpha1.Scheme, true)
+	// The plugins the controller registers in production.
+	pm, err = setup.NewPluginManager(ctx, nil, slog.New(logr.ToSlogHandler(GinkgoLogr)), setup.WithTempDir(GinkgoT().TempDir()))
 	Expect(err).ToNot(HaveOccurred())
-	Expect(pm.SigningRegistry.RegisterInternalComponentSignatureHandler(signingHandler)).To(Succeed())
-	Expect(pm.CredentialRepositoryRegistry.RegisterInternalCredentialRepositoryPlugin(
-		&ocicredentials.OCICredentialRepository{},
-		[]ocmruntime.Type{v1.Type},
-	)).To(Succeed())
-
-	const unlimited = 0
-	ttl := time.Minute * 30
-	resolverCache := expirable.NewLRU[string, *workerpool.Result](unlimited, nil, ttl)
-
-	// Create worker pool with its own dependencies
-	workerLogger := logf.Log.WithName("worker-pool")
-	workerPool := workerpool.NewWorkerPool(workerpool.PoolOptions{
-		WorkerCount: 10,
-		QueueSize:   100,
-		Logger:      &workerLogger,
-		Client:      k8sManager.GetClient(),
-		Cache:       resolverCache,
-	})
-	Expect(k8sManager.Add(workerPool)).To(Succeed())
 
 	resolutionLogger := logf.Log.WithName("resolution")
-	resolver := resolution.NewResolver(&resolutionLogger, workerPool)
+	resolver := resolution.NewResolver(&resolutionLogger)
 
 	Expect((&Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
@@ -167,7 +117,7 @@ var _ = BeforeSuite(func() {
 			NewPluginManager: test.StaticPluginManager(pm),
 		},
 		Resolver: resolver,
-	}).SetupWithManager(ctx, k8sManager)).To(Succeed())
+	}).SetupWithManager(ctx, k8sManager, 1)).To(Succeed())
 
 	mgrDone := make(chan struct{})
 	go func() {

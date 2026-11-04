@@ -1,6 +1,9 @@
 package input_test
 
 import (
+	"crypto/sha512"
+	"encoding/hex"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -34,6 +37,15 @@ func blobDigest(t *testing.T, b blob.ReadOnlyBlob) string {
 	return digest
 }
 
+// readErrs fully reads b and returns the errors of the read and of closing the reader.
+func readErrs(t *testing.T, b blob.ReadOnlyBlob) (readErr, closeErr error) {
+	t.Helper()
+	rc, err := b.ReadCloser()
+	require.NoError(t, err)
+	_, readErr = io.ReadAll(rc)
+	return readErr, rc.Close()
+}
+
 // wgetResourceWithDigest builds a wget input resource carrying a provided digest.
 func wgetResourceWithDigest(t *testing.T, url, value string) *constructorruntime.Resource {
 	t.Helper()
@@ -64,6 +76,7 @@ func TestProcessResource_ProvidedDigest(t *testing.T) {
 	}
 
 	t.Run("matching provided digest is verified and stored", func(t *testing.T) {
+		t.Parallel()
 		server := serve(t)
 		defer server.Close()
 
@@ -76,17 +89,21 @@ func TestProcessResource_ProvidedDigest(t *testing.T) {
 	})
 
 	t.Run("mismatching provided digest fails", func(t *testing.T) {
+		t.Parallel()
 		server := serve(t)
 		defer server.Close()
 
 		method := &input.InputMethod{ChecksumConfig: &checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeSkip}}
-		_, err := method.ProcessResource(t.Context(),
+		result, err := method.ProcessResource(t.Context(),
 			wgetResourceWithDigest(t, server.URL+"/artifact", strings.Repeat("0", 64)), nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "digest mismatch")
+		require.NoError(t, err, "a mismatch can only be detected once the bytes are read")
+		readErr, closeErr := readErrs(t, result.ProcessedBlobData)
+		require.ErrorContains(t, readErr, "digest mismatch")
+		require.ErrorContains(t, closeErr, "digest mismatch")
 	})
 
 	t.Run("unsupported provided hash algorithm fails", func(t *testing.T) {
+		t.Parallel()
 		server := serve(t)
 		defer server.Close()
 
@@ -99,8 +116,9 @@ func TestProcessResource_ProvidedDigest(t *testing.T) {
 	})
 
 	t.Run("provided digest and policy are both verified", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("x-checksum-sha1", hwSHA1)
+			w.Header().Set("X-Checksum-Sha1", hwSHA1)
 			_, _ = w.Write(content)
 		}))
 		defer server.Close()
@@ -138,10 +156,11 @@ func TestProcessResource_ChecksumPolicy_HeaderVerification(t *testing.T) {
 	}
 
 	t.Run("advertised header verifies and credentials reach the artifact", func(t *testing.T) {
+		t.Parallel()
 		var artifactAuth string
 		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			artifactAuth = r.Header.Get("Authorization")
-			w.Header().Set("x-checksum-sha256", hwSHA256)
+			w.Header().Set("X-Checksum-Sha256", hwSHA256)
 			_, _ = w.Write(content)
 		}))
 		defer server.Close()
@@ -154,18 +173,41 @@ func TestProcessResource_ChecksumPolicy_HeaderVerification(t *testing.T) {
 		assert.Equal(t, "Bearer my-token", artifactAuth, "artifact fetch must carry credentials")
 	})
 
-	t.Run("tampered advertised header fails construction", func(t *testing.T) {
+	t.Run("tampered advertised header fails while reading", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("x-checksum-sha256", strings.Repeat("f", 64))
+			w.Header().Set("X-Checksum-Sha256", strings.Repeat("f", 64))
 			_, _ = w.Write(content)
 		}))
 		defer server.Close()
 
 		method := &input.InputMethod{ChecksumConfig: requireMode()}
-		_, err := method.ProcessResource(t.Context(),
+		result, err := method.ProcessResource(t.Context(),
 			wgetInputResource(t, map[string]any{"url": server.URL + "/artifact"}), nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "checksum mismatch")
+		require.NoError(t, err, "a mismatch can only be detected once the bytes are read")
+		readErr, closeErr := readErrs(t, result.ProcessedBlobData)
+		require.ErrorContains(t, readErr, "checksum mismatch")
+		require.ErrorContains(t, closeErr, "checksum mismatch")
+	})
+
+	t.Run("advertised SHA-256 that disagrees with the bytes fails even when SHA-512 verifies", func(t *testing.T) {
+		t.Parallel()
+		sha512Sum := sha512.Sum512(content)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("X-Checksum-Sha512", hex.EncodeToString(sha512Sum[:]))
+			w.Header().Set("X-Checksum-Sha256", strings.Repeat("0", 64))
+			_, _ = w.Write(content)
+		}))
+		defer server.Close()
+
+		method := &input.InputMethod{ChecksumConfig: requireMode()}
+		result, err := method.ProcessResource(t.Context(),
+			wgetInputResource(t, map[string]any{"url": server.URL + "/artifact"}), nil)
+		require.NoError(t, err)
+		assert.Equal(t, "sha256:"+strings.Repeat("0", 64), blobDigest(t, result.ProcessedBlobData))
+		readErr, closeErr := readErrs(t, result.ProcessedBlobData)
+		require.ErrorContains(t, readErr, "digest mismatch")
+		require.ErrorContains(t, closeErr, "digest mismatch")
 	})
 }
 
@@ -186,11 +228,12 @@ func TestProcessResource_ChecksumPolicy_ConfigDriven(t *testing.T) {
 			_, _ = w.Write([]byte(hwSHA256 + "  artifact\n"))
 			return
 		}
-		w.Header().Set("x-checksum-sha256", hwSHA256)
+		w.Header().Set("X-Checksum-Sha256", hwSHA256)
 		_, _ = w.Write(content)
 	})
 
 	t.Run("default mode applies to the resource", func(t *testing.T) {
+		t.Parallel()
 		server := httptest.NewServer(handler)
 		defer server.Close()
 
@@ -203,12 +246,14 @@ func TestProcessResource_ChecksumPolicy_ConfigDriven(t *testing.T) {
 	})
 
 	t.Run("host override wins over default", func(t *testing.T) {
+		t.Parallel()
 		// Default mode "Skip" accepts any bytes without verification; the
 		// host override for the artifact's actual host is "Require".
 		// A tampered advertised digest therefore fails against the override but
 		// would go unnoticed under the default.
+
 		badServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("x-checksum-sha256", strings.Repeat("f", 64))
+			w.Header().Set("X-Checksum-Sha256", strings.Repeat("f", 64))
 			_, _ = w.Write(content)
 		}))
 		defer badServer.Close()
@@ -221,10 +266,12 @@ func TestProcessResource_ChecksumPolicy_ConfigDriven(t *testing.T) {
 			},
 		}
 		method := &input.InputMethod{ChecksumConfig: cfg}
-		_, err := method.ProcessResource(t.Context(), wgetInputResource(t, map[string]any{
+		result, err := method.ProcessResource(t.Context(), wgetInputResource(t, map[string]any{
 			"url": badServer.URL + "/artifact",
 		}), nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "checksum mismatch")
+		require.NoError(t, err, "a mismatch can only be detected once the bytes are read")
+		readErr, closeErr := readErrs(t, result.ProcessedBlobData)
+		require.ErrorContains(t, readErr, "checksum mismatch")
+		require.ErrorContains(t, closeErr, "checksum mismatch")
 	})
 }

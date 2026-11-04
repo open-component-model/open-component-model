@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"strings"
 
 	godigest "github.com/opencontainers/go-digest"
-	"helm.sh/helm/v4/pkg/registry"
+	"helm.sh/helm/v4/pkg/getter"
 	"helm.sh/helm/v4/pkg/repo/v1"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -18,12 +19,17 @@ import (
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	helmcreds "ocm.software/open-component-model/bindings/go/helm/spec/credentials"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
-const hashAlgorithmSHA256 = "SHA-256"
+const (
+	hashAlgorithmSHA256 = "SHA-256"
+	genericBlobDigestV1 = "genericBlobDigest/v1"
+	ociArtifactDigestV1 = "ociArtifactDigest/v1"
+)
 
 var _ digestprocessor.BuiltinDigestProcessorPlugin = (*DigestProcessor)(nil)
 
@@ -32,12 +38,26 @@ var _ digestprocessor.BuiltinDigestProcessorPlugin = (*DigestProcessor)(nil)
 // For OCI repositories it resolves the OCI manifest digest.
 type DigestProcessor struct {
 	tempFolder string
+	httpConfig *httpv1alpha1.Config
+}
+
+// Option configures a [DigestProcessor].
+type Option func(*DigestProcessor)
+
+// WithHTTPConfig sets the HTTP client configuration for every request the processor
+// makes: OCI manifest resolution, repository index and chart downloads.
+func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
+	return func(p *DigestProcessor) { p.httpConfig = cfg }
 }
 
 // NewDigestProcessor creates a new Helm digest processor.
 // tempFolder specifies a base directory for temporary files; if empty, os.TempDir() is used.
-func NewDigestProcessor(tempFolder string) *DigestProcessor {
-	return &DigestProcessor{tempFolder: tempFolder}
+func NewDigestProcessor(tempFolder string, opts ...Option) *DigestProcessor {
+	p := &DigestProcessor{tempFolder: tempFolder}
+	for _, opt := range opts {
+		opt(p)
+	}
+	return p
 }
 
 func (p *DigestProcessor) GetResourceRepositoryScheme() *ocmruntime.Scheme {
@@ -82,16 +102,22 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	}
 
 	var resolvedDigest godigest.Digest
+	normalisation := genericBlobDigestV1
 
 	var err error
 	if strings.HasPrefix(helm.HelmRepository, "oci://") {
+		normalisation = ociArtifactDigestV1
 		var ociCreds *ocicredsv1.OCICredentials
 		if credentials != nil {
 			if ociCreds, err = helmcredsv1.ConvertToOCICredentials(credentials); err != nil {
 				return nil, fmt.Errorf("error converting credentials: %w", err)
 			}
 		}
-		resolvedDigest, err = p.resolveOCIDigest(ctx, helm, ociCreds)
+		var ref string
+		if ref, err = helm.ChartReference(); err != nil {
+			return nil, fmt.Errorf("error constructing chart reference: %w", err)
+		}
+		resolvedDigest, err = download.ResolveOCIManifestDigest(ctx, ref, ociCreds, p.httpConfig)
 	} else {
 		var helmCreds *helmcredsv1.HelmHTTPCredentials
 		if credentials != nil {
@@ -109,10 +135,10 @@ func (p *DigestProcessor) ProcessResourceDigest(
 
 	if resource.Digest == nil {
 		resource.Digest = &runtime.Digest{}
-		if err := applyDigest(resource.Digest, resolvedDigest); err != nil {
+		if err := applyDigest(resource.Digest, resolvedDigest, normalisation); err != nil {
 			return nil, fmt.Errorf("failed to apply digest to resource: %w", err)
 		}
-	} else if err := verifyDigest(resource.Digest, resolvedDigest); err != nil {
+	} else if err := verifyDigest(resource.Digest, resolvedDigest, normalisation); err != nil {
 		return nil, fmt.Errorf("failed to verify digest of resource: %w", err)
 	}
 
@@ -151,7 +177,11 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 		entry.KeyFile = credentials.KeyFile
 	}
 
-	chartRepo, err := repo.NewChartRepository(entry, download.GetterProviders(nil, download.HTTPConfigGetterOpts{}))
+	providers, err := download.IndexGetterProviders(ctx, helm.HelmRepository, credentials, p.httpConfig)
+	if err != nil {
+		return "", fmt.Errorf("error creating helm repository client: %w", err)
+	}
+	chartRepo, err := repo.NewChartRepository(entry, providers)
 	if err != nil {
 		return "", fmt.Errorf("error creating chart repository: %w", err)
 	}
@@ -194,7 +224,11 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 	}
 
 	if cv.Digest == "" {
-		return "", fmt.Errorf("chart %q version %q in repository index has no digest", chartName, version)
+		// The index does not vouch for the chart, so the chart it selected is downloaded
+		// and hashed, from the URL the index lists for it.
+		slog.InfoContext(ctx, "helm repository index lists no digest for the chart; downloading it to compute one",
+			"chart", chartName, "version", cv.Version)
+		return downloadChartDigest(ctx, providers, helm.HelmRepository, cv, credentials)
 	}
 
 	d, err := parseDigest(cv.Digest)
@@ -205,60 +239,58 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 	return d, nil
 }
 
-func (p *DigestProcessor) resolveOCIDigest(ctx context.Context, helm helmv1.Helm, credentials *ocicredsv1.OCICredentials) (godigest.Digest, error) {
-	if err := ctx.Err(); err != nil {
-		return "", fmt.Errorf("context cancelled before resolving OCI digest: %w", err)
+// downloadChartDigest downloads the chart cv names with the getters the index was fetched
+// with and returns its digest. Credentials are sent only to the host of repoURL, also if
+// the index points the chart elsewhere.
+func downloadChartDigest(ctx context.Context, providers getter.Providers, repoURL string, cv *repo.ChartVersion, credentials *helmcredsv1.HelmHTTPCredentials) (godigest.Digest, error) {
+	if len(cv.URLs) == 0 {
+		return "", fmt.Errorf("chart %q version %q in repository index has no download URL", cv.Name, cv.Version)
 	}
-
-	ref, err := helm.ChartReference()
+	chartURL, err := repo.ResolveReferenceURL(repoURL, cv.URLs[0])
 	if err != nil {
-		return "", fmt.Errorf("error constructing chart reference: %w", err)
+		return "", fmt.Errorf("error resolving download URL of chart %q version %q: %w", cv.Name, cv.Version, err)
 	}
-
-	// Strip the oci:// prefix for the registry client
-	ref = strings.TrimPrefix(ref, "oci://")
-
-	var username, password string
+	u, err := url.Parse(chartURL)
+	if err != nil {
+		return "", fmt.Errorf("error parsing download URL %q: %w", chartURL, err)
+	}
+	g, err := providers.ByScheme(u.Scheme)
+	if err != nil {
+		return "", fmt.Errorf("error downloading helm chart %q: %w", chartURL, err)
+	}
+	// Helm's getter sends basic auth only to the host of the URL it is given.
+	opts := []getter.Option{getter.WithURL(repoURL)}
 	if credentials != nil {
-		username = credentials.Username
-		password = credentials.Password
-		if password == "" {
-			if token := credentials.AccessToken; token != "" {
-				password = token
-			}
+		if base, err := url.Parse(repoURL); err == nil && base.Scheme == u.Scheme && base.Host == u.Host {
+			opts = append(opts, getter.WithBasicAuth(credentials.Username, credentials.Password))
+		}
+		if credentials.CertFile != "" || credentials.KeyFile != "" {
+			opts = append(opts, getter.WithTLSClientConfig(credentials.CertFile, credentials.KeyFile, ""))
 		}
 	}
-	var regClientOpts []registry.ClientOption
-	if username != "" && password != "" {
-		regClientOpts = append(regClientOpts, registry.ClientOptBasicAuth(username, password))
-	}
-	regClient, err := registry.NewClient(regClientOpts...)
-	if err != nil {
-		return "", fmt.Errorf("error creating registry client: %w", err)
-	}
 
-	// Helm's registry Resolve does not accept a context, so we run it in a
-	// goroutine and select on the context to allow cancellation.
-	type resolveResult struct {
+	// Helm's getters do not accept a context: the configured getter ends its request with
+	// ctx (see download.IndexGetterProviders); the context is also selected on so the
+	// default getter, bounded by its own timeout, does not hold up cancellation.
+	type chartResult struct {
 		digest godigest.Digest
 		err    error
 	}
-	ch := make(chan resolveResult, 1)
+	ch := make(chan chartResult, 1)
 	go func() {
-		desc, resolveErr := regClient.Resolve(ref)
-		if resolveErr != nil {
-			ch <- resolveResult{err: resolveErr}
+		buf, err := g.Get(chartURL, opts...)
+		if err != nil {
+			ch <- chartResult{err: err}
 			return
 		}
-		ch <- resolveResult{digest: desc.Digest}
+		ch <- chartResult{digest: godigest.SHA256.FromBytes(buf.Bytes())}
 	}()
-
 	select {
 	case <-ctx.Done():
-		return "", fmt.Errorf("context cancelled while resolving OCI chart reference %q: %w", ref, ctx.Err())
+		return "", fmt.Errorf("context cancelled while downloading helm chart %q: %w", chartURL, ctx.Err())
 	case res := <-ch:
 		if res.err != nil {
-			return "", fmt.Errorf("error resolving OCI chart reference %q: %w", ref, res.err)
+			return "", fmt.Errorf("error downloading helm chart %q: %w", chartURL, res.err)
 		}
 		return res.digest, nil
 	}
@@ -277,30 +309,39 @@ func parseDigest(raw string) (godigest.Digest, error) {
 	return d, d.Validate()
 }
 
-func applyDigest(target *runtime.Digest, d godigest.Digest) error {
+func applyDigest(target *runtime.Digest, d godigest.Digest, normalisation string) error {
 	algo := algorithmName(d.Algorithm())
 	if algo == "" {
 		return fmt.Errorf("unknown digest algorithm: %s", d.Algorithm())
 	}
 	target.HashAlgorithm = algo
-	target.NormalisationAlgorithm = "genericBlobDigest/v1"
+	target.NormalisationAlgorithm = normalisation
 	target.Value = d.Encoded()
 	return nil
 }
 
-func verifyDigest(target *runtime.Digest, d godigest.Digest) error {
+func verifyDigest(target *runtime.Digest, d godigest.Digest, normalisation string) error {
 	if target == nil {
 		return fmt.Errorf("target digest is nil")
 	}
-	if target.Value != d.Encoded() {
+	complete := target.HashAlgorithm != "" && target.NormalisationAlgorithm != "" && target.Value != ""
+	if target.NormalisationAlgorithm != "" && target.NormalisationAlgorithm != normalisation &&
+		(normalisation != ociArtifactDigestV1 || target.NormalisationAlgorithm != genericBlobDigestV1) {
+		return fmt.Errorf("normalisation algorithm mismatch: expected %s, got %s", normalisation, target.NormalisationAlgorithm)
+	}
+	if target.Value != "" && target.Value != d.Encoded() {
 		return fmt.Errorf("digest value mismatch: expected %s, got %s", target.Value, d.Encoded())
 	}
 	algo := algorithmName(d.Algorithm())
 	if algo == "" {
 		return fmt.Errorf("unknown digest algorithm: %s", d.Algorithm())
 	}
-	if target.HashAlgorithm != algo {
+	if target.HashAlgorithm != "" && target.HashAlgorithm != algo &&
+		(complete || !strings.EqualFold(strings.ReplaceAll(target.HashAlgorithm, "-", ""), strings.ReplaceAll(algo, "-", ""))) {
 		return fmt.Errorf("hash algorithm mismatch: expected %s, got %s", target.HashAlgorithm, algo)
+	}
+	if !complete {
+		return applyDigest(target, d, normalisation)
 	}
 	return nil
 }

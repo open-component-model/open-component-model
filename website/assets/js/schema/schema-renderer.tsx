@@ -1,9 +1,10 @@
-import {render} from "preact";
-import type {ComponentChildren} from "preact";
-import {useState, useEffect} from "preact/hooks";
-import {jsonSchemaToModel} from "./json-schema-converter.ts";
-import {crdYamlToModels, isYamlUrl} from "./crd-yaml-converter.ts";
-import type {SchemaField as SchemaFieldType, SchemaModel as SchemaModelType, FieldVariant as FieldVariantType} from "./schema-model.types.ts";
+import { render } from "preact";
+import type { ComponentChildren } from "preact";
+import { useState, useEffect } from "preact/hooks";
+import { jsonSchemaToModel } from "./json-schema-converter.ts";
+import { crdYamlToModels, isYamlUrl } from "./crd-yaml-converter.ts";
+import { parseDocText } from "./doc-text.ts";
+import type { SchemaField as SchemaFieldType, SchemaModel as SchemaModelType, FieldVariant as FieldVariantType } from "./schema-model.types.ts";
 
 // --- Helpers -----------------------------------------------------------------
 
@@ -11,7 +12,7 @@ const TYPE_CLASSES: Record<string, string> = {
     string: "sr-type--string",
     integer: "sr-type--number",
     number: "sr-type--number",
-    boolean: "sr-type--boolean",
+    boolean: "sr-type--boolean"
 };
 
 function typeClass(type: string): string {
@@ -28,11 +29,36 @@ function slugify(text: string): string {
 
 // --- Components --------------------------------------------------------------
 
-function SchemaHeader({meta}: {meta: SchemaModelType["meta"]}) {
+function DocText({ text, className }: { text: string; className?: string }) {
+    return (
+        <div className={className ? `sr-doc ${className}` : "sr-doc"}>
+            {parseDocText(text).map((block, i) => {
+                switch (block.kind) {
+                    case "code":
+                        return <pre key={i}><code>{block.text}</code></pre>;
+                    case "heading":
+                        return <p key={i} className="sr-doc__heading">{block.text}</p>;
+                    case "list": {
+                        const items = block.items.map((paras, j) => (
+                            <li key={j}>
+                                {paras.length === 1 ? paras[0] : paras.map((p, k) => <p key={k}>{p}</p>)}
+                            </li>
+                        ));
+                        return block.ordered ? <ol key={i}>{items}</ol> : <ul key={i}>{items}</ul>;
+                    }
+                    default:
+                        return <p key={i}>{block.text}</p>;
+                }
+            })}
+        </div>
+    );
+}
+
+function SchemaHeader({ meta }: { meta: SchemaModelType["meta"] }) {
     const hasGrid = meta.apiVersions?.length > 0 || meta.kind;
     return (
         <div className="sr-header">
-            {meta.description && <p className="sr-header__desc">{meta.description}</p>}
+            {meta.description && <DocText className="sr-header__desc" text={meta.description}/>}
             {hasGrid && (
                 <div className="sr-header__grid">
                     {meta.apiVersions?.length > 0 && (
@@ -55,7 +81,7 @@ function SchemaHeader({meta}: {meta: SchemaModelType["meta"]}) {
     );
 }
 
-function FieldRow({field, depth = 0, parentPath = ""}: {field: SchemaFieldType; depth?: number; parentPath?: string}) {
+function FieldRow({ field, depth = 0, parentPath = "" }: { field: SchemaFieldType; depth?: number; parentPath?: string }) {
     const [expanded, setExpanded] = useState(depth < 1);
     const hasNested = (field.properties?.length || 0) > 0;
     const hasVariants = (field.variants?.length || 0) > 0;
@@ -63,7 +89,7 @@ function FieldRow({field, depth = 0, parentPath = ""}: {field: SchemaFieldType; 
     const fieldPath = parentPath ? `${parentPath}-${slugify(field.name)}` : slugify(field.name);
 
     const descContent = field.description
-        ? <span>{field.description}</span>
+        ? <DocText text={field.description}/>
         : <span className="sr-no-desc">No description</span>;
 
     return (
@@ -121,7 +147,7 @@ function FieldRow({field, depth = 0, parentPath = ""}: {field: SchemaFieldType; 
     );
 }
 
-function VariantRows({variants, depth, parentPath = ""}: {variants: FieldVariantType[]; depth: number; parentPath?: string}) {
+function VariantRows({ variants, depth, parentPath = "" }: { variants: FieldVariantType[]; depth: number; parentPath?: string }) {
     const [active, setActive] = useState(0);
     const variant = variants[active];
 
@@ -143,7 +169,7 @@ function VariantRows({variants, depth, parentPath = ""}: {variants: FieldVariant
             {variant.description && (
                 <tr className="sr-variant-desc-row">
                     <td colSpan={3} className={`sr-variant-desc sr-depth-${Math.min(depth, 8)}`}>
-                        {variant.description}
+                        <DocText text={variant.description}/>
                     </td>
                 </tr>
             )}
@@ -154,14 +180,14 @@ function VariantRows({variants, depth, parentPath = ""}: {variants: FieldVariant
     );
 }
 
-function FieldTable({title, description, fields, footer}: {title: string; description: string; fields: SchemaFieldType[]; footer?: ComponentChildren}) {
+function FieldTable({ title, description, fields, footer }: { title: string; description: string; fields: SchemaFieldType[]; footer?: ComponentChildren }) {
     if (!fields?.length) {
         return null;
     }
     return (
         <div className="sr-section">
             <h3 id={slugify(title)}>{title}<a className="sr-anchor" href={`#${slugify(title)}`}>#</a></h3>
-            {description && <p className="sr-section__desc">{description}</p>}
+            {description && <DocText className="sr-section__desc" text={description}/>}
             <div className="sr-table-wrap">
                 <table className="sr-table">
                     <thead>
@@ -185,11 +211,11 @@ function fieldsHaveDeprecated(fields: SchemaFieldType[] | null): boolean {
     return !!fields?.some((field) =>
         field.deprecatedConstValues.length > 0 ||
         fieldsHaveDeprecated(field.properties) ||
-        !!field.variants?.some((variant) => fieldsHaveDeprecated(variant.properties)),
+        !!field.variants?.some((variant) => fieldsHaveDeprecated(variant.properties))
     );
 }
 
-function SchemaView({model, schemaUrl}: {model: SchemaModelType; schemaUrl: string}) {
+function SchemaView({ model, schemaUrl }: { model: SchemaModelType; schemaUrl: string }) {
     const hasDeprecated = model.sections.some((section) => fieldsHaveDeprecated(section.fields));
     // Render the footer inside the last populated section so it sits directly below
     // the table, rather than after the section's (shared, large) bottom margin.
@@ -232,7 +258,7 @@ function parseResponse(text: string, url: string): SchemaModelType[] {
     return [jsonSchemaToModel(JSON.parse(text))];
 }
 
-function SchemaRenderer({schemaUrl}: {schemaUrl: string}) {
+function SchemaRenderer({ schemaUrl }: { schemaUrl: string }) {
     const [state, setState] = useState<"loading" | "done" | "error">("loading");
     const [models, setModels] = useState<SchemaModelType[]>([]);
     const [error, setError] = useState<string | null>(null);
@@ -251,7 +277,7 @@ function SchemaRenderer({schemaUrl}: {schemaUrl: string}) {
         setModels([]);
         setError(null);
 
-        fetch(schemaUrl, {signal: controller.signal})
+        fetch(schemaUrl, { signal: controller.signal })
             .then((res) => {
                 if (!res.ok) {
                     throw new Error(`HTTP ${res.status}`);

@@ -1,8 +1,10 @@
 ---
 title: Resource
-description: "API reference for the Resource custom resource (delivery.ocm.software/v1alpha1)"
+description: "API reference for the Resource custom resource (delivery.ocm.software/v1alpha1): spec, localization rules, status, and condition types."
 weight: 3
 toc: false
+aliases:
+  - /docs/reference/kubernetes-api/resource/
 ---
 
 A **Resource** represents a specific OCM resource (artifact) within a component version.

@@ -43,6 +43,7 @@ func TestRegisterBlobTransformer(t *testing.T) {
 	r.NoError(err)
 	// Validate registered types
 	content, err := json.Marshal(rawPluginSpec)
+	r.NoError(err)
 	r.Contains(string(content), "blobTransformer")
 
 	handlers := builder.GetHandlers()

@@ -31,7 +31,7 @@ bindings/go/kubernetes/controller/
 ├── internal/
 │   ├── controller/                      # Reconcilers (one per CRD above)
 │   ├── ocm/                             # Base reconciler, shared OCM utilities
-│   └── resolution/                      # Component resolution worker pool + cache
+│   └── resolution/                      # Component version resolution + verification
 ├── chart/                               # Helm chart
 └── hack/                                # Generation scripts (CRD/RBAC)
 ```
@@ -45,9 +45,8 @@ The controller uses the same OCM [plugin system](https://ocm.software/docs/conce
 startup, `cmd/main.go` registers plugins for OCI component repositories, RSA signing, OCI credentials, resource
 fetching, digest processing, and blob transformation. These plugins handle all communication with OCM repositories.
 
-Component descriptor resolution runs through a worker pool with an in-memory LRU cache
-(`internal/resolution/workerpool/`). The worker pool is added as a controller-runtime `Runnable` so the manager handles
-its lifecycle.
+Component descriptor resolution runs synchronously inside the reconcile loop through `internal/resolution/`, which
+also verifies signatures and reference digests.
 
 ## CRD and Code Generation
 

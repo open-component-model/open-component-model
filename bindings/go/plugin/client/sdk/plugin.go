@@ -178,10 +178,10 @@ func (p *Plugin) listen(ctx context.Context) error {
 		},
 	}
 
-	// start idle checker.
-	go p.startIdleChecker(ctx)
-
+	// Assign before starting the idle checker: it reads p.server on timeout,
+	// and the go statement is what orders this write before that read.
 	p.server = server
+	go p.startIdleChecker(ctx)
 
 	// output the location before starting the server
 	var schemedLocation string

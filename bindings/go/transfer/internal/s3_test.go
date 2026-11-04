@@ -71,6 +71,11 @@ func TestProcessS3(t *testing.T) {
 	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, addTransform.Type)
 	assert.Contains(t, addTransform.ID, "Add")
 
+	// referenceName is an OCI-only legacy field; an s3 resource must not carry it.
+	addedResource := addTransform.Spec.Data["resource"].(map[string]any)
+	_, hasReferenceName := addedResource["access"].(map[string]any)["referenceName"]
+	assert.False(t, hasReferenceName)
+
 	// The resource's tracked transformation is the add (upload) node.
 	assert.Equal(t, addTransform.ID, resourceTransformIDs[0])
 }

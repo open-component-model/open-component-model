@@ -147,7 +147,7 @@ func TestPublicKeyFromCredentials(t *testing.T) {
 				return
 			}
 			require.NotNil(t, got)
-			assert.Equal(t, key.PublicKey.N, got.PublicKey.N)
+			assert.Equal(t, key.N, got.PublicKey.N)
 		})
 	}
 }

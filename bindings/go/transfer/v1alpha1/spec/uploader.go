@@ -95,17 +95,26 @@ func (u *HTTPUploaderConfig) Validate() error {
 	if u == nil {
 		return nil
 	}
-	if !u.Type.IsEmpty() {
-		if u.Type.Name != HTTPUploaderConfigType || (u.Type.Version != "" && u.Type.Version != Version) {
-			return fmt.Errorf("invalid type %q (must be %q or %q)",
-				u.Type, HTTPUploaderConfigType, runtime.NewVersionedType(HTTPUploaderConfigType, Version))
-		}
+	if err := validateUploaderType(u.Type, HTTPUploaderConfigType); err != nil {
+		return err
 	}
 	if strings.TrimSpace(u.Match) == "" {
 		return fmt.Errorf("match is required")
 	}
 	if u.TargetURL == "" {
 		return fmt.Errorf("targetURL is required")
+	}
+	return nil
+}
+
+// validateUploaderType rejects a non-empty typ that is not name, unversioned or at
+// [Version].
+func validateUploaderType(typ runtime.Type, name string) error {
+	if typ.IsEmpty() {
+		return nil
+	}
+	if typ.Name != name || (typ.Version != "" && typ.Version != Version) {
+		return fmt.Errorf("invalid type %q (must be %q or %q)", typ, name, runtime.NewVersionedType(name, Version))
 	}
 	return nil
 }

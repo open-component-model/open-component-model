@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -17,7 +16,7 @@ import (
 
 func TestCosignDownloadURL(t *testing.T) {
 	t.Parallel()
-	base := "https://github.com/sigstore/cosign/releases/download/" + cosignVersion + "/"
+	base := "https://github.com/open-component-model/cosign/releases/download/" + cosignVersion + "/"
 	tests := []struct{ name, version, goos, goarch, want string }{
 		{"linux amd64", cosignVersion, "linux", "amd64", base + "cosign-linux-amd64"},
 		{"darwin arm64", cosignVersion, "darwin", "arm64", base + "cosign-darwin-arm64"},
@@ -72,12 +71,11 @@ func TestParseChecksum(t *testing.T) {
 	})
 }
 
-func TestCosignVersion_IsSet(t *testing.T) {
+func TestCosignPins_AreSet(t *testing.T) {
 	t.Parallel()
-	semverRE := regexp.MustCompile(`^v\d+\.\d+\.\d+$`)
-	if !semverRE.MatchString(cosignVersion) {
-		t.Fatalf("cosignVersion %q does not match required format vMAJOR.MINOR.PATCH", cosignVersion)
-	}
+	r := require.New(t)
+	r.Regexp(`^v\d+\.\d+\.\d+\+ocm\.\d+$`, cosignVersion, "COSIGN_VERSION must be an OCM cosign release vMAJOR.MINOR.PATCH+ocm.N")
+	r.Regexp(`^[0-9a-f]{64}$`, cosignChecksumsSHA256, "COSIGN_CHECKSUMS_SHA256 must be a lowercase hex SHA256")
 }
 
 func TestDownloadAndVerify(t *testing.T) {
@@ -157,25 +155,34 @@ func TestVerifyFileChecksum(t *testing.T) {
 
 func TestFetchExpectedChecksumWith(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	checksums := []byte("deadbeef12345678  cosign-linux-amd64\n")
+	sum := sha256.Sum256(checksums)
+	pinned := hex.EncodeToString(sum[:])
+	serve := func(t *testing.T, status int, body []byte) *http.Client {
+		t.Helper()
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(status)
+			_, _ = w.Write(body)
+		}))
+		t.Cleanup(srv.Close)
+		return redirectAllClient(srv)
+	}
 	t.Run("non-200", func(t *testing.T) {
 		t.Parallel()
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.WriteHeader(http.StatusForbidden)
-		}))
-		t.Cleanup(srv.Close)
-		_, err := fetchExpectedChecksumWith(ctx, redirectAllClient(srv), "cosign-linux-amd64")
+		_, err := fetchExpectedChecksumWith(t.Context(), serve(t, http.StatusForbidden, nil), "cosign-linux-amd64", pinned)
 		require.ErrorContains(t, err, "HTTP 403")
 	})
-	t.Run("success", func(t *testing.T) {
+	t.Run("checksums file matches pin", func(t *testing.T) {
 		t.Parallel()
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("deadbeef12345678  cosign-linux-amd64\n"))
-		}))
-		t.Cleanup(srv.Close)
-		hash, err := fetchExpectedChecksumWith(ctx, redirectAllClient(srv), "cosign-linux-amd64")
+		hash, err := fetchExpectedChecksumWith(t.Context(), serve(t, http.StatusOK, checksums), "cosign-linux-amd64", pinned)
 		require.NoError(t, err)
 		require.Equal(t, "deadbeef12345678", hash)
+	})
+	t.Run("replaced checksums file is rejected", func(t *testing.T) {
+		t.Parallel()
+		tampered := []byte("0123456789abcdef  cosign-linux-amd64\n")
+		_, err := fetchExpectedChecksumWith(t.Context(), serve(t, http.StatusOK, tampered), "cosign-linux-amd64", pinned)
+		require.ErrorContains(t, err, "checksums file mismatch")
 	})
 }
 

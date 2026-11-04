@@ -24,10 +24,8 @@ func (t TestPluginType) GetType() runtime.Type {
 	}
 }
 
-func (t TestPluginType) SetType(t2 runtime.Type) {
-	t.Name = t2.Name
-	t.Version = t2.Version
-}
+// SetType is a no-op: these fixtures are read-only and only implement it to satisfy runtime.Typed.
+func (t TestPluginType) SetType(_ runtime.Type) {}
 
 func (t TestPluginType) DeepCopyTyped() runtime.Typed {
 	return &TestPluginType{
@@ -51,10 +49,8 @@ func (t TestPluginWrongType) GetType() runtime.Type {
 	}
 }
 
-func (t TestPluginWrongType) SetType(t2 runtime.Type) {
-	t.Name = t2.Name
-	t.Version = t2.Version
-}
+// SetType is a no-op: these fixtures are read-only and only implement it to satisfy runtime.Typed.
+func (t TestPluginWrongType) SetType(_ runtime.Type) {}
 
 func (t TestPluginWrongType) DeepCopyTyped() runtime.Typed {
 	return &TestPluginWrongType{

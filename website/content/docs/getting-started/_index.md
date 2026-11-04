@@ -1,6 +1,6 @@
 ---
 title: "Getting Started"
-description: "Learn how to use OCM through hands-on tutorials that guide you step-by-step."
+description: "Learn how to use OCM through hands-on guides: install the CLI, create a component version, and deploy a Helm chart step by step."
 icon: "🚀"
 weight: 20
 sidebar:
@@ -34,5 +34,5 @@ These tutorials follow the **learning-oriented** approach from the [Diataxis fra
 Every step is designed to work exactly as written, producing visible, verifiable results.
 If you're new to OCM, start with the first tutorial and work through them in order.
 
-For task-specific guidance after completing these tutorials, explore the [How-To Guides]({{< relref "docs/how-to/_index.md" >}}) section.
+For task-specific guidance after completing these tutorials, explore the [Guides]({{< relref "docs/guides/_index.md" >}}) section.
 To understand OCM concepts in depth, visit the [Concepts]({{< relref "docs/concepts/_index.md" >}}) section.

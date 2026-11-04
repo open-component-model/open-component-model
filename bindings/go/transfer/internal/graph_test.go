@@ -1,12 +1,20 @@
 package internal
 
 import (
+	"bytes"
+	"context"
+	"crypto"
+	"encoding/json"
+	"fmt"
+	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	v4alpha1 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	githubv1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
@@ -20,6 +28,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	"ocm.software/open-component-model/bindings/go/signing"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 )
@@ -139,6 +148,20 @@ func ociImageResource(name, version, imageRef string) descriptor.Resource {
 	}
 }
 
+func relativeOCIReferenceResource(name, version, reference string) descriptor.Resource {
+	return descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{
+			ObjectMeta: descriptor.ObjectMeta{Name: name, Version: version},
+		},
+		Type:     "ociImage",
+		Relation: descriptor.LocalRelation,
+		Access: &ociv1.RelativeOCIReference{
+			Type:      runtime.NewUnversionedType(ociv1.RelativeOCIReferenceType),
+			Reference: reference,
+		},
+	}
+}
+
 func helmResource(name, version, helmRepo, chart string) descriptor.Resource {
 	return descriptor.Resource{
 		ElementMeta: descriptor.ElementMeta{
@@ -199,12 +222,42 @@ func TestBuildGraphDefinition_LocalBlobResource(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, nil)
 	require.NoError(t, err)
 
-	assert.Len(t, tgd.Transformations, 4)
-	assert.Equal(t, ociv1alpha1.OCIGetLocalResourceV1alpha1, tgd.Transformations[0].Type)
-	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, tgd.Transformations[1].Type)
-	assert.Contains(t, tgd.Transformations[2].ID, "Upload")
-	assert.Equal(t, FileCleanupVersionedType, tgd.Transformations[3].Type)
-	assert.Equal(t, "fileBufferCleanup", tgd.Transformations[3].ID)
+	// A local blob is streamed by one fused node: no file buffer and no cleanup node.
+	require.Len(t, tgd.Transformations, 2)
+	assert.Equal(t, ociv1alpha1.TransferOCILocalBlobToOCILocalBlobV1alpha1, tgd.Transformations[0].Type)
+	assert.Contains(t, tgd.Transformations[1].ID, "Upload")
+	assert.Equal(t, fmt.Sprintf("${%s.output.resource}", tgd.Transformations[0].ID),
+		tgd.Transformations[1].Spec.Data["descriptor"].(map[string]any)["component"].(map[string]any)["resources"].([]any)[0])
+}
+
+// TestBuildGraphDefinition_RelativeOCIReference_CopiesAsLocalBlob proves the baseline copy
+// of a relativeOciReference re-stamps the target access to localBlob (the relative type does
+// not leak) and preserves the registry-relative reference as the referenceName so the
+// artifact can be re-materialised as an OCI image later.
+func TestBuildGraphDefinition_RelativeOCIReference_CopiesAsLocalBlob(t *testing.T) {
+	r := require.New(t)
+	sourceRepo := testOCIRepo("ghcr.io/source")
+	targetRepo := testOCIRepo("ghcr.io/target")
+	desc := testDescriptor("ocm.software/test", "1.0.0",
+		[]descriptor.Resource{relativeOCIReferenceResource("my-relative", "1.0.0", "ocm/value:v2.0")}, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
+	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
+
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, nil)
+	r.NoError(err)
+
+	r.Equal(ociv1alpha1.OCIGetLocalResourceV1alpha1, tgd.Transformations[0].Type)
+	add := tgd.Transformations[1]
+	r.Equal(ociv1alpha1.OCIAddLocalResourceV1alpha1, add.Type)
+
+	access := add.Spec.Data["resource"].(map[string]any)["access"].(map[string]any)
+	typeStr := access["type"].(string)
+	r.Contains(typeStr, descriptorv2.LocalBlobAccessType, "target access must be a localBlob")
+	r.NotContains(typeStr, ociv1.RelativeOCIReferenceType, "relative type must not leak into the target access")
+	r.Equal("ocm/value:v2.0", access["referenceName"],
+		"the relative reference must be preserved verbatim as the local blob referenceName")
+	_, hasReference := access["reference"]
+	r.False(hasReference, "the relativeOciReference 'reference' field must not leak into the target access")
 }
 
 func TestBuildGraphDefinition_OCIImageSkippedInDefaultMode(t *testing.T) {
@@ -233,8 +286,9 @@ func TestBuildGraphDefinition_OCIImageWithLocalBlobUploader(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, withLocalBlobUploader())
 	require.NoError(t, err)
 
-	assert.Len(t, tgd.Transformations, 4)
-	assert.Equal(t, ociv1alpha1.GetOCIArtifactV1alpha1, tgd.Transformations[0].Type)
+	require.Len(t, tgd.Transformations, 2)
+	assert.Equal(t, ociv1alpha1.TransferOCIArtifactToOCILocalBlobV1alpha1, tgd.Transformations[0].Type)
+	assert.Nil(t, findCleanupTransformation(tgd), "a streamed OCI artifact buffers no file, so no FileCleanup node")
 }
 
 func TestBuildGraphDefinition_OCIImage_OCIUploader(t *testing.T) {
@@ -320,10 +374,9 @@ func TestBuildGraphDefinition_CTFTarget(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, nil)
 	require.NoError(t, err)
 
-	assert.Len(t, tgd.Transformations, 4)
-	assert.Equal(t, ociv1alpha1.OCIGetLocalResourceV1alpha1, tgd.Transformations[0].Type)
-	assert.Equal(t, ociv1alpha1.CTFAddLocalResourceV1alpha1, tgd.Transformations[1].Type)
-	assert.Equal(t, ociv1alpha1.CTFAddComponentVersionV1alpha1, tgd.Transformations[2].Type)
+	require.Len(t, tgd.Transformations, 2)
+	assert.Equal(t, ociv1alpha1.TransferOCILocalBlobToCTFLocalBlobV1alpha1, tgd.Transformations[0].Type)
+	assert.Equal(t, ociv1alpha1.CTFAddComponentVersionV1alpha1, tgd.Transformations[1].Type)
 }
 
 func TestBuildGraphDefinition_Recursive(t *testing.T) {
@@ -366,6 +419,189 @@ func TestBuildGraphDefinition_ResolverError(t *testing.T) {
 
 	_, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, nil)
 	require.Error(t, err)
+}
+
+func TestBuildGraphDefinition_PinnedRoot(t *testing.T) {
+	r := require.New(t)
+	desc := testDescriptor("ocm.software/test", "1.0.0", nil, nil)
+	resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
+	actual, err := signing.GenerateDigest(t.Context(), desc, slog.Default(), v4alpha1.Algorithm, crypto.SHA256.String())
+	r.NoError(err)
+
+	build := func(pin descriptor.Digest) error {
+		roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
+		root := roots["ocm.software/test:1.0.0"]
+		root.ExpectedDigest = &pin
+		roots["ocm.software/test:1.0.0"] = root
+		_, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, nil)
+		return err
+	}
+
+	r.NoError(build(*actual), "a root matching its pin transfers")
+	wrong := *actual
+	wrong.Value = strings.Repeat("0", len(actual.Value))
+	r.ErrorContains(build(wrong), "does not match pinned digest", "a root not matching its pin fails")
+	ociPin := *actual
+	ociPin.NormalisationAlgorithm = ""
+	r.ErrorContains(build(ociPin), "does not store component versions content-addressed", "an OCI digest pin needs a content-addressed source")
+}
+
+// gatedResolver forces one legal ordering of the concurrent graph discovery: it opens the
+// repository of slowSpec only once the descriptors of all components in after have been read.
+type gatedResolver struct {
+	*mockCVRepoResolver
+	slowSpec runtime.Typed
+	read     map[string]chan struct{}
+	once     map[string]*sync.Once
+}
+
+func newGatedResolver(base *mockCVRepoResolver, slowSpec runtime.Typed, after ...string) *gatedResolver {
+	r := &gatedResolver{
+		mockCVRepoResolver: base,
+		slowSpec:           slowSpec,
+		read:               make(map[string]chan struct{}, len(after)),
+		once:               make(map[string]*sync.Once, len(after)),
+	}
+	for _, component := range after {
+		r.read[component] = make(chan struct{})
+		r.once[component] = &sync.Once{}
+	}
+	return r
+}
+
+func (r *gatedResolver) GetComponentVersionRepositoryForSpecification(ctx context.Context, spec runtime.Typed) (repository.ComponentVersionRepository, error) {
+	repo, err := r.mockCVRepoResolver.GetComponentVersionRepositoryForSpecification(ctx, spec)
+	if err != nil {
+		return nil, err
+	}
+	if spec == r.slowSpec {
+		for _, read := range r.read {
+			select {
+			case <-read:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		return repo, nil
+	}
+	return &signallingRepo{ComponentVersionRepository: repo, resolver: r}, nil
+}
+
+// signallingRepo reports to its gatedResolver which descriptors have been read.
+type signallingRepo struct {
+	repository.ComponentVersionRepository
+	resolver *gatedResolver
+}
+
+func (s *signallingRepo) GetComponentVersion(ctx context.Context, component, version string) (*descriptor.Descriptor, error) {
+	desc, err := s.ComponentVersionRepository.GetComponentVersion(ctx, component, version)
+	if once, ok := s.resolver.once[component]; ok {
+		once.Do(func() { close(s.resolver.read[component]) })
+	}
+	return desc, err
+}
+
+// A pinned root is verified against its pin even when another root references it with a
+// digest of its own: the reference digest must not replace the pin.
+func TestBuildGraphDefinition_PinnedRootReferencedByOtherRoot(t *testing.T) {
+	r := require.New(t)
+	child := testDescriptor("ocm.software/child", "1.0.0", nil, nil)
+	childDigest, err := signing.GenerateDigest(t.Context(), child, slog.Default(), v4alpha1.Algorithm, crypto.SHA256.String())
+	r.NoError(err)
+	parent := testDescriptor("ocm.software/parent", "1.0.0", nil, []descriptor.Reference{{
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "child", Version: "1.0.0"}},
+		Component:   "ocm.software/child",
+		Digest:      *childDigest,
+	}})
+
+	childSpec := testOCIRepo("ghcr.io/source")
+	resolver := newGatedResolver(testMultiResolver(map[string]struct {
+		spec runtime.Typed
+		desc *descriptor.Descriptor
+	}{
+		"ocm.software/parent:1.0.0": {spec: testOCIRepo("ghcr.io/source"), desc: parent},
+		"ocm.software/child:1.0.0":  {spec: childSpec, desc: child},
+	}), childSpec, "ocm.software/parent")
+	wrongPin := *childDigest
+	wrongPin.Value = strings.Repeat("0", len(childDigest.Value))
+
+	target := testOCIRepo("ghcr.io/target")
+	roots := map[string]TransferRoot{
+		"ocm.software/parent:1.0.0": {RootComponentKey: "ocm.software/parent:1.0.0", Targets: []runtime.Typed{target}, SourceResolver: resolver},
+		"ocm.software/child:1.0.0":  {RootComponentKey: "ocm.software/child:1.0.0", Targets: []runtime.Typed{target}, SourceResolver: resolver, ExpectedDigest: &wrongPin},
+	}
+	_, err = BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{Recursive: transferv1alpha1.RecursiveInfinite}, nil)
+	r.ErrorContains(err, "does not match pinned digest", "the child root is checked against its pin")
+}
+
+// Parents may reference the same child with digests that are spelled differently but are all
+// valid for it (another hash, the legacy normalisation alias). Each is verified against the
+// child; only a digest that does not match fails, and it cannot be replaced by a later parent.
+// The outcome must not depend on whether the child is resolved before or after a parent's
+// references are discovered.
+func TestBuildGraphDefinition_ReferenceDigestsOfSeveralParents(t *testing.T) {
+	r := require.New(t)
+	child := testDescriptor("ocm.software/child", "1.0.0", nil, nil)
+	sha256Digest, err := signing.GenerateDigest(t.Context(), child, slog.Default(), v4alpha1.Algorithm, crypto.SHA256.String())
+	r.NoError(err)
+	sha512Digest, err := signing.GenerateDigest(t.Context(), child, slog.Default(), v4alpha1.Algorithm, crypto.SHA512.String())
+	r.NoError(err)
+	legacyDigest := *sha256Digest
+	legacyDigest.NormalisationAlgorithm = signing.LegacyNormalisationAlgo
+	wrongDigest := *sha256Digest
+	wrongDigest.Value = strings.Repeat("0", len(sha256Digest.Value))
+
+	tests := []struct {
+		name    string
+		a, b    descriptor.Digest
+		wantErr string
+	}{
+		{name: "SHA-256 and SHA-512", a: *sha256Digest, b: *sha512Digest},
+		{name: "legacy normalisation alias", a: legacyDigest, b: *sha256Digest},
+		{name: "one parent expects another child", a: *sha256Digest, b: wrongDigest, wantErr: "digest mismatch"},
+	}
+	for _, tc := range tests {
+		// Open the child only after both parents were read, or parent b only after the child was read.
+		for slow, after := range map[string][]string{
+			"child": {"ocm.software/a", "ocm.software/b"},
+			"b":     {"ocm.software/a", "ocm.software/child"},
+		} {
+			t.Run(tc.name+"/"+slow+" resolved last", func(t *testing.T) {
+				r := require.New(t)
+				parent := func(name string, dig descriptor.Digest) *descriptor.Descriptor {
+					return testDescriptor(name, "1.0.0", nil, []descriptor.Reference{{
+						ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "child", Version: "1.0.0"}},
+						Component:   "ocm.software/child",
+						Digest:      dig,
+					}})
+				}
+				specs := map[string]runtime.Typed{
+					"a":     testOCIRepo("ghcr.io/source"),
+					"b":     testOCIRepo("ghcr.io/source"),
+					"child": testOCIRepo("ghcr.io/source"),
+				}
+				resolver := newGatedResolver(testMultiResolver(map[string]struct {
+					spec runtime.Typed
+					desc *descriptor.Descriptor
+				}{
+					"ocm.software/a:1.0.0":     {spec: specs["a"], desc: parent("ocm.software/a", tc.a)},
+					"ocm.software/b:1.0.0":     {spec: specs["b"], desc: parent("ocm.software/b", tc.b)},
+					"ocm.software/child:1.0.0": {spec: specs["child"], desc: child},
+				}), specs[slow], after...)
+				target := testOCIRepo("ghcr.io/target")
+				roots := map[string]TransferRoot{
+					"ocm.software/a:1.0.0": {RootComponentKey: "ocm.software/a:1.0.0", Targets: []runtime.Typed{target}, SourceResolver: resolver},
+					"ocm.software/b:1.0.0": {RootComponentKey: "ocm.software/b:1.0.0", Targets: []runtime.Typed{target}, SourceResolver: resolver},
+				}
+				_, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{Recursive: transferv1alpha1.RecursiveInfinite}, nil)
+				if tc.wantErr != "" {
+					r.ErrorContains(err, tc.wantErr)
+					return
+				}
+				r.NoError(err)
+			})
+		}
+	}
 }
 
 func TestBuildGraphDefinition_MultiTarget(t *testing.T) {
@@ -446,8 +682,8 @@ func TestBuildGraphDefinition_MultiTargetWithResources(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, nil)
 	require.NoError(t, err)
 
-	// With 1 resource and 2 targets: each target needs get + add + upload = 3, total 6, plus 1 cleanup = 7
-	assert.Len(t, tgd.Transformations, 7)
+	// With 1 resource and 2 targets: each target needs a streamed transfer + upload = 2, total 4.
+	assert.Len(t, tgd.Transformations, 4)
 }
 
 func TestBuildGraphDefinition_RecursiveTargetPropagation(t *testing.T) {
@@ -560,7 +796,7 @@ func cleanupFileExpressions(t *testing.T, cleanup *transformv1alpha1.GenericTran
 	return exprs
 }
 
-func TestBuildGraphDefinition_CleanupReferencesAddSpec_LocalBlob(t *testing.T) {
+func TestBuildGraphDefinition_NoCleanupForStreamedLocalBlob(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
 	desc := testDescriptor("ocm.software/test", "1.0.0",
@@ -571,24 +807,14 @@ func TestBuildGraphDefinition_CleanupReferencesAddSpec_LocalBlob(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, nil)
 	require.NoError(t, err)
 
-	cleanup := findCleanupTransformation(tgd)
-	require.NotNil(t, cleanup, "cleanup node should be present when resources exist")
-
-	exprs := cleanupFileExpressions(t, cleanup)
-	require.Len(t, exprs, 1)
-
-	// The expression should reference the Add transformation's spec.file,
-	// not the Get transformation's output.file.
-	assert.Contains(t, exprs[0], "Add")
-	assert.Contains(t, exprs[0], ".spec.file")
-	assert.NotContains(t, exprs[0], ".output.")
+	assert.Nil(t, findCleanupTransformation(tgd), "a streamed local blob buffers no file, so no FileCleanup node")
 }
 
-func TestBuildGraphDefinition_CleanupReferencesAddSpec_OCIArtifact(t *testing.T) {
+func TestBuildGraphDefinition_CleanupReferencesAddSpec_Wget(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
 	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")}, nil)
+		[]descriptor.Resource{wgetResource("blob", "1.0.0", "https://source.example/blob.tar")}, nil)
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -692,7 +918,7 @@ func TestBuildGraphDefinition_CleanupMultiTarget_AggregatesAllRefs(t *testing.T)
 	target2 := testOCIRepo("ghcr.io/target2")
 
 	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{localBlobResource("my-resource", "1.0.0")}, nil)
+		[]descriptor.Resource{wgetResource("blob", "1.0.0", "https://source.example/blob.tar")}, nil)
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 
 	roots := map[string]TransferRoot{
@@ -703,7 +929,7 @@ func TestBuildGraphDefinition_CleanupMultiTarget_AggregatesAllRefs(t *testing.T)
 		},
 	}
 
-	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, nil)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, withLocalBlobUploader())
 	require.NoError(t, err)
 
 	cleanup := findCleanupTransformation(tgd)
@@ -888,13 +1114,38 @@ func TestBuildDescriptorSpec_EmptyOptionalFields(t *testing.T) {
 	componentMap, ok := specMap["component"].(map[string]any)
 	require.True(t, ok)
 
-	for _, field := range []string{"labels", "repositoryContexts", "sources", "componentReferences"} {
-		if val, present := componentMap[field]; present {
-			assert.Nilf(t, val, "component[%q] must be nil for empty slice, got %v", field, val)
-		}
+	if val, present := componentMap["labels"]; present {
+		assert.Nilf(t, val, "labels must be nil for empty slice, got %v", val)
+	}
+	// Serialized without omitempty, so they must stay [] and not turn into null (#3885).
+	for _, field := range []string{"repositoryContexts", "sources", "componentReferences"} {
+		assert.Equalf(t, []any{}, componentMap[field], "component[%q] must be a literal empty list", field)
 	}
 	if val, present := specMap["signatures"]; present {
 		assert.Nilf(t, val, "signatures must be absent for empty slice, got %v", val)
+	}
+}
+
+func TestBuildDescriptorSpec_NilListFieldsStayNil(t *testing.T) {
+	r := require.New(t)
+	v2desc := &descriptorv2.Descriptor{
+		Component: descriptorv2.Component{
+			ComponentMeta: descriptorv2.ComponentMeta{
+				ObjectMeta: descriptorv2.ObjectMeta{Name: "ocm.software/test", Version: "1.0.0"},
+			},
+		},
+	}
+
+	spec := buildDescriptorSpec(v2desc, "envID", map[int]string{0: "someAddTransformID"})
+
+	specMap, ok := spec.(map[string]any)
+	r.True(ok)
+	componentMap, ok := specMap["component"].(map[string]any)
+	r.True(ok)
+	for _, field := range []string{"repositoryContexts", "sources", "componentReferences"} {
+		val, present := componentMap[field]
+		r.Truef(present, "component[%q] must be set", field)
+		r.Nilf(val, "component[%q] must stay nil for a nil slice", field)
 	}
 }
 
@@ -925,10 +1176,9 @@ func TestBuildGraphDefinition_DockerManifestLocalBlob_OCIUploader(t *testing.T) 
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, ociUploaders())
 	require.NoError(t, err)
 
-	addOCIType := runtime.NewVersionedType(ociv1alpha1.AddOCIArtifactType, ociv1alpha1.Version)
-	require.Len(t, tgd.Transformations, 4)
-	assert.Equal(t, ociv1alpha1.OCIGetLocalResourceV1alpha1, tgd.Transformations[0].Type)
-	assert.Equal(t, addOCIType, tgd.Transformations[1].Type, "Docker manifest LocalBlob should be uploaded as OCI artifact")
+	require.Len(t, tgd.Transformations, 2)
+	assert.Equal(t, ociv1alpha1.TransferOCILocalBlobToOCIArtifactV1alpha1, tgd.Transformations[0].Type,
+		"Docker manifest LocalBlob should be streamed as OCI artifact")
 }
 
 func TestBuildGraphDefinition_DockerManifestLocalBlob_FallsBackToLocalBlobWithoutOCIUploader(t *testing.T) {
@@ -942,7 +1192,125 @@ func TestBuildGraphDefinition_DockerManifestLocalBlob_FallsBackToLocalBlobWithou
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, nil)
 	require.NoError(t, err)
 
-	require.Len(t, tgd.Transformations, 4)
-	assert.Equal(t, ociv1alpha1.OCIGetLocalResourceV1alpha1, tgd.Transformations[0].Type)
-	assert.Equal(t, ociv1alpha1.OCIAddLocalResourceV1alpha1, tgd.Transformations[1].Type)
+	require.Len(t, tgd.Transformations, 2)
+	assert.Equal(t, ociv1alpha1.TransferOCILocalBlobToOCILocalBlobV1alpha1, tgd.Transformations[0].Type)
+}
+
+// A transferred tree whose reference digests are not all the default must warn
+// for each such reference, so users rebuild with a current CLI; a default-only
+// tree must not.
+func TestBuildGraphDefinition_WarnsAboutNonDefaultReferenceDigests(t *testing.T) {
+	r := require.New(t)
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	const warning = "component reference digest was computed with an older normalisation algorithm"
+
+	child := testDescriptor("ocm.software/child", "1.0.0", nil, nil)
+	transfer := func(t *testing.T, normalisationAlgorithm string) {
+		t.Helper()
+		dig, err := signing.GenerateDigest(t.Context(), child, slog.New(slog.DiscardHandler), normalisationAlgorithm, crypto.SHA256.String())
+		require.NoError(t, err)
+		parent := testDescriptor("ocm.software/parent", "1.0.0", nil, []descriptor.Reference{{
+			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "child", Version: "1.0.0"}},
+			Component:   "ocm.software/child",
+			Digest:      *dig,
+		}})
+		source := testOCIRepo("ghcr.io/source")
+		resolver := testMultiResolver(map[string]struct {
+			spec runtime.Typed
+			desc *descriptor.Descriptor
+		}{
+			"ocm.software/parent:1.0.0": {spec: source, desc: parent},
+			"ocm.software/child:1.0.0":  {spec: source, desc: child},
+		})
+		roots := testTransferRoots("ocm.software/parent", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
+		_, err = BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{Recursive: transferv1alpha1.RecursiveInfinite}, nil)
+		require.NoError(t, err)
+	}
+
+	transfer(t, signing.DefaultNormalisationAlgorithm)
+	r.NotContains(logs.String(), warning, "a tree with only default reference digests must not warn")
+
+	transfer(t, v4alpha1.Algorithm)
+	r.Equal(1, strings.Count(logs.String(), warning), "a v4alpha1 reference digest must warn once")
+	r.Contains(logs.String(), "normalisationAlgorithm="+v4alpha1.Algorithm)
+}
+
+// Transfer never adds or rewrites reference digests: an existing digest is only
+// used to verify the referenced component version, a missing one stays missing
+// (and is warned about). Rewriting either would change the referencing
+// descriptor and invalidate its signature.
+func TestBuildGraphDefinition_KeepsReferenceDigests(t *testing.T) {
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	r := require.New(t)
+
+	pinned := testDescriptor("ocm.software/pinned", "1.0.0", nil, nil)
+	unpinned := testDescriptor("ocm.software/unpinned", "1.0.0", nil, nil)
+	dig, err := signing.GenerateDigest(t.Context(), pinned, slog.New(slog.DiscardHandler), v4alpha1.Algorithm, crypto.SHA256.String())
+	r.NoError(err)
+	refs := []descriptor.Reference{
+		{
+			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "pinned", Version: "1.0.0"}},
+			Component:   "ocm.software/pinned",
+			Digest:      *dig,
+		},
+		{
+			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "unpinned", Version: "1.0.0"}},
+			Component:   "ocm.software/unpinned",
+		},
+	}
+	parent := testDescriptor("ocm.software/parent", "1.0.0", nil, refs)
+	source := testOCIRepo("ghcr.io/source")
+	resolver := testMultiResolver(map[string]struct {
+		spec runtime.Typed
+		desc *descriptor.Descriptor
+	}{
+		"ocm.software/parent:1.0.0":   {spec: source, desc: parent},
+		"ocm.software/pinned:1.0.0":   {spec: source, desc: pinned},
+		"ocm.software/unpinned:1.0.0": {spec: source, desc: unpinned},
+	})
+	roots := testTransferRoots("ocm.software/parent", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
+	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{Recursive: transferv1alpha1.RecursiveInfinite}, nil)
+	r.NoError(err)
+
+	v2desc, err := descriptor.ConvertToV2(runtime.NewScheme(), parent)
+	r.NoError(err)
+	want, err := json.Marshal(v2desc.Component.References)
+	r.NoError(err)
+
+	var envID string
+	for id, data := range tgd.Environment.Data {
+		component := data.(map[string]any)["component"].(map[string]any)
+		if component["name"] == "ocm.software/parent" {
+			envID = id
+			got, err := json.Marshal(component["componentReferences"])
+			r.NoError(err)
+			r.JSONEq(string(want), string(got), "the transferred references must be the source references, digests unchanged")
+		}
+	}
+	r.NotEmpty(envID, "parent must be in the environment")
+	r.Contains(logs.String(), "normalisationAlgorithm="+v4alpha1.Algorithm, "the v4alpha1 reference digest must be warned about")
+	r.Contains(logs.String(), `reference="name=unpinned,version=1.0.0"`, "the missing reference digest must be warned about")
+
+	for _, tr := range tgd.Transformations {
+		if !strings.HasSuffix(tr.ID, "Upload") {
+			continue
+		}
+		spec := tr.Spec.Data["descriptor"]
+		if s, ok := spec.(string); ok {
+			if s == "${environment."+envID+"}" {
+				return
+			}
+			continue
+		}
+		if refs := spec.(map[string]any)["component"].(map[string]any)["componentReferences"]; refs == "${environment."+envID+".component.componentReferences}" {
+			return
+		}
+	}
+	r.Fail("the parent's upload must take its references from the environment unchanged")
 }

@@ -2,9 +2,9 @@
   # renovate: datasource=node-version depName=node
   NODE_VERSION = "26.5.0"
   # renovate: datasource=npm depName=npm
-  NPM_VERSION = "12.0.2"
+  NPM_VERSION = "12.2.0"
   # renovate: datasource=golang-version depName=go
-  GO_VERSION = "1.27.1"
+  GO_VERSION = "1.27.3"
 
 [build]
   # rebuild when paths mounted by the "main" site version change.
@@ -16,6 +16,13 @@
 [context.deploy-preview]
   command = "npm ci && npm run build -- --baseURL=$DEPLOY_PRIME_URL --buildDrafts --buildFuture"
   publish = "public"
+
+[context.deploy-preview.environment]
+  # Serve the unversioned "main" docs at the preview root instead of the
+  # released default (hugo.yaml defaultContentVersion). Hugo maps HUGO_*
+  # env vars onto config keys, so this overrides only the preview build —
+  # production keeps its pinned default version.
+  HUGO_DEFAULTCONTENTVERSION = "main"
 
 [context.production]
   command = "npm ci && npm run build"

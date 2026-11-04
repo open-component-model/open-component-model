@@ -297,7 +297,7 @@ func Test_Integration_OCIRepository_StreamingDoesNotBuffer(t *testing.T) {
 //	unknown   | unknown     | streamed: PushStreaming computes both size and
 //	          |             | digest during upload. No buffering.
 //
-//	Non-streaming stores (CTF, memory, or remote with chunking disabled) do not
+//	Non-streaming stores (memory, or remote with chunking disabled) do not
 //	implement StreamingPusher, so an unknown size or digest falls back to
 //	buffering the whole blob in memory to build the descriptor before a
 //	monolithic push. Manifests are never chunked; they use the manifests
@@ -376,7 +376,7 @@ func Test_Integration_OCIRepository_AddComponentVersion_Streaming(t *testing.T) 
 	r.NoError(err)
 	r.Equal(component, fetched.Component.Name)
 
-	blobRC, gotRes, err := repo.GetLocalResource(ctx, component, version, resource.ElementMeta.ToIdentity())
+	blobRC, gotRes, err := repo.GetLocalResource(ctx, component, version, resource.ToIdentity())
 	r.NoError(err)
 	r.NotNil(gotRes)
 	rc, err := blobRC.ReadCloser()

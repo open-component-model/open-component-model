@@ -72,7 +72,7 @@ func Test_Client(t *testing.T) {
 			}))
 			defer ts.Close()
 
-			req, err := http.NewRequest(http.MethodPost, ts.URL, bytes.NewReader([]byte("test")))
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.URL, bytes.NewReader([]byte("test")))
 			if err != nil {
 				t.Fatalf("failed to create test request: %v", err)
 			}

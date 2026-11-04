@@ -1,6 +1,7 @@
 package jsonschema_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
@@ -138,7 +139,8 @@ func TestGroupErrorValidation(t *testing.T) {
 		require.Error(t, directErr, "direct validation should fail")
 
 		// Check that this actually creates a Group error structure
-		if valErr, ok := directErr.(*jsonschema.ValidationError); ok {
+		valErr := &jsonschema.ValidationError{}
+		if errors.As(directErr, &valErr) {
 			t.Logf("Root error type: %T", valErr.ErrorKind)
 			t.Logf("Number of causes: %d", len(valErr.Causes))
 
@@ -165,7 +167,8 @@ func TestGroupErrorValidation(t *testing.T) {
 
 		multiPropErr := multiPropSchema.Validate(multiPropResource)
 		if multiPropErr != nil {
-			if valErr, ok := multiPropErr.(*jsonschema.ValidationError); ok {
+			valErr := &jsonschema.ValidationError{}
+			if errors.As(multiPropErr, &valErr) {
 				t.Logf("Multiple properties error type: %T", valErr.ErrorKind)
 				t.Logf("Multiple properties causes: %d", len(valErr.Causes))
 			}
@@ -189,7 +192,8 @@ func TestGroupErrorValidation(t *testing.T) {
 
 		allOfErr := allOfSchema.Validate(allOfResource)
 		if allOfErr != nil {
-			if valErr, ok := allOfErr.(*jsonschema.ValidationError); ok {
+			valErr := &jsonschema.ValidationError{}
+			if errors.As(allOfErr, &valErr) {
 				t.Logf("AllOf error type: %T", valErr.ErrorKind)
 				t.Logf("AllOf causes: %d", len(valErr.Causes))
 				// Walk the error tree to see nested error types

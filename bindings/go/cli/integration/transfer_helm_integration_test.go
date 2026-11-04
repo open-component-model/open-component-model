@@ -395,10 +395,11 @@ configurations:
     type: helmChart
     input:
       type: helm/v1
-      path: %s
-`, componentName, componentVersion, chartFile)
+      path: mychart-0.1.0.tgz
+`, componentName, componentVersion)
 
 		localTempDir := t.TempDir()
+		r.NoError(os.CopyFS(localTempDir, os.DirFS(chartDir)))
 		localConstructorPath := filepath.Join(localTempDir, "constructor.yaml")
 		r.NoError(os.WriteFile(localConstructorPath, []byte(localConstructor), os.ModePerm))
 

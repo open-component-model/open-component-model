@@ -22,8 +22,9 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/blob"
 	v1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestDownloadRevisions(t *testing.T) {
@@ -51,64 +52,119 @@ func TestDownloadRevisions(t *testing.T) {
 			for _, tc := range []struct {
 				name, ref, commit string
 				want              plumbing.Hash
-				missingHeadError  string
+				// wantRef is the full name of the selecting ref; for HEAD without a
+				// branch to point to it stays HEAD.
+				wantRef          string
+				missingHeadError string
 			}{
-				{"default HEAD", "HEAD", "", fixture.Second, "cannot fetch git repository: transport failed; check repository access and server trust: reference not found"},
-				{"short main branch", "main", "", fixture.Second, `cannot resolve git ref: reference name escapes the reference storage: "main" is not under refs/ nor a valid pseudo-ref`},
-				{"qualified main branch", "refs/heads/main", "", fixture.Second, "cannot resolve git ref: reference not found"},
-				{"branch wins over same-named tag", "feature", "", fixture.Second, ""},
-				{"remote tracking branch", "refs/remotes/origin/feature", "", fixture.Second, ""},
-				{"qualified tag wins over same-named branch", "refs/tags/feature", "", fixture.First, ""},
-				{"custom ref namespace", "refs/releases/stable", "", fixture.First, ""},
-				{"short lightweight tag", "v1", "", fixture.First, ""},
-				{"short annotated tag", "annotated", "", fixture.First, ""},
-				{"short nested tag", "nested", "", fixture.First, ""},
-				{"pinned commit only", "", fixture.First.String(), fixture.First, ""},
-				{"pinned commit overrides HEAD", "HEAD", fixture.First.String(), fixture.First, ""},
-				{"pinned commit ignores deleted branch", "refs/heads/deleted", fixture.First.String(), fixture.First, ""},
+				{name: "default HEAD", ref: "HEAD", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: "cannot fetch git repository: transport failed; check repository access and server trust: reference not found"},
+				{name: "short main branch", ref: "main", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: `cannot resolve git ref: reference name escapes the reference storage: "main" is not under refs/ nor a valid pseudo-ref`},
+				{name: "qualified main branch", ref: "refs/heads/main", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: "cannot resolve git ref: reference not found"},
+				{name: "branch wins over same-named tag", ref: "feature", want: fixture.Second, wantRef: "refs/heads/feature"},
+				{name: "remote tracking branch", ref: "refs/remotes/origin/feature", want: fixture.Second, wantRef: "refs/heads/feature"},
+				{name: "qualified tag wins over same-named branch", ref: "refs/tags/feature", want: fixture.First, wantRef: "refs/tags/feature"},
+				{name: "custom ref namespace", ref: "refs/releases/stable", want: fixture.First, wantRef: "refs/releases/stable"},
+				{name: "short lightweight tag", ref: "v1", want: fixture.First, wantRef: "refs/tags/v1"},
+				{name: "short annotated tag", ref: "annotated", want: fixture.First, wantRef: "refs/tags/annotated"},
+				{name: "short nested tag", ref: "nested", want: fixture.First, wantRef: "refs/tags/nested"},
+				{name: "pinned commit only", commit: fixture.First.String(), want: fixture.First},
+				{name: "pinned commit overrides HEAD", ref: "HEAD", commit: fixture.First.String(), want: fixture.First, wantRef: "refs/heads/main"},
+				{name: "pinned commit with short branch", ref: "feature", commit: fixture.First.String(), want: fixture.First, wantRef: "refs/heads/feature"},
+				{name: "pinned commit with short tag", ref: "v1", commit: fixture.First.String(), want: fixture.First, wantRef: "refs/tags/v1"},
+				{name: "pinned commit keeps unknown short ref", ref: "gone", commit: fixture.First.String(), want: fixture.First, wantRef: "gone"},
+				{name: "pinned commit ignores deleted branch", ref: "refs/heads/deleted", commit: fixture.First.String(), want: fixture.First, wantRef: "refs/heads/deleted"},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					r := require.New(t)
 					spec := &v1.Git{Repository: fixture.Path, Ref: tc.ref, Commit: tc.commit}
-					result, err := Download(t.Context(), spec, nil, Options{TempDir: t.TempDir()})
+					result, err := download(t.Context(), spec, nil, Options{TempDir: t.TempDir()})
+					pinned, pinErr := Pin(t.Context(), spec, nil, Options{})
 					if head == "missing HEAD" && tc.missingHeadError != "" {
 						r.ErrorContains(err, tc.missingHeadError)
 						r.Nil(result)
+						r.Error(pinErr, "a ref the fetch cannot resolve is not pinned")
 						return
 					}
 					r.NoError(err)
 					r.Equal(tc.want.String(), result.Commit)
+					if head == "missing HEAD" && tc.ref == "HEAD" {
+						r.Equal("HEAD", result.Ref, "HEAD without a branch to point to stays HEAD")
+					} else {
+						r.Equal(tc.wantRef, result.Ref)
+					}
 					r.Equal(tc.commit, spec.Commit)
-					r.NotEmpty(readBlob(t, result.Blob))
+					r.NotEmpty(result.Data)
+					r.NoError(pinErr)
+					r.Equal(tc.want.String(), pinned.Commit, "Pin selects the commit the fetch selects")
 				})
 			}
 		})
 	}
 }
 
+func TestDownloadURLFragment(t *testing.T) {
+	fixture := newRepository(t)
+	r := require.New(t)
+	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/feature", fixture.First)))
+
+	for _, tc := range []struct {
+		name, fragment, ref string
+		want                plumbing.Hash
+	}{
+		{name: "branch", fragment: "branch=feature", want: fixture.First},
+		{name: "tag", fragment: "tag=v1", want: fixture.First},
+		{name: "commit", fragment: "commit=" + fixture.First.String(), want: fixture.First},
+		{name: "commit overrides ref", fragment: "commit=" + fixture.First.String(), ref: "main", want: fixture.First},
+		{name: "same branch as ref", fragment: "branch=main", ref: "main", want: fixture.Second},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			spec := &v1.Git{Repository: fixture.Path + "#" + tc.fragment, Ref: tc.ref}
+			result, err := download(t.Context(), spec, nil, Options{TempDir: t.TempDir()})
+			r.NoError(err)
+			r.Equal(tc.want.String(), result.Commit)
+		})
+	}
+}
+
+func TestDownloadURLFragmentNotSent(t *testing.T) {
+	r := require.New(t)
+
+	var requests []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		requests = append(requests, req.URL.RequestURI())
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := download(t.Context(), &v1.Git{Repository: server.URL + "/repo.git#branch=main"}, nil, Options{TempDir: t.TempDir(), HTTPClient: server.Client()})
+	r.ErrorContains(err, "repository not found")
+	r.Equal([]string{"/repo.git/info/refs?service=git-upload-pack"}, requests)
+}
+
 func TestDownloadArchive(t *testing.T) {
 	r := require.New(t)
 	fixture := newRepository(t)
 	dir := t.TempDir()
-	result, err := Download(t.Context(), &v1.Git{Repository: fixture.Path, Ref: "main"}, nil, Options{TempDir: dir})
+	streamed, err := download(t.Context(), &v1.Git{Repository: fixture.Path, Ref: "main"}, nil, Options{TempDir: dir})
 	r.NoError(err)
 
-	b := result.Blob
+	b := NewBlob(t.Context(), &v1.Git{Repository: fixture.Path, Ref: "main"}, nil, Options{TempDir: dir})
 	mt, ok := b.MediaType()
 	r.True(ok)
 	r.Equal("application/x-tgz", mt)
 	data := readBlob(t, b)
-	r.Equal(data, readBlob(t, b))
-	raw, ok := b.Digest()
-	r.True(ok)
-	r.Equal(digest.FromBytes(data).String(), raw)
-	r.Equal(raw, result.Digest.String())
+	r.Equal(streamed.Data, data, "the blob streams what Stream writes")
+	r.Equal(digest.FromBytes(data), streamed.Digest)
 
-	// The archive file outlives the download and belongs to the caller.
+	// The first read pins the commit, so a moved ref does not change later reads.
+	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/main", fixture.First)))
+	r.Equal(data, readBlob(t, b))
+
+	// Nothing of the archive is stored.
 	files, err := os.ReadDir(dir)
 	r.NoError(err)
-	r.Len(files, 1)
-	r.True(strings.HasSuffix(files[0].Name(), ".tar.gz"))
+	r.Empty(files)
 	gz, err := gzip.NewReader(bytes.NewReader(data))
 	r.NoError(err)
 	r.True(gz.ModTime.IsZero())
@@ -119,7 +175,7 @@ func TestDownloadArchive(t *testing.T) {
 	uncompressed, err := io.ReadAll(gz)
 	r.NoError(err)
 	r.NoError(gz.Close())
-	r.NotEqual(digest.FromBytes(uncompressed), result.Digest)
+	r.NotEqual(digest.FromBytes(uncompressed), streamed.Digest)
 
 	// Use the same stdlib default compressor as v1, without custom gzip metadata.
 	var recompressed bytes.Buffer
@@ -130,7 +186,68 @@ func TestDownloadArchive(t *testing.T) {
 	r.Equal(data, recompressed.Bytes())
 }
 
-func readBlob(t *testing.T, b *filesystem.Blob) []byte {
+func TestBlobFromClone(t *testing.T) {
+	t.Run("first read serves the clone and removes it", func(t *testing.T) {
+		r := require.New(t)
+		fixture := newRepository(t)
+		dir := t.TempDir()
+		access := &v1.Git{Repository: fixture.Path, Ref: "main"}
+		want, err := download(t.Context(), access, nil, Options{TempDir: dir})
+		r.NoError(err)
+
+		clone, err := Fetch(t.Context(), access, nil, Options{TempDir: dir})
+		r.NoError(err)
+		b := NewBlobFromClone(t.Context(), clone, access, nil, Options{TempDir: dir})
+		// Without the source, only the clone can serve the read.
+		r.NoError(os.RemoveAll(fixture.Path))
+		r.Equal(want.Data, readBlob(t, b))
+		files, err := os.ReadDir(dir)
+		r.NoError(err)
+		r.Empty(files, "closing the first reader removes the clone")
+
+		rc, err := b.ReadCloser()
+		r.NoError(err)
+		_, err = io.ReadAll(rc)
+		r.ErrorContains(errors.Join(err, rc.Close()), "cannot fetch git repository", "later reads fetch again")
+	})
+
+	t.Run("an unread clone is removed when the context ends", func(t *testing.T) {
+		r := require.New(t)
+		fixture := newRepository(t)
+		dir := t.TempDir()
+		ctx, cancel := context.WithCancel(t.Context())
+		clone, err := Fetch(ctx, &v1.Git{Repository: fixture.Path, Ref: "main"}, nil, Options{TempDir: dir})
+		r.NoError(err)
+		NewBlobFromClone(ctx, clone, &v1.Git{Repository: fixture.Path, Ref: "main"}, nil, Options{TempDir: dir})
+		files, err := os.ReadDir(dir)
+		r.NoError(err)
+		r.Len(files, 1)
+
+		cancel()
+		r.Eventually(func() bool {
+			files, err := os.ReadDir(dir)
+			return err == nil && len(files) == 0
+		}, 5*time.Second, 10*time.Millisecond)
+	})
+}
+
+// downloaded is a Result with the archive Stream wrote.
+type downloaded struct {
+	*Result
+	Data []byte
+}
+
+// download streams the archive of access into memory.
+func download(ctx context.Context, access *v1.Git, creds runtime.Typed, opts Options) (*downloaded, error) {
+	var buf bytes.Buffer
+	result, err := Stream(ctx, access, creds, &buf, opts)
+	if err != nil {
+		return nil, err
+	}
+	return &downloaded{Result: result, Data: buf.Bytes()}, nil
+}
+
+func readBlob(t *testing.T, b blob.ReadOnlyBlob) []byte {
 	t.Helper()
 
 	r := require.New(t)
@@ -167,7 +284,7 @@ func TestDownloadFailureCleanup(t *testing.T) {
 	}{
 		{name: "missing ref", ref: "absent", wantError: `cannot resolve git ref: reference name escapes the reference storage: "absent" is not under refs/ nor a valid pseudo-ref`},
 		{name: "missing commit", commit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", wantError: "cannot fetch git repository"},
-		{name: "already canceled", ref: "main", cancel: true, wantError: "cannot download git repository: context canceled", wantCause: context.Canceled},
+		{name: "already canceled", ref: "main", cancel: true, wantError: "cannot fetch git repository: context canceled", wantCause: context.Canceled},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
@@ -179,7 +296,7 @@ func TestDownloadFailureCleanup(t *testing.T) {
 				cancel()
 			}
 
-			result, err := Download(ctx, &v1.Git{Repository: fixture.Path, Ref: tc.ref, Commit: tc.commit}, nil, Options{TempDir: dir})
+			result, err := download(ctx, &v1.Git{Repository: fixture.Path, Ref: tc.ref, Commit: tc.commit}, nil, Options{TempDir: dir})
 			r.ErrorContains(err, tc.wantError)
 			if tc.wantCause != nil {
 				r.ErrorIs(err, tc.wantCause)
@@ -212,12 +329,12 @@ func TestDownloadInProgressCancellationCleanup(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			type outcome struct {
-				result *Result
+				result *downloaded
 				err    error
 			}
 			done := make(chan outcome, 1)
 			go func() {
-				result, err := Download(ctx, &v1.Git{Repository: server.URL + "/repo.git", Ref: ref}, nil, Options{TempDir: dir})
+				result, err := download(ctx, &v1.Git{Repository: server.URL + "/repo.git", Ref: ref}, nil, Options{TempDir: dir})
 				done <- outcome{result: result, err: err}
 			}()
 
@@ -232,7 +349,7 @@ func TestDownloadInProgressCancellationCleanup(t *testing.T) {
 			r.NoError(err)
 			r.Len(files, 1)
 			r.True(files[0].IsDir())
-			r.True(strings.HasPrefix(files[0].Name(), "ocm-git-repository-"))
+			r.True(strings.HasPrefix(files[0].Name(), "ocm-git-"))
 
 			// Cancel only once the download has allocated storage and reached the server.
 			cancel()
@@ -252,21 +369,19 @@ func TestArchiveSizeBoundary(t *testing.T) {
 
 	fixture := newRepository(t)
 	spec := &v1.Git{Repository: fixture.Path, Commit: fixture.First.String()}
-	result, err := Download(t.Context(), spec, nil, Options{TempDir: t.TempDir()})
+	result, err := download(t.Context(), spec, nil, Options{TempDir: t.TempDir()})
 	r.NoError(err)
 
-	data := readBlob(t, result.Blob)
-	size := result.Blob.Size()
-	r.Equal(int64(len(data)), size)
+	data := result.Data
+	size := int64(len(data))
 	r.Greater(int64(len(gunzipArchive(t, data))), size, "the limit applies to compressed bytes only")
 
-	result, err = Download(t.Context(), spec, nil, Options{TempDir: t.TempDir(), MaxArchiveSize: size})
+	result, err = download(t.Context(), spec, nil, Options{TempDir: t.TempDir(), MaxArchiveSize: size})
 	r.NoError(err)
-	r.NotNil(result.Blob)
-	r.Equal(data, readBlob(t, result.Blob))
+	r.Equal(data, result.Data)
 
 	dir := t.TempDir()
-	result, err = Download(t.Context(), spec, nil, Options{TempDir: dir, MaxArchiveSize: size - 1})
+	result, err = download(t.Context(), spec, nil, Options{TempDir: dir, MaxArchiveSize: size - 1})
 	r.ErrorContains(err, "git archive exceeds the maximum size")
 	r.Nil(result)
 	entries, err := os.ReadDir(dir)
@@ -291,7 +406,7 @@ func TestTransportErrorMessages(t *testing.T) {
 			"fetch: transport failed; check repository access and server trust: remote: https://xxxxx@example.invalid/repo.git rejected",
 		},
 	} {
-		err := transportError(t.Context(), "fetch", tc.err)
+		err := TransportError(t.Context(), "fetch", tc.err)
 		require.EqualError(t, err, tc.want)
 		require.NotContains(t, err.Error(), "token")
 	}
@@ -396,5 +511,23 @@ func newRepository(t *testing.T) repositoryFixture {
 		Git:    repo,
 		First:  first,
 		Second: second,
+	}
+}
+
+func TestRedactURL(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"https://user:token@example.invalid/org/repo.git", "https://xxxxx@example.invalid/org/repo.git"},
+		{"https://token@example.invalid/org/repo.git", "https://xxxxx@example.invalid/org/repo.git"},
+		{"ssh://git@example.invalid/org/repo.git", "ssh://xxxxx@example.invalid/org/repo.git"},
+		{"https://user:p@ss@example.invalid/org/repo.git", "https://xxxxx@example.invalid/org/repo.git"},
+		{"https://example.invalid/org/a@b.git", "https://example.invalid/org/a@b.git"},
+		{"https://example.invalid?ref=a@b", "https://example.invalid?ref=a@b"},
+		{"https://example.invalid/org/repo.git", "https://example.invalid/org/repo.git"},
+		{"/srv/git/repo.git", "/srv/git/repo.git"},
+	} {
+		t.Run(tc.in, func(t *testing.T) {
+			r := require.New(t)
+			r.Equal(tc.want, RedactURL(tc.in))
+		})
 	}
 }

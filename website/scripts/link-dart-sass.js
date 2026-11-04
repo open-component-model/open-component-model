@@ -14,14 +14,14 @@
  * Runs automatically via the "postinstall" npm lifecycle script.
  */
 
-const fs = require('node:fs');
-const path = require('node:path');
+const fs = require("node:fs");
+const path = require("node:path");
 
 const PLATFORM_MAP = {
-    'darwin-arm64': 'sass-embedded-darwin-arm64',
-    'darwin-x64': 'sass-embedded-darwin-x64',
-    'linux-x64': 'sass-embedded-linux-x64',
-    'linux-arm64': 'sass-embedded-linux-arm64',
+    "darwin-arm64": "sass-embedded-darwin-arm64",
+    "darwin-x64": "sass-embedded-darwin-x64",
+    "linux-x64": "sass-embedded-linux-x64",
+    "linux-arm64": "sass-embedded-linux-arm64"
 };
 
 function main() {
@@ -30,13 +30,13 @@ function main() {
     if (!pkg) {
         throw new Error(
             `Unsupported platform: ${key}. ` +
-      `Supported: ${Object.keys(PLATFORM_MAP).join(', ')}. ` +
-      'Install the standalone Dart Sass binary manually.'
+      `Supported: ${Object.keys(PLATFORM_MAP).join(", ")}. ` +
+      "Install the standalone Dart Sass binary manually."
         );
     }
 
-    const nodeModules = path.resolve(__dirname, '../node_modules');
-    const nativeSass = path.join(nodeModules, pkg, 'dart-sass', 'sass');
+    const nodeModules = path.resolve(__dirname, "../node_modules");
+    const nativeSass = path.join(nodeModules, pkg, "dart-sass", "sass");
 
     if (!fs.existsSync(nativeSass)) {
         throw new Error(
@@ -45,8 +45,8 @@ function main() {
         );
     }
 
-    const binDir = path.join(nodeModules, '.bin');
-    const linkPath = path.join(binDir, 'sass');
+    const binDir = path.join(nodeModules, ".bin");
+    const linkPath = path.join(binDir, "sass");
 
     // Remove existing entry (JS wrapper or stale symlink).
     // Use lstat to detect broken symlinks that existsSync would miss.

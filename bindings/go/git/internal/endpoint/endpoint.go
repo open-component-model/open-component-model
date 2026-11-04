@@ -36,9 +36,14 @@ const (
 // scp-like form user@host:path, and local repositories as file:///path,
 // file://localhost/path or a plain path. A string that has no scheme and is not
 // scp-like is a local path, relative to the working directory unless absolute.
+// A URL fragment is rejected: go-git would append its request path to it, so the
+// ref or commit it selects must be moved out first.
 func Parse(repository string) (*Endpoint, error) {
 	if strings.TrimSpace(repository) == "" {
 		return nil, fmt.Errorf("repository must not be empty")
+	}
+	if strings.Contains(repository, "#") {
+		return nil, fmt.Errorf("git repository URL fragment must be moved into ref or commit")
 	}
 
 	u, err := parseURL(repository)

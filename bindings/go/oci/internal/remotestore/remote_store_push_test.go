@@ -90,7 +90,7 @@ func (reg *chunkedRegistry) handler() http.HandlerFunc {
 			reg.uploaded = nil
 			reg.mu.Unlock()
 			if reg.chunkMinLength != "" {
-				w.Header().Set("OCI-Chunk-Min-Length", reg.chunkMinLength)
+				w.Header().Set("Oci-Chunk-Min-Length", reg.chunkMinLength)
 			}
 			if reg.warning != "" {
 				w.Header().Set("Warning", reg.warning)
@@ -107,9 +107,17 @@ func (reg *chunkedRegistry) handler() http.HandlerFunc {
 
 		case r.Method == http.MethodPut:
 			// Close chunked session; body may carry a final chunk (unused here).
+			// Like a registry, verify the content against the declared digest.
 			reg.mu.Lock()
 			reg.uploaded = append(reg.uploaded, body...)
+			uploaded := reg.uploaded
 			reg.mu.Unlock()
+			if dig, err := digest.Parse(r.URL.Query().Get("digest")); err != nil || dig.Algorithm().FromBytes(uploaded) != dig {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = io.WriteString(w, `{"errors":[{"code":"DIGEST_INVALID","message":"provided digest did not match uploaded content"}]}`)
+				return
+			}
 			w.Header().Set("Location", r.URL.Path)
 			w.WriteHeader(http.StatusCreated)
 
@@ -183,6 +191,71 @@ func TestRemoteStore_Push_Chunked(t *testing.T) {
 
 	// The registry received exactly the blob bytes.
 	require.Equal(t, data, reg.uploaded)
+}
+
+// lateReadTransport answers the upload protocol without reading PATCH bodies,
+// keeping them open as a transport may after RoundTrip returns (see
+// [http.RoundTripper]). The bodies are read only after the push finished.
+type lateReadTransport struct {
+	mu     sync.Mutex
+	bodies []io.ReadCloser
+}
+
+func (l *lateReadTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	status := http.StatusAccepted
+	switch req.Method {
+	case http.MethodPatch:
+		l.mu.Lock()
+		l.bodies = append(l.bodies, req.Body)
+		l.mu.Unlock()
+	case http.MethodPut:
+		status = http.StatusCreated
+	}
+	header := http.Header{}
+	header.Set("Location", "/v2/test-repo/blobs/uploads/session")
+	return &http.Response{StatusCode: status, Header: header, Body: http.NoBody, Request: req}, nil
+}
+
+func TestRemoteStore_Push_ChunkedDoesNotOverwriteUnclosedBodies(t *testing.T) {
+	r := require.New(t)
+
+	data := []byte("aaaabbbbcc")
+	desc := ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: digest.FromBytes(data), Size: int64(len(data))}
+	transport := &lateReadTransport{}
+	repo, err := remote.NewRepository("registry.example/test-repo")
+	r.NoError(err)
+	repo.Client = &http.Client{Transport: transport}
+	store := &RemoteStore{Repository: repo, ChunkSize: 4, ChunkThreshold: 1}
+
+	r.NoError(store.Push(t.Context(), desc, bytes.NewReader(data)))
+	// A later push drawing from the buffer pool must not overwrite the open bodies either.
+	other := bytes.Repeat([]byte("x"), len(data))
+	otherDesc := ociImageSpecV1.Descriptor{MediaType: desc.MediaType, Digest: digest.FromBytes(other), Size: int64(len(other))}
+	r.NoError(store.Push(t.Context(), otherDesc, bytes.NewReader(other)))
+
+	var sent []byte
+	for _, body := range transport.bodies[:3] {
+		b, err := io.ReadAll(body)
+		r.NoError(err)
+		r.NoError(body.Close())
+		sent = append(sent, b...)
+	}
+	r.Equal(data, sent)
+}
+
+func TestChunkBody_ReadAfterCloseDoesNotSeeReusedBuffer(t *testing.T) {
+	r := require.New(t)
+
+	buf := &chunkBuffer{data: []byte("aaaa")}
+	body := buf.body(len(buf.data))
+	r.NoError(body.Close())
+	r.False(buf.inUse())
+	// The buffer is reusable now; a straggling read must not see its next contents.
+	copy(buf.data, "bbbb")
+
+	n, err := body.Read(make([]byte, 4))
+	r.Zero(n)
+	r.ErrorIs(err, http.ErrBodyReadAfterClose)
 }
 
 func TestRemoteStore_Push_FallbackToMonolithicOnPOSTRejection(t *testing.T) {
@@ -427,8 +500,8 @@ func TestRemoteStore_PushStreaming_KnownDigestUnknownSize(t *testing.T) {
 }
 
 func TestRemoteStore_PushStreaming_DigestMismatchErrors(t *testing.T) {
-	// A claimed digest that does not match the streamed bytes must fail rather
-	// than close the session under a false identifier.
+	// A claimed digest that does not match the streamed bytes is not hashed
+	// client-side: the registry rejects closing the session under it.
 	reg := newChunkedRegistry(t)
 	srv := httptest.NewServer(reg.handler())
 	t.Cleanup(srv.Close)
@@ -440,10 +513,7 @@ func TestRemoteStore_PushStreaming_DigestMismatchErrors(t *testing.T) {
 	_, err := store.PushStreaming(t.Context(),
 		ociImageSpecV1.Descriptor{MediaType: "application/octet-stream", Digest: wrong},
 		bytes.NewReader(data))
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "does not match declared digest")
-	// The session must not be closed with the wrong digest.
-	require.NotContains(t, reg.methods(), http.MethodPut)
+	require.ErrorContains(t, err, "digest invalid")
 }
 
 func TestRemoteStore_PushStreaming_UnavailableWhenChunkingDisabled(t *testing.T) {
@@ -495,9 +565,8 @@ func TestRemoteStore_Push_InvokesHandleWarning(t *testing.T) {
 }
 
 // TestRemoteStore_Push_ChunkedNonSHA256Digest verifies that a chunked push of a
-// blob declared with a non-sha256 digest computes the running digest with the
-// declared algorithm and closes the session under that same digest, rather than
-// hashing with sha256 and failing resolveFinalDigest with a mismatch.
+// blob declared with a non-sha256 digest advertises the declared algorithm and
+// closes the session under that same digest.
 func TestRemoteStore_Push_ChunkedNonSHA256Digest(t *testing.T) {
 	r := require.New(t)
 

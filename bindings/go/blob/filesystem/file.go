@@ -4,108 +4,171 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"sync"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 )
 
-const DefaultFileIOBufferSize = 1 << 20 // 1 MiB
-
-// ioBufPool is a pool of byte buffers that can be reused for copying content
-// between i/o relevant data, such as files.
-var ioBufPool = sync.Pool{
-	New: func() interface{} {
-		// the buffer size should be larger than or equal to 128 KiB
-		// for performance considerations.
-		// we choose 1 MiB here so there will be less disk I/O.
-		buffer := make([]byte, DefaultFileIOBufferSize)
-		return &buffer
-	},
-}
-
 // CopyBlobToOSPath copies the content of a blob.ReadOnlyBlob to a local path on the operating system's filesystem.
-// It opens the file in os.O_APPEND mode.
-// If the file does not exist, it will be created (os.O_CREATE).
-// The function also handles named pipes by setting the appropriate file mode (os.ModeNamedPipe).
-// It uses a buffered I/O operation to improve performance, leveraing the internal ioBufPool.
-func CopyBlobToOSPath(blob blob.ReadOnlyBlob, path string) (err error) {
+// The file is created with 0600 if it does not exist (os.O_CREATE) and truncated if it does (os.O_TRUNC).
+// If reading or closing the blob fails, for example on a digest mismatch that a verifying blob reports at EOF
+// or on Close, the written regular file is truncated to zero and path is removed if it is a regular file itself,
+// so no rejected content is left behind. A symlink at path is kept and its target is left empty.
+// Content already written to a named pipe or device cannot be retracted.
+// The content is copied with blob.CopyReader.
+func CopyBlobToOSPath(blob blob.ReadOnlyBlob, path string) error {
 	data, err := blob.ReadCloser()
 	if err != nil {
 		return fmt.Errorf("failed to get resource data: %w", err)
 	}
-	defer func() {
-		err = errors.Join(err, data.Close())
-	}()
-
-	var isNamedPipe bool
-	fi, err := os.Stat(path)
-	if err == nil {
-		isNamedPipe = fi.Mode()&os.ModeNamedPipe != 0
-	}
-
-	var mode os.FileMode
-	if isNamedPipe {
-		mode = os.ModeNamedPipe
-	} else {
-		mode = 0o600
-	}
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, mode)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
-		return fmt.Errorf("failed to open target file %s: %w", path, err)
+		return errors.Join(fmt.Errorf("failed to open target file %s: %w", path, err), data.Close())
 	}
-	defer func() {
+	// Close data before checking for errors: verifying readers may report a mismatch only on Close.
+	if err := errors.Join(copyBuffered(file, data), data.Close()); err != nil {
+		fi, statErr := file.Stat()
+		regular := statErr == nil && fi.Mode().IsRegular()
+		if regular {
+			err = errors.Join(err, file.Truncate(0))
+		}
 		err = errors.Join(err, file.Close())
-	}()
+		if li, lstatErr := os.Lstat(path); regular && lstatErr == nil && li.Mode().IsRegular() {
+			err = errors.Join(err, os.Remove(path))
+		}
+		return err
+	}
+	return file.Close()
+}
 
-	buf := ioBufPool.Get().(*[]byte)
-	defer ioBufPool.Put(buf)
-	if _, err := io.CopyBuffer(file, data, *buf); err != nil {
+func copyBuffered(dst io.Writer, src io.Reader) error {
+	if _, err := blob.CopyReader(dst, src); err != nil {
 		return fmt.Errorf("failed to copy resource data: %w", err)
 	}
-
 	return nil
 }
 
-// GetBlobFromOSPath returns a read-only blob that reads from a file on the operating system's filesystem.
-func GetBlobFromOSPath(path string) (*Blob, error) {
-	return NewFileBlobFromPathWithFlag(path, os.O_RDONLY)
-}
-
-// GetBlobInWorkingDirectory returns a blob that reads from the operating system file system,
-// ensuring that the path is resolved against the specified working directory.
-// It uses ensurePathInWorkingDirectory to ensure the path does not escape the working directory.
-// The blob is created using the GetBlobFromOSPath function.
-// If the path is not absolute, it will be resolved against the working directory.
-// If the path is invalid or cannot be resolved, it returns an error.
-func GetBlobInWorkingDirectory(path, workingDir string) (*Blob, error) {
-	path, err := ensurePathInWorkingDirectory(path, workingDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to ensure path in working directory: %w", err)
+// GetBlobFromOSPath returns a read-only blob for the file at path.
+// A relative path is resolved against the current working directory once, on creation.
+// The file is opened by path on every read and no descriptor is held between reads.
+// Symlinks are followed like os.Open. A missing or unreadable file is reported when the blob is read.
+// [InWorkingDirectory] confines the file to a directory.
+func GetBlobFromOSPath(path string, opts ...OSPathOption) (*Blob, error) {
+	if path == "" {
+		return nil, errors.New("path must not be empty")
 	}
-	return GetBlobFromOSPath(path)
+	var o osPathOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+	if o.workingDir != "" {
+		root, rel, err := resolveInWorkingDirectory(path, o.workingDir)
+		if err != nil {
+			return nil, fmt.Errorf("failed to ensure path in working directory: %w", err)
+		}
+		return NewFileBlob(osFS{dir: root, confined: true}, rel), nil
+	}
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve absolute path: %w", err)
+	}
+	return NewFileBlob(osFS{dir: filepath.Dir(path)}, filepath.Base(path)), nil
 }
 
-// ensurePathInWorkingDirectory ensures that the given path is resolved against the specified working directory.
+// OSPathOption configures [GetBlobFromOSPath].
+type OSPathOption func(*osPathOptions)
+
+type osPathOptions struct {
+	workingDir string
+}
+
+// InWorkingDirectory confines the file to workingDir: a relative path is resolved
+// against workingDir, an absolute path must lie within it. Confinement is checked on
+// creation and enforced again on every access with os.Root, so a file swapped for an
+// escaping symlink after creation cannot be read. Symlinks that stay inside are followed.
+func InWorkingDirectory(workingDir string) OSPathOption {
+	return func(o *osPathOptions) { o.workingDir = workingDir }
+}
+
+// GetBlobInWorkingDirectory is [GetBlobFromOSPath] with [InWorkingDirectory].
+func GetBlobInWorkingDirectory(path, workingDir string) (*Blob, error) {
+	return GetBlobFromOSPath(path, InWorkingDirectory(workingDir))
+}
+
+// EnsurePathInWorkingDirectory ensures that the given path is resolved against the specified working directory.
 // If the path is absolute, it checks if the path is valid within the working directory.
 // If the path is relative, it resolves it against the working directory and prevents escaping the working directory.
 // If the path cannot be resolved or is invalid, it returns an error.
-func ensurePathInWorkingDirectory(path, workingDirectory string) (_ string, retErr error) {
+func EnsurePathInWorkingDirectory(path, workingDirectory string) (string, error) {
+	root, rel, err := resolveInWorkingDirectory(path, workingDirectory)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, rel), nil
+}
+
+// resolveInWorkingDirectory returns the absolute working directory and path relative to it,
+// after checking that path resolves without escaping the working directory.
+// It stats instead of opening, so it neither blocks on a FIFO nor needs read permission.
+func resolveInWorkingDirectory(path, workingDirectory string) (root, rel string, err error) {
+	root, err = filepath.Abs(workingDirectory)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to resolve working directory %q: %w", workingDirectory, err)
+	}
+
+	rel = path
 	if filepath.IsAbs(path) {
-		if path, retErr = filepath.Rel(workingDirectory, path); retErr != nil {
-			return "", fmt.Errorf("failed to create relative path for %q based on working directory %q: %w", path, workingDirectory, retErr)
+		if rel, err = filepath.Rel(root, path); err != nil {
+			return "", "", fmt.Errorf("failed to create relative path for %q based on working directory %q: %w", path, root, err)
 		}
 	}
+	rel = filepath.Clean(rel)
 
-	resolved, err := os.OpenInRoot(workingDirectory, path)
-	if err != nil {
-		return "", fmt.Errorf("failed to open path %q in root %q: %w", path, workingDirectory, err)
+	if _, err := (osFS{dir: root, confined: true}).Stat(rel); err != nil {
+		return "", "", fmt.Errorf("failed to stat path %q in root %q: %w", rel, root, err)
 	}
-	err = resolved.Close()
-	if err != nil {
-		return "", fmt.Errorf("failed to close path validation handle for %q in root %q: %w", path, workingDirectory, err)
-	}
+	return root, rel, nil
+}
 
-	return filepath.Join(workingDirectory, path), nil
+// osFS is a read-only fs.FS over an absolute directory that holds no descriptor
+// between calls. Unconfined, it opens by joined path and keeps the full path in
+// errors, so a failed read names the file's directory; confined, it opens a fresh
+// os.Root per call.
+type osFS struct {
+	dir      string
+	confined bool
+}
+
+var _ fs.StatFS = osFS{}
+
+func (f osFS) Open(name string) (fs.File, error) {
+	var (
+		file *os.File
+		err  error
+	)
+	if f.confined {
+		file, err = os.OpenInRoot(f.dir, name)
+	} else {
+		file, err = os.Open(filepath.Join(f.dir, name))
+	}
+	// A nil *os.File must not be returned as a non-nil fs.File.
+	if err != nil {
+		return nil, err
+	}
+	return file, nil
+}
+
+// Stat does not open the file itself, so a named pipe without a writer does not block.
+func (f osFS) Stat(name string) (fs.FileInfo, error) {
+	if !f.confined {
+		return os.Stat(filepath.Join(f.dir, name))
+	}
+	root, err := os.OpenRoot(f.dir)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	return root.Stat(name)
 }

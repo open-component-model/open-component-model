@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
-	"os"
-	"path/filepath"
+
+	godigest "github.com/opencontainers/go-digest"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	descv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -53,6 +53,7 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 	var (
 		chartSpec *filesystem.Blob
 		provSpec  *filesystem.Blob
+		err       error
 	)
 
 	var chartPath string
@@ -61,12 +62,10 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 	} else {
 		chartPath = p.Path
 	}
-	fs, err := filesystem.NewFS(filepath.Dir(chartPath), os.O_RDONLY)
-	if err != nil {
-		return nil, fmt.Errorf("failed creating filesystem from chart file spec: %w", err)
+	if chartSpec, err = filesystem.GetBlobFromOSPath(chartPath); err != nil {
+		return nil, fmt.Errorf("failed creating blob from chart file spec: %w", err)
 	}
-	slog.DebugContext(ctx, "Created filesystem for chart file", "uri", transformation.Spec.ChartFile.URI)
-	chartSpec = filesystem.NewFileBlob(fs, filepath.Base(chartPath))
+	slog.DebugContext(ctx, "Created blob for chart file", "uri", transformation.Spec.ChartFile.URI)
 
 	if transformation.Spec.ProvFile != nil && transformation.Spec.ProvFile.URI != "" {
 		var provPath string
@@ -75,12 +74,10 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 		} else {
 			provPath = p.Path
 		}
-		fs, err := filesystem.NewFS(filepath.Dir(provPath), os.O_RDONLY)
-		if err != nil {
-			return nil, fmt.Errorf("failed creating filesystem from prov file spec: %w", err)
+		if provSpec, err = filesystem.GetBlobFromOSPath(provPath); err != nil {
+			return nil, fmt.Errorf("failed creating blob from prov file spec: %w", err)
 		}
-		slog.DebugContext(ctx, "Created filesystem for prov file", "uri", transformation.Spec.ProvFile.URI)
-		provSpec = filesystem.NewFileBlob(fs, filepath.Base(provPath))
+		slog.DebugContext(ctx, "Created blob for prov file", "uri", transformation.Spec.ProvFile.URI)
 	}
 
 	outputPath, err := DetermineOutputPath(transformation.Spec.OutputPath, "oci")
@@ -117,10 +114,21 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 	transformation.Output.Resource = transformation.Spec.Resource
 	transformation.Output.Resource.Type = access.HelmRepositoryType
 
+	var hashAlgorithm string
+	switch result.Desc.Digest.Algorithm() {
+	case godigest.SHA256:
+		hashAlgorithm = "SHA-256"
+	case godigest.SHA512:
+		hashAlgorithm = "SHA-512"
+	default:
+		return nil, fmt.Errorf("unsupported OCI manifest digest algorithm: %s", result.Desc.Digest.Algorithm())
+	}
+
 	// Use digest of top-level-manifest
 	transformation.Output.Resource.Digest = &descv2.Digest{
-		HashAlgorithm: string(result.Desc.Digest.Algorithm()),
-		Value:         result.Desc.Digest.Encoded(),
+		HashAlgorithm:          hashAlgorithm,
+		NormalisationAlgorithm: "ociArtifactDigest/v1",
+		Value:                  result.Desc.Digest.Encoded(),
 	}
 	slog.DebugContext(ctx, "Set OCI image imageReference digest in output resource", "value", transformation.Output.Resource.Digest.Value)
 

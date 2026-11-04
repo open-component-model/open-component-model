@@ -130,8 +130,8 @@ func GetPlugin(cmd *cobra.Command, args []string) error {
 
 		var desc *descruntime.Descriptor
 
-		// Get latest version of plugin registry if no version is specified
-		if ref.Version == "" {
+		// Get latest version of plugin registry if neither a version nor a digest is specified
+		if ref.Version == "" && ref.Digest == "" {
 			descs, err := ocm.GetComponentVersions(ctx, ocm.GetComponentVersionsOptions{VersionOptions: ocm.VersionOptions{LatestOnly: true}}, ref.Component, ref.Version, repo)
 			if err != nil {
 				return fmt.Errorf("failed getting component versions for plugin registry: %w", err)
@@ -146,7 +146,7 @@ func GetPlugin(cmd *cobra.Command, args []string) error {
 			// Add version to registry ref to be able to identify the source later
 			reg = fmt.Sprintf("%s:%s", reg, desc.Component.Version)
 		} else {
-			desc, err = repo.GetComponentVersion(ctx, ref.Component, ref.Version)
+			_, desc, err = ocm.GetPinnedComponentVersion(ctx, repo, ref)
 			if err != nil {
 				return fmt.Errorf("failed getting component constructor for plugin registry: %w", err)
 			}

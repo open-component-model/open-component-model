@@ -19,11 +19,11 @@
 //   to Bootstrap's Tab API switches each matching group correctly and leaves
 //   the other groups alone.
 
-import { Tab } from 'bootstrap';
+import { Tab } from "bootstrap";
 
 function toggleTabs(event) {
     event.preventDefault();
-    const targetKey = event.currentTarget.getAttribute('data-toggle-tab');
+    const targetKey = event.currentTarget.getAttribute("data-toggle-tab");
     if (!targetKey) {
         return;
     }
@@ -34,6 +34,6 @@ function toggleTabs(event) {
     }
 }
 
-for (const tab of document.querySelectorAll('[data-toggle-tab]')) {
-    tab.addEventListener('click', toggleTabs);
+for (const tab of document.querySelectorAll("[data-toggle-tab]")) {
+    tab.addEventListener("click", toggleTabs);
 }

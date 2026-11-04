@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/opencontainers/go-digest"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,6 +24,36 @@ func TestOCIImageLayer_Validate(t *testing.T) {
 				Size:      100,
 			},
 			wantErr: false,
+		},
+		{
+			name:  "registry without tag or digest",
+			layer: OCIImageLayer{Reference: "example.com/repo", Digest: validDigest, Size: 100},
+		},
+		{
+			name:  "scheme with digest",
+			layer: OCIImageLayer{Reference: "https://example.com/repo@" + validDigest.String(), Digest: validDigest, Size: 100},
+		},
+		{
+			name:    "tag",
+			layer:   OCIImageLayer{Reference: "example.com/repo:latest", Digest: validDigest, Size: 100},
+			wantErr: true,
+		},
+		{
+			name:    "tag with digest",
+			layer:   OCIImageLayer{Reference: "https://example.com/repo:latest@" + validDigest.String(), Digest: validDigest, Size: 100},
+			wantErr: true,
+		},
+		{
+			name:  "zero size",
+			layer: OCIImageLayer{Reference: "example.com/repo", Digest: digest.FromString(""), Size: 0},
+		},
+		{
+			name:  "reference without registry",
+			layer: OCIImageLayer{Reference: "nginx", Digest: validDigest, Size: 100},
+		},
+		{
+			name:  "digest reference without registry",
+			layer: OCIImageLayer{Reference: "nginx@" + validDigest.String(), Digest: validDigest, Size: 100},
 		},
 		{
 			name: "empty reference",
@@ -66,12 +95,13 @@ func TestOCIImageLayer_Validate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
 			err := tt.layer.Validate()
 			if tt.wantErr {
-				assert.Error(t, err)
+				r.Error(err)
 				return
 			}
-			assert.NoError(t, err)
+			r.NoError(err)
 		})
 	}
 }
@@ -104,6 +134,37 @@ func TestOCIImageValidate(t *testing.T) {
 				return
 			}
 			require.ErrorContains(t, err, tt.wantErr)
+		})
+	}
+}
+
+func TestRelativeOCIReference_Validate(t *testing.T) {
+	for _, tt := range []struct {
+		name      string
+		reference string
+		wantErr   bool
+	}{
+		{name: "tag only", reference: "ocm/value:v2.0"},
+		{name: "single segment", reference: "value:v2.0"},
+		{name: "multi-segment", reference: "ocm-prefix/images/app:v1"},
+		{name: "dotted first segment is a path", reference: "acme.org/value:v2.0"},
+		{name: "digest only", reference: "ocm/value@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"},
+		{name: "tag and digest", reference: "ocm/value:v2.0@sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"},
+
+		{name: "empty", reference: "", wantErr: true},
+		{name: "leading slash", reference: "/ocm/value:v2.0", wantErr: true},
+		{name: "scheme", reference: "oci://ocm/value:v2.0", wantErr: true},
+		{name: "host:port", reference: "registry.io:5000/value:v2.0", wantErr: true},
+		{name: "invalid syntax", reference: "ocm/value:bad:tag:form", wantErr: true},
+		{name: "invalid digest", reference: "ocm/value@sha256:nothex", wantErr: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			err := (&RelativeOCIReference{Reference: tt.reference}).Validate()
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
 		})
 	}
 }

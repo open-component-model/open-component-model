@@ -9,12 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/time/rate"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/fields"
 	k8stypes "k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/util/workqueue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -30,7 +28,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/util"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/verification"
@@ -41,8 +38,7 @@ import (
 type Reconciler struct {
 	*ocm.BaseReconciler
 
-	// Resolver provides repository resolution and caching for resource reconciliation.
-	// It ensures that repository access is efficient and consistent during reconciliation operations.
+	// Resolver provides repository resolution and verification for resource reconciliation.
 	Resolver *resolution.Resolver
 }
 
@@ -66,32 +62,62 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 
 	// This index is required to get all deployers that reference a resource. This is required to make sure that when
 	// deleting the resource, no deployer exists anymore that references that resource.
-	if err := mgr.GetFieldIndexer().IndexField(
-		ctx,
-		&v1alpha1.Deployer{},
-		deployerIndex,
-		func(obj client.Object) []string {
-			deployer, ok := obj.(*v1alpha1.Deployer)
-			if !ok {
-				return nil
-			}
+	for _, deployerType := range []client.Object{&v1alpha1.Deployer{}, &v1alpha1.NamespacedDeployer{}} {
+		if err := mgr.GetFieldIndexer().IndexField(
+			ctx,
+			deployerType,
+			deployerIndex,
+			func(obj client.Object) []string {
+				deployer, ok := obj.(v1alpha1.DeployerObject)
+				if !ok {
+					return nil
+				}
 
-			return []string{fmt.Sprintf(
-				"%s/%s",
-				deployer.Spec.ResourceRef.Namespace,
-				deployer.Spec.ResourceRef.Name,
-			)}
-		},
-	); err != nil {
-		return fmt.Errorf("failed setting index fields: %w", err)
+				return []string{fmt.Sprintf(
+					"%s/%s",
+					deployer.GetResourceRef().Namespace,
+					deployer.GetResourceRef().Name,
+				)}
+			},
+		); err != nil {
+			return fmt.Errorf("failed setting index fields: %w", err)
+		}
 	}
 
-	// event source from resolver's worker pool to get notified when resolutions complete
-	eventSource := workerpool.NewEventSource(r.Resolver.WorkerPool())
+	// Ensure to reconcile the resource when a deployer changes that references this resource. We want to
+	// reconcile because the resource-finalizer makes sure that the resource is only deleted when
+	// it is not referenced by any deployer anymore. So, when the resource is already marked for deletion, we
+	// want to get notified about deployer changes (e.g. deletion) to remove the resource-finalizer
+	// respectively.
+	enqueueDeletingResource := handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+		deployer, ok := obj.(v1alpha1.DeployerObject)
+		if !ok {
+			return []reconcile.Request{}
+		}
+
+		resource := &v1alpha1.Resource{}
+		if err := r.Get(ctx, client.ObjectKey{
+			Namespace: deployer.GetResourceRef().Namespace,
+			Name:      deployer.GetResourceRef().Name,
+		}, resource); err != nil {
+			return []reconcile.Request{}
+		}
+
+		// Only reconcile if the resource is marked for deletion
+		if resource.GetDeletionTimestamp().IsZero() {
+			return []reconcile.Request{}
+		}
+
+		return []reconcile.Request{
+			{NamespacedName: k8stypes.NamespacedName{
+				Namespace: resource.GetNamespace(),
+				Name:      resource.GetName(),
+			}},
+		}
+	})
 
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Resource{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		WatchesRawSource(eventSource).
 		// Watch for component-events that are referenced by resources
 		Watches(
 			&v1alpha1.Component{},
@@ -120,45 +146,11 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 
 				return requests
 			}), builder.WithPredicates(ocm.ComponentInfoChangedPredicate{})).
-		Watches(
-			// Ensure to reconcile the resource when a deployer changes that references this resource. We want to
-			// reconcile because the resource-finalizer makes sure that the resource is only deleted when
-			// it is not referenced by any deployer anymore. So, when the resource is already marked for deletion, we
-			// want to get notified about deployer changes (e.g. deletion) to remove the resource-finalizer
-			// respectively.
-			&v1alpha1.Deployer{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
-				deployer, ok := obj.(*v1alpha1.Deployer)
-				if !ok {
-					return []reconcile.Request{}
-				}
-
-				resource := &v1alpha1.Resource{}
-				if err := r.Get(ctx, client.ObjectKey{
-					Namespace: deployer.Spec.ResourceRef.Namespace,
-					Name:      deployer.Spec.ResourceRef.Name,
-				}, resource); err != nil {
-					return []reconcile.Request{}
-				}
-
-				// Only reconcile if the resource is marked for deletion
-				if resource.GetDeletionTimestamp().IsZero() {
-					return []reconcile.Request{}
-				}
-
-				return []reconcile.Request{
-					{NamespacedName: k8stypes.NamespacedName{
-						Namespace: resource.GetNamespace(),
-						Name:      resource.GetName(),
-					}},
-				}
-			})).
+		Watches(&v1alpha1.Deployer{}, enqueueDeletingResource).
+		Watches(&v1alpha1.NamespacedDeployer{}, enqueueDeletingResource).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: concurrency,
-			RateLimiter: workqueue.NewTypedMaxOfRateLimiter(
-				workqueue.NewTypedItemExponentialFailureRateLimiter[reconcile.Request](5*time.Millisecond, 5*time.Minute),
-				&workqueue.TypedBucketRateLimiter[reconcile.Request]{Limiter: rate.NewLimiter(10, 100)},
-			),
+			RateLimiter:             r.RateLimit.Limiter(),
 		}).
 		Complete(r)
 }
@@ -191,25 +183,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	if !resource.GetDeletionTimestamp().IsZero() {
 		logger.Info("resource is marked for deletion, attempting cleanup")
-		// The resource should only be deleted if no deployer exists that references that resource.
-		deployerList := &v1alpha1.DeployerList{}
-		if err := r.List(ctx, deployerList, &client.ListOptions{
-			FieldSelector: fields.OneTermEqualSelector(
-				deployerIndex,
-				client.ObjectKeyFromObject(resource).String(),
-			),
-		}); err != nil {
+		// The resource should only be deleted if no deployer of either kind exists that references that resource.
+		names, err := r.referencingDeployers(ctx, resource)
+		if err != nil {
 			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.DeletionFailedReason, err.Error())
 
-			return ctrl.Result{}, fmt.Errorf("failed to list deployers: %w", err)
+			return ctrl.Result{}, err
 		}
 
-		if len(deployerList.Items) > 0 {
-			var names []string
-			for _, deployer := range deployerList.Items {
-				names = append(names, deployer.Name)
-			}
-
+		if len(names) > 0 {
 			msg := fmt.Sprintf(
 				"resource cannot be removed as deployers are still referencing it: %s",
 				strings.Join(names, ","),
@@ -287,12 +269,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to configure context: %w", err)
 	}
 
-	// Set effective config immediately so the deferred patch persists it
-	// even if a subsequent step fails.
-	if !equality.Semantic.DeepEqual(resource.Status.EffectiveOCMConfig, configs) {
-		resource.Status.EffectiveOCMConfig = configs
-		return ctrl.Result{}, fmt.Errorf("effective ocm config changed")
-	}
+	// The deferred status patch persists it, even if a later step fails.
+	resource.Status.EffectiveOCMConfig = configs
 
 	repoSpec := &runtime.Raw{}
 	if err := runtime.NewScheme(runtime.WithAllowUnknown()).Decode(
@@ -325,39 +303,18 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get verifications: %w", err)
 	}
 
-	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
+	resolveOpts := &resolution.Options{
 		RepositorySpec: repoSpec,
 		Configuration:  cfg,
 		PluginManager:  pm,
-		Verifications:  verifications,
-		RequesterFunc: func() workerpool.RequesterInfo {
-			return workerpool.RequesterInfo{
-				NamespacedName: k8stypes.NamespacedName{
-					Namespace: resource.GetNamespace(),
-					Name:      resource.GetName(),
-				},
-			}
-		},
-	})
-	if err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), resource, v1alpha1.GetRepositoryFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to create cache-backed repository: %w", err)
 	}
 
-	referencedDescriptor, err := cacheBackedRepo.GetComponentVersion(ctx,
+	referencedDescriptor, err := r.Resolver.GetComponentVersion(ctx, resolveOpts,
+		resolution.Verification{Verifications: verifications},
 		component.Status.Component.Component,
 		component.Status.Component.Version)
 	switch {
-	case errors.Is(err, workerpool.ErrResolutionInProgress):
-		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
-		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.ResolutionInProgress, err.Error())
-		logger.Info("component version resolution in progress, waiting for event notification",
-			"component", component.Status.Component.Component,
-			"version", component.Status.Component.Version)
-
-		return ctrl.Result{}, nil
-	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+	case errors.Is(err, resolution.ErrNotSafelyDigestible):
 		// Ignore error, but log event
 		event.New(r.EventRecorder, resource, nil, v1alpha1.EventSeverityError, "%s", err.Error())
 	default:
@@ -375,28 +332,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		r.Resolver,
 		referencedDescriptor,
 		resource.Spec.Resource.ByReference.ReferencePath,
-		&resolution.RepositoryOptions{
-			RepositorySpec: repoSpec,
-			Configuration:  cfg,
-			PluginManager:  pm,
-			RequesterFunc: func() workerpool.RequesterInfo {
-				return workerpool.RequesterInfo{
-					NamespacedName: k8stypes.NamespacedName{
-						Namespace: resource.GetNamespace(),
-						Name:      resource.GetName(),
-					},
-				}
-			},
-		},
+		resolveOpts,
 	)
 	switch {
-	case errors.Is(err, workerpool.ErrResolutionInProgress):
-		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
-		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.ResolutionInProgress, err.Error())
-		logger.Info("reference path resolution in progress, waiting for event notification")
-
-		return ctrl.Result{}, nil
-	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+	case errors.Is(err, resolution.ErrNotSafelyDigestible):
 		// Ignore error, but log event
 		event.New(r.EventRecorder, resource, nil, v1alpha1.EventSeverityError, "%s", err.Error())
 	default:
@@ -428,17 +367,17 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	if resource.Spec.VerificationPolicy != v1alpha1.VerificationPolicyNever {
 		logger.V(1).Info("verifying resource")
 
-		matchedResource, err = ocm.VerifyResource(ctx, pm, matchedResource, cfg)
+		if ocm.IsLocalResource(matchedResource) {
+			// Local resources are checked against the digest their repository stores them
+			// under; only content it cannot check that way is downloaded.
+			err = ocm.VerifyLocalResource(ctx, r.Resolver, resolveOpts, resourceDescriptor, matchedResource)
+		} else {
+			matchedResource, err = ocm.VerifyResource(ctx, pm, matchedResource, cfg)
+		}
 		if err != nil {
-			if errors.Is(err, ocm.ErrPluginNotFound) {
-				// TODO(@frewilhelm): For now we skip resource types that do not have a digest processor plugin.
-				//                    We need to adjust this when the plugins are available
-				logger.V(1).Info("skipping resource verification as no suitable plugin was found")
-			} else {
-				status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
+			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
 
-				return ctrl.Result{}, fmt.Errorf("failed to verify resource: %w", err)
-			}
+			return ctrl.Result{}, fmt.Errorf("failed to verify resource: %w", err)
 		}
 	} else {
 		logger.V(1).Info("skip verifying resource: verification policy is Never")
@@ -535,4 +474,34 @@ func convertLabels(in []descriptor.Label) ([]v1alpha1.Label, error) {
 	}
 
 	return out, nil
+}
+
+// referencingDeployers returns the names of all Deployers and NamespacedDeployers referencing the resource.
+func (r *Reconciler) referencingDeployers(ctx context.Context, resource *v1alpha1.Resource) ([]string, error) {
+	opts := &client.ListOptions{
+		FieldSelector: fields.OneTermEqualSelector(
+			deployerIndex,
+			client.ObjectKeyFromObject(resource).String(),
+		),
+	}
+
+	deployers := &v1alpha1.DeployerList{}
+	if err := r.List(ctx, deployers, opts); err != nil {
+		return nil, fmt.Errorf("failed to list deployers: %w", err)
+	}
+
+	namespacedDeployers := &v1alpha1.NamespacedDeployerList{}
+	if err := r.List(ctx, namespacedDeployers, opts); err != nil {
+		return nil, fmt.Errorf("failed to list namespaced deployers: %w", err)
+	}
+
+	names := make([]string, 0, len(deployers.Items)+len(namespacedDeployers.Items))
+	for _, deployer := range deployers.Items {
+		names = append(names, deployer.Name)
+	}
+	for _, deployer := range namespacedDeployers.Items {
+		names = append(names, client.ObjectKeyFromObject(&deployer).String())
+	}
+
+	return names, nil
 }

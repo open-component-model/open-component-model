@@ -757,11 +757,11 @@ func TestConvertFromDescriptorSource(t *testing.T) {
 			assert.Equal(t, tt.expected.Version, result.Version)
 			assert.Equal(t, tt.expected.Type, result.Type)
 			assert.Equal(t, tt.expected.Labels, result.Labels)
-			if tt.expected.AccessOrInput.Access != nil {
-				assert.NotNil(t, result.AccessOrInput.Access)
-				assert.Equal(t, tt.expected.AccessOrInput.Access.GetType(), result.AccessOrInput.Access.GetType())
+			if tt.expected.Access != nil {
+				assert.NotNil(t, result.Access)
+				assert.Equal(t, tt.expected.Access.GetType(), result.Access.GetType())
 			} else {
-				assert.Nil(t, result.AccessOrInput.Access)
+				assert.Nil(t, result.Access)
 			}
 		})
 	}

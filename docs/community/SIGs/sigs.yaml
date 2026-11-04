@@ -1,6 +1,5 @@
 # List of OCM Special Interest Groups (SIGs)
 # This file is machine-readable and can be used for automation, dashboards, or website integration.
-# The 
 
 sigs:
   - name: SIG Runtime
@@ -8,14 +7,14 @@ sigs:
     leads:
       - name: Gergely Brautigam
         role: Chair
-        github: @Skarlso
+        github: "@Skarlso"
       - name: Fabian Burth
         role: Tech Lead
-        github: @fabianburth
+        github: "@fabianburth"
     meeting:
       cadence: no regular SIG meetings, but participation in monthly community meetings
-      url: 
-      notes: https://github.com/open-component-model/open-component-model/tree/main/docs/community/SIGs/Runtime/meeting-notes
+      url: https://ocm.software/community/#community-calls
+      notes: https://github.com/open-component-model/open-component-model/blob/main/docs/community/README.md#community-call-history
     communication:
       mailing_list: open-component-model-sig-runtime@lists.neonephos.org
       zulip: https://linuxfoundation.zulipchat.com/#narrow/channel/532975-neonephos-ocm-support

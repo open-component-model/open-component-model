@@ -55,7 +55,7 @@ func newFakeS3(t *testing.T, body []byte) *httptest.Server {
 		// Real S3 reports a checksum, and the SDK warns about every response carrying none.
 		sum := make([]byte, 4)
 		binary.BigEndian.PutUint32(sum, crc32.ChecksumIEEE(body))
-		w.Header().Set("x-amz-checksum-crc32", base64.StdEncoding.EncodeToString(sum))
+		w.Header().Set("X-Amz-Checksum-Crc32", base64.StdEncoding.EncodeToString(sum))
 		_, _ = w.Write(body)
 	}))
 	t.Cleanup(srv.Close)
@@ -95,12 +95,13 @@ func TestDownloadS3Resource_Transform(t *testing.T) {
 	srv := newFakeS3(t, []byte(content))
 
 	t.Run("downloads resource to a file", func(t *testing.T) {
+		t.Parallel()
 		r := require.New(t)
 		ctx := t.Context()
 
 		transform := &transformation.DownloadS3Resource{
 			Scheme:             scheme,
-			ResourceRepository: repository.NewResourceRepository(nil),
+			ResourceRepository: repository.NewResourceRepository(),
 			CredentialProvider: staticCredentials{},
 		}
 
@@ -134,13 +135,14 @@ func TestDownloadS3Resource_Transform(t *testing.T) {
 	})
 
 	t.Run("downloads to specified output directory", func(t *testing.T) {
+		t.Parallel()
 		r := require.New(t)
 		ctx := t.Context()
 		outputDir := t.TempDir()
 
 		transform := &transformation.DownloadS3Resource{
 			Scheme:             scheme,
-			ResourceRepository: repository.NewResourceRepository(nil),
+			ResourceRepository: repository.NewResourceRepository(),
 			CredentialProvider: staticCredentials{},
 		}
 
@@ -166,6 +168,7 @@ func TestDownloadS3Resource_Transform(t *testing.T) {
 	})
 
 	t.Run("removes the output file when the download fails", func(t *testing.T) {
+		t.Parallel()
 		r := require.New(t)
 		ctx := t.Context()
 		outputDir := t.TempDir()
@@ -177,7 +180,7 @@ func TestDownloadS3Resource_Transform(t *testing.T) {
 
 		transform := &transformation.DownloadS3Resource{
 			Scheme:             scheme,
-			ResourceRepository: repository.NewResourceRepository(nil),
+			ResourceRepository: repository.NewResourceRepository(),
 			CredentialProvider: staticCredentials{},
 		}
 
@@ -200,12 +203,13 @@ func TestDownloadS3Resource_Transform(t *testing.T) {
 	})
 
 	t.Run("fails when spec is nil", func(t *testing.T) {
+		t.Parallel()
 		r := require.New(t)
 		ctx := t.Context()
 
 		transform := &transformation.DownloadS3Resource{
 			Scheme:             scheme,
-			ResourceRepository: repository.NewResourceRepository(nil),
+			ResourceRepository: repository.NewResourceRepository(),
 			CredentialProvider: staticCredentials{},
 		}
 
@@ -222,12 +226,13 @@ func TestDownloadS3Resource_Transform(t *testing.T) {
 	})
 
 	t.Run("fails when resource is nil", func(t *testing.T) {
+		t.Parallel()
 		r := require.New(t)
 		ctx := t.Context()
 
 		transform := &transformation.DownloadS3Resource{
 			Scheme:             scheme,
-			ResourceRepository: repository.NewResourceRepository(nil),
+			ResourceRepository: repository.NewResourceRepository(),
 			CredentialProvider: staticCredentials{},
 		}
 

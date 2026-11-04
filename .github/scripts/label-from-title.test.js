@@ -13,6 +13,7 @@ const maps = {
     docs: ["kind/chore", "area/documentation"],
     test: ["kind/chore", "area/quality"],
     perf: ["kind/chore", "area/quality"],
+    revert: ["kind/chore"],
   },
   scopeToLabel: {
     deps: ["kind/dependency"],
@@ -79,6 +80,12 @@ test("type with a label list applies every label (perf)", () => {
 
 test("refactor maps to kind/chore", () => {
   const { valid, labels } = deriveLabels("refactor: simplify resolver", maps);
+  assert.strictEqual(valid, true);
+  assert.deepStrictEqual(labels, ["kind/chore"]);
+});
+
+test("revert type is accepted and maps to kind/chore", () => {
+  const { valid, labels } = deriveLabels("revert: feat(cli): add foo", maps);
   assert.strictEqual(valid, true);
   assert.deepStrictEqual(labels, ["kind/chore"]);
 });

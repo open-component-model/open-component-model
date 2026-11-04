@@ -17,10 +17,11 @@ Verify component version(s) inside an OCM repository based on signatures.
 
 ## Reference Format
 
-	[type::]{repository}/[valid-prefix]/{component}[:version]
+	[type::]{repository}/[valid-prefix]/{component}[:version][@digest]
 
 - Prefixes: {component-descriptors|none} (default: "component-descriptors")  
 - Repo types: {OCIRepository|CommonTransportFormat} (short: {OCI|oci|CTF|ctf})
+- Digest: optional pin (see "ocm get cv --help"), "@sha256:<hex>" (OCI digest of the artifact the component version is stored as; the version may be omitted) or "@jsonNormalisation.v4alpha3+sha256:<hex>" (normalized: the digest signatures sign); the command fails unless the component version matches it
 
 ## OCM Verification explained in simple steps
 
@@ -28,18 +29,29 @@ Verify component version(s) inside an OCM repository based on signatures.
 - Fetch component version 
 - Normalise descriptor (algorithm from signature)
 - Recompute hash and compare with signature digest
-- Verify signature (verifier from the OCM configuration, default RSASSA-PSS verifier)
+- Verify signature (verifier from the OCM configuration, otherwise derived from the signature algorithm)
 
 ## Behavior
 
 - --signature selects a single signature by name; without it, every signature on the descriptor is verified
 - Credentials are resolved per signature under that signature's name, so every signature needs its own consumer entry
 - Signatures are verified concurrently (--concurrency-limit); the command exits non-zero on the first failure
-- Default verifier: RSASSA-PSS, resolves the public key from credentials in .ocmconfig
+- Without a configured verifier, the signature algorithm selects the default: RSA signatures (RSASSA-PSS, RSASSA-PKCS1-V1_5) use the RSA verifier, which resolves the public key from credentials in .ocmconfig
+- Sigstore signatures default to a Sigstore verifier that accepts any signer identity and issuer and logs a warning: the bundle, certificate chain and transparency log are checked, but not who signed. Configure a SigstoreVerificationConfiguration/v1alpha1 verifier with identity constraints to pin the signer
 - The verifier is configured in the OCM configuration (signing.config.ocm.software/v1alpha1), not on the command line
 - An entry with a "signature" field only applies to that signature, one without applies to all
 - The verifier is resolved per signature, so a component carrying several signatures can be verified with a different handler for each
 - --verifier-spec is no longer supported and fails with an error
+- In an OCI registry or CTF, the version tag is resolved once and the component version is read from the artifact it resolved to; on success the log field "reference" holds the reference pinned to that artifact's OCI digest. Passing it to a subsequent command (e.g. transfer, download resource) reads exactly the verified content, even if the tag moves in between
+
+## Timestamp Verification (RFC 3161 TSA)
+
+- If a signature carries an RFC 3161 timestamp, the verifier checks it automatically
+- Full certificate-chain verification of the timestamp token requires the TSA's root CA certificate, supplied via the credential graph under a TSA/v1alpha1 identity
+- Without TSA root certificates the token structure and imprint are still checked, but the certificate chain is not verified and a warning is logged
+- Only a timestamp validated against trusted TSA roots is used to validate an (RSA/PEM) signing certificate as of the signing time; a merely structural token never relaxes certificate validity
+- The TSA URL label (url.tsa.ocm.software/<signature>) selects a URL-specific TSA/v1alpha1 entry; an entry without URL attributes applies to any TSA
+- Timestamps created by the OCM v1 CLI are verified as well, but their time is not used to validate certificates unless --insecure-trust-legacy-timestamps is set: they cover only the descriptor digest, which is known before signing, so they do not prove the signature existed at that time
 
 Use to validate component versions before promotion, deployment, or further usage to ensure integrity and provenance.
 
@@ -102,7 +114,9 @@ verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0
 #
 # The verifier selects the verification handler and configures it.
 # It does NOT contain credentials - public keys and trust material are always
-# resolved via .ocmconfig credentials. If omitted, defaults to RSASSA-PSS.
+# resolved via .ocmconfig credentials. If omitted, the signature algorithm selects
+# the verifier: RSA signatures use the RSA verifier, Sigstore signatures a Sigstore
+# verifier that accepts any signer identity (with a warning).
 # Add a "signature" field to scope an entry to the signature of that name
 # (see the per-signature example below); without it the entry applies to all.
 
@@ -207,15 +221,32 @@ verify component-version ./repo//ocm.software/cli:0.12.0 --config ./sigstore-ver
 
 # Verify a specific signature
 verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --signature my-signature
+
+## Example Credential Config (TSA timestamp verification)
+# TSA/v1alpha1 identity supplying the TSA root CA for full timestamp chain verification
+# (see "Timestamp Verification (RFC 3161 TSA)" above):
+
+    type: generic.config.ocm.software/v1
+    configurations:
+    - type: credentials.config.ocm.software
+      consumers:
+      - identity:
+          type: TSA/v1alpha1
+          hostname: timestamp.digicert.com
+          scheme: http
+        credentials:
+        - type: TSACredentials/v1alpha1
+          rootCertsPEMFile: /path/to/digicert-tsa-root.pem
 ```
 
 ### Options
 
 ```
-      --concurrency-limit int   maximum amount of parallel requests to the repository for resolving component versions (default 4)
-  -h, --help                    help for component-version
-      --signature string        name of the signature to verify. If not set, all signatures are verified.
-      --verifier-spec string    DEPRECATED: no longer supported, configure the verifier in the OCM configuration instead (signing.config.ocm.software/v1alpha1, field "verifier")
+      --concurrency-limit int              maximum amount of parallel requests to the repository for resolving component versions (default 4)
+  -h, --help                               help for component-version
+      --insecure-trust-legacy-timestamps   use the time of trusted timestamps created by the OCM v1 CLI to validate expired signing certificates; these timestamps cover only the descriptor digest, so a signature made after the certificate expired can reuse one
+      --signature string                   name of the signature to verify. If not set, all signatures are verified.
+      --verifier-spec string               DEPRECATED: no longer supported, configure the verifier in the OCM configuration instead (signing.config.ocm.software/v1alpha1, field "verifier")
 ```
 
 ### Options inherited from parent commands
@@ -240,7 +271,9 @@ verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 -
                                            If multiple configuration files are found, they will be merged in the order they are discovered.
                                            Later entries have higher priority.
                                            Using the option, the specified configuration file(s) will be used instead of the lookup above.
-                                           Configuration documents piped into stdin are applied last, on top of these files.
+                                           Use "-" to read configuration documents from stdin. It is an entry like any other: on its own it
+                                           replaces the lookup above, so add --config <file> to keep a file, and a repeated "-" is ignored.
+                                           Other documents on stdin stay there for commands that read it, such as transfer with --transfer-spec -.
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output

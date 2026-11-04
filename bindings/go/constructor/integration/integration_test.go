@@ -201,7 +201,7 @@ type targetRepositoryProvider struct {
 }
 
 func (p targetRepositoryProvider) GetTargetRepository(_ context.Context, _ *constructorruntime.Component) (constructor.TargetRepository, error) {
-	return targetRepository{repo: p.repo}, nil
+	return targetRepository(p), nil
 }
 
 // targetRepository adapts a ComponentVersionRepository to constructor.TargetRepository.

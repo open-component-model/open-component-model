@@ -12,6 +12,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
@@ -94,7 +95,7 @@ func TestWriteAndRead(t *testing.T) {
 			defer tt.cleanup()
 
 			// Create a test blob
-			testBlob := blob.NewDirectReadOnlyBlob(bytes.NewReader(testData))
+			testBlob := inmemory.New(bytes.NewReader(testData))
 
 			write := func() {
 				err := Write(tt.location, testBlob)
@@ -149,7 +150,7 @@ func TestWriteErrors(t *testing.T) {
 				LocationType: types.LocationTypeLocalFile,
 				Value:        "/non/existent/path/test.txt",
 			},
-			blob:        blob.NewDirectReadOnlyBlob(bytes.NewReader([]byte("test"))),
+			blob:        inmemory.New(bytes.NewReader([]byte("test"))),
 			expectError: true,
 		},
 		{
@@ -158,7 +159,7 @@ func TestWriteErrors(t *testing.T) {
 				LocationType: types.LocationTypeUnixNamedPipe,
 				Value:        "/non/existent/path/test.pipe",
 			},
-			blob:        blob.NewDirectReadOnlyBlob(bytes.NewReader([]byte("test"))),
+			blob:        inmemory.New(bytes.NewReader([]byte("test"))),
 			expectError: true,
 		},
 	}
@@ -176,8 +177,6 @@ func TestWriteErrors(t *testing.T) {
 }
 
 func TestReadErrors(t *testing.T) {
-	r := require.New(t)
-
 	// Test cases for read errors
 	tests := []struct {
 		name        string
@@ -212,7 +211,15 @@ func TestReadErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := Read(tt.location)
+			r := require.New(t)
+			b, err := Read(tt.location)
+			if err == nil {
+				// A missing file is reported when the blob is read, not when it is created.
+				var rc io.ReadCloser
+				if rc, err = b.ReadCloser(); err == nil {
+					r.NoError(rc.Close())
+				}
+			}
 			if tt.expectError {
 				r.Error(err, "expected error but got none")
 			} else {

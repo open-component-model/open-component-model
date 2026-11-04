@@ -424,17 +424,9 @@ func Test_Get_Component_Version_Formats_Recursive(t *testing.T) {
 - component:
     componentReferences:
     - componentName: ocm.software/leaf-a
-      digest:
-        hashAlgorithm: ""
-        normalisationAlgorithm: ""
-        value: ""
       name: leaf-a
       version: 0.0.1
     - componentName: ocm.software/leaf-b
-      digest:
-        hashAlgorithm: ""
-        normalisationAlgorithm: ""
-        value: ""
       name: leaf-b
       version: 0.0.1
     name: ocm.software/root
@@ -516,21 +508,11 @@ COMPONENT           │ VERSION │ PROVIDER
 								"name":          "leaf-a",
 								"version":       "0.0.1",
 								"componentName": "ocm.software/leaf-a",
-								"digest": map[string]any{
-									"hashAlgorithm":          "",
-									"normalisationAlgorithm": "",
-									"value":                  "",
-								},
 							},
 							map[string]any{
 								"name":          "leaf-b",
 								"version":       "0.0.1",
 								"componentName": "ocm.software/leaf-b",
-								"digest": map[string]any{
-									"hashAlgorithm":          "",
-									"normalisationAlgorithm": "",
-									"value":                  "",
-								},
 							},
 						},
 						"name":               "ocm.software/root",
@@ -960,7 +942,7 @@ resources:
 		r.NoError(blob.Copy(&buf, blb))
 		r.Equal("foobar", buf.String(), "expected resource content to match test file content")
 
-		t.Run("expect failure on existing component version", func(t *testing.T) {
+		t.Run("expect failure on invalid semver in constructor", func(t *testing.T) {
 			constructorYAML = fmt.Sprintf(`
 name: ocm.software/examples-01
 version: invalid_1.0.0
@@ -985,16 +967,17 @@ resources:
 			_, err := test.OCM(t, test.WithArgs("add", "cv",
 				"--constructor", constructorYAMLFilePath,
 				"--repository", archiveFilePath,
-				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
 			), test.WithErrorOutput(logs), test.WithOutput(result))
 
 			r.Error(err, "expected error on invalid component version semver")
 		})
 
-		t.Run("expect failure on invalid semver in constructor", func(t *testing.T) {
+		// The abort policy is deprecated but still honoured until it is removed.
+		t.Run("expect failure on existing component version with abort-and-fail", func(t *testing.T) {
 			_, err := test.OCM(t, test.WithArgs("add", "cv",
 				"--constructor", constructorYAMLFilePath,
 				"--repository", archiveFilePath,
+				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyAbortAndFail),
 			), test.WithErrorOutput(logs))
 
 			r.Error(err, "expected error on adding existing component version")
@@ -1005,7 +988,7 @@ resources:
 			r.NotEmpty(entries, "expected log entries to be present")
 		})
 
-		t.Run("expect success on replace strategy", func(t *testing.T) {
+		t.Run("expect existing component version to be replaced by default", func(t *testing.T) {
 			constructorYAML = fmt.Sprintf(`
 name: ocm.software/examples-01
 version: 1.0.0
@@ -1030,10 +1013,9 @@ resources:
 			_, err := test.OCM(t, test.WithArgs("add", "cv",
 				"--constructor", constructorYAMLFilePath,
 				"--repository", archiveFilePath,
-				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
 			), test.WithErrorOutput(logs), test.WithOutput(result))
 
-			r.NoError(err, "could not construct component version", "replace strategy should allow an existing component version to be replaced")
+			r.NoError(err, "could not construct component version", "an existing component version is replaced by default")
 
 			entries, err := logs.List()
 			r.NoError(err, "failed to list log entries")
@@ -1093,7 +1075,6 @@ resources:
 				"--constructor", constructorYAMLFilePath,
 				"--repository", archiveFilePath,
 				"--working-directory", tmp,
-				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
 			), test.WithErrorOutput(logs))
 
 			r.Equal(new(tmp), ocmctx.FromContext(cmd.Context()).FilesystemConfig().WorkingDirectory, "expected working directory to be set in ocm context automatically")
@@ -1104,7 +1085,7 @@ resources:
 	t.Run("construction with references targeting fallback resolvers", func(t *testing.T) {
 		r := require.New(t)
 		tmp := t.TempDir()
-		externalConstructorYAML := fmt.Sprintf(`
+		externalConstructorYAML := `
 name: ocm.software/external
 version: 1.0.0
 provider:
@@ -1115,7 +1096,7 @@ resources:
   input:
     type: utf8/v1
     text: "I come from external!"
-`)
+`
 		externalConstructorYAMLFilePath := filepath.Join(tmp, "component-constructor-external.yaml")
 		r.NoError(os.WriteFile(externalConstructorYAMLFilePath, []byte(externalConstructorYAML), 0o600))
 		externalArchiveFilePath := filepath.Join(tmp, "transport-archive-external")
@@ -1141,7 +1122,7 @@ configurations:
 		legacyResolverConfigYAMLFilePath := filepath.Join(tmp, "config-with-legacy-resolver.yaml")
 		r.NoError(os.WriteFile(legacyResolverConfigYAMLFilePath, []byte(legacyResolverConfigYAML), 0o600))
 
-		constructorYAML = fmt.Sprintf(`
+		constructorYAML = `
 components:
 - name: ocm.software/a
   version: 1.0.0
@@ -1170,7 +1151,7 @@ components:
       input:
         type: utf8/v1
         text: "I come from B"
-`)
+`
 
 		// Create a replacement test file to be added to the component version
 		constructorYAMLFilePath := filepath.Join(tmp, "component-constructor-external-reference.yaml")
@@ -1181,7 +1162,6 @@ components:
 			"--repository", archiveFilePath,
 			"--working-directory", tmp,
 			"--config", legacyResolverConfigYAMLFilePath,
-			"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
 			"--external-component-version-copy-policy", string(componentversion.ExternalComponentVersionCopyPolicyCopyOrFail),
 		), test.WithErrorOutput(logs))
 
@@ -1219,7 +1199,7 @@ components:
 	t.Run("construction with references targeting resolvers", func(t *testing.T) {
 		r := require.New(t)
 		tmp := t.TempDir()
-		externalConstructorYAML := fmt.Sprintf(`
+		externalConstructorYAML := `
 name: ocm.software/external
 version: 1.0.0
 provider:
@@ -1230,7 +1210,7 @@ resources:
   input:
     type: utf8/v1
     text: "I come from external!"
-`)
+`
 		externalConstructorYAMLFilePath := filepath.Join(tmp, "component-constructor-external.yaml")
 		r.NoError(os.WriteFile(externalConstructorYAMLFilePath, []byte(externalConstructorYAML), 0o600))
 		externalArchiveFilePath := filepath.Join(tmp, "transport-archive-external")
@@ -1257,7 +1237,7 @@ configurations:
 		resolverConfigYAMLFilePath := filepath.Join(tmp, "config-with-resolver.yaml")
 		r.NoError(os.WriteFile(resolverConfigYAMLFilePath, []byte(resolverConfigYAML), 0o600))
 
-		constructorYAML = fmt.Sprintf(`
+		constructorYAML = `
 components:
 - name: ocm.software/a
   version: 1.0.0
@@ -1286,7 +1266,7 @@ components:
       input:
         type: utf8/v1
         text: "I come from B"
-`)
+`
 
 		// Create a replacement test file to be added to the component version
 		constructorYAMLFilePath := filepath.Join(tmp, "component-constructor-external-reference.yaml")
@@ -1297,7 +1277,6 @@ components:
 			"--repository", archiveFilePath,
 			"--working-directory", tmp,
 			"--config", resolverConfigYAMLFilePath,
-			"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
 			"--external-component-version-copy-policy", string(componentversion.ExternalComponentVersionCopyPolicyCopyOrFail),
 		), test.WithErrorOutput(logs))
 
@@ -1836,13 +1815,52 @@ configurations:
 	)
 	r.NoError(err, "failed to sign component version")
 
+	// Signing without --normalisation must default to jsonNormalisation/v4alpha3:
+	// the printed signature pins its own normalisation algorithm.
+	r.Contains(logs.String(), "jsonNormalisation/v4alpha3",
+		"signing without --normalisation must default to v4alpha3")
+
+	// --normalisation only offers signable algorithms: the verify-only v1 and
+	// the legacy v3 alias are rejected while parsing the flag.
+	for _, algo := range []string{"jsonNormalisation/v1", "jsonNormalisation/v3"} {
+		_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+			reference,
+			"--signature", signatureName,
+			"--normalisation", algo,
+			"--config", ocmConfigFilePath),
+		)
+		r.ErrorContains(err, "expected one of", "%s must not be signable", algo)
+	}
+
+	const olderAlgorithmWarning = "older normalisation algorithm"
+	verifyLogs := test.NewJSONLogReader()
 	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
 		reference,
 		"--signature", signatureName,
 		"--config", ocmConfigFilePath),
-		test.WithOutput(logs),
+		test.WithErrorOutput(verifyLogs),
 	)
 	r.NoError(err, "failed to verify component version")
+	r.NotContains(verifyLogs.String(), olderAlgorithmWarning, "a default signature must not warn")
+
+	// Trusting a signature under an older algorithm warns, recommending an upgrade.
+	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+		reference,
+		"--signature", signatureName,
+		"--normalisation", "jsonNormalisation/v4alpha1",
+		"--force",
+		"--config", ocmConfigFilePath),
+	)
+	r.NoError(err, "failed to re-sign component version with v4alpha1")
+	verifyLogs = test.NewJSONLogReader()
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
+		reference,
+		"--signature", signatureName,
+		"--config", ocmConfigFilePath),
+		test.WithErrorOutput(verifyLogs),
+	)
+	r.NoError(err, "failed to verify v4alpha1 signature")
+	r.Contains(verifyLogs.String(), olderAlgorithmWarning, "a v4alpha1 signature must warn")
 }
 
 func Test_Sign_With_Sigstore_Spec_Selects_Cosign_Handler(t *testing.T) {
@@ -2534,7 +2552,7 @@ resources:
 		r := require.New(t)
 		// We need to calculate the digest - the referenced component doesn't have it stored.
 		// Create a component referencing it and let it calculate the digest.
-		constructorYAML := fmt.Sprintf(`
+		constructorYAML := `
 name: ocm.software/referencing-no-digest
 version: 1.0.0
 provider:
@@ -2549,7 +2567,7 @@ resources:
   input:
     type: utf8/v1
     text: "I reference another component"
-`)
+`
 		constructorYAMLFilePath := filepath.Join(tmp, "referencing-no-digest-constructor.yaml")
 		r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
 
@@ -2685,7 +2703,7 @@ type: generic.config.ocm.software/v1
 		{
 			name: "filesystem config - merge multiple files",
 			args: []string{"get", "config"},
-			// Config file combination covers: a value that gets overriden, a value that is preserved, and a value that is added from the second file
+			// Config file combination covers: a value that gets overridden, a value that is preserved, and a value that is added from the second file
 			configsYAML: []string{`
 type: generic.config.ocm.software/v1
 configurations:

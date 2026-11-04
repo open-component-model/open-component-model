@@ -3,6 +3,7 @@ package transfer
 import (
 	"context"
 
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -15,6 +16,13 @@ type ComponentID struct {
 
 	// Version is the semantic version (e.g., "1.0.0").
 	Version string
+
+	// Digest optionally pins the component version (see [repository.ParseDigestPin]). With a
+	// normalisation algorithm, the transfer fails unless the normalised source descriptor has
+	// this digest. Without one, it is the OCI digest of the artifact (image index or manifest)
+	// the component version is stored as in the source: the descriptor and all local resources
+	// are read from that artifact instead of from what the version tag resolves to.
+	Digest *descriptor.Digest
 }
 
 // String returns the "component:version" key form used internally for DAG roots.

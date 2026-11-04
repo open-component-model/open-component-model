@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer/internal"
@@ -22,7 +23,8 @@ import (
 // the first uploader whose match selects a resource handles it, and a selected
 // uploader that cannot handle the resource fails the build. A resource no uploader
 // selects follows the baseline: local blobs are copied as local blobs, everything
-// else stays by reference.
+// else stays by reference. How a resource no uploader selects is reported is
+// decided by cfg.UnmatchedResourcePolicy (Ignore, Warn by default, Fail).
 //
 // Each [Mapping] pairs source components with a target repository and a
 // resolver, enabling N:M routing where different sources feed different
@@ -57,6 +59,7 @@ func BuildGraphDefinition(
 	slog.DebugContext(ctx, "building transfer graph definition",
 		"roots", len(roots),
 		"recursive", resolved.Recursive,
+		"unmatchedResourcePolicy", resolved.UnmatchedResourcePolicy.Normalize(),
 		"uploaders", len(uploaders))
 
 	return internal.BuildGraphDefinition(ctx, roots, resolved, uploaders)
@@ -70,6 +73,7 @@ func collectTransferRoots(ctx context.Context, mappings []Mapping) (map[string]i
 	type rootData struct {
 		targets  []runtime.Typed
 		resolver resolvers.ComponentVersionRepositoryResolver
+		digest   *descriptor.Digest
 	}
 
 	byKey := make(map[string]*rootData)
@@ -101,6 +105,12 @@ func collectTransferRoots(ctx context.Context, mappings []Mapping) (map[string]i
 			} else if rd.resolver != m.Resolver {
 				return nil, fmt.Errorf("conflicting resolvers for component %s: each component must use the same resolver across all mappings", key)
 			}
+			if id.Digest != nil {
+				if rd.digest != nil && *rd.digest != *id.Digest {
+					return nil, fmt.Errorf("conflicting digests for component %s: each component must be pinned to the same digest across all mappings", key)
+				}
+				rd.digest = id.Digest
+			}
 			rd.targets = internal.AppendUniqueRepositories(rd.targets, []runtime.Typed{m.Target})
 		}
 	}
@@ -111,6 +121,7 @@ func collectTransferRoots(ctx context.Context, mappings []Mapping) (map[string]i
 			RootComponentKey: key,
 			Targets:          rd.targets,
 			SourceResolver:   rd.resolver,
+			ExpectedDigest:   rd.digest,
 		}
 	}
 	return roots, nil

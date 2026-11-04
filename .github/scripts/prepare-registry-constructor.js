@@ -60,8 +60,13 @@ function runOcmCommand(core, args, {volumes = {}, workdir, throwOnError = true} 
         ...Object.entries(volumes).map(([host, container]) => `-v "${host}:${container}"`),
     ];
 
+    // The CLI image runs as a non-root user; run as the host user so the
+    // mounted docker config (mode 0600) stays readable.
+    const user = process.getuid && `--user ${process.getuid()}:${process.getgid()}`;
+
     const dockerCmd = [
         "docker run --rm",
+        user,
         ...volumeMounts,
         workdir && `-w "${workdir}"`,
         `"${CLI_IMAGE}"`,
@@ -212,7 +217,6 @@ function publishComponent(core, repository, constructorPath) {
 
     runOcmCommand(core, [
         "add cv",
-        "--component-version-conflict-policy replace",
         `--config "/.ocmconfig"`,
         `--repository "${repository}"`,
         `--constructor "./plugin-registry-constructor.yaml"`,

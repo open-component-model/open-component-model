@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/opencontainers/go-digest"
+
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory/cache"
@@ -18,7 +20,9 @@ import (
 	"ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/repository/integrity"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -120,11 +124,12 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 
 	slog.DebugContext(ctx, "Created temporary download directory", "dir", downloadDir)
 
+	isOCI := strings.HasPrefix(helmURL, "oci://")
 	opts := []helmdownload.Option{helmdownload.WithAlwaysDownloadProv(true)}
+	var ociCreds *ocicredsv1.OCICredentials
 	if credentials != nil {
-		if strings.HasPrefix(helmURL, "oci://") {
-			ociCreds, err := helmcredsv1.ConvertToOCICredentials(credentials)
-			if err != nil {
+		if isOCI {
+			if ociCreds, err = helmcredsv1.ConvertToOCICredentials(credentials); err != nil {
 				return nil, fmt.Errorf("error converting credentials: %w", err)
 			}
 			opts = append(opts, helmdownload.WithOCICredentials(ociCreds))
@@ -140,9 +145,32 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 		opts = append(opts, helmdownload.WithHTTPConfig(r.httpConfig))
 	}
 
+	var pin digest.Digest
+	if isOCI {
+		if pin, err = r.manifestPin(ctx, resource, helmURL, ociCreds); err != nil {
+			return nil, err
+		}
+		if pin != "" {
+			opts = append(opts, helmdownload.WithOCIManifestDigest(pin))
+		}
+	}
+
 	result, err := helmdownload.NewReadOnlyChartFromRemote(ctx, helmURL, downloadDir, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("error downloading helm chart %q: %w", helmURL, err)
+	}
+
+	// Verification covers the chart .tgz as downloaded. A pinned chart is bound through its
+	// manifest: the registry client pulls it by that digest and checks the chart layer against
+	// the digest the manifest lists, so the .tgz on disk is that layer. Otherwise the resource
+	// digest must describe the .tgz itself. The tar returned below is no transform of the chart:
+	// it only packs the verified .tgz (and its .prov) byte for byte, read back from downloadDir,
+	// which this function created and nothing else writes to.
+	if pin == "" {
+		if err := integrity.VerifyContent(ctx, resource.Digest, result.ChartBlob,
+			integrity.WithLogAttrs(slog.Any("resource", resource.ToIdentity()))); err != nil {
+			return nil, fmt.Errorf("helm chart %q does not match the digest of resource %q: %w", helmURL, resource.Name, err)
+		}
 	}
 
 	slog.DebugContext(ctx, "Helm chart downloaded successfully, creating tar archive", "chartReference", helmURL)
@@ -166,6 +194,39 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 	slog.DebugContext(ctx, "Created tar archive from downloaded helm chart files")
 
 	return tarBlob, nil
+}
+
+// manifestPin returns the manifest digest an oci:// chart must be pulled by, or "" if the resource
+// digest does not name its manifest.
+func (r *ResourceRepository) manifestPin(ctx context.Context, resource *descriptor.Resource, helmURL string, creds *ocicredsv1.OCICredentials) (digest.Digest, error) {
+	want, err := integrity.ParseDigest(resource.Digest)
+	if err != nil {
+		return "", fmt.Errorf("resource %q: %w", resource.Name, err)
+	}
+	if want == "" {
+		return "", nil
+	}
+	switch resource.Digest.NormalisationAlgorithm {
+	case descriptor.OCIArtifactDigestV1:
+		return want, nil
+	case descriptor.GenericBlobDigestV1, "":
+		// OCM v1 records the chart .tgz digest here, OCM v2 historically the manifest digest.
+		// Resolve reports the registry's SHA-256 manifest digest, which another algorithm never equals.
+		if want.Algorithm() != digest.SHA256 {
+			return "", nil
+		}
+		m, err := helmdownload.ResolveOCIManifestDigest(ctx, helmURL, creds, r.httpConfig)
+		if err != nil {
+			// Not knowing the manifest only means the .tgz content check decides instead.
+			slog.WarnContext(ctx, "could not resolve the manifest digest of the helm chart, verifying the chart archive instead",
+				"chartReference", helmURL, "resource", resource.Name, "error", err)
+			return "", nil
+		}
+		if m == want {
+			return want, nil
+		}
+	}
+	return "", nil
 }
 
 // UploadResource is not supported for Helm repositories and always returns an error.

@@ -16,6 +16,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/oidc"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/rsa"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/s3"
+	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/tsa"
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/builtin/wget"
 	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
@@ -62,7 +63,6 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		manager.DigestProcessorRegistry,
 		manager.CredentialTypeRegistry,
 		httpConfig,
-		filesystemConfig,
 		checksumHTTPConfig); err != nil {
 		return fmt.Errorf("could not register wget inbuilt plugin: %w", err)
 	}
@@ -97,7 +97,7 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 		tempFolder = *filesystemConfig.TempFolder
 	}
 	if err := manager.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(
-		helmdigest.NewDigestProcessor(tempFolder),
+		helmdigest.NewDigestProcessor(tempFolder, helmdigest.WithHTTPConfig(httpConfig)),
 	); err != nil {
 		return fmt.Errorf("could not register helm digest processor plugin: %w", err)
 	}
@@ -115,8 +115,11 @@ func Register(manager *manager.PluginManager, filesystemConfig *filesystemv1alph
 	if err := oidc.RegisterCredentialPlugin(manager.CredentialPluginRegistry); err != nil {
 		return fmt.Errorf("could not register OIDC credential plugin: %w", err)
 	}
-	if err := gpg.Register(manager.SigningRegistry, manager.CredentialTypeRegistry, filesystemConfig); err != nil {
+	if err := gpg.Register(manager.SigningRegistry, manager.CredentialTypeRegistry); err != nil {
 		return fmt.Errorf("could not register GPG signing plugin: %w", err)
+	}
+	if err := tsa.Register(manager.CredentialTypeRegistry); err != nil {
+		return fmt.Errorf("could not register TSA credential types: %w", err)
 	}
 
 	return nil

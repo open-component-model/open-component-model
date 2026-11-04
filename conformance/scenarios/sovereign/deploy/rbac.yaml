@@ -1,16 +1,27 @@
-# Custom RBAC for the OCM controller in the sovereign scenario.
+# RBAC for the sovereign scenario. Three identities need permissions
+# beyond what their Helm charts ship:
 #
-# The Deployer controller uses server-side apply (ApplySet) to push
-# ResourceGraphDefinitions into the cluster. The default manager-role
-# shipped with the Helm chart does not include kro.run permissions,
-# so we add them here.
+# 1. The service account impersonated by the NamespacedDeployer needs
+#    permission to apply the product ResourceGraphDefinition into the cluster.
+#    The controller chart grants impersonation; this role bounds what this
+#    scenario's deployer service account may apply.
 #
-# See also: https://ocm.software/docs/how-to/configure-custom-rbac-for-deployers/
+# 2. The OCM controller itself. It applies nothing with its own identity, but
+#    it watches the objects the NamespacedDeployer deployed to know when they
+#    are synced, so it needs read-only access to kro.run resourcegraphdefinitions.
+#    See https://ocm.software/docs/how-to/configure-custom-rbac-for-deployers/
+#
+# 3. kro. The scenario installs kro with rbac.mode=aggregation, so kro
+#    can only manage the kinds a labeled ClusterRole grants. The role
+#    below lists exactly what the product RGD creates. No binding is
+#    needed: kro aggregates every ClusterRole labeled
+#    rbac.kro.run/aggregate-to-controller into its own.
+#    See https://kro.run/docs/advanced/access-control
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: ocm-controller-sovereign-scenario
+  name: sovereign-product-deployer
 rules:
   - apiGroups:
       - kro.run
@@ -28,6 +39,33 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
+  name: sovereign-product-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: sovereign-product-deployer
+subjects:
+  - kind: ServiceAccount
+    name: sovereign-product-deployer
+    namespace: sovereign-product
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ocm-controller-sovereign-scenario
+rules:
+  - apiGroups:
+      - kro.run
+    resources:
+      - resourcegraphdefinitions
+    verbs:
+      - get
+      - list
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
   name: ocm-controller-sovereign-scenario
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -37,3 +75,89 @@ subjects:
   - kind: ServiceAccount
     name: ocm-k8s-toolkit-controller-manager
     namespace: ocm-k8s-toolkit-system
+---
+# Everything the sovereign-product RGD templates, grouped by controller.
+# kro's own static role already covers RGDs, CRDs, configmaps, leases and events.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kro-controller-sovereign-scenario
+  labels:
+    rbac.kro.run/aggregate-to-controller: "true"
+rules:
+  # Instances of the kind the RGD defines
+  - apiGroups:
+      - kro.run
+    resources:
+      - sovereignproducts
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - kro.run
+    resources:
+      - sovereignproducts/status
+    verbs:
+      - get
+      - patch
+      - update
+  # Namespace and application secret
+  - apiGroups:
+      - ""
+    resources:
+      - namespaces
+      - secrets
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  # OCM delivery chain
+  - apiGroups:
+      - delivery.ocm.software
+    resources:
+      - repositories
+      - components
+      - resources
+      - namespaceddeployers
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  # Flux deployment
+  - apiGroups:
+      - source.toolkit.fluxcd.io
+    resources:
+      - ocirepositories
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch
+  - apiGroups:
+      - helm.toolkit.fluxcd.io
+    resources:
+      - helmreleases
+    verbs:
+      - create
+      - delete
+      - get
+      - list
+      - patch
+      - update
+      - watch

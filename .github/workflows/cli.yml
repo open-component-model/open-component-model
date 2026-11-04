@@ -25,6 +25,9 @@ on:
       artifact_id:
         description: "The artifact id that was built."
         value: ${{ jobs.assemble.outputs.artifact_id }}
+      source_sha:
+        description: "Commit used to build the CLI artifact."
+        value: ${{ jobs.version.outputs.source_sha }}
       version:
         description: "Version computed for this build."
         value: ${{ jobs.version.outputs.version }}
@@ -54,8 +57,9 @@ jobs:
   # assemble job, so all six binaries and the CTF carry an identical version.
   version:
     name: Compute Version
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
       version: ${{ steps.version.outputs.version }}
       build_version: ${{ steps.build_version.outputs.build_version }}
     steps:
@@ -66,7 +70,11 @@ jobs:
           sparse-checkout: |
             .github/scripts
           persist-credentials: 'false'
-          ref: ${{ env.REF }}
+          ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
+
+      - name: Record source commit
+        id: source
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       # Compute VERSION from env.REF
       - name: Compute VERSION
@@ -95,7 +103,7 @@ jobs:
   build:
     name: ${{ matrix.goos }}/${{ matrix.goarch }}
     needs: version
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     permissions:
       contents: read
     strategy:
@@ -111,7 +119,7 @@ jobs:
           sparse-checkout: |
             ${{ env.GO_MODULE_ROOT }}
           persist-credentials: 'false'
-          ref: ${{ env.REF }}
+          ref: ${{ needs.version.outputs.source_sha }}
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
@@ -137,7 +145,7 @@ jobs:
             BUILD_VERSION="${BUILD_VERSION}"
 
       - name: Upload target artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           if-no-files-found: 'error'
           retention-days: 1
@@ -151,7 +159,7 @@ jobs:
   assemble:
     name: Assemble CTF
     needs: [ version, build ]
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     outputs:
       artifact_name: ${{ env.ARTIFACT_NAME }}
       artifact_id: ${{ steps.upload-artifacts.outputs.artifact_id }}
@@ -164,10 +172,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ env.CHECKOUT_REPO }}
+          # .github/scripts provides oci-annotations.sh for the image annotations.
           sparse-checkout: |
             ${{ env.CLI_DIR }}
+            .github/scripts
           persist-credentials: 'false'
-          ref: ${{ env.REF }}
+          ref: ${{ needs.version.outputs.source_sha }}
 
       - name: Install Task
         uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
@@ -181,7 +191,7 @@ jobs:
 
       # Restore every target's binary and resource manifest under cli/tmp
       - name: Download target binaries
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           path: ${{ env.CLI_DIR }}/tmp
           pattern: cli-target-*
@@ -208,7 +218,7 @@ jobs:
 
       # Upload CLI binaries and OCI layout as build artifacts
       - name: Upload Artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         id: upload-artifacts
         with:
           if-no-files-found: 'error'

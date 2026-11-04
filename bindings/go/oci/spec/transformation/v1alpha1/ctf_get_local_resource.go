@@ -45,6 +45,10 @@ type CTFGetLocalResourceSpec struct {
 	Component string `json:"component"`
 	// Version is the component version
 	Version string `json:"version"`
+	// Digest optionally pins the component version to the OCI digest ("<algorithm>:<hex>") of the
+	// image index or manifest it is stored as. The resource is then read from that artifact
+	// instead of from the one the version tag resolves to.
+	Digest string `json:"digest,omitempty"`
 	// ResourceIdentity identifies the resource to retrieve.
 	// Must match a resource in the component descriptor.
 	ResourceIdentity runtime.Identity `json:"resourceIdentity"`

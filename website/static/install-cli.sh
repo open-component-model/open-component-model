@@ -268,7 +268,7 @@ print_verify_instructions() {
     warn "    1. Install gh: https://cli.github.com/"
     warn "    2. Authenticate against GitHub.com: gh auth login --hostname github.com"
     warn "    3. Verify the installed binary:"
-    warn "       gh attestation verify ${quoted_binary_path} --repo ${GITHUB_REPO}"
+    warn "       GH_HOST=github.com gh attestation verify ${quoted_binary_path} --repo ${GITHUB_REPO}"
     warn ""
     warn "  Option B — Verify with cosign (no GitHub auth needed):"
     cat >&2 <<COSIGN_EOF
@@ -324,7 +324,7 @@ verify_binary() {
     fi
 
     info "Verifying binary attestation..."
-    if gh attestation verify "${TMP_BIN}" --repo "${GITHUB_REPO}" 2>/dev/null; then
+    if GH_HOST=github.com gh attestation verify "${TMP_BIN}" --repo "${GITHUB_REPO}" 2>/dev/null; then
         info "Attestation verification successful"
     else
         fatal "Attestation verification failed. The binary may have been tampered with."

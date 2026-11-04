@@ -49,8 +49,8 @@ func TestFromHeaders_RFC9530ContentDigest(t *testing.T) {
 func TestFromHeaders_LegacyXChecksum(t *testing.T) {
 	r := require.New(t)
 	h := http.Header{}
-	h.Set("x-checksum-sha1", helloSHA1)
-	h.Set("x-checksum-md5", helloMD5)
+	h.Set("X-Checksum-Sha1", helloSHA1)
+	h.Set("X-Checksum-Md5", helloMD5)
 
 	got := FromHeaders(h, nil)
 	r.Len(got, 2)
@@ -65,7 +65,7 @@ func TestFromHeaders_LegacyXChecksum(t *testing.T) {
 func TestFromHeaders_ExtraHeaderInfersAlgorithm(t *testing.T) {
 	r := require.New(t)
 	h := http.Header{}
-	h.Set("x-artifact-sha256", helloSHA256)
+	h.Set("X-Artifact-Sha256", helloSHA256)
 
 	got := FromHeaders(h, []string{"x-artifact-sha256"})
 	r.Len(got, 1)
@@ -76,7 +76,7 @@ func TestFromHeaders_ExtraHeaderInfersAlgorithm(t *testing.T) {
 func TestFromHeaders_IgnoresMalformedValues(t *testing.T) {
 	r := require.New(t)
 	h := http.Header{}
-	h.Set("x-checksum-sha256", "not-a-hex-digest")
+	h.Set("X-Checksum-Sha256", "not-a-hex-digest")
 	h.Set("Content-Digest", "sha-256=:not-base64!:")
 	r.Empty(FromHeaders(h, nil))
 }
@@ -97,7 +97,7 @@ func TestVerify(t *testing.T) {
 func TestResolve_HeaderMatchAndVerify(t *testing.T) {
 	r := require.New(t)
 	h := http.Header{}
-	h.Set("x-checksum-sha1", helloSHA1)
+	h.Set("X-Checksum-Sha1", helloSHA1)
 
 	exp, verified, err := Resolve(context.Background(), Policy{
 		Sources:   []Source{{Type: SourceHTTPHeader}},
@@ -111,7 +111,7 @@ func TestResolve_HeaderMatchAndVerify(t *testing.T) {
 func TestResolve_HeaderMismatchFails(t *testing.T) {
 	r := require.New(t)
 	h := http.Header{}
-	h.Set("x-checksum-sha256", "0000000000000000000000000000000000000000000000000000000000000000") // valid length, wrong value
+	h.Set("X-Checksum-Sha256", "0000000000000000000000000000000000000000000000000000000000000000") // valid length, wrong value
 
 	_, _, err := Resolve(context.Background(), Policy{
 		Sources: []Source{{Type: SourceHTTPHeader}},
@@ -144,7 +144,7 @@ func TestResolve_StreamSourceStops(t *testing.T) {
 	r := require.New(t)
 	// A stream source short-circuits without verification even if headers exist.
 	h := http.Header{}
-	h.Set("x-checksum-sha256", helloSHA1+"00") // would mismatch if consulted
+	h.Set("X-Checksum-Sha256", helloSHA1+"00") // would mismatch if consulted
 	_, verified, err := Resolve(context.Background(), Policy{
 		Sources: []Source{{Type: SourceStream}, {Type: SourceHTTPHeader}},
 	}, Input{Headers: h, Computed: helloComputed()})

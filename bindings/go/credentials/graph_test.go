@@ -302,8 +302,7 @@ func GetGraph(tb testing.TB, yaml string) (credentials.Resolver, error) {
 			var vaultHost string
 			if id, ok := repoType.(runtime.Identity); ok {
 				vaultHost = id[runtime.IdentityAttributeHostname]
-			} else {
-				data, _ := json.Marshal(repoType)
+			} else if data, err := json.Marshal(repoType); err == nil {
 				var mm map[string]any
 				_ = json.Unmarshal(data, &mm)
 				if surl, ok := mm["serverURL"].(string); ok {
@@ -452,10 +451,10 @@ func TestResolveCredentials(t *testing.T) {
 				"username": "some-owner",
 				"password": "abc",
 			},
-			require.ErrorAssertionFunc(func(t require.TestingT, err error, i ...interface{}) {
+			func(t require.TestingT, err error, i ...interface{}) {
 				require.Error(t, err)
 				require.ErrorIs(t, err, credentials.ErrNotFound)
-			}),
+			},
 		},
 		{
 			"plugin resolution error handling",
@@ -469,10 +468,10 @@ func TestResolveCredentials(t *testing.T) {
 				"username": "some-owner",
 				"password": "abc",
 			},
-			require.ErrorAssertionFunc(func(t require.TestingT, err error, i ...interface{}) {
+			func(t require.TestingT, err error, i ...interface{}) {
 				require.Error(t, err)
 				require.ErrorIs(t, err, credentials.ErrUnknown)
-			}),
+			},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -690,4 +689,64 @@ func TestResolutionErrors(t *testing.T) {
 	r.ErrorIs(err, credentials.ErrNoIndirectCredentials)
 	r.ErrorContains(err, fmt.Sprintf("failed to resolve credentials for identity %q: credentials not found", id.String()))
 	r.ErrorContains(err, "no indirect credentials found in graph")
+}
+
+// TestResolvePluginConsumerOverlappingDirectConsumer checks that a plugin-backed consumer
+// still resolves when its path pattern also matches another consumer's path, which links
+// the two nodes with a cyclic-only edge.
+func TestResolvePluginConsumerOverlappingDirectConsumer(t *testing.T) {
+	credsType := runtime.NewVersionedType(v1.CredentialsType, v1.Version)
+	refType := runtime.NewVersionedType("VaultRef", "v1")
+
+	for _, path := range []string{"org/*", "org/**"} {
+		t.Run(path, func(t *testing.T) {
+			r := require.New(t)
+
+			plugin := CredentialPlugin{
+				ConsumerIdentityTypeAttributes: map[runtime.Type]map[string]func(v any) (string, string){
+					refType: {"vault": func(v any) (string, string) { return runtime.IdentityAttributeHostname, v.(string) }},
+				},
+				CredentialFunc: func(context.Context, runtime.Identity, runtime.Typed) (runtime.Typed, error) {
+					return &v1.DirectCredentials{Type: credsType, Properties: map[string]string{"username": "from-plugin"}}, nil
+				},
+			}
+
+			graph, err := credentials.ToGraph(t.Context(), &credentialruntime.Config{Consumers: []credentialruntime.Consumer{
+				{
+					Identities:  []runtime.Identity{{runtime.IdentityAttributeType: "Vault", runtime.IdentityAttributeHostname: "vault.example.com"}},
+					Credentials: []runtime.Typed{&v1.DirectCredentials{Type: credsType, Properties: map[string]string{"token": "vault-token"}}},
+				},
+				{
+					Identities:  []runtime.Identity{{runtime.IdentityAttributeType: "OCIRegistry", runtime.IdentityAttributeHostname: "ghcr.io", runtime.IdentityAttributePath: path}},
+					Credentials: []runtime.Typed{&runtime.Raw{Type: refType, Data: []byte(`{"type":"VaultRef/v1","vault":"vault.example.com"}`)}},
+				},
+				{
+					Identities:  []runtime.Identity{{runtime.IdentityAttributeType: "OCIRegistry", runtime.IdentityAttributeHostname: "ghcr.io", runtime.IdentityAttributePath: "org/team/repo"}},
+					Credentials: []runtime.Typed{&v1.DirectCredentials{Type: credsType, Properties: map[string]string{"username": "direct"}}},
+				},
+				{
+					Identities:  []runtime.Identity{{runtime.IdentityAttributeType: "OCIRegistry", runtime.IdentityAttributeHostname: "ghcr.io", runtime.IdentityAttributePath: "org/repo"}},
+					Credentials: []runtime.Typed{&v1.DirectCredentials{Type: credsType, Properties: map[string]string{"username": "direct"}}},
+				},
+			}}, credentials.Options{
+				CredentialPluginProvider: credentials.GetCredentialPluginFn(func(_ context.Context, typed runtime.Typed) (credentials.CredentialPlugin, error) {
+					switch typed.GetType().Name {
+					case "VaultRef", "Vault":
+						return plugin, nil
+					default:
+						return nil, fmt.Errorf("no credential plugin for %s", typed.GetType())
+					}
+				}),
+			})
+			r.NoError(err)
+
+			resolved, err := graph.Resolve(t.Context(), runtime.Identity{
+				runtime.IdentityAttributeType:     "OCIRegistry",
+				runtime.IdentityAttributeHostname: "ghcr.io",
+				runtime.IdentityAttributePath:     "org/other",
+			})
+			r.NoError(err)
+			r.Equal("from-plugin", resolved.(*v1.DirectCredentials).Properties["username"])
+		})
+	}
 }
