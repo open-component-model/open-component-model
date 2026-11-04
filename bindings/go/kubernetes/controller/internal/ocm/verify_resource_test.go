@@ -16,10 +16,13 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/go-git/go-billy/v6/osfs"
 	git "github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/backend"
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/filemode"
 	"github.com/go-git/go-git/v6/plumbing/object"
+	"github.com/go-git/go-git/v6/plumbing/transport"
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -228,7 +231,11 @@ func newGitRepository() (string, string) {
 		TreeHash:  store(&object.Tree{Entries: []object.TreeEntry{{Name: "README.md", Mode: filemode.Regular, Hash: blobHash}}}),
 	})
 	Expect(repo.Storer.SetReference(plumbing.NewHashReference("refs/heads/main", commit))).To(Succeed())
-	return dir, commit.String()
+
+	// Git/v1 accesses reject local paths, so serve the repository over HTTP.
+	srv := httptest.NewServer(backend.New(transport.NewFilesystemLoader(osfs.New(filepath.Dir(dir)), false)))
+	DeferCleanup(srv.Close)
+	return srv.URL + "/" + filepath.Base(dir), commit.String()
 }
 
 func mustJSON(v any) []byte {
