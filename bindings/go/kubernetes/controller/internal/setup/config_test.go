@@ -44,8 +44,9 @@ configurations:
     remotePolicy: Always
   - type: http.config.ocm.software/v1alpha1
     timeout: 45s
+  - type: credentials.config.ocm.software
 `,
-			wantErr: `type "http.config.ocm.software/v1alpha1" is not supported at startup`,
+			wantErr: "types [http.config.ocm.software/v1alpha1 credentials.config.ocm.software] are not supported at startup",
 		},
 		{
 			name:    "malformed",

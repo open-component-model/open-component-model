@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"slices"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	ocicachev1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/cache/v1alpha1"
@@ -33,10 +32,16 @@ func LoadStartupConfig(path string) (_ *genericv1.Config, err error) {
 	if err := genericv1.Scheme.Decode(file, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to decode ocm config: %w", err)
 	}
-	for _, entry := range cfg.Configurations {
-		if !slices.Contains(startupConfigTypes, entry.GetType()) {
-			return nil, fmt.Errorf("type %q is not supported at startup, supported: %v", entry.GetType(), startupConfigTypes)
-		}
+	supported, unsupported, err := genericv1.FilterWithRemainder(&cfg, &genericv1.FilterOptions{ConfigTypes: startupConfigTypes})
+	if err != nil {
+		return nil, fmt.Errorf("failed to filter ocm config: %w", err)
 	}
-	return &cfg, nil
+	if len(unsupported.Configurations) > 0 {
+		types := make([]string, 0, len(unsupported.Configurations))
+		for _, entry := range unsupported.Configurations {
+			types = append(types, entry.GetType().String())
+		}
+		return nil, fmt.Errorf("types %v are not supported at startup, supported: %v", types, startupConfigTypes)
+	}
+	return supported, nil
 }
