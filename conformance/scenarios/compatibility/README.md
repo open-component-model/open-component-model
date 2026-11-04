@@ -34,3 +34,20 @@ The external access cases currently cover descriptor compatibility, not
 download or digest verification of their remote content. A v1 OCI input case
 still needs a local registry service; S3 has no v1 input type, so its case
 checks the v1 S3 access record.
+
+## Known gaps
+
+Some cases pin the behaviour v2 shows today for v1 data that is known to be
+mishandled. Each is tagged with `knownGap` and the number of its open issue
+under [ocm-project#1366](https://github.com/open-component-model/ocm-project/issues/1366):
+the case asserts the unfixed behaviour, so when a fix merges the case fails here
+and is rewritten to assert the supported behaviour. Grep for `knownGap` for the
+current list.
+
+Two bugs under #1366 deliberately have no case here.
+[#1405](https://github.com/open-component-model/ocm-project/issues/1405)
+(`componentNameMapping: sha256-digest`) needs an OCI registry, which this
+scenario does not provision.
+[#1369](https://github.com/open-component-model/ocm-project/issues/1369)
+(`localOciBlob`) is a descriptor access type no released v1 CLI writes any
+more, so it is covered where its fix belongs, in `bindings/go/descriptor`.
