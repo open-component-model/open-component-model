@@ -28,10 +28,10 @@ See the [installation notes in the root README](../README.md#installation) for d
 | [`k8s-manifest-cross-namespace`](#k8s-manifest-cross-namespace) | `NamespacedDeployer` | Applying into a second namespace that granted the deployer's service account |
 | [`applyset-pruning`](#applyset-pruning) | `NamespacedDeployer` | Pruning orphaned resources with ApplySet |
 
-All examples except `helm-simple-nested-status` deploy with the `NamespacedDeployer`, which applies with the
+All examples deploy with the `NamespacedDeployer`, which applies with the
 permissions of a service account defined in the example's bootstrap. The RGD examples bind that service account
-to a `ClusterRole` for `ResourceGraphDefinitions`, as RGDs are cluster-scoped. `helm-simple-nested-status` keeps
-the cluster-scoped `Deployer`, which is discouraged because it applies with the controller's own permissions.
+to a `ClusterRole` for `ResourceGraphDefinitions`, as RGDs are cluster-scoped. The cluster-scoped `Deployer` is
+discouraged because it applies with the controller's own permissions.
 
 The kro `rgd.yaml` bundles **both the FluxCD and ArgoCD deployer blocks** in the same file; kro instantiates
 both. Crossplane is a separate path, in its own `crossplane-composition.yaml`. On a cluster where only one
