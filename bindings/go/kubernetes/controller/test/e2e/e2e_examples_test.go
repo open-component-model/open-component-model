@@ -1,10 +1,7 @@
 package e2e
 
 import (
-	"bytes"
-	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,8 +10,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	utilyaml "k8s.io/apimachinery/pkg/util/yaml"
 
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/test/utils"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
@@ -139,8 +134,12 @@ var _ = Describe("controller", func() {
 					crossplaneName := example.Name() + "-crossplane"
 
 					By("waiting for XRD to be Established")
-					xrdName, xrdErr := xrdNameFromComposition(filepath.Join(examplesDir, example.Name(), CrossplaneComposition))
-					Expect(xrdErr).NotTo(HaveOccurred())
+					// The XRD metadata.name follows Crossplane's required <plural>.<group>
+					// form, and every example derives both parts from the example name:
+					// dashes stripped with a "crossplanes" suffix for the plural, and the
+					// fixed examples.ocm.software group. Deriving it here mirrors how the
+					// kro flow uses example.Name() and avoids reading the composition file.
+					xrdName := strings.ReplaceAll(example.Name(), "-", "") + "crossplanes.examples.ocm.software"
 					Expect(utils.WaitForResource(ctx, "condition=Established=true", timeout,
 						"compositeresourcedefinitions.apiextensions.crossplane.io/"+xrdName)).To(Succeed())
 
@@ -268,38 +267,3 @@ var _ = Describe("controller", func() {
 		}
 	})
 })
-
-// xrdNameFromComposition reads metadata.name of the first
-// CompositeResourceDefinition document in a crossplane-composition.yaml file.
-// It decodes each YAML document into a minimal typed struct, so it is robust
-// against comments, flow-style, reordered keys, and document ordering.
-func xrdNameFromComposition(compositionPath string) (string, error) {
-	data, err := os.ReadFile(compositionPath)
-	if err != nil {
-		return "", err
-	}
-
-	decoder := utilyaml.NewYAMLToJSONDecoder(bytes.NewReader(data))
-	for {
-		var doc struct {
-			Kind     string `json:"kind"`
-			Metadata struct {
-				Name string `json:"name"`
-			} `json:"metadata"`
-		}
-		if err := decoder.Decode(&doc); err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			return "", fmt.Errorf("parsing %s: %w", compositionPath, err)
-		}
-		if doc.Kind != "CompositeResourceDefinition" {
-			continue
-		}
-		if doc.Metadata.Name == "" {
-			return "", fmt.Errorf("CompositeResourceDefinition in %s has no metadata.name", compositionPath)
-		}
-		return doc.Metadata.Name, nil
-	}
-	return "", fmt.Errorf("no CompositeResourceDefinition name found in %s", compositionPath)
-}
