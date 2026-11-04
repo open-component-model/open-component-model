@@ -34,3 +34,19 @@ The external access cases currently cover descriptor compatibility, not
 download or digest verification of their remote content. A v1 OCI input case
 still needs a local registry service; S3 has no v1 input type, so its case
 checks the v1 S3 access record.
+
+## Known gaps
+
+Some cases pin the behaviour v2 shows today for v1 data that is known to be
+mishandled. Every one is linked to an open issue under
+[ocm-project#1366](https://github.com/open-component-model/ocm-project/issues/1366)
+through the `knownGap` helper, and asserts the unfixed behaviour: when a fix
+merges, its case fails here and is rewritten to assert the supported behaviour.
+
+`ocmv1_signature_gaps_integration_test.go`:
+
+| Case | Issue |
+| --- | --- |
+| Certificate-chain signatures fail with `issuer mismatch` | [#1367](https://github.com/open-component-model/ocm-project/issues/1367) |
+| Signed labels with `value: null` fail verification | [#1402](https://github.com/open-component-model/ocm-project/issues/1402) |
+| `jsonNormalisation/v2` signatures cannot be verified | [#1403](https://github.com/open-component-model/ocm-project/issues/1403) |
