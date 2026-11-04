@@ -1,10 +1,11 @@
-name: "Website: Redundant Security Overrides"
+name: "Redundant Security Overrides"
 
 # npm `overrides` become stale over time. Usually they are added to alleviate
 # a specific CVE before the fixed version is adopted upstream. But nothing
 # triggers a removal of that override once it is no longer necessary.
-# This job tests each override in website/package.json by removing it,
-# re-resolving the lockfile and running `npm audit`.
+# This job tests each override in website/package.json and
+# .github/scripts/package.json by removing it, re-resolving the lockfile and
+# running `npm audit`.
 # An override whose removal introduces no new advisory is a removal candidate.
 
 on:
@@ -19,6 +20,7 @@ on:
       - '.github/workflows/website-redundant-overrides.yml'
       - '.github/scripts/check-redundant-overrides.js'
       - 'website/package.json'
+      - '.github/scripts/package.json'
 
 permissions:
   contents: read
@@ -63,8 +65,8 @@ jobs:
 
       # Detection re-resolves lockfiles in a temp directory, so the checked-out
       # files are untouched while auditing. On publishing runs `--apply` then removes
-      # the detected redundant overrides from website/package.json; the next step
-      # refreshes the lockfile to match, and the PR step commits both.
+      # the detected redundant overrides from each checked package.json; the next step
+      # refreshes the lockfiles to match, and the PR step commits both.
       - name: Detect redundant overrides
         id: check
         shell: bash
@@ -73,12 +75,15 @@ jobs:
           if [[ "${PUBLISH}" == "true" ]]; then args+=(--apply); fi
           node .github/scripts/check-redundant-overrides.js "${args[@]}" | tee "${RUNNER_TEMP}/report.md"
 
-      - name: Refresh lockfile
+      - name: Refresh lockfiles
         if: >-
           env.PUBLISH == 'true' &&
           steps.check.outputs.candidate-count != '' && steps.check.outputs.candidate-count != '0'
-        working-directory: website
-        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+        shell: bash
+        run: |
+          for dir in website .github/scripts; do
+            ( cd "$dir" && npm install --package-lock-only --ignore-scripts --no-audit --no-fund )
+          done
 
       # The remaining steps also run with zero candidates: create-pull-request
       # then finds no diff with main and, with delete-branch, deletes the branch,
@@ -122,9 +127,9 @@ jobs:
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
           token: ${{ steps.token.outputs.token }}
-          title: "chore(website): remove redundant npm overrides"
-          commit-message: "chore(website): remove redundant npm overrides"
-          branch: website/remove-redundant-overrides
+          title: "chore: remove redundant npm overrides"
+          commit-message: "chore: remove redundant npm overrides"
+          branch: chore/remove-redundant-overrides
           delete-branch: true
           sign-commits: true
           labels: |
