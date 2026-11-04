@@ -18,6 +18,7 @@ import {
   renderMarkdown,
   removeOverrideKey,
   applyRemovals,
+  PACKAGE_DIRS,
 } from "./check-redundant-overrides.js";
 
 // --- npm output -------------------------------------------------------------
@@ -286,6 +287,16 @@ test("renderMarkdown states nothing to remove and omits empty sections", () => {
   assert.doesNotMatch(md, /###/);
 });
 
+test("renderMarkdown names the package file in the heading and the removal hint", () => {
+  const md = renderMarkdown({ candidates: ["glob"], protecting: [], ignored: [] }, {}, ".github/scripts/package.json");
+  assert.match(md, /^## Redundant-override check: `\.github\/scripts\/package\.json`$/m);
+  assert.match(md, /Removing these from `\.github\/scripts\/package\.json`/);
+});
+
+test("PACKAGE_DIRS covers both checked npm packages", () => {
+  assert.deepStrictEqual(PACKAGE_DIRS, ["website", ".github/scripts"]);
+});
+
 // --- package.json edits -----------------------------------------------------
 
 test("removeOverrideKey drops one key without mutating the input", () => {
@@ -307,6 +318,23 @@ test("applyRemovals deletes only the given override keys and keeps clean JSON", 
     const after = readFileSync(join(root, "website", "package.json"), "utf8");
     assert.deepStrictEqual(JSON.parse(after).overrides, { "minimatch@<11.0.1": "11.0.1" });
     assert.ok(after.endsWith("\n"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("applyRemovals edits the package.json of the given package directory", () => {
+  const root = mkdtempSync(join(tmpdir(), "ocm-apply-dir-"));
+  try {
+    mkdirSync(join(root, ".github", "scripts"), { recursive: true });
+    const pkg = { name: "scripts", overrides: { "minimatch@<11.0.1": "11.0.1", "@actions/github": { undici: "^6.29.1" } } };
+    writeFileSync(join(root, ".github", "scripts", "package.json"), JSON.stringify(pkg, null, 2) + "\n");
+
+    const removed = applyRemovals(root, ["@actions/github"], ".github/scripts");
+    assert.deepStrictEqual(removed, ["@actions/github"]);
+
+    const after = JSON.parse(readFileSync(join(root, ".github", "scripts", "package.json"), "utf8"));
+    assert.deepStrictEqual(after.overrides, { "minimatch@<11.0.1": "11.0.1" });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

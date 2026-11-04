@@ -1,7 +1,8 @@
 // @ts-check
 
 /**
- * Redundant-override detector for website/package.json.
+ * Redundant-override detector for the repo's npm packages (website/package.json
+ * and .github/scripts/package.json, see PACKAGE_DIRS).
  *
  * npm `overrides` become stale over time. Usually they are added to alleviate
  * a specific CVE before the fixed version is adopted upstream. But nothing
@@ -30,6 +31,7 @@
  *
  * Run locally:
  *   node .github/scripts/check-redundant-overrides.js [repo-root]
+ * Both packages are checked; pass --apply to edit the package.json files.
  */
 
 import { spawnSync } from "node:child_process";
@@ -44,6 +46,14 @@ import { pathToFileURL } from "node:url";
  *
  * @type {Record<string, string>}
  */
+/**
+ * npm packages checked for redundant overrides, each a path relative to the
+ * repo root. Every entry is a standalone npm package with its own lockfile.
+ *
+ * @type {string[]}
+ */
+export const PACKAGE_DIRS = ["website", ".github/scripts"];
+
 export const IGNORE = {
   // Peer-dependency alignment: forces eslint-plugin-compat (transitive via
   // eslint-config-developit) onto the root project's eslint. Compatibility,
@@ -159,15 +169,16 @@ export function selectCombinedRemovals({ candidates, baseline, auditWithout }) {
  *
  * @param {Result} result
  * @param {Record<string, string>} [ignore] - reasons for ignored keys, same set as passed to classify.
+ * @param {string} [packageFile] - the package.json the report is about, for the heading and hints.
  * @returns {string}
  */
-export function renderMarkdown(result, ignore = IGNORE) {
-  const lines = ["## Redundant-override check", ""];
+export function renderMarkdown(result, ignore = IGNORE, packageFile = "website/package.json") {
+  const lines = [`## Redundant-override check: \`${packageFile}\``, ""];
   if (result.candidates.length === 0) {
     lines.push("Every security override is still required. Nothing to remove.", "");
   } else {
     lines.push("### Removal candidates", "");
-    lines.push("Removing these from `website/package.json` introduces no new advisory. If an override here is a non-security pin, add it to the `IGNORE` set in `check-redundant-overrides.js` instead.", "");
+    lines.push(`Removing these from \`${packageFile}\` introduces no new advisory. If an override here is a non-security pin, add it to the \`IGNORE\` set in \`check-redundant-overrides.js\` instead.`, "");
     for (const key of result.candidates) lines.push(`- \`${key}\``);
     lines.push("");
   }
@@ -292,18 +303,18 @@ function npmJson(args, cwd) {
 }
 
 /**
- * Run `npm audit --json` for a copy of the website package whose `overrides`
- * object is replaced by the given one, re-resolving a temp lockfile.
+ * Run `npm audit --json` for a copy of the package whose `overrides` object is
+ * replaced by the given one, re-resolving a temp lockfile.
  * Throws NpmError when npm reports an error, for example ERESOLVE.
  *
- * @param {string} websiteDir - Absolute path to the website/ directory.
+ * @param {string} packageDir - Absolute path to the package directory.
  * @param {Record<string, unknown>} overrides
  * @returns {Set<string>} advisory ids present.
  */
-function auditWithOverrides(websiteDir, overrides) {
-  const pkg = JSON.parse(readFileSync(join(websiteDir, "package.json"), "utf8"));
+function auditWithOverrides(packageDir, overrides) {
+  const pkg = JSON.parse(readFileSync(join(packageDir, "package.json"), "utf8"));
   pkg.overrides = overrides;
-  const lockPath = join(websiteDir, "package-lock.json");
+  const lockPath = join(packageDir, "package-lock.json");
 
   const tmp = mkdtempSync(join(tmpdir(), "ocm-override-check-"));
   try {
@@ -318,25 +329,26 @@ function auditWithOverrides(websiteDir, overrides) {
 }
 
 /**
- * Entry point for CLI and CI use.
+ * Entry point for CLI and CI use. Checks one package directory.
  *
  * @param {string} repoRoot
+ * @param {string} [packageDir] - package path relative to repoRoot.
  * @returns {{ result: Result, markdown: string }}
  */
-export function run(repoRoot) {
-  const websiteDir = join(repoRoot, "website");
-  const packageJson = JSON.parse(readFileSync(join(websiteDir, "package.json"), "utf8"));
+export function run(repoRoot, packageDir = "website") {
+  const absPackageDir = join(repoRoot, packageDir);
+  const packageJson = JSON.parse(readFileSync(join(absPackageDir, "package.json"), "utf8"));
   const overrides = /** @type {Record<string, unknown>} */ (packageJson.overrides ?? {});
   const overrideKeys = Object.keys(overrides);
 
   // The baseline must resolve, otherwise no comparison is possible.
-  const baseline = auditWithOverrides(websiteDir, overrides);
+  const baseline = auditWithOverrides(absPackageDir, overrides);
 
   /** @type {Record<string, string[]>} */
   const introducedByKey = {};
   for (const key of overrideKeys) {
     if (Object.hasOwn(IGNORE, key)) continue;
-    const without = auditVariant(`Without ${key}`, () => auditWithOverrides(websiteDir, removeOverrideKey(overrides, key)));
+    const without = auditVariant(`${packageDir}: without ${key}`, () => auditWithOverrides(absPackageDir, removeOverrideKey(overrides, key)));
     introducedByKey[key] = newlyIntroduced(baseline, without);
   }
 
@@ -345,25 +357,26 @@ export function run(repoRoot) {
     candidates: classified.candidates,
     baseline,
     auditWithout: (keys) =>
-      auditVariant(`Without ${keys.join(", ")}`, () => auditWithOverrides(websiteDir, keys.reduce(removeOverrideKey, overrides))),
+      auditVariant(`${packageDir}: without ${keys.join(", ")}`, () => auditWithOverrides(absPackageDir, keys.reduce(removeOverrideKey, overrides))),
   });
 
   /** @type {Result} */
   const result = { ...classified, candidates: removable, heldBack };
-  return { result, markdown: renderMarkdown(result) };
+  return { result, markdown: renderMarkdown(result, IGNORE, `${packageDir}/package.json`) };
 }
 
 /**
- * Remove the given override keys from website/package.json, writing the file
- * back with stable 2-space JSON formatting (the file round-trips cleanly, so
- * only the deleted lines change). Returns the keys actually removed.
+ * Remove the given override keys from a package.json, writing the file back
+ * with stable 2-space JSON formatting (the file round-trips cleanly, so only
+ * the deleted lines change). Returns the keys actually removed.
  *
  * @param {string} repoRoot
  * @param {string[]} keys
+ * @param {string} [packageDir] - package path relative to repoRoot.
  * @returns {string[]}
  */
-export function applyRemovals(repoRoot, keys) {
-  const pkgPath = join(repoRoot, "website", "package.json");
+export function applyRemovals(repoRoot, keys, packageDir = "website") {
+  const pkgPath = join(repoRoot, packageDir, "package.json");
   const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
   const removed = [];
   for (const key of keys) {
@@ -378,21 +391,29 @@ export function applyRemovals(repoRoot, keys) {
 
 // Executed directly:
 //   node .github/scripts/check-redundant-overrides.js [repo-root] [--apply]
-// --apply removes the detected redundant overrides from website/package.json
+// --apply removes the detected redundant overrides from each package.json
+// listed in PACKAGE_DIRS.
 if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) {
   const args = process.argv.slice(2);
   const apply = args.includes("--apply");
   const positional = args.find((a) => !a.startsWith("--"));
   const repoRoot = resolve(positional ?? join(import.meta.dirname, "..", ".."));
 
-  const { result, markdown } = run(repoRoot);
+  const reports = [];
+  let candidateCount = 0;
+  for (const packageDir of PACKAGE_DIRS) {
+    const { result, markdown } = run(repoRoot, packageDir);
+    reports.push(markdown);
+    candidateCount += result.candidates.length;
+
+    if (apply && result.candidates.length > 0) {
+      const removed = applyRemovals(repoRoot, result.candidates, packageDir);
+      reports.push(`Removed ${removed.length} override(s) from ${packageDir}/package.json: ${removed.join(", ")}\n`);
+    }
+  }
+  const markdown = reports.join("\n");
   process.stdout.write(markdown + "\n");
 
-  if (apply && result.candidates.length > 0) {
-    const removed = applyRemovals(repoRoot, result.candidates);
-    process.stdout.write(`\nRemoved ${removed.length} override(s) from website/package.json: ${removed.join(", ")}\n`);
-  }
-
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown + "\n");
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `candidate-count=${result.candidates.length}\n`);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `candidate-count=${candidateCount}\n`);
 }
