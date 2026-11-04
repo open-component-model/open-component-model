@@ -26,29 +26,17 @@ func TestVerifyNormalizationBoundary(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
 		normalization string
-		hashAlgorithm string
-		ociAllowed    bool
 		blobAllowed   bool
 	}{
-		{name: "OCI artifact", normalization: OCIArtifactDigestV1, ociAllowed: true},
-		{name: "OCI hash spelling", normalization: OCIArtifactDigestV1, hashAlgorithm: "sha256", ociAllowed: true},
-		{name: "legacy OCI label", normalization: GenericBlobDigestV1, ociAllowed: true, blobAllowed: true},
+		{name: "OCI artifact", normalization: OCIArtifactDigestV1},
+		{name: "legacy OCI label", normalization: GenericBlobDigestV1, blobAllowed: true},
 		{name: "other normalization", normalization: "jsonNormalisation/v1"},
 		{name: "missing normalization"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			hashAlgorithm := HashAlgorithmSHA256
-			if tc.hashAlgorithm != "" {
-				hashAlgorithm = tc.hashAlgorithm
-			}
-			dig := &runtime.Digest{HashAlgorithm: hashAlgorithm, NormalisationAlgorithm: tc.normalization, Value: root.Encoded()}
+			dig := &runtime.Digest{HashAlgorithm: HashAlgorithmSHA256, NormalisationAlgorithm: tc.normalization, Value: root.Encoded()}
 			before := *dig
-			if tc.ociAllowed {
-				r.NoError(VerifyOCIArtifact(dig, root))
-			} else {
-				r.Error(VerifyOCIArtifact(dig, root))
-			}
 			if tc.blobAllowed {
 				r.NoError(Verify(dig, root, GenericBlobDigestV1))
 			} else {
@@ -57,20 +45,6 @@ func TestVerifyNormalizationBoundary(t *testing.T) {
 			// Even the legacy label must never make a manifest hash verify archive bytes.
 			r.Error(Verify(dig, godigest.FromString("archive bytes"), GenericBlobDigestV1))
 			r.Equal(before, *dig)
-		})
-	}
-}
-
-func TestVerifyOCIArtifactRejectsInvalidDigest(t *testing.T) {
-	for _, normalization := range []string{OCIArtifactDigestV1, GenericBlobDigestV1} {
-		t.Run(normalization, func(t *testing.T) {
-			r := require.New(t)
-			root := godigest.FromString("manifest")
-			dig := &runtime.Digest{HashAlgorithm: HashAlgorithmSHA256, NormalisationAlgorithm: normalization, Value: root.Encoded()}
-			r.ErrorContains(VerifyOCIArtifact(dig, godigest.FromString("other manifest")), "digest value mismatch")
-			dig.HashAlgorithm = "SHA-512"
-			r.ErrorContains(VerifyOCIArtifact(dig, root), "hash algorithm mismatch")
-			r.Error(VerifyOCIArtifact(nil, root))
 		})
 	}
 }

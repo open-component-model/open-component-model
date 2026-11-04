@@ -3179,6 +3179,18 @@ func testRepositoryResourceDigest(t *testing.T, operation string) {
 			}
 			tests := []testCase{
 				{name: "generate OCI artifact digest"},
+				{name: "excluded from signature", digest: descriptor.NewExcludeFromSignatureDigest()},
+				// Either marker excludes, as on download and in signing; the value is not verified.
+				{name: "no digest marker with a value", digest: &descriptor.Digest{
+					HashAlgorithm:          descriptor.NoDigest,
+					NormalisationAlgorithm: "ociArtifactDigest/v1",
+					Value:                  digest.FromString("different content").Encoded(),
+				}},
+				{name: "excluded marker with a value", digest: &descriptor.Digest{
+					HashAlgorithm:          "SHA-256",
+					NormalisationAlgorithm: descriptor.ExcludeFromSignature,
+					Value:                  digest.FromString("different content").Encoded(),
+				}},
 			}
 			for _, normalization := range []string{"ociArtifactDigest/v1", "genericBlobDigest/v1", "unexpected/v1", ""} {
 				existing := correct
@@ -3189,13 +3201,19 @@ func testRepositoryResourceDigest(t *testing.T, operation string) {
 					switch mismatch {
 					case "algorithm":
 						candidate.HashAlgorithm = "SHA-512"
-						wantErr = "hash algorithm mismatch"
+						wantErr = "invalid digest"
+						if normalization == "" {
+							wantErr = "hash algorithm mismatch"
+						}
 					case "value":
 						candidate.Value = digest.FromString("different content").Encoded()
-						wantErr = "digest value mismatch"
+						wantErr = "OCI artifact digest mismatch"
+						if normalization == "" {
+							wantErr = "digest value mismatch"
+						}
 					}
 					if normalization == "unexpected/v1" {
-						wantErr = "unsupported OCI artifact normalisation algorithm"
+						wantErr = "unsupported normalisation algorithm"
 					}
 					// An empty normalization is completed, but set fields must still match.
 					// Incomplete metadata copied from OCI descriptors uses the OCI spelling (Helm does).
@@ -3338,6 +3356,9 @@ func TestRepository_UploadDigestControls(t *testing.T) {
 			sha384 := testCase{method: method, state: state, algorithm: digest.SHA384}
 			if method != "source" { // the transport accepts SHA-384, OCM resource digests do not
 				sha384.err = "unknown algorithm"
+				if state == "correct" {
+					sha384.err = "unsupported hash algorithm"
+				}
 			}
 			tests = append(tests, testCase{method: method, state: state, algorithm: digest.SHA512}, sha384)
 		}
