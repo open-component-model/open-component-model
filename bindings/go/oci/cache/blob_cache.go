@@ -320,8 +320,7 @@ func (c *BlobCache) fetchAlways(ctx context.Context, upstream ReadOnlyRepository
 	if known {
 		if f := c.cached(ctx, target); f != nil {
 			if err := c.verifyRemoteAccess(ctx, upstream, target); err != nil {
-				_ = f.Close()
-				return nil, err
+				return nil, errors.Join(err, f.Close())
 			}
 			return f, nil
 		}
