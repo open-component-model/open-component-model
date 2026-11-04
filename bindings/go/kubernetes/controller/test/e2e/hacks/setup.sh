@@ -232,7 +232,12 @@ install_kro() {
 }
 
 install_crossplane() {
+  # renovate: datasource=helm depName=crossplane registryUrl=https://charts.crossplane.io/stable
   CROSSPLANE_VERSION="${CROSSPLANE_VERSION:-2.3.1}"
+  # renovate: datasource=docker depName=xpkg.upbound.io/crossplane-contrib/function-patch-and-transform
+  FUNCTION_PATCH_AND_TRANSFORM_VERSION="${FUNCTION_PATCH_AND_TRANSFORM_VERSION:-v0.10.6}"
+  # renovate: datasource=docker depName=xpkg.upbound.io/crossplane-contrib/function-auto-ready
+  FUNCTION_AUTO_READY_VERSION="${FUNCTION_AUTO_READY_VERSION:-v0.6.5}"
   if kubectl get deployment crossplane -n crossplane-system >/dev/null 2>&1 \
      && kubectl get deployment crossplane -n crossplane-system -o jsonpath='{.status.availableReplicas}' | grep -q '[1-9]'; then
     echo "crossplane already installed, skipping"
@@ -252,7 +257,7 @@ kind: Function
 metadata:
   name: crossplane-contrib-function-patch-and-transform
 spec:
-  package: xpkg.upbound.io/crossplane-contrib/function-patch-and-transform:v0.10.6
+  package: xpkg.upbound.io/crossplane-contrib/function-patch-and-transform:${FUNCTION_PATCH_AND_TRANSFORM_VERSION}
 EOF
   fi
   # Always wait — covers both fresh installs and pre-existing objects that may be unhealthy
@@ -267,7 +272,7 @@ kind: Function
 metadata:
   name: crossplane-contrib-function-auto-ready
 spec:
-  package: xpkg.upbound.io/crossplane-contrib/function-auto-ready:v0.6.5
+  package: xpkg.upbound.io/crossplane-contrib/function-auto-ready:${FUNCTION_AUTO_READY_VERSION}
 EOF
   fi
   # Always wait — covers both fresh installs and pre-existing objects that may be unhealthy

@@ -127,7 +127,6 @@ var _ = Describe("controller", func() {
 
 				}
 
-				// Crossplane flow: apply XRD+Composition directly, then XR instance
 				// Crossplane flow: the bootstrap already deployed the OCM Resource and
 				// Deployer for crossplane-xrd alongside the kro ones. Here we just wait
 				// for the XRD to be Established, then create the XR instance.
