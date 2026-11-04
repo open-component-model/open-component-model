@@ -33,6 +33,10 @@ permissions of a service account defined in the example's bootstrap. The RGD exa
 to a `ClusterRole` for `ResourceGraphDefinitions`, as RGDs are cluster-scoped. `helm-simple-nested-status` keeps
 the cluster-scoped `Deployer`, which is discouraged because it applies with the controller's own permissions.
 
+The kro `rgd.yaml` bundles **both the FluxCD and ArgoCD deployer blocks** in the same file; kro instantiates
+both. Crossplane is a separate path, in its own `crossplane-composition.yaml`. On a cluster where only one
+GitOps deployer is installed, remove the block for the absent deployer from `rgd.yaml`.
+
 ---
 
 ## helm-simple
