@@ -12,6 +12,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/errcode"
 
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
@@ -42,6 +43,8 @@ type CachingResolver struct {
 	subPath    string
 	baseClient remote.Client
 	plainHTTP  bool
+	// httpConfig is the central HTTP client configuration, if any.
+	httpConfig *httpv1alpha1.Config
 
 	DisableCacheProxy bool
 
@@ -117,7 +120,7 @@ func (resolver *CachingResolver) Ping(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to create registry client: %w", err)
 	}
-	r.PlainHTTP = resolver.plainHTTP
+	r.PlainHTTP = resolver.plainHTTPFor(parsedURL.Scheme, parsedURL.Host)
 	if resolver.baseClient != nil {
 		r.Client = resolver.baseClient
 	}
@@ -140,7 +143,7 @@ func (resolver *CachingResolver) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (resolver *CachingResolver) StoreForReference(_ context.Context, reference string) (spec.Store, error) {
+func (resolver *CachingResolver) StoreForReference(ctx context.Context, reference string) (spec.Store, error) {
 	ref, err := looseref.ParseReference(reference)
 	if err != nil {
 		return nil, err
@@ -167,9 +170,7 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 		SkipReferrersGC: true,
 	}
 
-	if resolver.plainHTTP || ref.Scheme == "http" {
-		repo.PlainHTTP = true
-	}
+	repo.PlainHTTP = resolver.plainHTTPFor(ref.Scheme, ref.Registry)
 
 	if resolver.baseClient != nil {
 		repo.Client = resolver.baseClient
@@ -183,6 +184,21 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 	resolver.addToCache(key, store)
 
 	return cache.Wrap(store, resolver.blobCache.Load(), resolver.referenceCache.Load()), nil
+}
+
+// plainHTTPFor reports whether registry clients for host must use cleartext
+// HTTP: for an http:// base URL (WithPlainHTTP), for an http:// reference, or
+// when the HTTP configuration sets plainHTTP for the host. An explicit https://
+// reference skips the configuration lookup, so the config cannot downgrade it.
+func (resolver *CachingResolver) plainHTTPFor(scheme, host string) bool {
+	if resolver.plainHTTP || scheme == "http" {
+		return true
+	}
+	if scheme == "https" {
+		return false
+	}
+	plain := resolver.httpConfig.ResolveHost(host).PlainHTTP
+	return plain != nil && *plain
 }
 
 func (resolver *CachingResolver) addToCache(reference string, store *remotestore.RemoteStore) {

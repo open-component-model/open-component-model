@@ -3,6 +3,7 @@ package url
 import (
 	"oras.land/oras-go/v2/registry/remote"
 
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 )
 
@@ -34,10 +35,24 @@ func WithBaseClient(client remote.Client) Option {
 	})
 }
 
-// WithPlainHTTP sets whether to use plain HTTP instead of HTTPS for any repository clients
+// WithPlainHTTP sets whether the repository clients the resolver builds use
+// plain HTTP instead of HTTPS. With true, every reference the resolver
+// resolves uses plain HTTP, whatever host it names: an explicit https:// prefix
+// and a per-host plainHTTP: false in the HTTP configuration do not restore
+// HTTPS for it. With false, a scheme-less reference follows the HTTP
+// configuration of its host, and an http:// prefix still means plain HTTP. The
+// OCI repository provider passes true for an http:// repository base URL.
 func WithPlainHTTP(plainHTTP bool) Option {
 	return OptionFunc(func(resolver *CachingResolver) {
 		resolver.plainHTTP = plainHTTP
+	})
+}
+
+// WithHTTPConfig sets the central HTTP client configuration. A nil config is
+// allowed.
+func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
+	return OptionFunc(func(resolver *CachingResolver) {
+		resolver.httpConfig = cfg
 	})
 }
 

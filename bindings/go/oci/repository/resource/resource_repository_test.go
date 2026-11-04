@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
@@ -197,7 +198,7 @@ func TestCreateRepositoryWithFilesystemConfig(t *testing.T) {
 			}
 			credentials := ocicredsv1.OCICredentials{}
 
-			repo, err := createRepository(spec, &credentials, tt.filesystemConfig, "test", http.DefaultClient)
+			repo, err := createRepository(spec, &credentials, tt.filesystemConfig, "test", http.DefaultClient, nil)
 
 			if tt.expectError {
 				r.Error(err, "expected error")
@@ -390,6 +391,70 @@ func TestOCIImageLayer_RegistryEndpoint(t *testing.T) {
 					r.True(ok)
 					r.Equal(wantMediaType, mediaType, "the blob keeps the declared media type")
 				})
+			}
+		})
+	}
+}
+
+func TestNewResourceRepositoryHTTPConfig_PlainHTTP(t *testing.T) {
+	var serverHit atomic.Bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serverHit.Store(true)
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(server.Close)
+
+	host := strings.TrimPrefix(server.URL, "http://")
+	tr, fa := true, false
+	perHost := &httpv1alpha1.Config{
+		Hosts: map[string]*httpv1alpha1.HostConfig{
+			host: {ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: &tr}},
+		},
+	}
+	perHostFalse := &httpv1alpha1.Config{
+		Hosts: map[string]*httpv1alpha1.HostConfig{
+			host: {ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: &fa}},
+		},
+	}
+
+	tests := []struct {
+		name       string
+		reference  string
+		httpConfig *httpv1alpha1.Config
+		expectHit  bool
+	}{
+		{name: "without config the client speaks TLS to a plain server", reference: host + "/test/img:v1.0.0"},
+		{name: "per-host plainHTTP reaches the registry", reference: host + "/test/img:v1.0.0", httpConfig: perHost, expectHit: true},
+		{name: "explicit http reference uses cleartext despite per-host plainHTTP false", reference: "http://" + host + "/test/img:v1.0.0", httpConfig: perHostFalse, expectHit: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			serverHit.Store(false)
+
+			raw := &runtime.Raw{}
+			r.NoError(ociaccess.Scheme.Convert(
+				&v1.OCIImage{
+					Type:           runtime.NewVersionedType(v1.OCIImageType, v1.Version),
+					ImageReference: tt.reference,
+				},
+				raw,
+			))
+			res := &descriptor.Resource{
+				Type:   "ociArtifact",
+				Access: raw,
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{Name: "test", Version: "1.0.0"},
+				},
+			}
+
+			repo := NewResourceRepository(nil, WithHTTPConfig(tt.httpConfig))
+			_, err := repo.DownloadResource(t.Context(), res, nil)
+			r.Error(err)
+			r.Equal(tt.expectHit, serverHit.Load(), "expected HTTP request to reach test server")
+			if !tt.expectHit {
+				r.ErrorContains(err, "server gave HTTP response to HTTPS client", "the request must have tried TLS")
 			}
 		})
 	}

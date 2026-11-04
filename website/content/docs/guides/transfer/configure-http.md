@@ -301,6 +301,31 @@ certs. Reach for `insecureSkipVerify` only when you have no certificate to
 pin against (e.g. a bare `kind` cluster with no cert at all).
 {{< /callout >}}
 
+## Use plain HTTP for a local registry
+
+OCM talks HTTPS to every OCI registry unless the reference starts with
+`http://`. For a development or air-gapped registry without TLS, mark the host
+as plain HTTP instead of changing every reference:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    hosts:
+      "registry.local:5000":
+        plainHTTP: true
+```
+
+{{< callout context="danger" >}}
+`plainHTTP: true` sends every OCI registry request to that host, including
+credentials, in cleartext. **Never enable it for a public registry or in
+production.**
+{{< /callout >}}
+
+`plainHTTP` covers OCM's OCI repositories and `ociArtifact` access only. Helm
+chart downloads ignore it, including charts at `oci://` URLs. A classic Helm
+repository uses plain HTTP only with an `http://` URL.
+
 ## Override settings per host
 
 Override timeouts, retry policy, and TLS settings for specific registries
@@ -331,8 +356,8 @@ configurations:
 ```
 
 Each host entry accepts the same timeout fields as the global config, plus
-`retry` and `insecureSkipVerify`. Fields not specified in a host block
-inherit the global value.
+`retry`, `insecureSkipVerify`, `rootCAsPEM`, `rootCAsPEMFile`, `disableHTTP2`,
+and `plainHTTP`. Fields not specified in a host block inherit the global value.
 
 The host key is matched against `request.URL.Host` by exact string — first
 against `hostname:port`, then against the bare `hostname`. Use the bare

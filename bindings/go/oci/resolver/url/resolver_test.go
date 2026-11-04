@@ -12,6 +12,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/auth"
 
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	"ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -531,4 +532,115 @@ func TestURLPathResolver_DynamicCacheSwapping(t *testing.T) {
 	store, err = resolver.StoreForReference(ctx, ref)
 	require.NoError(t, err)
 	assert.IsType(t, &remotestore.RemoteStore{}, store)
+}
+
+func TestURLPathResolver_PlainHTTPFromHTTPConfig(t *testing.T) {
+	tr, fa := true, false
+	hostCfg := func(plain *bool) *httpv1alpha1.HostConfig {
+		return &httpv1alpha1.HostConfig{ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: plain}}
+	}
+
+	tests := []struct {
+		name      string
+		cfg       *httpv1alpha1.Config
+		opts      []url.Option
+		reference string
+		plainHTTP bool
+	}{
+		{
+			name:      "no config keeps HTTPS",
+			reference: "registry.local:5000/repo:v1",
+		},
+		{
+			name:      "per-host true turns on plain HTTP",
+			cfg:       &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{"registry.local:5000": hostCfg(&tr)}},
+			reference: "registry.local:5000/repo:v1",
+			plainHTTP: true,
+		},
+		{
+			name:      "bare hostname entry covers the port",
+			cfg:       &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{"registry.local": hostCfg(&tr)}},
+			reference: "registry.local:5000/repo:v1",
+			plainHTTP: true,
+		},
+		{
+			name:      "entry for another host does not apply",
+			cfg:       &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{"registry.local": hostCfg(&tr)}},
+			reference: "ghcr.io/repo:v1",
+		},
+		{
+			name:      "global true applies to every host",
+			cfg:       &httpv1alpha1.Config{ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: &tr}},
+			reference: "ghcr.io/repo:v1",
+			plainHTTP: true,
+		},
+		{
+			name: "per-host false overrides global true",
+			cfg: &httpv1alpha1.Config{
+				ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: &tr},
+				Hosts:          map[string]*httpv1alpha1.HostConfig{"ghcr.io": hostCfg(&fa)},
+			},
+			reference: "ghcr.io/repo:v1",
+		},
+		{
+			name:      "WithPlainHTTP wins over per-host false",
+			cfg:       &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{"registry.local": hostCfg(&fa)}},
+			opts:      []url.Option{url.WithPlainHTTP(true)},
+			reference: "registry.local/repo:v1",
+			plainHTTP: true,
+		},
+		{
+			name:      "http reference uses cleartext despite per-host false",
+			cfg:       &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{"registry.local:5000": hostCfg(&fa)}},
+			reference: "http://registry.local:5000/repo:v1",
+			plainHTTP: true,
+		},
+		{
+			name:      "https reference keeps HTTPS despite per-host true",
+			cfg:       &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{"registry.local:5000": hostCfg(&tr)}},
+			reference: "https://registry.local:5000/repo:v1",
+		},
+		{
+			name:      "https reference keeps HTTPS despite global true",
+			cfg:       &httpv1alpha1.Config{ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: &tr}},
+			reference: "https://registry.local:5000/repo:v1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			opts := append([]url.Option{url.WithBaseURL("registry.local"), url.WithHTTPConfig(tt.cfg)}, tt.opts...)
+			resolver, err := url.New(opts...)
+			r.NoError(err)
+
+			store, err := resolver.StoreForReference(t.Context(), tt.reference)
+			r.NoError(err)
+			remoteStore, ok := store.(*remotestore.RemoteStore)
+			r.True(ok, "expected a bare RemoteStore when no cache is configured, got %T", store)
+			r.Equal(tt.plainHTTP, remoteStore.PlainHTTP)
+		})
+	}
+
+	t.Run("ping honours per-host plain HTTP", func(t *testing.T) {
+		r := require.New(t)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			if req.URL.Path == "/v2/" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+		serverHost := server.URL[len("http://"):]
+
+		cfg := &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{serverHost: hostCfg(&tr)}}
+		resolver, err := url.New(url.WithBaseURL(serverHost), url.WithHTTPConfig(cfg))
+		r.NoError(err)
+		r.NoError(resolver.Ping(t.Context()))
+
+		resolver, err = url.New(url.WithBaseURL(serverHost))
+		r.NoError(err)
+		r.ErrorContains(resolver.Ping(t.Context()), "server gave HTTP response to HTTPS client", "without the host entry the ping must try HTTPS against a plain HTTP server")
+	})
 }

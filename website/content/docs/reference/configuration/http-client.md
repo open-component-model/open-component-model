@@ -55,6 +55,7 @@ All fields are optional. When omitted, OCM applies these defaults:
 | All other timeout fields | No limit (OS default for TCP fields) |
 | `insecureSkipVerify`     | `false`                              |
 | `disableHTTP2`           | `false` (HTTP/2 negotiated via ALPN) |
+| `plainHTTP`              | `false` (OCI registries over HTTPS)  |
 
 {{< callout context="caution" title="No overall timeout by default" >}}
 With `timeout` omitted or set to `0s` (the default), OCM does not bound response-body duration. A stalled peer can therefore leave an operation waiting indefinitely. Set a positive `timeout` when bounded completion is more important than allowing arbitrarily long transfers.
@@ -112,6 +113,28 @@ configurations:
       ghcr.io:
         disableHTTP2: true
 ```
+
+### Plain HTTP
+
+OCM talks HTTPS to every OCI registry unless the reference starts with
+`http://`. `plainHTTP: true` makes OCM's OCI registry clients use cleartext
+HTTP for a host without changing the reference. It is meant for development and air-gapped registries
+without TLS. Traffic, including credentials, is unencrypted, so set it per host
+and never for a public registry. A reference with an explicit `https://`
+prefix keeps TLS regardless of this setting.
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    hosts:
+      "registry.local:5000":
+        plainHTTP: true
+```
+
+`plainHTTP` covers OCM's OCI repositories and `ociArtifact` access only. Helm
+chart downloads ignore it, including charts at `oci://` URLs. A classic Helm
+repository uses plain HTTP only with an `http://` URL.
 
 ### Per-Host Merge Semantics
 

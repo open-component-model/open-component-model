@@ -25,6 +25,10 @@
       "type": "boolean",
       "description": "InsecureSkipVerify disables verification of the server's TLS certificate\nchain and host name. Setting this to true makes connections vulnerable to\nactive MITM attacks; use only for development and local registry testing.\nA warning is logged at transport build time and on every new host connection.\n\nNil means \"unset\" (TLS verification stays enabled at the top level). When\nTLSConfig is embedded in HostConfig, nil additionally means \"inherit from\nthe global Config\"; an explicit false on a host re-enables verification\neven when the global config sets true. See HostConfig for per-host merge\nsemantics."
     },
+    "plainHTTP": {
+      "type": "boolean",
+      "description": "PlainHTTP makes OCI registry clients talk cleartext HTTP instead of HTTPS.\nIt exists so a plain OCI reference such as registry.local:5000/repo can\nreach a development or air-gapped registry without an http:// prefix in\nthe repository spec. The traffic, including credentials, is unencrypted,\nso set it per host and never for a public registry. A reference with an\nexplicit https:// prefix keeps TLS regardless of this setting.\n\nIt covers OCM's OCI repositories and ociArtifact access. Helm chart\ndownloads, including oci:// charts, ignore it; a classic Helm repository\nuses plain HTTP only with an http:// URL.\n\nNil means \"unset\" (HTTPS at the top level). In a HostConfig, nil means\n\"inherit from the global Config\"; an explicit false on a host keeps HTTPS\neven when the global config sets true. An http:// prefix on a repository\nbase URL is stronger than both: every scheme-less reference that\nrepository resolves uses plain HTTP, and a per-host false does not\nrestore HTTPS for it."
+    },
     "responseHeaderTimeout": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
       "description": "ResponseHeaderTimeout specifies the amount of time to wait for\na server's response headers after fully writing the request\n(including its body, if any). This time does not include the\ntime to read the response body."
@@ -94,6 +98,10 @@
           "type": "boolean",
           "description": "InsecureSkipVerify disables verification of the server's TLS certificate\nchain and host name. Setting this to true makes connections vulnerable to\nactive MITM attacks; use only for development and local registry testing.\nA warning is logged at transport build time and on every new host connection.\n\nNil means \"unset\" (TLS verification stays enabled at the top level). When\nTLSConfig is embedded in HostConfig, nil additionally means \"inherit from\nthe global Config\"; an explicit false on a host re-enables verification\neven when the global config sets true. See HostConfig for per-host merge\nsemantics."
         },
+        "plainHTTP": {
+          "type": "boolean",
+          "description": "PlainHTTP makes OCI registry clients talk cleartext HTTP instead of HTTPS.\nIt exists so a plain OCI reference such as registry.local:5000/repo can\nreach a development or air-gapped registry without an http:// prefix in\nthe repository spec. The traffic, including credentials, is unencrypted,\nso set it per host and never for a public registry. A reference with an\nexplicit https:// prefix keeps TLS regardless of this setting.\n\nIt covers OCM's OCI repositories and ociArtifact access. Helm chart\ndownloads, including oci:// charts, ignore it; a classic Helm repository\nuses plain HTTP only with an http:// URL.\n\nNil means \"unset\" (HTTPS at the top level). In a HostConfig, nil means\n\"inherit from the global Config\"; an explicit false on a host keeps HTTPS\neven when the global config sets true. An http:// prefix on a repository\nbase URL is stronger than both: every scheme-less reference that\nrepository resolves uses plain HTTP, and a per-host false does not\nrestore HTTPS for it."
+        },
         "responseHeaderTimeout": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
           "description": "ResponseHeaderTimeout specifies the amount of time to wait for\na server's response headers after fully writing the request\n(including its body, if any). This time does not include the\ntime to read the response body."
@@ -139,6 +147,10 @@
         "disableHTTP2": {
           "type": "boolean",
           "description": "DisableHTTP2 restricts the client to HTTP/1.1. By default HTTP/2 is\nnegotiated via TLS ALPN, which multiplexes every concurrent request to a\nhost over one TCP connection: a single connection loss or GOAWAY then\naffects all in-flight transfers at once. With HTTP/1.1 each concurrent\nrequest uses its own connection, at the cost of more TLS handshakes."
+        },
+        "plainHTTP": {
+          "type": "boolean",
+          "description": "PlainHTTP makes OCI registry clients talk cleartext HTTP instead of HTTPS.\nIt exists so a plain OCI reference such as registry.local:5000/repo can\nreach a development or air-gapped registry without an http:// prefix in\nthe repository spec. The traffic, including credentials, is unencrypted,\nso set it per host and never for a public registry. A reference with an\nexplicit https:// prefix keeps TLS regardless of this setting.\n\nIt covers OCM's OCI repositories and ociArtifact access. Helm chart\ndownloads, including oci:// charts, ignore it; a classic Helm repository\nuses plain HTTP only with an http:// URL.\n\nNil means \"unset\" (HTTPS at the top level). In a HostConfig, nil means\n\"inherit from the global Config\"; an explicit false on a host keeps HTTPS\neven when the global config sets true. An http:// prefix on a repository\nbase URL is stronger than both: every scheme-less reference that\nrepository resolves uses plain HTTP, and a per-host false does not\nrestore HTTPS for it."
         }
       },
       "additionalProperties": false

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -236,4 +238,43 @@ func TestWithHTTPConfig_ShortTimeoutCausesError(t *testing.T) {
 	// ListComponentVersions triggers HTTP traffic — should time out.
 	_, err = repo.ListComponentVersions(t.Context(), "example.org/component")
 	require.Error(t, err)
+}
+
+func TestWithHTTPConfig_PerHostPlainHTTP(t *testing.T) {
+	var serverHit atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serverHit.Store(true)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+	host := strings.TrimPrefix(srv.URL, "http://")
+	tr := true
+	perHost := &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{
+		host: {ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: &tr}},
+	}}
+
+	tests := []struct {
+		name      string
+		baseURL   string
+		cfg       *httpv1alpha1.Config
+		expectHit bool
+	}{
+		{name: "without config the client speaks TLS to a plain server", baseURL: host},
+		{name: "per-host plainHTTP reaches the registry", baseURL: host, cfg: perHost, expectHit: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			serverHit.Store(false)
+			prov := provider.NewComponentVersionRepositoryProvider(provider.WithHTTPConfig(tt.cfg))
+			repo, err := prov.GetComponentVersionRepository(t.Context(), &ocirepospecv1.Repository{BaseUrl: tt.baseURL}, nil)
+			r.NoError(err)
+			_, err = repo.ListComponentVersions(t.Context(), "example.org/component")
+			r.Equal(tt.expectHit, serverHit.Load())
+			if !tt.expectHit {
+				r.ErrorContains(err, "server gave HTTP response to HTTPS client", "the request must have tried TLS")
+			}
+		})
+	}
 }
