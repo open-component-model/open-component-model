@@ -52,9 +52,12 @@ export default async function perfCommand({ github, context, core }) {
   await react("eyes");
 
   const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: issue.number });
-  const { data: base } = await github.rest.repos.getBranch({ owner, repo, branch: pr.base.ref });
+  // The merge base, not the base branch tip: the tip moves between runs, the fork point does not.
+  const { data: cmp } = await github.rest.repos.compareCommitsWithBasehead({
+    owner, repo, basehead: `${pr.base.sha}...${pr.head.sha}`,
+  });
   core.setOutput("base_ref", pr.base.ref);
-  core.setOutput("base_sha", base.commit.sha);
+  core.setOutput("base_sha", cmp.merge_base_commit.sha);
   core.setOutput("pr_sha", pr.head.sha);
   await react("rocket");
 }

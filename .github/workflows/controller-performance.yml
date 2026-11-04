@@ -15,7 +15,7 @@ on:
         description: "Repetitions of every scenario and object count. Empty uses 3. Higher count means better averages."
         type: string
         required: false
-  # A "/perf" comment on a pull request benchmarks its head commit against the head of its base branch.
+  # A "/perf" comment on a pull request benchmarks its head commit against its merge base with the base branch.
   issue_comment:
     types: [created]
   schedule:

@@ -33,7 +33,7 @@ its job summary and uploads the results directory as an artifact.
 | Nightly on `main`         | The standard suite: `--scenarios=complex --objects=1000 --repeats=3` |
 | Weekly on `main` (Sunday) | The full suite                                                       |
 | Actions, Run workflow     | Any `--scenarios`, `--objects` and `--repeats`                       |
-| `/perf` comment on a PR   | The standard suite, for the PR and for its base branch               |
+| `/perf` comment on a PR   | The standard suite, for the PR and for its merge base                |
 
 `/perf` takes no arguments, so every comparison runs the same suite. The workflow reacts with 👀 when it sees the
 command, 🚀 when the runs are launched, and 😕 when the comment has arguments. When both runs succeed, it replies with a
