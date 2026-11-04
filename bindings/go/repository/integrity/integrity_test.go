@@ -148,6 +148,20 @@ func TestVerify_LogsAttrsOfUnverifiedContent(t *testing.T) {
 			r.NoError(call(descriptor.NewExcludeFromSignatureDigest(), WithLogAttrs(slog.String("resource", "excluded"))))
 			r.Contains(logged.String(), "excluded from signature")
 			r.Contains(logged.String(), "resource=excluded")
+			r.NotContains(logged.String(), "level=WARN", "the marker alone is not a risk")
+
+			value := digest.FromString("other content").Encoded()
+			for _, contradictory := range []*descriptor.Digest{
+				{HashAlgorithm: descriptor.NoDigest, NormalisationAlgorithm: descriptor.OCIArtifactDigestV1, Value: value},
+				{HashAlgorithm: "SHA-256", NormalisationAlgorithm: descriptor.ExcludeFromSignature, Value: value},
+				{HashAlgorithm: descriptor.NoDigest, NormalisationAlgorithm: descriptor.ExcludeFromSignature, Value: value},
+			} {
+				logged.Reset()
+				r.NoError(call(contradictory, WithLogAttrs(slog.String("resource", "contradictory"))))
+				r.Contains(logged.String(), "level=WARN")
+				r.Contains(logged.String(), "resource=contradictory")
+				r.Contains(logged.String(), value)
+			}
 		})
 	}
 }

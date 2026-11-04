@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"testing"
 
+	godigest "github.com/opencontainers/go-digest"
 	ocispecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
+	"oras.land/oras-go/v2/registry/remote"
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
@@ -45,13 +48,13 @@ func Test_Integration_TransferOCIArtifact_ExcludedFromSignature(t *testing.T) {
 		name     string
 		wantType string
 		uploader *transferv1alpha1.OCIUploaderConfig
-		seed     func(t *testing.T, repo repository.ComponentVersionRepository, creds registryCreds) descriptor.Resource
+		seed     func(t *testing.T, repo repository.ComponentVersionRepository, creds registryCreds) (descriptor.Resource, godigest.Digest)
 	}{
 		{
 			name:     "local blob",
 			wantType: "TransferCTFLocalBlobToOCIArtifact",
 			uploader: &transferv1alpha1.OCIUploaderConfig{Match: `resource.access.isType("LocalBlob")`},
-			seed: func(t *testing.T, repo repository.ComponentVersionRepository, _ registryCreds) descriptor.Resource {
+			seed: func(t *testing.T, repo repository.ComponentVersionRepository, _ registryCreds) (descriptor.Resource, godigest.Digest) {
 				t.Helper()
 				r := require.New(t)
 				var archive bytes.Buffer
@@ -60,7 +63,7 @@ func Test_Integration_TransferOCIArtifact_ExcludedFromSignature(t *testing.T) {
 				layer := []byte("test layer content")
 				layerDesc := content.NewDescriptorFromBytes(ocispecv1.MediaTypeImageLayer, layer)
 				r.NoError(writer.Push(t.Context(), layerDesc, bytes.NewReader(layer)))
-				_, err = oras.PackManifest(t.Context(), writer, oras.PackManifestVersion1_1, "application/vnd.ocm.test", oras.PackManifestOptions{
+				root, err := oras.PackManifest(t.Context(), writer, oras.PackManifestVersion1_1, "application/vnd.ocm.test", oras.PackManifestOptions{
 					Layers: []ocispecv1.Descriptor{layerDesc},
 				})
 				r.NoError(err)
@@ -77,16 +80,23 @@ func Test_Integration_TransferOCIArtifact_ExcludedFromSignature(t *testing.T) {
 					},
 				}, inmemory.New(bytes.NewReader(archive.Bytes()), inmemory.WithMediaType(layout.MediaTypeOCIImageLayoutTarV1)))
 				r.NoError(err)
-				return *resource
+				return *resource, root.Digest
 			},
 		},
 		{
 			name:     "OCI image",
 			wantType: "TransferOCIArtifact",
 			uploader: &transferv1alpha1.OCIUploaderConfig{},
-			seed: func(t *testing.T, _ repository.ComponentVersionRepository, creds registryCreds) descriptor.Resource {
+			seed: func(t *testing.T, _ repository.ComponentVersionRepository, creds registryCreds) (descriptor.Resource, godigest.Digest) {
 				t.Helper()
+				r := require.New(t)
 				imageRef := pushTestOCIImage(t, creds.address, creds.username, creds.password, "test/image", "v1")
+				source, err := remote.NewRepository(strings.TrimPrefix(imageRef, "http://"))
+				r.NoError(err)
+				source.PlainHTTP = true
+				source.Client = createAuthClient(creds.address, creds.username, creds.password)
+				root, err := source.Resolve(t.Context(), "v1")
+				r.NoError(err)
 				return descriptor.Resource{
 					ElementMeta: meta,
 					Type:        "ociImage",
@@ -95,7 +105,7 @@ func Test_Integration_TransferOCIArtifact_ExcludedFromSignature(t *testing.T) {
 						Type:           runtime.NewVersionedType(ociaccessv1.LegacyType, ociaccessv1.LegacyTypeVersion),
 						ImageReference: imageRef,
 					},
-				}
+				}, root.Digest
 			},
 		},
 	} {
@@ -110,7 +120,7 @@ func Test_Integration_TransferOCIArtifact_ExcludedFromSignature(t *testing.T) {
 
 			sourcePath := t.TempDir()
 			sourceRepo := createCTFRepository(t, sourcePath)
-			resource := tc.seed(t, sourceRepo, sourceCreds)
+			resource, wantRoot := tc.seed(t, sourceRepo, sourceCreds)
 			resource.Digest = descriptor.NewExcludeFromSignatureDigest()
 			desc := &descriptor.Descriptor{
 				Meta: descriptor.Meta{Version: "v2"},
@@ -178,6 +188,10 @@ func Test_Integration_TransferOCIArtifact_ExcludedFromSignature(t *testing.T) {
 			r.NoError(err)
 			r.NoError(json.Unmarshal(raw, &access))
 			r.Contains(access.ImageReference, targetAddr, "the artifact must be uploaded to the target registry")
+			stream, err := targetRepo.DownloadResourceStream(ctx, &got.Component.Resources[0])
+			r.NoError(err)
+			r.Equal(wantRoot, stream.Root().Digest, "the target must hold the source artifact")
+
 			// Downloading is lazy, so only reading it proves the artifact arrived in full.
 			downloaded, err := targetRepo.DownloadResource(ctx, &got.Component.Resources[0])
 			r.NoError(err)

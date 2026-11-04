@@ -1,8 +1,11 @@
 package pack
 
 import (
+	"bytes"
+	"log/slog"
 	"testing"
 
+	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/content"
@@ -11,6 +14,44 @@ import (
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+func TestVerifyLayoutRootDigest_WarnsAboutExcludedDigestWithValue(t *testing.T) {
+	var logged bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	root := digest.FromString("root")
+	value := digest.FromString("other").Encoded()
+	for _, tc := range []struct {
+		name     string
+		digest   *descriptor.Digest
+		wantWarn bool
+	}{
+		{name: "marker alone", digest: descriptor.NewExcludeFromSignatureDigest()},
+		{name: "excluded with a value", digest: &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: descriptor.ExcludeFromSignature, Value: value}, wantWarn: true},
+		{name: "excluded in lower case with a value", digest: &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "exclude-from-signature", Value: value}, wantWarn: true},
+		{name: "no digest with a value", digest: &descriptor.Digest{HashAlgorithm: descriptor.NoDigest, NormalisationAlgorithm: "ociArtifactDigest/v1", Value: value}, wantWarn: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			logged.Reset()
+			resource := &descriptor.Resource{
+				ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "artifact"}},
+				Digest:      tc.digest,
+			}
+
+			r.NoError(verifyLayoutRootDigest(t.Context(), resource, root))
+
+			if tc.wantWarn {
+				r.Contains(logged.String(), "level=WARN")
+				r.Contains(logged.String(), "artifact", "the warning must name the resource")
+			} else {
+				r.NotContains(logged.String(), "level=WARN")
+			}
+		})
+	}
+}
 
 func TestUpdateArtifactAccess_CompletesPartialDigest(t *testing.T) {
 	root := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, []byte("test content"))

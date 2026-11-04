@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/opencontainers/go-digest"
@@ -269,8 +270,15 @@ func newArtifactBlob(ctx context.Context, content blob.ReadOnlyBlob, root digest
 }
 
 func logUnverified(ctx context.Context, expected *descriptor.Digest, attrs []slog.Attr) {
-	if expected != nil && (strings.EqualFold(expected.HashAlgorithm, descriptor.NoDigest) ||
-		strings.EqualFold(expected.NormalisationAlgorithm, descriptor.ExcludeFromSignature)) {
+	if expected != nil && isExcluded(expected) {
+		if expected.Value != "" && !strings.EqualFold(expected.Value, descriptor.NoDigest) {
+			attrs = append(slices.Clone(attrs),
+				slog.String("hashAlgorithm", expected.HashAlgorithm),
+				slog.String("normalisationAlgorithm", expected.NormalisationAlgorithm),
+				slog.String("value", expected.Value))
+			slog.LogAttrs(ctx, slog.LevelWarn, "digest is excluded from signature but records a value: the value is not verified and does not identify the content", attrs...)
+			return
+		}
 		slog.LogAttrs(ctx, slog.LevelDebug, "content is excluded from signature, it is used without verification", attrs...)
 		return
 	}

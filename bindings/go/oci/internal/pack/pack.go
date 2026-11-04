@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"maps"
+	"strings"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -300,7 +302,7 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 		MutateParentFunc: func(idx *ociImageSpecV1.Descriptor) error {
 			// Verify the selected root, not the archive checksum, before any graph writes.
 			if resource, ok := b.Artifact.(*descriptor.Resource); ok {
-				if err := verifyLayoutRootDigest(ctx, resource.Digest, idx.Digest); err != nil {
+				if err := verifyLayoutRootDigest(ctx, resource, idx.Digest); err != nil {
 					return fmt.Errorf("failed to verify resource OCI artifact digest: %w", err)
 				}
 			}
@@ -330,8 +332,10 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 
 // verifyLayoutRootDigest checks a resource digest against the selected layout root without
 // modifying it. Incomplete digests must be completable from the root; complete digests with
-// another normalisation are preserved unverified.
-func verifyLayoutRootDigest(ctx context.Context, d *descriptor.Digest, root digest.Digest) error {
+// another normalisation are preserved unverified. Excluded digests also go through the
+// verifier, which accepts them but warns if they record a value.
+func verifyLayoutRootDigest(ctx context.Context, resource *descriptor.Resource, root digest.Digest) error {
+	d := resource.Digest
 	if !internaldigest.IsComplete(d) {
 		var completed descriptor.Digest
 		if d != nil {
@@ -339,9 +343,11 @@ func verifyLayoutRootDigest(ctx context.Context, d *descriptor.Digest, root dige
 		}
 		return internaldigest.Complete(&completed, root, internaldigest.OCIArtifactDigestV1)
 	}
-	switch d.NormalisationAlgorithm {
-	case internaldigest.OCIArtifactDigestV1, internaldigest.GenericBlobDigestV1:
-		return integrity.VerifyOCIArtifact(ctx, d, root)
+	switch {
+	case d.NormalisationAlgorithm == internaldigest.OCIArtifactDigestV1,
+		d.NormalisationAlgorithm == internaldigest.GenericBlobDigestV1,
+		strings.EqualFold(d.NormalisationAlgorithm, descriptor.ExcludeFromSignature):
+		return integrity.VerifyOCIArtifact(ctx, d, root, integrity.WithLogAttrs(slog.Any("resource", resource.ToIdentity())))
 	}
 	return nil
 }

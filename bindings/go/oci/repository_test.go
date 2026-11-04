@@ -3180,6 +3180,17 @@ func testRepositoryResourceDigest(t *testing.T, operation string) {
 			tests := []testCase{
 				{name: "generate OCI artifact digest"},
 				{name: "excluded from signature", digest: descriptor.NewExcludeFromSignatureDigest()},
+				// Either marker excludes, as on download and in signing; the value is not verified.
+				{name: "no digest marker with a value", digest: &descriptor.Digest{
+					HashAlgorithm:          descriptor.NoDigest,
+					NormalisationAlgorithm: "ociArtifactDigest/v1",
+					Value:                  digest.FromString("different content").Encoded(),
+				}},
+				{name: "excluded marker with a value", digest: &descriptor.Digest{
+					HashAlgorithm:          "SHA-256",
+					NormalisationAlgorithm: descriptor.ExcludeFromSignature,
+					Value:                  digest.FromString("different content").Encoded(),
+				}},
 			}
 			for _, normalization := range []string{"ociArtifactDigest/v1", "genericBlobDigest/v1", "unexpected/v1", ""} {
 				existing := correct
