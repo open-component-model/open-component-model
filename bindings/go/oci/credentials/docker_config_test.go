@@ -3,9 +3,10 @@ package credentials
 import (
 	"testing"
 
+	remotecredentials "github.com/oras-project/oras-go/v3/registry/remote/credentials"
+	"github.com/oras-project/oras-go/v3/registry/remote/properties"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2/registry/remote/auth"
 
 	credentialsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
@@ -20,7 +21,7 @@ func TestCredentialFunc(t *testing.T) {
 		hostport    string
 		wantErr     bool
 		wantEmpty   bool
-		wantCred    *auth.Credential // if set, assert exact credential match
+		wantCred    *remotecredentials.Credential // if set, assert exact credential match
 	}{
 		{
 			name: "matching host and port",
@@ -96,7 +97,7 @@ func TestCredentialFunc(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			credFunc := CredentialFunc(tt.identity, tt.credentials)
-			cred, err := credFunc(t.Context(), tt.hostport)
+			cred, err := credFunc(t.Context(), properties.Resource{Registry: tt.hostport})
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -105,7 +106,7 @@ func TestCredentialFunc(t *testing.T) {
 
 			require.NoError(t, err)
 			if tt.wantEmpty {
-				assert.Equal(t, auth.EmptyCredential, cred)
+				assert.Equal(t, remotecredentials.EmptyCredential, cred)
 				return
 			}
 
@@ -126,12 +127,12 @@ func TestCredentialFromTyped(t *testing.T) {
 	tests := []struct {
 		name        string
 		credentials *credentialsv1.OCICredentials
-		expected    auth.Credential
+		expected    remotecredentials.Credential
 	}{
 		{
 			name:        "zero-value credentials",
 			credentials: &credentialsv1.OCICredentials{},
-			expected:    auth.Credential{},
+			expected:    remotecredentials.Credential{},
 		},
 		{
 			name: "all fields populated",
@@ -141,7 +142,7 @@ func TestCredentialFromTyped(t *testing.T) {
 				AccessToken:  "atoken",
 				RefreshToken: "rtoken",
 			},
-			expected: auth.Credential{
+			expected: remotecredentials.Credential{
 				Username:     "user",
 				Password:     "pass",
 				AccessToken:  "atoken",
@@ -154,7 +155,7 @@ func TestCredentialFromTyped(t *testing.T) {
 				Username: "user",
 				Password: "pass",
 			},
-			expected: auth.Credential{
+			expected: remotecredentials.Credential{
 				Username: "user",
 				Password: "pass",
 			},
@@ -164,7 +165,7 @@ func TestCredentialFromTyped(t *testing.T) {
 			credentials: &credentialsv1.OCICredentials{
 				AccessToken: "atoken",
 			},
-			expected: auth.Credential{
+			expected: remotecredentials.Credential{
 				AccessToken: "atoken",
 			},
 		},

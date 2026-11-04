@@ -17,10 +17,10 @@ import (
 	git "github.com/go-git/go-git/v6"
 	godigest "github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3"
+	orasoci "github.com/oras-project/oras-go/v3/content/oci"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v4/pkg/chart/v2/loader"
-	"oras.land/oras-go/v2"
-	orasoci "oras.land/oras-go/v2/content/oci"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/compression"

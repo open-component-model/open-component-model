@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"oras.land/oras-go/v2/registry/remote/auth"
+	"github.com/oras-project/oras-go/v3/registry/remote/auth"
+	remotecredentials "github.com/oras-project/oras-go/v3/registry/remote/credentials"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
@@ -262,15 +263,17 @@ func createRepository(
 	}
 	urlString := url.Host + url.Path
 
+	header := http.Header{"User-Agent": {userAgent}}
 	resolverOpts := []urlresolver.Option{
 		urlresolver.WithBaseURL(urlString),
 		urlresolver.WithBaseURLScheme(url.Scheme),
 		urlresolver.WithBaseClient(&auth.Client{
-			Client: httpClient,
-			Header: map[string][]string{
-				"User-Agent": {userAgent},
-			},
-			Credential: auth.StaticCredential(url.Host, ocicredentials.MapCredentials(credentials)),
+			Client:         httpClient,
+			Header:         header,
+			CredentialFunc: remotecredentials.StaticCredentialFunc(url.Host, ocicredentials.MapCredentials(credentials)),
+			// Keep the distribution spec token flow for basic credentials instead of
+			// attempting OAuth2 first, which not all registries implement.
+			TokenFetcher: auth.NewCompositeTokenFetcher(httpClient, header, "", true),
 		}),
 	}
 	if httpConfig != nil {

@@ -23,13 +23,13 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/object"
 	godigest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3"
+	"github.com/oras-project/oras-go/v3/content"
+	"github.com/oras-project/oras-go/v3/registry/remote"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/registry"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"oras.land/oras-go/v2"
-	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/registry/remote"
 )
 
 const (
@@ -64,7 +64,7 @@ func pushArtifact(t *testing.T, ctx context.Context, address, repository, tag st
 
 	repo, err := remote.NewRepository(address + "/" + repository)
 	r.NoError(err)
-	repo.PlainHTTP = true
+	repo.Registry.PlainHTTP = true
 
 	layerDesc := content.NewDescriptorFromBytes(ocispec.MediaTypeImageLayer, layer)
 	r.NoError(repo.Push(ctx, layerDesc, bytes.NewReader(layer)))

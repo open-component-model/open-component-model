@@ -5,7 +5,7 @@ import (
 	"io"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2/content"
+	"github.com/oras-project/oras-go/v3/content"
 
 	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	"ocm.software/open-component-model/bindings/go/oci/spec"

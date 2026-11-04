@@ -15,10 +15,10 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/content"
+	"github.com/oras-project/oras-go/v3/registry/remote/properties"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/registry"
 
 	identityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 )
@@ -270,7 +270,7 @@ func TestBlobCache_Always_WhatARepositoryServedDoesNotExpireBeforeTheBlob(t *tes
 // digestBlindRepository ignores the reference it is asked to parse.
 type digestBlindRepository struct{ *lyingRepository }
 
-func (s *digestBlindRepository) ParseReference(string) (registry.Reference, error) {
+func (s *digestBlindRepository) ParseReference(string) (properties.Reference, error) {
 	return s.ref, nil
 }
 
@@ -354,8 +354,8 @@ func TestBlobCache_Always_RecordsDoNotKeepAnnotations(t *testing.T) {
 // unidentifiableRepository cannot tell which repository it belongs to.
 type unidentifiableRepository struct{ *fakeReadOnly }
 
-func (*unidentifiableRepository) ParseReference(string) (registry.Reference, error) {
-	return registry.Reference{}, errors.New("no repository")
+func (*unidentifiableRepository) ParseReference(string) (properties.Reference, error) {
+	return properties.Reference{}, errors.New("no repository")
 }
 
 func TestBlobCache_Always_UnidentifiableRepositoryIsRejected(t *testing.T) {
@@ -396,7 +396,7 @@ func TestReferenceCache_IfNotPresent_HitAvoidsUpstream(t *testing.T) {
 	c := newTestRefCache(t, Options{RemotePolicy: RemotePolicyIfNotPresent})
 
 	desc := ociImageSpecV1.Descriptor{MediaType: ociImageSpecV1.MediaTypeImageManifest, Size: 1}
-	ref, err := registry.ParseReference("ghcr.io/owner/repo@" + digest.FromString("payload").String())
+	ref, err := properties.NewReference("ghcr.io/owner/repo@" + digest.FromString("payload").String())
 	require.NoError(t, err)
 
 	var resolves atomic.Int64
@@ -421,7 +421,7 @@ func TestReferenceCache_IfNotPresent_TagAlwaysResolvesUpstream(t *testing.T) {
 	c := newTestRefCache(t, Options{RemotePolicy: RemotePolicyIfNotPresent})
 
 	desc := ociImageSpecV1.Descriptor{MediaType: ociImageSpecV1.MediaTypeImageManifest, Size: 1}
-	ref, err := registry.ParseReference("ghcr.io/owner/repo:v1")
+	ref, err := properties.NewReference("ghcr.io/owner/repo:v1")
 	require.NoError(t, err)
 
 	var resolves atomic.Int64
@@ -443,7 +443,7 @@ func TestReferenceCache_Always_AlwaysCallsUpstream(t *testing.T) {
 	c := newTestRefCache(t, Options{RemotePolicy: RemotePolicyAlways})
 
 	desc := ociImageSpecV1.Descriptor{MediaType: ociImageSpecV1.MediaTypeImageManifest, Size: 1}
-	ref, err := registry.ParseReference("ghcr.io/owner/repo:v1")
+	ref, err := properties.NewReference("ghcr.io/owner/repo:v1")
 	require.NoError(t, err)
 
 	var resolves atomic.Int64
@@ -466,7 +466,7 @@ func TestReferenceCache_Always_ConcurrentCallersResolveIndependently(t *testing.
 	c := newTestRefCache(t, Options{RemotePolicy: RemotePolicyAlways})
 
 	desc := ociImageSpecV1.Descriptor{MediaType: ociImageSpecV1.MediaTypeImageManifest, Size: 1}
-	ref, err := registry.ParseReference("ghcr.io/owner/repo:v1")
+	ref, err := properties.NewReference("ghcr.io/owner/repo:v1")
 	r.NoError(err)
 
 	started := make(chan struct{})
