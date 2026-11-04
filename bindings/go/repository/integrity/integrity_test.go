@@ -148,6 +148,20 @@ func TestVerify_LogsAttrsOfUnverifiedContent(t *testing.T) {
 			r.NoError(call(descriptor.NewExcludeFromSignatureDigest(), WithLogAttrs(slog.String("resource", "excluded"))))
 			r.Contains(logged.String(), "excluded from signature")
 			r.Contains(logged.String(), "resource=excluded")
+			r.NotContains(logged.String(), "level=WARN", "the marker alone is not a risk")
+
+			value := digest.FromString("other content").Encoded()
+			for _, contradictory := range []*descriptor.Digest{
+				{HashAlgorithm: descriptor.NoDigest, NormalisationAlgorithm: descriptor.OCIArtifactDigestV1, Value: value},
+				{HashAlgorithm: "SHA-256", NormalisationAlgorithm: descriptor.ExcludeFromSignature, Value: value},
+				{HashAlgorithm: descriptor.NoDigest, NormalisationAlgorithm: descriptor.ExcludeFromSignature, Value: value},
+			} {
+				logged.Reset()
+				r.NoError(call(contradictory, WithLogAttrs(slog.String("resource", "contradictory"))))
+				r.Contains(logged.String(), "level=WARN")
+				r.Contains(logged.String(), "resource=contradictory")
+				r.Contains(logged.String(), value)
+			}
 		})
 	}
 }
@@ -339,6 +353,15 @@ func TestVerifyOCIArtifact(t *testing.T) {
 		{name: "matching root", expected: withNormalisation(root, descriptor.OCIArtifactDigestV1)},
 		{name: "matching root labelled as generic blob", expected: generic(root)},
 		{
+			name:     "matching root with the OCI hash spelling",
+			expected: &descriptor.Digest{HashAlgorithm: "sha256", NormalisationAlgorithm: descriptor.OCIArtifactDigestV1, Value: root.Encoded()},
+		},
+		{
+			name:     "hash algorithm contradicting the value",
+			expected: &descriptor.Digest{HashAlgorithm: "SHA-512", NormalisationAlgorithm: descriptor.OCIArtifactDigestV1, Value: root.Encoded()},
+			wantErr:  "invalid digest",
+		},
+		{
 			name:     "other root",
 			expected: withNormalisation(digest.FromString("other"), descriptor.OCIArtifactDigestV1),
 			wantErr:  "OCI artifact digest mismatch: expected " + digest.FromString("other").String() + ", got " + root.String(),
@@ -346,6 +369,11 @@ func TestVerifyOCIArtifact(t *testing.T) {
 		{
 			name:     "unsupported normalisation",
 			expected: withNormalisation(root, "jsonNormalisation/v1"),
+			wantErr:  "unsupported normalisation algorithm",
+		},
+		{
+			name:     "unsupported normalisation of a digest that does not parse",
+			expected: &descriptor.Digest{HashAlgorithm: "MD5", NormalisationAlgorithm: "jsonNormalisation/v1", Value: "not-hex"},
 			wantErr:  "unsupported normalisation algorithm",
 		},
 	}
@@ -358,6 +386,9 @@ func TestVerifyOCIArtifact(t *testing.T) {
 				return
 			}
 			r.ErrorContains(err, tt.wantErr)
+			if strings.Contains(tt.wantErr, "unsupported normalisation") {
+				r.ErrorIs(err, ErrUnverifiable)
+			}
 		})
 	}
 }

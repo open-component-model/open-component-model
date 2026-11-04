@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 
 	"github.com/opencontainers/go-digest"
@@ -30,6 +31,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
+	"ocm.software/open-component-model/bindings/go/repository/integrity"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -299,7 +301,7 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 		MutateParentFunc: func(idx *ociImageSpecV1.Descriptor) error {
 			// Verify the selected root, not the archive checksum, before any graph writes.
 			if resource, ok := b.Artifact.(*descriptor.Resource); ok {
-				if err := verifyLayoutRootDigest(resource.Digest, idx.Digest); err != nil {
+				if err := verifyLayoutRootDigest(ctx, resource, idx.Digest); err != nil {
 					return fmt.Errorf("failed to verify resource OCI artifact digest: %w", err)
 				}
 			}
@@ -330,7 +332,8 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 // verifyLayoutRootDigest checks a resource digest against the selected layout root without
 // modifying it. Incomplete digests must be completable from the root; complete digests with
 // another normalisation are preserved unverified.
-func verifyLayoutRootDigest(d *descriptor.Digest, root digest.Digest) error {
+func verifyLayoutRootDigest(ctx context.Context, resource *descriptor.Resource, root digest.Digest) error {
+	d := resource.Digest
 	if !internaldigest.IsComplete(d) {
 		var completed descriptor.Digest
 		if d != nil {
@@ -338,11 +341,11 @@ func verifyLayoutRootDigest(d *descriptor.Digest, root digest.Digest) error {
 		}
 		return internaldigest.Complete(&completed, root, internaldigest.OCIArtifactDigestV1)
 	}
-	switch d.NormalisationAlgorithm {
-	case internaldigest.OCIArtifactDigestV1, internaldigest.GenericBlobDigestV1:
-		return internaldigest.VerifyOCIArtifact(d, root)
+	err := integrity.VerifyOCIArtifact(ctx, d, root, integrity.WithLogAttrs(slog.Any("resource", resource.ToIdentity())))
+	if errors.Is(err, integrity.ErrUnverifiable) {
+		return nil
 	}
-	return nil
+	return err
 }
 
 // ResourceBlobOCILayerOptions defines the configuration options for pushing a blob as a resource.
