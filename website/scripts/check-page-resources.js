@@ -171,11 +171,12 @@ function parseSrcset(value) {
  * <style> (inline JS/CSS and JSON-LD) first, then HTML comments. Script and
  * style go first so that a `<!--` inside inline JS cannot swallow real markup.
  * The opening and closing tags are kept so a real `<script src=...>` is still
- * extracted.
+ * extracted. The opening-tag match is quote-aware, so a `>` inside a quoted
+ * attribute value does not end the tag early and drop a later `src`.
  */
 function stripNonMarkup(html) {
     return html
-        .replace(/(<(script|style)\b[^>]*>)[\s\S]*?(<\/\2\s*>)/gi, "$1$3")
+        .replace(/(<(script|style)\b(?:"[^"]*"|'[^']*'|[^'">])*>)[\s\S]*?(<\/\2\s*>)/gi, "$1$3")
         .replace(/<!--[\s\S]*?-->/g, "");
 }
 

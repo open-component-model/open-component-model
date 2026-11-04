@@ -196,6 +196,11 @@ test("stripNonMarkup: a <!-- inside an inline script does not swallow real marku
     assert.ok(!stripped.includes("<!-- c -->"));
 });
 
+test("stripNonMarkup: a quoted > in a script opening tag does not drop a later src", () => {
+    const html = "<script title=\"x > y\" src=\"/missing.js\"></script>";
+    assert.deepEqual(extractResourceRefs(html).map((r) => `${r.attr}:${r.url}`), ["src:/missing.js"]);
+});
+
 test("extractResourceRefs: comments and inline script/style bodies are not scanned", () => {
     const html = [
         "<!-- <img src=\"/old/removed.png\"> -->",
