@@ -83,6 +83,8 @@ func (i *InputMethod) ProcessResource(ctx context.Context, resource *constructor
 		TempDir:         i.TempFolder,
 		MaxArchiveSize:  download.DefaultMaxArchiveSize,
 		HostKeyCallback: i.HostKeyCallback,
+		// A Git input archives a local repository into a local blob, so it may read one.
+		AllowLocal: true,
 	}
 	if i.MaxArchiveSize != nil {
 		opts.MaxArchiveSize = *i.MaxArchiveSize

@@ -1,6 +1,7 @@
 package endpoint
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"path/filepath"
@@ -108,6 +109,11 @@ func parseURL(repository string) (*url.URL, error) {
 
 	return transport.ParseURL(repository)
 }
+
+// ErrLocalRepository is returned for a local repository where only remote
+// repositories are allowed.
+var ErrLocalRepository = errors.New("git access must not reference a local git repository " +
+	"(file:// or a local path); only remote repositories are supported")
 
 // IsLocal reports whether the endpoint refers to a local repository, i.e. a
 // file:// URL or a plain local path, which a remote consumer cannot reach.

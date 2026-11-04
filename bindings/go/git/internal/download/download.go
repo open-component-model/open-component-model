@@ -435,9 +435,13 @@ func pinnedRefName(ctx context.Context, repo *git.Repository, ref string, client
 }
 
 // ClientOptions applies the same credential and HTTP client rules to fetch and push.
-// The caller calls release once it no longer uses the options; it closes the SSH agent
-// connection an agent authentication holds.
+// Every transport goes through it, so it also rejects a local repository unless
+// opts.AllowLocal is set. The caller calls release once it no longer uses the options;
+// it closes the SSH agent connection an agent authentication holds.
 func ClientOptions(ctx context.Context, ep *endpoint.Endpoint, creds runtime.Typed, opts Options) ([]client.Option, func(), error) {
+	if ep.IsLocal() && !opts.AllowLocal {
+		return nil, nil, endpoint.ErrLocalRepository
+	}
 	auth, err := authMethod(ep, creds, opts)
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot authenticate against git repository: %w", err)

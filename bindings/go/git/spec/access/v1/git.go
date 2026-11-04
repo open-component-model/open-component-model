@@ -97,8 +97,7 @@ func (g *Git) Validate() error {
 		return err
 	}
 	if ep.IsLocal() {
-		return fmt.Errorf("git access must not reference a local git repository " +
-			"(file:// or a local path); only remote repositories are supported")
+		return endpoint.ErrLocalRepository
 	}
 	return nil
 }
