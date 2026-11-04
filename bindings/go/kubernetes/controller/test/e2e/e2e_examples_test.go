@@ -262,6 +262,34 @@ var _ = Describe("controller", func() {
 						"'{.items[0].spec.containers[0].env[?(@.name==\"PODINFO_UI_MESSAGE\")].value}'",
 						example.Name(),
 					)).To(Succeed())
+
+					// The Crossplane composition localizes and configures the same podinfo
+					// chart, but under the <example>-crossplane-podinfo label. Without these
+					// assertions a Crossplane composition that drops the image/ui.message
+					// patches still passes, since the checks above only look at the kro pods.
+					if slices.Contains(files, CrossplaneComposition) && slices.Contains(files, CrossplaneInstance) {
+						crossplanePods := "pod -l app.kubernetes.io/name=" + example.Name() + "-crossplane-podinfo"
+
+						By("validating the Crossplane FluxCD localization")
+						assertLocalizedImage(crossplanePods)
+
+						By("validating the Crossplane FluxCD configuration (ui.message)")
+						Expect(utils.CompareResourceField(ctx,
+							crossplanePods,
+							"'{.items[0].spec.containers[0].env[?(@.name==\"PODINFO_UI_MESSAGE\")].value}'",
+							example.Name(),
+						)).To(Succeed())
+
+						By("validating the Crossplane ArgoCD localization")
+						assertLocalizedImage(crossplanePods + " -n default-argocd")
+
+						By("validating the Crossplane ArgoCD configuration (ui.message)")
+						Expect(utils.CompareResourceField(ctx,
+							crossplanePods+" -n default-argocd",
+							"'{.items[0].spec.containers[0].env[?(@.name==\"PODINFO_UI_MESSAGE\")].value}'",
+							example.Name(),
+						)).To(Succeed())
+					}
 				}
 			})
 		}
