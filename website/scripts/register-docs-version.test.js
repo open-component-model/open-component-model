@@ -239,6 +239,18 @@ test("buildModuleBlocks: schema imports have correct targets with version prefix
     ]);
 });
 
+test("buildModuleBlocks: s3 and tsa credential schemas are gated to their introduction version", () => {
+    const monoDeps = { [MONOLITHIC_BINDINGS_MODULE]: "v0.22.0" };
+    const targetsFor = (v) => buildModuleBlocks(v, `${v}.0`, monoDeps)
+        .imports.flatMap((i) => i.mounts.map((m) => m.target));
+    const s3 = (v) => `static/${v}/schemas/bindings/go/credentials/s3/v1`;
+    const tsa = (v) => `static/${v}/schemas/bindings/go/credentials/tsa/v1alpha1`;
+    assert.ok(!targetsFor("0.15").includes(s3("0.15")), "s3 credentials absent before 0.16");
+    assert.ok(targetsFor("0.16").includes(s3("0.16")), "s3 credentials present from 0.16");
+    assert.ok(!targetsFor("0.19").includes(tsa("0.19")), "tsa credentials absent before 0.21");
+    assert.ok(targetsFor("0.21").includes(tsa("0.21")), "tsa credentials present from 0.21");
+});
+
 test("buildModuleBlocks: schema imports have correct sources", () => {
     const { imports } = buildModuleBlocks("0.3", "0.3.0", ALL_DEPS);
     const schemaImports = imports.filter((i) => !i.path.endsWith("/cli") && !i.path.endsWith("/website"));
