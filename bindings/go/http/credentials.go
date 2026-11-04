@@ -5,7 +5,6 @@ import (
 	"fmt"
 	nethttp "net/http"
 	"net/url"
-	"slices"
 	"strings"
 )
 
@@ -13,14 +12,6 @@ import (
 // clone of the request, so an implementation may set headers but must not
 // retain or modify anything else.
 type Credential func(*nethttp.Request)
-
-// BasicAuth returns a Credential that sends username and password as HTTP
-// basic authorization.
-func BasicAuth(username, password string) Credential {
-	return func(req *nethttp.Request) {
-		req.SetBasicAuth(username, password)
-	}
-}
 
 // BearerToken returns a Credential that sends token as a bearer authorization.
 func BearerToken(token string) Credential {
@@ -71,31 +62,6 @@ func WithCredentialSource(client *nethttp.Client, src CredentialSource) *nethttp
 	c := *client
 	c.Transport = &credentialSourceTransport{base: base, src: src}
 	return &c
-}
-
-// BindCredential returns a copy of client that carries cred to hosts and
-// nothing to any other host. It is WithCredentialSource with StaticCredential,
-// for a credential already resolved for a known host.
-func BindCredential(client *nethttp.Client, cred Credential, hosts ...string) *nethttp.Client {
-	return WithCredentialSource(client, StaticCredential(cred, hosts...))
-}
-
-// StaticCredential returns a CredentialSource serving cred to hosts and
-// nothing elsewhere. An empty hosts list serves nothing at all.
-func StaticCredential(cred Credential, hosts ...string) CredentialSource {
-	bound := make([]string, 0, len(hosts))
-	for _, host := range hosts {
-		if h := hostnameOf(host); h != "" {
-			bound = append(bound, h)
-		}
-	}
-	return func(_ context.Context, host string) (Credential, error) {
-		h := hostnameOf(host)
-		if slices.ContainsFunc(bound, func(b string) bool { return servedBy(h, b) }) {
-			return cred, nil
-		}
-		return nil, nil
-	}
 }
 
 // BoundToHost reports whether a request to requestHost is served by a
