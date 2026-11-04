@@ -23,6 +23,25 @@ The flow mirrors the e2e tasks (`test/e2e/setup/local`, `test/e2e`, `test/e2e/se
 
 `go run ./test/performance --help` lists every flag.
 
+### In CI
+
+The `Controller: Performance Benchmark` workflow runs the same flow in four ways. Every run shows `summary.md` in
+its job summary and uploads the results directory as an artifact.
+
+| Trigger                   | Suite                                                                |
+|---------------------------|----------------------------------------------------------------------|
+| Nightly on `main`         | The standard suite: `--scenarios=complex --objects=1000 --repeats=3` |
+| Weekly on `main` (Sunday) | The full suite                                                       |
+| Actions, Run workflow     | Any `--scenarios`, `--objects` and `--repeats`                       |
+| `/perf` comment on a PR   | The standard suite, for the PR and for its merge base                |
+
+`/perf` takes no arguments, so every comparison runs the same suite. The workflow reacts with 👀 when it sees the
+command, 🚀 when the runs are launched, and 😕 when the comment has arguments. When both runs succeed, it replies with a
+table of the medians of both sides and the difference; when either fails, it replies with 🛑 and a link to the run.
+Rows marked `*` depend on the runner, because the two sides run on different machines. A new `/perf` on the same pull
+request cancels the runs of the previous one. Only repository owners, organization members and collaborators can
+trigger it.
+
 ## Structure
 
 The benchmark is a standalone Go program, run with `go run`. It builds and measures the working tree only.
