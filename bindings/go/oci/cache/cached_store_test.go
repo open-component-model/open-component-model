@@ -113,23 +113,16 @@ func TestWrap_NilCachesReturnBase(t *testing.T) {
 	assert.Same(t, backing, got)
 }
 
-func TestWrap_PreservesChunkConfigPassthrough(t *testing.T) {
-	// With no caches configured Wrap must not strip chunk configuration.
-	inner := &remote.Repository{}
-	backing := &remotestore.RemoteStore{Repository: inner, ChunkSize: 4 << 20, ChunkThreshold: 8 << 20}
-	got := Wrap(backing, nil, nil)
-	rs, ok := got.(*remotestore.RemoteStore)
-	require.True(t, ok)
-	assert.Equal(t, int64(4<<20), rs.ChunkSize)
-	assert.Equal(t, int64(8<<20), rs.ChunkThreshold)
-}
-
 func TestWrap_BlobCacheOnlyWraps(t *testing.T) {
 	inner := &remote.Repository{}
+	// A chunk-configured backing must survive wrapping (same pointer), so a
+	// configured cache cannot silently disable chunked push.
+	backing := &remotestore.RemoteStore{Repository: inner, ChunkSize: 4 << 20, ChunkThreshold: 8 << 20}
 	c := newTestCache(t, Options{})
-	got := Wrap(&remotestore.RemoteStore{Repository: inner}, c, nil)
+	got := Wrap(backing, c, nil)
 	wrapped, ok := got.(*CachedStore)
 	require.True(t, ok)
+	assert.Same(t, backing, wrapped.RemoteStore)
 	assert.Same(t, inner, wrapped.Repository)
 	assert.Same(t, c, wrapped.BlobCache)
 	assert.Nil(t, wrapped.ReferenceCache)
@@ -156,21 +149,6 @@ func TestWrap_BothCachesWrap(t *testing.T) {
 	assert.Same(t, inner, wrapped.Repository)
 	assert.Same(t, c, wrapped.BlobCache)
 	assert.Same(t, rc, wrapped.ReferenceCache)
-}
-
-func TestWrap_PreservesBackingThroughCache(t *testing.T) {
-	// The embedded RemoteStore (and its ChunkSize/ChunkThreshold) must
-	// survive wrapping so chunked push is not silently disabled when a
-	// cache is configured.
-	inner := &remote.Repository{}
-	backing := &remotestore.RemoteStore{Repository: inner, ChunkSize: 4 << 20, ChunkThreshold: 8 << 20}
-	c := newTestCache(t, Options{})
-	got := Wrap(backing, c, nil)
-	wrapped, ok := got.(*CachedStore)
-	require.True(t, ok)
-	assert.Same(t, backing, wrapped.RemoteStore)
-	assert.Equal(t, int64(4<<20), wrapped.ChunkSize)
-	assert.Equal(t, int64(8<<20), wrapped.ChunkThreshold)
 }
 
 // plainHTTPRepo builds a *remote.Repository pointed at srv over plain

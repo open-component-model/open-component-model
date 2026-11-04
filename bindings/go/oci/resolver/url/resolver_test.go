@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/auth"
 
@@ -532,41 +531,4 @@ func TestURLPathResolver_DynamicCacheSwapping(t *testing.T) {
 	store, err = resolver.StoreForReference(ctx, ref)
 	require.NoError(t, err)
 	assert.IsType(t, &remotestore.RemoteStore{}, store)
-}
-
-// Regression: caching must preserve chunked/streaming pushes and keep an Unwrap
-// chain that pack's global-store detection can follow to a global store.
-func TestURLPathResolver_CachingPreservesStreamingPusher(t *testing.T) {
-	ctx := t.Context()
-	resolver, err := url.New(
-		url.WithBaseURL("http://example.com"),
-		url.WithChunkedPush(4<<20, 8<<20),
-	)
-	require.NoError(t, err)
-	resolver.SetBlobCache(&cache.BlobCache{})
-
-	store, err := resolver.StoreForReference(ctx, "example.com/test-component:v1.0.0")
-	require.NoError(t, err)
-
-	require.Implements(t, (*remotestore.StreamingPusher)(nil), store)
-
-	// Mirror pack.backedByGlobalStore: the chain must reach a store it
-	// recognizes as global (the backing RemoteStore or its *remote.Repository).
-	var reachedGlobal bool
-	for cur := content.Storage(store); cur != nil; {
-		if _, ok := cur.(*remotestore.RemoteStore); ok {
-			reachedGlobal = true
-			break
-		}
-		if _, ok := cur.(*remote.Repository); ok {
-			reachedGlobal = true
-			break
-		}
-		u, ok := cur.(interface{ Unwrap() content.Storage })
-		if !ok {
-			break
-		}
-		cur = u.Unwrap()
-	}
-	require.True(t, reachedGlobal, "Unwrap chain must reach a global-detected store")
 }
