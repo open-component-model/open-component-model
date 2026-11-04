@@ -50,7 +50,8 @@ const (
 type Options struct {
 	// Dir is the absolute directory the cache owns — required. Both
 	// caches lay out their files inside Dir without colliding
-	// ([BlobCache] uses `<Dir>/blobs/<algo>/<hex>` files,
+	// ([BlobCache] uses `<Dir>/blobs/<algo>/<hex>` files, and under
+	// [RemotePolicyAlways] also `<Dir>/served/refs/`,
 	// [ReferenceCache] uses `<Dir>/refs/<sha256(namespace)>.json`), so
 	// the same Dir can be shared.
 	Dir string

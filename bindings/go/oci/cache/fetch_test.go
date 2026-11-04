@@ -18,12 +18,11 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/registry"
 )
 
-// fakeReadOnly is a minimal in-memory [content.ReadOnlyStorage] used
-// to drive Fetch tests without pulling in a full registry.
+// fakeReadOnly is a minimal in-memory [ReadOnlyRepository] used to
+// drive Fetch tests without pulling in a full registry.
 type fakeReadOnly struct {
 	ref     registry.Reference
 	mu      sync.Mutex
@@ -87,7 +86,7 @@ func (s *fakeReadOnly) remove(dgst digest.Digest) {
 	delete(s.media, dgst)
 }
 
-var _ content.ReadOnlyStorage = (*fakeReadOnly)(nil)
+var _ ReadOnlyRepository = (*fakeReadOnly)(nil)
 
 func readAllAndClose(t *testing.T, rc io.ReadCloser) []byte {
 	t.Helper()

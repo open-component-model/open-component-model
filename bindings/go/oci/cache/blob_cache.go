@@ -74,7 +74,9 @@ type BlobCache struct {
 //
 // The cache stores its files under `<Options.Dir>/blobs/<algo>/<hex>`
 // so the same Dir can also host a [ReferenceCache] (which writes
-// `<Dir>/refs/<sha256(namespace)>.json`) without collisions.
+// `<Dir>/refs/<sha256(namespace)>.json`) without collisions. Under
+// [RemotePolicyAlways] it also records what each repository served, in
+// a [ReferenceCache] of its own under `<Options.Dir>/served/`.
 func NewBlobCache(opts Options) (*BlobCache, error) {
 	opts, err := opts.applyDefaults(DefaultBlobMaxEntries)
 	if err != nil {
@@ -93,10 +95,9 @@ func NewBlobCache(opts Options) (*BlobCache, error) {
 	c.lru = expirable.NewLRU(opts.MaxEntries, c.onEvict, opts.TTL)
 	if opts.RemotePolicy == RemotePolicyAlways {
 		c.served, err = NewReferenceCache(Options{
-			Dir:          filepath.Join(root, "served"),
-			MaxEntries:   opts.MaxEntries,
-			TTL:          noExpiry, // a hit also needs the blob, so the blob's lifetime decides
-			RemotePolicy: opts.RemotePolicy,
+			Dir:        filepath.Join(root, "served"),
+			MaxEntries: opts.MaxEntries,
+			TTL:        noExpiry, // a hit also needs the blob, so the blob's lifetime decides
 		})
 		if err != nil {
 			return nil, fmt.Errorf("blobcache: %w", err)
@@ -225,8 +226,9 @@ func (c *BlobCache) populate(ctx context.Context, dgst digest.Digest, size int64
 // Concurrent Fetches for the same digest are collapsed via
 // singleflight into a single upstream.Fetch; every caller receives an
 // independent reader over identical bytes. Under [RemotePolicyAlways]
-// every caller proves access with its own upstream, see
-// [BlobCache.fetchAlways].
+// every caller proves access with its own upstream: a cache hit requires
+// that its repository served the blob before and that Exists passes, and
+// any other call is not collapsed but fetched by the caller itself.
 func (c *BlobCache) Fetch(ctx context.Context, upstream ReadOnlyRepository, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 	if c == nil || !c.Accept(target) {
 		return upstream.Fetch(ctx, target)
@@ -314,7 +316,8 @@ func (c *BlobCache) fetchAlways(ctx context.Context, upstream ReadOnlyRepository
 		return nil, fmt.Errorf("blobcache: identify repository of %s: %w", target.Digest, err)
 	}
 
-	if _, ok := c.served.Lookup(blobRef); ok {
+	_, known := c.served.Lookup(blobRef)
+	if known {
 		if f := c.cached(ctx, target); f != nil {
 			if err := c.verifyRemoteAccess(ctx, upstream, target); err != nil {
 				_ = f.Close()
@@ -328,7 +331,11 @@ func (c *BlobCache) fetchAlways(ctx context.Context, upstream ReadOnlyRepository
 	if err != nil {
 		return nil, err
 	}
-	c.served.Add(blobRef, target)
+	if !known {
+		// Only the digest: annotations of a descriptor can be of any size, and
+		// writing a record rewrites the snapshot of its repository.
+		c.served.Add(blobRef, ociImageSpecV1.Descriptor{Digest: target.Digest})
+	}
 	return io.NopCloser(bytes.NewReader(data)), nil
 }
 

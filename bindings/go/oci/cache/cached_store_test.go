@@ -113,6 +113,8 @@ func TestCachedStore_Fetch_Always_HitsAreBoundToTheRepository(t *testing.T) {
 		Size:      int64(len(manifest)),
 	}
 
+	manifestPath := func(repo string) string { return "/v2/" + repo + "/manifests/" + desc.Digest.String() }
+
 	var mu sync.Mutex
 	requests := map[string]int{}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -120,9 +122,9 @@ func TestCachedStore_Fetch_Always_HitsAreBoundToTheRepository(t *testing.T) {
 		requests[req.Method+" "+req.URL.Path]++
 		mu.Unlock()
 		body := manifest
-		if req.URL.Path == "/v2/attacker/manifests/"+desc.Digest.String() {
+		if req.URL.Path == manifestPath("attacker") {
 			body = forged
-		} else if req.URL.Path != "/v2/victim/manifests/"+desc.Digest.String() {
+		} else if req.URL.Path != manifestPath("victim") {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -145,7 +147,6 @@ func TestCachedStore_Fetch_Always_HitsAreBoundToTheRepository(t *testing.T) {
 	c := newTestCache(t, Options{RemotePolicy: RemotePolicyAlways})
 	victim := newCachedStore(repoAt("victim"), c, nil)
 	attacker := newCachedStore(repoAt("attacker"), c, nil)
-	manifestPath := func(repo string) string { return "/v2/" + repo + "/manifests/" + desc.Digest.String() }
 
 	for range 2 {
 		rc, err := victim.Fetch(t.Context(), desc)
