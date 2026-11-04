@@ -18,6 +18,34 @@ tests:
       - hasDocuments:
           count: 0
 
+  - it: keeps the default rules when the healthProbe block and the rule keys are absent
+    # Simulates helm upgrade --reuse-values from a release that predates them.
+    set:
+      manager.networkPolicy.enabled: true
+      manager.networkPolicy.ingress: null
+      manager.networkPolicy.egress: null
+      manager.healthProbe: null
+    asserts:
+      - equal:
+          path: spec.ingress
+          value:
+            - ports:
+                - port: 8081
+                  protocol: TCP
+      - equal:
+          path: spec.egress
+          value:
+            - ports:
+                - port: 53
+                  protocol: UDP
+                - port: 53
+                  protocol: TCP
+            - ports:
+                - port: 443
+                  protocol: TCP
+                - port: 6443
+                  protocol: TCP
+
   - it: admits only the health-probe port by default
     set:
       manager.networkPolicy.enabled: true

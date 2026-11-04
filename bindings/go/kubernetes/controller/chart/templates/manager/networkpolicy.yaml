@@ -1,4 +1,4 @@
-{{- /* dig: a helm upgrade --reuse-values from a release without this key must not fail */}}
+{{- /* dig: a helm upgrade --reuse-values from a release without these keys must not fail */}}
 {{- if dig "networkPolicy" "enabled" false .Values.manager }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -23,7 +23,7 @@ spec:
     ingress:
         {{- /* Mirror the ports the manager listens on, see manager.yaml. */}}
         - ports:
-            - port: {{ regexFind "[0-9]+$" (.Values.manager.healthProbe.bindAddress | default ":8081" | toString) | int }}
+            - port: {{ regexFind "[0-9]+$" (dig "healthProbe" "bindAddress" ":8081" .Values.manager | default ":8081" | toString) | int }}
               protocol: TCP
             {{- with include "ocm-k8s-toolkit.metricsPort" . }}
             - port: {{ . | int }}
@@ -33,12 +33,12 @@ spec:
             - port: 9443
               protocol: TCP
             {{- end }}
-        {{- with .Values.manager.networkPolicy.ingress }}
+        {{- with dig "networkPolicy" "ingress" (list) .Values.manager }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
     egress:
-        {{- if .Values.manager.networkPolicy.egress }}
-        {{- toYaml .Values.manager.networkPolicy.egress | nindent 8 }}
+        {{- with dig "networkPolicy" "egress" (list) .Values.manager }}
+        {{- toYaml . | nindent 8 }}
         {{- else }}
         - ports:
             - port: 53

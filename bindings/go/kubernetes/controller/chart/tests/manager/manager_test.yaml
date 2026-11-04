@@ -310,6 +310,68 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --enable-namespaced-deployer=true
 
+  - it: defaults the metrics flags when the metricsServer block is absent
+    # Simulates helm upgrade --reuse-values from a release that predates the block.
+    set:
+      manager.metricsServer: null
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --metrics-bind-address=0
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --metrics-secure
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --enable-http2
+      - notExists:
+          path: spec.template.spec.containers[0].ports
+
+  - it: defaults the health-probe and leader-election flags when their blocks are absent
+    # Simulates helm upgrade --reuse-values from a release that predates the blocks.
+    set:
+      manager.healthProbe: null
+      manager.leaderElection: null
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --health-probe-bind-address=:8081
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --leader-elect
+
+  - it: allows more than one replica when the leaderElection block is absent
+    # The block defaults to enabled, so the replicas guard must not fail.
+    set:
+      manager.replicas: 2
+      manager.leaderElection: null
+    asserts:
+      - equal:
+          path: spec.replicas
+          value: 2
+
+  - it: defaults the probes when their blocks are absent
+    set:
+      manager.livenessProbe: null
+      manager.readinessProbe: null
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe
+          value:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe
+          value:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
   - it: passes fractional rate-limit qps and a custom burst
     # values.schema.json rejects burst < 1, so the zero-burst branch of the template is unreachable.
     set:
@@ -328,9 +390,9 @@ tests:
     set:
       manager.cache.deployerDownloadMaxResourceSize: null
     asserts:
-      - notContains:
-          path: spec.template.spec.containers[0].args
-          content: --deployer-download-max-resource-size=
+      - notMatchRegex:
+          path: spec.template.spec.containers[0].args[*]
+          pattern: ^--deployer-download-max-resource-size=
 
   - it: renders no flags for absent concurrency, rateLimiter, cache and logging blocks
     # Simulates helm upgrade --reuse-values from a release that predates these sections.
