@@ -53,6 +53,17 @@
 // context deadline (covering headers + body), so a per-host value can exceed
 // the global. http.Client.Timeout is left zero in this case.
 //
+// # Host-bound credentials
+//
+// A credential belongs to the host it was resolved for. BindCredential ties it
+// to that host so neither a redirect nor an access spec naming another host can
+// move it:
+//
+//	client = ocmhttp.BindCredential(client, ocmhttp.BearerToken(token), "github.com")
+//
+// The returned client shares the original's connection pool, so a credential
+// can be bound per download.
+//
 // # Lower-level constructors
 //
 // Skip the retry layer with NewClient, or get just the transport:

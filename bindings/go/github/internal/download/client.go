@@ -54,33 +54,64 @@ func ownerRepo(u *url.URL, repoURL string) (owner, repo string, err error) {
 // falls back to an unauthenticated request. The fallback is silent, so a token
 // that never reached the client makes a private repository answer 404 rather
 // than an auth error.
+//
+// A token is bound to the repository host rather than handed to go-github,
+// which would attach it to whatever host the client ends up addressing:
+// GetResourceCredentialConsumerIdentity resolves the token from repoUrl alone,
+// while APIHostname — part of the same, untrusted access spec — decides where
+// the API calls go. An access that points its API at an unrelated host is
+// rejected instead of being served anonymously, so a GitHub Enterprise
+// deployment with a misconfigured apiHostname fails with its cause named
+// rather than with a 404.
 func clientFor(gitHub *v1.GitHub, u *url.URL, credentials *credsv1.GitHubCredentials, httpClient *http.Client) (*github.Client, error) {
 	if httpClient == nil {
 		httpClient = defaultHTTPClient()
 	}
-	// WithHTTPClient copies the supplied client before NewClient wraps its
-	// Transport for auth, so the shared, pooled client stays untouched and a
-	// token cannot leak across downloads (TestFetch_SharedClientDoesNotLeakToken
-	// pins this against future go-github bumps).
-	opts := []github.ClientOptionsFunc{github.WithHTTPClient(httpClient)}
-	if credentials != nil && credentials.Token != "" {
-		opts = append(opts, github.WithAuthToken(credentials.Token))
-	}
 
+	var enterpriseURLs []github.ClientOptionsFunc
 	if gitHub.APIHostname != "" || u.Hostname() != "github.com" {
 		enterpriseHost := gitHub.APIHostname
 		if enterpriseHost == "" {
 			enterpriseHost = u.Host
 		}
 		base := (&url.URL{Scheme: u.Scheme, Host: enterpriseHost}).String()
-		opts = append(opts, github.WithEnterpriseURLs(base, base))
+		enterpriseURLs = append(enterpriseURLs, github.WithEnterpriseURLs(base, base))
 	}
 
-	gh, err := github.NewClient(opts...)
-	if err != nil {
-		return nil, fmt.Errorf("error building github client for %q: %w", gitHub.RepoURL, err)
+	// WithHTTPClient copies the supplied client, so the shared, pooled client
+	// stays untouched and a token cannot leak across downloads
+	// (TestFetch_SharedClientDoesNotLeakToken pins this against future
+	// go-github bumps).
+	newClient := func(client *http.Client) (*github.Client, error) {
+		opts := append([]github.ClientOptionsFunc{github.WithHTTPClient(client)}, enterpriseURLs...)
+		gh, err := github.NewClient(opts...)
+		if err != nil {
+			return nil, fmt.Errorf("error building github client for %q: %w", gitHub.RepoURL, err)
+		}
+		return gh, nil
 	}
-	return gh, nil
+
+	gh, err := newClient(httpClient)
+	if err != nil {
+		return nil, err
+	}
+	if credentials == nil || credentials.Token == "" {
+		return gh, nil
+	}
+
+	// Ask go-github which hosts it resolved rather than deriving them again:
+	// the public API and upload hosts are its defaults, not ours.
+	for _, apiURL := range []string{gh.BaseURL(), gh.UploadURL()} {
+		parsed, err := url.Parse(apiURL)
+		if err != nil {
+			return nil, fmt.Errorf("error parsing the github api url %q of %q: %w", apiURL, gitHub.RepoURL, err)
+		}
+		if !ocmhttp.BoundToHost(u.Host, parsed.Host) {
+			return nil, fmt.Errorf("refusing to use the github credential of %q with api host %q: "+
+				"the credential is resolved for the repository host and must not be sent to another host", u.Host, parsed.Host)
+		}
+	}
+	return newClient(ocmhttp.BindCredential(httpClient, ocmhttp.BearerToken(credentials.Token), u.Host))
 }
 
 // ResolveCommit resolves the access's git reference (a branch, tag, or fully
