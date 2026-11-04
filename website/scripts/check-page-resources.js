@@ -38,8 +38,8 @@
  * - Use `--ignore <regex>` (repeatable) to skip known-dynamic URLs.
  */
 
-const fs = require('node:fs');
-const path = require('node:path');
+const fs = require("node:fs");
+const path = require("node:path");
 
 // Embedded-resource attributes. `tags: null` means any element. Keys are
 // lowercase. `data-schema-url` is the custom attribute emitted by the
@@ -48,13 +48,13 @@ const path = require('node:path');
 // navigational <a href>/<area href> are never reported.
 const RESOURCE_ATTRS = {
     src: { tags: null, srcset: false },
-    href: { tags: new Set(['link', 'use', 'image']), srcset: false },
-    poster: { tags: new Set(['video']), srcset: false },
-    data: { tags: new Set(['object']), srcset: false },
-    srcset: { tags: new Set(['img', 'source']), srcset: true },
-    'data-schema-url': { tags: null, srcset: false },
-    'data-src': { tags: null, srcset: false },
-    'data-srcset': { tags: null, srcset: true },
+    href: { tags: new Set(["link", "use", "image"]), srcset: false },
+    poster: { tags: new Set(["video"]), srcset: false },
+    data: { tags: new Set(["object"]), srcset: false },
+    srcset: { tags: new Set(["img", "source"]), srcset: true },
+    "data-schema-url": { tags: null, srcset: false },
+    "data-src": { tags: null, srcset: false },
+    "data-srcset": { tags: null, srcset: true }
 };
 
 /**
@@ -68,13 +68,13 @@ function isInternalUrl(url) {
         return false;
     }
     const value = url.trim();
-    if (value === '') {
+    if (value === "") {
         return false;
     }
-    if (value.startsWith('#')) {
+    if (value.startsWith("#")) {
         return false; // in-page anchor
     }
-    if (value.startsWith('//')) {
+    if (value.startsWith("//")) {
         return false; // protocol-relative (external)
     }
     if (/^[a-z][a-z0-9+.-]*:/i.test(value)) {
@@ -86,11 +86,11 @@ function isInternalUrl(url) {
 /** Strip query string and fragment, then percent-decode. */
 function normalizeUrl(url) {
     let value = url.trim();
-    const hash = value.indexOf('#');
+    const hash = value.indexOf("#");
     if (hash !== -1) {
         value = value.slice(0, hash);
     }
-    const query = value.indexOf('?');
+    const query = value.indexOf("?");
     if (query !== -1) {
         value = value.slice(0, query);
     }
@@ -111,24 +111,24 @@ function normalizeUrl(url) {
  */
 function resolveCandidates(url, htmlFile, publicDir) {
     const clean = normalizeUrl(url);
-    if (clean === '') {
+    if (clean === "") {
         return [];
     }
 
     const root = path.resolve(publicDir);
-    const base = clean.startsWith('/')
+    const base = clean.startsWith("/")
         ? path.join(root, clean)
         : path.resolve(path.dirname(htmlFile), clean);
 
     const rel = path.relative(root, base);
-    if (rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) {
+    if (rel === ".." || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) {
         return [];
     }
 
-    if (clean.endsWith('/')) {
-        return [path.join(base, 'index.html')];
+    if (clean.endsWith("/")) {
+        return [path.join(base, "index.html")];
     }
-    return [base, path.join(base, 'index.html'), `${base}.html`];
+    return [base, path.join(base, "index.html"), `${base}.html`];
 }
 
 /**
@@ -149,17 +149,17 @@ function parseSrcset(value) {
             i += 1;
         }
         let url = value.slice(start, i);
-        if (url === '') {
+        if (url === "") {
             break;
         }
-        if (url.endsWith(',')) {
-            url = url.replace(/,+$/, '');
+        if (url.endsWith(",")) {
+            url = url.replace(/,+$/, "");
         } else {
-            while (i < value.length && value[i] !== ',') {
+            while (i < value.length && value[i] !== ",") {
                 i += 1;
             }
         }
-        if (url !== '') {
+        if (url !== "") {
             urls.push(url);
         }
     }
@@ -175,8 +175,8 @@ function parseSrcset(value) {
  */
 function stripNonMarkup(html) {
     return html
-        .replace(/(<(script|style)\b[^>]*>)[\s\S]*?(<\/\2\s*>)/gi, '$1$3')
-        .replace(/<!--[\s\S]*?-->/g, '');
+        .replace(/(<(script|style)\b[^>]*>)[\s\S]*?(<\/\2\s*>)/gi, "$1$3")
+        .replace(/<!--[\s\S]*?-->/g, "");
 }
 
 // One start tag: name, then attribute text with quoted values kept intact so a
@@ -208,7 +208,7 @@ function extractResourceRefs(html) {
             if (!rule || (rule.tags && !rule.tags.has(tag))) {
                 continue;
             }
-            const value = attrMatch[2] ?? attrMatch[3] ?? attrMatch[4] ?? '';
+            const value = attrMatch[2] ?? attrMatch[3] ?? attrMatch[4] ?? "";
             const urls = rule.srcset ? parseSrcset(value) : [value];
             for (const url of urls) {
                 refs.push({ tag, attr, url });
@@ -228,7 +228,7 @@ function findHtmlFiles(dir) {
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) {
             out.push(...findHtmlFiles(full));
-        } else if (entry.isFile() && full.toLowerCase().endsWith('.html')) {
+        } else if (entry.isFile() && full.toLowerCase().endsWith(".html")) {
             out.push(full);
         }
     }
@@ -255,7 +255,7 @@ function checkPublicDir(publicDir, options = {}) {
     let checked = 0;
 
     for (const htmlFile of htmlFiles) {
-        const html = fs.readFileSync(htmlFile, 'utf8');
+        const html = fs.readFileSync(htmlFile, "utf8");
         const refs = extractResourceRefs(html);
         const seen = new Set();
 
@@ -273,7 +273,7 @@ function checkPublicDir(publicDir, options = {}) {
             }
             seen.add(key);
 
-            if (normalizeUrl(url) === '') {
+            if (normalizeUrl(url) === "") {
                 continue; // query/fragment only
             }
 
@@ -284,7 +284,7 @@ function checkPublicDir(publicDir, options = {}) {
                     page: path.relative(publicDir, htmlFile),
                     attr,
                     url,
-                    tried: candidates.map((c) => path.relative(publicDir, c)),
+                    tried: candidates.map((c) => path.relative(publicDir, c))
                 });
             }
         }
@@ -298,17 +298,17 @@ function checkPublicDir(publicDir, options = {}) {
 }
 
 function parseArguments(argv) {
-    const args = { publicDir: 'public', ignore: [] };
+    const args = { publicDir: "public", ignore: [] };
     for (let i = 0; i < argv.length; i += 1) {
         const arg = argv[i];
-        if (arg === '--ignore') {
+        if (arg === "--ignore") {
             const pattern = argv[i + 1];
             if (!pattern) {
-                throw new Error('--ignore requires a regex argument');
+                throw new Error("--ignore requires a regex argument");
             }
             args.ignore.push(new RegExp(pattern));
             i += 1;
-        } else if (!arg.startsWith('-')) {
+        } else if (!arg.startsWith("-")) {
             args.publicDir = arg;
         } else {
             throw new Error(`unknown argument: ${arg}`);
@@ -323,7 +323,7 @@ function main(argv) {
 
     if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
         console.error(`error: build output directory not found: ${resolved}`);
-        console.error('Run `npm run build` first, or pass the correct path.');
+        console.error("Run `npm run build` first, or pass the correct path.");
         process.exit(2);
     }
 
@@ -332,7 +332,7 @@ function main(argv) {
     console.log(`Scanned ${pages} page(s), checked ${checked} internal resource reference(s).`);
 
     if (missing.length === 0) {
-        console.log('All checked embedded resource references resolve to a published file.');
+        console.log("All checked embedded resource references resolve to a published file.");
         return;
     }
 
@@ -340,8 +340,8 @@ function main(argv) {
     for (const m of missing) {
         console.error(`  page:  ${m.page}`);
         console.error(`  ${m.attr}: ${m.url}`);
-        console.error(`  tried: ${m.tried.length > 0 ? m.tried.join(', ') : '(path resolves outside the build directory)'}`);
-        console.error('');
+        console.error(`  tried: ${m.tried.length > 0 ? m.tried.join(", ") : "(path resolves outside the build directory)"}`);
+        console.error("");
     }
     process.exit(1);
 }
@@ -364,5 +364,5 @@ module.exports = {
     extractResourceRefs,
     findHtmlFiles,
     checkPublicDir,
-    parseArguments,
+    parseArguments
 };
