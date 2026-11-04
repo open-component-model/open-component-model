@@ -28,7 +28,8 @@
     "preinfo": "npm version",
     "preview": "http-server --gzip --brotli --ext=html --cors",
     "postinstall": "node scripts/link-dart-sass.js",
-    "test": "node --test scripts/register-docs-version.test.js"
+    "check:resources": "node scripts/check-page-resources.js public",
+    "test": "node --test scripts/*.test.js"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
