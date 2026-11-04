@@ -3212,7 +3212,7 @@ func testRepositoryResourceDigest(t *testing.T, operation string) {
 							wantErr = "digest value mismatch"
 						}
 					}
-					if normalization == "unexpected/v1" && mismatch != "algorithm" {
+					if normalization == "unexpected/v1" {
 						wantErr = "unsupported normalisation algorithm"
 					}
 					// An empty normalization is completed, but set fields must still match.

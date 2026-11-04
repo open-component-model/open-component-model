@@ -371,6 +371,11 @@ func TestVerifyOCIArtifact(t *testing.T) {
 			expected: withNormalisation(root, "jsonNormalisation/v1"),
 			wantErr:  "unsupported normalisation algorithm",
 		},
+		{
+			name:     "unsupported normalisation of a digest that does not parse",
+			expected: &descriptor.Digest{HashAlgorithm: "MD5", NormalisationAlgorithm: "jsonNormalisation/v1", Value: "not-hex"},
+			wantErr:  "unsupported normalisation algorithm",
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -381,6 +386,9 @@ func TestVerifyOCIArtifact(t *testing.T) {
 				return
 			}
 			r.ErrorContains(err, tt.wantErr)
+			if strings.Contains(tt.wantErr, "unsupported normalisation") {
+				r.ErrorIs(err, ErrUnverifiable)
+			}
 		})
 	}
 }

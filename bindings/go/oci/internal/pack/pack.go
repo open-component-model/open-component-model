@@ -9,7 +9,6 @@ import (
 	"io"
 	"log/slog"
 	"maps"
-	"strings"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -332,8 +331,7 @@ func ResourceLocalBlobOCILayout(ctx context.Context, storage content.Storage, b 
 
 // verifyLayoutRootDigest checks a resource digest against the selected layout root without
 // modifying it. Incomplete digests must be completable from the root; complete digests with
-// another normalisation are preserved unverified. Excluded digests also go through the
-// verifier, which accepts them but warns if they record a value.
+// another normalisation are preserved unverified.
 func verifyLayoutRootDigest(ctx context.Context, resource *descriptor.Resource, root digest.Digest) error {
 	d := resource.Digest
 	if !internaldigest.IsComplete(d) {
@@ -343,13 +341,11 @@ func verifyLayoutRootDigest(ctx context.Context, resource *descriptor.Resource, 
 		}
 		return internaldigest.Complete(&completed, root, internaldigest.OCIArtifactDigestV1)
 	}
-	switch {
-	case d.NormalisationAlgorithm == internaldigest.OCIArtifactDigestV1,
-		d.NormalisationAlgorithm == internaldigest.GenericBlobDigestV1,
-		strings.EqualFold(d.NormalisationAlgorithm, descriptor.ExcludeFromSignature):
-		return integrity.VerifyOCIArtifact(ctx, d, root, integrity.WithLogAttrs(slog.Any("resource", resource.ToIdentity())))
+	err := integrity.VerifyOCIArtifact(ctx, d, root, integrity.WithLogAttrs(slog.Any("resource", resource.ToIdentity())))
+	if errors.Is(err, integrity.ErrUnverifiable) {
+		return nil
 	}
-	return nil
+	return err
 }
 
 // ResourceBlobOCILayerOptions defines the configuration options for pushing a blob as a resource.

@@ -197,21 +197,32 @@ func VerifyContent(ctx context.Context, expected *descriptor.Digest, content blo
 func VerifyOCIArtifact(ctx context.Context, expected *descriptor.Digest, root digest.Digest, opts ...Option) error {
 	want, err := ParseDigest(expected)
 	if err != nil {
+		// A digest of an unknown normalisation cannot be judged by what its fields look like.
+		if !isArtifactNormalisation(expected.NormalisationAlgorithm) {
+			return unsupportedNormalisation(expected.NormalisationAlgorithm)
+		}
 		return err
 	}
 	if want == "" {
 		logUnverified(ctx, expected, newOptions(opts).logAttrs)
 		return nil
 	}
+	if !isArtifactNormalisation(expected.NormalisationAlgorithm) {
+		return unsupportedNormalisation(expected.NormalisationAlgorithm)
+	}
+	if want != root {
+		return fmt.Errorf("OCI artifact digest mismatch: expected %s, got %s", want, root)
+	}
+	return nil
+}
 
-	switch n := expected.NormalisationAlgorithm; n {
+// isArtifactNormalisation reports whether normalisation may label the root digest of an OCI artifact.
+func isArtifactNormalisation(normalisation string) bool {
+	switch normalisation {
 	case "", descriptor.GenericBlobDigestV1, descriptor.OCIArtifactDigestV1:
-		if want != root {
-			return fmt.Errorf("OCI artifact digest mismatch: expected %s, got %s", want, root)
-		}
-		return nil
+		return true
 	default:
-		return unsupportedNormalisation(n)
+		return false
 	}
 }
 
