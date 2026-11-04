@@ -37,6 +37,12 @@ The kro `rgd.yaml` bundles **both the FluxCD and ArgoCD deployer blocks** in the
 both. Crossplane is a separate path, in its own `crossplane-composition.yaml`. On a cluster where only one
 GitOps deployer is installed, remove the block for the absent deployer from `rgd.yaml`.
 
+Crossplane Compositions run under the `crossplane` service account, which by default cannot create the
+resources they produce (OCM `Resource`s, Flux sources/`HelmRelease`s/`Kustomization`s, ArgoCD `Application`s),
+so the XR never becomes Ready. Apply [`crossplane-rbac.yaml`](crossplane-rbac.yaml) once per cluster to grant
+it: the manifest is an aggregated `ClusterRole` that Crossplane's RBAC manager folds into that service account.
+The local e2e setup applies the same file.
+
 ---
 
 ## helm-simple

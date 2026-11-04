@@ -299,47 +299,17 @@ subjects:
     namespace: ocm-k8s-toolkit-system
 EOF
 
-  # Grant Crossplane SA permission to manage OCM, Flux, and ArgoCD resources
-  # (needed so Crossplane Compositions can create OCM Resources, HelmReleases, etc.)
-  kubectl apply -f - <<EOF || return 1
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: crossplane-ocm-resources-e2e
-rules:
-  - apiGroups: ["delivery.ocm.software"]
-    resources: ["resources","resources/status","components","repositories"]
-    verbs: ["create","delete","get","list","patch","update","watch"]
-  - apiGroups: ["examples.ocm.software"]
-    resources: ["*","*/status"]
-    verbs: ["create","delete","get","list","patch","update","watch"]
-  - apiGroups: ["source.toolkit.fluxcd.io"]
-    resources: ["ocirepositories","ocirepositories/status","helmrepositories","helmrepositories/status","gitrepositories","gitrepositories/status"]
-    verbs: ["create","delete","get","list","patch","update","watch"]
-  - apiGroups: ["kustomize.toolkit.fluxcd.io"]
-    resources: ["kustomizations","kustomizations/status"]
-    verbs: ["create","delete","get","list","patch","update","watch"]
-  - apiGroups: ["helm.toolkit.fluxcd.io"]
-    resources: ["helmreleases","helmreleases/status"]
-    verbs: ["create","delete","get","list","patch","update","watch"]
-  - apiGroups: ["argoproj.io"]
-    resources: ["applications","applications/status"]
-    verbs: ["create","delete","get","list","patch","update","watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: crossplane-ocm-resources-e2e
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: crossplane-ocm-resources-e2e
-subjects:
-  - kind: ServiceAccount
-    name: crossplane
-    namespace: crossplane-system
-EOF
-
+  # Grant the Crossplane SA access to the resources Compositions create (OCM
+  # Resources, Flux sources/HelmReleases/Kustomizations, ArgoCD Applications) by
+  # applying the same aggregated ClusterRole the examples ship, so the e2e
+  # exercises the exact RBAC a user applies. XR/XRD access comes from Crossplane's
+  # RBAC manager, so examples.ocm.software is not needed here.
+  crossplane_rbac="${script_dir}/../../../examples/crossplane-rbac.yaml"
+  if [ ! -f "${crossplane_rbac}" ]; then
+    echo "Crossplane RBAC manifest not found: ${crossplane_rbac}"
+    return 1
+  fi
+  kubectl apply -f "${crossplane_rbac}" || return 1
 }
 
 pids=()
