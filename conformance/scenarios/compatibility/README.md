@@ -57,3 +57,18 @@ merges, its case fails here and is rewritten to assert the supported behaviour.
 | --- | --- |
 | `--copy-resources` does not copy `s3/v1` resources | [#1404](https://github.com/open-component-model/ocm-project/issues/1404) |
 | `--copy-resources` breaks the signature of v1 Helm resources | [#1368](https://github.com/open-component-model/ocm-project/issues/1368) |
+
+`ocmv1_descriptor_gaps_integration_test.go`:
+
+| Case | Issue |
+| --- | --- |
+| Label `merge` is dropped on read and transfer | [#1371](https://github.com/open-component-model/ocm-project/issues/1371) |
+| `ocm.software/v3alpha1` descriptors fail with a misleading error | [#1407](https://github.com/open-component-model/ocm-project/issues/1407) |
+
+Two bugs under #1366 have no case in this lane.
+[#1405](https://github.com/open-component-model/ocm-project/issues/1405)
+(`componentNameMapping: sha256-digest`) needs an OCI registry, which this
+scenario does not provision.
+[#1369](https://github.com/open-component-model/ocm-project/issues/1369)
+(`localOciBlob`) is a descriptor access type no released v1 CLI writes any
+more, so it is covered where its fix belongs, in `bindings/go/descriptor`.

@@ -138,6 +138,23 @@ func readCompatDescriptor(t *testing.T, configPath, reference string) ocmv1Descr
 	return descriptors[0]
 }
 
+// readOCMv1Descriptor renders a descriptor with the v1 CLI. Cases that assert
+// what v2 wrote for a v1 consumer need the v1 view, not the v2 one.
+func readOCMv1Descriptor(t *testing.T, configPath, reference string) ocmv1Descriptor {
+	t.Helper()
+	r := require.New(t)
+	output := runCompatibilityTool(t, os.Getenv("OCM_V1_BIN"), "--config", configPath,
+		"get", "cv", reference, "-o", "json")
+	// The v1 CLI wraps its listing in an "items" envelope.
+	var listing struct {
+		Items []ocmv1Descriptor `json:"items"`
+	}
+	r.NoError(json.Unmarshal(output, &listing))
+	r.Len(listing.Items, 1)
+
+	return listing.Items[0]
+}
+
 func runCompatibilityTool(t *testing.T, binary string, arguments ...string) []byte {
 	t.Helper()
 	command := exec.CommandContext(t.Context(), binary, arguments...)
