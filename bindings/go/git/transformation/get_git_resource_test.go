@@ -8,20 +8,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/go-git/go-billy/v6/osfs"
 	git "github.com/go-git/go-git/v6"
-	"github.com/go-git/go-git/v6/backend"
 	"github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing/object"
-	"github.com/go-git/go-git/v6/plumbing/transport"
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
@@ -31,6 +26,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/git/gittest"
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	"ocm.software/open-component-model/bindings/go/git/spec/access"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
@@ -52,21 +48,6 @@ func gitResource(t *testing.T, url, ref, commit, accessType string) *v2.Resource
 		ElementMeta: v2.ElementMeta{ObjectMeta: v2.ObjectMeta{Name: "source", Version: "1.0.0"}},
 		Access:      raw,
 	}
-}
-
-// serveGit serves the repository at dir over plain HTTP from an in-process go-git
-// backend and returns its URL. Git/v1 accesses reject local paths, so the tests
-// need a remote URL.
-func serveGit(t *testing.T, dir string) string {
-	t.Helper()
-	b := backend.New(transport.NewFilesystemLoader(osfs.New(filepath.Dir(dir)), false))
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// The backend refuses receive-pack without credentials; the tests push anonymously.
-		r.Header.Set("Authorization", "Basic dGVzdDp0ZXN0")
-		b.ServeHTTP(w, r)
-	}))
-	t.Cleanup(srv.Close)
-	return srv.URL + "/" + filepath.Base(dir)
 }
 
 // servedRepository creates a repository with two commits and returns its URL and
@@ -96,7 +77,7 @@ func servedRepository(t *testing.T) (url, firstCommit string) {
 			firstCommit = hash.String()
 		}
 	}
-	return serveGit(t, work), firstCommit
+	return gittest.Serve(t, work), firstCommit
 }
 
 func TestGetGitResourceLocalRepository(t *testing.T) {

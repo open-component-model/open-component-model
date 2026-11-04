@@ -21,6 +21,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/git/gittest"
 	"ocm.software/open-component-model/bindings/go/git/repository"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -32,7 +33,7 @@ func TestUploadResourceRoundTrip(t *testing.T) {
 	targetPath := filepath.Join(t.TempDir(), "target.git")
 	_, err := git.PlainInit(targetPath, true)
 	r.NoError(err)
-	targetURL := serveGit(t, targetPath)
+	targetURL := gittest.Serve(t, targetPath)
 	uploader := newUploader(t)
 
 	for _, testCase := range []struct {
@@ -90,7 +91,7 @@ func TestUploadResourceToURLFragmentTarget(t *testing.T) {
 	targetPath := filepath.Join(t.TempDir(), "target.git")
 	_, err := git.PlainInit(targetPath, true)
 	r.NoError(err)
-	targetURL := serveGit(t, targetPath)
+	targetURL := gittest.Serve(t, targetPath)
 	uploader := newUploader(t)
 
 	source, content := downloadResource(t, uploader, fixture.URL, "refs/heads/main", fixture.First)
@@ -127,7 +128,7 @@ func TestUploadResourceToExistingAnnotatedTag(t *testing.T) {
 			targetPath := filepath.Join(t.TempDir(), "target.git")
 			_, err := git.PlainClone(targetPath, &git.CloneOptions{URL: fixture.Path, Bare: true, Tags: git.AllTags})
 			r.NoError(err)
-			targetURL := serveGit(t, targetPath)
+			targetURL := gittest.Serve(t, targetPath)
 			target, err := git.PlainOpen(targetPath)
 			r.NoError(err)
 			// fixture.Path tags fixture.First as an annotated tag, as if it had been pushed by hand.
@@ -250,7 +251,7 @@ func TestUploadResourceRejectsArchive(t *testing.T) {
 			targetPath := filepath.Join(t.TempDir(), "target.git")
 			target, err := git.PlainInit(targetPath, true)
 			r.NoError(err)
-			targetURL := serveGit(t, targetPath)
+			targetURL := gittest.Serve(t, targetPath)
 			resource := targetResource(source, targetURL, "refs/heads/main")
 			resource.Digest = nil
 			if testCase.digest != "" {

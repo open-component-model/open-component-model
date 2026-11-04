@@ -32,6 +32,7 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/git/gittest"
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	gitaccessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	helmblob "ocm.software/open-component-model/bindings/go/helm/blob"
@@ -106,7 +107,7 @@ func Test_Integration_DownloadUploadedGitResource(t *testing.T) {
 	assertGitArchiveAtFirstCommit(t, archive)
 
 	// A Git/v1 access rejects local paths, so the access reads the same fixture over HTTP.
-	remoteURL := serveGit(t, gitPath)
+	remoteURL := gittest.Serve(t, gitPath)
 	tempFolder := t.TempDir()
 	gitRepo := gitrepository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
 	source, err := gitRepo.ProcessResourceDigest(t.Context(), &descriptor.Resource{Access: &gitaccessv1.Git{

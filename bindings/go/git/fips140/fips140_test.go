@@ -11,24 +11,20 @@ package fips140
 import (
 	"crypto/fips140"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/go-git/go-billy/v6/osfs"
 	"github.com/go-git/go-git/v6"
-	"github.com/go-git/go-git/v6/backend"
 	"github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/object"
-	"github.com/go-git/go-git/v6/plumbing/transport"
 	"github.com/stretchr/testify/require"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/git/gittest"
 	"ocm.software/open-component-model/bindings/go/git/repository"
 	"ocm.software/open-component-model/bindings/go/git/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
@@ -43,7 +39,7 @@ func TestResourceDigestAndDownload(t *testing.T) {
 	dir := t.TempDir()
 	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &dir})
 
-	res := &descriptor.Resource{Access: &v1.Git{Type: runtime.NewUnversionedType("git"), Repository: serveGit(t, path), Ref: "refs/heads/main"}}
+	res := &descriptor.Resource{Access: &v1.Git{Type: runtime.NewUnversionedType("git"), Repository: gittest.Serve(t, path), Ref: "refs/heads/main"}}
 	pinned, err := repo.ProcessResourceDigest(t.Context(), res, nil)
 	r.NoError(err)
 	r.Equal("SHA-256", pinned.Digest.HashAlgorithm)
@@ -91,18 +87,4 @@ func newRepository(t *testing.T) (path string, commit plumbing.Hash) {
 		r.NoError(err)
 	})
 	return path, commit
-}
-
-// serveGit serves the repository at dir over plain HTTP from an in-process go-git
-// backend and returns its URL. Git/v1 accesses reject local paths, so the test needs
-// a remote URL. The server is fixture infrastructure: it hashes with SHA-1, so it
-// runs without enforcement, while the client under test stays enforced.
-func serveGit(t *testing.T, dir string) string {
-	t.Helper()
-	b := backend.New(transport.NewFilesystemLoader(osfs.New(filepath.Dir(dir)), false))
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fips140.WithoutEnforcement(func() { b.ServeHTTP(w, r) })
-	}))
-	t.Cleanup(srv.Close)
-	return srv.URL + "/" + filepath.Base(dir)
 }

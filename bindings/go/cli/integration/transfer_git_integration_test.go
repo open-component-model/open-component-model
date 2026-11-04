@@ -7,21 +7,16 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/go-git/go-billy/v6/osfs"
 	"github.com/go-git/go-git/v6"
-	"github.com/go-git/go-git/v6/backend"
 	"github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/object"
-	"github.com/go-git/go-git/v6/plumbing/transport"
 	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
@@ -32,6 +27,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/git/gittest"
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	gitaccess "ocm.software/open-component-model/bindings/go/git/spec/access"
 	gitv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
@@ -171,28 +167,13 @@ func assertGitArchiveREADME(t *testing.T, data []byte, want string) {
 	r.Equal(map[string]string{"README.md": want}, files, "unexpected Git archive content")
 }
 
-// serveGit serves the repository at dir over plain HTTP from an in-process go-git
-// backend and returns its URL. Git/v1 accesses reject local paths, so the tests
-// need a remote URL.
-func serveGit(t *testing.T, dir string) string {
-	t.Helper()
-	b := backend.New(transport.NewFilesystemLoader(osfs.New(filepath.Dir(dir)), false))
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// The backend refuses receive-pack without credentials; the tests push anonymously.
-		r.Header.Set("Authorization", "Basic dGVzdDp0ZXN0")
-		b.ServeHTTP(w, r)
-	}))
-	t.Cleanup(srv.Close)
-	return srv.URL + "/" + filepath.Base(dir)
-}
-
 // newBareGitRepository creates an empty bare repository and returns its path and URL.
 func newBareGitRepository(t *testing.T) (path, url string) {
 	t.Helper()
 	path = t.TempDir()
 	_, err := git.PlainInit(path, true)
 	require.NoError(t, err)
-	return path, serveGit(t, path)
+	return path, gittest.Serve(t, path)
 }
 
 // Test_Integration_Transfer_Git transfers a resource with a Git access from a CTF
@@ -224,7 +205,7 @@ func Test_Integration_Transfer_Git(t *testing.T) {
 	// Create the fixture locally to get the commit hash, then expose it over HTTP
 	// so all accesses use a remote URL (local-path git accesses are rejected by Validate).
 	gitPath, commit := newGitFixture(t)
-	gitServerURL := serveGit(t, gitPath)
+	gitServerURL := gittest.Serve(t, gitPath)
 
 	repoProvider := provider.NewComponentVersionRepositoryProvider()
 	ocmconf, err := configuration.GetConfigFromPath(cfgPath)

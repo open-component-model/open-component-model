@@ -3,25 +3,21 @@ package integration_test
 import (
 	"fmt"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/go-git/go-billy/v6/osfs"
 	"github.com/go-git/go-git/v6"
-	"github.com/go-git/go-git/v6/backend"
 	"github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/object"
-	"github.com/go-git/go-git/v6/plumbing/transport"
 	"github.com/stretchr/testify/require"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/git/gittest"
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	gitaccess "ocm.software/open-component-model/bindings/go/git/spec/access"
 	gitv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
@@ -35,27 +31,13 @@ import (
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
-// serveGit serves the repository at dir over plain HTTP from an in-process go-git backend and
-// returns its URL. Git/v1 accesses reject local paths, so the tests need a remote URL.
-func serveGit(t *testing.T, dir string) string {
-	t.Helper()
-	b := backend.New(transport.NewFilesystemLoader(osfs.New(filepath.Dir(dir)), false))
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// The backend refuses receive-pack without credentials; the tests push anonymously.
-		r.Header.Set("Authorization", "Basic dGVzdDp0ZXN0")
-		b.ServeHTTP(w, r)
-	}))
-	t.Cleanup(srv.Close)
-	return srv.URL + "/" + filepath.Base(dir)
-}
-
 // newBareGitRepository creates an empty bare repository and returns its path and URL.
 func newBareGitRepository(t *testing.T) (path, url string) {
 	t.Helper()
 	path = t.TempDir()
 	_, err := git.PlainInit(path, true)
 	require.NoError(t, err)
-	return path, serveGit(t, path)
+	return path, gittest.Serve(t, path)
 }
 
 // newGitRepository creates a repository with two commits on main and the lightweight tag
@@ -91,7 +73,7 @@ func newGitRepository(t *testing.T) (url string, first plumbing.Hash) {
 		}
 	}
 	r.NoError(repo.Storer.SetReference(plumbing.NewHashReference("refs/tags/v1.0.0", first)))
-	return serveGit(t, path), first
+	return gittest.Serve(t, path), first
 }
 
 // Transfers a Git resource pinned to a commit from a source CTF to an OCI registry, and

@@ -32,6 +32,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/git/gittest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -1312,7 +1313,7 @@ func Test_Integration_AddComponentVersion_GitAccess(t *testing.T) {
 
 	// Git/v1 accesses reject local paths, so the test serves a local repository over HTTP.
 	repoDir, commit := createGitRepository(t)
-	repoURL := serveGit(t, repoDir)
+	repoURL := gittest.Serve(t, repoDir)
 
 	const componentName = "ocm.software/git-access-component"
 	const componentVersion = "v1.0.0"
