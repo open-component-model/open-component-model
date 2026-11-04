@@ -18,13 +18,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/git/spec/access"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/git/transformation/spec/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/internal/gittest"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestAddGitResourceLocalRepository(t *testing.T) {
 	r := require.New(t)
-	_, sourceURL, commit := localRepository(t)
+	sourceURL, commit := servedRepository(t)
 	tempDir := t.TempDir()
 	repo := gitrepository.NewResourceRepository(&filesystemconfig.Config{TempFolder: &tempDir})
 
@@ -54,7 +53,7 @@ func TestAddGitResourceLocalRepository(t *testing.T) {
 			targetPath := filepath.Join(t.TempDir(), "target.git")
 			_, err := git.PlainInit(targetPath, true)
 			r.NoError(err)
-			targetURL := gittest.ServeHTTP(t, targetPath)
+			targetURL := serveGit(t, targetPath)
 
 			resource := gitResource(t, targetURL, tc.ref, tc.commit, "Git/v1")
 			resource.Digest = &v2.Digest{

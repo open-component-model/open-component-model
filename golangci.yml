@@ -545,7 +545,6 @@ linters:
             - "ocm.software/open-component-model/bindings/go/github"
             - "ocm.software/open-component-model/bindings/go/helm"
             - "ocm.software/open-component-model/bindings/go/http"
-            - "ocm.software/open-component-model/bindings/go/internal/gittest"
             - "ocm.software/open-component-model/bindings/go/oci"
             - "ocm.software/open-component-model/bindings/go/repository"
             - "ocm.software/open-component-model/bindings/go/runtime"
@@ -581,7 +580,6 @@ linters:
             - "ocm.software/open-component-model/bindings/go/descriptor/v2"
             - "ocm.software/open-component-model/bindings/go/git"
             - "ocm.software/open-component-model/bindings/go/http"
-            - "ocm.software/open-component-model/bindings/go/internal/gittest"
             - "ocm.software/open-component-model/bindings/go/repository"
             - "ocm.software/open-component-model/bindings/go/runtime"
           deny:
@@ -627,7 +625,6 @@ linters:
             - "ocm.software/open-component-model/bindings/go/input/dir"
             - "ocm.software/open-component-model/bindings/go/input/file"
             - "ocm.software/open-component-model/bindings/go/input/utf8"
-            - "ocm.software/open-component-model/bindings/go/internal/gittest"
             - "ocm.software/open-component-model/bindings/go/oci"
             - "ocm.software/open-component-model/bindings/go/plugin"
             - "ocm.software/open-component-model/bindings/go/repository"

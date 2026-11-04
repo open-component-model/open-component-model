@@ -4,16 +4,21 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/go-git/go-billy/v6/osfs"
 	"github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/backend"
 	"github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/object"
+	"github.com/go-git/go-git/v6/plumbing/transport"
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
@@ -22,7 +27,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/git/repository"
 	"ocm.software/open-component-model/bindings/go/git/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
-	"ocm.software/open-component-model/bindings/go/internal/gittest"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -313,7 +317,20 @@ type repositoryFixture struct {
 	First, Second plumbing.Hash
 }
 
-// serveGitHTTP wrapper removed; call gittest.ServeHTTP directly.
+// serveGit serves the repository at dir over plain HTTP from an in-process go-git
+// backend and returns its URL. Git/v1 accesses reject local paths, so the tests
+// need a remote URL.
+func serveGit(t *testing.T, dir string) string {
+	t.Helper()
+	b := backend.New(transport.NewFilesystemLoader(osfs.New(filepath.Dir(dir)), false))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The backend refuses receive-pack without credentials; the tests push anonymously.
+		r.Header.Set("Authorization", "Basic dGVzdDp0ZXN0")
+		b.ServeHTTP(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL + "/" + filepath.Base(dir)
+}
 
 // newRepository creates a bare repository with two commits on main and an
 // annotated tag on the first. The wrapper needs a moving branch to pin and a
@@ -369,6 +386,5 @@ func newRepository(t *testing.T) repositoryFixture {
 	_, err = bare.CreateTag("annotated", first, &git.CreateTagOptions{Tagger: signature, Message: "release\n"})
 	r.NoError(err)
 
-	url := gittest.ServeHTTP(t, path)
-	return repositoryFixture{Path: path, URL: url, Git: bare, First: first, Second: second}
+	return repositoryFixture{Path: path, URL: serveGit(t, path), Git: bare, First: first, Second: second}
 }

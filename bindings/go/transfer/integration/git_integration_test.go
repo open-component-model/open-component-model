@@ -3,17 +3,20 @@ package integration_test
 import (
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
+	"github.com/go-git/go-billy/v6/osfs"
 	"github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/backend"
 	"github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/object"
+	"github.com/go-git/go-git/v6/plumbing/transport"
 	"github.com/stretchr/testify/require"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
@@ -22,7 +25,6 @@ import (
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	gitaccess "ocm.software/open-component-model/bindings/go/git/spec/access"
 	gitv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
-	"ocm.software/open-component-model/bindings/go/internal/gittest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -33,21 +35,39 @@ import (
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
-// newGitRepository creates a local repository with two commits on main and the lightweight tag
-// v1.0.0 on the first commit, then serves it over plain HTTP via git-http-backend with both
-// fetch and push enabled. Returns the HTTP server URL and the first commit hash.
-//
-// Using a remote URL is required because git access specs that reference a local path are
-// rejected by Validate; serving the fixture over HTTP lets all accesses use a proper remote URL.
-func newGitRepository(t *testing.T) (serverURL string, first plumbing.Hash) {
+// serveGit serves the repository at dir over plain HTTP from an in-process go-git backend and
+// returns its URL. Git/v1 accesses reject local paths, so the tests need a remote URL.
+func serveGit(t *testing.T, dir string) string {
+	t.Helper()
+	b := backend.New(transport.NewFilesystemLoader(osfs.New(filepath.Dir(dir)), false))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The backend refuses receive-pack without credentials; the tests push anonymously.
+		r.Header.Set("Authorization", "Basic dGVzdDp0ZXN0")
+		b.ServeHTTP(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL + "/" + filepath.Base(dir)
+}
+
+// newBareGitRepository creates an empty bare repository and returns its path and URL.
+func newBareGitRepository(t *testing.T) (path, url string) {
+	t.Helper()
+	path = t.TempDir()
+	_, err := git.PlainInit(path, true)
+	require.NoError(t, err)
+	return path, serveGit(t, path)
+}
+
+// newGitRepository creates a repository with two commits on main and the lightweight tag
+// v1.0.0 on the first, and returns its URL and the first commit.
+func newGitRepository(t *testing.T) (url string, first plumbing.Hash) {
 	t.Helper()
 	r := require.New(t)
 
-	// Build the working repository with two commits so the first commit is
-	// distinct from HEAD (main).
-	work := t.TempDir()
-	repo, err := git.PlainInit(work, false)
+	path := t.TempDir()
+	repo, err := git.PlainInit(path, false)
 	r.NoError(err)
+	// go-git reads the global Git config; a host commit.gpgSign must not sign fixtures.
 	cfg, err := repo.Config()
 	r.NoError(err)
 	cfg.Commit.GpgSign = config.OptBoolFalse
@@ -57,7 +77,7 @@ func newGitRepository(t *testing.T) (serverURL string, first plumbing.Hash) {
 	tree, err := repo.Worktree()
 	r.NoError(err)
 	for _, content := range []string{"first\n", "second\n"} {
-		r.NoError(os.WriteFile(filepath.Join(work, "README.md"), []byte(content), 0o600))
+		r.NoError(os.WriteFile(filepath.Join(path, "README.md"), []byte(content), 0o600))
 		_, err := tree.Add("README.md")
 		r.NoError(err)
 		hash, err := tree.Commit(content, &git.CommitOptions{Author: &object.Signature{
@@ -71,11 +91,8 @@ func newGitRepository(t *testing.T) (serverURL string, first plumbing.Hash) {
 		}
 	}
 	r.NoError(repo.Storer.SetReference(plumbing.NewHashReference("refs/tags/v1.0.0", first)))
-
-	return gittest.NewServerFrom(t, work), first
+	return serveGit(t, path), first
 }
-
-// newEmptyGitHTTPServer wrapper removed; call gittest.NewEmptyServer directly.
 
 // Transfers a Git resource pinned to a commit from a source CTF to an OCI registry, and
 // checks it lands in the target as a localBlob holding the repository archive.
@@ -83,10 +100,9 @@ func Test_Integration_TransferGit_CTFToOCI(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	// 1. Start the target OCI registry and serve the fixture repository over HTTP so
-	//    all git accesses use a remote URL (local-path git accesses are rejected by Validate).
+	// 1. Start the target OCI registry and create the Git repository the resource is fetched from.
 	registryAddr, user, password := startRegistry(t)
-	gitURL, first := newGitRepository(t)
+	repoURL, first := newGitRepository(t)
 
 	// 2. Create a source CTF whose component has a Git resource pinned to the first commit,
 	//    while main already points at the second one.
@@ -108,7 +124,7 @@ func Test_Integration_TransferGit_CTFToOCI(t *testing.T) {
 		Relation: descriptor.ExternalRelation,
 		Access: &gitv1.Git{
 			Type:       runtime.NewVersionedType(gitv1.Type, gitv1.Version),
-			Repository: gitURL,
+			Repository: repoURL,
 			Ref:        "refs/heads/main",
 			Commit:     first.String(),
 		},
@@ -216,10 +232,11 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 
-	// 1. Start the target OCI registry and serve the fixture repository over HTTP.
-	//    All git source accesses and upload targets use HTTP URLs so Validate accepts them.
+	// 1. Start the target OCI registry and create the Git repository the resource is fetched
+	//    from and the existing (empty) repository it is pushed into.
 	registryAddr, user, password := startRegistry(t)
-	gitURL, first := newGitRepository(t)
+	repoURL, first := newGitRepository(t)
+	targetGitPath, targetGitURL := newBareGitRepository(t)
 
 	// 2. Create a source CTF whose component has a Git resource pinned to the first commit,
 	//    with the digest the constructor would pin.
@@ -241,7 +258,7 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 		Relation: descriptor.ExternalRelation,
 		Access: &gitv1.Git{
 			Type:       runtime.NewVersionedType(gitv1.Type, gitv1.Version),
-			Repository: gitURL,
+			Repository: repoURL,
 			Ref:        "v1.0.0",
 			Commit:     first.String(),
 		},
@@ -278,8 +295,8 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 	}
 
 	// assertPushed reads the transferred component version back from subPath of the target
-	// registry and verifies the pushed commit in the target Git repository via ls-remote.
-	assertPushed := func(t *testing.T, subPath, repository, ref string) {
+	// registry and the pushed commit back from the target Git repository.
+	assertPushed := func(t *testing.T, subPath, repositoryPath, repositoryURL, ref string) {
 		t.Helper()
 		r := require.New(t)
 
@@ -297,26 +314,21 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 		res := gotDesc.Component.Resources[0]
 		var published gitv1.Git
 		r.NoError(gitaccess.Scheme.Convert(res.Access, &published), "the resource must be published with Git access")
-		r.Equal(repository, published.Repository)
+		r.Equal(repositoryURL, published.Repository)
 		r.Equal(ref, published.Ref)
 		r.Equal(first.String(), published.Commit, "the commit SHA must be unchanged")
 		r.NotNil(res.Digest)
 		r.Equal(digested.Digest.Value, res.Digest.Value, "the pinned digest must be preserved")
 
-		// Verify the pushed ref and commit via git ls-remote, which does not require a
-		// successful HEAD (an empty-branch push target has a dangling HEAD).
-		gitBin, err := exec.LookPath("git")
+		pushed, err := git.PlainOpen(repositoryPath)
 		r.NoError(err)
-		out, err := exec.CommandContext(t.Context(), gitBin, "ls-remote", repository, ref).CombinedOutput()
-		r.NoError(err, "git ls-remote must succeed: %s", string(out))
-		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-		r.Len(lines, 1, "expected exactly one ref %q in ls-remote output: %s", ref, string(out))
-		fields := strings.Fields(lines[0])
-		r.Len(fields, 2)
-		r.Equal(first.String(), fields[0], "pushed commit must match the source commit")
-		r.Equal(ref, fields[1])
+		pushedRef, err := pushed.Reference(plumbing.ReferenceName(ref), false)
+		r.NoError(err)
+		r.Equal(first, pushedRef.Hash())
+		commit, err := pushed.CommitObject(first)
+		r.NoError(err)
+		r.Equal("first\n", commit.Message, "the original commit must be pushed, not a new one")
 
-		// Download the resource via the published access to verify the archive is retrievable.
 		content, err := resourceRepo.DownloadResource(t.Context(), &res, nil)
 		r.NoError(err)
 		reader, err := content.ReadCloser()
@@ -328,12 +340,9 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 	}
 
 	t.Run("a Git access is pushed to the configured ref", func(t *testing.T) {
-		// Use an HTTP git server as the upload target so the git uploader can push
-		// without hitting the local-path rejection in Validate.
-		targetGitURL := gittest.NewEmptyServer(t)
 		transferOnce(t, ctfRepo, sourceSpec, targetSpec("direct"),
 			&transferv1alpha1.GitUploaderConfig{Repository: targetGitURL, Ref: "refs/tags/v1.0.0"}, resourceRepo, credResolver, componentName, componentVersion)
-		assertPushed(t, "direct", targetGitURL, "refs/tags/v1.0.0")
+		assertPushed(t, "direct", targetGitPath, targetGitURL, "refs/tags/v1.0.0")
 	})
 
 	t.Run("a local blob carried through an air gap is pushed with explicit match, repository and ref", func(t *testing.T) {
@@ -358,8 +367,7 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 
 		// Stage 2, air-gapped side: the local blob no longer carries its origin, so the
 		// uploader needs an explicit match, repository and ref to push it.
-		// Use an HTTP git server as the upload target so Validate accepts it.
-		mirrorURL := gittest.NewEmptyServer(t)
+		mirror, mirrorURL := newBareGitRepository(t)
 		transferOnce(t, airGapRepo, airGapSpec, targetSpec("airgap"),
 			&transferv1alpha1.GitUploaderConfig{
 				Match:      `resource.access.isType("LocalBlob") && resource.access.mediaType == "` + transferv1alpha1.GitLocalBlobMediaType + `"`,
@@ -367,7 +375,7 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 				Ref:        "refs/tags/v1.0.0",
 			},
 			resourceRepo, credResolver, componentName, componentVersion)
-		assertPushed(t, "airgap", mirrorURL, "refs/tags/v1.0.0")
+		assertPushed(t, "airgap", mirror, mirrorURL, "refs/tags/v1.0.0")
 	})
 
 	t.Run("the git uploader requires an explicit ref", func(t *testing.T) {
@@ -376,7 +384,7 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 		old := digested.DeepCopy()
 		old.Access = &gitv1.Git{
 			Type:       runtime.NewVersionedType(gitv1.Type, gitv1.Version),
-			Repository: gitURL,
+			Repository: repoURL,
 			Ref:        "v1.0.0",
 			Commit:     first.String(),
 		}
@@ -392,9 +400,7 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 				Resources: []descriptor.Resource{*old},
 			},
 		}))
-		// Use an HTTP git server as the upload target so the config parses without a
-		// local-path rejection; the test verifies the ref-missing error fires before any push.
-		unpushedURL := gittest.NewEmptyServer(t)
+		unpushed, unpushedURL := newBareGitRepository(t)
 
 		_, err = transfer.BuildGraphDefinition(t.Context(),
 			&transferv1alpha1.Config{},
@@ -410,23 +416,13 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 		)
 		r.ErrorContains(err, "ref is required")
 
-		// Verify nothing was pushed by checking that ls-remote returns no non-HEAD refs.
-		gitBin, lookErr := exec.LookPath("git")
-		r.NoError(lookErr)
-		out, err := exec.CommandContext(t.Context(), gitBin, "ls-remote", unpushedURL).CombinedOutput()
-		r.NoError(err, "git ls-remote must succeed on the empty target: %s", string(out))
-		// An empty repo yields no lines (or only HEAD pointing at nothing); no real ref must appear.
-		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-			fields := strings.Fields(line)
-			if len(fields) < 2 {
-				continue
-			}
-			ref := fields[1]
-			if ref == "HEAD" {
-				continue
-			}
-			r.Fail("no ref should have been pushed to the target",
-				"unexpected ref %s pointing at %s in empty target repository", ref, fields[0])
-		}
+		target, err := git.PlainOpen(unpushed)
+		r.NoError(err)
+		refs, err := target.References()
+		r.NoError(err)
+		r.NoError(refs.ForEach(func(ref *plumbing.Reference) error {
+			r.Equal(plumbing.HEAD, ref.Name(), "nothing may be pushed to the target")
+			return nil
+		}))
 	})
 }

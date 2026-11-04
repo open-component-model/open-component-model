@@ -7,17 +7,21 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/go-git/go-billy/v6/osfs"
 	"github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/backend"
 	"github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/go-git/go-git/v6/plumbing/object"
+	"github.com/go-git/go-git/v6/plumbing/transport"
 	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
@@ -31,7 +35,6 @@ import (
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	gitaccess "ocm.software/open-component-model/bindings/go/git/spec/access"
 	gitv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
-	"ocm.software/open-component-model/bindings/go/internal/gittest"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -168,8 +171,29 @@ func assertGitArchiveREADME(t *testing.T, data []byte, want string) {
 	r.Equal(map[string]string{"README.md": want}, files, "unexpected Git archive content")
 }
 
-// newGitHTTPBareServerRW and newEmptyGitHTTPBareServer wrappers removed;
-// call gittest.NewServerFrom / gittest.NewEmptyServer directly.
+// serveGit serves the repository at dir over plain HTTP from an in-process go-git
+// backend and returns its URL. Git/v1 accesses reject local paths, so the tests
+// need a remote URL.
+func serveGit(t *testing.T, dir string) string {
+	t.Helper()
+	b := backend.New(transport.NewFilesystemLoader(osfs.New(filepath.Dir(dir)), false))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The backend refuses receive-pack without credentials; the tests push anonymously.
+		r.Header.Set("Authorization", "Basic dGVzdDp0ZXN0")
+		b.ServeHTTP(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL + "/" + filepath.Base(dir)
+}
+
+// newBareGitRepository creates an empty bare repository and returns its path and URL.
+func newBareGitRepository(t *testing.T) (path, url string) {
+	t.Helper()
+	path = t.TempDir()
+	_, err := git.PlainInit(path, true)
+	require.NoError(t, err)
+	return path, serveGit(t, path)
+}
 
 // Test_Integration_Transfer_Git transfers a resource with a Git access from a CTF
 // to an OCI registry.
@@ -200,7 +224,7 @@ func Test_Integration_Transfer_Git(t *testing.T) {
 	// Create the fixture locally to get the commit hash, then expose it over HTTP
 	// so all accesses use a remote URL (local-path git accesses are rejected by Validate).
 	gitPath, commit := newGitFixture(t)
-	gitServerURL := gittest.NewServerFrom(t, gitPath)
+	gitServerURL := serveGit(t, gitPath)
 
 	repoProvider := provider.NewComponentVersionRepositoryProvider()
 	ocmconf, err := configuration.GetConfigFromPath(cfgPath)
@@ -372,7 +396,7 @@ func Test_Integration_Transfer_Git(t *testing.T) {
 
 		// Use a remote HTTP git server as the upload target so the git uploader
 		// can push without hitting the local-path rejection in Validate.
-		targetGitURL := gittest.NewEmptyServer(t)
+		targetGitPath, targetGitURL := newBareGitRepository(t)
 		uploaderCfg := filepath.Join(t.TempDir(), "git-uploader.yaml")
 		r.NoError(os.WriteFile(uploaderCfg, []byte(fmt.Sprintf(`type: generic.config.ocm.software/v1
 configurations:
@@ -409,17 +433,11 @@ configurations:
 		r.Equal(sourceDigest.Value, godigest.FromBytes(archive).Encoded())
 		assertGitArchiveAtFirstCommit(t, archive)
 
-		// Verify the commit actually landed on refs/heads/mirror in the target repository.
-		gitBin, err := exec.LookPath("git")
-		r.NoError(err, "git binary must be in PATH")
-		out, err := exec.CommandContext(t.Context(), gitBin, "ls-remote", targetGitURL, "refs/heads/mirror").CombinedOutput()
-		r.NoError(err, "git ls-remote must succeed: %s", string(out))
-		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-		r.Len(lines, 1, "expected exactly one ref refs/heads/mirror in ls-remote output: %s", string(out))
-		fields := strings.Fields(lines[0])
-		r.Len(fields, 2)
-		r.Equal(commit, fields[0], "pushed commit must match the source commit")
-		r.Equal("refs/heads/mirror", fields[1])
+		pushed, err := git.PlainOpen(targetGitPath)
+		r.NoError(err)
+		ref, err := pushed.Reference("refs/heads/mirror", false)
+		r.NoError(err)
+		r.Equal(commit, ref.Hash().String(), "the commit must land on refs/heads/mirror")
 	})
 
 	t.Run("a resource that is not pinned to a commit is transferred at the ref's commit", func(t *testing.T) {

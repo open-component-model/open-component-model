@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	git "github.com/go-git/go-git/v6"
 	godigest "github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
@@ -34,7 +35,6 @@ import (
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	gitaccessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	helmblob "ocm.software/open-component-model/bindings/go/helm/blob"
-	"ocm.software/open-component-model/bindings/go/internal/gittest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
@@ -51,7 +51,7 @@ import (
 //     same archive digest as the downloaded blob.
 //  3. The downloaded blob is pushed back with UploadResource to a remote empty server
 //     (NewEmptyServer); the uploaded digest and pinned commit must match the source;
-//     git ls-remote confirms the commit landed on refs/heads/main.
+//     the commit must land on refs/heads/main.
 func Test_Integration_DownloadUploadedGitResource(t *testing.T) {
 	r := require.New(t)
 
@@ -105,10 +105,8 @@ func Test_Integration_DownloadUploadedGitResource(t *testing.T) {
 	// The input is pinned to the first commit, so README.md must be "first\n".
 	assertGitArchiveAtFirstCommit(t, archive)
 
-	// For the ACCESS path, point at a remote HTTP server (Validate rejects local URLs
-	// on Git/v1 access, so the server must be remote). The remote server is a
-	// bare clone of the same local fixture and resolves the same commit.
-	remoteURL := gittest.NewServerFrom(t, gitPath)
+	// A Git/v1 access rejects local paths, so the access reads the same fixture over HTTP.
+	remoteURL := serveGit(t, gitPath)
 	tempFolder := t.TempDir()
 	gitRepo := gitrepository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
 	source, err := gitRepo.ProcessResourceDigest(t.Context(), &descriptor.Resource{Access: &gitaccessv1.Git{
@@ -120,8 +118,8 @@ func Test_Integration_DownloadUploadedGitResource(t *testing.T) {
 	r.NoError(err)
 	r.Equal(source.Digest.Value, godigest.FromBytes(archive).Encoded(), "the git input and the access archive the same carrier bytes")
 
-	// Push the downloaded archive to a fresh remote server and assert the commit lands.
-	targetURL := gittest.NewEmptyServer(t)
+	// Push the downloaded archive to an empty repository and assert the commit lands.
+	targetPath, targetURL := newBareGitRepository(t)
 	localBlob, err := filesystem.GetBlobFromOSPath(output)
 	r.NoError(err)
 	uploadTarget := source.DeepCopy()
@@ -135,17 +133,11 @@ func Test_Integration_DownloadUploadedGitResource(t *testing.T) {
 	r.Equal(source.Digest, uploaded.Digest, "uploaded digest must match the source digest")
 	r.Equal(commit, uploaded.Access.(*gitaccessv1.Git).Commit, "uploaded access must carry the pinned commit")
 
-	// Confirm the commit landed on refs/heads/main in the remote target via ls-remote.
-	gitBin, err := exec.LookPath("git")
-	r.NoError(err, "git binary must be in PATH")
-	out, err := exec.CommandContext(t.Context(), gitBin, "ls-remote", targetURL, "refs/heads/main").CombinedOutput()
-	r.NoError(err, "git ls-remote must succeed: %s", string(out))
-	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
-	r.Len(lines, 1, "expected exactly one ref in ls-remote output: %s", string(out))
-	fields := strings.Fields(lines[0])
-	r.Len(fields, 2)
-	r.Equal(commit, fields[0], "pushed commit must match the first fixture commit")
-	r.Equal("refs/heads/main", fields[1])
+	target, err := git.PlainOpen(targetPath)
+	r.NoError(err)
+	targetRef, err := target.Reference("refs/heads/main", false)
+	r.NoError(err)
+	r.Equal(commit, targetRef.Hash().String(), "the commit must land on refs/heads/main")
 }
 
 func Test_Integration_OCIRepository(t *testing.T) {

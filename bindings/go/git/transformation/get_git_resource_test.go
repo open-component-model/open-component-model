@@ -8,15 +8,20 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/go-git/go-billy/v6/osfs"
 	git "github.com/go-git/go-git/v6"
+	"github.com/go-git/go-git/v6/backend"
 	"github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing/object"
+	"github.com/go-git/go-git/v6/plumbing/transport"
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
@@ -31,7 +36,6 @@ import (
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/git/transformation/spec/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/internal/gittest"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -50,7 +54,24 @@ func gitResource(t *testing.T, url, ref, commit, accessType string) *v2.Resource
 	}
 }
 
-func localRepository(t *testing.T) (path, serverURL, firstCommit string) {
+// serveGit serves the repository at dir over plain HTTP from an in-process go-git
+// backend and returns its URL. Git/v1 accesses reject local paths, so the tests
+// need a remote URL.
+func serveGit(t *testing.T, dir string) string {
+	t.Helper()
+	b := backend.New(transport.NewFilesystemLoader(osfs.New(filepath.Dir(dir)), false))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The backend refuses receive-pack without credentials; the tests push anonymously.
+		r.Header.Set("Authorization", "Basic dGVzdDp0ZXN0")
+		b.ServeHTTP(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	return srv.URL + "/" + filepath.Base(dir)
+}
+
+// servedRepository creates a repository with two commits and returns its URL and
+// the first commit.
+func servedRepository(t *testing.T) (url, firstCommit string) {
 	t.Helper()
 	r := require.New(t)
 	work := t.TempDir()
@@ -75,16 +96,12 @@ func localRepository(t *testing.T) (path, serverURL, firstCommit string) {
 			firstCommit = hash.String()
 		}
 	}
-	// Bare-clone into a sibling so git-http-backend can serve it.
-	barePath := filepath.Join(t.TempDir(), "fixture.git")
-	_, err = git.PlainClone(barePath, &git.CloneOptions{URL: work, Bare: true})
-	r.NoError(err)
-	return barePath, gittest.ServeHTTP(t, barePath), firstCommit
+	return serveGit(t, work), firstCommit
 }
 
 func TestGetGitResourceLocalRepository(t *testing.T) {
 	r := require.New(t)
-	_, serverURL, commit := localRepository(t)
+	serverURL, commit := servedRepository(t)
 	r.NotEmpty(commit)
 	for _, tc := range []struct {
 		name, ref, commit, accessType, content string
@@ -287,7 +304,7 @@ func TestGetGitResourceInvalidInput(t *testing.T) {
 
 func TestGetGitResourceRemovesOutputOnBufferFailure(t *testing.T) {
 	r := require.New(t)
-	_, serverURL, commit := localRepository(t)
+	serverURL, commit := servedRepository(t)
 	downloadDir, outDir := t.TempDir(), t.TempDir()
 	repo := gitrepository.NewResourceRepository(&filesystemconfig.Config{TempFolder: &downloadDir})
 	intercept := &testRepository{download: func(ctx context.Context, resource *descriptor.Resource, creds runtime.Typed) (blob.ReadOnlyBlob, error) {
@@ -317,7 +334,7 @@ func TestGetGitResourceRemovesOutputOnBufferFailure(t *testing.T) {
 
 func TestGetGitResourceRejectsWrongDigest(t *testing.T) {
 	r := require.New(t)
-	_, serverURL, commit := localRepository(t)
+	serverURL, commit := servedRepository(t)
 	downloadDir, outDir := t.TempDir(), t.TempDir()
 	resource := gitResource(t, serverURL, "", commit, "Git/v1")
 	resource.Digest = &v2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: strings.Repeat("0", 64)}

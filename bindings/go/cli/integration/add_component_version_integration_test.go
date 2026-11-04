@@ -36,7 +36,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/internal/gittest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -1299,14 +1298,12 @@ components:
 	r.Equal(content, readAllFromBlob(t, blobData), "local blob should hold the object from the bucket")
 }
 
-// newGitHTTPBareServer creates a non-bare git repository with a single commit on "main"
-// (README.md = readmeContent) and serves it over plain HTTP via gittest.NewServerFrom.
-func newGitHTTPBareServer(t *testing.T, readmeContent string) (serverURL string) {
+// newServedGitRepository creates a repository with a single commit on "main"
+// (README.md = readmeContent) and serves it over plain HTTP.
+func newServedGitRepository(t *testing.T, readmeContent string) (serverURL string) {
 	t.Helper()
 	r := require.New(t)
 
-	// Build a non-bare working repository; gittest.NewServerFrom will bare-clone it
-	// and spin up a git-http-backend server.
 	work := t.TempDir()
 	repo, err := git.PlainInit(work, false)
 	r.NoError(err)
@@ -1327,7 +1324,7 @@ func newGitHTTPBareServer(t *testing.T, readmeContent string) (serverURL string)
 	}})
 	r.NoError(err)
 
-	return gittest.NewServerFrom(t, work)
+	return serveGit(t, work)
 }
 
 // Test_Integration_AddComponentVersion_GitAccess verifies the full happy path for
@@ -1351,7 +1348,7 @@ func Test_Integration_AddComponentVersion_GitAccess(t *testing.T) {
 
 	// Serve the fixture repository over plain HTTP so add cv can clone it.
 	// Plain HTTP lets the test run in parallel without touching DefaultTransport.
-	gitURL := newGitHTTPBareServer(t, readmeContent)
+	gitURL := newServedGitRepository(t, readmeContent)
 
 	registry, err := internal.CreateOCIRegistry(t)
 	r.NoError(err)
