@@ -204,7 +204,7 @@ function extractResourceRefs(html) {
         const tag = tagMatch[1].toLowerCase();
         for (const attrMatch of tagMatch[2].matchAll(ATTRIBUTE_PATTERN)) {
             const attr = attrMatch[1].toLowerCase();
-            const rule = RESOURCE_ATTRS[attr];
+            const rule = Object.hasOwn(RESOURCE_ATTRS, attr) ? RESOURCE_ATTRS[attr] : undefined;
             if (!rule || (rule.tags && !rule.tags.has(tag))) {
                 continue;
             }
@@ -328,6 +328,12 @@ function main(argv) {
     }
 
     const { pages, checked, missing } = checkPublicDir(resolved, { ignore });
+
+    if (pages === 0) {
+        console.error(`error: no HTML pages found in build output directory: ${resolved}`);
+        console.error("Run `npm run build` first, or pass the correct path.");
+        process.exit(2);
+    }
 
     console.log(`Scanned ${pages} page(s), checked ${checked} internal resource reference(s).`);
 

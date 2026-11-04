@@ -407,6 +407,23 @@ test("CLI: exit 2 when the build output directory is missing", () => {
     assert.equal(res.code, 2);
 });
 
+test("CLI: exit 2 when the build output directory has no HTML pages", () => {
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), "ocm-empty-"));
+    fs.writeFileSync(path.join(empty, "robots.txt"), "ok");
+    try {
+        const res = runCli([empty]);
+        assert.equal(res.code, 2);
+        assert.match(res.stdout, /no HTML pages found/);
+    } finally {
+        fs.rmSync(empty, { recursive: true, force: true });
+    }
+});
+
+test("extractResourceRefs: an attribute named like an Object prototype key is not a resource", () => {
+    const refs = extractResourceRefs("<img constructor=\"/not-a-ref.png\" toString=\"/x.png\">");
+    assert.deepEqual(refs, []);
+});
+
 // --- parseArguments ---
 
 test("parseArguments: defaults and overrides", () => {
