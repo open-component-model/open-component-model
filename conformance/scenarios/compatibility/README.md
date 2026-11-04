@@ -50,3 +50,10 @@ merges, its case fails here and is rewritten to assert the supported behaviour.
 | Certificate-chain signatures fail with `issuer mismatch` | [#1367](https://github.com/open-component-model/ocm-project/issues/1367) |
 | Signed labels with `value: null` fail verification | [#1402](https://github.com/open-component-model/ocm-project/issues/1402) |
 | `jsonNormalisation/v2` signatures cannot be verified | [#1403](https://github.com/open-component-model/ocm-project/issues/1403) |
+
+`ocmv1_transfer_gaps_integration_test.go`:
+
+| Case | Issue |
+| --- | --- |
+| `--copy-resources` does not copy `s3/v1` resources | [#1404](https://github.com/open-component-model/ocm-project/issues/1404) |
+| `--copy-resources` breaks the signature of v1 Helm resources | [#1368](https://github.com/open-component-model/ocm-project/issues/1368) |
