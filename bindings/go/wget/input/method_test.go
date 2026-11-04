@@ -131,9 +131,10 @@ func TestProcessResource(t *testing.T) {
 		method := &input.InputMethod{MaxDownloadSize: 8}
 		resource := wgetInputResource(t, map[string]any{"url": server.URL + "/resource"})
 
-		_, err := method.ProcessResource(t.Context(), resource, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "exceeds maximum allowed size")
+		result, err := method.ProcessResource(t.Context(), resource, nil)
+		require.NoError(t, err)
+		readErr, _ := readErrs(t, result.ProcessedBlobData)
+		assert.ErrorContains(t, readErr, "exceeds maximum allowed size")
 	})
 
 	t.Run("errors on non-2xx status", func(t *testing.T) {
@@ -146,9 +147,10 @@ func TestProcessResource(t *testing.T) {
 		method := &input.InputMethod{}
 		resource := wgetInputResource(t, map[string]any{"url": server.URL + "/missing"})
 
-		_, err := method.ProcessResource(t.Context(), resource, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "404")
+		result, err := method.ProcessResource(t.Context(), resource, nil)
+		require.NoError(t, err)
+		readErr, _ := readErrs(t, result.ProcessedBlobData)
+		assert.ErrorContains(t, readErr, "404")
 	})
 
 	t.Run("errors on missing url", func(t *testing.T) {

@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"bytes"
 	"crypto"
 	"log/slog"
 	"strings"
@@ -103,4 +104,36 @@ func TestVerifyNormalizedPin_V1(t *testing.T) {
 	wrong, err := ParseDigestPin("jsonNormalisation.v1+sha256:" + strings.Repeat("00", 32))
 	r.NoError(err)
 	r.ErrorContains(verifyNormalizedPin(ctx, desc, wrong), "does not match pinned digest")
+}
+
+// A normalized pin under an older normalisation must warn on a match, so users
+// upgrade it; a pin under the default must not.
+func TestVerifyNormalizedPin_WarnsNonDefault(t *testing.T) {
+	r := require.New(t)
+	var logs bytes.Buffer
+	previous := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(previous) })
+
+	desc := &descruntime.Descriptor{
+		Component: descruntime.Component{
+			ComponentMeta: descruntime.ComponentMeta{
+				ObjectMeta: descruntime.ObjectMeta{Name: "acme.org/test", Version: "1.0.0"},
+			},
+			Provider: descruntime.Provider{Name: "acme"},
+		},
+	}
+	for _, algo := range []string{jsonv1.Algorithm, v4alpha1.Algorithm, signing.DefaultNormalisationAlgorithm} {
+		logs.Reset()
+		generated, err := signing.GenerateDigest(t.Context(), desc, slog.New(slog.DiscardHandler), algo, crypto.SHA256.String())
+		r.NoError(err)
+		r.NoError(verifyNormalizedPin(t.Context(), desc, generated))
+		if algo == signing.DefaultNormalisationAlgorithm {
+			r.Empty(logs.String(), algo)
+			continue
+		}
+		r.Contains(logs.String(), "older normalisation algorithm", algo)
+		r.Contains(logs.String(), "normalisationAlgorithm="+algo, algo)
+		r.Contains(logs.String(), "component=acme.org/test", algo)
+	}
 }

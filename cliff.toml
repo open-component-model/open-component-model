@@ -110,14 +110,18 @@ protect_breaking_commits = true
 # Assigns commits to groups.
 commit_parsers = [
     { message = "^feat", group = "<!-- 0 -->🚀 Features" },
-    { message = "^chore\\(deps.*\\)", group = "<!-- 2 -->📚 Dependencies" },
-    { message = "^fix\\(deps.*\\)", group = "<!-- 2 -->📚 Dependencies" },
+    { message = "^chore\\(deps.*\\)", group = "<!-- 2 -->📦 Dependencies" },
+    { message = "^fix\\(deps.*\\)", group = "<!-- 2 -->📦 Dependencies" },
     { message = "^chore\\(docs.*\\)", group = "<!-- 8 -->📚 Documentation" },
     { message = "^fix\\(docs.*\\)", group = "<!-- 8 -->📚 Documentation" },
     { message = "^docs", group = "<!-- 8 -->📚 Documentation" },
+    { message = "^fix\\(ci.*\\)", group = "<!-- 7 -->⚙️ Miscellaneous Tasks" },
     { message = "^fix", group = "<!-- 1 -->🐛 Bug Fixes" },
+    { message = "^perf", group = "<!-- 3 -->⚡ Performance" },
+    { message = "^refactor", group = "<!-- 4 -->🚜 Refactor" },
+    { message = "^test", group = "<!-- 5 -->🧪 Testing" },
     { message = "^revert", group = "<!-- 6 -->⏪ Reverts" },
-    { message = "^chore|^ci|chore\\(ci.*\\)|fix\\(ci.*\\)", group = "<!-- 7 -->⚙️ Miscellaneous Tasks" },
+    { message = "^chore|^ci|chore\\(ci.*\\)", group = "<!-- 7 -->⚙️ Miscellaneous Tasks" },
 ]
 # Exclude commits that are not matched by any commit parser.
 filter_commits = false

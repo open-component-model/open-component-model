@@ -1,0 +1,84 @@
+name: "Website: Verify"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/website-verify.yml'
+      - 'website/**'
+      # Schemas/references under bindings are mounted into the website build for the
+      # main version (see website/config/_default/module.yaml); rebuild when they change.
+      - 'bindings/go/**'
+  pull_request:
+    branches:
+      - main
+      - website/**
+    paths:
+      - '.github/workflows/website-verify.yml'
+      - 'website/**'
+      - 'bindings/go/**'
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-test:
+    name: Lint & Test Scripts
+    runs-on: ubuntu-26.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: website/package.json
+
+      - name: Install dependencies
+        working-directory: website
+        run: npm ci
+
+      - name: Lint scripts
+        working-directory: website
+        run: npm run lint:scripts
+
+      - name: Run scripts tests
+        working-directory: website
+        run: npm test
+
+  build:
+    name: Build & Check SEO
+    runs-on: ubuntu-26.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: website/package.json
+
+      # Hugo (extended) is provided by the hugo-extended devDependency installed via npm ci;
+      # npm run build invokes ./node_modules/.bin/hugo, so no separate Hugo setup is needed.
+      - name: Install dependencies
+        working-directory: website
+        run: npm ci
+
+      - name: Build and check for SEO description length warnings
+        working-directory: website
+        run: |
+          if ! npm run build > build.log 2>&1; then
+            cat build.log
+            exit 1
+          fi
+          WARNINGS=$(grep "^WARN.*Description too" build.log || true)
+          if [ -n "$WARNINGS" ]; then
+            echo "SEO description length violations found:"
+            echo "$WARNINGS"
+            exit 1
+          fi

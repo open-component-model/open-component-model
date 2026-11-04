@@ -21,12 +21,14 @@ import (
 const gitArchiveMediaType = "application/x-tgz"
 
 // processGitUploader emits the transformations that push resource, selected by u, into a
-// Git repository: the archive holding its history is read (GetGitResource for a Git access
-// pinned to a commit, the source's GetLocalResource for a local blob holding such an archive)
-// and pushed (AddGitResource). The target repository and ref come from the uploader config,
-// which must set both explicitly. A resource the uploader cannot push is an error: the
-// uploader's match selected it, so the config must be adjusted. It returns the CEL spec-field
-// expressions of the file buffers produced, for cleanup.
+// Git repository: the archive holding its history is read (GetGitResource for a Git access,
+// pinned or not, the source's GetLocalResource for a local blob holding such an archive) and
+// pushed (AddGitResource). The target repository and ref come from the uploader config, which
+// must set both explicitly. AddGitResource pins the target access to the commit it pushed, so
+// the resource in the target descriptor always carries a commit even when the source did not.
+// A resource the uploader cannot push is an error: the uploader's match selected it, so the
+// config must be adjusted. It returns the CEL spec-field expressions of the file buffers
+// produced, for cleanup.
 func processGitUploader(ctx context.Context, resource descriptorv2.Resource, access runtime.Typed, u *transferv1alpha1.GitUploaderConfig, aliases map[string]string, env *uploaderEnv, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string, i int) ([]string, error) {
 	resourceID := identityToTransformationID(resource.ToIdentity())
 	getResourceID := fmt.Sprintf("%sGet%s", id, resourceID)
@@ -36,6 +38,12 @@ func processGitUploader(ctx context.Context, resource descriptorv2.Resource, acc
 	var err error
 	switch acc := access.(type) {
 	case *gitv1.Git:
+		// An unpinned access is uploaded as-is, its ref resolved at download time, matching how
+		// an OCI resource transfers by tag without a digest. The graph-time targetAccess below
+		// omits the commit when the source is unpinned, but AddGitResource pins the target
+		// access to the commit it actually pushed, so the resource in the target descriptor
+		// ends up pinned regardless.
+		warnUnpinnedGit(ctx, resource, acc)
 		commit = acc.Commit
 		var getTransform transformv1alpha1.GenericTransformation
 		if getTransform, err = getGitTransformation(resource, acc, getResourceID, val); err != nil {
@@ -74,6 +82,8 @@ func processGitUploader(ctx context.Context, resource descriptorv2.Resource, acc
 		"ref":        refTemplate,
 	}
 	if commit != "" {
+		// Only the input spec of AddGitResource; its output pins the target access to the
+		// commit it pushed, so an unpinned source still yields a pinned resource in the target.
 		targetAccess["commit"] = commit
 	}
 	tgd.Transformations = append(tgd.Transformations, transformv1alpha1.GenericTransformation{

@@ -1,6 +1,6 @@
 ---
 title: "Transfer Settings"
-description: "Reference for transfer.config.ocm.software/v1alpha1: global transfer settings."
+description: "Reference for transfer.config.ocm.software/v1alpha1: global transfer settings, overwrite policy, local-blob strategy, and recursion flags."
 weight: 1
 toc: true
 aliases:

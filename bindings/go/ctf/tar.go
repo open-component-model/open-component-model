@@ -2,7 +2,6 @@ package ctf
 
 import (
 	"archive/tar"
-	"bytes"
 	"compress/gzip"
 	"context"
 	"errors"
@@ -16,6 +15,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/compression/gzippool"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/ctf/index/v1"
 )
@@ -94,7 +94,7 @@ func extractTARToFilesystemCTF(reader *tar.Reader, ctf *FileSystemCTF) (err erro
 		}
 		switch header.Typeflag {
 		case tar.TypeReg:
-			if err := ctf.writeFile(header.Name, reader, header.Size, nil); err != nil {
+			if err := ctf.writeFile(header.Name, reader, header.Size); err != nil {
 				return fmt.Errorf("unable to write file: %w", err)
 			}
 		case tar.TypeDir:
@@ -203,9 +203,10 @@ func ArchiveTARToWriter(ctx context.Context, ctf CTF, writer io.Writer, format F
 
 	var tarWriter *tar.Writer
 	if format == FormatTGZ {
-		gzipFile := gzip.NewWriter(writer)
+		gzipFile := gzippool.Get(writer)
 		defer func() {
 			err = errors.Join(err, gzipFile.Close())
+			gzippool.Put(gzipFile)
 		}()
 		tarWriter = tar.NewWriter(gzipFile)
 	} else {
@@ -220,9 +221,7 @@ func ArchiveTARToWriter(ctx context.Context, ctf CTF, writer io.Writer, format F
 		return fmt.Errorf("unable to list blobs: %w", err)
 	}
 
-	copyBuffer := make([]byte, blob.DefaultArchiveBlobBufferSize) // shared buffer for all data to avoid allocs.
-
-	if err := archiveIndex(ctx, ctf, tarWriter, copyBuffer); err != nil {
+	if err := archiveIndex(ctx, ctf, tarWriter); err != nil {
 		return fmt.Errorf("unable to archive index: %w", err)
 	}
 	for _, digest := range blobs {
@@ -239,7 +238,7 @@ func ArchiveTARToWriter(ctx context.Context, ctf CTF, writer io.Writer, format F
 			return err
 		}
 		name := filepath.Join(BlobsDirectoryName, file)
-		if err := blob.ArchiveBlob(name, size.Size(), digest, b, tarWriter, copyBuffer); err != nil {
+		if err := blob.ArchiveBlob(name, size.Size(), digest, b, tarWriter); err != nil {
 			return err
 		}
 	}
@@ -247,7 +246,7 @@ func ArchiveTARToWriter(ctx context.Context, ctf CTF, writer io.Writer, format F
 	return nil
 }
 
-func archiveIndex(ctx context.Context, ctf CTF, tarWriter *tar.Writer, buf []byte) (err error) {
+func archiveIndex(ctx context.Context, ctf CTF, tarWriter *tar.Writer) (err error) {
 	idx, err := ctf.GetIndex(ctx)
 	if err != nil {
 		return fmt.Errorf("unable to get index: %w", err)
@@ -263,7 +262,7 @@ func archiveIndex(ctx context.Context, ctf CTF, tarWriter *tar.Writer, buf []byt
 	}); err != nil {
 		return fmt.Errorf("unable to write index header: %w", err)
 	}
-	if _, err := io.CopyBuffer(tarWriter, bytes.NewReader(rawIdx), buf); err != nil {
+	if _, err := tarWriter.Write(rawIdx); err != nil {
 		return fmt.Errorf("unable to write index: %w", err)
 	}
 	return nil

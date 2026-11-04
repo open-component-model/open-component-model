@@ -58,8 +58,7 @@ func TestDownloadHTTPSRedirectDoesNotLeakCredentials(t *testing.T) {
 					credentials, err = credsv1.ConvertCredentials(legacy)
 					r.NoError(err)
 				}
-				_, err := Download(ctx, &accessv1.Git{Repository: secure.URL + "/repo.git", Ref: ref}, credentials,
-					Options{TempDir: t.TempDir(), HTTPClient: secure.Client()})
+				_, err := download(ctx, &accessv1.Git{Repository: secure.URL + "/repo.git", Ref: ref}, credentials, Options{TempDir: t.TempDir(), HTTPClient: secure.Client()})
 
 				r.True(authenticatedHTTPSRequest.Load(), "Download must authenticate the HTTPS Git discovery request before the redirect")
 				r.False(httpRequest.Load(), "Download must not make any HTTP request on an HTTPS-to-HTTP redirect")
@@ -120,7 +119,7 @@ func TestDownloadAuthenticatedRedirectOrigins(t *testing.T) {
 					t.Cleanup(secure.Close)
 					httpClient := secure.Client()
 					httpClient.Transport = redirectTestTransport{target: secure.Listener.Addr().String(), transport: httpClient.Transport}
-					_, err := Download(t.Context(), &accessv1.Git{Repository: "https://" + auth.userinfo + "git.example.test/repo.git", Ref: ref}, auth.creds, Options{TempDir: t.TempDir(), HTTPClient: httpClient})
+					_, err := download(t.Context(), &accessv1.Git{Repository: "https://" + auth.userinfo + "git.example.test/repo.git", Ref: ref}, auth.creds, Options{TempDir: t.TempDir(), HTTPClient: httpClient})
 					r.Error(err)
 					r.Equal(auth.authenticated, initialAuthenticated.Load())
 					if auth.authenticated && !target.sameOrigin {

@@ -152,8 +152,7 @@ components:
           type: file/v1
           path: hello-ocm.tar.gz
           mediaType: application/vnd.ocm.software.oci.layout.v1+tar+gzip
-`, component, ownershipVersion, resourceName),
-		"--component-version-conflict-policy", "replace")
+`, component, ownershipVersion, resourceName))
 	assertOwnershipReferrer(t, ctx, resolver, subject, component, ownershipVersion, resourceName, true)
 }
 
@@ -207,8 +206,7 @@ components:
           type: file/v1
           path: hello-ocm.tar.gz
           mediaType: application/vnd.ocm.software.oci.layout.v1+tar+gzip
-`, component, ownershipVersion, resourceName),
-		"--component-version-conflict-policy", "replace")
+`, component, ownershipVersion, resourceName))
 	assertOwnershipReferrer(t, ctx, resolver, subject, component, ownershipVersion, resourceName, true)
 }
 

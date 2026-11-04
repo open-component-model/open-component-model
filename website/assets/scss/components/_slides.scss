@@ -1,0 +1,43 @@
+// Slide deck viewer (layouts/_shortcodes/slides.html).
+// Slides are mostly white, so Bootstrap's default white controls would be
+// invisible: controls get a dark backdrop and the indicators move below the
+// slide instead of overlaying it.
+
+.slide-deck {
+  margin: 1.5rem 0;
+
+  .carousel {
+    padding-bottom: 2rem;
+  }
+
+  .carousel-inner {
+    border: 1px solid var(--bs-border-color);
+    border-radius: var(--bs-border-radius);
+  }
+
+  .carousel-control-prev,
+  .carousel-control-next {
+    bottom: 2rem;
+    width: 10%;
+  }
+
+  .carousel-control-prev-icon,
+  .carousel-control-next-icon {
+    padding: 1.25rem;
+    background-color: rgb(0 0 0 / 55%);
+    background-size: 50%;
+    border-radius: 50%;
+  }
+
+  .carousel-indicators {
+    margin-bottom: 0;
+
+    [data-bs-target] {
+      background-color: var(--bs-body-color);
+    }
+  }
+
+  figcaption {
+    text-align: center;
+  }
+}

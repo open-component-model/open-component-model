@@ -4,13 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
+	"log/slog"
 
-	"golang.org/x/sync/errgroup"
-
-	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/constructor/internal/log"
 	constructor "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/algorithms"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -55,12 +54,20 @@ func (d *resolverAndDiscoverer) Discover(ctx context.Context, component *Constru
 		children := make([]string, len(component.ConstructorComponent.References))
 		for index, ref := range component.ConstructorComponent.References {
 			children[index] = ref.ToComponentIdentity().String()
+			// A reference without a digest is minted with the default.
+			if ref.Digest != nil {
+				algorithms.LogNonDefaultReferenceDigest(ctx, log.Base(), slog.LevelWarn, constructor.ConvertToDescriptorReference(&ref).Digest, "component", component.ConstructorComponent.ToIdentity().String(), "reference", ref.ToIdentity().String())
+			}
 		}
 		return children, nil
 	case component.ExternalComponent != nil:
 		children := make([]string, len(component.ExternalComponent.Component.References))
 		for index, ref := range component.ExternalComponent.Component.References {
 			children[index] = ref.ToComponentIdentity().String()
+			// Published by someone else: the user cannot change it, and it does
+			// not affect the digest of the component version being built.
+			algorithms.LogNonDefaultReferenceDigest(ctx, log.Base(), slog.LevelDebug, ref.Digest,
+				"component", component.ExternalComponent.Component.ToIdentity().String(), "reference", ref.ToIdentity().String())
 		}
 		return children, nil
 	}
@@ -77,18 +84,15 @@ func (d *resolverAndDiscoverer) resolveConstructorComponent(_ context.Context, i
 	return nil, fmt.Errorf("component %s not found in constructor: %w", id, repository.ErrNotFound)
 }
 
+// DescriptorWithLocalBlobs is an external component version together with what is
+// needed to copy its local blobs.
 type DescriptorWithLocalBlobs struct {
 	*descriptor.Descriptor
-	Local []LocalResourceWithContent
-}
-
-type LocalResourceWithContent struct {
-	// Index specifies the position of the local resource within the original descriptor.
-	Index int
-	// Content represents a read-only blob that provides lazy access to the content of the local resource.
-	Content blob.ReadOnlyBlob
-	// Resource represents the original resource descriptor.
-	Resource *descriptor.Resource
+	// Source is the repository the component version was resolved from. It is set
+	// only if the local blobs are copied.
+	Source repository.ComponentVersionRepository
+	// Local holds the indexes of the resources stored as local blobs.
+	Local []int
 }
 
 func (d *resolverAndDiscoverer) resolveExternalComponent(ctx context.Context, id string) (*DescriptorWithLocalBlobs, error) {
@@ -110,30 +114,15 @@ func (d *resolverAndDiscoverer) resolveExternalComponent(ctx context.Context, id
 	}
 
 	descriptorWithLocalBlobs := &DescriptorWithLocalBlobs{Descriptor: desc}
-	var mu sync.Mutex
-
 	if d.resolveExternalLocalBlobs {
-		eg, egctx := errgroup.WithContext(ctx)
+		// The blobs are fetched when the component is processed, not here: a blob may be
+		// read only while the context it was fetched with lasts, and discovery's ends
+		// before processing starts.
+		descriptorWithLocalBlobs.Source = repo
 		for idx, resource := range desc.Component.Resources {
 			if err := v2.Scheme.Convert(resource.Access, &v2.LocalBlob{}); err == nil {
-				eg.Go(func() error {
-					content, resource, err := repo.GetLocalResource(egctx, desc.Component.Name, desc.Component.Version, resource.ToIdentity())
-					if err != nil {
-						return fmt.Errorf("error getting local resource for component %q: %w", identity.String(), err)
-					}
-					mu.Lock()
-					defer mu.Unlock()
-					descriptorWithLocalBlobs.Local = append(descriptorWithLocalBlobs.Local, LocalResourceWithContent{
-						Index:    idx,
-						Content:  content,
-						Resource: resource,
-					})
-					return nil
-				})
+				descriptorWithLocalBlobs.Local = append(descriptorWithLocalBlobs.Local, idx)
 			}
-		}
-		if err := eg.Wait(); err != nil {
-			return nil, fmt.Errorf("error getting local resources for component %q: %w", identity.String(), err)
 		}
 	}
 

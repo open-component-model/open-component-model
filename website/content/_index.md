@@ -1,5 +1,6 @@
 ---
 title: "Open Component Model"
+description: "Open Component Model (OCM) is an open standard for describing, transporting, and deploying software in cloud-native environments."
 leader_open_source_text: "Open-Source Apache-2.0 licensed."
 hero_line1: "Secure Delivery for"
 hero_line2: "Sovereign Clouds"

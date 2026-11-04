@@ -2,7 +2,6 @@ package oci
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,6 +13,7 @@ import (
 	"helm.sh/helm/v4/pkg/registry"
 	"oras.land/oras-go/v2"
 
+	"ocm.software/open-component-model/bindings/go/blob/compression/gzippool"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/helm/internal"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
@@ -40,7 +40,8 @@ func CopyChartToOCILayout(ctx context.Context, chart *internal.ChartData, dir st
 		_ = tmpFile.Close()
 	}(tmpFile)
 
-	zippedBuf := gzip.NewWriter(tmpFile)
+	zippedBuf := gzippool.Get(tmpFile)
+	defer gzippool.Put(zippedBuf)
 
 	target, err := tar.NewOCILayoutWriterWithTempFile(zippedBuf, dir)
 	if err != nil {

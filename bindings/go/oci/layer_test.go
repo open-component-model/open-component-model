@@ -19,56 +19,42 @@ func TestFetchLayer(t *testing.T) {
 	closeErr := errors.New("close failed")
 	fetchErr := errors.New("fetch failed")
 	for _, tt := range []struct {
-		name      string
-		data      string
-		size      int64
-		digest    digest.Digest
-		mediaType string
-		readErr   error
-		closeErr  error
-		fetchErr  error
-		wantErr   string
-		wantCause error
+		name         string
+		data         string
+		size         int64
+		digest       digest.Digest
+		mediaType    string
+		readErr      error
+		closeErr     error
+		fetchErr     error
+		wantReadErr  string
+		wantCause    error
+		wantCloseErr error
 	}{
 		{name: "layer", data: "layer", size: 5, mediaType: ocispec.MediaTypeImageLayer},
 		{name: "default media type", data: "layer", size: 5},
 		{name: "empty layer", size: 0},
-		{name: "size too large", data: "layer", size: 6, wantErr: "the descriptor declares 6"},
-		{name: "size too small", data: "layer", size: 4, wantErr: "the descriptor declares 4"},
-		{name: "zero size with content", data: "layer", size: 0, wantErr: "the descriptor declares 0"},
-		{name: "incorrect digest", data: "layer", size: 5, digest: digest.FromString("other"), wantErr: "differed from loaded digest"},
-		{name: "valid prefix with extra content", data: "layer extra", size: 5, digest: digest.FromString("layer"), wantErr: "differed from loaded digest"},
-		{name: "read error", readErr: readErr, wantErr: "failed to read layer", wantCause: readErr},
-		{name: "close error", data: "layer", size: 5, closeErr: closeErr, wantCause: closeErr},
-		{name: "read and close errors", readErr: readErr, closeErr: closeErr, wantCause: readErr},
-		{name: "fetch error", fetchErr: fetchErr, wantErr: "failed to fetch layer", wantCause: fetchErr},
+		{name: "size too large", data: "layer", size: 6, wantReadErr: "size mismatch: expected 6 bytes, read 5"},
+		{name: "size too small", data: "layer", size: 4, wantReadErr: "size mismatch: expected 4 bytes, read 5"},
+		{name: "zero size with content", data: "layer", size: 0, wantReadErr: "size mismatch: expected 0 bytes"},
+		{name: "incorrect digest", data: "layer", size: 5, digest: digest.FromString("other"), wantReadErr: "digest mismatch"},
+		{name: "valid prefix with extra content", data: "layer extra", size: 5, digest: digest.FromString("layer"), wantReadErr: "size mismatch"},
+		{name: "read error", data: "layer", size: 5, readErr: readErr, wantCause: readErr},
+		{name: "close error", data: "layer", size: 5, closeErr: closeErr, wantCloseErr: closeErr},
+		{name: "fetch error", fetchErr: fetchErr, wantReadErr: "failed to fetch layer", wantCause: fetchErr},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
-			reader := &layerReader{Reader: strings.NewReader(tt.data), readErr: tt.readErr, closeErr: tt.closeErr}
-			store := &layerStorage{reader: reader, fetchErr: tt.fetchErr}
+			store := &layerStorage{data: tt.data, readErr: tt.readErr, closeErr: tt.closeErr, fetchErr: tt.fetchErr}
 			dig := tt.digest
 			if dig == "" {
 				dig = digest.FromString(tt.data)
 			}
 			desc := ocispec.Descriptor{Digest: dig, Size: tt.size, MediaType: tt.mediaType}
-			r.False(reader.closed)
 
-			b, err := fetchLayer(t.Context(), store, desc)
-			r.Equal(tt.fetchErr == nil, reader.closed)
-			if tt.wantErr != "" || tt.wantCause != nil {
-				if tt.wantErr != "" {
-					r.ErrorContains(err, tt.wantErr)
-				}
-				if tt.wantCause != nil {
-					r.ErrorIs(err, tt.wantCause)
-				}
-				if tt.closeErr != nil {
-					r.ErrorIs(err, tt.closeErr)
-				}
-				return
-			}
-			r.NoError(err)
+			b := fetchLayer(t.Context(), store, desc)
+			r.Empty(store.readers, "the layer must not be fetched before it is read")
+
 			r.Equal(tt.size, b.(blob.SizeAware).Size())
 			actualDigest, ok := b.(blob.DigestAware).Digest()
 			r.True(ok)
@@ -80,28 +66,54 @@ func TestFetchLayer(t *testing.T) {
 			} else {
 				r.Equal(tt.mediaType, mediaType)
 			}
-			for range 2 {
+
+			for i := range 2 {
 				rc, err := b.ReadCloser()
+				if tt.fetchErr != nil {
+					r.ErrorContains(err, tt.wantReadErr)
+					r.ErrorIs(err, tt.wantCause)
+					return
+				}
 				r.NoError(err)
 				data, err := io.ReadAll(rc)
-				r.NoError(err)
-				r.NoError(rc.Close())
-				r.Equal(tt.data, string(data))
+				closeErr := rc.Close()
+				r.Len(store.readers, i+1, "every read fetches the layer anew")
+				r.True(store.readers[i].closed)
+				switch {
+				case tt.wantReadErr != "":
+					r.ErrorContains(err, tt.wantReadErr)
+					r.Error(closeErr)
+				case tt.wantCause != nil:
+					r.ErrorIs(err, tt.wantCause)
+				case tt.wantCloseErr != nil:
+					r.NoError(err)
+					r.ErrorIs(closeErr, tt.wantCloseErr)
+				default:
+					r.NoError(err)
+					r.NoError(closeErr)
+					r.Equal(tt.data, string(data))
+				}
 			}
 		})
 	}
 }
 
+// layerStorage serves a fresh reader over data on every fetch.
 type layerStorage struct {
-	reader   io.ReadCloser
+	data     string
+	readErr  error
+	closeErr error
 	fetchErr error
+	readers  []*layerReader
 }
 
 func (s *layerStorage) Fetch(context.Context, ocispec.Descriptor) (io.ReadCloser, error) {
 	if s.fetchErr != nil {
 		return nil, s.fetchErr
 	}
-	return s.reader, nil
+	reader := &layerReader{Reader: strings.NewReader(s.data), readErr: s.readErr, closeErr: s.closeErr}
+	s.readers = append(s.readers, reader)
+	return reader, nil
 }
 
 type layerReader struct {

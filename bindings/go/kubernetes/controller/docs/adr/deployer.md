@@ -522,8 +522,8 @@ This is why, we will not elaborate further on this approach.
 
 # Links
 
-* Epic [#404](https://github.com/open-component-model/ocm-k8s-toolkit/issues/147)
-* Issue [#90](https://github.com/open-component-model/ocm-k8s-toolkit/issues/136)
+* Epic [ocm-project#636](https://github.com/open-component-model/ocm-project/issues/636)
+* Issue `ocm-k8s-toolkit#136` (Create a Deployment ADR; archived, non-public repository)
 
 [kro-github]: https://github.com/kro-run/kro
 

@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 
 # Build the manager binary
-FROM --platform=${BUILDPLATFORM} golang:1.27.3@sha256:f20d83a83e18dbd2a4714b8ffd4b30b287b6243962dd75608e86abcc63ba4efc AS builder
+FROM --platform=${BUILDPLATFORM} golang:1.27.3@sha256:2920bb124f1a2e12a1d39f0cab756ae0068441ee1da7655dec7f5e374944095b AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
@@ -48,7 +48,7 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
 # bindings/go/sigstore/signing/handler/internal/.env (Renovate group "OCM cosign";
 # pin_sync_test.go there fails if they diverge). The sigstore signing handler in
 # bindings/go/sigstore shells out to this binary.
-FROM ghcr.io/open-component-model/cosign:v3.1.4-ocm.5@sha256:b9e74695c0c83c2ea951a84e29c90e5ece1b31b4da6d63255aa26d4e1500dcb5 AS cosign
+FROM ghcr.io/open-component-model/cosign:v3.1.4-ocm.6@sha256:275824e5d82a53f28571406ad2bbe93484fd7f3d78e566eb04aefcc43cb0681c AS cosign
 
 # Garden Linux FIPS image: source of the CA bundle for OCI/registry TLS, which
 # the final image copies by its path so nothing else from this image reaches

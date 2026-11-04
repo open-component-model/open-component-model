@@ -1,6 +1,6 @@
 ---
 title: "Deploy Kubernetes Manifests with the OCM Deployer"
-description: "Apply raw Kubernetes manifests to the cluster with the OCM Deployer alone — no kro, no Helm chart, no GitOps tool."
+description: "Apply raw Kubernetes manifests to the cluster with the OCM Deployer alone, without kro, Helm, or any GitOps tool."
 weight: 60
 toc: true
 aliases:

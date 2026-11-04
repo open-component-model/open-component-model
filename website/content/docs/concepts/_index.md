@@ -1,6 +1,6 @@
 ---
 title: "Concepts"
-description: "Understand the fundamental principles and architecture of the Open Component Model."
+description: "Understand the fundamental principles and architecture of the Open Component Model: components, credentials, signing, and transport."
 icon: "🏢"
 weight: 40
 sidebar:

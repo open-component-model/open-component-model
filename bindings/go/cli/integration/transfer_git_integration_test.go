@@ -136,6 +136,12 @@ func newGitFixture(t *testing.T) (path, first string) {
 // first commit, not of main, which already points at the second one.
 func assertGitArchiveAtFirstCommit(t *testing.T, data []byte) {
 	t.Helper()
+	assertGitArchiveREADME(t, data, "first\n")
+}
+
+// assertGitArchiveREADME checks that data is a Git archive whose README.md holds want.
+func assertGitArchiveREADME(t *testing.T, data []byte, want string) {
+	t.Helper()
 	r := require.New(t)
 
 	gz, err := gzip.NewReader(bytes.NewReader(data))
@@ -156,7 +162,7 @@ func assertGitArchiveAtFirstCommit(t *testing.T, data []byte) {
 		r.NoError(err)
 		files[header.Name] = string(content)
 	}
-	r.Equal(map[string]string{"README.md": "first\n"}, files, "the archive must hold the pinned commit, not main")
+	r.Equal(map[string]string{"README.md": want}, files, "unexpected Git archive content")
 }
 
 // Test_Integration_Transfer_Git transfers a resource with a Git access from a CTF
@@ -394,16 +400,32 @@ configurations:
 		assertGitArchiveAtFirstCommit(t, archive)
 	})
 
-	t.Run("a resource that is not pinned to a commit is refused", func(t *testing.T) {
+	t.Run("a resource that is not pinned to a commit is transferred at the ref's commit", func(t *testing.T) {
 		r := require.New(t)
 
-		// Skip digest processing so the stored access keeps only its ref —
-		// pinning it to a commit is exactly that processor's job.
+		// Skip digest processing so the stored access keeps only its ref — pinning it to a
+		// commit is that processor's job. Transfer no longer refuses a ref-only resource; it
+		// embeds the archive at the commit the ref resolves to now (main's second commit),
+		// matching how an unpinned OCI resource transfers by tag without a digest.
 		refOnlyRef, _ := addToCTF(t, gitConstructor("ref", "refs/heads/main"), "--skip-reference-digest-processing")
 
-		_, err := runTransfer(t, refOnlyRef, "git-transfer-refonly", "--copy-resources")
-		r.Error(err, "transferring a ref-only Git resource must fail")
-		r.ErrorContains(err, "no pinned commit",
-			"the failure must name the missing commit, since the embedded bytes would not be reproducible")
+		targetRef, err := runTransfer(t, refOnlyRef, "git-transfer-refonly", "--copy-resources")
+		r.NoError(err, "transferring a ref-only Git resource must succeed")
+
+		targetRepo, err := createRepo(t.Context(), repoProvider, credentialResolver, &ociv1.Repository{BaseUrl: targetRef})
+		r.NoError(err)
+		desc, err := targetRepo.GetComponentVersion(t.Context(), componentName, componentVersion)
+		r.NoError(err)
+		res := desc.Component.Resources[0]
+
+		var localBlobAccess v2.LocalBlob
+		r.NoError(v2.Scheme.Convert(res.Access, &localBlobAccess),
+			"a ref-only Git access must become a local blob once copied")
+		r.Equal(transferv1alpha1.GitLocalBlobMediaType, localBlobAccess.MediaType)
+
+		stored := readLocalResource(t, t.Context(), targetRepo, componentName, componentVersion, res.ToIdentity())
+		r.Equal(res.Digest.Value, godigest.FromBytes(stored).Encoded(),
+			"the stored blob must hash to the digest it was published under")
+		assertGitArchiveREADME(t, stored, "second\n")
 	})
 }

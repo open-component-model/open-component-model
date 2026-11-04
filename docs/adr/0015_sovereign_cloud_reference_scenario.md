@@ -410,7 +410,7 @@ All build, sign, transfer, and cluster operations are driven by a single [Taskfi
 
 ## 8. Deployment Manifests (Bootstrap)
 
-> **Prerequisites:** The cluster must have the [OCM Kubernetes Toolkit](https://github.com/open-component-model/ocm-k8s-toolkit), [kro](https://kro.run), and [FluxCD](https://fluxcd.io/) installed. The `task cluster:setup` command handles all of this — it creates the kind cluster with an in-cluster registry, then installs the OCM controllers, kro, and FluxCD. See the [README](../../conformance/scenarios/sovereign/README.md) for details.
+> **Prerequisites:** The cluster must have the [OCM Kubernetes Toolkit](../../bindings/go/kubernetes/controller/README.md), [kro](https://kro.run), and [FluxCD](https://fluxcd.io/) installed. The `task cluster:setup` command handles all of this — it creates the kind cluster with an in-cluster registry, then installs the OCM controllers, kro, and FluxCD. See the [README](../../conformance/scenarios/sovereign/README.md) for details.
 
 The cluster-side deployment uses a minimal bootstrap pattern. Only four files are needed in [`deploy/`](../../conformance/scenarios/sovereign/deploy):
 

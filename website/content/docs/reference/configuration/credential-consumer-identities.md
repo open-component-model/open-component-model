@@ -1,6 +1,6 @@
 ---
 title: "Credential Consumer Identities"
-description: "Complete reference for OCM credential consumer identity types, their attributes, and credential properties."
+description: "Complete reference for OCM credential consumer identity types, their required and optional attributes, and the credentials they accept."
 icon: "🔑"
 weight: 2
 toc: true

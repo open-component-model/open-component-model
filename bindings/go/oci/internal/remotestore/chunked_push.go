@@ -1,7 +1,6 @@
 package remotestore
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -275,9 +274,14 @@ func (r *RemoteStore) openUploadSession(ctx context.Context, knownDigest digest.
 // the monolithic push.
 func (r *RemoteStore) uploadChunks(ctx context.Context, up *chunkedUpload, content io.Reader) error {
 	hasher := up.digester.Hash()
-	buf := make([]byte, up.chunk)
+	buf := getChunkBuffer(up.chunk)
+	defer func() { buf.release() }()
 	for {
-		n, readErr := io.ReadFull(content, buf)
+		if buf.inUse() {
+			// The transport may still read the previous PATCH body; never overwrite it.
+			buf = getChunkBuffer(up.chunk)
+		}
+		n, readErr := io.ReadFull(content, buf.data)
 		if n > 0 {
 			// Bytes have left the reader: the stream can no longer be rewound,
 			// so no monolithic fallback is possible from here on. Mark consumed
@@ -297,13 +301,15 @@ func (r *RemoteStore) uploadChunks(ctx context.Context, up *chunkedUpload, conte
 		if n == 0 {
 			return nil
 		}
-		_, _ = hasher.Write(buf[:n])
+		_, _ = hasher.Write(buf.data[:n])
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodPatch, up.location.String(), bytes.NewReader(buf[:n]))
+		chunk := buf
+		req, err := http.NewRequestWithContext(ctx, http.MethodPatch, up.location.String(), chunk.body(n))
 		if err != nil {
 			r.cancelUpload(ctx, up.location)
 			return fmt.Errorf("chunked blob push: failed to build PATCH request: %w", err)
 		}
+		req.GetBody = func() (io.ReadCloser, error) { return chunk.body(n), nil }
 		req.Header.Set("Content-Type", "application/octet-stream")
 		req.Header.Set("Content-Range", fmt.Sprintf("%d-%d", up.offset, up.offset+int64(n)-1))
 		req.ContentLength = int64(n)

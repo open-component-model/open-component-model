@@ -347,3 +347,23 @@ func TestGetV1HelmBlob_WorkingDirectory(t *testing.T) {
 		})
 	}
 }
+
+func TestGetV1HelmBlob_WorkingDirectoryProvSymlinkEscape(t *testing.T) {
+	r := require.New(t)
+	chart, err := os.ReadFile(filepath.Join("..", "testdata", "mychart-0.1.0.tgz"))
+	r.NoError(err)
+
+	base := t.TempDir()
+	secret := filepath.Join(base, "secret.txt")
+	r.NoError(os.WriteFile(secret, []byte("host secret"), 0o600))
+	workDir := filepath.Join(base, "work")
+	r.NoError(os.Mkdir(workDir, 0o700))
+	r.NoError(os.WriteFile(filepath.Join(workDir, "mychart-0.1.0.tgz"), chart, 0o600))
+	if err := os.Symlink(secret, filepath.Join(workDir, "mychart-0.1.0.tgz.prov")); err != nil {
+		t.Skipf("symlinks not supported: %v", err)
+	}
+
+	b, _, err := input.GetV1HelmBlob(t.Context(), v1.Helm{Path: "mychart-0.1.0.tgz"}, t.TempDir(), input.WithWorkingDirectory(workDir))
+	r.ErrorContains(err, "path escapes from parent")
+	r.Nil(b)
+}

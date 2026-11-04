@@ -16,7 +16,7 @@ import (
 	"oras.land/oras-go/v2/content"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/blob/direct"
 	"ocm.software/open-component-model/bindings/go/blob/transformer"
 	"ocm.software/open-component-model/bindings/go/configuration/extract/v1alpha1/spec"
 	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
@@ -103,9 +103,6 @@ func (t *Transformer) extractOCIArtifact(ctx context.Context, store content.Fetc
 
 	var tarBuffer bytes.Buffer
 	tarWriter := tar.NewWriter(&tarBuffer)
-	defer func() {
-		err = errors.Join(err, tarWriter.Close())
-	}()
 
 	// Helm is a special snowflake. The filename for the generated output needs to follow a specific naming convention.
 	// The filename needs to be chartname-version.tgz for charts and chartname-version.tgz.prov for provenance.
@@ -131,10 +128,11 @@ func (t *Transformer) extractOCIArtifact(ctx context.Context, store content.Fetc
 		}
 	}
 
-	resultBlob := inmemory.New(bytes.NewReader(tarBuffer.Bytes()))
-	resultBlob.SetMediaType("application/tar")
+	if err := tarWriter.Close(); err != nil {
+		return nil, fmt.Errorf("failed to finalize tar archive: %w", err)
+	}
 
-	return resultBlob, nil
+	return direct.NewFromBytes(tarBuffer.Bytes(), direct.WithMediaType("application/tar")), nil
 }
 
 // processRuleWithHelm processes layers that match the rule's selectors into a single tar file, with Helm-aware filename handling.
