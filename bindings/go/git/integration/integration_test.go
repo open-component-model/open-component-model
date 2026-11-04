@@ -13,23 +13,19 @@ import (
 	"net/http"
 	"net/http/cgi"
 	"net/http/httptest"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/go-git/go-git/v6"
-	"github.com/go-git/go-git/v6/config"
 	"github.com/go-git/go-git/v6/plumbing"
-	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
 // trustServerCertificate changes process-global state; callers and their ancestors must not run in parallel.
@@ -138,44 +134,5 @@ func assertArchive(t *testing.T, content blob.ReadOnlyBlob, expectedReadme strin
 // internal/download.
 func newRepository(t *testing.T) (path string, first plumbing.Hash) {
 	t.Helper()
-
-	r := require.New(t)
-
-	work := t.TempDir()
-	repo, err := git.PlainInit(work, false)
-	r.NoError(err)
-	// go-git reads the global Git config; a host commit.gpgSign must not sign fixtures.
-	cfg, err := repo.Config()
-	r.NoError(err)
-	cfg.Commit.GpgSign = config.OptBoolFalse
-	r.NoError(repo.SetConfig(cfg))
-	r.NoError(repo.Storer.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, "refs/heads/main")))
-
-	tree, err := repo.Worktree()
-	r.NoError(err)
-
-	commit := func(content string) plumbing.Hash {
-		r.NoError(os.WriteFile(filepath.Join(work, "README.md"), []byte(content), 0o600))
-
-		_, err := tree.Add("README.md")
-		r.NoError(err)
-
-		hash, err := tree.Commit(content, &git.CommitOptions{Author: &object.Signature{
-			Name:  "OCM fixture",
-			Email: "fixture@example.invalid",
-			When:  time.Unix(1700000000, 0).UTC(),
-		}})
-		r.NoError(err)
-
-		return hash
-	}
-
-	first = commit("first\n")
-	commit("second\n")
-
-	path = filepath.Join(t.TempDir(), "fixture.git")
-	_, err = git.PlainClone(path, &git.CloneOptions{URL: work, Bare: true})
-	r.NoError(err)
-
-	return path, first
+	return testgit.Repository(t, testgit.Options{DefaultBranch: "main", Bare: true})
 }
