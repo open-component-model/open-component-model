@@ -30,6 +30,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/cmd/internal/test"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/pkitest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/signing/tsa"
@@ -137,7 +138,7 @@ func getTSATestComponentVersion(t *testing.T, ref, name string) (*oci.Repository
 func writeExpiredSigner(t *testing.T, dir string) (keyPath, chainPath string) {
 	t.Helper()
 	r := require.New(t)
-	key := mustKey(t)
+	key := pkitest.RSAKey(t)
 	tmpl := &x509.Certificate{
 		SerialNumber:          big.NewInt(time.Now().UnixNano()),
 		Subject:               pkix.Name{CommonName: "expired signer"},
@@ -151,7 +152,7 @@ func writeExpiredSigner(t *testing.T, dir string) (keyPath, chainPath string) {
 	r.NoError(err)
 	cert, err := x509.ParseCertificate(der)
 	r.NoError(err)
-	return writeKeyAndChain(t, dir, key, cert)
+	return pkitest.WriteKeyAndChain(t, dir, key, cert)
 }
 
 func rsaConsumerYAML(signature, chainPath, keyPath, extraProperties string) string {
@@ -195,7 +196,7 @@ func Test_Verify_TSA_Timestamp_Validates_Expired_Certificate(t *testing.T) {
 
 	dir := t.TempDir()
 	keyPath, chainPath := writeExpiredSigner(t, dir)
-	tsaRoot := writeCertsPEM(t, dir, "tsa-root.pem", tsaCert)
+	tsaRoot := pkitest.WriteCerts(t, dir, "tsa-root.pem", tsaCert)
 	rsaConsumer := rsaConsumerYAML("default", chainPath, keyPath, "")
 
 	writeConfig := func(name, consumers string) string {
@@ -293,8 +294,8 @@ func Test_Sign_TSA_Guards(t *testing.T) {
 	tsaSrv, _, tsaRequests := newMockTSA(t, time.Now())
 
 	dir := t.TempDir()
-	key := mustKey(t)
-	keyPath, chainPath := writeKeyAndChain(t, dir, key, mustSelfSigned(t, "signer", key))
+	key := pkitest.RSAKey(t)
+	keyPath, chainPath := pkitest.WriteKeyAndChain(t, dir, key, pkitest.SelfSigned(t, "signer", key))
 	rsaConsumers := rsaConsumerYAML("default", chainPath, keyPath, "") + rsaConsumerYAML("other", chainPath, keyPath, "")
 	writeConfig := func(name, body string) string {
 		p := filepath.Join(dir, name)
@@ -302,7 +303,7 @@ func Test_Sign_TSA_Guards(t *testing.T) {
 		return p
 	}
 	config := writeConfig("rsa.yaml", pemSigningConfigYAML(rsaConsumers))
-	wrongRoot := writeConfig("wrong-root.yaml", pemSigningConfigYAML(rsaConsumers+tsaConsumerYAML("", writeCertsPEM(t, dir, "wrong-root.pem", mustSelfSigned(t, "wrong root", mustKey(t))))))
+	wrongRoot := writeConfig("wrong-root.yaml", pemSigningConfigYAML(rsaConsumers+tsaConsumerYAML("", pkitest.WriteCerts(t, dir, "wrong-root.pem", pkitest.SelfSigned(t, "wrong root", pkitest.RSAKey(t))))))
 	sigstore := writeConfig("sigstore.yaml", `type: generic.config.ocm.software/v1
 configurations:
 - type: signing.config.ocm.software/v1alpha1
@@ -391,8 +392,8 @@ func Test_Sign_TSA_Keeps_Descriptor_Digest(t *testing.T) {
 	r := require.New(t)
 	tsaSrv, _, _ := newMockTSA(t, time.Now())
 	dir := t.TempDir()
-	key := mustKey(t)
-	keyPath, chainPath := writeKeyAndChain(t, dir, key, mustSelfSigned(t, "signer", key))
+	key := pkitest.RSAKey(t)
+	keyPath, chainPath := pkitest.WriteKeyAndChain(t, dir, key, pkitest.SelfSigned(t, "signer", key))
 	config := filepath.Join(dir, "config.yaml")
 	r.NoError(os.WriteFile(config, []byte(pemSigningConfigYAML(rsaConsumerYAML("default", chainPath, keyPath, ""))), 0o600))
 

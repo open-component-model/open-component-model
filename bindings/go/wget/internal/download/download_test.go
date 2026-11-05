@@ -3,32 +3,27 @@ package download_test
 import (
 	"bytes"
 	"compress/gzip"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
 	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
-	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/internal/testutil/blobtest"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/pkitest"
 	"ocm.software/open-component-model/bindings/go/wget/internal/download"
 	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
@@ -192,57 +187,11 @@ func TestDownload_Redirect(t *testing.T) {
 
 // --- mTLS -------------------------------------------------------------------
 
-// newCA generates a self-signed CA certificate and its private key.
-func newCA(t *testing.T) (*x509.Certificate, *ecdsa.PrivateKey) {
-	t.Helper()
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(t, err)
-
-	tmpl := &x509.Certificate{
-		SerialNumber:          big.NewInt(1),
-		Subject:               pkix.Name{CommonName: "wget-download-test-ca"},
-		NotBefore:             time.Now().Add(-time.Hour),
-		NotAfter:              time.Now().Add(time.Hour),
-		IsCA:                  true,
-		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
-		BasicConstraintsValid: true,
-	}
-	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
-	require.NoError(t, err)
-	cert, err := x509.ParseCertificate(der)
-	require.NoError(t, err)
-	return cert, key
-}
-
-// issueClientCert issues a client-auth leaf certificate signed by the given CA.
-func issueClientCert(t *testing.T, ca *x509.Certificate, caKey *ecdsa.PrivateKey) (certPEM, keyPEM []byte) {
-	t.Helper()
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(t, err)
-
-	tmpl := &x509.Certificate{
-		SerialNumber: big.NewInt(2),
-		Subject:      pkix.Name{CommonName: "wget-download-test-client"},
-		NotBefore:    time.Now().Add(-time.Hour),
-		NotAfter:     time.Now().Add(time.Hour),
-		KeyUsage:     x509.KeyUsageDigitalSignature,
-		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
-	}
-	der, err := x509.CreateCertificate(rand.Reader, tmpl, ca, &key.PublicKey, caKey)
-	require.NoError(t, err)
-	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
-	require.NoError(t, err)
-
-	certPEM = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
-	keyPEM = pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
-	return certPEM, keyPEM
-}
-
 func TestDownload_MTLS(t *testing.T) {
 	t.Parallel()
 
-	ca, caKey := newCA(t)
-	clientCertPEM, clientKeyPEM := issueClientCert(t, ca, caKey)
+	ca, caKey := pkitest.CA(t, "wget-download-test-ca")
+	clientCertPEM, clientKeyPEM := pkitest.ClientCert(t, ca, caKey, "wget-download-test-client")
 
 	clientCAPool := x509.NewCertPool()
 	clientCAPool.AddCert(ca)

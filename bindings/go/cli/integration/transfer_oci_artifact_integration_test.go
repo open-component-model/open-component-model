@@ -36,6 +36,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/pkitest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
@@ -743,7 +744,7 @@ func Test_Integration_Transfer_OCIArtifact_PreservesV1DescriptorDigest(t *testin
 		{Host: targetRegistry.Host, Port: targetRegistry.Port, User: targetRegistry.User, Password: targetRegistry.Password},
 	})
 	r.NoError(err)
-	key := mustRSAKey(t)
+	key := pkitest.RSAKey(t)
 	cfg, err := os.ReadFile(cfgPath)
 	r.NoError(err)
 	cfg = append(cfg, []byte(fmt.Sprintf(`
