@@ -596,14 +596,16 @@ func TestURLPathResolver_PlainHTTPFromHTTPConfig(t *testing.T) {
 			plainHTTP: true,
 		},
 		{
-			name:      "https reference keeps HTTPS despite per-host true",
+			name:      "https reference follows per-host true",
 			cfg:       &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{"registry.local:5000": hostCfg(&tr)}},
 			reference: "https://registry.local:5000/repo:v1",
+			plainHTTP: true,
 		},
 		{
-			name:      "https reference keeps HTTPS despite global true",
+			name:      "https reference follows global true",
 			cfg:       &httpv1alpha1.Config{ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: &tr}},
 			reference: "https://registry.local:5000/repo:v1",
+			plainHTTP: true,
 		},
 	}
 

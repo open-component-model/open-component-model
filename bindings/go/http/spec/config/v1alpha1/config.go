@@ -232,8 +232,8 @@ type ProtocolConfig struct {
 	// It exists so a plain OCI reference such as registry.local:5000/repo can
 	// reach a development or air-gapped registry without an http:// prefix in
 	// the repository spec. The traffic, including credentials, is unencrypted,
-	// so set it per host and never for a public registry. A reference with an
-	// explicit https:// prefix keeps TLS regardless of this setting.
+	// so set it per host and never for a public registry. It applies to a
+	// reference with an explicit https:// prefix as well.
 	//
 	// It covers OCM's OCI repositories and ociArtifact access. Helm chart
 	// downloads, including oci:// charts, ignore it; a classic Helm repository

@@ -120,8 +120,9 @@ OCM talks HTTPS to every OCI registry unless the reference starts with
 `http://`. `plainHTTP: true` makes OCM's OCI registry clients use cleartext
 HTTP for a host without changing the reference. It is meant for development and air-gapped registries
 without TLS. Traffic, including credentials, is unencrypted, so set it per host
-and never for a public registry. A reference with an explicit `https://`
-prefix keeps TLS regardless of this setting.
+and never for a public registry. It applies to a reference with an explicit
+`https://` prefix as well; only an `http://` prefix on a repository base URL is
+stronger.
 
 ```yaml
 type: generic.config.ocm.software/v1

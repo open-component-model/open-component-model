@@ -143,7 +143,7 @@ func (resolver *CachingResolver) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (resolver *CachingResolver) StoreForReference(ctx context.Context, reference string) (spec.Store, error) {
+func (resolver *CachingResolver) StoreForReference(_ context.Context, reference string) (spec.Store, error) {
 	ref, err := looseref.ParseReference(reference)
 	if err != nil {
 		return nil, err
@@ -170,7 +170,7 @@ func (resolver *CachingResolver) StoreForReference(ctx context.Context, referenc
 		SkipReferrersGC: true,
 	}
 
-	repo.PlainHTTP = resolver.plainHTTPFor(ref.Scheme, ref.Registry)
+	repo.PlainHTTP = resolver.plainHTTPFor(ref.Scheme, ref.Host())
 
 	if resolver.baseClient != nil {
 		repo.Client = resolver.baseClient
@@ -188,14 +188,12 @@ func (resolver *CachingResolver) StoreForReference(ctx context.Context, referenc
 
 // plainHTTPFor reports whether registry clients for host must use cleartext
 // HTTP: for an http:// base URL (WithPlainHTTP), for an http:// reference, or
-// when the HTTP configuration sets plainHTTP for the host. An explicit https://
-// reference skips the configuration lookup, so the config cannot downgrade it.
+// when the HTTP configuration sets plainHTTP for the host. The configuration
+// applies to https:// references too, because a repository base URL loses its
+// https:// scheme before it gets here; treating both alike keeps one rule.
 func (resolver *CachingResolver) plainHTTPFor(scheme, host string) bool {
 	if resolver.plainHTTP || scheme == "http" {
 		return true
-	}
-	if scheme == "https" {
-		return false
 	}
 	plain := resolver.httpConfig.ResolveHost(host).PlainHTTP
 	return plain != nil && *plain
