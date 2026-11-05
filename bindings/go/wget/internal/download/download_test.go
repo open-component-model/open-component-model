@@ -28,20 +28,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/blobtest"
 	"ocm.software/open-component-model/bindings/go/wget/internal/download"
 	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
-
-// readBlob fully reads a blob and returns its bytes.
-func readBlob(t *testing.T, b blob.ReadOnlyBlob) []byte {
-	t.Helper()
-	rc, err := b.ReadCloser()
-	require.NoError(t, err)
-	defer func() { _ = rc.Close() }()
-	data, err := io.ReadAll(rc)
-	require.NoError(t, err)
-	return data
-}
 
 // wgetCreds builds a typed WgetCredentials value.
 func wgetCreds(c credv1.WgetCredentials) *credv1.WgetCredentials {
@@ -82,7 +72,7 @@ func TestDownload_HappyPath(t *testing.T) {
 	b, err := download.Download(t.Context(), download.Request{URL: srv.URL}, download.WithClient(srv.Client()))
 	require.NoError(t, err)
 	require.NotNil(t, b)
-	assert.Equal(t, content, readBlob(t, b))
+	assert.Equal(t, content, blobtest.ReadAll(t, b))
 
 	got, _ := b.MediaType()
 	assert.Equal(t, "text/plain", got)
@@ -116,7 +106,7 @@ func TestDownload_StoredGzipIsNotDecoded(t *testing.T) {
 			r := require.New(t)
 			b, err := download.Download(t.Context(), download.Request{URL: srv.URL + "/stored.gz"}, opts...)
 			r.NoError(err)
-			r.Equal(stored, readBlob(t, b))
+			r.Equal(stored, blobtest.ReadAll(t, b))
 		})
 	}
 }
@@ -129,7 +119,7 @@ func TestDownload_Credentials(t *testing.T) {
 		srv := echoAuthServer(t)
 		b, err := download.Download(t.Context(), download.Request{URL: srv.URL}, download.WithClient(srv.Client()))
 		require.NoError(t, err)
-		assert.Equal(t, "none", string(readBlob(t, b)))
+		assert.Equal(t, "none", string(blobtest.ReadAll(t, b)))
 	})
 
 	t.Run("basic auth", func(t *testing.T) {
@@ -139,7 +129,7 @@ func TestDownload_Credentials(t *testing.T) {
 		b, err := download.Download(t.Context(), download.Request{URL: srv.URL},
 			download.WithClient(srv.Client()), download.WithCredentials(creds))
 		require.NoError(t, err)
-		assert.Equal(t, "basic:user:pass", string(readBlob(t, b)))
+		assert.Equal(t, "basic:user:pass", string(blobtest.ReadAll(t, b)))
 	})
 
 	t.Run("bearer token", func(t *testing.T) {
@@ -149,7 +139,7 @@ func TestDownload_Credentials(t *testing.T) {
 		b, err := download.Download(t.Context(), download.Request{URL: srv.URL},
 			download.WithClient(srv.Client()), download.WithCredentials(creds))
 		require.NoError(t, err)
-		assert.Equal(t, "Bearer my-token", string(readBlob(t, b)))
+		assert.Equal(t, "Bearer my-token", string(blobtest.ReadAll(t, b)))
 	})
 
 	t.Run("bearer token takes precedence over basic auth", func(t *testing.T) {
@@ -159,7 +149,7 @@ func TestDownload_Credentials(t *testing.T) {
 		b, err := download.Download(t.Context(), download.Request{URL: srv.URL},
 			download.WithClient(srv.Client()), download.WithCredentials(creds))
 		require.NoError(t, err)
-		assert.Equal(t, "Bearer my-token", string(readBlob(t, b)))
+		assert.Equal(t, "Bearer my-token", string(blobtest.ReadAll(t, b)))
 	})
 }
 
@@ -184,7 +174,7 @@ func TestDownload_Redirect(t *testing.T) {
 		srv := newRedirectServer(t)
 		b, err := download.Download(t.Context(), download.Request{URL: srv.URL + "/redirect"}, download.WithClient(srv.Client()))
 		require.NoError(t, err)
-		assert.Equal(t, "final", string(readBlob(t, b)))
+		assert.Equal(t, "final", string(blobtest.ReadAll(t, b)))
 	})
 
 	t.Run("NoRedirect surfaces the redirect status instead of following", func(t *testing.T) {
@@ -284,7 +274,7 @@ func TestDownload_MTLS(t *testing.T) {
 		})
 		b, err := download.Download(t.Context(), download.Request{URL: srv.URL}, download.WithCredentials(creds))
 		require.NoError(t, err)
-		assert.Equal(t, "mtls-ok:", string(readBlob(t, b)))
+		assert.Equal(t, "mtls-ok:", string(blobtest.ReadAll(t, b)))
 	})
 
 	t.Run("client certificate composes with a bearer token", func(t *testing.T) {
@@ -297,7 +287,7 @@ func TestDownload_MTLS(t *testing.T) {
 		})
 		b, err := download.Download(t.Context(), download.Request{URL: srv.URL}, download.WithCredentials(creds))
 		require.NoError(t, err)
-		assert.Equal(t, "mtls-ok:Bearer my-token", string(readBlob(t, b)))
+		assert.Equal(t, "mtls-ok:Bearer my-token", string(blobtest.ReadAll(t, b)))
 	})
 }
 
@@ -391,7 +381,7 @@ func TestDownload_ReRead(t *testing.T) {
 			r.NoError(err)
 			r.Equal(int32(0), hits.Load(), "Download must not send the request")
 
-			r.Equal("echoed header", string(readBlob(t, b)))
+			r.Equal("echoed header", string(blobtest.ReadAll(t, b)))
 			r.Equal(int32(1), hits.Load())
 
 			if !tt.wantReread {
@@ -403,7 +393,7 @@ func TestDownload_ReRead(t *testing.T) {
 				r.Equal(int32(1), hits.Load(), "the request must not be sent again")
 				return
 			}
-			r.Equal("echoed header", string(readBlob(t, b)))
+			r.Equal("echoed header", string(blobtest.ReadAll(t, b)))
 			r.Equal(int32(2), hits.Load(), "a second read must send the request again")
 		})
 	}
@@ -432,7 +422,7 @@ func TestDownload_UnreadReaderSendsNothing(t *testing.T) {
 	r.NoError(rc.Close())
 	r.Equal(int32(0), hits.Load(), "an unread reader must not send the request")
 
-	r.Equal("posted", string(readBlob(t, b)))
+	r.Equal("posted", string(blobtest.ReadAll(t, b)))
 	r.Equal(int32(1), hits.Load())
 }
 
@@ -488,7 +478,7 @@ func TestDownload_Metadata(t *testing.T) {
 		r.Equal(int32(1), heads.Load(), "metadata must be requested once")
 		r.Equal(int32(0), gets.Load(), "metadata must not send the request")
 
-		r.Equal(content, readBlob(t, b))
+		r.Equal(content, blobtest.ReadAll(t, b))
 		r.Equal("sha256:advertised", pinned, "the reported digest must be verified")
 		r.Equal(int32(1), heads.Load())
 	})
@@ -501,7 +491,7 @@ func TestDownload_Metadata(t *testing.T) {
 		b, err := download.Download(t.Context(), download.Request{URL: srv.URL}, download.WithClient(srv.Client()), advertised)
 		r.NoError(err)
 
-		r.Equal(content, readBlob(t, b))
+		r.Equal(content, blobtest.ReadAll(t, b))
 		requireMetadata(r, b)
 		r.Equal(int32(0), heads.Load(), "a read response must make the HEAD request unnecessary")
 	})
@@ -518,7 +508,7 @@ func TestDownload_Metadata(t *testing.T) {
 		_, ok := b.Digest()
 		r.False(ok)
 		r.Equal(int32(0), heads.Load()+gets.Load(), "no request may be sent")
-		r.Equal(content, readBlob(t, b))
+		r.Equal(content, blobtest.ReadAll(t, b))
 	})
 
 	t.Run("failing HEAD is not repeated and leaves metadata to the response", func(t *testing.T) {
@@ -544,7 +534,7 @@ func TestDownload_Metadata(t *testing.T) {
 		r.Equal("application/octet-stream", mediaType)
 		r.Equal(int32(1), heads.Load(), "a failed HEAD request must not be repeated")
 
-		r.Equal(content, readBlob(t, b))
+		r.Equal(content, blobtest.ReadAll(t, b))
 		requireMetadata(r, b)
 		r.Equal(int32(1), heads.Load())
 	})
@@ -629,7 +619,7 @@ func TestDownload_RereadWithoutLengthIsCheckedAgainstKnownSize(t *testing.T) {
 			b, err := download.Download(t.Context(), download.Request{URL: srv.URL}, download.WithClient(srv.Client()))
 			r.NoError(err)
 			r.Equal(int64(3), b.Size())
-			r.Equal("abc", string(readBlob(t, b)))
+			r.Equal("abc", string(blobtest.ReadAll(t, b)))
 
 			// Stop at the known size like a consumer copying exactly Size bytes.
 			rc, err := b.ReadCloser()
@@ -742,7 +732,7 @@ func TestDownload_Size(t *testing.T) {
 			b, err := download.Download(t.Context(), download.Request{URL: serveBody(t, content, tt.chunked).URL})
 			r.NoError(err)
 			r.Equal(tt.want, b.Size())
-			r.Equal(content, readBlob(t, b))
+			r.Equal(content, blobtest.ReadAll(t, b))
 		})
 	}
 }

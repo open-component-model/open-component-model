@@ -30,6 +30,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/blobtest"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/repository"
 	accessspec "ocm.software/open-component-model/bindings/go/wget/spec/access"
@@ -76,18 +77,6 @@ func wgetResource(t *testing.T, spec map[string]any) *descruntime.Resource {
 		Data: raw,
 	}
 	return r
-}
-
-func readBlob(t *testing.T, b blob.ReadOnlyBlob) []byte {
-	t.Helper()
-	rc, err := b.ReadCloser()
-	require.NoError(t, err)
-	defer func(rc io.ReadCloser) {
-		_ = rc.Close()
-	}(rc)
-	data, err := io.ReadAll(rc)
-	require.NoError(t, err)
-	return data
 }
 
 // readError fully reads b and returns the error of the read and of closing the
@@ -158,7 +147,7 @@ func Test_Integration_WgetResourceRepository(t *testing.T) {
 		r.NoError(err)
 		r.NotNil(b)
 
-		data := readBlob(t, b)
+		data := blobtest.ReadAll(t, b)
 		assert.Equal(t, "Hello, World!\n", string(data))
 
 		// Verify media type was detected from Content-Type
@@ -180,7 +169,7 @@ func Test_Integration_WgetResourceRepository(t *testing.T) {
 		b, err := repo.DownloadResource(t.Context(), resource, nil)
 		r.NoError(err)
 
-		data := readBlob(t, b)
+		data := blobtest.ReadAll(t, b)
 		assert.Len(t, data, 1024)
 
 		// Verify content integrity
@@ -206,7 +195,7 @@ func Test_Integration_WgetResourceRepository(t *testing.T) {
 		b, err := repo.DownloadResource(t.Context(), resource, nil)
 		r.NoError(err)
 
-		data := readBlob(t, b)
+		data := blobtest.ReadAll(t, b)
 		r.NotEmpty(data)
 
 		// Verify the explicit media type takes precedence
@@ -241,7 +230,7 @@ func Test_Integration_WgetResourceRepository(t *testing.T) {
 		b, err := repo.DownloadResource(t.Context(), resource, nil)
 		r.NoError(err)
 
-		data := readBlob(t, b)
+		data := blobtest.ReadAll(t, b)
 		assert.JSONEq(t, `{"key":"value"}`, string(data))
 	})
 
@@ -267,7 +256,7 @@ func Test_Integration_WgetResourceRepository(t *testing.T) {
 		b, err := echoRepo.DownloadResource(t.Context(), resource, nil)
 		r.NoError(err)
 
-		data := readBlob(t, b)
+		data := blobtest.ReadAll(t, b)
 		assert.Equal(t, "X-Request-ID: test-12345", string(data))
 	})
 
@@ -298,7 +287,7 @@ func Test_Integration_WgetResourceRepository(t *testing.T) {
 		r.NoError(err)
 
 		var resp map[string]string
-		r.NoError(json.Unmarshal(readBlob(t, b), &resp))
+		r.NoError(json.Unmarshal(blobtest.ReadAll(t, b), &resp))
 		assert.Equal(t, "POST", resp["method"])
 		assert.JSONEq(t, `{"query":"test"}`, resp["body"])
 	})
@@ -333,8 +322,8 @@ func Test_Integration_WgetResourceRepository(t *testing.T) {
 		r.NoError(err)
 
 		// Read the blob twice to verify it can be re-read
-		data1 := readBlob(t, b)
-		data2 := readBlob(t, b)
+		data1 := blobtest.ReadAll(t, b)
+		data2 := blobtest.ReadAll(t, b)
 		assert.Equal(t, data1, data2)
 		assert.Equal(t, "Hello, World!\n", string(data1))
 	})
@@ -392,7 +381,7 @@ func Test_Integration_WgetWithAuthentication(t *testing.T) {
 
 		b, err := repo.DownloadResource(t.Context(), resource, creds)
 		r.NoError(err)
-		assert.Equal(t, "Hello, World!\n", string(readBlob(t, b)))
+		assert.Equal(t, "Hello, World!\n", string(blobtest.ReadAll(t, b)))
 	})
 
 	t.Run("download fails without credentials", func(t *testing.T) {
@@ -452,7 +441,7 @@ func Test_Integration_WgetWithRedirects(t *testing.T) {
 
 		b, err := repo.DownloadResource(t.Context(), resource, nil)
 		r.NoError(err)
-		assert.Equal(t, "Hello, World!\n", string(readBlob(t, b)))
+		assert.Equal(t, "Hello, World!\n", string(blobtest.ReadAll(t, b)))
 	})
 
 	t.Run("stops at redirect when noRedirect is set", func(t *testing.T) {
@@ -641,7 +630,7 @@ func Test_Integration_WgetAuthExclusiveness(t *testing.T) {
 			resource := wgetResource(t, map[string]any{"url": srv.URL + "/resource"})
 			b, err := repo.DownloadResource(t.Context(), resource, tt.creds)
 			require.NoError(t, err)
-			assert.Equal(t, tt.wantAuth, string(readBlob(t, b)))
+			assert.Equal(t, tt.wantAuth, string(blobtest.ReadAll(t, b)))
 		})
 	}
 }
@@ -733,7 +722,7 @@ func Test_Integration_WgetMTLS(t *testing.T) {
 
 		b, err := repo.DownloadResource(t.Context(), resource, creds)
 		require.NoError(t, err)
-		assert.Equal(t, "mtls-ok:", string(readBlob(t, b)))
+		assert.Equal(t, "mtls-ok:", string(blobtest.ReadAll(t, b)))
 	})
 
 	t.Run("client certificate composes with a bearer token", func(t *testing.T) {
@@ -750,7 +739,7 @@ func Test_Integration_WgetMTLS(t *testing.T) {
 
 		b, err := repo.DownloadResource(t.Context(), resource, creds)
 		require.NoError(t, err)
-		assert.Equal(t, "mtls-ok:Bearer my-token", string(readBlob(t, b)))
+		assert.Equal(t, "mtls-ok:Bearer my-token", string(blobtest.ReadAll(t, b)))
 	})
 
 	t.Run("request without a client certificate is rejected", func(t *testing.T) {

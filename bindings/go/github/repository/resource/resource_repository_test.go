@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +19,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/blobtest"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -75,16 +75,6 @@ func githubResource(repoURL, commit string) *descriptor.Resource {
 	}
 }
 
-func readBlob(t *testing.T, b blobpkg.ReadOnlyBlob) []byte {
-	t.Helper()
-	reader, err := b.ReadCloser()
-	require.NoError(t, err)
-	defer func() { require.NoError(t, reader.Close()) }()
-	data, err := io.ReadAll(reader)
-	require.NoError(t, err)
-	return data
-}
-
 func TestResourceRepository_DownloadResource(t *testing.T) {
 	t.Run("downloads the commit archive verbatim as a tgz blob", func(t *testing.T) {
 		baseURL, payload := mockGitHub(t)
@@ -92,7 +82,7 @@ func TestResourceRepository_DownloadResource(t *testing.T) {
 			t.Context(), githubResource(baseURL+"/octocat/Hello-World", testCommit), nil)
 		require.NoError(t, err)
 
-		assert.Equal(t, payload, readBlob(t, downloaded), "blob must be the exact archive GitHub served")
+		assert.Equal(t, payload, blobtest.ReadAll(t, downloaded), "blob must be the exact archive GitHub served")
 
 		mt, ok := downloaded.(blobpkg.MediaTypeAware).MediaType()
 		require.True(t, ok)
@@ -124,7 +114,7 @@ func TestResourceRepository_DownloadResource(t *testing.T) {
 		}
 		downloaded, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
 		require.NoError(t, err)
-		assert.Equal(t, payload, readBlob(t, downloaded), "the archive of the resolved commit must be served")
+		assert.Equal(t, payload, blobtest.ReadAll(t, downloaded), "the archive of the resolved commit must be served")
 	})
 
 	t.Run("warns when the ref no longer points at the pinned commit and downloads the commit", func(t *testing.T) {
@@ -162,7 +152,7 @@ func TestResourceRepository_DownloadResource(t *testing.T) {
 		}
 		downloaded, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
 		require.NoError(t, err, "ref drift must never fail the download")
-		assert.Equal(t, payload, readBlob(t, downloaded), "the pinned commit's archive must be served, not the ref's")
+		assert.Equal(t, payload, blobtest.ReadAll(t, downloaded), "the pinned commit's archive must be served, not the ref's")
 		assert.Contains(t, logBuf.String(), "no longer points at the pinned commit", "the drift must be logged as a warning")
 	})
 
@@ -226,7 +216,7 @@ func TestResourceRepository_DownloadResource_DigestVerification(t *testing.T) {
 
 		downloaded, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
 		require.NoError(t, err)
-		assert.Equal(t, payload, readBlob(t, downloaded))
+		assert.Equal(t, payload, blobtest.ReadAll(t, downloaded))
 	})
 
 	t.Run("rejects an archive that does not match the resource digest", func(t *testing.T) {
@@ -245,7 +235,7 @@ func TestResourceRepository_DownloadResource_DigestVerification(t *testing.T) {
 
 		downloaded, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
 		require.NoError(t, err)
-		assert.Equal(t, payload, readBlob(t, downloaded))
+		assert.Equal(t, payload, blobtest.ReadAll(t, downloaded))
 	})
 }
 
@@ -306,7 +296,7 @@ func TestResourceRepository_WithHTTPClient_IsUsedForRequests(t *testing.T) {
 		githubResource(baseURL+"/octocat/Hello-World", testCommit), nil)
 	require.NoError(t, err)
 
-	assert.Equal(t, payload, readBlob(t, downloaded), "the download must work through the injected client")
+	assert.Equal(t, payload, blobtest.ReadAll(t, downloaded), "the download must work through the injected client")
 	assert.Positive(t, transport.requests, "the injected client must carry the requests")
 }
 

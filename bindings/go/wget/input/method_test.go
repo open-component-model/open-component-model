@@ -2,7 +2,6 @@ package input_test
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,6 +11,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/blobtest"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/input"
 	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
@@ -33,16 +33,6 @@ func wgetInputResource(t *testing.T, spec map[string]any) *constructorruntime.Re
 		Data: raw,
 	}
 	return r
-}
-
-func readBlob(t *testing.T, b blob.ReadOnlyBlob) []byte {
-	t.Helper()
-	rc, err := b.ReadCloser()
-	require.NoError(t, err)
-	defer func() { require.NoError(t, rc.Close()) }()
-	data, err := io.ReadAll(rc)
-	require.NoError(t, err)
-	return data
 }
 
 func TestProcessResource(t *testing.T) {
@@ -67,7 +57,7 @@ func TestProcessResource(t *testing.T) {
 		require.NotNil(t, result.ProcessedBlobData)
 		assert.Nil(t, result.ProcessedResource)
 
-		assert.Equal(t, content, readBlob(t, result.ProcessedBlobData))
+		assert.Equal(t, content, blobtest.ReadAll(t, result.ProcessedBlobData))
 
 		ma, ok := result.ProcessedBlobData.(blob.MediaTypeAware)
 		require.True(t, ok)
@@ -118,7 +108,7 @@ func TestProcessResource(t *testing.T) {
 
 		result, err := method.ProcessResource(t.Context(), resource, creds)
 		require.NoError(t, err)
-		assert.Equal(t, []byte("ok"), readBlob(t, result.ProcessedBlobData))
+		assert.Equal(t, []byte("ok"), blobtest.ReadAll(t, result.ProcessedBlobData))
 	})
 
 	t.Run("enforces max download size", func(t *testing.T) {
