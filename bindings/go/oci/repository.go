@@ -413,7 +413,7 @@ func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descript
 		if err := internaldigest.Complete(res.Digest, desc.Digest, internaldigest.OCIArtifactDigestV1); err != nil {
 			return nil, fmt.Errorf("failed to complete digest of resource %q: %w", res.ToIdentity(), err)
 		}
-	} else if err := internaldigest.VerifyOCIArtifact(res.Digest, desc.Digest); err != nil {
+	} else if err := integrity.VerifyOCIArtifact(ctx, res.Digest, desc.Digest, resourceLogAttrs(res)); err != nil {
 		return nil, fmt.Errorf("failed to verify digest of resource %q: %w", res.ToIdentity(), err)
 	}
 
@@ -783,7 +783,7 @@ func (repo *Repository) UploadResource(ctx context.Context, res *descriptor.Reso
 		res.Digest = &descriptor.Digest{}
 	}
 
-	_, access, err := repo.uploadOCIImage(ctx, res.Access, b, res.Digest)
+	_, access, err := repo.uploadOCIImage(ctx, res.Access, b, res.Digest, resourceLogAttrs(res))
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload resource as OCI image: %w", err)
 	}
@@ -813,7 +813,7 @@ func (repo *Repository) UploadSource(ctx context.Context, src *descriptor.Source
 	return src, nil
 }
 
-func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Typed, b blob.ReadOnlyBlob, resourceDigest *descriptor.Digest) (_ ociImageSpecV1.Descriptor, _ *accessv1.OCIImage, err error) {
+func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Typed, b blob.ReadOnlyBlob, resourceDigest *descriptor.Digest, opts ...integrity.Option) (_ ociImageSpecV1.Descriptor, _ *accessv1.OCIImage, err error) {
 	access, err := repo.targetOCIImageAccess(newAccess)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, err
@@ -853,7 +853,7 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 			if err := internaldigest.Complete(resourceDigest, main.Digest, internaldigest.OCIArtifactDigestV1); err != nil {
 				return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to complete resource digest: %w", err)
 			}
-		} else if err := internaldigest.VerifyOCIArtifact(resourceDigest, main.Digest); err != nil {
+		} else if err := integrity.VerifyOCIArtifact(ctx, resourceDigest, main.Digest, opts...); err != nil {
 			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to verify resource digest: %w", err)
 		}
 	}
@@ -1389,7 +1389,7 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 		if err := internaldigest.Complete(res.Digest, rs.Root().Digest, internaldigest.OCIArtifactDigestV1); err != nil {
 			return nil, fmt.Errorf("failed to complete resource digest: %w", err)
 		}
-	} else if err := internaldigest.VerifyOCIArtifact(res.Digest, rs.Root().Digest); err != nil {
+	} else if err := integrity.VerifyOCIArtifact(ctx, res.Digest, rs.Root().Digest, resourceLogAttrs(res)); err != nil {
 		return nil, fmt.Errorf("failed to verify resource digest: %w", err)
 	}
 

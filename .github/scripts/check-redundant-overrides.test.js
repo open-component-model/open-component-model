@@ -11,6 +11,7 @@ import {
   NpmError,
   extractAdvisoryIds,
   newlyIntroduced,
+  partitionIgnored,
   classify,
   selectCombinedRemovals,
   auditVariant,
@@ -18,6 +19,7 @@ import {
   renderMarkdown,
   removeOverrideKey,
   applyRemovals,
+  PACKAGE_DIRS,
 } from "./check-redundant-overrides.js";
 
 // --- npm output -------------------------------------------------------------
@@ -120,31 +122,28 @@ test("newlyIntroduced returns the sorted ids that are not in the baseline", () =
 
 // --- classification ---------------------------------------------------------
 
-test("classify splits candidates, protecting and ignored, and ignore wins over candidate", () => {
+test("partitionIgnored splits keys into audited and ignored, keeping their order", () => {
+  const result = partitionIgnored(["glob", "eslint-config-developit", "semver"], { "eslint-config-developit": "compat" });
+  assert.deepStrictEqual(result, { audited: ["glob", "semver"], ignored: ["eslint-config-developit"] });
+});
+
+test("partitionIgnored does not treat inherited Object properties as ignored", () => {
+  assert.deepStrictEqual(partitionIgnored(["constructor", "tostring"], {}), { audited: ["constructor", "tostring"], ignored: [] });
+});
+
+test("classify splits audited keys into candidates and protecting", () => {
   const result = classify({
-    overrideKeys: ["glob", "minimatch@<11.0.1", "eslint-config-developit"],
-    introducedByKey: {
-      glob: [],
-      "minimatch@<11.0.1": ["GHSA-G3HV-75WG-M249"],
-      "eslint-config-developit": [],
-    },
-    ignore: { "eslint-config-developit": "compat" },
+    keys: ["glob", "minimatch@<11.0.1"],
+    introducedByKey: { glob: [], "minimatch@<11.0.1": ["GHSA-G3HV-75WG-M249"] },
   });
   assert.deepStrictEqual(result, {
     candidates: ["glob"],
     protecting: [{ key: "minimatch@<11.0.1", advisories: ["GHSA-G3HV-75WG-M249"] }],
-    ignored: ["eslint-config-developit"],
   });
 });
 
-test("classify does not read inherited Object properties from ignore or introducedByKey", () => {
-  const result = classify({
-    overrideKeys: ["constructor", "tostring"],
-    introducedByKey: {},
-    ignore: {},
-  });
-  assert.deepStrictEqual(result.candidates, ["constructor", "tostring"]);
-  assert.deepStrictEqual(result.ignored, []);
+test("classify does not read inherited Object properties from introducedByKey", () => {
+  assert.deepStrictEqual(classify({ keys: ["constructor"], introducedByKey: {} }), { candidates: ["constructor"], protecting: [] });
 });
 
 // --- combined removal -------------------------------------------------------
@@ -286,6 +285,16 @@ test("renderMarkdown states nothing to remove and omits empty sections", () => {
   assert.doesNotMatch(md, /###/);
 });
 
+test("renderMarkdown names the package file in the heading and the removal hint", () => {
+  const md = renderMarkdown({ candidates: ["glob"], protecting: [], ignored: [] }, {}, ".github/scripts/package.json");
+  assert.match(md, /^## Redundant-override check: `\.github\/scripts\/package\.json`$/m);
+  assert.match(md, /Removing these from `\.github\/scripts\/package\.json`/);
+});
+
+test("PACKAGE_DIRS covers both checked npm packages", () => {
+  assert.deepStrictEqual(PACKAGE_DIRS, ["website", ".github/scripts"]);
+});
+
 // --- package.json edits -----------------------------------------------------
 
 test("removeOverrideKey drops one key without mutating the input", () => {
@@ -307,6 +316,23 @@ test("applyRemovals deletes only the given override keys and keeps clean JSON", 
     const after = readFileSync(join(root, "website", "package.json"), "utf8");
     assert.deepStrictEqual(JSON.parse(after).overrides, { "minimatch@<11.0.1": "11.0.1" });
     assert.ok(after.endsWith("\n"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("applyRemovals edits the package.json of the given package directory", () => {
+  const root = mkdtempSync(join(tmpdir(), "ocm-apply-dir-"));
+  try {
+    mkdirSync(join(root, ".github", "scripts"), { recursive: true });
+    const pkg = { name: "scripts", overrides: { "minimatch@<11.0.1": "11.0.1", "@actions/github": { undici: "^6.29.1" } } };
+    writeFileSync(join(root, ".github", "scripts", "package.json"), JSON.stringify(pkg, null, 2) + "\n");
+
+    const removed = applyRemovals(root, ["@actions/github"], ".github/scripts");
+    assert.deepStrictEqual(removed, ["@actions/github"]);
+
+    const after = JSON.parse(readFileSync(join(root, ".github", "scripts", "package.json"), "utf8"));
+    assert.deepStrictEqual(after.overrides, { "minimatch@<11.0.1": "11.0.1" });
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -50,21 +50,6 @@ func Verify(target *runtime.Digest, digest digest.Digest, normalisation string) 
 	return verifyHash(target, digest)
 }
 
-// VerifyOCIArtifact accepts the historical v2 generic label only at an OCI artifact
-// boundary, where digest is the resolved manifest/index hash, never a blob checksum.
-// Keeping the original triple avoids invalidating signatures on published descriptors.
-func VerifyOCIArtifact(target *runtime.Digest, digest digest.Digest) error {
-	if target == nil {
-		return fmt.Errorf("target digest is nil")
-	}
-	switch target.NormalisationAlgorithm {
-	case OCIArtifactDigestV1, GenericBlobDigestV1:
-		return verifyHash(target, digest)
-	default:
-		return fmt.Errorf("unsupported OCI artifact normalisation algorithm: %s", target.NormalisationAlgorithm)
-	}
-}
-
 // IsComplete reports whether hash algorithm, normalisation algorithm, and value are all set.
 func IsComplete(target *runtime.Digest) bool {
 	return target != nil && target.HashAlgorithm != "" && target.NormalisationAlgorithm != "" && target.Value != ""
@@ -73,7 +58,7 @@ func IsComplete(target *runtime.Digest) bool {
 // Complete fills the missing fields of target from digest recorded with normalisation.
 // Hash algorithm and value that are already set must agree with digest, so incomplete
 // metadata is completed but never silently replaced. For OCI artifacts the historical
-// generic label is accepted, as in VerifyOCIArtifact, and corrected: incomplete
+// generic label is accepted, as in integrity.VerifyOCIArtifact, and corrected: incomplete
 // metadata cannot carry a signature that relabeling would invalidate.
 func Complete(target *runtime.Digest, digest digest.Digest, normalisation string) error {
 	if target == nil {
