@@ -331,7 +331,10 @@ const BINDING_MOUNTS = [
     { pkg: "wget", source: "spec/access/v1/schemas", target: "schemas/bindings/go/access/wget/v1", since: "0.18" },
     { pkg: "s3", source: "spec/access/v2/schemas", target: "schemas/bindings/go/access/s3/v2", since: "0.18" },
     { pkg: "configuration/resolvers", source: "v1alpha1/spec/schemas", target: "schemas/bindings/go/configuration/resolvers/v1alpha1", sinceMonolith: true },
-    { pkg: "configuration/versioning", source: "v1alpha1/spec/schemas", target: "schemas/bindings/go/configuration/versioning/v1alpha1", sinceMonolith: true }
+    { pkg: "configuration/versioning", source: "v1alpha1/spec/schemas", target: "schemas/bindings/go/configuration/versioning/v1alpha1", sinceMonolith: true },
+    // Credential schema dirs added after the initial credential set; gated to their first release tag.
+    { pkg: "s3",          source: "spec/credentials/v1/schemas",                        target: "schemas/bindings/go/credentials/s3/v1",       since: "0.16" },
+    { pkg: "signing/tsa", source: "spec/credentials/v1alpha1/schemas",                  target: "schemas/bindings/go/credentials/tsa/v1alpha1", since: "0.21" }
 ];
 
 // Return the bindings schema imports for a version. The layout is auto-detected

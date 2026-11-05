@@ -1064,6 +1064,12 @@ imports:
           matrix:
             versions:
               - '0.16'
+      - source: s3/spec/credentials/v1/schemas
+        target: assets/0.16/schemas/bindings/go/credentials/s3/v1
+        sites:
+          matrix:
+            versions:
+              - '0.16'
       - source: gpg/spec/credentials/v1alpha1/schemas
         target: assets/0.16/schemas/bindings/go/credentials/gpg/v1alpha1
         sites:
@@ -1163,6 +1169,12 @@ imports:
               - '0.17'
       - source: rsa/spec/credentials/v1/schemas
         target: assets/0.17/schemas/bindings/go/credentials/rsa/v1
+        sites:
+          matrix:
+            versions:
+              - '0.17'
+      - source: s3/spec/credentials/v1/schemas
+        target: assets/0.17/schemas/bindings/go/credentials/s3/v1
         sites:
           matrix:
             versions:
@@ -1284,6 +1296,12 @@ imports:
               - '0.19'
       - source: rsa/spec/credentials/v1/schemas
         target: assets/0.19/schemas/bindings/go/credentials/rsa/v1
+        sites:
+          matrix:
+            versions:
+              - '0.19'
+      - source: s3/spec/credentials/v1/schemas
+        target: assets/0.19/schemas/bindings/go/credentials/s3/v1
         sites:
           matrix:
             versions:
@@ -1505,6 +1523,18 @@ imports:
           matrix:
             versions:
               - '0.21'
+      - source: s3/spec/credentials/v1/schemas
+        target: assets/0.21/schemas/bindings/go/credentials/s3/v1
+        sites:
+          matrix:
+            versions:
+              - '0.21'
+      - source: signing/tsa/spec/credentials/v1alpha1/schemas
+        target: assets/0.21/schemas/bindings/go/credentials/tsa/v1alpha1
+        sites:
+          matrix:
+            versions:
+              - '0.21'
       - source: gpg/spec/credentials/v1alpha1/schemas
         target: assets/0.21/schemas/bindings/go/credentials/gpg/v1alpha1
         sites:
@@ -1718,6 +1748,18 @@ imports:
               - '0.22'
       - source: rsa/spec/credentials/v1/schemas
         target: assets/0.22/schemas/bindings/go/credentials/rsa/v1
+        sites:
+          matrix:
+            versions:
+              - '0.22'
+      - source: s3/spec/credentials/v1/schemas
+        target: assets/0.22/schemas/bindings/go/credentials/s3/v1
+        sites:
+          matrix:
+            versions:
+              - '0.22'
+      - source: signing/tsa/spec/credentials/v1alpha1/schemas
+        target: assets/0.22/schemas/bindings/go/credentials/tsa/v1alpha1
         sites:
           matrix:
             versions:
