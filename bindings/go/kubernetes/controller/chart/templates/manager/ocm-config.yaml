@@ -1,0 +1,18 @@
+{{- if .Values.manager.ocmConfig }}
+{{- $config := deepCopy .Values.manager.ocmConfig }}
+{{- $_ := set $config "type" (default "generic.config.ocm.software/v1" $config.type) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+    labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        control-plane: controller-manager
+    name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "ocm-config" "context" $) }}
+    namespace: {{ .Release.Namespace }}
+data:
+    config.yaml: |
+        {{- toYaml $config | nindent 8 }}
+{{- end }}

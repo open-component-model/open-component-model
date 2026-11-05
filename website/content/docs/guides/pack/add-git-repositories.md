@@ -294,11 +294,17 @@ all attributes.
 
 ## Troubleshooting
 
-### `repository not found` for a public repository
+### `must not reference a local git repository` or `repository not found` for a public repository
 
-**Cause:** The URL has no scheme, for example `github.com/org/repo`. OCM reads such a string as a local directory.
+**Cause:** The `repository` value has no scheme and is not scp-style SSH. For example, `github.com/org/repo`
+has no scheme.
+For a `Git/v1` **access**, OCM rejects such a value with `must not reference a local git repository`
+because only remote repositories are reachable by consumers. For a `Git/v1` **input**, OCM would treat
+the value as a local directory path, which does not exist here.
 
-**Fix:** Write the full URL, such as `https://github.com/org/repo.git`.
+**Fix:** Write the full URL, such as `https://github.com/org/repo.git`. To archive a
+local repository, switch to the `Git/v1` input type in your constructor; it accepts `file://` and plain paths
+and archives the repository into a portable local blob.
 
 ### `ssh: unable to authenticate, attempted methods [none publickey]`
 

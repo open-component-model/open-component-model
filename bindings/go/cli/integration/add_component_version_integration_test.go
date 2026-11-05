@@ -32,6 +32,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/git/gittest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -1310,8 +1311,9 @@ func Test_Integration_AddComponentVersion_GitAccess(t *testing.T) {
 	}})
 	r.NoError(err)
 
-	// A local repository keeps the test offline; file:// runs the same fetch and archive path as a remote.
+	// Git/v1 accesses reject local paths, so the test serves a local repository over HTTP.
 	repoDir, commit := createGitRepository(t)
+	repoURL := gittest.Serve(t, repoDir)
 
 	const componentName = "ocm.software/git-access-component"
 	const componentVersion = "v1.0.0"
@@ -1329,9 +1331,9 @@ components:
     relation: external
     access:
       type: Git/v1
-      repository: file://%s
+      repository: %s
       ref: main
-`, componentName, componentVersion, repoDir)
+`, componentName, componentVersion, repoURL)
 	constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
 	r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
 
@@ -1409,6 +1411,73 @@ components:
 	}
 	r.Equal(map[string]string{"README.md": "hello from git access\n"}, files)
 	r.Contains(history, ".git/HEAD", "the archive carries the commit history")
+}
+
+// Test_Integration_AddComponentVersion_GitAccess_LocalRejected verifies that add cv
+// rejects a Git access whose repository resolves to a local path (file:// or plain path).
+// Consumption of existing component versions that carry a local git access is unaffected;
+// see Test_Integration_Transfer_Git for end-to-end transfer/download coverage.
+func Test_Integration_AddComponentVersion_GitAccess_LocalRejected(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctx := t.Context()
+
+	registry, err := internal.CreateOCIRegistry(t)
+	r.NoError(err)
+	cfgPath, err := internal.CreateOCMConfigForRegistry(t, []internal.ConfigOpts{{
+		Host: registry.Host, Port: registry.Port, User: registry.User, Password: registry.Password,
+	}})
+	r.NoError(err)
+
+	repoDir, _ := createGitRepository(t)
+
+	const componentName = "ocm.software/git-access-component"
+	const componentVersion = "v1.0.0"
+
+	for _, tc := range []struct {
+		name, repository string
+	}{
+		{name: "file:// URL", repository: "file://" + repoDir},
+		{name: "plain path", repository: repoDir},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+
+			constructorContent := fmt.Sprintf(`
+components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: repo-archive
+    version: v1.0.0
+    type: blob
+    relation: external
+    access:
+      type: Git/v1
+      repository: %s
+      ref: main
+`, componentName, componentVersion, tc.repository)
+			constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+			r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+			addCMD := cmd.New()
+			addCMD.SetArgs([]string{
+				"add",
+				"component-version",
+				"--repository", fmt.Sprintf("http://%s", registry.RegistryAddress),
+				"--constructor", constructorPath,
+				"--config", cfgPath,
+			})
+			addCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+			defer cancel()
+			err := addCMD.ExecuteContext(addCtx)
+			r.Error(err, "add cv with a local git access must be rejected")
+			r.ErrorContains(err, "local git repository",
+				"error must explain that a local repository is not allowed at creation time")
+		})
+	}
 }
 
 // startS3WithObject starts RustFS holding content at bucket/key and writes an ocmconfig

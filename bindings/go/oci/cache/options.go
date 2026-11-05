@@ -19,11 +19,15 @@ type RemotePolicy string
 
 const (
 	// RemotePolicyIfNotPresent returns cached content without contacting
-	// the registry. The local cache directory is trusted.
+	// the registry. The local cache directory is trusted, and whoever
+	// knows a digest gets a cached blob, whichever repository it came
+	// from. Use it where all callers of a cache share one trust domain.
 	RemotePolicyIfNotPresent RemotePolicy = "IfNotPresent"
 
 	// RemotePolicyAlways contacts the registry on every cache hit to
 	// verify the caller is authorised. Mirrors Kubernetes imagePullPolicy:Always.
+	// A [BlobCache] only counts a hit if the caller's repository served the
+	// blob before, so a registry that claims to hold a digest gains nothing.
 	RemotePolicyAlways RemotePolicy = "Always"
 )
 
@@ -46,7 +50,8 @@ const (
 type Options struct {
 	// Dir is the absolute directory the cache owns — required. Both
 	// caches lay out their files inside Dir without colliding
-	// ([BlobCache] uses `<Dir>/blobs/<algo>/<hex>` files,
+	// ([BlobCache] uses `<Dir>/blobs/<algo>/<hex>` files, and under
+	// [RemotePolicyAlways] also `<Dir>/served/refs/`,
 	// [ReferenceCache] uses `<Dir>/refs/<sha256(namespace)>.json`), so
 	// the same Dir can be shared.
 	Dir string
@@ -55,8 +60,9 @@ type Options struct {
 	// [DefaultBlobMaxEntries] or [DefaultReferenceMaxEntries].
 	MaxEntries int
 
-	// TTL is the maximum age of a cache entry. A value of 0 disables
-	// time-based expiry; entries then live until LRU overflow.
+	// TTL is the maximum age of a cache entry. A value of 0 uses the default
+	// of [Defaults]. A negative value disables time-based expiry; entries then
+	// live until LRU overflow.
 	TTL time.Duration
 
 	// MaxBlobSize is the per-blob size cap for the [BlobCache].
@@ -75,6 +81,9 @@ type Options struct {
 	// on a cache hit. Defaults to [RemotePolicyIfNotPresent].
 	RemotePolicy RemotePolicy
 }
+
+// noExpiry is an [Options.TTL] that disables time-based expiry.
+const noExpiry time.Duration = -1
 
 const (
 	// DefaultBlobMaxEntries is the [BlobCache] entry limit. A component version takes

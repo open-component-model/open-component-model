@@ -58,6 +58,7 @@ var allowedConfigTypes = slices.Concat(
 		transferspec.LocalBlobUploaderConfigType,
 		transferspec.ReferenceUploaderConfigType,
 	),
+	// oci.cache.config.ocm.software stays out: one blob cache serves every namespace (see --ocm-config).
 	[]runtime.Type{
 		runtime.NewVersionedType(httpv1alpha1.ConfigType, httpv1alpha1.Version),
 		runtime.NewUnversionedType(httpv1alpha1.ConfigType),
