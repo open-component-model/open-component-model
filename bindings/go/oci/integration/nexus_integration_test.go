@@ -19,6 +19,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/nexustest"
 	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -213,17 +214,17 @@ func startNexus(t *testing.T, ctx context.Context) *nexusServer {
 
 	// Community edition blocks uploads until the EULA is accepted.
 	eulaURL := baseURL + "/service/rest/v1/system/eula"
-	status, body := nexusAdminRequest(t, http.MethodGet, eulaURL, password, nil)
+	status, body := nexustest.Request(t, http.MethodGet, eulaURL, password, nil)
 	if status != http.StatusNotFound {
 		r.Equal(http.StatusOK, status, string(body))
 		body = bytes.Replace(body, []byte(`"accepted" : false`), []byte(`"accepted" : true`), 1)
 		body = bytes.Replace(body, []byte(`"accepted":false`), []byte(`"accepted":true`), 1)
-		status, respBody := nexusAdminRequest(t, http.MethodPost, eulaURL, password, body)
+		status, respBody := nexustest.Request(t, http.MethodPost, eulaURL, password, body)
 		r.Equal(http.StatusNoContent, status, string(respBody))
 	}
 
 	// Clients authenticate via the bearer-token realm of the repository format.
-	status, body = nexusAdminRequest(t, http.MethodPut, baseURL+"/service/rest/v1/security/realms/active", password,
+	status, body = nexustest.Request(t, http.MethodPut, baseURL+"/service/rest/v1/security/realms/active", password,
 		[]byte(`["NexusAuthenticatingRealm","DockerToken","OciBearerToken"]`))
 	r.Equal(http.StatusNoContent, status, string(body))
 
@@ -236,7 +237,7 @@ func (n *nexusServer) addHostedRepository(t *testing.T, ctx context.Context, rep
 	t.Helper()
 	r := require.New(t)
 
-	status, body := nexusAdminRequest(t, http.MethodPost, n.baseURL+"/service/rest/v1/repositories/"+string(repository.format)+"/hosted", n.password,
+	status, body := nexustest.Request(t, http.MethodPost, n.baseURL+"/service/rest/v1/repositories/"+string(repository.format)+"/hosted", n.password,
 		[]byte(`{"name":"`+repository.name+`","online":true,`+
 			`"storage":{"blobStoreName":"default","strictContentTypeValidation":`+strconv.FormatBool(repository.strict)+`,"writePolicy":"allow_once"},`+
 			`"`+string(repository.format)+`":{"v1Enabled":false,"forceBasicAuth":true,"httpPort":`+strings.TrimSuffix(repository.connector, "/tcp")+`}}`))
@@ -270,20 +271,4 @@ func (n *nexusServer) addHostedRepository(t *testing.T, ctx context.Context, rep
 	r.NoError(err)
 
 	return resolver, repo, endpoint
-}
-
-func nexusAdminRequest(t *testing.T, method, target, password string, body []byte) (int, []byte) {
-	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), method, target, bytes.NewReader(body))
-	require.NoError(t, err)
-	req.SetBasicAuth("admin", password)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	defer func() { _ = resp.Body.Close() }()
-	respBody, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	return resp.StatusCode, respBody
 }
