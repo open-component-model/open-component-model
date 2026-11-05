@@ -19,6 +19,15 @@ import (
 	"oras.land/oras-go/v2/registry"
 )
 
+const (
+	// blobSubdir is the directory under [Options.Dir] that holds the blobs
+	// of a [BlobCache].
+	blobSubdir = "blobs"
+	// servedSubdir is the directory under [Options.Dir] that holds the records
+	// of which repository served which blob under [RemotePolicyAlways].
+	servedSubdir = "served"
+)
+
 // blobEntry is the LRU value for [BlobCache]. The on-disk path is
 // derived deterministically from the digest key via [pathFor]; storing
 // it on the entry keeps the eviction callback self-contained even if
@@ -86,7 +95,7 @@ func NewBlobCache(opts Options) (*BlobCache, error) {
 	// Scope to a dedicated subdirectory so a shared Options.Dir does
 	// not entangle blob layout with anything else the caller stores
 	// at that path.
-	opts.Dir = filepath.Join(root, "blobs")
+	opts.Dir = filepath.Join(root, blobSubdir)
 	if err := ensureDir(opts.Dir); err != nil {
 		return nil, fmt.Errorf("blobcache: %w", err)
 	}
@@ -95,7 +104,7 @@ func NewBlobCache(opts Options) (*BlobCache, error) {
 	c.lru = expirable.NewLRU(opts.MaxEntries, c.onEvict, opts.TTL)
 	if opts.RemotePolicy == RemotePolicyAlways {
 		c.served, err = NewReferenceCache(Options{
-			Dir:        filepath.Join(root, "served"),
+			Dir:        filepath.Join(root, servedSubdir),
 			MaxEntries: opts.MaxEntries,
 			TTL:        noExpiry, // a hit also needs the blob, so the blob's lifetime decides
 		})

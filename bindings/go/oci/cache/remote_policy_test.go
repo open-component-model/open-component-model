@@ -300,7 +300,7 @@ func TestBlobCache_Always_RecordsAreBoundToTheDigest(t *testing.T) {
 
 func servedSnapshots(t *testing.T, dir string) []string {
 	t.Helper()
-	snapshots, err := filepath.Glob(filepath.Join(dir, "served", referenceSubdir, "*"+referenceFileExt))
+	snapshots, err := filepath.Glob(filepath.Join(dir, servedSubdir, referenceSubdir, "*"+referenceFileExt))
 	require.NoError(t, err)
 	return snapshots
 }
