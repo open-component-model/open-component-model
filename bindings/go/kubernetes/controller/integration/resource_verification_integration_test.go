@@ -21,6 +21,7 @@ import (
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/s3test"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/oci"
@@ -59,7 +60,7 @@ func Test_Integration_ResourceVerification(t *testing.T) {
 	registryAddress := registrytest.Start(t).Address
 	ociDigest := pushArtifact(t, ctx, registryAddress, "verification/artifact", "v1.0.0", []byte("oci artifact content"))
 
-	s3Endpoint := startRustFS(t, ctx)
+	s3Endpoint := "http://" + s3test.Start(t)
 	s3Content := []byte("s3 object content")
 	const s3Bucket, s3Key = "verification", "path/to/object.txt"
 	putS3Object(t, ctx, s3Endpoint, s3Bucket, s3Key, s3Content)
@@ -106,8 +107,8 @@ func Test_Integration_ResourceVerification(t *testing.T) {
 					},
 					"credentials": []any{map[string]any{
 						"type":            "S3Credentials/v1",
-						"accessKeyId":     rustfsAccessKey,
-						"secretAccessKey": rustfsSecretKey,
+						"accessKeyId":     s3test.AccessKey,
+						"secretAccessKey": s3test.SecretKey,
 					}},
 				}},
 			},

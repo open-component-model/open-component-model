@@ -10,6 +10,7 @@ import (
 
 	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/s3test"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/repository"
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
@@ -40,11 +41,11 @@ func Test_Integration_S3Transformation(t *testing.T) {
 	r := require.New(t)
 	ctx := context.Background()
 
-	endpoint := "http://" + startRustFS(t, ctx)
+	endpoint := "http://" + s3test.Start(t)
 
 	const bucket, key = "transformation-bucket", "path/to/blob.txt"
 	content := []byte("hello ocm from the s3 transformer")
-	setup := newSetupClient(t, ctx, endpoint, rustfsAccessKey, rustfsSecretKey)
+	setup := newSetupClient(t, ctx, endpoint, s3test.AccessKey, s3test.SecretKey)
 	createBucket(t, ctx, setup, bucket)
 	putObject(t, ctx, setup, bucket, key, content)
 
@@ -67,7 +68,7 @@ func Test_Integration_S3Transformation(t *testing.T) {
 	transform := &transformation.DownloadS3Resource{
 		Scheme:             scheme,
 		ResourceRepository: repository.NewResourceRepository(),
-		CredentialProvider: staticCredentials{rustfsAccessKey, rustfsSecretKey},
+		CredentialProvider: staticCredentials{s3test.AccessKey, s3test.SecretKey},
 	}
 
 	outputDir := t.TempDir()

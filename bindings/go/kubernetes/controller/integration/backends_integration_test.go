@@ -24,20 +24,14 @@ import (
 	godigest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/registry/remote"
+
+	"ocm.software/open-component-model/bindings/go/internal/testutil/s3test"
 )
 
-const (
-	// Images as in bindings/go/oci/integration and bindings/go/s3/integration.
-	rustfsImage     = "rustfs/rustfs:1.0.0-rc.6"
-	rustfsAccessKey = "ocm-test"
-	rustfsSecretKey = "ocm-test-secret"
-	s3Region        = "us-east-1"
-)
+const s3Region = "us-east-1"
 
 // pushArtifact pushes a single-layer OCI artifact to repository:tag in the registry at
 // address and returns its manifest digest.
@@ -59,24 +53,6 @@ func pushArtifact(t *testing.T, ctx context.Context, address, repository, tag st
 	return manifest.Digest
 }
 
-// startRustFS starts a RustFS S3 server and returns its endpoint URL.
-func startRustFS(t *testing.T, ctx context.Context) string {
-	t.Helper()
-	r := require.New(t)
-
-	container, err := testcontainers.Run(ctx, rustfsImage,
-		testcontainers.WithExposedPorts("9000/tcp"),
-		testcontainers.WithEnv(map[string]string{"RUSTFS_ACCESS_KEY": rustfsAccessKey, "RUSTFS_SECRET_KEY": rustfsSecretKey}),
-		testcontainers.WithWaitStrategy(wait.ForHTTP("/health/ready").WithPort("9000/tcp")),
-	)
-	r.NoError(err)
-	t.Cleanup(func() { r.NoError(testcontainers.TerminateContainer(container)) })
-
-	hostPort, err := container.PortEndpoint(ctx, "9000/tcp", "")
-	r.NoError(err)
-	return "http://" + hostPort
-}
-
 // putS3Object creates bucket in the S3 server at endpoint and uploads content as key.
 func putS3Object(t *testing.T, ctx context.Context, endpoint, bucket, key string, data []byte) {
 	t.Helper()
@@ -84,7 +60,7 @@ func putS3Object(t *testing.T, ctx context.Context, endpoint, bucket, key string
 
 	cfg, err := config.LoadDefaultConfig(ctx,
 		config.WithRegion(s3Region),
-		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(rustfsAccessKey, rustfsSecretKey, "")),
+		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(s3test.AccessKey, s3test.SecretKey, "")),
 	)
 	r.NoError(err)
 	c := s3.NewFromConfig(cfg, func(o *s3.Options) {
