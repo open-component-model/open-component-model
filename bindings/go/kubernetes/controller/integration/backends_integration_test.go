@@ -25,7 +25,6 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/registry"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
@@ -34,27 +33,11 @@ import (
 
 const (
 	// Images as in bindings/go/oci/integration and bindings/go/s3/integration.
-	distributionRegistryImage = "registry:3.0.0"
-	rustfsImage               = "rustfs/rustfs:1.0.0-rc.6"
-	rustfsAccessKey           = "ocm-test"
-	rustfsSecretKey           = "ocm-test-secret"
-	s3Region                  = "us-east-1"
+	rustfsImage     = "rustfs/rustfs:1.0.0-rc.6"
+	rustfsAccessKey = "ocm-test"
+	rustfsSecretKey = "ocm-test-secret"
+	s3Region        = "us-east-1"
 )
-
-// startRegistry starts an OCI distribution registry, reachable over plain HTTP, and returns
-// its host:port.
-func startRegistry(t *testing.T, ctx context.Context) string {
-	t.Helper()
-	r := require.New(t)
-
-	container, err := registry.Run(ctx, distributionRegistryImage)
-	r.NoError(err)
-	t.Cleanup(func() { r.NoError(testcontainers.TerminateContainer(container)) })
-
-	address, err := container.HostAddress(ctx)
-	r.NoError(err)
-	return address
-}
 
 // pushArtifact pushes a single-layer OCI artifact to repository:tag in the registry at
 // address and returns its manifest digest.

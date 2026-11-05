@@ -19,6 +19,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
@@ -244,7 +245,7 @@ func (n *nexusServer) addHostedRepository(t *testing.T, ctx context.Context, rep
 	endpoint, err := n.container.PortEndpoint(ctx, repository.connector, "")
 	r.NoError(err)
 
-	client := createAuthClient(endpoint, "admin", n.password)
+	client := registrytest.AuthClient(endpoint, "admin", n.password)
 
 	// The connector comes up asynchronously after the repo is created.
 	r.Eventually(func() bool {

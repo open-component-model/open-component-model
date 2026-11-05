@@ -14,6 +14,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ocmoci "ocm.software/open-component-model/bindings/go/oci/spec/access"
@@ -33,7 +34,7 @@ func Test_Integration_RelativeOCIReference_Read(t *testing.T) {
 	r := require.New(t)
 
 	password := generateRandomPassword(t, passwordLength)
-	htpasswd := generateHtpasswd(t, testUsername, password)
+	htpasswd := registrytest.Htpasswd(t, testUsername, password)
 
 	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
 		registry.WithHtpasswd(htpasswd),
@@ -46,7 +47,7 @@ func Test_Integration_RelativeOCIReference_Read(t *testing.T) {
 	registryAddress, err := registryContainer.HostAddress(ctx)
 	r.NoError(err)
 
-	client := createAuthClient(registryAddress, testUsername, password)
+	client := registrytest.AuthClient(registryAddress, testUsername, password)
 	resolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(registryAddress),
 		urlresolver.WithPlainHTTP(true),

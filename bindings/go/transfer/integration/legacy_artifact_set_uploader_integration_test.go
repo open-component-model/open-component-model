@@ -16,6 +16,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ociresource "ocm.software/open-component-model/bindings/go/oci/repository/resource"
@@ -155,7 +156,7 @@ func transferLegacyArtifactSetCTFToOCI(t *testing.T, legacyMediaType, manifestTy
 	resolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(registryAddr),
 		urlresolver.WithPlainHTTP(true),
-		urlresolver.WithBaseClient(createAuthClient(registryAddr, user, password)),
+		urlresolver.WithBaseClient(registrytest.AuthClient(registryAddr, user, password)),
 	)
 	r.NoError(err)
 	targetRepo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
@@ -214,7 +215,7 @@ func Test_Integration_TransferDockerArtifactSetLocalBlob_OCIToOCI(t *testing.T) 
 	sourceResolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(sourceAddr),
 		urlresolver.WithPlainHTTP(true),
-		urlresolver.WithBaseClient(createAuthClient(sourceAddr, sourceUser, sourcePwd)),
+		urlresolver.WithBaseClient(registrytest.AuthClient(sourceAddr, sourceUser, sourcePwd)),
 	)
 	r.NoError(err)
 	sourceRepo, err := oci.NewRepository(oci.WithResolver(sourceResolver), oci.WithTempDir(t.TempDir()))
@@ -280,7 +281,7 @@ func Test_Integration_TransferDockerArtifactSetLocalBlob_OCIToOCI(t *testing.T) 
 	targetResolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(targetAddr),
 		urlresolver.WithPlainHTTP(true),
-		urlresolver.WithBaseClient(createAuthClient(targetAddr, targetUser, targetPwd)),
+		urlresolver.WithBaseClient(registrytest.AuthClient(targetAddr, targetUser, targetPwd)),
 	)
 	r.NoError(err)
 	targetRepo, err := oci.NewRepository(oci.WithResolver(targetResolver), oci.WithTempDir(t.TempDir()))

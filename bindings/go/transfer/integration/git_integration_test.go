@@ -15,6 +15,7 @@ import (
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	gitaccess "ocm.software/open-component-model/bindings/go/git/spec/access"
 	gitv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -133,7 +134,7 @@ func Test_Integration_TransferGit_CTFToOCI(t *testing.T) {
 	r.NoError(graph.Process(ctx))
 
 	// 5. Verify the resource landed in the target as a localBlob.
-	client := createAuthClient(registryAddr, user, password)
+	client := registrytest.AuthClient(registryAddr, user, password)
 	urlRes, err := urlresolver.New(
 		urlresolver.WithBaseURL(registryAddr),
 		urlresolver.WithPlainHTTP(true),
@@ -252,7 +253,7 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 		urlRes, err := urlresolver.New(
 			urlresolver.WithBaseURL(registryAddr+"/"+subPath),
 			urlresolver.WithPlainHTTP(true),
-			urlresolver.WithBaseClient(createAuthClient(registryAddr, user, password)),
+			urlresolver.WithBaseClient(registrytest.AuthClient(registryAddr, user, password)),
 		)
 		r.NoError(err)
 		targetRepo, err := oci.NewRepository(oci.WithResolver(urlRes), oci.WithTempDir(t.TempDir()))

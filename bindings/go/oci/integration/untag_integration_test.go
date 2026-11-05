@@ -19,6 +19,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/ctf"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 )
@@ -77,7 +78,7 @@ func Test_Integration_RemoteRegistry_Untag(t *testing.T) {
 	ctx := t.Context()
 
 	password := generateRandomPassword(t, passwordLength)
-	htpasswd := generateHtpasswd(t, testUsername, password)
+	htpasswd := registrytest.Htpasswd(t, testUsername, password)
 
 	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
 		registry.WithHtpasswd(htpasswd),
@@ -96,7 +97,7 @@ func Test_Integration_RemoteRegistry_Untag(t *testing.T) {
 	registryAddress, err := registryContainer.HostAddress(ctx)
 	r.NoError(err)
 
-	client := createAuthClient(registryAddress, testUsername, password)
+	client := registrytest.AuthClient(registryAddress, testUsername, password)
 
 	resolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(registryAddress),

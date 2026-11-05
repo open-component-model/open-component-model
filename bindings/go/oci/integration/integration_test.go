@@ -28,13 +28,11 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/log"
 	"github.com/testcontainers/testcontainers-go/modules/registry"
-	"golang.org/x/crypto/bcrypt"
 	"oras.land/oras-go/v2/content"
 	orasoci "oras.land/oras-go/v2/content/oci"
 	"oras.land/oras-go/v2/errdef"
 	orasregistry "oras.land/oras-go/v2/registry"
 	"oras.land/oras-go/v2/registry/remote/auth"
-	"oras.land/oras-go/v2/registry/remote/retry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -48,6 +46,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
@@ -93,7 +92,7 @@ func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 
 	resolver, err := urlresolver.New(urlresolver.WithBaseURL(reg))
 	r.NoError(err)
-	resolver.SetClient(createAuthClient(reg, user, password))
+	resolver.SetClient(registrytest.AuthClient(reg, user, password))
 
 	scheme := ocmruntime.NewScheme()
 	ocmoci.MustAddToScheme(scheme)
@@ -178,7 +177,7 @@ func Test_Integration_HealthCheck_Authentication(t *testing.T) {
 
 		resolver, err := urlresolver.New(urlresolver.WithBaseURL(reg))
 		r.NoError(err)
-		resolver.SetClient(createAuthClient(reg, user, password))
+		resolver.SetClient(registrytest.AuthClient(reg, user, password))
 
 		repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
 		r.NoError(err)
@@ -206,7 +205,7 @@ func Test_Integration_HealthCheck_Authentication(t *testing.T) {
 
 		resolver, err := urlresolver.New(urlresolver.WithBaseURL(reg))
 		r.NoError(err)
-		resolver.SetClient(createAuthClient(reg, user, password))
+		resolver.SetClient(registrytest.AuthClient(reg, user, password))
 
 		// Direct resolver ping should succeed with valid credentials
 		err = resolver.Ping(t.Context())
@@ -234,7 +233,7 @@ func Test_Integration_OCIRepository(t *testing.T) {
 
 	// Setup credentials and htpasswd
 	password := generateRandomPassword(t, passwordLength)
-	htpasswd := generateHtpasswd(t, testUsername, password)
+	htpasswd := registrytest.Htpasswd(t, testUsername, password)
 
 	// Start containerized registry
 	t.Logf("Launching test registry (%s)...", distributionRegistryImage)
@@ -262,7 +261,7 @@ func Test_Integration_OCIRepository(t *testing.T) {
 			return fmt.Sprintf("%s/%s", registryAddress, ref)
 		}
 
-		client := createAuthClient(registryAddress, testUsername, password)
+		client := registrytest.AuthClient(registryAddress, testUsername, password)
 
 		resolver, err := urlresolver.New(
 			urlresolver.WithBaseURL(registryAddress),
@@ -466,7 +465,7 @@ func Test_Integration_Transformers(t *testing.T) {
 
 	// Setup credentials and htpasswd
 	password := generateRandomPassword(t, passwordLength)
-	htpasswd := generateHtpasswd(t, testUsername, password)
+	htpasswd := registrytest.Htpasswd(t, testUsername, password)
 
 	// Start containerized registry
 	t.Logf("Launching test registry (%s)...", distributionRegistryImage)
@@ -763,30 +762,6 @@ func testResolverConnectivity(t *testing.T, address, reference string, client *a
 // configuration (not an http:// prefix on a reference) decides that.
 func plainHTTPConfig() *httpv1alpha1.Config {
 	return &httpv1alpha1.Config{ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: new(true)}}
-}
-
-func createAuthClient(address, username, password string) *auth.Client {
-	url, err := ocmruntime.ParseURLAndAllowNoScheme(address)
-	if err != nil {
-		panic(fmt.Sprintf("invalid address %q: %v", address, err))
-	}
-	return &auth.Client{
-		Client: retry.DefaultClient,
-		Header: http.Header{
-			"User-Agent": []string{userAgent},
-		},
-		Credential: auth.StaticCredential(url.Host, auth.Credential{
-			Username: username,
-			Password: password,
-		}),
-	}
-}
-
-func generateHtpasswd(t *testing.T, username, password string) string {
-	t.Helper()
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	require.NoError(t, err)
-	return fmt.Sprintf("%s:%s", username, hashedPassword)
 }
 
 func generateRandomPassword(t *testing.T, length int) string {
@@ -1618,7 +1593,7 @@ func startOwnershipRegistry(t *testing.T, ctx context.Context) (*urlresolver.Cac
 	r := require.New(t)
 
 	password := generateRandomPassword(t, passwordLength)
-	htpasswd := generateHtpasswd(t, testUsername, password)
+	htpasswd := registrytest.Htpasswd(t, testUsername, password)
 	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
 		registry.WithHtpasswd(htpasswd),
 		testcontainers.WithEnv(map[string]string{
@@ -1637,7 +1612,7 @@ func startOwnershipRegistry(t *testing.T, ctx context.Context) (*urlresolver.Cac
 	resolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(address),
 		urlresolver.WithPlainHTTP(true),
-		urlresolver.WithBaseClient(createAuthClient(address, testUsername, password)),
+		urlresolver.WithBaseClient(registrytest.AuthClient(address, testUsername, password)),
 	)
 	r.NoError(err)
 
@@ -1843,7 +1818,7 @@ func Test_Integration_OCIImageLayer(t *testing.T) {
 	ctx := t.Context()
 
 	password := generateRandomPassword(t, passwordLength)
-	htpasswd := generateHtpasswd(t, testUsername, password)
+	htpasswd := registrytest.Htpasswd(t, testUsername, password)
 
 	t.Logf("Launching test registry (%s)...", distributionRegistryImage)
 	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
@@ -1863,7 +1838,7 @@ func Test_Integration_OCIImageLayer(t *testing.T) {
 	registryAddress, err := registryContainer.HostAddress(ctx)
 	r.NoError(err)
 
-	client := createAuthClient(registryAddress, testUsername, password)
+	client := registrytest.AuthClient(registryAddress, testUsername, password)
 	resolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(registryAddress),
 		urlresolver.WithPlainHTTP(true),
