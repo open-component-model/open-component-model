@@ -1,7 +1,6 @@
 package integration_test
 
 import (
-	"context"
 	"encoding/pem"
 	"log/slog"
 	nethttp "net/http"
@@ -15,33 +14,8 @@ import (
 
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/logtest"
 )
-
-type tlsLogCapture struct {
-	records []slog.Record
-}
-
-func (l *tlsLogCapture) Enabled(_ context.Context, level slog.Level) bool {
-	return level >= slog.LevelWarn
-}
-
-func (l *tlsLogCapture) Handle(_ context.Context, r slog.Record) error {
-	l.records = append(l.records, r)
-	return nil
-}
-
-func (l *tlsLogCapture) WithAttrs(_ []slog.Attr) slog.Handler { return l }
-func (l *tlsLogCapture) WithGroup(_ string) slog.Handler      { return l }
-
-func (l *tlsLogCapture) warnMessages() []string {
-	msgs := make([]string, 0, len(l.records))
-	for _, r := range l.records {
-		if r.Level == slog.LevelWarn {
-			msgs = append(msgs, r.Message)
-		}
-	}
-	return msgs
-}
 
 func TestTLSInsecureSkipVerify_Integration(t *testing.T) {
 	tr := true
@@ -61,10 +35,7 @@ func TestTLSInsecureSkipVerify_Integration(t *testing.T) {
 	})
 
 	t.Run("InsecureSkipVerify=true succeeds and emits warning", func(t *testing.T) {
-		capture := &tlsLogCapture{}
-		origLogger := slog.Default()
-		slog.SetDefault(slog.New(capture))
-		t.Cleanup(func() { slog.SetDefault(origLogger) })
+		capture := logtest.Default(t, slog.LevelWarn)
 
 		cfg := &httpv1alpha1.Config{
 			TLSConfig: httpv1alpha1.TLSConfig{InsecureSkipVerify: &tr},
@@ -77,7 +48,7 @@ func TestTLSInsecureSkipVerify_Integration(t *testing.T) {
 		resp.Body.Close()
 		assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
 
-		msgs := capture.warnMessages()
+		msgs := capture.Messages()
 		assert.NotEmpty(t, msgs, "warning must be emitted when InsecureSkipVerify=true")
 		assert.Contains(t, msgs[0], "InsecureSkipVerify=true", "warning must identify the specific setting")
 	})

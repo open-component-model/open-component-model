@@ -38,6 +38,7 @@ import (
 	gpgcredentialsv1 "ocm.software/open-component-model/bindings/go/gpg/spec/credentials/v1alpha1"
 	identityv1 "ocm.software/open-component-model/bindings/go/gpg/spec/identity/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/gpg/spec/signing/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/logtest"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -789,7 +790,7 @@ func TestGPGHandler_Keyring(t *testing.T) {
 // TestGPGHandler_FIPSBoundaryLogs checks the fips140=on rule of ADR 0030: steps outside the Go Cryptographic Module
 // run, but are logged at debug level.
 func TestGPGHandler_FIPSBoundaryLogs(t *testing.T) {
-	logs := captureDebugLogs(t)
+	logs := logtest.Default(t, slog.LevelDebug)
 	digest := makeDigest(t, crypto.SHA256, testDigestContent)
 	const suffix = " runs outside the FIPS 140-3 boundary (GODEBUG=fips140=only rejects it)"
 
@@ -825,12 +826,12 @@ func TestGPGHandler_FIPSBoundaryLogs(t *testing.T) {
 			if tt.keyring {
 				creds = &gpgcredentialsv1.GPGCredentials{KeyringFingerprint: key.Fingerprint}
 			}
-			logs.take()
+			logs.Reset()
 			_, err := h.Sign(t.Context(), digest, &v1alpha1.Config{}, creds)
 			r.NoError(err)
 
 			var got []string
-			for _, msg := range logs.take() {
+			for _, msg := range logs.Messages() {
 				if boundary, ok := strings.CutSuffix(msg, suffix); ok {
 					got = append(got, boundary)
 				}
@@ -927,42 +928,6 @@ func handlerWithFakeGPG(t *testing.T, key *handlertest.Key) (*Handler, *fakeGPG)
 		gpgbinary.WithExec(gpg.exec),
 	)
 	return h, gpg
-}
-
-// captureDebugLogs routes the default logger, which the handler logs to, into the returned recorder for this test.
-func captureDebugLogs(t *testing.T) *logRecorder {
-	t.Helper()
-	rec := &logRecorder{}
-	prev := slog.Default()
-	slog.SetDefault(slog.New(rec))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-	return rec
-}
-
-// logRecorder is a slog.Handler that records the messages of all records.
-type logRecorder struct {
-	mu       sync.Mutex
-	messages []string
-}
-
-func (*logRecorder) Enabled(context.Context, slog.Level) bool { return true }
-func (l *logRecorder) WithAttrs([]slog.Attr) slog.Handler     { return l }
-func (l *logRecorder) WithGroup(string) slog.Handler          { return l }
-
-func (l *logRecorder) Handle(_ context.Context, r slog.Record) error {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.messages = append(l.messages, r.Message)
-	return nil
-}
-
-// take returns and clears the recorded messages.
-func (l *logRecorder) take() []string {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	m := l.messages
-	l.messages = nil
-	return m
 }
 
 func mustGenerateKey(t *testing.T, cfg handlertest.KeyConfig) *handlertest.Key {
