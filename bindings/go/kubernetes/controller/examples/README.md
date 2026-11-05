@@ -39,9 +39,36 @@ GitOps deployer is installed, remove the block for the absent deployer from `rgd
 
 Crossplane Compositions run under the `crossplane` service account, which by default cannot create the
 resources they produce (OCM `Resource`s, Flux sources/`HelmRelease`s/`Kustomization`s, ArgoCD `Application`s),
-so the XR never becomes Ready. Apply [`crossplane-rbac.yaml`](crossplane-rbac.yaml) once per cluster to grant
-it: the manifest is an aggregated `ClusterRole` that Crossplane's RBAC manager folds into that service account.
-The local e2e setup applies the same file.
+so the XR never becomes Ready. Grant the Crossplane service account these permissions once per cluster with an
+aggregated `ClusterRole` that Crossplane's RBAC manager folds into that service account (no binding needed):
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: crossplane-ocm-resources
+  labels:
+    rbac.crossplane.io/aggregate-to-crossplane: "true"
+rules:
+  - apiGroups: ["delivery.ocm.software"]
+    resources: ["resources", "resources/status"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["source.toolkit.fluxcd.io"]
+    resources: ["ocirepositories", "ocirepositories/status", "gitrepositories", "gitrepositories/status"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["kustomize.toolkit.fluxcd.io"]
+    resources: ["kustomizations", "kustomizations/status"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["helm.toolkit.fluxcd.io"]
+    resources: ["helmreleases", "helmreleases/status"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications", "applications/status"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+```
+
+On a shared cluster, scope this down to the groups and namespaces you actually use. The local e2e setup grants
+the same permissions from `test/e2e/hacks/rbac.yaml`.
 
 ---
 

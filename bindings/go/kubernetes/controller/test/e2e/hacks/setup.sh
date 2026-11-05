@@ -279,42 +279,8 @@ EOF
   kubectl wait functions.pkg.crossplane.io/crossplane-contrib-function-auto-ready \
     --for=condition=Healthy=True --timeout=120s || return 1
 
-  # Grant OCM controller permission to manage Crossplane XRDs/Compositions
-  kubectl apply -f - <<EOF || return 1
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: controller-manager-crossplane-e2e
-rules:
-  - apiGroups: ["apiextensions.crossplane.io"]
-    resources: ["compositeresourcedefinitions","compositions"]
-    verbs: ["create","delete","get","list","patch","update","watch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: controller-manager-crossplane-e2e
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: controller-manager-crossplane-e2e
-subjects:
-  - kind: ServiceAccount
-    name: ocm-k8s-toolkit-controller-manager
-    namespace: ocm-k8s-toolkit-system
-EOF
-
-  # Grant the Crossplane SA access to the resources Compositions create (OCM
-  # Resources, Flux sources/HelmReleases/Kustomizations, ArgoCD Applications) by
-  # applying the same aggregated ClusterRole the examples ship, so the e2e
-  # exercises the exact RBAC a user applies. XR/XRD access comes from Crossplane's
-  # RBAC manager, so examples.ocm.software is not needed here.
-  crossplane_rbac="${script_dir}/../../../examples/crossplane-rbac.yaml"
-  if [ ! -f "${crossplane_rbac}" ]; then
-    echo "Crossplane RBAC manifest not found: ${crossplane_rbac}"
-    return 1
-  fi
-  kubectl apply -f "${crossplane_rbac}" || return 1
+  # Crossplane RBAC (controller XRD/Composition access + the aggregated grant for
+  # the crossplane SA) lives in rbac.yaml, applied by install_registries.
 }
 
 pids=()
