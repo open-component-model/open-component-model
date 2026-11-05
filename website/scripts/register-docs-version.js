@@ -332,7 +332,10 @@ const BINDING_MOUNTS = [
     { pkg: "s3", source: "spec/access/v2/schemas", target: "schemas/bindings/go/access/s3/v2", since: "0.18" },
     { pkg: "configuration/resolvers", source: "v1alpha1/spec/schemas", target: "schemas/bindings/go/configuration/resolvers/v1alpha1", sinceMonolith: true },
     { pkg: "configuration/versioning", source: "v1alpha1/spec/schemas", target: "schemas/bindings/go/configuration/versioning/v1alpha1", sinceMonolith: true },
-    { pkg: "oci", source: "spec/config/cache/v1alpha1/schemas", target: "schemas/bindings/go/oci/cache/v1alpha1", since: "0.24" }
+    { pkg: "oci", source: "spec/config/cache/v1alpha1/schemas", target: "schemas/bindings/go/oci/cache/v1alpha1", since: "0.24" },
+    // Credential schema dirs added after the initial credential set; gated to their first release tag.
+    { pkg: "s3",          source: "spec/credentials/v1/schemas",                        target: "schemas/bindings/go/credentials/s3/v1",       since: "0.16" },
+    { pkg: "signing/tsa", source: "spec/credentials/v1alpha1/schemas",                  target: "schemas/bindings/go/credentials/tsa/v1alpha1", since: "0.21" }
 ];
 
 // Return the bindings schema imports for a version. The layout is auto-detected
@@ -349,7 +352,7 @@ function bindingSchemaImports(version, deps) {
             .filter((m) => !m.since || compareSemver(version, m.since) >= 0)
             .map((m) => ({
                 source: `${m.pkg}/${m.source}`,
-                target: `static/${version}/${m.target}`,
+                target: `assets/${version}/${m.target}`,
                 sites: { matrix: { versions: [version] } }
             }));
 
@@ -364,7 +367,7 @@ function bindingSchemaImports(version, deps) {
                 },
                 {
                     source: "kubernetes/controller/config/crd/bases",
-                    target: `static/${version}/schemas/kubernetes/controller`,
+                    target: `assets/${version}/schemas/kubernetes/controller`,
                     sites: { matrix: { versions: [version] } }
                 }
             );
@@ -396,7 +399,7 @@ function bindingSchemaImports(version, deps) {
         version: deps?.[`${MODULE_PREFIX}/bindings/go/${pkg}`],
         mounts: mounts.map((m) => ({
             source: m.source,
-            target: `static/${version}/${m.target}`,
+            target: `assets/${version}/${m.target}`,
             sites: { matrix: { versions: [version] } }
         }))
     }));
@@ -461,7 +464,7 @@ function buildModuleBlocks(version, fullVersion, deps) {
                 version: `v${fullVersion}`,
                 mounts: [{
                     source: "config/crd/bases",
-                    target: `static/${version}/schemas/kubernetes/controller`,
+                    target: `assets/${version}/schemas/kubernetes/controller`,
                     sites: { matrix: { versions: [version] } }
                 }]
             }
