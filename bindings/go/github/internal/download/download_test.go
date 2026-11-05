@@ -16,6 +16,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/tartest"
 )
 
 const downloadTestCommit = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
@@ -40,7 +41,7 @@ func archiveServer(t *testing.T, payload []byte) *httptest.Server {
 
 func TestDownload(t *testing.T) {
 	t.Run("returns the archive as an application/x-tgz blob", func(t *testing.T) {
-		payload := gzippedTar(t, "octocat-Hello-World-"+downloadTestCommit+"/README", "hello world")
+		payload := tartest.Gzipped(t, tartest.Entry{Name: "octocat-Hello-World-" + downloadTestCommit + "/README", Data: []byte("hello world")})
 		server := archiveServer(t, payload)
 
 		downloaded, err := Download(t.Context(), &v1.GitHub{

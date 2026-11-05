@@ -1,9 +1,7 @@
 package tar
 
 import (
-	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -24,32 +22,12 @@ import (
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/content/memory"
 
+	"ocm.software/open-component-model/bindings/go/internal/testutil/tartest"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 )
 
-type tarEntry struct {
-	name string
-	data []byte
-}
-
-func gzippedTar(t *testing.T, entries ...tarEntry) []byte {
-	t.Helper()
-	r := require.New(t)
-	var buf bytes.Buffer
-	gz := gzip.NewWriter(&buf)
-	tw := tar.NewWriter(gz)
-	for _, e := range entries {
-		r.NoError(tw.WriteHeader(&tar.Header{Name: e.name, Mode: 0o644, Size: int64(len(e.data)), Typeflag: tar.TypeReg}))
-		_, err := tw.Write(e.data)
-		r.NoError(err)
-	}
-	r.NoError(tw.Close())
-	r.NoError(gz.Close())
-	return buf.Bytes()
-}
-
-func blobEntry(desc ociImageSpecV1.Descriptor, data []byte) tarEntry {
-	return tarEntry{name: "blobs/" + desc.Digest.Algorithm().String() + "/" + desc.Digest.Encoded(), data: data}
+func blobEntry(desc ociImageSpecV1.Descriptor, data []byte) tartest.Entry {
+	return tartest.Entry{Name: "blobs/" + desc.Digest.Algorithm().String() + "/" + desc.Digest.Encoded(), Data: data}
 }
 
 // verifyLayout reads archive through a LayoutVerifier like a consumer copying it would.
@@ -139,89 +117,89 @@ func TestLayoutVerifier_RefusesTamperedLayouts(t *testing.T) {
 	require.NoError(t, err)
 	manifest := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, manifestData)
 
-	index := func(annotations map[string]string) tarEntry {
+	index := func(annotations map[string]string) tartest.Entry {
 		data, err := json.Marshal(ociImageSpecV1.Index{
 			Versioned:   specs.Versioned{SchemaVersion: 2},
 			Manifests:   []ociImageSpecV1.Descriptor{manifest},
 			Annotations: annotations,
 		})
 		require.NoError(t, err)
-		return tarEntry{name: ociImageSpecV1.ImageIndexFile, data: data}
+		return tartest.Entry{Name: ociImageSpecV1.ImageIndexFile, Data: data}
 	}
-	layoutFile := tarEntry{name: ociImageSpecV1.ImageLayoutFile, data: []byte(`{"imageLayoutVersion":"1.0.0"}`)}
+	layoutFile := tartest.Entry{Name: ociImageSpecV1.ImageLayoutFile, Data: []byte(`{"imageLayoutVersion":"1.0.0"}`)}
 
 	tests := []struct {
 		name    string
-		entries []tarEntry
+		entries []tartest.Entry
 		wantErr string
 	}{
 		{
 			name:    "complete layout",
-			entries: []tarEntry{layoutFile, blobEntry(config, configData), blobEntry(layer, layerData), blobEntry(manifest, manifestData), index(nil)},
+			entries: []tartest.Entry{layoutFile, blobEntry(config, configData), blobEntry(layer, layerData), blobEntry(manifest, manifestData), index(nil)},
 		},
 		{
 			name:    "complete layout with a matching main annotation",
-			entries: []tarEntry{index(map[string]string{annotationMainArtifact: manifest.Digest.String()}), blobEntry(config, configData), blobEntry(layer, layerData), blobEntry(manifest, manifestData)},
+			entries: []tartest.Entry{index(map[string]string{annotationMainArtifact: manifest.Digest.String()}), blobEntry(config, configData), blobEntry(layer, layerData), blobEntry(manifest, manifestData)},
 		},
 		{
 			name:    "tampered layer",
-			entries: []tarEntry{layoutFile, blobEntry(config, configData), blobEntry(layer, []byte("tampered")), blobEntry(manifest, manifestData), index(nil)},
+			entries: []tartest.Entry{layoutFile, blobEntry(config, configData), blobEntry(layer, []byte("tampered")), blobEntry(manifest, manifestData), index(nil)},
 			wantErr: "does not match its digest",
 		},
 		{
 			name:    "missing layer",
-			entries: []tarEntry{layoutFile, blobEntry(config, configData), blobEntry(manifest, manifestData), index(nil)},
+			entries: []tartest.Entry{layoutFile, blobEntry(config, configData), blobEntry(manifest, manifestData), index(nil)},
 			wantErr: "referenced by the artifact graph is missing",
 		},
 		{
 			name:    "missing manifest",
-			entries: []tarEntry{layoutFile, blobEntry(config, configData), blobEntry(layer, layerData), index(nil)},
+			entries: []tartest.Entry{layoutFile, blobEntry(config, configData), blobEntry(layer, layerData), index(nil)},
 			wantErr: "listed in the index cannot be inspected",
 		},
 		{
 			name:    "duplicate entry",
-			entries: []tarEntry{layoutFile, blobEntry(config, configData), blobEntry(layer, layerData), blobEntry(layer, layerData), blobEntry(manifest, manifestData), index(nil)},
+			entries: []tartest.Entry{layoutFile, blobEntry(config, configData), blobEntry(layer, layerData), blobEntry(layer, layerData), blobEntry(manifest, manifestData), index(nil)},
 			wantErr: "more than once",
 		},
 		{
 			name: "index.json alias following the index",
-			entries: []tarEntry{
+			entries: []tartest.Entry{
 				layoutFile, blobEntry(config, configData), blobEntry(layer, layerData), blobEntry(manifest, manifestData), index(nil),
-				{name: ".//" + ociImageSpecV1.ImageIndexFile, data: []byte(`{"schemaVersion":2,"manifests":[]}`)},
+				{Name: ".//" + ociImageSpecV1.ImageIndexFile, Data: []byte(`{"schemaVersion":2,"manifests":[]}`)},
 			},
 			wantErr: "more than once",
 		},
 		{
 			name: "blob alias following the blob",
-			entries: []tarEntry{
+			entries: []tartest.Entry{
 				layoutFile, blobEntry(config, configData), blobEntry(layer, layerData), blobEntry(manifest, manifestData), index(nil),
-				{name: ".//" + blobEntry(layer, nil).name, data: []byte("tampered")},
+				{Name: ".//" + blobEntry(layer, nil).Name, Data: []byte("tampered")},
 			},
 			wantErr: "more than once",
 		},
 		{
 			name: "absolute index.json alias following the index",
-			entries: []tarEntry{
+			entries: []tartest.Entry{
 				layoutFile, blobEntry(config, configData), blobEntry(layer, layerData), blobEntry(manifest, manifestData), index(nil),
-				{name: "/" + ociImageSpecV1.ImageIndexFile, data: []byte(`{"schemaVersion":2,"manifests":[]}`)},
+				{Name: "/" + ociImageSpecV1.ImageIndexFile, Data: []byte(`{"schemaVersion":2,"manifests":[]}`)},
 			},
 			wantErr: "more than once",
 		},
 		{
 			name:    "main annotation naming another artifact",
-			entries: []tarEntry{index(map[string]string{annotationMainArtifact: digest.FromString("other").String()}), blobEntry(config, configData), blobEntry(layer, layerData), blobEntry(manifest, manifestData)},
+			entries: []tartest.Entry{index(map[string]string{annotationMainArtifact: digest.FromString("other").String()}), blobEntry(config, configData), blobEntry(layer, layerData), blobEntry(manifest, manifestData)},
 			wantErr: "layout annotation software.ocm/main names",
 		},
 		{
 			name:    "no index",
-			entries: []tarEntry{layoutFile, blobEntry(config, configData), blobEntry(layer, layerData), blobEntry(manifest, manifestData)},
+			entries: []tartest.Entry{layoutFile, blobEntry(config, configData), blobEntry(layer, layerData), blobEntry(manifest, manifestData)},
 			wantErr: "layout has no index.json",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
-			err := verifyLayout(t.Context(), gzippedTar(t, tt.entries...), manifest.Digest)
+			err := verifyLayout(t.Context(), tartest.Gzipped(t, tt.entries...), manifest.Digest)
 			if tt.wantErr == "" {
 				r.NoError(err)
 				return
@@ -258,28 +236,28 @@ func TestLayoutVerifier_WarnsAboutUntrackedContent(t *testing.T) {
 	main.Annotations = map[string]string{ociImageSpecV1.AnnotationRefName: "main"}
 	indexData, err := json.Marshal(ociImageSpecV1.Index{Versioned: specs.Versioned{SchemaVersion: 2}, Manifests: []ociImageSpecV1.Descriptor{main, other}})
 	require.NoError(t, err)
-	tracked := []tarEntry{
-		{name: ociImageSpecV1.ImageLayoutFile, data: []byte(`{"imageLayoutVersion":"1.0.0"}`)},
+	tracked := []tartest.Entry{
+		{Name: ociImageSpecV1.ImageLayoutFile, Data: []byte(`{"imageLayoutVersion":"1.0.0"}`)},
 		blobEntry(config, configData), blobEntry(layer, layerData), blobEntry(main, mainData),
 		blobEntry(otherLayer, otherLayerData), blobEntry(other, otherData),
-		{name: ociImageSpecV1.ImageIndexFile, data: indexData},
+		{Name: ociImageSpecV1.ImageIndexFile, Data: indexData},
 	}
 
 	for _, tc := range []struct {
 		name  string
-		extra []tarEntry
+		extra []tartest.Entry
 		want  []string
 	}{
 		{name: "everything reachable from the index"},
-		{name: "a blob nothing references", extra: []tarEntry{blobEntry(stray, strayData)}, want: []string{"unreferencedBlobs=1", stray.Digest.String(), "resource=chart"}},
-		{name: "a file outside the layout structure", extra: []tarEntry{{name: "notes.txt", data: []byte("hi")}}, want: []string{"otherFiles=1", "notes.txt", "resource=chart"}},
+		{name: "a blob nothing references", extra: []tartest.Entry{blobEntry(stray, strayData)}, want: []string{"unreferencedBlobs=1", stray.Digest.String(), "resource=chart"}},
+		{name: "a file outside the layout structure", extra: []tartest.Entry{{Name: "notes.txt", Data: []byte("hi")}}, want: []string{"otherFiles=1", "notes.txt", "resource=chart"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			logged.Reset()
 			// The warning goes to the logger ctx carries, so callers can name the content.
 			ctx := slogcontext.With(t.Context(), slog.String("resource", "chart"))
-			r.NoError(verifyLayout(ctx, gzippedTar(t, append(slices.Clone(tracked), tc.extra...)...), main.Digest))
+			r.NoError(verifyLayout(ctx, tartest.Gzipped(t, append(slices.Clone(tracked), tc.extra...)...), main.Digest))
 			if len(tc.want) == 0 {
 				r.Empty(logged.String())
 				return
@@ -376,10 +354,10 @@ func TestLayoutVerifier_RefusesRootsConsumersWouldNotPick(t *testing.T) {
 		require.NoError(t, err)
 		return content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, data), data
 	}
-	indexOf := func(manifests ...ociImageSpecV1.Descriptor) tarEntry {
+	indexOf := func(manifests ...ociImageSpecV1.Descriptor) tartest.Entry {
 		data, err := json.Marshal(ociImageSpecV1.Index{Versioned: specs.Versioned{SchemaVersion: 2}, Manifests: manifests})
 		require.NoError(t, err)
-		return tarEntry{name: ociImageSpecV1.ImageIndexFile, data: data}
+		return tartest.Entry{Name: ociImageSpecV1.ImageIndexFile, Data: data}
 	}
 
 	root, rootData := manifestWith(layer)
@@ -389,7 +367,7 @@ func TestLayoutVerifier_RefusesRootsConsumersWouldNotPick(t *testing.T) {
 	t.Run("an artifact holding the root as a layer", func(t *testing.T) {
 		r := require.New(t)
 		wrapper, wrapperData := manifestWith(root)
-		archive := gzippedTar(t,
+		archive := tartest.Gzipped(t,
 			blobEntry(config, configData), blobEntry(layer, layerData),
 			blobEntry(root, rootData), blobEntry(wrapper, wrapperData),
 			indexOf(named, wrapper),
@@ -401,7 +379,7 @@ func TestLayoutVerifier_RefusesRootsConsumersWouldNotPick(t *testing.T) {
 		r := require.New(t)
 		notManifestData := []byte("not a manifest")
 		notManifest := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, notManifestData)
-		archive := gzippedTar(t,
+		archive := tartest.Gzipped(t,
 			blobEntry(config, configData), blobEntry(layer, layerData),
 			blobEntry(root, rootData), blobEntry(notManifest, notManifestData),
 			indexOf(named, notManifest),
@@ -500,9 +478,9 @@ func TestLayoutVerifier_LargeManifests(t *testing.T) {
 			manifest := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, manifestData)
 			indexData, err := json.Marshal(ociImageSpecV1.Index{Versioned: specs.Versioned{SchemaVersion: 2}, Manifests: []ociImageSpecV1.Descriptor{manifest}})
 			r.NoError(err)
-			archive := gzippedTar(t,
+			archive := tartest.Gzipped(t,
 				blobEntry(layer, layerData), blobEntry(config, configData), blobEntry(manifest, manifestData),
-				tarEntry{name: ociImageSpecV1.ImageIndexFile, data: indexData},
+				tartest.Entry{Name: ociImageSpecV1.ImageIndexFile, Data: indexData},
 			)
 			err = verifyLayout(t.Context(), archive, manifest.Digest)
 			if tc.wantErr == "" {

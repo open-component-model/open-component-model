@@ -1,9 +1,6 @@
 package transformation
 
 import (
-	"archive/tar"
-	"bytes"
-	"compress/gzip"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -23,29 +20,17 @@ import (
 	accessv1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/github/transformation/spec/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/tartest"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const testCommit = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
 
-func gzippedTar(t *testing.T, name, content string) []byte {
-	t.Helper()
-	var buf bytes.Buffer
-	gz := gzip.NewWriter(&buf)
-	tw := tar.NewWriter(gz)
-	require.NoError(t, tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(content)), Typeflag: tar.TypeReg}))
-	_, err := tw.Write([]byte(content))
-	require.NoError(t, err)
-	require.NoError(t, tw.Close())
-	require.NoError(t, gz.Close())
-	return buf.Bytes()
-}
-
 // mockGitHub emulates the GitHub archive API and returns its base URL plus the
 // exact archive bytes served.
 func mockGitHub(t *testing.T) (baseURL string, payload []byte) {
 	t.Helper()
-	payload = gzippedTar(t, "octocat-Hello-World-"+testCommit+"/README", "hello world")
+	payload = tartest.Gzipped(t, tartest.Entry{Name: "octocat-Hello-World-" + testCommit + "/README", Data: []byte("hello world")})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/repos/octocat/Hello-World/tarball/"+testCommit):
@@ -204,7 +189,7 @@ func TestGetGitHubCommit_Transform_ResolveCredentials(t *testing.T) {
 
 	t.Run("resolved credentials reach the download", func(t *testing.T) {
 		var gotAuth string
-		payload := gzippedTar(t, "octocat-Hello-World-"+testCommit+"/README", "hello world")
+		payload := tartest.Gzipped(t, tartest.Entry{Name: "octocat-Hello-World-" + testCommit + "/README", Data: []byte("hello world")})
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case strings.HasSuffix(r.URL.Path, "/repos/octocat/Hello-World/tarball/"+testCommit):

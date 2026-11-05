@@ -1,9 +1,7 @@
 package resource
 
 import (
-	"archive/tar"
 	"bytes"
-	"compress/gzip"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -20,24 +18,11 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/internal/testutil/blobtest"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/tartest"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const testCommit = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
-
-// gzippedTar builds a gzipped tar archive containing a single file.
-func gzippedTar(t *testing.T, name, content string) []byte {
-	t.Helper()
-	var buf bytes.Buffer
-	gz := gzip.NewWriter(&buf)
-	tw := tar.NewWriter(gz)
-	require.NoError(t, tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(content)), Typeflag: tar.TypeReg}))
-	_, err := tw.Write([]byte(content))
-	require.NoError(t, err)
-	require.NoError(t, tw.Close())
-	require.NoError(t, gz.Close())
-	return buf.Bytes()
-}
 
 // mockGitHub stands up an httptest server emulating the GitHub archive API and
 // returns its base URL and the exact archive bytes it serves. A resource whose
@@ -45,7 +30,7 @@ func gzippedTar(t *testing.T, name, content string) []byte {
 // path (enterprise client -> /api/v3/... -> 302 -> archive) against it.
 func mockGitHub(t *testing.T) (baseURL string, payload []byte) {
 	t.Helper()
-	payload = gzippedTar(t, "octocat-Hello-World-"+testCommit+"/README", "hello world")
+	payload = tartest.Gzipped(t, tartest.Entry{Name: "octocat-Hello-World-" + testCommit + "/README", Data: []byte("hello world")})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/repos/octocat/Hello-World/commits/main"):
@@ -123,7 +108,7 @@ func TestResourceRepository_DownloadResource(t *testing.T) {
 		slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
 		t.Cleanup(func() { slog.SetDefault(previous) })
 
-		payload := gzippedTar(t, "octocat-Hello-World-"+testCommit+"/README", "hello world")
+		payload := tartest.Gzipped(t, tartest.Entry{Name: "octocat-Hello-World-" + testCommit + "/README", Data: []byte("hello world")})
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch {
 			case strings.HasSuffix(r.URL.Path, "/repos/octocat/Hello-World/commits/main"):
