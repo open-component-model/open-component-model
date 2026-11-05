@@ -12,11 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	git "github.com/go-git/go-git/v6"
-	"github.com/go-git/go-git/v6/config"
-	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
@@ -34,6 +30,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/git/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
 func gitResource(t *testing.T, url, ref, commit, accessType string) *v2.Resource {
@@ -54,30 +51,11 @@ func gitResource(t *testing.T, url, ref, commit, accessType string) *v2.Resource
 // the first commit.
 func servedRepository(t *testing.T) (url, firstCommit string) {
 	t.Helper()
-	r := require.New(t)
-	work := t.TempDir()
-	repo, err := git.PlainInit(work, false)
-	r.NoError(err)
-	// Ignore host signing settings when creating test fixtures.
-	cfg, err := repo.Config()
-	r.NoError(err)
-	cfg.Commit.GpgSign = config.OptBoolFalse
-	r.NoError(repo.SetConfig(cfg))
-	worktree, err := repo.Worktree()
-	r.NoError(err)
-	for _, content := range []string{"original", "updated"} {
-		r.NoError(os.WriteFile(filepath.Join(work, "README"), []byte(content), 0o644))
-		_, err = worktree.Add("README")
-		r.NoError(err)
-		hash, err := worktree.Commit(content, &git.CommitOptions{Author: &object.Signature{
-			Name: "Test", Email: "test@example.com", When: time.Unix(1, 0),
-		}})
-		r.NoError(err)
-		if firstCommit == "" {
-			firstCommit = hash.String()
-		}
-	}
-	return gittest.Serve(t, work), firstCommit
+	path, first := testgit.Repository(t, testgit.Options{Commits: []testgit.Commit{
+		{File: "README", Content: "original"},
+		{File: "README", Content: "updated"},
+	}})
+	return gittest.Serve(t, path), first.String()
 }
 
 func TestGetGitResourceLocalRepository(t *testing.T) {
