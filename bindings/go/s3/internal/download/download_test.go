@@ -28,6 +28,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/blobtest"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	credv1 "ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1"
 )
@@ -216,17 +217,6 @@ func blobFrom(t *testing.T, srv *fakeS3, req Request, opts ...Option) *Blob {
 	return NewBlob(t.Context(), at(srv, req), append([]Option{WithCredentials(fakeCredentials())}, opts...)...)
 }
 
-func readBlob(t *testing.T, b blob.ReadOnlyBlob) []byte {
-	t.Helper()
-	r := require.New(t)
-	rc, err := b.ReadCloser()
-	r.NoError(err)
-	defer func() { _ = rc.Close() }()
-	data, err := io.ReadAll(rc)
-	r.NoError(err)
-	return data
-}
-
 // methods returns the HTTP methods of requests, in order.
 func methods(requests []s3Request) []string {
 	out := make([]string, 0, len(requests))
@@ -317,7 +307,7 @@ func TestDownload_PinnedVersionIsForwarded(t *testing.T) {
 
 	_, _, err := streamFrom(t, srv, req)
 	r.NoError(err)
-	readBlob(t, blobFrom(t, srv, req))
+	blobtest.ReadAll(t, blobFrom(t, srv, req))
 
 	requests := srv.recorded()
 	r.Len(requests, 2)
@@ -403,7 +393,7 @@ func TestDownload_MediaType(t *testing.T) {
 
 			for name, b := range map[string]*Blob{"before a read": blobFrom(t, srv, req), "after a read": blobFrom(t, srv, req)} {
 				if name == "after a read" {
-					readBlob(t, b)
+					blobtest.ReadAll(t, b)
 				}
 				got, known := b.MediaType()
 				r.True(known, name)
@@ -561,8 +551,8 @@ func TestBlob_EveryReadRequestsTheObject(t *testing.T) {
 	b := blobFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"})
 	r.Empty(srv.recorded(), "creating the blob must not request the object")
 
-	r.Equal(content, readBlob(t, b))
-	r.Equal(content, readBlob(t, b))
+	r.Equal(content, blobtest.ReadAll(t, b))
+	r.Equal(content, blobtest.ReadAll(t, b))
 	r.Equal([]string{http.MethodGet, http.MethodGet}, methods(srv.recorded()))
 }
 
@@ -583,8 +573,8 @@ func TestBlob_PinsVersionOfFirstRead(t *testing.T) {
 			srv := newFakeS3(t, s3Object{body: []byte("content"), versionID: tt.versionID})
 			b := blobFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"})
 
-			readBlob(t, b)
-			readBlob(t, b)
+			blobtest.ReadAll(t, b)
+			blobtest.ReadAll(t, b)
 			r.Equal(int64(len("content")), b.Size(), "the size is learned from the first read")
 
 			requests := srv.recorded()
@@ -607,7 +597,7 @@ func TestBlob_DescribedByHeadBeforeRead(t *testing.T) {
 	r.Equal("text/plain", mediaType)
 	r.Equal([]string{http.MethodHead}, methods(srv.recorded()), "one HeadObject describes the object")
 
-	r.Equal(content, readBlob(t, b))
+	r.Equal(content, blobtest.ReadAll(t, b))
 	r.Equal([]string{http.MethodHead, http.MethodGet}, methods(srv.recorded()))
 }
 
@@ -617,7 +607,7 @@ func TestBlob_PinsVersionDescribedByHead(t *testing.T) {
 	b := blobFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"})
 
 	r.Equal(int64(len("described")), b.Size())
-	readBlob(t, b)
+	blobtest.ReadAll(t, b)
 
 	requests := srv.recorded()
 	r.Equal([]string{http.MethodHead, http.MethodGet}, methods(requests))

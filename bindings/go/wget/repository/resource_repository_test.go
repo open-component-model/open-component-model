@@ -23,6 +23,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/blobtest"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/repository"
 	v1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
@@ -70,7 +71,7 @@ func TestDownloadResource(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, b)
 
-		data := readBlob(t, b)
+		data := blobtest.ReadAll(t, b)
 		assert.Equal(t, content, data)
 
 		if ma, ok := b.(blob.MediaTypeAware); ok {
@@ -103,7 +104,7 @@ func TestDownloadResource(t *testing.T) {
 		}
 		b, err := repo.DownloadResource(t.Context(), resource, creds)
 		require.NoError(t, err)
-		assert.Equal(t, []byte("authenticated"), readBlob(t, b))
+		assert.Equal(t, []byte("authenticated"), blobtest.ReadAll(t, b))
 	})
 
 	t.Run("passes the max download size to the downloader", func(t *testing.T) {
@@ -172,7 +173,7 @@ func TestDownloadResource_DigestVerification(t *testing.T) {
 
 		b, err := repo.DownloadResource(t.Context(), resource, nil)
 		require.NoError(t, err)
-		assert.Equal(t, []byte(served), readBlob(t, b))
+		assert.Equal(t, []byte(served), blobtest.ReadAll(t, b))
 	})
 
 	t.Run("rejects content that does not match the resource digest", func(t *testing.T) {
@@ -202,7 +203,7 @@ func TestDownloadResource_DigestVerification(t *testing.T) {
 
 		b, err := repo.DownloadResource(t.Context(), resource, nil)
 		require.NoError(t, err)
-		assert.Equal(t, []byte(served), readBlob(t, b))
+		assert.Equal(t, []byte(served), blobtest.ReadAll(t, b))
 	})
 
 	t.Run("serves content unverified when the resource is excluded from signing", func(t *testing.T) {
@@ -216,7 +217,7 @@ func TestDownloadResource_DigestVerification(t *testing.T) {
 
 		b, err := repo.DownloadResource(t.Context(), resource, nil)
 		require.NoError(t, err)
-		assert.Equal(t, []byte(served), readBlob(t, b))
+		assert.Equal(t, []byte(served), blobtest.ReadAll(t, b))
 	})
 
 	t.Run("reads without a HEAD request and keeps the metadata of the GET response", func(t *testing.T) {
@@ -243,7 +244,7 @@ func TestDownloadResource_DigestVerification(t *testing.T) {
 
 		b, err := repo.DownloadResource(t.Context(), resource, nil)
 		require.NoError(t, err)
-		assert.Equal(t, []byte(served), readBlob(t, b))
+		assert.Equal(t, []byte(served), blobtest.ReadAll(t, b))
 		assert.Zero(t, heads.Load())
 		assert.Equal(t, int64(len(served)), b.(blob.SizeAware).Size())
 		mediaType, ok := b.(blob.MediaTypeAware).MediaType()
@@ -277,7 +278,7 @@ func TestDownloadResource_DigestVerification(t *testing.T) {
 
 		b, err := repo.DownloadResource(t.Context(), resource, nil)
 		r.NoError(err)
-		r.Equal([]byte(served), readBlob(t, b))
+		r.Equal([]byte(served), blobtest.ReadAll(t, b))
 	})
 
 	t.Run("rejects content that does not match a SHA-512 resource digest", func(t *testing.T) {
@@ -343,18 +344,6 @@ func TestGetResourceRepositoryScheme(t *testing.T) {
 	require.NotNil(t, scheme)
 	assert.True(t, scheme.IsRegistered(runtime.NewVersionedType("wget", v1.Version)))
 	assert.True(t, scheme.IsRegistered(runtime.NewUnversionedType("wget")))
-}
-
-func readBlob(t *testing.T, b blob.ReadOnlyBlob) []byte {
-	t.Helper()
-	rc, err := b.ReadCloser()
-	require.NoError(t, err)
-	defer func(rc io.ReadCloser) {
-		_ = rc.Close()
-	}(rc)
-	data, err := io.ReadAll(rc)
-	require.NoError(t, err)
-	return data
 }
 
 // readError fully reads b and returns the error of the read and of closing the
@@ -771,7 +760,7 @@ func TestDownloadResource_ChecksumPolicy(t *testing.T) {
 		b, err := repo.DownloadResource(t.Context(),
 			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
 		require.NoError(t, err)
-		assert.Equal(t, content, readBlob(t, b))
+		assert.Equal(t, content, blobtest.ReadAll(t, b))
 	})
 
 	t.Run("Require aborts a transfer whose advertised checksum mismatches the bytes", func(t *testing.T) {
@@ -832,7 +821,7 @@ func TestDownloadResource_ChecksumPolicy(t *testing.T) {
 		b, err := repo.DownloadResource(t.Context(),
 			wgetResource(t, server.URL, map[string]any{"url": server.URL + "/resource"}), nil)
 		require.NoError(t, err)
-		assert.Equal(t, content, readBlob(t, b))
+		assert.Equal(t, content, blobtest.ReadAll(t, b))
 	})
 }
 
