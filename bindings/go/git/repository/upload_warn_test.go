@@ -11,6 +11,8 @@ import (
 	git "github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/stretchr/testify/require"
+
+	"ocm.software/open-component-model/bindings/go/git/gittest"
 )
 
 // warnCapture is a slog.Handler that records Warn records so a test can assert on them.
@@ -61,7 +63,7 @@ func captureWarnings(t *testing.T) *warnCapture {
 func TestUploadTagToEmptyRepositoryWarns(t *testing.T) {
 	fixture := newRepository(t)
 	uploader := newUploader(t)
-	source, content := downloadResource(t, uploader, fixture.Path, "refs/heads/main", fixture.First)
+	source, content := downloadResource(t, uploader, fixture.URL, "refs/heads/main", fixture.First)
 
 	for _, tc := range []struct {
 		name       string
@@ -80,17 +82,18 @@ func TestUploadTagToEmptyRepositoryWarns(t *testing.T) {
 			r.NoError(err)
 			// PlainInit points HEAD at master; hosts point it at the first pushed branch.
 			r.NoError(bare.Storer.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, "refs/heads/main")))
+			targetURL := gittest.Serve(t, targetPath)
 
 			if tc.seedBranch {
 				// Give the target a branch before the tag push so hasBranch(refs) is true;
 				// this is what distinguishes "tag suppressed because a branch exists" from
 				// "no warning because the pushed ref is itself a branch".
-				_, err := uploader.UploadResource(t.Context(), targetResource(source, targetPath, "refs/heads/main"), content, nil)
+				_, err := uploader.UploadResource(t.Context(), targetResource(source, targetURL, "refs/heads/main"), content, nil)
 				r.NoError(err)
 			}
 
 			capture := captureWarnings(t)
-			_, err = uploader.UploadResource(t.Context(), targetResource(source, targetPath, tc.targetRef), content, nil)
+			_, err = uploader.UploadResource(t.Context(), targetResource(source, targetURL, tc.targetRef), content, nil)
 			r.NoError(err)
 
 			target, err := git.PlainOpen(targetPath)
