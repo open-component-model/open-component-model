@@ -16,11 +16,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/s3test"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/repository"
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
@@ -28,44 +27,20 @@ import (
 	credv1 "ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1"
 )
 
-const (
-	rustfsImage     = "rustfs/rustfs:1.0.0-rc.6"
-	rustfsAccessKey = "ocm-test"
-	rustfsSecretKey = "ocm-test-secret"
-)
-
-// startRustFS starts a RustFS S3 server and returns its host:port.
-func startRustFS(t *testing.T, ctx context.Context) string {
-	t.Helper()
-	r := require.New(t)
-
-	container, err := testcontainers.Run(ctx, rustfsImage,
-		testcontainers.WithExposedPorts("9000/tcp"),
-		testcontainers.WithEnv(map[string]string{"RUSTFS_ACCESS_KEY": rustfsAccessKey, "RUSTFS_SECRET_KEY": rustfsSecretKey}),
-		testcontainers.WithWaitStrategy(wait.ForHTTP("/health/ready").WithPort("9000/tcp")),
-	)
-	r.NoError(err)
-	t.Cleanup(func() { r.NoError(testcontainers.TerminateContainer(container)) })
-
-	hostPort, err := container.PortEndpoint(ctx, "9000/tcp", "")
-	r.NoError(err)
-	return hostPort
-}
-
 // Test_Integration_S3 exercises the S3 ResourceRepository end to end against a RustFS
 // container.
 func Test_Integration_S3(t *testing.T) {
 	ctx := context.Background()
 
-	hostPort := startRustFS(t, ctx)
+	hostPort := s3test.Start(t)
 	endpoint := "http://" + hostPort
 
-	setup := newSetupClient(t, ctx, endpoint, rustfsAccessKey, rustfsSecretKey)
+	setup := newSetupClient(t, ctx, endpoint, s3test.AccessKey, s3test.SecretKey)
 
 	creds := &credv1.S3Credentials{
 		Type:            credv1.S3CredentialsVersionedType,
-		AccessKeyID:     rustfsAccessKey,
-		SecretAccessKey: rustfsSecretKey,
+		AccessKeyID:     s3test.AccessKey,
+		SecretAccessKey: s3test.SecretKey,
 	}
 	// A real http configuration: the retry section drives the SDK's attempt count, and
 	// the per-host entry routes S3 requests through the host-specific transport.
