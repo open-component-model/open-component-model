@@ -899,10 +899,6 @@ configurations:
 		r.Contains(cfg.Hosts, "registry.local:5000")
 		r.NotNil(cfg.Hosts["registry.local:5000"].PlainHTTP)
 		r.True(*cfg.Hosts["registry.local:5000"].PlainHTTP)
-
-		resolved := cfg.ResolveHost("registry.local:5000")
-		r.NotNil(resolved.PlainHTTP)
-		r.True(*resolved.PlainHTTP)
 	})
 }
 

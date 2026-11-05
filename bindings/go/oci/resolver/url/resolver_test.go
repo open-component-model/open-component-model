@@ -3,8 +3,11 @@ package url_test
 import (
 	"context"
 	"encoding/base64"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	neturl "net/url"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -546,6 +549,7 @@ func TestURLPathResolver_PlainHTTPFromHTTPConfig(t *testing.T) {
 		opts      []url.Option
 		reference string
 		plainHTTP bool
+		wantErr   string
 	}{
 		{
 			name:      "no config keeps HTTPS",
@@ -554,12 +558,6 @@ func TestURLPathResolver_PlainHTTPFromHTTPConfig(t *testing.T) {
 		{
 			name:      "per-host true turns on plain HTTP",
 			cfg:       &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{"registry.local:5000": hostCfg(&tr)}},
-			reference: "registry.local:5000/repo:v1",
-			plainHTTP: true,
-		},
-		{
-			name:      "bare hostname entry covers the port",
-			cfg:       &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{"registry.local": hostCfg(&tr)}},
 			reference: "registry.local:5000/repo:v1",
 			plainHTTP: true,
 		},
@@ -575,23 +573,54 @@ func TestURLPathResolver_PlainHTTPFromHTTPConfig(t *testing.T) {
 			plainHTTP: true,
 		},
 		{
-			name: "per-host false overrides global true",
-			cfg: &httpv1alpha1.Config{
-				ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: &tr},
-				Hosts:          map[string]*httpv1alpha1.HostConfig{"ghcr.io": hostCfg(&fa)},
-			},
-			reference: "ghcr.io/repo:v1",
-		},
-		{
-			name:      "WithPlainHTTP wins over per-host false",
-			cfg:       &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{"registry.local": hostCfg(&fa)}},
+			name:      "WithPlainHTTP without config uses cleartext",
 			opts:      []url.Option{url.WithPlainHTTP(true)},
 			reference: "registry.local/repo:v1",
 			plainHTTP: true,
 		},
 		{
-			name:      "http reference uses cleartext despite per-host false",
+			name:      "WithPlainHTTP with per-host true uses cleartext",
+			cfg:       &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{"registry.local": hostCfg(&tr)}},
+			opts:      []url.Option{url.WithPlainHTTP(true)},
+			reference: "registry.local/repo:v1",
+			plainHTTP: true,
+		},
+		{
+			name:      "WithPlainHTTP against per-host false is an error",
+			cfg:       &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{"registry.local": hostCfg(&fa)}},
+			opts:      []url.Option{url.WithPlainHTTP(true)},
+			reference: "registry.local/repo:v1",
+			wantErr:   `conflicts with plainHTTP: false`,
+		},
+		{
+			name:      "http reference without config uses cleartext",
+			reference: "http://registry.local:5000/repo:v1",
+			plainHTTP: true,
+		},
+		{
+			name:      "http reference with per-host true uses cleartext",
+			cfg:       &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{"registry.local:5000": hostCfg(&tr)}},
+			reference: "http://registry.local:5000/repo:v1",
+			plainHTTP: true,
+		},
+		{
+			name:      "http reference against per-host false is an error",
 			cfg:       &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{"registry.local:5000": hostCfg(&fa)}},
+			reference: "http://registry.local:5000/repo:v1",
+			wantErr:   `host "registry.local:5000"`,
+		},
+		{
+			name:      "http reference against global false is an error",
+			cfg:       &httpv1alpha1.Config{ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: &fa}},
+			reference: "http://registry.local:5000/repo:v1",
+			wantErr:   `conflicts with plainHTTP: false`,
+		},
+		{
+			name: "http reference with per-host true under global false uses cleartext",
+			cfg: &httpv1alpha1.Config{
+				ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: &fa},
+				Hosts:          map[string]*httpv1alpha1.HostConfig{"registry.local:5000": hostCfg(&tr)},
+			},
 			reference: "http://registry.local:5000/repo:v1",
 			plainHTTP: true,
 		},
@@ -607,6 +636,20 @@ func TestURLPathResolver_PlainHTTPFromHTTPConfig(t *testing.T) {
 			reference: "https://registry.local:5000/repo:v1",
 			plainHTTP: true,
 		},
+		{
+			name: "docker.io reference matches the registry-1.docker.io entry set to false",
+			cfg: &httpv1alpha1.Config{
+				ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: &tr},
+				Hosts:          map[string]*httpv1alpha1.HostConfig{"registry-1.docker.io": hostCfg(&fa)},
+			},
+			reference: "docker.io/library/alpine:3",
+		},
+		{
+			name:      "docker.io reference matches the registry-1.docker.io entry set to true",
+			cfg:       &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{"registry-1.docker.io": hostCfg(&tr)}},
+			reference: "docker.io/library/alpine:3",
+			plainHTTP: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -617,12 +660,30 @@ func TestURLPathResolver_PlainHTTPFromHTTPConfig(t *testing.T) {
 			r.NoError(err)
 
 			store, err := resolver.StoreForReference(t.Context(), tt.reference)
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
+				r.ErrorContains(err, tt.reference, "the error must name the reference")
+				r.Nil(store)
+				return
+			}
 			r.NoError(err)
 			remoteStore, ok := store.(*remotestore.RemoteStore)
 			r.True(ok, "expected a bare RemoteStore when no cache is configured, got %T", store)
 			r.Equal(tt.plainHTTP, remoteStore.PlainHTTP)
 		})
 	}
+
+	t.Run("ping rejects an http base URL against per-host false", func(t *testing.T) {
+		r := require.New(t)
+		cfg := &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{"registry.local:5000": hostCfg(&fa)}}
+		resolver, err := url.New(url.WithBaseURL("registry.local:5000"), url.WithPlainHTTP(true), url.WithHTTPConfig(cfg))
+		r.NoError(err)
+		client := &recordingClient{}
+		resolver.SetClient(client)
+
+		r.ErrorContains(resolver.Ping(t.Context()), `host "registry.local:5000"`)
+		r.Nil(client.url, "the ping must not reach the registry")
+	})
 
 	t.Run("ping honours per-host plain HTTP", func(t *testing.T) {
 		r := require.New(t)
@@ -644,5 +705,278 @@ func TestURLPathResolver_PlainHTTPFromHTTPConfig(t *testing.T) {
 		resolver, err = url.New(url.WithBaseURL(serverHost))
 		r.NoError(err)
 		r.ErrorContains(resolver.Ping(t.Context()), "server gave HTTP response to HTTPS client", "without the host entry the ping must try HTTPS against a plain HTTP server")
+	})
+
+	t.Run("ping keys the host lookup on the request host", func(t *testing.T) {
+		r := require.New(t)
+		cfg := &httpv1alpha1.Config{
+			ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: &tr},
+			Hosts:          map[string]*httpv1alpha1.HostConfig{"registry-1.docker.io": hostCfg(&fa)},
+		}
+		resolver, err := url.New(url.WithBaseURL("docker.io"), url.WithHTTPConfig(cfg))
+		r.NoError(err)
+		client := &recordingClient{}
+		resolver.SetClient(client)
+
+		r.NoError(resolver.Ping(t.Context()))
+		r.NotNil(client.url, "the ping must reach the client")
+		r.Equal("registry-1.docker.io", client.url.Host)
+		r.Equal("https", client.url.Scheme, "the registry-1.docker.io entry must override global plainHTTP")
+	})
+
+	t.Run("ping follows global plain HTTP over an https base URL", func(t *testing.T) {
+		r := require.New(t)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			if req.URL.Path == "/v2/" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+		baseURL := "https://" + server.URL[len("http://"):]
+
+		cfg := &httpv1alpha1.Config{ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: &tr}}
+		resolver, err := url.New(url.WithBaseURL(baseURL), url.WithHTTPConfig(cfg))
+		r.NoError(err)
+		r.NoError(resolver.Ping(t.Context()), "global plainHTTP wins over an https:// base URL")
+
+		resolver, err = url.New(url.WithBaseURL(baseURL))
+		r.NoError(err)
+		r.ErrorContains(resolver.Ping(t.Context()), "server gave HTTP response to HTTPS client", "without the config the ping must use the https:// scheme of the base URL")
+	})
+}
+
+// recordingClient answers every request with 200 OK without network access
+// and keeps the URL of the last request.
+type recordingClient struct {
+	url *neturl.URL
+}
+
+func (c *recordingClient) Do(req *http.Request) (*http.Response, error) {
+	c.url = req.URL
+	return &http.Response{StatusCode: http.StatusOK, Body: http.NoBody, Request: req}, nil
+}
+
+type warnCapture struct {
+	records []slog.Record
+}
+
+func (c *warnCapture) Enabled(_ context.Context, level slog.Level) bool {
+	return level >= slog.LevelWarn
+}
+
+func (c *warnCapture) Handle(_ context.Context, r slog.Record) error {
+	c.records = append(c.records, r)
+	return nil
+}
+
+func (c *warnCapture) WithAttrs(_ []slog.Attr) slog.Handler { return c }
+func (c *warnCapture) WithGroup(_ string) slog.Handler      { return c }
+
+// hosts returns the distinct host attributes of the records, in first-seen
+// order, "" for a record without one. How often a host is reported is not
+// part of the contract, only that it is.
+func (c *warnCapture) hosts() []string {
+	hosts := []string{}
+	for _, rec := range c.records {
+		host := ""
+		rec.Attrs(func(a slog.Attr) bool {
+			if a.Key == "host" {
+				host = a.Value.String()
+			}
+			return true
+		})
+		if !slices.Contains(hosts, host) {
+			hosts = append(hosts, host)
+		}
+	}
+	return hosts
+}
+
+func TestURLPathResolver_PlainHTTPWarning(t *testing.T) {
+	tr, fa := true, false
+	hostCfg := func(plain *bool) *httpv1alpha1.HostConfig {
+		return &httpv1alpha1.HostConfig{ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: plain}}
+	}
+
+	tests := []struct {
+		name  string
+		cfg   *httpv1alpha1.Config
+		hosts []string
+	}{
+		{
+			name:  "nil config warns nothing",
+			hosts: []string{},
+		},
+		{
+			name:  "global true warns for each host used",
+			cfg:   &httpv1alpha1.Config{ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: &tr}},
+			hosts: []string{"registry.local:5000", "ghcr.io"},
+		},
+		{
+			name:  "per-host true warns for that host only",
+			cfg:   &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{"registry.local:5000": hostCfg(&tr)}},
+			hosts: []string{"registry.local:5000"},
+		},
+		{
+			name: "a host entry that is never used is not reported",
+			cfg: &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{
+				"registry.local:5000": hostCfg(&tr),
+				"unused.local":        hostCfg(&tr),
+			}},
+			hosts: []string{"registry.local:5000"},
+		},
+		{
+			name: "per-host false under global true is not reported",
+			cfg: &httpv1alpha1.Config{
+				ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: &tr},
+				Hosts:          map[string]*httpv1alpha1.HostConfig{"ghcr.io": hostCfg(&fa)},
+			},
+			hosts: []string{"registry.local:5000"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			capture := &warnCapture{}
+			orig := slog.Default()
+			slog.SetDefault(slog.New(capture))
+			t.Cleanup(func() { slog.SetDefault(orig) })
+
+			resolver, err := url.New(url.WithBaseURL("registry.local"), url.WithHTTPConfig(tt.cfg))
+			r.NoError(err)
+			r.Empty(capture.records, "creating the resolver must not warn")
+
+			for _, ref := range []string{"registry.local:5000/a:v1", "ghcr.io/b:v1"} {
+				_, err := resolver.StoreForReference(t.Context(), ref)
+				r.NoError(err)
+			}
+			r.Equal(tt.hosts, capture.hosts())
+		})
+	}
+}
+
+// deprecations returns the distinct host attributes of the records that link
+// the http:// prefix migration guide, in first-seen order.
+func (c *warnCapture) deprecations() []string {
+	hosts := []string{}
+	for _, rec := range c.records {
+		host, guide := "", ""
+		rec.Attrs(func(a slog.Attr) bool {
+			switch a.Key {
+			case "host":
+				host = a.Value.String()
+			case "url":
+				guide = a.Value.String()
+			}
+			return true
+		})
+		if guide == "https://ocm.software/docs/guides/transfer/configure-http/#migrate-from-http-prefixes" && !slices.Contains(hosts, host) {
+			hosts = append(hosts, host)
+		}
+	}
+	return hosts
+}
+
+func TestURLPathResolver_HTTPPrefixDeprecationWarning(t *testing.T) {
+	tr := true
+	hostCfg := func(plain *bool) *httpv1alpha1.HostConfig {
+		return &httpv1alpha1.HostConfig{ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: plain}}
+	}
+	perHostTrue := &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{"registry.local:5000": hostCfg(&tr)}}
+
+	tests := []struct {
+		name      string
+		opts      []url.Option
+		ping      bool
+		reference string
+		hosts     []string
+	}{
+		{
+			name:      "http base URL without config warns",
+			opts:      []url.Option{url.WithBaseURL("registry.local:5000"), url.WithPlainHTTP(true)},
+			reference: "registry.local:5000/repo:v1",
+			hosts:     []string{"registry.local:5000"},
+		},
+		{
+			name:      "http base URL warns on ping",
+			opts:      []url.Option{url.WithBaseURL("registry.local:5000"), url.WithPlainHTTP(true)},
+			ping:      true,
+			reference: "registry.local:5000/repo:v1",
+			hosts:     []string{"registry.local:5000"},
+		},
+		{
+			name:      "http base URL names the request host",
+			opts:      []url.Option{url.WithBaseURL("docker.io"), url.WithPlainHTTP(true)},
+			ping:      true,
+			reference: "docker.io/library/alpine:3",
+			hosts:     []string{"registry-1.docker.io"},
+		},
+		{
+			name:      "http base URL with per-host plainHTTP still warns",
+			opts:      []url.Option{url.WithBaseURL("registry.local:5000"), url.WithPlainHTTP(true), url.WithHTTPConfig(perHostTrue)},
+			ping:      true,
+			reference: "registry.local:5000/repo:v1",
+			hosts:     []string{"registry.local:5000"},
+		},
+		{
+			name:      "http reference without config warns",
+			opts:      []url.Option{url.WithBaseURL("registry.local")},
+			reference: "http://registry.local:5000/repo:v1",
+			hosts:     []string{"registry.local:5000"},
+		},
+		{
+			name:      "http reference with per-host plainHTTP still warns",
+			opts:      []url.Option{url.WithBaseURL("registry.local"), url.WithHTTPConfig(perHostTrue)},
+			reference: "http://registry.local:5000/repo:v1",
+			hosts:     []string{"registry.local:5000"},
+		},
+		{
+			name:      "scheme-less reference with per-host plainHTTP does not warn",
+			opts:      []url.Option{url.WithBaseURL("registry.local"), url.WithHTTPConfig(perHostTrue)},
+			reference: "registry.local:5000/repo:v1",
+			hosts:     []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			capture := &warnCapture{}
+			orig := slog.Default()
+			slog.SetDefault(slog.New(capture))
+			t.Cleanup(func() { slog.SetDefault(orig) })
+
+			resolver, err := url.New(tt.opts...)
+			r.NoError(err)
+			resolver.SetClient(&recordingClient{})
+			r.Empty(capture.records, "creating the resolver must not warn")
+
+			if tt.ping {
+				r.NoError(resolver.Ping(t.Context()))
+			}
+			_, err = resolver.StoreForReference(t.Context(), tt.reference)
+			r.NoError(err)
+			r.Equal(tt.hosts, capture.deprecations())
+		})
+	}
+
+	t.Run("a rejected http prefix does not warn", func(t *testing.T) {
+		r := require.New(t)
+		capture := &warnCapture{}
+		orig := slog.Default()
+		slog.SetDefault(slog.New(capture))
+		t.Cleanup(func() { slog.SetDefault(orig) })
+
+		fa := false
+		perHostFalse := &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{"registry.local:5000": hostCfg(&fa)}}
+		resolver, err := url.New(url.WithBaseURL("registry.local"), url.WithHTTPConfig(perHostFalse))
+		r.NoError(err)
+
+		_, err = resolver.StoreForReference(t.Context(), "http://registry.local:5000/repo:v1")
+		r.ErrorContains(err, "plainHTTP: false")
+		r.Empty(capture.deprecations(), "the error replaces the warning")
 	})
 }

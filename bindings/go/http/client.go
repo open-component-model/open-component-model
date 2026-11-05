@@ -1,10 +1,7 @@
 package http
 
 import (
-	"log/slog"
-	"maps"
 	nethttp "net/http"
-	"slices"
 	"time"
 
 	"ocm.software/open-component-model/bindings/go/http/internal/retry"
@@ -164,7 +161,6 @@ func buildRoutingTransport(cfg *httpv1alpha1.Config, inner func(*httpv1alpha1.Ho
 	if cfg == nil {
 		return inner(nil)
 	}
-	warnPlainHTTP(cfg)
 
 	globalChain := inner(&httpv1alpha1.HostConfig{
 		TimeoutConfig:  cfg.TimeoutConfig,
@@ -204,21 +200,6 @@ func buildRoutingTransport(cfg *httpv1alpha1.Config, inner func(*httpv1alpha1.Ho
 		globalTimeout: globalTimeout,
 		hosts:         hosts,
 		hostTimeouts:  hostTimeouts,
-	}
-}
-
-func warnPlainHTTP(cfg *httpv1alpha1.Config) {
-	if cfg.PlainHTTP != nil && *cfg.PlainHTTP {
-		slog.Warn("plainHTTP is enabled for all hosts; OCI registry requests, including credentials, go over cleartext HTTP")
-	}
-	for _, host := range slices.Sorted(maps.Keys(cfg.Hosts)) {
-		if cfg.Hosts[host] == nil {
-			continue
-		}
-		if plain := cfg.ResolveHost(host).PlainHTTP; plain != nil && *plain {
-			slog.Warn("plainHTTP is enabled; OCI registry requests to this host, including credentials, go over cleartext HTTP",
-				slog.String("host", host))
-		}
 	}
 }
 

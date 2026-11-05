@@ -228,23 +228,16 @@ type ProtocolConfig struct {
 	// request uses its own connection, at the cost of more TLS handshakes.
 	DisableHTTP2 *bool `json:"disableHTTP2,omitempty"`
 
-	// PlainHTTP makes OCI registry clients talk cleartext HTTP instead of HTTPS.
-	// It exists so a plain OCI reference such as registry.local:5000/repo can
-	// reach a development or air-gapped registry without an http:// prefix in
-	// the repository spec. The traffic, including credentials, is unencrypted,
-	// so set it per host and never for a public registry. It applies to a
-	// reference with an explicit https:// prefix as well.
+	// PlainHTTP makes OCI registry clients use cleartext HTTP, also for https://
+	// references. Credentials go unencrypted: set it per host, never for a
+	// public registry. Helm chart downloads ignore it.
 	//
-	// It covers OCM's OCI repositories and ociArtifact access. Helm chart
-	// downloads, including oci:// charts, ignore it; a classic Helm repository
-	// uses plain HTTP only with an http:// URL.
+	// Nil means HTTPS at the top level and "inherit" in a HostConfig; an
+	// explicit false on a host wins over a global true.
 	//
-	// Nil means "unset" (HTTPS at the top level). In a HostConfig, nil means
-	// "inherit from the global Config"; an explicit false on a host keeps HTTPS
-	// even when the global config sets true. An http:// prefix on a repository
-	// base URL is stronger than both: every scheme-less reference that
-	// repository resolves uses plain HTTP, and a per-host false does not
-	// restore HTTPS for it.
+	// An http:// prefix still forces plain HTTP but is deprecated: OCM warns,
+	// and a future release stops downgrading. Against an explicit false for the
+	// host the prefix is an error. Set this field to true and drop the prefix.
 	PlainHTTP *bool `json:"plainHTTP,omitempty"`
 }
 

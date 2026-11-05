@@ -120,7 +120,14 @@ func (resolver *CachingResolver) Ping(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to create registry client: %w", err)
 	}
-	r.PlainHTTP = resolver.plainHTTPFor(parsedURL.Scheme, parsedURL.Host)
+	// Per-host settings are keyed by the host the request goes to, which for docker.io is registry-1.docker.io.
+	r.PlainHTTP, err = resolver.plainHTTPFor(parsedURL.Scheme, r.Reference.Host())
+	if err != nil {
+		return fmt.Errorf("failed to determine plain HTTP setting for host %s: %w", r.Reference.Host(), err)
+	}
+	if r.PlainHTTP {
+		resolver.warnPlainHTTP(ctx, parsedURL.Scheme, r.Reference.Host())
+	}
 	if resolver.baseClient != nil {
 		r.Client = resolver.baseClient
 	}
@@ -143,7 +150,7 @@ func (resolver *CachingResolver) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (resolver *CachingResolver) StoreForReference(_ context.Context, reference string) (spec.Store, error) {
+func (resolver *CachingResolver) StoreForReference(ctx context.Context, reference string) (spec.Store, error) {
 	ref, err := looseref.ParseReference(reference)
 	if err != nil {
 		return nil, err
@@ -158,6 +165,14 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 		return cache.Wrap(remoteStore, resolver.blobCache.Load(), resolver.referenceCache.Load()), nil
 	}
 
+	plainHTTP, err := resolver.plainHTTPFor(ref.Scheme, ref.Host())
+	if err != nil {
+		return nil, fmt.Errorf("cannot resolve %q: %w", reference, err)
+	}
+	if plainHTTP {
+		resolver.warnPlainHTTP(ctx, ref.Scheme, ref.Host())
+	}
+
 	repo := &remote.Repository{
 		Reference: ref.Reference,
 		// to remain fully compatible with all OCI repositories, we MUST skip referrers GC.
@@ -170,7 +185,7 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 		SkipReferrersGC: true,
 	}
 
-	repo.PlainHTTP = resolver.plainHTTPFor(ref.Scheme, ref.Host())
+	repo.PlainHTTP = plainHTTP
 
 	if resolver.baseClient != nil {
 		repo.Client = resolver.baseClient
@@ -186,17 +201,34 @@ func (resolver *CachingResolver) StoreForReference(_ context.Context, reference 
 	return cache.Wrap(store, resolver.blobCache.Load(), resolver.referenceCache.Load()), nil
 }
 
-// plainHTTPFor reports whether registry clients for host must use cleartext
-// HTTP: for an http:// base URL (WithPlainHTTP), for an http:// reference, or
-// when the HTTP configuration sets plainHTTP for the host. The configuration
-// applies to https:// references too, because a repository base URL loses its
-// https:// scheme before it gets here; treating both alike keeps one rule.
-func (resolver *CachingResolver) plainHTTPFor(scheme, host string) bool {
-	if resolver.plainHTTP || scheme == "http" {
-		return true
-	}
+// plainHTTPFor reports whether host must be reached over cleartext HTTP: on an
+// http:// prefix (base URL or reference), or when the HTTP configuration sets
+// plainHTTP for the host. The configuration applies to https:// references too,
+// since a base URL loses its scheme before it gets here. An http:// prefix
+// against an explicit plainHTTP: false for the host is an error: a URL must not
+// downgrade a host the configuration pins to HTTPS.
+func (resolver *CachingResolver) plainHTTPFor(scheme, host string) (bool, error) {
 	plain := resolver.httpConfig.ResolveHost(host).PlainHTTP
-	return plain != nil && *plain
+	forced := resolver.plainHTTP || scheme == "http"
+	if forced && plain != nil && !*plain {
+		return false, fmt.Errorf("the http:// prefix conflicts with plainHTTP: false for host %q in the HTTP client configuration; drop the prefix or set plainHTTP: true (see %s)", host, httpPrefixMigrationGuide)
+	}
+	return forced || (plain != nil && *plain), nil
+}
+
+// httpPrefixMigrationGuide explains how to replace an http:// prefix with
+// plainHTTP in the HTTP client configuration.
+const httpPrefixMigrationGuide = "https://ocm.software/docs/guides/transfer/configure-http/#migrate-from-http-prefixes"
+
+func (resolver *CachingResolver) warnPlainHTTP(ctx context.Context, scheme, host string) {
+	switch {
+	case scheme == "http", resolver.plainHTTP:
+		slog.WarnContext(ctx, "the http:// prefix is deprecated and a future release will stop downgrading to plain HTTP; set plainHTTP: true for this host in the HTTP client configuration instead",
+			slog.String("host", host), slog.String("url", httpPrefixMigrationGuide))
+	default:
+		slog.WarnContext(ctx, "plainHTTP is enabled for this host in the HTTP client configuration; OCI registry requests, including credentials, go over cleartext HTTP",
+			slog.String("host", host))
+	}
 }
 
 func (resolver *CachingResolver) addToCache(reference string, store *remotestore.RemoteStore) {

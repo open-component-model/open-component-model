@@ -35,13 +35,11 @@ func WithBaseClient(client remote.Client) Option {
 	})
 }
 
-// WithPlainHTTP sets whether the repository clients the resolver builds use
-// plain HTTP instead of HTTPS. With true, every reference the resolver
-// resolves uses plain HTTP, whatever host it names: an explicit https:// prefix
-// and a per-host plainHTTP: false in the HTTP configuration do not restore
-// HTTPS for it. With false, a scheme-less reference follows the HTTP
-// configuration of its host, and an http:// prefix still means plain HTTP. The
-// OCI repository provider passes true for an http:// repository base URL.
+// WithPlainHTTP forces plain HTTP for every reference, even an https:// one.
+// The OCI repository provider sets it for an http:// base URL. Forcing plain
+// HTTP is deprecated: it warns, stops working in a future release, and is
+// already an error for a host whose HTTP configuration sets plainHTTP: false.
+// Set plainHTTP: true for the host instead.
 func WithPlainHTTP(plainHTTP bool) Option {
 	return OptionFunc(func(resolver *CachingResolver) {
 		resolver.plainHTTP = plainHTTP

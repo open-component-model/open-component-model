@@ -422,10 +422,12 @@ func TestNewResourceRepositoryHTTPConfig_PlainHTTP(t *testing.T) {
 		reference  string
 		httpConfig *httpv1alpha1.Config
 		expectHit  bool
+		wantErr    string
 	}{
-		{name: "without config the client speaks TLS to a plain server", reference: host + "/test/img:v1.0.0"},
+		{name: "without config the client speaks TLS to a plain server", reference: host + "/test/img:v1.0.0", wantErr: "server gave HTTP response to HTTPS client"},
 		{name: "per-host plainHTTP reaches the registry", reference: host + "/test/img:v1.0.0", httpConfig: perHost, expectHit: true},
-		{name: "explicit http reference uses cleartext despite per-host plainHTTP false", reference: "http://" + host + "/test/img:v1.0.0", httpConfig: perHostFalse, expectHit: true},
+		{name: "explicit http reference reaches the registry", reference: "http://" + host + "/test/img:v1.0.0", expectHit: true},
+		{name: "explicit http reference against per-host plainHTTP false is rejected", reference: "http://" + host + "/test/img:v1.0.0", httpConfig: perHostFalse, wantErr: "plainHTTP: false"},
 	}
 
 	for _, tt := range tests {
@@ -453,8 +455,8 @@ func TestNewResourceRepositoryHTTPConfig_PlainHTTP(t *testing.T) {
 			_, err := repo.DownloadResource(t.Context(), res, nil)
 			r.Error(err)
 			r.Equal(tt.expectHit, serverHit.Load(), "expected HTTP request to reach test server")
-			if !tt.expectHit {
-				r.ErrorContains(err, "server gave HTTP response to HTTPS client", "the request must have tried TLS")
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
 			}
 		})
 	}

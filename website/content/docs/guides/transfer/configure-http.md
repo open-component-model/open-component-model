@@ -326,6 +326,40 @@ production.**
 chart downloads ignore it, including charts at `oci://` URLs. A classic Helm
 repository uses plain HTTP only with an `http://` URL.
 
+### Migrate from http:// prefixes
+
+An `http://` prefix on a repository base URL or a reference is deprecated. OCM
+still uses plain HTTP for it, but logs a warning, and a future release will
+stop downgrading to plain HTTP on the prefix alone. If the HTTP configuration
+sets `plainHTTP: false` for that host, the prefix is an error: the
+configuration pins the host to HTTPS, and a URL cannot downgrade it.
+
+To migrate, drop the prefix and mark the host as plain HTTP. Before:
+
+```yaml
+type: OCIRepository/v1
+baseUrl: http://registry.local:5000/ocm
+```
+
+After:
+
+```yaml
+type: OCIRepository/v1
+baseUrl: registry.local:5000/ocm
+```
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    hosts:
+      "registry.local:5000":
+        plainHTTP: true
+```
+
+Do the same for references: write `registry.local:5000/ocm` instead of
+`http://registry.local:5000/ocm`.
+
 ## Override settings per host
 
 Override timeouts, retry policy, and TLS settings for specific registries

@@ -121,8 +121,11 @@ OCM talks HTTPS to every OCI registry unless the reference starts with
 HTTP for a host without changing the reference. It is meant for development and air-gapped registries
 without TLS. Traffic, including credentials, is unencrypted, so set it per host
 and never for a public registry. It applies to a reference with an explicit
-`https://` prefix as well; only an `http://` prefix on a repository base URL is
-stronger.
+`https://` prefix as well. An `http://` prefix on a repository base URL or a
+reference still forces plain HTTP, but it is deprecated: OCM logs a warning,
+and a future release will stop downgrading on the prefix. Against an explicit
+`plainHTTP: false` for the host, the prefix is an error. See
+[Migrate from http:// prefixes]({{< relref "docs/guides/transfer/configure-http.md#migrate-from-http-prefixes" >}}).
 
 ```yaml
 type: generic.config.ocm.software/v1
