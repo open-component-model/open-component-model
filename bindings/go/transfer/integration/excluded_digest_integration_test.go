@@ -20,6 +20,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ociresource "ocm.software/open-component-model/bindings/go/oci/repository/resource"
@@ -94,7 +95,7 @@ func Test_Integration_TransferOCIArtifact_ExcludedFromSignature(t *testing.T) {
 				source, err := remote.NewRepository(strings.TrimPrefix(imageRef, "http://"))
 				r.NoError(err)
 				source.PlainHTTP = true
-				source.Client = createAuthClient(creds.address, creds.username, creds.password)
+				source.Client = registrytest.AuthClient(creds.address, creds.username, creds.password)
 				root, err := source.Resolve(t.Context(), "v1")
 				r.NoError(err)
 				return descriptor.Resource{
@@ -167,7 +168,7 @@ func Test_Integration_TransferOCIArtifact_ExcludedFromSignature(t *testing.T) {
 			resolver, err := urlresolver.New(
 				urlresolver.WithBaseURL(targetAddr),
 				urlresolver.WithPlainHTTP(true),
-				urlresolver.WithBaseClient(createAuthClient(targetAddr, targetUser, targetPwd)),
+				urlresolver.WithBaseClient(registrytest.AuthClient(targetAddr, targetUser, targetPwd)),
 			)
 			r.NoError(err)
 			targetRepo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))

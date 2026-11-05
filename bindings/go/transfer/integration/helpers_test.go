@@ -2,19 +2,12 @@ package integration_test
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"os"
 	"testing"
-	"time"
 
 	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/registry"
-	"golang.org/x/crypto/bcrypt"
-	"oras.land/oras-go/v2/registry/remote/auth"
-	"oras.land/oras-go/v2/registry/remote/retry"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
@@ -22,6 +15,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	credidentity "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
@@ -31,52 +25,14 @@ import (
 )
 
 const (
-	distributionRegistryImage = "registry:3.0.0"
-	testUsername              = "ocm"
-	testPassword              = "password"
+	testUsername = "ocm"
+	testPassword = "password"
 )
 
 func startRegistry(t *testing.T) (address, user, password string) {
 	t.Helper()
-
-	htpasswd := generateHtpasswd(t, testUsername, testPassword)
-
-	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
-	defer cancel()
-
-	container, err := registry.Run(ctx, distributionRegistryImage,
-		registry.WithHtpasswd(htpasswd),
-		testcontainers.WithEnv(map[string]string{
-			"REGISTRY_VALIDATION_DISABLED": "true",
-			"REGISTRY_LOG_LEVEL":           "debug",
-		}),
-	)
-	require.NoError(t, err, "should start registry container")
-
-	t.Cleanup(func() {
-		if err := container.Terminate(context.Background()); err != nil {
-			t.Logf("failed to terminate registry container: %v", err)
-		}
-	})
-
-	addr, err := container.HostAddress(ctx)
-	require.NoError(t, err)
-
-	return addr, testUsername, testPassword
-}
-
-func generateHtpasswd(t *testing.T, username, password string) string {
-	t.Helper()
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	require.NoError(t, err)
-	return fmt.Sprintf("%s:%s", username, string(hash))
-}
-
-func createAuthClient(address, username, password string) *auth.Client {
-	return &auth.Client{
-		Client:     retry.DefaultClient,
-		Credential: auth.StaticCredential(address, auth.Credential{Username: username, Password: password}),
-	}
+	reg := registrytest.Start(t, registrytest.WithAuth(testUsername, testPassword))
+	return reg.Address, reg.Username, reg.Password
 }
 
 // registryCreds holds credentials for a single OCI registry.

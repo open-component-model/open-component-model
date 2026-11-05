@@ -17,6 +17,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -153,7 +154,7 @@ func Test_Integration_TransferS3Resource_LocalBlobUploader(t *testing.T) {
 	r.NoError(graph.Process(ctx))
 
 	// 6. Verify the component arrived in the target registry with the resource stored as a localBlob.
-	client := createAuthClient(registryAddr, user, password)
+	client := registrytest.AuthClient(registryAddr, user, password)
 	urlRes, err := urlresolver.New(
 		urlresolver.WithBaseURL(registryAddr),
 		urlresolver.WithPlainHTTP(true),

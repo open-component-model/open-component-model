@@ -10,6 +10,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ociresource "ocm.software/open-component-model/bindings/go/oci/repository/resource"
@@ -111,7 +112,7 @@ func Test_Integration_TransferLocalBlob_CTFToOCI(t *testing.T) {
 	r.NoError(graph.Process(ctx), "graph execution should succeed")
 
 	// 5. Verify the component exists in the target registry
-	client := createAuthClient(registryAddr, user, password)
+	client := registrytest.AuthClient(registryAddr, user, password)
 	urlRes, err := urlresolver.New(
 		urlresolver.WithBaseURL(registryAddr),
 		urlresolver.WithPlainHTTP(true),
@@ -187,7 +188,7 @@ func Test_Integration_TransferDescriptorOnly_CTFToOCI(t *testing.T) {
 	r.NoError(graph.Process(ctx))
 
 	// 5. Verify the component exists in the target registry with correct metadata.
-	client := createAuthClient(registryAddr, user, password)
+	client := registrytest.AuthClient(registryAddr, user, password)
 	urlRes, err := urlresolver.New(
 		urlresolver.WithBaseURL(registryAddr),
 		urlresolver.WithPlainHTTP(true),
@@ -256,7 +257,7 @@ func Test_Integration_TransferMultipleResources_CTFToOCI(t *testing.T) {
 	r.NoError(graph.Process(ctx))
 
 	// 5. Verify all 3 resources arrive in target.
-	client := createAuthClient(registryAddr, user, password)
+	client := registrytest.AuthClient(registryAddr, user, password)
 	urlRes, err := urlresolver.New(
 		urlresolver.WithBaseURL(registryAddr),
 		urlresolver.WithPlainHTTP(true),
@@ -390,7 +391,7 @@ func Test_Integration_TransferMultipleComponents_CTFToOCI(t *testing.T) {
 	r.NoError(graph.Process(ctx))
 
 	// 5. Verify both components arrive in target.
-	client := createAuthClient(registryAddr, user, password)
+	client := registrytest.AuthClient(registryAddr, user, password)
 	urlRes, err := urlresolver.New(
 		urlresolver.WithBaseURL(registryAddr),
 		urlresolver.WithPlainHTTP(true),
@@ -461,7 +462,7 @@ func Test_Integration_TransferWithFromRepository(t *testing.T) {
 	r.NoError(graph.Process(ctx))
 
 	// 5. Verify the component exists in the target registry.
-	client := createAuthClient(registryAddr, user, password)
+	client := registrytest.AuthClient(registryAddr, user, password)
 	urlRes, err := urlresolver.New(
 		urlresolver.WithBaseURL(registryAddr),
 		urlresolver.WithPlainHTTP(true),
@@ -568,7 +569,7 @@ func Test_Integration_TransferRecursive_CTFToOCI(t *testing.T) {
 	r.NoError(graph.Process(ctx))
 
 	// 5. Verify both parent and child arrive in the target.
-	client := createAuthClient(registryAddr, user, password)
+	client := registrytest.AuthClient(registryAddr, user, password)
 	urlRes, err := urlresolver.New(
 		urlresolver.WithBaseURL(registryAddr),
 		urlresolver.WithPlainHTTP(true),
