@@ -3,6 +3,7 @@ package cache
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -234,25 +235,67 @@ func TestBlobCache_Always_WhatARepositoryServedSurvivesARestart(t *testing.T) {
 // before the blob does.
 func TestBlobCache_Always_WhatARepositoryServedDoesNotExpireBeforeTheBlob(t *testing.T) {
 	r := require.New(t)
-	const ttl = 200 * time.Millisecond
 	dir := filepath.Join(t.TempDir(), "blobcache")
 	base := newFakeReadOnly()
 	desc := base.put(ociImageSpecV1.MediaTypeImageManifest, []byte(`{"schemaVersion":2}`))
 
-	// A long TTL here, as a running cache would delete the blob once it expires.
 	rc, err := newTestCache(t, Options{Dir: dir, TTL: time.Hour, RemotePolicy: RemotePolicyAlways}).Fetch(t.Context(), base, desc)
 	r.NoError(err)
 	_ = readAllAndClose(t, rc)
 
-	time.Sleep(ttl + 100*time.Millisecond)
+	snapshots := servedSnapshots(t, dir)
+	r.Len(snapshots, 1)
+	raw, err := os.ReadFile(snapshots[0])
+	r.NoError(err)
+	var snap referenceFileSnapshot
+	r.NoError(json.Unmarshal(raw, &snap))
+	r.Len(snap.References, 1)
+	for ref, entry := range snap.References {
+		entry.SavedAt = time.Now().Add(-2 * time.Hour)
+		snap.References[ref] = entry
+	}
+	rewritten, err := json.Marshal(snap)
+	r.NoError(err)
+	r.NoError(os.WriteFile(snapshots[0], rewritten, 0o600))
 
-	restarted := newTestCache(t, Options{Dir: dir, TTL: ttl, RemotePolicy: RemotePolicyAlways})
+	restarted := newTestCache(t, Options{Dir: dir, TTL: time.Hour, RemotePolicy: RemotePolicyAlways})
 	r.True(restarted.Has(desc.Digest), "precondition: the blob must have survived the restart")
 	rc, err = restarted.Fetch(t.Context(), base, desc)
 	r.NoError(err)
 	_ = readAllAndClose(t, rc)
 	r.EqualValues(1, base.fetches.Load(), "the blob and what its repository served must age together")
 	r.EqualValues(1, base.exists.Load())
+}
+
+// digestBlindRepository ignores the reference it is asked to parse.
+type digestBlindRepository struct{ *lyingRepository }
+
+func (s *digestBlindRepository) ParseReference(string) (registry.Reference, error) {
+	return s.ref, nil
+}
+
+func TestBlobCache_Always_RecordsAreBoundToTheDigest(t *testing.T) {
+	r := require.New(t)
+	c := newTestCache(t, Options{RemotePolicy: RemotePolicyAlways})
+
+	other := newFakeRepository("registry.example", "other")
+	cached := other.put(ociImageSpecV1.MediaTypeImageManifest, []byte(`{"schemaVersion":2}`))
+	rc, err := c.Fetch(t.Context(), other, cached)
+	r.NoError(err)
+	_ = readAllAndClose(t, rc)
+
+	served := []byte(`{"schemaVersion":3}`)
+	blind := &digestBlindRepository{&lyingRepository{
+		fakeReadOnly: newFakeRepository("registry.example", "blind"),
+		served:       served,
+	}}
+	own := blind.put(ociImageSpecV1.MediaTypeImageManifest, served)
+	rc, err = c.Fetch(t.Context(), blind, own)
+	r.NoError(err)
+	_ = readAllAndClose(t, rc)
+
+	_, err = c.Fetch(t.Context(), blind, cached)
+	r.ErrorIs(err, content.ErrMismatchedDigest, "serving one blob must not unlock another")
 }
 
 func servedSnapshots(t *testing.T, dir string) []string {

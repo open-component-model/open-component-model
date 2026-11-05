@@ -315,6 +315,8 @@ func (c *BlobCache) fetchAlways(ctx context.Context, upstream ReadOnlyRepository
 	if err != nil {
 		return nil, fmt.Errorf("blobcache: identify repository of %s: %w", target.Digest, err)
 	}
+	// The record must be for this digest, whatever the implementation returns.
+	blobRef.Reference = target.Digest.String()
 
 	_, known := c.served.Lookup(blobRef)
 	if known {
