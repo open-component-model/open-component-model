@@ -9,6 +9,7 @@ import (
 	godigest "github.com/opencontainers/go-digest"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	githubinternal "ocm.software/open-component-model/bindings/go/github/internal"
 	"ocm.software/open-component-model/bindings/go/github/internal/download"
@@ -29,6 +30,7 @@ import (
 type ResourceRepository struct {
 	httpConfig *httpv1alpha1.Config
 	httpClient *http.Client
+	resolver   credentials.Resolver
 }
 
 // Option configures a ResourceRepository.
@@ -53,6 +55,18 @@ func WithHTTPClient(client *http.Client) Option {
 	}
 }
 
+// WithCredentialResolver sets the resolver used to look up credentials for a
+// host the access addresses beyond the one GetResourceCredentialConsumerIdentity
+// names — an APIHostname override, or a redirect. Credentials are looked up
+// under the same GitHubRepository consumer type, so a host is served only what
+// the configuration holds for it. Without a resolver such a host is addressed
+// unauthenticated.
+func WithCredentialResolver(resolver credentials.Resolver) Option {
+	return func(r *ResourceRepository) {
+		r.resolver = resolver
+	}
+}
+
 var _ repository.ResourceRepository = (*ResourceRepository)(nil)
 
 // NewResourceRepository creates a ResourceRepository. Downloaded archives are
@@ -74,7 +88,7 @@ func NewResourceRepository(opts ...Option) *ResourceRepository {
 // at, using this repository's HTTP client. The digest processor uses it to pin a
 // ref-only access before downloading. Nil credentials resolve anonymously.
 func (r *ResourceRepository) ResolveCommit(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHubCredentials) (string, error) {
-	return download.ResolveCommit(ctx, gitHub, credentials, r.httpClient)
+	return download.ResolveCommit(ctx, gitHub, credentials, r.httpClient, r.resolver)
 }
 
 // GetResourceRepositoryScheme returns the GitHub access scheme containing the
@@ -162,7 +176,7 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, resource *des
 // DownloadArchive downloads the archive of the commit pinned in gitHub without verifying it
 // against a resource digest; the digest processor uses it to compute that digest.
 func (r *ResourceRepository) DownloadArchive(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHubCredentials) (blob.ReadOnlyBlob, error) {
-	return download.Download(ctx, gitHub, credentials, r.httpClient)
+	return download.Download(ctx, gitHub, credentials, r.httpClient, r.resolver)
 }
 
 // UploadResource is not supported: the GitHub access type is a read-only

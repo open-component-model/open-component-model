@@ -53,6 +53,23 @@
 // context deadline (covering headers + body), so a per-host value can exceed
 // the global. http.Client.Timeout is left zero in this case.
 //
+// # Per-host credentials
+//
+// A credential belongs to the host it was resolved for. WithCredentialSource
+// asks, for every request a client makes, which credential the host it
+// addresses may carry, so neither a redirect nor an access spec naming another
+// host can move one elsewhere:
+//
+//	client = ocmhttp.WithCredentialSource(client, func(ctx context.Context, host string) (ocmhttp.Credential, error) {
+//		if ocmhttp.BoundToHost("github.com", host) {
+//			return ocmhttp.BearerToken(token), nil
+//		}
+//		return nil, nil // any other host goes out unauthenticated
+//	})
+//
+// The returned client shares the original's connection pool, so a source can
+// be installed per download.
+//
 // # Lower-level constructors
 //
 // Skip the retry layer with NewClient, or get just the transport:

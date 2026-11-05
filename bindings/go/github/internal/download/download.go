@@ -14,6 +14,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/credentials"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
 )
@@ -31,8 +32,8 @@ const MediaTypeTGZ = "application/x-tgz"
 // An access without a resolved commit is rejected: a bare ref is mutable and
 // cannot be materialized reproducibly.
 //
-// credentials and httpClient may be nil; see clientFor.
-func Download(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHubCredentials, httpClient *http.Client) (blob.ReadOnlyBlob, error) {
+// creds, httpClient and resolver may be nil; see clientFor.
+func Download(ctx context.Context, gitHub *v1.GitHub, creds *credsv1.GitHubCredentials, httpClient *http.Client, resolver credentials.Resolver) (blob.ReadOnlyBlob, error) {
 	if err := gitHub.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid GitHub access: %w", err)
 	}
@@ -42,7 +43,7 @@ func Download(ctx context.Context, gitHub *v1.GitHub, credentials *credsv1.GitHu
 
 	slog.DebugContext(ctx, "Downloading GitHub commit archive", "repoUrl", gitHub.RepoURL, "commit", gitHub.Commit)
 
-	stream, err := fetch(ctx, gitHub, credentials, httpClient)
+	stream, err := fetch(ctx, gitHub, creds, httpClient, resolver)
 	if err != nil {
 		return nil, err
 	}

@@ -134,8 +134,12 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 	// Resources of these access types are downloaded to be verified, and by the Deployer.
 	httpClient := httpclient.New(httpclient.WithConfig(httpCfg))
 	gitRepository := gitrepository.NewResourceRepository(fsCfg, gitrepository.WithHTTPClient(httpClient))
-	gitHubRepository := githubrepository.NewResourceRepository(githubrepository.WithHTTPClient(httpClient))
-	gitHubDigestProcessor := githubdigest.NewDigestProcessor(githubrepository.WithHTTPClient(httpClient))
+	// Declared with bare instances: the credential scheme a binding consumes is its own and
+	// does not depend on how a repository is configured. The configured GitHub plugins are
+	// registered below, once the graph their accesses resolve through has been ingested
+	// against these very types.
+	gitHubCredentialTypes := githubrepository.NewResourceRepository()
+	gitHubDigestCredentialTypes := githubdigest.NewDigestProcessor()
 	wgetRepository := wgetrepository.NewResourceRepository(wgetrepository.WithHTTPClient(httpClient), wgetrepository.WithChecksumConfig(checksumCfg))
 	s3Repository := s3repository.NewResourceRepository(s3repository.WithHTTPConfig(httpCfg))
 
@@ -153,8 +157,6 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 		pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(helmDigestProcessor),
 		pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(gitRepository),
 		pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(gitRepository),
-		pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(gitHubRepository),
-		pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(gitHubDigestProcessor),
 		pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(wgetRepository),
 		pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(wgetRepository),
 		pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(s3Repository),
@@ -172,12 +174,30 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 		pm.CredentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(ociResourceRepoPlugin),
 		pm.CredentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(helmDigestProcessor),
 		pm.CredentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(gitRepository),
-		pm.CredentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(gitHubRepository),
-		pm.CredentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(gitHubDigestProcessor),
+		pm.CredentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(gitHubCredentialTypes),
+		pm.CredentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(gitHubDigestCredentialTypes),
 		pm.CredentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(wgetRepository),
 		pm.CredentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(s3Repository),
 	); err != nil {
 		return nil, fmt.Errorf("failed to register credential types: %w", err)
+	}
+
+	// Every credential type is declared now, so the configuration can be ingested and
+	// validated against them; the plugins that resolve through the graph follow.
+	graph, err := NewCredentialGraph(ctx, cfg, CredentialGraphOptions{PluginManager: pm})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create credential graph: %w", err)
+	}
+
+	gitHubOpts := []githubrepository.Option{
+		githubrepository.WithHTTPClient(httpClient),
+		githubrepository.WithCredentialResolver(graph),
+	}
+	if err := errors.Join(
+		pm.ResourcePluginRegistry.RegisterInternalResourcePlugin(githubrepository.NewResourceRepository(gitHubOpts...)),
+		pm.DigestProcessorRegistry.RegisterInternalDigestProcessorPlugin(githubdigest.NewDigestProcessor(gitHubOpts...)),
+	); err != nil {
+		return nil, fmt.Errorf("failed to register credential-aware internal plugins: %w", err)
 	}
 
 	return pm, nil

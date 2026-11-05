@@ -3,6 +3,7 @@ package github
 import (
 	"fmt"
 
+	"ocm.software/open-component-model/bindings/go/credentials"
 	githubdigest "ocm.software/open-component-model/bindings/go/github/digest"
 	githubrepository "ocm.software/open-component-model/bindings/go/github/repository/resource"
 	httpclient "ocm.software/open-component-model/bindings/go/http"
@@ -12,29 +13,39 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/resource"
 )
 
-// Register wires the GitHub resource repository, its digest processor and its
-// credential scheme into the CLI plugin registries.
+// RegisterCredentialTypes declares the credential types the GitHub binding consumes. The
+// credential graph ingests a configuration against them, so they are registered before it is
+// built, while Register needs the finished graph. The declared scheme is the binding's own and
+// does not depend on how a repository is configured, so a bare one serves to declare it.
+func RegisterCredentialTypes(credentialTypeRegistry *credentialtyperepository.CredentialTypeRegistry) error {
+	if err := credentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(githubrepository.NewResourceRepository()); err != nil {
+		return fmt.Errorf("could not register github credential types: %w", err)
+	}
+	if err := credentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(githubdigest.NewDigestProcessor()); err != nil {
+		return fmt.Errorf("could not register github credential types: %w", err)
+	}
+	return nil
+}
+
+// Register wires the GitHub resource repository and its digest processor into the CLI plugin
+// registries. credentialResolver is the finished credential graph, which they consult for a
+// host the access addresses beyond the one its consumer identity names.
 func Register(resourcePluginRegistry *resource.ResourceRegistry,
 	digestProcessorRegistry *digestprocessor.RepositoryRegistry,
-	credentialTypeRegistry *credentialtyperepository.CredentialTypeRegistry,
 	httpConfig *httpv1alpha1.Config,
+	credentialResolver credentials.Resolver,
 ) error {
 	httpClient := httpclient.New(httpclient.WithConfig(httpConfig))
-
-	repository := githubrepository.NewResourceRepository(githubrepository.WithHTTPClient(httpClient))
-	if err := credentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(repository); err != nil {
-		return fmt.Errorf("could not register github credential types: %w", err)
+	opts := []githubrepository.Option{
+		githubrepository.WithHTTPClient(httpClient),
+		githubrepository.WithCredentialResolver(credentialResolver),
 	}
-	if err := resourcePluginRegistry.RegisterInternalResourcePlugin(repository); err != nil {
+
+	if err := resourcePluginRegistry.RegisterInternalResourcePlugin(githubrepository.NewResourceRepository(opts...)); err != nil {
 		return fmt.Errorf("could not register github resource repository plugin: %w", err)
 	}
-
-	digestProcessor := githubdigest.NewDigestProcessor(githubrepository.WithHTTPClient(httpClient))
-	if err := digestProcessorRegistry.RegisterInternalDigestProcessorPlugin(digestProcessor); err != nil {
+	if err := digestProcessorRegistry.RegisterInternalDigestProcessorPlugin(githubdigest.NewDigestProcessor(opts...)); err != nil {
 		return fmt.Errorf("could not register github digest processor plugin: %w", err)
-	}
-	if err := credentialTypeRegistry.RegisterInternalCredentialTypeSchemeProvider(digestProcessor); err != nil {
-		return fmt.Errorf("could not register github credential types: %w", err)
 	}
 
 	return nil

@@ -4,7 +4,9 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -14,8 +16,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/credentials"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestOwnerRepo(t *testing.T) {
@@ -82,7 +86,7 @@ func TestResolveCommit(t *testing.T) {
 	}))
 	defer server.Close()
 
-	got, err := ResolveCommit(t.Context(), &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Ref: ref}, nil, server.Client())
+	got, err := ResolveCommit(t.Context(), &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Ref: ref}, nil, server.Client(), nil)
 	require.NoError(t, err)
 	assert.Equal(t, wantSHA, got)
 }
@@ -112,7 +116,7 @@ func TestResolveCommit_APIHostnameOverridesTheRepoHost(t *testing.T) {
 		Ref:         ref,
 	}
 
-	got, err := ResolveCommit(t.Context(), access, nil, api.Client())
+	got, err := ResolveCommit(t.Context(), access, nil, api.Client(), nil)
 	require.NoError(t, err)
 	assert.Equal(t, wantSHA, got)
 	assert.True(t, strings.HasPrefix(pathSeen, "/api/v3/"),
@@ -125,7 +129,7 @@ func TestResolveCommit_UnresolvableRef(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := ResolveCommit(t.Context(), &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Ref: "gone"}, nil, server.Client())
+	_, err := ResolveCommit(t.Context(), &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Ref: "gone"}, nil, server.Client(), nil)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, `error resolving github ref "gone" for octocat/Hello-World`)
 }
@@ -176,7 +180,7 @@ func TestFetch(t *testing.T) {
 			defer server.Close()
 
 			access := &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Commit: commit}
-			rc, err := fetch(t.Context(), access, tc.credentials, server.Client())
+			rc, err := fetch(t.Context(), access, tc.credentials, server.Client(), nil)
 			require.NoError(t, err)
 			defer func() { require.NoError(t, rc.Close()) }()
 
@@ -214,11 +218,11 @@ func TestFetch_SharedClientDoesNotLeakToken(t *testing.T) {
 	access := &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Commit: commit}
 	shared := server.Client()
 
-	rc, err := fetch(t.Context(), access, &credsv1.GitHubCredentials{Token: "ghp_secret"}, shared)
+	rc, err := fetch(t.Context(), access, &credsv1.GitHubCredentials{Token: "ghp_secret"}, shared, nil)
 	require.NoError(t, err)
 	require.NoError(t, rc.Close())
 
-	rc, err = fetch(t.Context(), access, nil, shared)
+	rc, err = fetch(t.Context(), access, nil, shared, nil)
 	require.NoError(t, err)
 	require.NoError(t, rc.Close())
 
@@ -245,7 +249,7 @@ func TestFetch_ArchiveEndpointStatusError(t *testing.T) {
 	defer server.Close()
 
 	access := &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Commit: commit}
-	_, err := fetch(t.Context(), access, nil, server.Client())
+	_, err := fetch(t.Context(), access, nil, server.Client(), nil)
 	require.Error(t, err)
 	assert.ErrorContains(t, err, "unexpected status downloading github archive octocat/Hello-World@"+commit+": 410 Gone")
 }
@@ -275,7 +279,7 @@ func TestFetch_DownloadErrorDoesNotLeakTheSignedArchiveLink(t *testing.T) {
 	defer server.Close()
 
 	access := &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Commit: commit}
-	_, err := fetch(t.Context(), access, &credsv1.GitHubCredentials{Token: "ghp_secret"}, server.Client())
+	_, err := fetch(t.Context(), access, &credsv1.GitHubCredentials{Token: "ghp_secret"}, server.Client(), nil)
 
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), signedToken, "the signed archive link's token must not reach the error")
@@ -284,4 +288,159 @@ func TestFetch_DownloadErrorDoesNotLeakTheSignedArchiveLink(t *testing.T) {
 		"the commit coordinates must survive so the failure stays diagnosable")
 	assert.Contains(t, err.Error(), "token="+redactedToken, "the signed link's token must be visibly redacted, not silently dropped")
 	assert.ErrorContains(t, err, "connection refused", "the underlying cause must survive")
+}
+
+// staticResolver resolves the identities it was given and reports ErrNotFound for anything
+// else, standing in for the credential graph built from an ocmconfig.
+type staticResolver struct {
+	byHostname map[string]string
+}
+
+func (r *staticResolver) Resolve(_ context.Context, identity runtime.Identity) (runtime.Typed, error) {
+	token, ok := r.byHostname[identity[runtime.IdentityAttributeHostname]]
+	if !ok {
+		return nil, credentials.ErrNotFound
+	}
+	return &credsv1.GitHubCredentials{
+		Type:  runtime.NewVersionedType(credsv1.GitHubCredentialsType, credsv1.Version),
+		Token: token,
+	}, nil
+}
+
+// TestResolveCommit_APIHostnameCredentials covers which token reaches an apiHostname that is
+// not the repository host. The consumer identity the caller resolved comes from repoUrl, so
+// that token belongs to the repository host; the API host gets whatever the configuration
+// holds for it under the same GitHubRepository consumer type, and nothing when it holds none.
+func TestResolveCommit_APIHostnameCredentials(t *testing.T) {
+	const ref = "main"
+	const wantSHA = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
+	const repoToken = "VICTIM-TOKEN-FOR-THE-REPO-HOST"
+
+	tests := []struct {
+		name     string
+		resolver credentials.Resolver
+		wantAuth string
+	}{
+		{
+			name:     "no resolver leaves the api host unauthenticated",
+			wantAuth: "",
+		},
+		{
+			name:     "nothing configured for the api host leaves it unauthenticated",
+			resolver: &staticResolver{byHostname: map[string]string{"github.invalid": repoToken}},
+			wantAuth: "",
+		},
+		{
+			name:     "a credential configured for the api host is used",
+			resolver: &staticResolver{byHostname: map[string]string{"api.invalid": "TOKEN-FOR-THE-API-HOST"}},
+			wantAuth: "Bearer TOKEN-FOR-THE-API-HOST",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			var authSeen string
+			api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				if strings.HasSuffix(req.URL.Path, "/repos/octocat/Hello-World/commits/"+ref) {
+					authSeen = req.Header.Get("Authorization")
+					_, _ = w.Write([]byte(wantSHA))
+					return
+				}
+				http.Error(w, "unexpected path "+req.URL.Path, http.StatusNotFound)
+			}))
+			defer api.Close()
+
+			client := &http.Client{Transport: &http.Transport{
+				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+					if addr == "api.invalid:80" {
+						addr = hostOf(t, api)
+					}
+					var dialer net.Dialer
+					return dialer.DialContext(ctx, network, addr)
+				},
+			}}
+
+			access := &v1.GitHub{
+				RepoURL:     "http://github.invalid/octocat/Hello-World",
+				APIHostname: "api.invalid",
+				Ref:         ref,
+			}
+			got, err := ResolveCommit(t.Context(), access, &credsv1.GitHubCredentials{Token: repoToken}, client, tc.resolver)
+			r.NoError(err)
+			r.Equal(wantSHA, got)
+			r.Equal(tc.wantAuth, authSeen)
+			r.NotEqual("Bearer "+repoToken, authSeen, "the repository host's token must never reach the api host")
+		})
+	}
+}
+
+func TestResolveCommit_SendsTheTokenToTheEnterpriseAPIHost(t *testing.T) {
+	r := require.New(t)
+	const ref = "main"
+	const wantSHA = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
+	const token = "VICTIM-GHE-PAT"
+
+	var authSeen string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if strings.HasSuffix(req.URL.Path, "/repos/octocat/Hello-World/commits/"+ref) {
+			authSeen = req.Header.Get("Authorization")
+			_, _ = w.Write([]byte(wantSHA))
+			return
+		}
+		http.Error(w, "unexpected path "+req.URL.Path, http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	access := &v1.GitHub{RepoURL: server.URL + "/octocat/Hello-World", Ref: ref}
+	got, err := ResolveCommit(t.Context(), access, &credsv1.GitHubCredentials{Token: token}, server.Client(), nil)
+	r.NoError(err)
+	r.Equal(wantSHA, got)
+	r.Equal("Bearer "+token, authSeen)
+}
+
+func TestResolveCommit_TokenDoesNotFollowARedirectOffTheAPIHost(t *testing.T) {
+	r := require.New(t)
+	const ref = "main"
+	const token = "VICTIM-GHE-PAT"
+
+	authByHost := map[string]string{}
+	attacker := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		authByHost[req.Host] = req.Header.Get("Authorization")
+		http.Error(w, "nothing here", http.StatusNotFound)
+	}))
+	defer attacker.Close()
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		authByHost[req.Host] = req.Header.Get("Authorization")
+		http.Redirect(w, req, "http://attacker.invalid"+req.URL.Path, http.StatusMovedPermanently)
+	}))
+	defer api.Close()
+
+	apiHost, attackerHost := hostOf(t, api), hostOf(t, attacker)
+	// Both servers listen on 127.0.0.1, so address them by distinct hostnames
+	// and map those to the listeners when dialling.
+	client := &http.Client{Transport: &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			switch addr {
+			case "ghe.invalid:80":
+				addr = apiHost
+			case "attacker.invalid:80":
+				addr = attackerHost
+			}
+			var dialer net.Dialer
+			return dialer.DialContext(ctx, network, addr)
+		},
+	}}
+
+	access := &v1.GitHub{RepoURL: "http://ghe.invalid/octocat/Hello-World", Ref: ref}
+	_, err := ResolveCommit(t.Context(), access, &credsv1.GitHubCredentials{Token: token}, client, nil)
+	r.Error(err, "the redirect target serves no commit")
+	r.Equal("Bearer "+token, authByHost["ghe.invalid"])
+	r.Empty(authByHost["attacker.invalid"], "the token must not follow the redirect")
+}
+
+func hostOf(t *testing.T, server *httptest.Server) string {
+	t.Helper()
+	u, err := url.Parse(server.URL)
+	require.NoError(t, err)
+	return u.Host
 }
