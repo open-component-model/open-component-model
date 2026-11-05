@@ -221,22 +221,34 @@ test("buildModuleBlocks: schema imports have correct targets with version prefix
     const { imports } = buildModuleBlocks("0.15", "0.15.0", ALL_DEPS);
     const targets = imports.flatMap((i) => i.mounts.map((m) => m.target)).sort();
     assert.deepEqual(targets, [
+        "assets/0.15/schemas/bindings/go/constructor",
+        "assets/0.15/schemas/bindings/go/credentials/direct/v1",
+        "assets/0.15/schemas/bindings/go/credentials/github/v1",
+        "assets/0.15/schemas/bindings/go/credentials/gpg/v1alpha1",
+        "assets/0.15/schemas/bindings/go/credentials/helm/v1",
+        "assets/0.15/schemas/bindings/go/credentials/oci/v1",
+        "assets/0.15/schemas/bindings/go/credentials/rsa/v1",
+        "assets/0.15/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1",
+        "assets/0.15/schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1",
+        "assets/0.15/schemas/bindings/go/credentials/wget/v1",
+        "assets/0.15/schemas/bindings/go/descriptor/v2",
+        "assets/0.15/schemas/bindings/go/http",
+        "assets/0.15/schemas/kubernetes/controller",
         "content",
-        "content/docs/reference/ocm-cli",
-        "static/0.15/schemas/bindings/go/constructor",
-        "static/0.15/schemas/bindings/go/credentials/direct/v1",
-        "static/0.15/schemas/bindings/go/credentials/github/v1",
-        "static/0.15/schemas/bindings/go/credentials/gpg/v1alpha1",
-        "static/0.15/schemas/bindings/go/credentials/helm/v1",
-        "static/0.15/schemas/bindings/go/credentials/oci/v1",
-        "static/0.15/schemas/bindings/go/credentials/rsa/v1",
-        "static/0.15/schemas/bindings/go/credentials/sigstore/oidcidentitytoken/v1alpha1",
-        "static/0.15/schemas/bindings/go/credentials/sigstore/trustedroot/v1alpha1",
-        "static/0.15/schemas/bindings/go/credentials/wget/v1",
-        "static/0.15/schemas/bindings/go/descriptor/v2",
-        "static/0.15/schemas/bindings/go/http",
-        "static/0.15/schemas/kubernetes/controller"
+        "content/docs/reference/ocm-cli"
     ]);
+});
+
+test("buildModuleBlocks: s3 and tsa credential schemas are gated to their introduction version", () => {
+    const monoDeps = { [MONOLITHIC_BINDINGS_MODULE]: "v0.22.0" };
+    const targetsFor = (v) => buildModuleBlocks(v, `${v}.0`, monoDeps)
+        .imports.flatMap((i) => i.mounts.map((m) => m.target));
+    const s3 = (v) => `assets/${v}/schemas/bindings/go/credentials/s3/v1`;
+    const tsa = (v) => `assets/${v}/schemas/bindings/go/credentials/tsa/v1alpha1`;
+    assert.ok(!targetsFor("0.15").includes(s3("0.15")), "s3 credentials absent before 0.16");
+    assert.ok(targetsFor("0.16").includes(s3("0.16")), "s3 credentials present from 0.16");
+    assert.ok(!targetsFor("0.19").includes(tsa("0.19")), "tsa credentials absent before 0.21");
+    assert.ok(targetsFor("0.21").includes(tsa("0.21")), "tsa credentials present from 0.21");
 });
 
 test("buildModuleBlocks: schema imports have correct sources", () => {
@@ -708,7 +720,7 @@ test("buildModuleBlocks: monolithic import mounts cover every schema directory",
     assert.equal(monolith.mounts.length, applicable.length);
     for (const m of monolith.mounts) {
         assert.deepEqual(m.sites.matrix.versions, ["0.15"]);
-        assert.match(m.target, /^static\/0\.15\/schemas\/bindings\/go\//);
+        assert.match(m.target, /^assets\/0\.15\/schemas\/bindings\/go\//);
     }
 });
 
@@ -719,7 +731,7 @@ test("buildModuleBlocks: monolithic and legacy layouts mount the same schema set
     // existed as stand-alone modules, so they only appear in the monolithic
     // layout. Strip them for the schema-set parity check.
     const sinceMonolithTargets = new Set(
-        BINDING_SCHEMA_MOUNTS.filter((m) => m.sinceMonolith).map((m) => `static/0.15/${m.target}`)
+        BINDING_SCHEMA_MOUNTS.filter((m) => m.sinceMonolith).map((m) => `assets/0.15/${m.target}`)
     );
     const legacyTargets = legacy.flatMap((i) => i.mounts.map((m) => m.target)).sort();
     const monolithTargets = monolith
@@ -738,7 +750,7 @@ test("buildModuleBlocks: monolithic and legacy layouts mount the same schema set
         if (since && compareSemver("0.15", since) < 0) {
             continue;
         }
-        assert.equal(monolithByTarget.get(`static/0.15/${target}`), `${pkg}/${source}`);
+        assert.equal(monolithByTarget.get(`assets/0.15/${target}`), `${pkg}/${source}`);
     }
 });
 
@@ -805,7 +817,7 @@ test("buildModuleBlocks: post-merge (>=0.16) folds cli/controller into bindings/
     assert.equal(cli.target, "content/docs/reference/ocm-cli");
     assert.equal(cli.source, "cli/docs/reference");
     assert.equal(controller.sites.matrix.versions[0], "0.16");
-    assert.equal(controller.target, "static/0.16/schemas/kubernetes/controller");
+    assert.equal(controller.target, "assets/0.16/schemas/kubernetes/controller");
     assert.equal(controller.source, "kubernetes/controller/config/crd/bases");
 });
 

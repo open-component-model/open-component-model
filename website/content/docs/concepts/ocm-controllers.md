@@ -170,7 +170,16 @@ The controller accepts a fixed set of OCM configuration types and silently drops
 | `transfer.config.ocm.software`    | replication settings                                                                                                           |
 | `http.config.ocm.software`        | HTTP client timeouts, retries, per-host overrides, and `insecureSkipVerify` for local registries with self-signed certificates |
 
-`filesystem.config.ocm.software` is deliberately **not** accepted.
+`filesystem.config.ocm.software` and `oci.cache.config.ocm.software` are deliberately **not** accepted. The OCI cache
+remote policy is set for the whole controller instead, see
+[Caching]({{< relref "docs/reference/configuration/caching.md#remote-policy-in-the-controller" >}}).
+
+{{<callout context="caution" title="Shared OCI cache" icon="outline/alert-triangle">}}
+One OCI blob cache serves every namespace. With the default remote policy `IfNotPresent`, cached manifests and
+component descriptors are returned without checking the registry first, so an object can read blobs that, potentially,
+it doesn't have credentials for. Use `Always` when namespaces MUST NOT share registry access. With `Always`, the cache
+will verify access, before serving a cached blob.
+{{</callout>}}
 
 ## Additional Status Fields
 
