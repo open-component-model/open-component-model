@@ -1,5 +1,4 @@
-// Package integrity binds downloaded content to the digest a component descriptor
-// records for it.
+// Package integrity binds content to the digest a component descriptor records for it.
 //
 // Repositories hand the content they download to [Verify] together with the digest of
 // the resource. The returned blob fails, at the latest when it is read to its end, if
@@ -23,6 +22,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/opencontainers/go-digest"
@@ -197,21 +197,32 @@ func VerifyContent(ctx context.Context, expected *descriptor.Digest, content blo
 func VerifyOCIArtifact(ctx context.Context, expected *descriptor.Digest, root digest.Digest, opts ...Option) error {
 	want, err := ParseDigest(expected)
 	if err != nil {
+		// A digest of an unknown normalisation cannot be judged by what its fields look like.
+		if !isArtifactNormalisation(expected.NormalisationAlgorithm) {
+			return unsupportedNormalisation(expected.NormalisationAlgorithm)
+		}
 		return err
 	}
 	if want == "" {
 		logUnverified(ctx, expected, newOptions(opts).logAttrs)
 		return nil
 	}
+	if !isArtifactNormalisation(expected.NormalisationAlgorithm) {
+		return unsupportedNormalisation(expected.NormalisationAlgorithm)
+	}
+	if want != root {
+		return fmt.Errorf("OCI artifact digest mismatch: expected %s, got %s", want, root)
+	}
+	return nil
+}
 
-	switch n := expected.NormalisationAlgorithm; n {
+// isArtifactNormalisation reports whether normalisation may label the root digest of an OCI artifact.
+func isArtifactNormalisation(normalisation string) bool {
+	switch normalisation {
 	case "", descriptor.GenericBlobDigestV1, descriptor.OCIArtifactDigestV1:
-		if want != root {
-			return fmt.Errorf("OCI artifact digest mismatch: expected %s, got %s", want, root)
-		}
-		return nil
+		return true
 	default:
-		return unsupportedNormalisation(n)
+		return false
 	}
 }
 
@@ -270,8 +281,15 @@ func newArtifactBlob(ctx context.Context, content blob.ReadOnlyBlob, root digest
 }
 
 func logUnverified(ctx context.Context, expected *descriptor.Digest, attrs []slog.Attr) {
-	if expected != nil && (strings.EqualFold(expected.HashAlgorithm, descriptor.NoDigest) ||
-		strings.EqualFold(expected.NormalisationAlgorithm, descriptor.ExcludeFromSignature)) {
+	if expected != nil && isExcluded(expected) {
+		if expected.Value != "" && !strings.EqualFold(expected.Value, descriptor.NoDigest) {
+			attrs = append(slices.Clone(attrs),
+				slog.String("hashAlgorithm", expected.HashAlgorithm),
+				slog.String("normalisationAlgorithm", expected.NormalisationAlgorithm),
+				slog.String("value", expected.Value))
+			slog.LogAttrs(ctx, slog.LevelWarn, "digest is excluded from signature but records a value: the value is not verified and does not identify the content", attrs...)
+			return
+		}
 		slog.LogAttrs(ctx, slog.LevelDebug, "content is excluded from signature, it is used without verification", attrs...)
 		return
 	}

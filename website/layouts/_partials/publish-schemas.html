@@ -1,0 +1,18 @@
+{{- /*
+  Publish this version's schema assets.
+
+  Schemas are mounted under assets/<version>/schemas (not static/) so the
+  schema-renderer shortcode can validate them with resources.Get and fail the
+  build when one is missing. Assets publish only on demand, so copy each one to
+  its /<version>/schemas/... output path and publish it. resources.Copy is
+  required: versions that share a module version resolve to one shared resource,
+  and copying to a version-specific target keeps every version's URL distinct.
+
+  Called from baseof.html as:
+    {{ partialCached "publish-schemas.html" . .Site.Version.Name }}
+*/ -}}
+{{- $v := .Site.Version.Name -}}
+{{- range resources.Match (printf "%s/schemas/**" $v) -}}
+  {{- $target := printf "/%s/%s" $v (replaceRE `^/?[^/]+/` "" .Name) -}}
+  {{- with resources.Copy $target . -}}{{- .Publish -}}{{- end -}}
+{{- end -}}
