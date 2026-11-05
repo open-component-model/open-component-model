@@ -2,15 +2,10 @@ package handler
 
 import (
 	"crypto"
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/hex"
-	"encoding/pem"
-	"math/big"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -20,6 +15,7 @@ import (
 
 	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/pkitest"
 	internalpem "ocm.software/open-component-model/bindings/go/rsa/signing/handler/internal/pem"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	rsacredentialsv1 "ocm.software/open-component-model/bindings/go/rsa/spec/credentials/v1"
@@ -30,14 +26,14 @@ import (
 
 func Test_RSA_Handler(t *testing.T) {
 	// signer A
-	aKey := mustKey(t)
-	aCert := mustSelfSigned(t, "signer", aKey)
-	aPriv, aPub := writeKeyAndChain(t, t.TempDir(), aKey, aCert)
+	aKey := pkitest.RSAKey(t)
+	aCert := pkitest.SelfSigned(t, "signer", aKey)
+	aPriv, aPub := pkitest.WriteKeyAndChain(t, t.TempDir(), aKey, aCert)
 
 	// signer B (mismatch)
-	bKey := mustKey(t)
-	bCert := mustSelfSigned(t, "other", bKey)
-	_, bPub := writeKeyAndChain(t, t.TempDir(), bKey, bCert)
+	bKey := pkitest.RSAKey(t)
+	bCert := pkitest.SelfSigned(t, "other", bKey)
+	_, bPub := pkitest.WriteKeyAndChain(t, t.TempDir(), bKey, bCert)
 
 	h, err := New(v1alpha1.Scheme, false)
 	require.NoError(t, err)
@@ -104,8 +100,8 @@ func Test_RSA_Handler(t *testing.T) {
 						c := buildChain(t)
 						dir := t.TempDir()
 						privPath := filepath.Join(dir, "leaf.key")
-						writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
-						leafOnly := writeCertsPEM(t, dir, "leaf.pem", c.leaf)
+						pkitest.WritePEM(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
+						leafOnly := pkitest.WriteCerts(t, dir, "leaf.pem", c.leaf)
 						return signPEM(t, privPath, leafOnly)
 					}
 
@@ -252,9 +248,9 @@ func Test_RSA_Handler(t *testing.T) {
 
 								dir := t.TempDir()
 								privPath := filepath.Join(dir, "leaf.key")
-								writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
+								pkitest.WritePEM(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
 
-								embedded := writeCertsPEM(t, dir, "embedded.pem", c.leaf, c.interm)
+								embedded := pkitest.WriteCerts(t, dir, "embedded.pem", c.leaf, c.interm)
 
 								cfg := v1alpha1.Config{
 									SignatureAlgorithm:      alg,
@@ -268,7 +264,7 @@ func Test_RSA_Handler(t *testing.T) {
 								require.NoError(t, err)
 
 								rootDir := t.TempDir()
-								rootPEM = writeCertsPEM(t, rootDir, "root.pem", c.root)
+								rootPEM = pkitest.WriteCerts(t, rootDir, "root.pem", c.root)
 
 								// Issuer must match the leaf's X.509 Issuer field, which is the
 								// intermediate's Subject (the cert that directly signed the leaf).
@@ -299,10 +295,10 @@ func Test_RSA_Handler(t *testing.T) {
 
 								dir := t.TempDir()
 								privPath := filepath.Join(dir, "leaf.key")
-								writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
+								pkitest.WritePEM(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
 
 								// Embed full chain including the self-signed root.
-								embedded := writeCertsPEM(t, dir, "embedded.pem", c.leaf, c.interm, c.root)
+								embedded := pkitest.WriteCerts(t, dir, "embedded.pem", c.leaf, c.interm, c.root)
 
 								cfg := v1alpha1.Config{
 									SignatureAlgorithm:      alg,
@@ -334,9 +330,9 @@ func Test_RSA_Handler(t *testing.T) {
 
 								dir := t.TempDir()
 								privPath := filepath.Join(dir, "leaf.key")
-								writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
+								pkitest.WritePEM(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
 								// Root is NOT embedded — it will come from credentials.
-								embedded := writeCertsPEM(t, dir, "embedded.pem", c.leaf, c.interm)
+								embedded := pkitest.WriteCerts(t, dir, "embedded.pem", c.leaf, c.interm)
 
 								cfg := v1alpha1.Config{
 									SignatureAlgorithm:      alg,
@@ -349,7 +345,7 @@ func Test_RSA_Handler(t *testing.T) {
 								})
 								require.NoError(t, err)
 
-								rootPEM = writeCertsPEM(t, t.TempDir(), "root.pem", c.root)
+								rootPEM = pkitest.WriteCerts(t, t.TempDir(), "root.pem", c.root)
 
 								// leaf.Issuer == interm.Subject: set Issuer to that, should succeed.
 								return descruntime.Signature{
@@ -380,9 +376,9 @@ func Test_RSA_Handler(t *testing.T) {
 
 								dir := t.TempDir()
 								privPath := filepath.Join(dir, "leaf.key")
-								writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
+								pkitest.WritePEM(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
 								// Root is NOT embedded — it will come from credentials.
-								embedded := writeCertsPEM(t, dir, "embedded.pem", c.leaf, c.interm)
+								embedded := pkitest.WriteCerts(t, dir, "embedded.pem", c.leaf, c.interm)
 
 								cfg := v1alpha1.Config{
 									SignatureAlgorithm:      alg,
@@ -395,7 +391,7 @@ func Test_RSA_Handler(t *testing.T) {
 								})
 								require.NoError(t, err)
 
-								rootPEM = writeCertsPEM(t, t.TempDir(), "root.pem", c.root)
+								rootPEM = pkitest.WriteCerts(t, t.TempDir(), "root.pem", c.root)
 
 								// Set Issuer to root's subject, but leaf was signed by intermediate — mismatch.
 								return descruntime.Signature{
@@ -426,9 +422,9 @@ func Test_RSA_Handler(t *testing.T) {
 								c := buildChain(t)
 								dir := t.TempDir()
 								privPath := filepath.Join(dir, "leaf.key")
-								writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
+								pkitest.WritePEM(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
 								// Embed leaf + intermediate only — no root.
-								embedded := writeCertsPEM(t, dir, "embedded.pem", c.leaf, c.interm)
+								embedded := pkitest.WriteCerts(t, dir, "embedded.pem", c.leaf, c.interm)
 								return signPEM(t, privPath, embedded)
 							},
 							// No credentials anchor either — interm must not be elevated to root.
@@ -450,8 +446,8 @@ func Test_RSA_Handler(t *testing.T) {
 
 								dir := t.TempDir()
 								privPath := filepath.Join(dir, "leaf.key")
-								writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
-								embedded := writeCertsPEM(t, dir, "embedded.pem", c.leaf, c.interm)
+								pkitest.WritePEM(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
+								embedded := pkitest.WriteCerts(t, dir, "embedded.pem", c.leaf, c.interm)
 
 								cfg := v1alpha1.Config{
 									SignatureAlgorithm:      alg,
@@ -465,7 +461,7 @@ func Test_RSA_Handler(t *testing.T) {
 								require.NoError(t, err)
 
 								rootDir := t.TempDir()
-								rootPEM = writeCertsPEM(t, rootDir, "root.pem", c.root)
+								rootPEM = pkitest.WriteCerts(t, rootDir, "root.pem", c.root)
 
 								// It must now fail because leaf.Issuer is
 								// interm.Subject, not root.Subject.
@@ -499,14 +495,14 @@ func Test_RSA_Handler(t *testing.T) {
 								c := buildChain(t)
 								dir := t.TempDir()
 								privPath := filepath.Join(dir, "leaf.key")
-								writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
-								leafOnly := writeCertsPEM(t, dir, "leaf.pem", c.leaf)
+								pkitest.WritePEM(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
+								leafOnly := pkitest.WriteCerts(t, dir, "leaf.pem", c.leaf)
 								return signPEM(t, privPath, leafOnly)
 							},
 							creds: func(t *testing.T) runtime.Typed {
 								t.Helper()
 								c := buildChain(t) // different chain — interm/root don't match the leaf above
-								chainPath := writeCertsPEM(t, t.TempDir(), "chain.pem", c.interm, c.root)
+								chainPath := pkitest.WriteCerts(t, t.TempDir(), "chain.pem", c.interm, c.root)
 								return &rsacredentialsv1.RSACredentials{
 									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: chainPath,
 								}
@@ -527,8 +523,8 @@ func Test_RSA_Handler(t *testing.T) {
 								c := buildChain(t)
 								dir := t.TempDir()
 								privPath := filepath.Join(dir, "leaf.key")
-								writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
-								leafOnly := writeCertsPEM(t, dir, "leaf.pem", c.leaf)
+								pkitest.WritePEM(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
+								leafOnly := pkitest.WriteCerts(t, dir, "leaf.pem", c.leaf)
 
 								cfg := v1alpha1.Config{
 									SignatureAlgorithm:      alg,
@@ -541,7 +537,7 @@ func Test_RSA_Handler(t *testing.T) {
 								})
 								require.NoError(t, err)
 
-								rootPEM = writeCertsPEM(t, t.TempDir(), "chain.pem", c.interm, c.root)
+								rootPEM = pkitest.WriteCerts(t, t.TempDir(), "chain.pem", c.interm, c.root)
 
 								return descruntime.Signature{Digest: d, Signature: si}
 							},
@@ -563,7 +559,7 @@ func Test_RSA_Handler(t *testing.T) {
 							creds: func(t *testing.T) runtime.Typed {
 								t.Helper()
 								c := buildChain(t)
-								intermOnly := writeCertsPEM(t, t.TempDir(), "interm.pem", c.interm)
+								intermOnly := pkitest.WriteCerts(t, t.TempDir(), "interm.pem", c.interm)
 								return &rsacredentialsv1.RSACredentials{
 									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: intermOnly,
 								}
@@ -579,7 +575,7 @@ func Test_RSA_Handler(t *testing.T) {
 								t.Helper()
 								c := buildChain(t)
 								// Deliberately wrong order: [root, interm] — self-signed root is not last.
-								badChain := writeCertsPEM(t, t.TempDir(), "bad.pem", c.root, c.interm)
+								badChain := pkitest.WriteCerts(t, t.TempDir(), "bad.pem", c.root, c.interm)
 								return &rsacredentialsv1.RSACredentials{
 									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: badChain,
 								}
@@ -597,7 +593,7 @@ func Test_RSA_Handler(t *testing.T) {
 							creds: func(t *testing.T) runtime.Typed {
 								t.Helper()
 								c := buildChain(t)
-								rootPath := writeCertsPEM(t, t.TempDir(), "root.pem", c.root)
+								rootPath := pkitest.WriteCerts(t, t.TempDir(), "root.pem", c.root)
 								return &rsacredentialsv1.RSACredentials{
 									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: rootPath,
 								}
@@ -638,10 +634,10 @@ func Test_RSA_Credentials_Override_SystemRoots(t *testing.T) {
 		t.Skipf("cannot load system roots: %v", err)
 	}
 
-	key := mustKey(t)
-	cert := mustSelfSigned(t, "system-trusted-signer", key)
+	key := pkitest.RSAKey(t)
+	cert := pkitest.SelfSigned(t, "system-trusted-signer", key)
 	dir := t.TempDir()
-	privPath, chainPath := writeKeyAndChain(t, dir, key, cert)
+	privPath, chainPath := pkitest.WriteKeyAndChain(t, dir, key, cert)
 
 	sum := sha256.Sum256([]byte("payload"))
 	d := descruntime.Digest{HashAlgorithm: crypto.SHA256.String(), Value: hex.EncodeToString(sum[:])}
@@ -669,9 +665,9 @@ func Test_RSA_Credentials_Override_SystemRoots(t *testing.T) {
 	// Self-signed anchor: a different root in credentials must fail even though
 	// system roots are loaded — a self-signed anchor isolates the root pool.
 	t.Run("self_signed_anchor_wrong_cert_fails_despite_system_roots", func(t *testing.T) {
-		otherKey := mustKey(t)
-		otherCert := mustSelfSigned(t, "unrelated-root", otherKey)
-		otherPath := writeCertsPEM(t, t.TempDir(), "other.pem", otherCert)
+		otherKey := pkitest.RSAKey(t)
+		otherCert := pkitest.SelfSigned(t, "unrelated-root", otherKey)
+		otherPath := pkitest.WriteCerts(t, t.TempDir(), "other.pem", otherCert)
 
 		err := h.Verify(t.Context(), sig, nil, &rsacredentialsv1.RSACredentials{
 			Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: otherPath,
@@ -688,9 +684,9 @@ func Test_RSA_Credentials_Override_SystemRoots(t *testing.T) {
 
 		leafDir := t.TempDir()
 		leafPrivPath := filepath.Join(leafDir, "leaf.key")
-		writePEMFile(t, leafPrivPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
+		pkitest.WritePEM(t, leafPrivPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
 		// Embed only the leaf; interm and root come from credentials.
-		leafOnly := writeCertsPEM(t, leafDir, "leaf.pem", c.leaf)
+		leafOnly := pkitest.WriteCerts(t, leafDir, "leaf.pem", c.leaf)
 
 		leafSI, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
 			Type:              rsacredentialsv1.VersionedType,
@@ -702,7 +698,7 @@ func Test_RSA_Credentials_Override_SystemRoots(t *testing.T) {
 
 		// Credentials supply [interm, root]: interm → intermediates pool,
 		// root (self-signed, last) → isolated anchor. Must succeed.
-		chainPath := writeCertsPEM(t, t.TempDir(), "chain.pem", c.interm, c.root)
+		chainPath := pkitest.WriteCerts(t, t.TempDir(), "chain.pem", c.interm, c.root)
 		err = h.Verify(t.Context(), leafSig, nil, &rsacredentialsv1.RSACredentials{
 			Type:             rsacredentialsv1.VersionedType,
 			PublicKeyPEMFile: chainPath,
@@ -712,7 +708,7 @@ func Test_RSA_Credentials_Override_SystemRoots(t *testing.T) {
 		// Credentials supply only [interm] (no self-signed root). The intermediate
 		// goes to the intermediates pool; no root exists to terminate the chain.
 		// Must fail — a non-self-signed cert is never elevated to an anchor.
-		intermPath := writeCertsPEM(t, t.TempDir(), "interm.pem", c.interm)
+		intermPath := pkitest.WriteCerts(t, t.TempDir(), "interm.pem", c.interm)
 		err = h.Verify(t.Context(), leafSig, nil, &rsacredentialsv1.RSACredentials{
 			Type:             rsacredentialsv1.VersionedType,
 			PublicKeyPEMFile: intermPath,
@@ -729,10 +725,10 @@ func Test_RSA_Verify_ErrorPaths_BothAlgs(t *testing.T) {
 			require.NoError(t, err)
 
 			// Keys and certs.
-			key := mustKey(t)
-			cert := mustSelfSigned(t, "cn=signer", key)
+			key := pkitest.RSAKey(t)
+			cert := pkitest.SelfSigned(t, "cn=signer", key)
 			dir := t.TempDir()
-			privPath, chainPath := writeKeyAndChain(t, dir, key, cert)
+			privPath, chainPath := pkitest.WriteKeyAndChain(t, dir, key, cert)
 
 			// Base digest.
 			sum := sha256.Sum256([]byte("payload"))
@@ -947,7 +943,7 @@ func Test_RSA_Identity(t *testing.T) {
 		// helper to build a minimal SIGNATURE PEM for a given algorithm
 		newPEM := func(t *testing.T, alg string) string {
 			t.Helper()
-			cert := mustSelfSigned(t, "cn=signer", mustKey(t))
+			cert := pkitest.SelfSigned(t, "cn=signer", pkitest.RSAKey(t))
 			// dummy bytes, no chain needed for identity parsing
 			return string(internalpem.SignatureBytesToPem(alg, []byte{0x01}, cert))
 		}
@@ -1044,9 +1040,9 @@ func Test_RSA_Verify_TrustedSigningTime(t *testing.T) {
 	h, err := New(v1alpha1.Scheme, false)
 	require.NoError(t, err)
 
-	key := mustKey(t)
-	cert := mustSelfSigned(t, "expiring-signer", key)
-	privPath, chainPath := writeKeyAndChain(t, t.TempDir(), key, cert)
+	key := pkitest.RSAKey(t)
+	cert := pkitest.SelfSigned(t, "expiring-signer", key)
+	privPath, chainPath := pkitest.WriteKeyAndChain(t, t.TempDir(), key, cert)
 
 	d := digestHex(crypto.SHA256, []byte("payload"))
 	si, err := h.Sign(t.Context(), d, &v1alpha1.Config{
@@ -1121,92 +1117,13 @@ func digestHex(algorithm crypto.Hash, b []byte) descruntime.Digest {
 	return descruntime.Digest{HashAlgorithm: algorithm.String(), Value: hex.EncodeToString(hashSum)}
 }
 
-func mustKey(t *testing.T) *rsa.PrivateKey {
-	t.Helper()
-	k, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
-	return k
-}
-
-func mustSelfSigned(t *testing.T, cn string, key *rsa.PrivateKey) *x509.Certificate {
-	t.Helper()
-	tmpl := &x509.Certificate{
-		SerialNumber:          mustRand128(t),
-		Subject:               pkix.Name{CommonName: cn},
-		NotBefore:             time.Now().Add(-time.Hour),
-		NotAfter:              time.Now().Add(24 * time.Hour),
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment | x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
-		BasicConstraintsValid: true,
-		IsCA:                  true,
-	}
-	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
-	require.NoError(t, err)
-	cert, err := x509.ParseCertificate(der)
-	require.NoError(t, err)
-	return cert
-}
-
-func mustRand128(t *testing.T) *big.Int {
-	t.Helper()
-	n, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
-	require.NoError(t, err)
-	return n
-}
-
-func writePEMFile(t *testing.T, path, typ string, der []byte) {
-	t.Helper()
-	require.NoError(t, os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: typ, Bytes: der}), 0o600))
-}
-
-func writeKeyAndChain(t *testing.T, dir string, priv *rsa.PrivateKey, chain ...*x509.Certificate) (privPath, chainPath string) {
-	t.Helper()
-	privPath = filepath.Join(dir, "key.pem")
-	writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(priv))
-	chainPath = writeCertsPEM(t, dir, "chain.pem", chain...)
-	return
-}
-
 func writePKCS8PrivateKeyPEM(t *testing.T, dir string, key *rsa.PrivateKey) string {
 	t.Helper()
 	der, err := x509.MarshalPKCS8PrivateKey(key)
 	require.NoError(t, err)
 	p := filepath.Join(dir, "key_pkcs8.pem")
-	writePEMFile(t, p, "PRIVATE KEY", der)
+	pkitest.WritePEM(t, p, "PRIVATE KEY", der)
 	return p
-}
-
-func issueCert(t *testing.T, parent *x509.Certificate, parentKey *rsa.PrivateKey, subjectcn string, isCA bool, pub *rsa.PublicKey) *x509.Certificate {
-	t.Helper()
-	tmpl := &x509.Certificate{
-		SerialNumber:          mustRand128(t),
-		Subject:               pkix.Name{CommonName: subjectcn},
-		NotBefore:             time.Now().Add(-time.Hour),
-		NotAfter:              time.Now().Add(7 * 24 * time.Hour),
-		KeyUsage:              x509.KeyUsageDigitalSignature,
-		BasicConstraintsValid: isCA,
-		IsCA:                  isCA,
-	}
-	if isCA {
-		tmpl.KeyUsage |= x509.KeyUsageCertSign | x509.KeyUsageCRLSign
-	}
-	if parent == nil {
-		parent = tmpl
-	}
-	if parentKey == nil {
-		parentKey = mustKey(t)
-		if pub == nil {
-			pub = &parentKey.PublicKey
-		}
-	}
-	if pub == nil {
-		priv := mustKey(t)
-		pub = &priv.PublicKey
-	}
-	der, err := x509.CreateCertificate(rand.Reader, tmpl, parent, pub, parentKey)
-	require.NoError(t, err)
-	cert, err := x509.ParseCertificate(der)
-	require.NoError(t, err)
-	return cert
 }
 
 type chain struct {
@@ -1216,28 +1133,17 @@ type chain struct {
 
 func buildChain(t *testing.T) chain {
 	t.Helper()
-	rootKey := mustKey(t)
+	rootKey := pkitest.RSAKey(t)
 	// Self-sign the root with rootKey so CheckSignatureFrom(root) passes.
-	root := issueCert(t, nil, rootKey, "cn=root", true, &rootKey.PublicKey)
+	root := pkitest.Issue(t, nil, rootKey, "cn=root", true, &rootKey.PublicKey)
 
-	intermKey := mustKey(t)
-	interm := issueCert(t, root, rootKey, "cn=intermediate", true, &intermKey.PublicKey)
+	intermKey := pkitest.RSAKey(t)
+	interm := pkitest.Issue(t, root, rootKey, "cn=intermediate", true, &intermKey.PublicKey)
 
-	leafKey := mustKey(t)
-	leaf := issueCert(t, interm, intermKey, "cn=leaf", false, &leafKey.PublicKey)
+	leafKey := pkitest.RSAKey(t)
+	leaf := pkitest.Issue(t, interm, intermKey, "cn=leaf", false, &leafKey.PublicKey)
 
 	return chain{root, interm, leaf, rootKey, intermKey, leafKey}
-}
-
-func writeCertsPEM(t *testing.T, dir, name string, certs ...*x509.Certificate) string {
-	t.Helper()
-	var blob []byte
-	for _, c := range certs {
-		blob = append(blob, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: c.Raw})...)
-	}
-	p := filepath.Join(dir, name)
-	require.NoError(t, os.WriteFile(p, blob, 0o600))
-	return p
 }
 
 func writePKIXPublicKeyPEM(t *testing.T, dir string, pub *rsa.PublicKey) string {
@@ -1245,7 +1151,7 @@ func writePKIXPublicKeyPEM(t *testing.T, dir string, pub *rsa.PublicKey) string 
 	der, err := x509.MarshalPKIXPublicKey(pub)
 	require.NoError(t, err)
 	p := filepath.Join(dir, "pub_pkix.pem")
-	writePEMFile(t, p, "PUBLIC KEY", der)
+	pkitest.WritePEM(t, p, "PUBLIC KEY", der)
 	return p
 }
 
@@ -1253,7 +1159,7 @@ func writePKCS1PublicKeyPEM(t *testing.T, dir string, pub *rsa.PublicKey) string
 	t.Helper()
 	der := x509.MarshalPKCS1PublicKey(pub)
 	p := filepath.Join(dir, "pub_pkcs1.pem")
-	writePEMFile(t, p, "RSA PUBLIC KEY", der)
+	pkitest.WritePEM(t, p, "RSA PUBLIC KEY", der)
 	return p
 }
 

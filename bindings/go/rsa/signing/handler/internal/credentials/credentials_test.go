@@ -15,15 +15,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/internal/testutil/pkitest"
 	rsacredentialsv1 "ocm.software/open-component-model/bindings/go/rsa/spec/credentials/v1"
 )
-
-func newKey(t *testing.T) *rsa.PrivateKey {
-	t.Helper()
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
-	return key
-}
 
 func pkcs1PrivatePEM(key *rsa.PrivateKey) string {
 	return string(pem.EncodeToMemory(&pem.Block{
@@ -65,10 +59,10 @@ func writeTempFile(t *testing.T, content string) string {
 }
 
 func TestPrivateKeyFromCredentials(t *testing.T) {
-	key := newKey(t)
+	key := pkitest.RSAKey(t)
 	privPEM := pkcs1PrivatePEM(key)
 	privFile := writeTempFile(t, privPEM)
-	otherFile := writeTempFile(t, pkcs1PrivatePEM(newKey(t)))
+	otherFile := writeTempFile(t, pkcs1PrivatePEM(pkitest.RSAKey(t)))
 
 	tests := []struct {
 		name    string
@@ -111,7 +105,7 @@ func TestPrivateKeyFromCredentials(t *testing.T) {
 }
 
 func TestPublicKeyFromCredentials(t *testing.T) {
-	key := newKey(t)
+	key := pkitest.RSAKey(t)
 	pubPEM := pkixPublicPEM(key)
 	pubFile := writeTempFile(t, pubPEM)
 
@@ -153,7 +147,7 @@ func TestPublicKeyFromCredentials(t *testing.T) {
 }
 
 func TestCertificateChainFromCredentials(t *testing.T) {
-	key := newKey(t)
+	key := pkitest.RSAKey(t)
 	certPEM := selfSignedCertPEM(t, key)
 	certFile := writeTempFile(t, certPEM)
 

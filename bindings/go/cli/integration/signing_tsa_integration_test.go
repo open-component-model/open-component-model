@@ -25,6 +25,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/pkitest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	"ocm.software/open-component-model/bindings/go/signing/tsa"
@@ -44,7 +45,7 @@ func Test_Integration_Signing_TSA(t *testing.T) {
 	registry, err := internal.CreateOCIRegistry(t)
 	r.NoError(err)
 
-	k := mustRSAKey(t)
+	k := pkitest.RSAKey(t)
 	privPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(k)})
 	pubPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PUBLIC KEY", Bytes: x509.MarshalPKCS1PublicKey(&k.PublicKey)})
 
@@ -82,7 +83,7 @@ configurations:
     - type: TSACredentials/v1alpha1
       rootCertsPEMFile: %[10]q
 `, registry.Host, registry.Port, registry.User, registry.Password, pubPEM, privPEM,
-		tsaServerURL.Hostname(), tsaServerURL.Port(), tsaServerURL.Scheme, writePEMCertFile(t, dir, "tsa-root.pem", tsaCert))), 0o600))
+		tsaServerURL.Hostname(), tsaServerURL.Port(), tsaServerURL.Scheme, pkitest.WriteCerts(t, dir, "tsa-root.pem", tsaCert))), 0o600))
 
 	resolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(registry.RegistryAddress),
@@ -132,11 +133,11 @@ configurations:
 func newMockTSA(t *testing.T) (*httptest.Server, *x509.Certificate) {
 	t.Helper()
 	r := require.New(t)
-	key := mustRSAKey(t)
+	key := pkitest.RSAKey(t)
 	ekuVal, err := asn1.Marshal([]asn1.ObjectIdentifier{{1, 3, 6, 1, 5, 5, 7, 3, 8}})
 	r.NoError(err)
 	tmpl := &x509.Certificate{
-		SerialNumber:          mustRand128Bit(t),
+		SerialNumber:          pkitest.SerialNumber(t),
 		Subject:               pkix.Name{CommonName: "Test TSA"},
 		NotBefore:             time.Now().Add(-time.Hour),
 		NotAfter:              time.Now().Add(time.Hour),

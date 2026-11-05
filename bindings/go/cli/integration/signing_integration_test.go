@@ -4,10 +4,8 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
-	"math/big"
 	"os"
 	"path/filepath"
 	"testing"
@@ -20,6 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/pkitest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 )
@@ -146,12 +145,12 @@ func Test_Integration_Signing_PEM(t *testing.T) {
 	r.NoError(err)
 
 	// Build a 3-tier certificate chain: root CA → intermediate CA → leaf
-	rootKey := mustRSAKey(t)
-	root := issuePEMCert(t, nil, rootKey, "pem-test-root", true, &rootKey.PublicKey)
-	intermKey := mustRSAKey(t)
-	interm := issuePEMCert(t, root, rootKey, "pem-test-interm", true, &intermKey.PublicKey)
-	leafKey := mustRSAKey(t)
-	leaf := issuePEMCert(t, interm, intermKey, "pem-test-leaf", false, &leafKey.PublicKey)
+	rootKey := pkitest.RSAKey(t)
+	root := pkitest.Issue(t, nil, rootKey, "pem-test-root", true, &rootKey.PublicKey)
+	intermKey := pkitest.RSAKey(t)
+	interm := pkitest.Issue(t, root, rootKey, "pem-test-interm", true, &intermKey.PublicKey)
+	leafKey := pkitest.RSAKey(t)
+	leaf := pkitest.Issue(t, interm, intermKey, "pem-test-leaf", false, &leafKey.PublicKey)
 
 	dir := t.TempDir()
 
@@ -162,10 +161,10 @@ func Test_Integration_Signing_PEM(t *testing.T) {
 		0o600))
 
 	// [leaf + intermediate] chain — root must NOT be included (verifier rejects embedded self-signed certs)
-	chainPath := writePEMCertFile(t, dir, "chain.pem", leaf, interm)
+	chainPath := pkitest.WriteCerts(t, dir, "chain.pem", leaf, interm)
 
 	// Root CA — used as trust anchor by the verifier
-	rootCAPath := writePEMCertFile(t, dir, "root.pem", root)
+	rootCAPath := pkitest.WriteCerts(t, dir, "root.pem", root)
 
 	// Signing config: private key + [leaf, interm] chain, signer with PEM encoding policy
 	signCfg := fmt.Sprintf(`
@@ -286,57 +285,4 @@ configurations:
 		verifyCMD.SetArgs([]string{"verify", "cv", ref, "--config", verifyCfgPath})
 		r.NoError(verifyCMD.ExecuteContext(t.Context()))
 	})
-}
-
-func mustRSAKey(t *testing.T) *rsa.PrivateKey {
-	t.Helper()
-	k, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
-	return k
-}
-
-func mustRand128Bit(t *testing.T) *big.Int {
-	t.Helper()
-	n, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
-	require.NoError(t, err)
-	return n
-}
-
-// issuePEMCert creates an X.509 certificate signed by parent/parentKey.
-// When parent is nil the certificate is self-signed (root CA use case).
-func issuePEMCert(t *testing.T, parent *x509.Certificate, parentKey *rsa.PrivateKey, cn string, isCA bool, pub *rsa.PublicKey) *x509.Certificate {
-	t.Helper()
-	tmpl := &x509.Certificate{
-		SerialNumber:          mustRand128Bit(t),
-		Subject:               pkix.Name{CommonName: cn},
-		NotBefore:             time.Now().Add(-time.Hour),
-		NotAfter:              time.Now().Add(7 * 24 * time.Hour),
-		KeyUsage:              x509.KeyUsageDigitalSignature,
-		BasicConstraintsValid: isCA,
-		IsCA:                  isCA,
-	}
-	if isCA {
-		tmpl.KeyUsage |= x509.KeyUsageCertSign | x509.KeyUsageCRLSign
-	}
-	if parent == nil {
-		parent = tmpl
-	}
-	der, err := x509.CreateCertificate(rand.Reader, tmpl, parent, pub, parentKey)
-	require.NoError(t, err)
-	cert, err := x509.ParseCertificate(der)
-	require.NoError(t, err)
-	return cert
-}
-
-// writePEMCertFile concatenates the given certificates as CERTIFICATE PEM blocks
-// into dir/name and returns the file path.
-func writePEMCertFile(t *testing.T, dir, name string, certs ...*x509.Certificate) string {
-	t.Helper()
-	var blob []byte
-	for _, c := range certs {
-		blob = append(blob, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: c.Raw})...)
-	}
-	p := filepath.Join(dir, name)
-	require.NoError(t, os.WriteFile(p, blob, 0o600))
-	return p
 }
