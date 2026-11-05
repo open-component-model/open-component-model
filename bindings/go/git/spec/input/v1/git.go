@@ -25,6 +25,8 @@ type Git struct {
 	// local path, relative to the working directory unless absolute. A fragment may
 	// select the ref or commit with branch=<name>, tag=<name> or commit=<sha>, as in
 	// https://github.com/org/repo.git#branch=main.
+	// Local repositories (file:// or plain paths) are accepted: the input archives
+	// the local repository into a portable local blob at component version creation time.
 	Repository string `json:"repository"`
 
 	// Ref selects a branch, tag or full ref name (for example main, v1.0.0 or
@@ -45,8 +47,7 @@ func (g *Git) Validate() error {
 	if err != nil {
 		return err
 	}
-
-	return access.Validate()
+	return access.ValidateStructure()
 }
 
 // ToAccess returns the normalized Git access that selects the input snapshot.

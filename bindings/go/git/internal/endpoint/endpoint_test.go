@@ -71,3 +71,27 @@ func TestParseRejects(t *testing.T) {
 		})
 	}
 }
+
+func TestIsLocal(t *testing.T) {
+	for _, tc := range []struct {
+		repository string
+		want       bool
+	}{
+		{"file:///srv/repo.git", true},
+		{"file://localhost/srv/repo.git", true},
+		{"/srv/repo.git", true},
+		{"example.com/org/repo.git", true}, // no scheme → local path
+		{"https://example.com/org/repo.git", false},
+		{"http://example.com/org/repo.git", false},
+		{"ssh://git@example.com/org/repo.git", false},
+		{"git@example.com:org/repo.git", false},
+		{"git://example.com/repo.git", false},
+	} {
+		t.Run(tc.repository, func(t *testing.T) {
+			r := require.New(t)
+			ep, err := endpoint.Parse(tc.repository)
+			r.NoError(err)
+			r.Equal(tc.want, ep.IsLocal())
+		})
+	}
+}

@@ -12,6 +12,7 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/git/gittest"
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	gitaccess "ocm.software/open-component-model/bindings/go/git/spec/access"
 	gitv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
@@ -26,12 +27,21 @@ import (
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
-// newGitRepository creates a local repository with two commits on main and the lightweight tag
-// v1.0.0 on the first, and returns its path and the first commit. A local path is a valid Git/v1
-// repository, so no Git server is needed.
-func newGitRepository(t *testing.T) (path string, first plumbing.Hash) {
+// newBareGitRepository creates an empty bare repository and returns its path and URL.
+func newBareGitRepository(t *testing.T) (path, url string) {
 	t.Helper()
-	return testgit.Repository(t, testgit.Options{DefaultBranch: "main", Tags: []string{"v1.0.0"}})
+	path = t.TempDir()
+	_, err := git.PlainInit(path, true)
+	require.NoError(t, err)
+	return path, gittest.Serve(t, path)
+}
+
+// newGitRepository creates a repository with two commits on main and the lightweight tag
+// v1.0.0 on the first, and returns its URL and the first commit.
+func newGitRepository(t *testing.T) (url string, first plumbing.Hash) {
+	t.Helper()
+	path, first := testgit.Repository(t, testgit.Options{DefaultBranch: "main", Tags: []string{"v1.0.0"}})
+	return gittest.Serve(t, path), first
 }
 
 // Transfers a Git resource pinned to a commit from a source CTF to an OCI registry, and
@@ -42,7 +52,7 @@ func Test_Integration_TransferGit_CTFToOCI(t *testing.T) {
 
 	// 1. Start the target OCI registry and create the Git repository the resource is fetched from.
 	registryAddr, user, password := startRegistry(t)
-	repoPath, first := newGitRepository(t)
+	repoURL, first := newGitRepository(t)
 
 	// 2. Create a source CTF whose component has a Git resource pinned to the first commit,
 	//    while main already points at the second one.
@@ -64,7 +74,7 @@ func Test_Integration_TransferGit_CTFToOCI(t *testing.T) {
 		Relation: descriptor.ExternalRelation,
 		Access: &gitv1.Git{
 			Type:       runtime.NewVersionedType(gitv1.Type, gitv1.Version),
-			Repository: repoPath,
+			Repository: repoURL,
 			Ref:        "refs/heads/main",
 			Commit:     first.String(),
 		},
@@ -175,10 +185,8 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 	// 1. Start the target OCI registry and create the Git repository the resource is fetched
 	//    from and the existing (empty) repository it is pushed into.
 	registryAddr, user, password := startRegistry(t)
-	repoPath, first := newGitRepository(t)
-	targetGitPath := t.TempDir()
-	_, err := git.PlainInit(targetGitPath, true)
-	r.NoError(err)
+	repoURL, first := newGitRepository(t)
+	targetGitPath, targetGitURL := newBareGitRepository(t)
 
 	// 2. Create a source CTF whose component has a Git resource pinned to the first commit,
 	//    with the digest the constructor would pin.
@@ -200,7 +208,7 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 		Relation: descriptor.ExternalRelation,
 		Access: &gitv1.Git{
 			Type:       runtime.NewVersionedType(gitv1.Type, gitv1.Version),
-			Repository: repoPath,
+			Repository: repoURL,
 			Ref:        "v1.0.0",
 			Commit:     first.String(),
 		},
@@ -238,7 +246,7 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 
 	// assertPushed reads the transferred component version back from subPath of the target
 	// registry and the pushed commit back from the target Git repository.
-	assertPushed := func(t *testing.T, subPath, repository, ref string) {
+	assertPushed := func(t *testing.T, subPath, repositoryPath, repositoryURL, ref string) {
 		t.Helper()
 		r := require.New(t)
 
@@ -256,13 +264,13 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 		res := gotDesc.Component.Resources[0]
 		var published gitv1.Git
 		r.NoError(gitaccess.Scheme.Convert(res.Access, &published), "the resource must be published with Git access")
-		r.Equal(repository, published.Repository)
+		r.Equal(repositoryURL, published.Repository)
 		r.Equal(ref, published.Ref)
 		r.Equal(first.String(), published.Commit, "the commit SHA must be unchanged")
 		r.NotNil(res.Digest)
 		r.Equal(digested.Digest.Value, res.Digest.Value, "the pinned digest must be preserved")
 
-		pushed, err := git.PlainOpen(repository)
+		pushed, err := git.PlainOpen(repositoryPath)
 		r.NoError(err)
 		pushedRef, err := pushed.Reference(plumbing.ReferenceName(ref), false)
 		r.NoError(err)
@@ -283,8 +291,8 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 
 	t.Run("a Git access is pushed to the configured ref", func(t *testing.T) {
 		transferOnce(t, ctfRepo, sourceSpec, targetSpec("direct"),
-			&transferv1alpha1.GitUploaderConfig{Repository: targetGitPath, Ref: "refs/tags/v1.0.0"}, resourceRepo, credResolver, componentName, componentVersion)
-		assertPushed(t, "direct", targetGitPath, "refs/tags/v1.0.0")
+			&transferv1alpha1.GitUploaderConfig{Repository: targetGitURL, Ref: "refs/tags/v1.0.0"}, resourceRepo, credResolver, componentName, componentVersion)
+		assertPushed(t, "direct", targetGitPath, targetGitURL, "refs/tags/v1.0.0")
 	})
 
 	t.Run("a local blob carried through an air gap is pushed with explicit match, repository and ref", func(t *testing.T) {
@@ -309,17 +317,15 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 
 		// Stage 2, air-gapped side: the local blob no longer carries its origin, so the
 		// uploader needs an explicit match, repository and ref to push it.
-		mirror := t.TempDir()
-		_, err = git.PlainInit(mirror, true)
-		r.NoError(err)
+		mirror, mirrorURL := newBareGitRepository(t)
 		transferOnce(t, airGapRepo, airGapSpec, targetSpec("airgap"),
 			&transferv1alpha1.GitUploaderConfig{
 				Match:      `resource.access.isType("LocalBlob") && resource.access.mediaType == "` + transferv1alpha1.GitLocalBlobMediaType + `"`,
-				Repository: mirror,
+				Repository: mirrorURL,
 				Ref:        "refs/tags/v1.0.0",
 			},
 			resourceRepo, credResolver, componentName, componentVersion)
-		assertPushed(t, "airgap", mirror, "refs/tags/v1.0.0")
+		assertPushed(t, "airgap", mirror, mirrorURL, "refs/tags/v1.0.0")
 	})
 
 	t.Run("the git uploader requires an explicit ref", func(t *testing.T) {
@@ -328,7 +334,7 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 		old := digested.DeepCopy()
 		old.Access = &gitv1.Git{
 			Type:       runtime.NewVersionedType(gitv1.Type, gitv1.Version),
-			Repository: repoPath,
+			Repository: repoURL,
 			Ref:        "v1.0.0",
 			Commit:     first.String(),
 		}
@@ -344,13 +350,11 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 				Resources: []descriptor.Resource{*old},
 			},
 		}))
-		unpushed := t.TempDir()
-		_, err := git.PlainInit(unpushed, true)
-		r.NoError(err)
+		unpushed, unpushedURL := newBareGitRepository(t)
 
 		_, err = transfer.BuildGraphDefinition(t.Context(),
 			&transferv1alpha1.Config{},
-			[]transferv1alpha1.UploaderConfig{&transferv1alpha1.GitUploaderConfig{Repository: unpushed}},
+			[]transferv1alpha1.UploaderConfig{&transferv1alpha1.GitUploaderConfig{Repository: unpushedURL}},
 			transfer.Mapping{
 				Components: []transfer.ComponentID{{Component: componentName, Version: componentVersion}},
 				Target:     targetSpec("old"),

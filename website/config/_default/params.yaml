@@ -70,7 +70,7 @@ doks:
 # Debug
 render_hooks:
   image:
-    errorLevel: ignore # ignore (default), warning, or error (fails the build)
+    errorLevel: error # ignore (default), warning, or error (fails the build)
   link:
     errorLevel: ignore # ignore (default), warning, or error (fails the build)
     highlightBroken: false # true or false (default)

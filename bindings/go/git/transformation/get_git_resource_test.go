@@ -22,6 +22,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/git/gittest"
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	"ocm.software/open-component-model/bindings/go/git/spec/access"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
@@ -46,18 +47,20 @@ func gitResource(t *testing.T, url, ref, commit, accessType string) *v2.Resource
 	}
 }
 
-func localRepository(t *testing.T) (path, firstCommit string) {
+// servedRepository creates a repository with two commits and returns its URL and
+// the first commit.
+func servedRepository(t *testing.T) (url, firstCommit string) {
 	t.Helper()
 	path, first := testgit.Repository(t, testgit.Options{Commits: []testgit.Commit{
 		{File: "README", Content: "original"},
 		{File: "README", Content: "updated"},
 	}})
-	return path, first.String()
+	return gittest.Serve(t, path), first.String()
 }
 
 func TestGetGitResourceLocalRepository(t *testing.T) {
 	r := require.New(t)
-	path, commit := localRepository(t)
+	serverURL, commit := servedRepository(t)
 	r.NotEmpty(commit)
 	for _, tc := range []struct {
 		name, ref, commit, accessType, content string
@@ -70,7 +73,7 @@ func TestGetGitResourceLocalRepository(t *testing.T) {
 			r := require.New(t)
 			downloadDir, outputDir := t.TempDir(), t.TempDir()
 			repo := gitrepository.NewResourceRepository(&filesystemconfig.Config{TempFolder: &downloadDir})
-			resource := gitResource(t, path, tc.ref, tc.commit, tc.accessType)
+			resource := gitResource(t, serverURL, tc.ref, tc.commit, tc.accessType)
 			pinned, err := repo.ProcessResourceDigest(t.Context(), descriptor.ConvertFromV2Resource(resource), nil)
 			r.NoError(err)
 			// Keep the original access, including ref-only access, but require digest verification.
@@ -260,7 +263,7 @@ func TestGetGitResourceInvalidInput(t *testing.T) {
 
 func TestGetGitResourceRemovesOutputOnBufferFailure(t *testing.T) {
 	r := require.New(t)
-	path, commit := localRepository(t)
+	serverURL, commit := servedRepository(t)
 	downloadDir, outDir := t.TempDir(), t.TempDir()
 	repo := gitrepository.NewResourceRepository(&filesystemconfig.Config{TempFolder: &downloadDir})
 	intercept := &testRepository{download: func(ctx context.Context, resource *descriptor.Resource, creds runtime.Typed) (blob.ReadOnlyBlob, error) {
@@ -279,7 +282,7 @@ func TestGetGitResourceRemovesOutputOnBufferFailure(t *testing.T) {
 	transformer := &GetGitResource{Scheme: v1alpha1.Scheme, ResourceRepository: intercept}
 	result, err := transformer.Transform(t.Context(), &v1alpha1.GetGitResource{
 		Type: v1alpha1.GetGitResourceV1alpha1,
-		Spec: &v1alpha1.GetGitResourceSpec{Resource: gitResource(t, path, "", commit, "Git/v1"), OutputPath: outDir},
+		Spec: &v1alpha1.GetGitResourceSpec{Resource: gitResource(t, serverURL, "", commit, "Git/v1"), OutputPath: outDir},
 	})
 	r.ErrorContains(err, "failed buffering git resource archive to file")
 	r.Nil(result)
@@ -290,9 +293,9 @@ func TestGetGitResourceRemovesOutputOnBufferFailure(t *testing.T) {
 
 func TestGetGitResourceRejectsWrongDigest(t *testing.T) {
 	r := require.New(t)
-	path, commit := localRepository(t)
+	serverURL, commit := servedRepository(t)
 	downloadDir, outDir := t.TempDir(), t.TempDir()
-	resource := gitResource(t, path, "", commit, "Git/v1")
+	resource := gitResource(t, serverURL, "", commit, "Git/v1")
 	resource.Digest = &v2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: strings.Repeat("0", 64)}
 	transformer := &GetGitResource{Scheme: v1alpha1.Scheme, ResourceRepository: gitrepository.NewResourceRepository(&filesystemconfig.Config{TempFolder: &downloadDir})}
 	result, err := transformer.Transform(t.Context(), &v1alpha1.GetGitResource{
