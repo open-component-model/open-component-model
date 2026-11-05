@@ -377,7 +377,7 @@ mounts:
         versions:
           - main
   - source: ../bindings/go/oci/spec/config/cache/v1alpha1/schemas
-    target: static/main/schemas/bindings/go/oci/cache/v1alpha1
+    target: assets/main/schemas/bindings/go/oci/cache/v1alpha1
     sites:
       matrix:
         versions:
