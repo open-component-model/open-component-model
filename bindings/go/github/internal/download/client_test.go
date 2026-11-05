@@ -1,9 +1,6 @@
 package download
 
 import (
-	"archive/tar"
-	"bytes"
-	"compress/gzip"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,6 +13,7 @@ import (
 
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/tartest"
 )
 
 func TestOwnerRepo(t *testing.T) {
@@ -51,20 +49,6 @@ func TestOwnerRepo(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), `"github.com/octocat"`, "the error must quote the caller's input")
 	})
-}
-
-// gzippedTar builds a gzipped tar archive containing a single file.
-func gzippedTar(t *testing.T, name, content string) []byte {
-	t.Helper()
-	var buf bytes.Buffer
-	gz := gzip.NewWriter(&buf)
-	tw := tar.NewWriter(gz)
-	require.NoError(t, tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(content)), Typeflag: tar.TypeReg}))
-	_, err := tw.Write([]byte(content))
-	require.NoError(t, err)
-	require.NoError(t, tw.Close())
-	require.NoError(t, gz.Close())
-	return buf.Bytes()
 }
 
 func TestResolveCommit(t *testing.T) {
@@ -132,7 +116,7 @@ func TestResolveCommit_UnresolvableRef(t *testing.T) {
 
 func TestFetch(t *testing.T) {
 	const commit = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
-	payload := gzippedTar(t, "Hello-World-"+commit+"/README", "hello")
+	payload := tartest.Gzipped(t, tartest.Entry{Name: "Hello-World-" + commit + "/README", Data: []byte("hello")})
 
 	// Absent credentials must send no Authorization header at all, not an empty
 	// bearer token, which GitHub rejects outright.
@@ -195,7 +179,7 @@ func TestFetch(t *testing.T) {
 // fetch must not leak into a later anonymous fetch through the shared client.
 func TestFetch_SharedClientDoesNotLeakToken(t *testing.T) {
 	const commit = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
-	payload := gzippedTar(t, "Hello-World-"+commit+"/README", "hello")
+	payload := tartest.Gzipped(t, tartest.Entry{Name: "Hello-World-" + commit + "/README", Data: []byte("hello")})
 
 	var authSeen [][]string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
