@@ -71,3 +71,55 @@ spec:
   resourceRef:
     name: helm-nested-resource-nested-rgd
   serviceAccountName: helm-nested-deployer
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: helm-nested-crossplane-resource-xrd
+spec:
+  componentRef:
+    name: helm-nested-component
+  resource:
+    byReference:
+      resource:
+        name: crossplane-xrd
+      referencePath:
+        - name: nested-rgd
+---
+# The NamespacedDeployer applies the cluster-scoped Crossplane XRD and Composition with the
+# permissions of this service account, so it needs a ClusterRole for apiextensions.crossplane.io.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: helm-nested-crossplane-deployer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: helm-nested-crossplane-deployer
+rules:
+  - apiGroups: ["apiextensions.crossplane.io"]
+    resources: ["compositeresourcedefinitions", "compositions"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: helm-nested-crossplane-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: helm-nested-crossplane-deployer
+subjects:
+  - kind: ServiceAccount
+    name: helm-nested-crossplane-deployer
+    namespace: default
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: NamespacedDeployer
+metadata:
+  name: helm-nested-crossplane-deployer
+spec:
+  resourceRef:
+    name: helm-nested-crossplane-resource-xrd
+  serviceAccountName: helm-nested-crossplane-deployer

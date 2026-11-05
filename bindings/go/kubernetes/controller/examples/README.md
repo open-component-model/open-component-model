@@ -1,13 +1,10 @@
 # Examples
 
-This directory contains end-to-end examples demonstrating how to use the OCM Kubernetes Controller Toolkit.
-Each example is self-contained: it includes a component definition (`component-constructor.yaml`), a bootstrap
-manifest (`bootstrap.yaml`), and — where deployment is needed — a kro `ResourceGraphDefinition` (`rgd.yaml`)
-and an instance manifest (`instance.yaml`).
+This directory contains end-to-end examples demonstrating how to use the OCM Kubernetes Controller Toolkit. Each example is self-contained: it includes a component definition (`component-constructor.yaml`), a bootstrap manifest (`bootstrap.yaml`), a kro `ResourceGraphDefinition` (`rgd.yaml`) with an instance manifest (`kro-instance.yaml`), and — where present — a Crossplane Composition (`crossplane-composition.yaml`) with its instance (`crossplane-instance.yaml`) showing the same deployment driven by Crossplane.
 
 ## Prerequisites
 
-A local Kind cluster with kro, FluxCD, and ArgoCD installed. Use the Taskfile to set it up:
+A local Kind cluster with kro, FluxCD, ArgoCD, and Crossplane installed. Use the Taskfile to set it up:
 
 ```bash
 task test/e2e/setup/local
@@ -31,13 +28,47 @@ See the [installation notes in the root README](../README.md#installation) for d
 | [`k8s-manifest-cross-namespace`](#k8s-manifest-cross-namespace) | `NamespacedDeployer` | Applying into a second namespace that granted the deployer's service account |
 | [`applyset-pruning`](#applyset-pruning) | `NamespacedDeployer` | Pruning orphaned resources with ApplySet |
 
-All examples except `helm-simple-nested-status` deploy with the `NamespacedDeployer`, which applies with the
+All examples deploy with the `NamespacedDeployer`, which applies with the
 permissions of a service account defined in the example's bootstrap. The RGD examples bind that service account
-to a `ClusterRole` for `ResourceGraphDefinitions`, as RGDs are cluster-scoped. `helm-simple-nested-status` keeps
-the cluster-scoped `Deployer`, which is discouraged because it applies with the controller's own permissions.
+to a `ClusterRole` for `ResourceGraphDefinitions`, as RGDs are cluster-scoped. The cluster-scoped `Deployer` is
+discouraged because it applies with the controller's own permissions.
 
-All examples that use FluxCD and ArgoCD include **both deployer blocks** in the same `rgd.yaml`. kro
-instantiates both; on a cluster where only one is installed, remove the block for the absent deployer.
+The kro `rgd.yaml` bundles **both the FluxCD and ArgoCD deployer blocks** in the same file; kro instantiates
+both. Crossplane is a separate path, in its own `crossplane-composition.yaml`. On a cluster where only one
+GitOps deployer is installed, remove the block for the absent deployer from `rgd.yaml`.
+
+Crossplane Compositions run under the `crossplane` service account, which by default cannot create the
+resources they produce (OCM `Resource`s, Flux sources/`HelmRelease`s/`Kustomization`s, ArgoCD `Application`s),
+so the XR never becomes Ready. Grant the Crossplane service account these permissions once per cluster with an
+aggregated `ClusterRole` that Crossplane's RBAC manager folds into that service account (no binding needed):
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: crossplane-ocm-resources
+  labels:
+    rbac.crossplane.io/aggregate-to-crossplane: "true"
+rules:
+  - apiGroups: ["delivery.ocm.software"]
+    resources: ["resources", "resources/status"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["source.toolkit.fluxcd.io"]
+    resources: ["ocirepositories", "ocirepositories/status", "gitrepositories", "gitrepositories/status"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["kustomize.toolkit.fluxcd.io"]
+    resources: ["kustomizations", "kustomizations/status"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["helm.toolkit.fluxcd.io"]
+    resources: ["helmreleases", "helmreleases/status"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications", "applications/status"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+```
+
+On a shared cluster, scope this down to the groups and namespaces you actually use. The local e2e setup grants
+the same permissions from `test/e2e/hacks/rbac.yaml`.
 
 ---
 

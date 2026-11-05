@@ -69,3 +69,53 @@ spec:
   resourceRef:
     name: kustomize-simple-resource-rgd
   serviceAccountName: kustomize-simple-deployer
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: kustomize-simple-crossplane-resource-xrd
+spec:
+  componentRef:
+    name: kustomize-simple-component
+  resource:
+    byReference:
+      resource:
+        name: crossplane-xrd
+---
+# The NamespacedDeployer applies the cluster-scoped Crossplane XRD and Composition with the
+# permissions of this service account, so it needs a ClusterRole for apiextensions.crossplane.io.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kustomize-simple-crossplane-deployer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kustomize-simple-crossplane-deployer
+rules:
+  - apiGroups: ["apiextensions.crossplane.io"]
+    resources: ["compositeresourcedefinitions", "compositions"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kustomize-simple-crossplane-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kustomize-simple-crossplane-deployer
+subjects:
+  - kind: ServiceAccount
+    name: kustomize-simple-crossplane-deployer
+    namespace: default
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: NamespacedDeployer
+metadata:
+  name: kustomize-simple-crossplane-deployer
+spec:
+  resourceRef:
+    name: kustomize-simple-crossplane-resource-xrd
+  serviceAccountName: kustomize-simple-crossplane-deployer

@@ -18,13 +18,15 @@ import (
 )
 
 const (
-	ComponentConstructor = "component-constructor.yaml"
-	Bootstrap            = "bootstrap.yaml"
-	Manifests            = "manifests.yaml"
-	Rgd                  = "rgd.yaml"
-	Instance             = "instance.yaml"
-	K8sManifest          = "k8s-manifest.yaml"
-	OCMConfig            = ".ocmconfig"
+	ComponentConstructor  = "component-constructor.yaml"
+	Bootstrap             = "bootstrap.yaml"
+	Manifests             = "manifests.yaml"
+	Rgd                   = "rgd.yaml"
+	KroInstance           = "kro-instance.yaml"
+	K8sManifest           = "k8s-manifest.yaml"
+	OCMConfig             = ".ocmconfig"
+	CrossplaneComposition = "crossplane-composition.yaml"
+	CrossplaneInstance    = "crossplane-instance.yaml"
 )
 
 // ignoreExamples lists examples that are tested elsewhere or should be skipped.
@@ -96,10 +98,10 @@ var _ = Describe("controller", func() {
 					)
 				}
 
-				if slices.Contains(files, Instance) {
+				if slices.Contains(files, KroInstance) {
 					By("creating an instance of the example")
 					Expect(utils.DeployAndWaitForResource(
-						ctx, filepath.Join(examplesDir, example.Name(), Instance),
+						ctx, filepath.Join(examplesDir, example.Name(), KroInstance),
 						"condition=Ready=true",
 						timeout,
 					)).To(Succeed())
@@ -123,6 +125,56 @@ var _ = Describe("controller", func() {
 						"pod", "-l", "app.kubernetes.io/name="+example.Name()+"-podinfo", "-n", "default-argocd",
 					)).To(Succeed())
 
+				}
+
+				// Crossplane flow: the bootstrap already deployed the OCM Resource and
+				// Deployer for crossplane-xrd alongside the kro ones. Here we just wait
+				// for the XRD to be Established, then create the XR instance.
+				if slices.Contains(files, CrossplaneComposition) &&
+					slices.Contains(files, CrossplaneInstance) {
+					crossplaneName := example.Name() + "-crossplane"
+
+					By("waiting for XRD to be Established")
+					// The XRD metadata.name follows Crossplane's required <plural>.<group>
+					// form, and every example derives both parts from the example name:
+					// dashes stripped with a "crossplanes" suffix for the plural, and the
+					// fixed examples.ocm.software group. Deriving it here mirrors how the
+					// kro flow uses example.Name() and avoids reading the composition file.
+					xrdName := strings.ReplaceAll(example.Name(), "-", "") + "crossplanes.examples.ocm.software"
+					Expect(utils.WaitForResource(ctx, "condition=Established=true", timeout,
+						"compositeresourcedefinitions.apiextensions.crossplane.io/"+xrdName)).To(Succeed())
+
+					By("creating the Crossplane XR instance")
+					Expect(utils.DeployAndWaitForResource(
+						ctx, filepath.Join(examplesDir, example.Name(), CrossplaneInstance),
+						"condition=Ready=true",
+						timeout,
+					)).To(Succeed())
+
+					By("validating the Crossplane FluxCD-managed deployment")
+					name = "deployment.apps/" + crossplaneName + "-podinfo"
+					Expect(utils.WaitForResource(ctx, "create", timeout, name)).To(Succeed())
+					Expect(utils.WaitForResource(ctx, "condition=Available", timeout, name)).To(Succeed())
+					Expect(utils.WaitForResource(
+						ctx, "condition=Ready=true",
+						timeout,
+						"pod", "-l", "app.kubernetes.io/name="+crossplaneName+"-podinfo",
+					)).To(Succeed())
+
+					By("checking for Crossplane ArgoCD Application")
+					argoCDAppName := "applications.argoproj.io/" + crossplaneName
+					Expect(utils.WaitForResource(ctx, "create", timeout, argoCDAppName, "-n", "argocd")).To(Succeed())
+					Expect(utils.WaitForResource(ctx, "jsonpath={.status.sync.status}=Synced", timeout, argoCDAppName, "-n", "argocd")).To(Succeed())
+
+					By("validating the Crossplane ArgoCD-managed deployment")
+					name = "deployment.apps/" + crossplaneName + "-podinfo"
+					Expect(utils.WaitForResource(ctx, "create", timeout, name, "-n", "default-argocd")).To(Succeed())
+					Expect(utils.WaitForResource(ctx, "condition=Available", timeout, name, "-n", "default-argocd")).To(Succeed())
+					Expect(utils.WaitForResource(
+						ctx, "condition=Ready=true",
+						timeout,
+						"pod", "-l", "app.kubernetes.io/name="+crossplaneName+"-podinfo", "-n", "default-argocd",
+					)).To(Succeed())
 				}
 
 				By("validating the example")
@@ -212,6 +264,34 @@ var _ = Describe("controller", func() {
 						"'{.items[0].spec.containers[0].env[?(@.name==\"PODINFO_UI_MESSAGE\")].value}'",
 						example.Name(),
 					)).To(Succeed())
+
+					// The Crossplane composition localizes and configures the same podinfo
+					// chart, but under the <example>-crossplane-podinfo label. Without these
+					// assertions a Crossplane composition that drops the image/ui.message
+					// patches still passes, since the checks above only look at the kro pods.
+					if slices.Contains(files, CrossplaneComposition) && slices.Contains(files, CrossplaneInstance) {
+						crossplanePods := "pod -l app.kubernetes.io/name=" + example.Name() + "-crossplane-podinfo"
+
+						By("validating the Crossplane FluxCD localization")
+						assertLocalizedImage(crossplanePods)
+
+						By("validating the Crossplane FluxCD configuration (ui.message)")
+						Expect(utils.CompareResourceField(ctx,
+							crossplanePods,
+							"'{.items[0].spec.containers[0].env[?(@.name==\"PODINFO_UI_MESSAGE\")].value}'",
+							example.Name(),
+						)).To(Succeed())
+
+						By("validating the Crossplane ArgoCD localization")
+						assertLocalizedImage(crossplanePods + " -n default-argocd")
+
+						By("validating the Crossplane ArgoCD configuration (ui.message)")
+						Expect(utils.CompareResourceField(ctx,
+							crossplanePods+" -n default-argocd",
+							"'{.items[0].spec.containers[0].env[?(@.name==\"PODINFO_UI_MESSAGE\")].value}'",
+							example.Name(),
+						)).To(Succeed())
+					}
 				}
 			})
 		}

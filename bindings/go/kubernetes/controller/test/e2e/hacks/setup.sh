@@ -193,7 +193,7 @@ EOF
   # surfaces in resource.status.additional.registry — which kro then copies verbatim
   # into the ArgoCD Application's repoURL. The credential template only matches when
   # the url prefix is identical to the Application's repoURL.
-  kubectl apply -n argocd -f - <<EOF
+  kubectl apply -n argocd -f - <<EOF || return 1
 apiVersion: v1
 kind: Secret
 metadata:
@@ -207,10 +207,80 @@ stringData:
   enableOCI: "true"
   insecureOCIForceHttp: "true"
 EOF
+
+  # Register the Docker network alias (image-registry:5000) as a second credential
+  # template. Crossplane Compositions surface this alias in the XR status fields that
+  # get copied into ArgoCD Application repoURLs, so ArgoCD must recognise it too.
+  kubectl apply -n argocd -f - <<EOF || return 1
+apiVersion: v1
+kind: Secret
+metadata:
+  name: image-registry-alias-creds
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repo-creds
+stringData:
+  url: oci://image-registry:5000
+  type: helm
+  enableOCI: "true"
+  insecureOCIForceHttp: "true"
+EOF
 }
 
 install_kro() {
   helm install kro oci://registry.k8s.io/kro/charts/kro --namespace kro --create-namespace --version=0.9.2
+}
+
+install_crossplane() {
+  # renovate: datasource=helm depName=crossplane registryUrl=https://charts.crossplane.io/stable
+  CROSSPLANE_VERSION="${CROSSPLANE_VERSION:-2.3.1}"
+  # renovate: datasource=docker depName=xpkg.upbound.io/crossplane-contrib/function-patch-and-transform
+  FUNCTION_PATCH_AND_TRANSFORM_VERSION="${FUNCTION_PATCH_AND_TRANSFORM_VERSION:-v0.10.6}"
+  # renovate: datasource=docker depName=xpkg.upbound.io/crossplane-contrib/function-auto-ready
+  FUNCTION_AUTO_READY_VERSION="${FUNCTION_AUTO_READY_VERSION:-v0.6.5}"
+  if kubectl get deployment crossplane -n crossplane-system >/dev/null 2>&1 \
+     && kubectl get deployment crossplane -n crossplane-system -o jsonpath='{.status.availableReplicas}' | grep -q '[1-9]'; then
+    echo "crossplane already installed, skipping"
+  else
+    helm repo add crossplane-stable https://charts.crossplane.io/stable 2>/dev/null || true
+    helm repo update crossplane-stable || return 1
+    helm upgrade --install crossplane crossplane-stable/crossplane \
+      --namespace crossplane-system --create-namespace \
+      --version "${CROSSPLANE_VERSION}" --wait || return 1
+  fi
+
+  # function-patch-and-transform
+  if ! kubectl get functions.pkg.crossplane.io crossplane-contrib-function-patch-and-transform >/dev/null 2>&1; then
+    kubectl apply -f - <<EOF || return 1
+apiVersion: pkg.crossplane.io/v1beta1
+kind: Function
+metadata:
+  name: crossplane-contrib-function-patch-and-transform
+spec:
+  package: xpkg.upbound.io/crossplane-contrib/function-patch-and-transform:${FUNCTION_PATCH_AND_TRANSFORM_VERSION}
+EOF
+  fi
+  # Always wait — covers both fresh installs and pre-existing objects that may be unhealthy
+  kubectl wait functions.pkg.crossplane.io/crossplane-contrib-function-patch-and-transform \
+    --for=condition=Healthy=True --timeout=120s || return 1
+
+  # function-auto-ready
+  if ! kubectl get functions.pkg.crossplane.io crossplane-contrib-function-auto-ready >/dev/null 2>&1; then
+    kubectl apply -f - <<EOF || return 1
+apiVersion: pkg.crossplane.io/v1
+kind: Function
+metadata:
+  name: crossplane-contrib-function-auto-ready
+spec:
+  package: xpkg.upbound.io/crossplane-contrib/function-auto-ready:${FUNCTION_AUTO_READY_VERSION}
+EOF
+  fi
+  # Always wait — covers both fresh installs and pre-existing objects that may be unhealthy
+  kubectl wait functions.pkg.crossplane.io/crossplane-contrib-function-auto-ready \
+    --for=condition=Healthy=True --timeout=120s || return 1
+
+  # Crossplane RBAC (controller XRD/Composition access + the aggregated grant for
+  # the crossplane SA) lives in rbac.yaml, applied by install_registries.
 }
 
 pids=()
@@ -218,6 +288,7 @@ run_step "image-registries"   install_registries & pids+=($!)
 run_step "flux"               install_flux       & pids+=($!)
 run_step "argocd"             install_argocd     & pids+=($!)
 run_step "kro"                install_kro        & pids+=($!)
+run_step "crossplane"         install_crossplane & pids+=($!)
 
 fail=0
 for pid in "${pids[@]}"; do
