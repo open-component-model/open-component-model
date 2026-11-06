@@ -243,11 +243,9 @@ below.
   with `UnsupportedConfiguration`. The controller emits `configResources` patches in spec order, then
   the `template` patches, so `template` applies last. Kustomize runs its `images` transformer after all
   patches, so localization would silently rewrite a patched image. A patch, from `configResources` or
-  `template`, that sets an `image` field to a name that localization matches is therefore rejected with
-  `UnsupportedConfiguration`; the controller finds these in strategic-merge patches by their `image` keys
-  and in JSON6902 patches by `add`/`replace` operations whose path ends in `/image`. A `template` `images`
-  entry, which replaces the localized entry with the same `name`, is the only way to change a localized
-  image.
+  `template`, that sets or may set an image that localization matches is therefore rejected with
+  `UnsupportedConfiguration`; a `template` `images` entry, which replaces the localized entry with the same
+  `name`, is the only way to change a localized image.
 
 ### Reconcile flow
 
