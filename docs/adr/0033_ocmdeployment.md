@@ -242,9 +242,12 @@ below.
   entry supplies a top-level `patches` list (`{patch, target}`); a missing or invalid list is rejected
   with `UnsupportedConfiguration`. The controller emits `configResources` patches in spec order, then
   the `template` patches, so `template` applies last. Kustomize runs its `images` transformer after all
-  patches, so a patch cannot change an image that localization matches: localization rewrites it
-  afterwards. Such a change belongs in a `template` `images` entry, which replaces the localized entry
-  with the same `name`.
+  patches, so localization would silently rewrite a patched image. A patch, from `configResources` or
+  `template`, that sets an `image` field to a name that localization matches is therefore rejected with
+  `UnsupportedConfiguration`; the controller finds these in strategic-merge patches by their `image` keys
+  and in JSON6902 patches by `add`/`replace` operations whose path ends in `/image`. A `template` `images`
+  entry, which replaces the localized entry with the same `name`, is the only way to change a localized
+  image.
 
 ### Reconcile flow
 
@@ -271,9 +274,10 @@ account) for every apply. That account bounds what the wrapper creates, not what
 the engine applies the workload under its own identity (Flux: `template.spec.serviceAccountName`, else
 Flux's default; Argo CD: its controller, scoped by the `AppProject`). As with `NamespacedDeployer`,
 whoever may create a wrapper can have the controller act as any service account in its namespace; the
-author's own RBAC does not bound this. Controller RBAC: `get;list;patch;watch` on the engine and Flux
-source kinds and `impersonate` on service accounts. No `Namespace` is rendered; the target namespace is
-a native `template` field (`spec.targetNamespace`, `spec.destination.namespace`).
+author's own RBAC does not bound this, so the right to create wrappers in a namespace amounts to trust
+in every service account there. Controller RBAC: `get;list;patch;watch` on the engine and Flux source
+kinds and `impersonate` on service accounts. No `Namespace` is rendered; the target namespace is a
+native `template` field (`spec.targetNamespace`, `spec.destination.namespace`).
 
 Child OCM CRs are owner-referenced and garbage-collected with the wrapper. The generated source and
 engine object are `applyset` members: `Background` and `Foreground` prune them; `Orphan` removes the
@@ -296,11 +300,13 @@ object is deleted, by pruning now or by an adopter later, is set in `template`:
 `Ready` is `True` when the children are ready and the engine reports the rendered state as healthy:
 for each Flux object, `Ready=True` with `status.observedGeneration` equal to `metadata.generation`, and
 for an engine object fed by an `OCIRepository`, the pinned digest reported as applied
-(`Kustomization` `status.lastAppliedRevision`, the latest `HelmRelease` `status.history` entry), because
-a new digest changes only the source, not the engine object's spec; for Argo, `Healthy` and `Synced`
-with `status.sync.comparedTo.source` and `.destination` equal to the rendered ones and no operation
-running. Without these checks, a status left from the previous generation would mark a new component
-version ready before the engine has acted on it; `deployedComponentVersion` and
+(`Kustomization` `status.lastAppliedRevision`; `HelmRelease` `status.history[0]` with `status: deployed`
+and `ociDigest` equal to the pinned digest), because a new digest changes only the source, not the
+engine object's spec. The `HelmRelease` check relies on helm-controller's digest tracking, which its
+`DisableChartDigestTracking` feature gate turns off. For Argo, the `Application` must be `Healthy` and
+`Synced`, with `status.sync.comparedTo.source` and `.destination` equal to the rendered ones and no
+operation running. Without these checks, a status left from the previous generation would mark a new
+component version ready before the engine has acted on it; `deployedComponentVersion` and
 `deployedResourceDigest` change only once this holds. A child that never becomes ready is not terminal;
 the wrapper requeues. An `Application` without status usually means Argo CD does not watch the namespace
 (apps-in-any-namespace); the condition message says so.
