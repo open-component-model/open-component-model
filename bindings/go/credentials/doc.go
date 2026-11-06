@@ -167,6 +167,9 @@
 //	typed, err := graph.Resolve(ctx, runtime.Identity{"path": "ghcr.io/my-org/some-other"}) // matches
 //	typed, err := graph.Resolve(ctx, runtime.Identity{"path": "ghcr.io/my-other-org/path"}) // does not match
 //
+// The [runtime.IdentityAttributeHostname] attribute supports one wildcard form: "*.suffix.tld"
+// where "*" matches exactly one DNS label and does not cross ".". Any other pattern is matched literally.
+//
 // Note that wildcard matches always get resolved AFTER equivalence matches. This means that if two identities
 // exist, one with a wildcard and one with an exact match, the exact match will always be preferred.
 //

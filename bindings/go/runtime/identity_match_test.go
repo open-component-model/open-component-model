@@ -681,6 +681,224 @@ func TestIdentityMatchesURL(t *testing.T) {
 			},
 			true,
 		},
+		{
+			"absent hostname in consumer identity matches absent request hostname",
+			args{
+				a: runtime.Identity{},
+				b: runtime.Identity{},
+			},
+			true,
+		},
+		{
+			"absent hostname in consumer identity does not match present request hostname",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "registry.example.com",
+				},
+				b: runtime.Identity{},
+			},
+			false,
+		},
+		{
+			"consumer hostname present but request hostname absent does not match",
+			args{
+				a: runtime.Identity{},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "*.example.com",
+				},
+			},
+			false,
+		},
+		{
+			"explicit empty hostname in consumer identity does not match non-empty hostnames",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "registry.example.com",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "",
+				},
+			},
+			false,
+		},
+		{
+			"explicit empty hostname in consumer identity only matches empty hostname",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "",
+				},
+			},
+			true,
+		},
+		{
+			"hostname matching is case-sensitive (wildcard pattern)",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "Sub.Example.COM",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "*.example.com",
+				},
+			},
+			false,
+		},
+		{
+			"* does not match any hostname (literal)",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "localhost",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "*",
+				},
+			},
+			false,
+		},
+		{
+			"** does not match any hostname (literal)",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "registry.example.com",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "**",
+				},
+			},
+			false,
+		},
+		{
+			"* does not match empty hostname (literal)",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "*",
+				},
+			},
+			false,
+		},
+		{
+			"** does not match empty hostname (literal)",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "**",
+				},
+			},
+			false,
+		},
+		{
+			"*.example.com matches direct subdomain",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "sub.example.com",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "*.example.com",
+				},
+			},
+			true,
+		},
+		{
+			"*.example.com does not match apex domain",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "*.example.com",
+				},
+			},
+			false,
+		},
+		{
+			"*.example.com does not match sub-sub domain",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "a.b.example.com",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "*.example.com",
+				},
+			},
+			false,
+		},
+		{
+			"*.example.com does not match unrelated domain",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "sub.other.com",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "*.example.com",
+				},
+			},
+			false,
+		},
+		{
+			"**.example.com matches literally",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "sub.example.com",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "**.example.com",
+				},
+			},
+			false,
+		},
+		{
+			"*.2.3.4 matches 1.2.3.4 (wildcard first label)",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "1.2.3.4",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "*.2.3.4",
+				},
+			},
+			true,
+		},
+		{
+			"*.*.* matches literally",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "a.b.c",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "*.*.*",
+				},
+			},
+			false,
+		},
+		{
+			"*.example.com does not match malformed leading-dot hostname",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: ".example.com",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "*.example.com",
+				},
+			},
+			false,
+		},
+		{
+			"explicit empty hostname in consumer identity matches absent request hostname",
+			args{
+				a: runtime.Identity{},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "",
+				},
+			},
+			true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -753,6 +971,42 @@ func TestIdentity_Match_WithURLMatching(t *testing.T) {
 				runtime.IdentityAttributePath:     "org/*",
 			},
 			true,
+		},
+		{
+			"single wildcard hostname and path both match",
+			runtime.Identity{
+				runtime.IdentityAttributeHostname: "sub.example.com",
+				runtime.IdentityAttributePath:     "org/repo",
+			},
+			runtime.Identity{
+				runtime.IdentityAttributeHostname: "*.example.com",
+				runtime.IdentityAttributePath:     "org/*",
+			},
+			true,
+		},
+		{
+			"**.example.com matches literally",
+			runtime.Identity{
+				runtime.IdentityAttributeHostname: "a.b.example.com",
+				runtime.IdentityAttributePath:     "org/team/repo",
+			},
+			runtime.Identity{
+				runtime.IdentityAttributeHostname: "**.example.com",
+				runtime.IdentityAttributePath:     "org/**",
+			},
+			false,
+		},
+		{
+			"single wildcard path does not match multi-segment path even if hostname matches",
+			runtime.Identity{
+				runtime.IdentityAttributeHostname: "sub.example.com",
+				runtime.IdentityAttributePath:     "org/team/repo",
+			},
+			runtime.Identity{
+				runtime.IdentityAttributeHostname: "*.example.com",
+				runtime.IdentityAttributePath:     "org/*",
+			},
+			false,
 		},
 	}
 	for _, tt := range tests {
