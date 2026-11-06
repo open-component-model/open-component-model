@@ -218,7 +218,8 @@ install_kro() {
 
 # Only the CRD: the chart's ServiceMonitor (prometheus.enable in values.yaml) must apply; nothing scrapes it.
 install_servicemonitor_crd() {
-  kubectl apply --server-side -f "https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/${prometheus_operator_version}/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml"
+  kubectl apply --server-side -f "https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/${prometheus_operator_version}/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml" || return 1
+  kubectl wait --for=condition=Established crd/servicemonitors.monitoring.coreos.com --timeout=60s
 }
 
 pids=()
