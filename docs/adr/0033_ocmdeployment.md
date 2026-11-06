@@ -21,11 +21,14 @@ to run Kro or Crossplane.
 
 ## Decision Drivers
 
-* The native engine API stays fully usable: OCM reserves only the keys that select the source or would
-  bypass its merged values. Every other field passes through, so fields an engine adds to the rendered
-  API version need no OCM release.
-* OCM adds only source resolution, signed localization, and configuration; one CR per deployment.
-* Localization survives transfer and is digest-pinned where the chart allows it.
+* Users keep the full API of their deployment engine, including fields added in later engine releases,
+  without waiting for an OCM release.
+* OCM owns only what it uniquely knows (component resolution and verification, localization,
+  configuration); engine behavior stays with the engine.
+* Deploying a chart or kustomization from a component takes one object, without a hand-written
+  definition per chart or an extra orchestration layer.
+* Images are localized after transfer from data in the signed component version, without hand-written
+  mappings, and pinned to their digests where the chart allows it.
 
 ## Considered Options
 
