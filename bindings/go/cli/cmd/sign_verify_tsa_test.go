@@ -3,27 +3,21 @@ package cmd_test
 import (
 	"crypto"
 	"crypto/rand"
-	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
-	"io"
 	"math/big"
-	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/digitorus/timestamp"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -31,68 +25,11 @@ import (
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/internal/testutil/pkitest"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/tsatest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/signing/tsa"
 )
-
-// newMockTSA starts a local RFC 3161 TSA that attests genTime and counts its
-// requests. Its signer is a self-signed certificate with the critical
-// id-kp-timeStamping EKU, valid long enough before now to cover backdated
-// generation times.
-func newMockTSA(t *testing.T, genTime time.Time) (*httptest.Server, *x509.Certificate, *atomic.Int64) {
-	t.Helper()
-	r := require.New(t)
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	r.NoError(err)
-	ekuVal, err := asn1.Marshal([]asn1.ObjectIdentifier{{1, 3, 6, 1, 5, 5, 7, 3, 8}})
-	r.NoError(err)
-	tmpl := &x509.Certificate{
-		SerialNumber:          big.NewInt(1),
-		Subject:               pkix.Name{CommonName: "mock TSA"},
-		NotBefore:             time.Now().Add(-100 * time.Hour),
-		NotAfter:              time.Now().Add(time.Hour),
-		KeyUsage:              x509.KeyUsageDigitalSignature,
-		BasicConstraintsValid: true,
-		IsCA:                  true,
-		ExtraExtensions:       []pkix.Extension{{Id: asn1.ObjectIdentifier{2, 5, 29, 37}, Critical: true, Value: ekuVal}},
-	}
-	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
-	r.NoError(err)
-	cert, err := x509.ParseCertificate(der)
-	r.NoError(err)
-
-	var requests atomic.Int64
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		requests.Add(1)
-		body, err := io.ReadAll(req.Body)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		tsReq, err := timestamp.ParseRequest(body)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		out, err := (&timestamp.Timestamp{
-			HashAlgorithm:     tsReq.HashAlgorithm,
-			HashedMessage:     tsReq.HashedMessage,
-			Time:              genTime.UTC().Truncate(time.Second),
-			Nonce:             tsReq.Nonce,
-			Policy:            asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 0},
-			AddTSACertificate: true,
-		}).CreateResponseWithOpts(cert, key, crypto.SHA256)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/timestamp-reply")
-		_, _ = w.Write(out)
-	}))
-	t.Cleanup(srv.Close)
-	return srv, cert, &requests
-}
 
 // addTSATestComponentVersion constructs a component version in a fresh CTF and
 // returns its reference.
@@ -190,13 +127,13 @@ func tsaConsumerYAML(identityAttributes, rootPath string) string {
 
 func Test_Verify_TSA_Timestamp_Validates_Expired_Certificate(t *testing.T) {
 	// The TSA attests a signing time at which the now expired certificate was valid.
-	tsaSrv, tsaCert, _ := newMockTSA(t, time.Now().Add(-48*time.Hour))
+	tsaSrv := tsatest.Start(t, tsatest.WithTime(time.Now().Add(-48*time.Hour)))
 	tsaURL, err := url.Parse(tsaSrv.URL)
 	require.NoError(t, err)
 
 	dir := t.TempDir()
 	keyPath, chainPath := writeExpiredSigner(t, dir)
-	tsaRoot := pkitest.WriteCerts(t, dir, "tsa-root.pem", tsaCert)
+	tsaRoot := pkitest.WriteCerts(t, dir, "tsa-root.pem", tsaSrv.Cert)
 	rsaConsumer := rsaConsumerYAML("default", chainPath, keyPath, "")
 
 	writeConfig := func(name, consumers string) string {
@@ -291,7 +228,7 @@ func Test_Verify_TSA_Timestamp_Validates_Expired_Certificate(t *testing.T) {
 func Test_Sign_TSA_Guards(t *testing.T) {
 	t.Setenv("SIGSTORE_ID_TOKEN", "")
 	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "")
-	tsaSrv, _, tsaRequests := newMockTSA(t, time.Now())
+	tsaSrv := tsatest.Start(t)
 
 	dir := t.TempDir()
 	key := pkitest.RSAKey(t)
@@ -374,14 +311,14 @@ configurations:
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			ref := addTSATestComponentVersion(t, "ocm.software/tsa-guards")
-			before := tsaRequests.Load()
+			before := tsaSrv.Requests()
 			err := tc.run(t, ref)
 			if tc.wantErr != "" {
 				r.ErrorContains(err, tc.wantErr)
 			} else {
 				r.NoError(err)
 			}
-			r.Equal(tc.wantTSARequests, tsaRequests.Load()-before)
+			r.Equal(tc.wantTSARequests, tsaSrv.Requests()-before)
 		})
 	}
 }
@@ -390,7 +327,7 @@ configurations:
 // parent pinned for the component at construction time stays valid.
 func Test_Sign_TSA_Keeps_Descriptor_Digest(t *testing.T) {
 	r := require.New(t)
-	tsaSrv, _, _ := newMockTSA(t, time.Now())
+	tsaSrv := tsatest.Start(t)
 	dir := t.TempDir()
 	key := pkitest.RSAKey(t)
 	keyPath, chainPath := pkitest.WriteKeyAndChain(t, dir, key, pkitest.SelfSigned(t, "signer", key))
