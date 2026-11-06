@@ -12,18 +12,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
 	godigest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/registry/remote"
-
-	"ocm.software/open-component-model/bindings/go/internal/testutil/s3test"
 )
 
 const s3Region = "us-east-1"
@@ -46,26 +40,6 @@ func pushArtifact(t *testing.T, ctx context.Context, address, repository, tag st
 	r.NoError(err)
 	r.NoError(repo.Tag(ctx, manifest, tag))
 	return manifest.Digest
-}
-
-// putS3Object creates bucket in the S3 server at endpoint and uploads content as key.
-func putS3Object(t *testing.T, ctx context.Context, endpoint, bucket, key string, data []byte) {
-	t.Helper()
-	r := require.New(t)
-
-	cfg, err := config.LoadDefaultConfig(ctx,
-		config.WithRegion(s3Region),
-		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(s3test.AccessKey, s3test.SecretKey, "")),
-	)
-	r.NoError(err)
-	c := s3.NewFromConfig(cfg, func(o *s3.Options) {
-		o.BaseEndpoint = aws.String(endpoint)
-		o.UsePathStyle = true
-	})
-	_, err = c.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: aws.String(bucket)})
-	r.NoError(err)
-	_, err = c.PutObject(ctx, &s3.PutObjectInput{Bucket: aws.String(bucket), Key: aws.String(key), Body: bytes.NewReader(data)})
-	r.NoError(err)
 }
 
 // startFileServer starts an HTTPS server serving files by path and returns its URL.

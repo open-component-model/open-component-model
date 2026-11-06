@@ -11,6 +11,13 @@
 //		SecretAccessKey: s3test.SecretKey,
 //	}
 //
+// [Client] talks to either server with the keys above and path-style addressing;
+// [CreateBucket], [EnableVersioning] and [PutObject] prepare the objects a test reads:
+//
+//	client := s3test.Client(t, endpoint)
+//	s3test.CreateBucket(t, ctx, client, "bucket")
+//	versionID := s3test.PutObject(t, ctx, client, "bucket", "key", data)
+//
 // [StartFake] needs no Docker: it serves one canned [Object] over httptest for unit tests
 // and records the requests it answered:
 //
