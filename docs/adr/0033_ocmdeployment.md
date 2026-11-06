@@ -56,7 +56,7 @@ Three namespaced CRs in `delivery.ocm.software/v1alpha1`:
 | --- | --- | --- | --- |
 | `OCMHelmRelease` | Flux `helm.toolkit.fluxcd.io/v2` `HelmRelease` and its source | `spec.chartRef` or `spec.chart`; merged `spec.values` | `spec.chartRef`, `spec.chart` |
 | `OCMKustomization` | Flux `kustomize.toolkit.fluxcd.io/v1` `Kustomization` and its `OCIRepository` | `spec.sourceRef`; merged `spec.images`, `spec.patches` | `spec.sourceRef` |
-| `OCMApplication` | Argo `argoproj.io/v1alpha1` `Application` | `spec.source.repoURL`, `targetRevision`, and `chart` (HTTP Helm) or `path` (OCI); merged `helm.valuesObject` or `kustomize.images`/`patches` | `spec.source.repoURL`, `chart`, `targetRevision`, `helm.values`, `path` for a Helm chart; `spec.sources` |
+| `OCMApplication` | Argo `argoproj.io/v1alpha1` `Application` | `spec.source.repoURL`, `targetRevision`, and `chart` (HTTP Helm) or `path` (OCI); merged `helm.valuesObject` or `kustomize.images`/`patches` | `spec.source.repoURL`, `chart`, `targetRevision`, `helm.values`, `path` for a Helm chart; `spec.sources`, `spec.sourceHydrator` |
 
 Because `spec.chart` is reserved, chart-template options such as `spec.chart.spec.valuesFiles` are not
 available; `configResources` cover that need.
@@ -70,17 +70,19 @@ All three share these fields:
 | `configResources[]` | `{byReference, verificationPolicy}`: OCM resources that supply Helm values or Kustomize patches. |
 | `applyServiceAccountName` | Service account the controller impersonates for every apply; default `default`. |
 | `deletionPolicy` | `Background` (default), `Foreground`, or `Orphan`, for the generated objects. |
-| `ocmConfig` | OCM configuration, such as credentials, for the child OCM CRs. |
+| `ocmConfig` | OCM configuration for the child OCM CRs, such as credentials and signature verification. |
 | `interval` | Re-apply cadence of the wrapper. |
 
 The two Flux wrappers also carry an optional `sourceTemplate`: the Flux source object, handled like
-`template` (JSON, rendered as `unstructured`) plus a required `kind` (`OCIRepository` for OCI access,
-`HelmRepository` for HTTP `Helm/v1`). The controller sets only `spec.url` and, for `OCIRepository`,
-`spec.ref` (the signed digest); `verify`, `secretRef`, `provider`, `layerSelector`, and every other field
-are the user's. A `kind` that does not fit the deploy resource's access, or a template that sets `url`
-or `ref`, is rejected with `UnsupportedConfiguration`. Without `sourceTemplate`, the controller renders
-the fitting kind with defaults; `interval` defaults to the wrapper's. Argo CD has no source object, so
-`OCMApplication` has no such field.
+`template` (JSON, rendered as `unstructured`) plus a required `kind`: `OCIRepository` for an OCI
+artifact, including a `Helm/v1` chart in an `oci://` repository, and `HelmRepository` for a `Helm/v1`
+chart in an HTTP repository. The controller sets `spec.url` and, for `OCIRepository`, `spec.ref` (the
+signed digest, or the chart version where the Source table pins by version), and fills a missing
+`spec.interval`, which Flux requires, from the wrapper's `interval`; `verify`, `secretRef`, `provider`,
+`layerSelector`, and every other field are the user's. A `kind` that does not fit the deploy resource's
+access, or a template that sets `url` or `ref`, is rejected with `UnsupportedConfiguration`. Without
+`sourceTemplate`, the controller renders the fitting kind with only these fields. Argo CD has no source
+object, so `OCMApplication` has no such field.
 
 The engine object takes the wrapper's name. Every other generated object is named
 `<name>-<kind>-<role>`, with `hr`, `ks`, or `app` for the wrapper kind (e.g. `podinfo-hr-source`,
@@ -128,8 +130,9 @@ and the merged configuration, and passes every other field through untouched.
   Server-side apply always validates against the schema, so a typo surfaces as `Ready=False`.
 * **Reserved keys** (table above) are checked by the controller: `Ready=False`, reason
   `UnsupportedConfiguration`. They cannot be CEL rules on the wrapper CRD, because CEL cannot see fields
-  kept by `x-kubernetes-preserve-unknown-fields`. Argo's `spec.sources` is reserved because Argo ignores
-  `spec.source` when it is set; `helm.values` because Argo ignores it when `valuesObject` is set.
+  kept by `x-kubernetes-preserve-unknown-fields`. Argo's `spec.sources` and `spec.sourceHydrator` are
+  reserved because Argo ignores `spec.source` when either is set; `helm.values` because Argo ignores it
+  when `valuesObject` is set.
 * **JSON, not embedded Flux/Argo Go types.** A typed embed generates the wrapper's CRD schema from the
   vendored engine version, so the API server would prune any field a newer installed engine supports.
   It would also pull Flux and Argo modules into `bindings/go`, which the library and CLI share;
@@ -196,8 +199,9 @@ labels:
 
 At deploy time a label matches an image reference on registry and repository only (Docker Hub short
 names normalized), so a chart-side tag bump still matches. The substitute comes from the matched image's
-child `Resource` status (post-transfer location and digest, verified against the signed descriptor),
-falling back to `matchKey.digest`.
+child `Resource` status (post-transfer location and digest, checked against the descriptor, whose
+signature the child `Component` verifies when `ocmConfig` configures it), falling back to
+`matchKey.digest`.
 
 * **Helm**: the controller walks the default values of the chart and of every vendored subchart,
   recursively. A subchart's effective defaults are its own `values.yaml` overlaid with the parent's
@@ -221,7 +225,8 @@ higher layer replaces that image.
 ### Configuration and merge order
 
 Both engines use one precedence, lowest first: chart or kustomization defaults, localization,
-`configResources` in spec order, `template`.
+`configResources` in spec order, `template`. The one exception is a localized image in a kustomization,
+below.
 
 * **Helm**: the controller merges into `spec.values` (Argo: `helm.valuesObject`); the values in
   `template` are extracted as the top layer. Maps deep-merge, arrays replace. The coordinates of a
@@ -236,8 +241,10 @@ Both engines use one precedence, lowest first: chart or kustomization defaults, 
   (`Kustomization.spec.patches`, `Application.spec.source.kustomize.patches`). Each `configResources`
   entry supplies a top-level `patches` list (`{patch, target}`); a missing or invalid list is rejected
   with `UnsupportedConfiguration`. The controller emits `configResources` patches in spec order, then
-  the `template` patches, so `template` applies last. A `template` `images` entry replaces the localized
-  entry with the same `name`.
+  the `template` patches, so `template` applies last. Kustomize runs its `images` transformer after all
+  patches, so a patch cannot change an image that localization matches: localization rewrites it
+  afterwards. Such a change belongs in a `template` `images` entry, which replaces the localized entry
+  with the same `name`.
 
 ### Reconcile flow
 
@@ -253,18 +260,20 @@ Every reconcile runs all steps; "ensure" means create-or-update.
 5. Render the engine object (and, for Flux, the source from `sourceTemplate`), impersonate-apply both
    through `applyset`, and roll child and engine readiness into `Ready`.
 
-The watch on owned `Resource`s enqueues the wrapper only on create, delete, and `Ready` transitions, so
-N image `Resource`s cause O(N) wakeups, not O(N²).
+The watch on owned `Resource`s enqueues the wrapper on create, delete, a `Ready` transition, or a change
+of the resolved resource (`status.resource`, e.g. a new digest), not on other status writes, so N image
+`Resource`s cause O(N) wakeups, not O(N²).
 
 ### Identity, deletion, and status
 
 The controller impersonates `applyServiceAccountName` (default: the namespace's `default` service
 account) for every apply. That account bounds what the wrapper creates, not what the engine deploys:
 the engine applies the workload under its own identity (Flux: `template.spec.serviceAccountName`, else
-Flux's default; Argo CD: its controller, scoped by the `AppProject`). Controller RBAC:
-`get;list;patch;watch` on the engine and Flux source kinds and `impersonate` on service accounts. No
-`Namespace` is rendered; the target namespace is a native `template` field (`spec.targetNamespace`,
-`spec.destination.namespace`).
+Flux's default; Argo CD: its controller, scoped by the `AppProject`). As with `NamespacedDeployer`,
+whoever may create a wrapper can have the controller act as any service account in its namespace; the
+author's own RBAC does not bound this. Controller RBAC: `get;list;patch;watch` on the engine and Flux
+source kinds and `impersonate` on service accounts. No `Namespace` is rendered; the target namespace is
+a native `template` field (`spec.targetNamespace`, `spec.destination.namespace`).
 
 Child OCM CRs are owner-referenced and garbage-collected with the wrapper. The generated source and
 engine object are `applyset` members: `Background` and `Foreground` prune them; `Orphan` removes the
@@ -285,10 +294,13 @@ object is deleted, by pruning now or by an adopter later, is set in `template`:
   `resources-finalizer.argocd.argoproj.io`. Without it, even `Background` leaves the workload running.
 
 `Ready` is `True` when the children are ready and the engine reports the rendered state as healthy:
-for each Flux object, `Ready=True` with `status.observedGeneration` equal to `metadata.generation`; for
-Argo, `Healthy` and `Synced` with `status.sync.comparedTo.source` equal to the rendered `spec.source` and
-no operation running. Without these checks, a status left from the previous generation would mark a new
-component version ready before the engine has acted on it; `deployedComponentVersion` and
+for each Flux object, `Ready=True` with `status.observedGeneration` equal to `metadata.generation`, and
+for an engine object fed by an `OCIRepository`, the pinned digest reported as applied
+(`Kustomization` `status.lastAppliedRevision`, the latest `HelmRelease` `status.history` entry), because
+a new digest changes only the source, not the engine object's spec; for Argo, `Healthy` and `Synced`
+with `status.sync.comparedTo.source` and `.destination` equal to the rendered ones and no operation
+running. Without these checks, a status left from the previous generation would mark a new component
+version ready before the engine has acted on it; `deployedComponentVersion` and
 `deployedResourceDigest` change only once this holds. A child that never becomes ready is not terminal;
 the wrapper requeues. An `Application` without status usually means Argo CD does not watch the namespace
 (apps-in-any-namespace); the condition message says so.
