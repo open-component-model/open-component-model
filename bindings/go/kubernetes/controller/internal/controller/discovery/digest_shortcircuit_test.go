@@ -13,6 +13,7 @@ import (
 
 	desc "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/descriptortest"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/repository"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
@@ -83,9 +84,9 @@ func TestReconcile_UnchangedRootDigestSkipsTraversal(t *testing.T) {
 	const ns = "default"
 
 	dir := t.TempDir()
-	child := makeDescriptor("ocm.software/child", "1.0.0")
-	root := makeDescriptor("ocm.software/root", "1.0.0",
-		digestedRef("child", "ocm.software/child", "1.0.0", "childdigest"))
+	child := descriptortest.New("ocm.software/child", "1.0.0")
+	root := descriptortest.New("ocm.software/root", "1.0.0",
+		descriptortest.WithReferences(digestedRef("child", "ocm.software/child", "1.0.0", "childdigest")))
 	repoSpec := ctfRepoAt(t, dir, root, child)
 
 	component := componentWithDigest("component", ns, root.Component.Name, root.Component.Version, repoSpec, "rootdigest")
@@ -130,9 +131,9 @@ func TestReconcile_MissingReferenceDigestForcesFullTraversal(t *testing.T) {
 	const ns = "default"
 
 	dir := t.TempDir()
-	child := makeDescriptor("ocm.software/child", "1.0.0")
-	root := makeDescriptor("ocm.software/root", "1.0.0",
-		makeRef("child", "ocm.software/child", "1.0.0")) // no digest
+	child := descriptortest.New("ocm.software/child", "1.0.0")
+	root := descriptortest.New("ocm.software/root", "1.0.0",
+		descriptortest.WithReferences(makeRef("child", "ocm.software/child", "1.0.0"))) // no digest
 	repoSpec := ctfRepoAt(t, dir, root, child)
 
 	component := componentWithDigest("component", ns, root.Component.Name, root.Component.Version, repoSpec, "rootdigest")

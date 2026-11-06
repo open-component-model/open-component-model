@@ -19,6 +19,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/descriptortest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
@@ -47,26 +48,8 @@ func setupTestRepositoryWithDescriptorLibrary(t *testing.T, versions ...*descrip
 	return archivePath, nil
 }
 
-// createTestDescriptor creates a test component descriptor with the given name and version
-func createTestDescriptor(name, version string) *descriptor.Descriptor {
-	return &descriptor.Descriptor{
-		Meta: descriptor.Meta{
-			Version: "v2",
-		},
-		Component: descriptor.Component{
-			ComponentMeta: descriptor.ComponentMeta{
-				ObjectMeta: descriptor.ObjectMeta{
-					Name:    name,
-					Version: version,
-				},
-			},
-			Provider: descriptor.Provider{
-				Name: "ocm.software",
-			},
-			Resources: []descriptor.Resource{},
-		},
-	}
-}
+// noResources sets an empty, non-nil resource list.
+var noResources = descriptortest.WithResources([]descriptor.Resource{}...)
 
 // addReference adds a reference to another component to a descriptor
 func addReference(t *testing.T, parent, child *descriptor.Descriptor, refName string) {
@@ -89,7 +72,7 @@ func addReference(t *testing.T, parent, child *descriptor.Descriptor, refName st
 // setupSourceRef creates a test CTF repository with a simple component and returns the source reference string.
 func setupSourceRef(t *testing.T, componentName, componentVersion string) string {
 	t.Helper()
-	fromDesc := createTestDescriptor(componentName, componentVersion)
+	fromDesc := descriptortest.New(componentName, componentVersion, noResources)
 	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t, fromDesc)
 	require.NoError(t, err)
 	ref := &compref.Ref{
@@ -335,7 +318,7 @@ func TestTransferComponentVersionWithTransferSpecFileNotFound(t *testing.T) {
 }
 
 func TestTransferComponentVersion(t *testing.T) {
-	fromDesc := createTestDescriptor("ocm.software/test-component", "0.0.1")
+	fromDesc := descriptortest.New("ocm.software/test-component", "0.0.1", noResources)
 	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t, fromDesc)
 	require.NoError(t, err)
 
@@ -389,8 +372,8 @@ func TestTransferComponentVersion(t *testing.T) {
 }
 
 func TestTransferComponentVersionRecursive(t *testing.T) {
-	childDesc := createTestDescriptor("ocm.software/child-component", "0.0.1")
-	parentDesc := createTestDescriptor("ocm.software/parent-component", "1.0.0")
+	childDesc := descriptortest.New("ocm.software/child-component", "0.0.1", noResources)
+	parentDesc := descriptortest.New("ocm.software/parent-component", "1.0.0", noResources)
 	addReference(t, parentDesc, childDesc, "child")
 
 	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t, childDesc, parentDesc)
@@ -465,7 +448,7 @@ func TestTransferComponentVersionPreservesSignatures(t *testing.T) {
 	r := require.New(t)
 
 	// Create a descriptor with a local blob resource
-	fromDesc := createTestDescriptor("ocm.software/signed-component", "1.0.0")
+	fromDesc := descriptortest.New("ocm.software/signed-component", "1.0.0", noResources)
 	fromDesc.Component.Resources = []descriptor.Resource{
 		{
 			ElementMeta: descriptor.ElementMeta{
@@ -578,7 +561,7 @@ func setupMultiVersionSourceRef(t *testing.T, componentName string, versions ...
 	t.Helper()
 	descs := make([]*descriptor.Descriptor, len(versions))
 	for i, v := range versions {
-		descs[i] = createTestDescriptor(componentName, v)
+		descs[i] = descriptortest.New(componentName, v, noResources)
 	}
 	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t, descs...)
 	require.NoError(t, err)
@@ -706,9 +689,9 @@ func TestTransferComponentVersion_RepositoryReference(t *testing.T) {
 	r := require.New(t)
 
 	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t,
-		createTestDescriptor("github.com/acme/first", "v1.0.0"),
-		createTestDescriptor("github.com/acme/first", "v1.1.0"),
-		createTestDescriptor("github.com/acme/second", "v2.0.0"),
+		descriptortest.New("github.com/acme/first", "v1.0.0", noResources),
+		descriptortest.New("github.com/acme/first", "v1.1.0", noResources),
+		descriptortest.New("github.com/acme/second", "v2.0.0", noResources),
 	)
 	r.NoError(err)
 
@@ -742,7 +725,7 @@ func TestTransferComponentVersion_RepositoryReferenceWithCTFPrefix(t *testing.T)
 	r := require.New(t)
 
 	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t,
-		createTestDescriptor("github.com/acme/only", "v0.0.1"),
+		descriptortest.New("github.com/acme/only", "v0.0.1", noResources),
 	)
 	r.NoError(err)
 
@@ -767,9 +750,9 @@ func TestTransferComponentVersion_RepositoryReferenceLatestOnly(t *testing.T) {
 	r := require.New(t)
 
 	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t,
-		createTestDescriptor("github.com/acme/first", "v1.0.0"),
-		createTestDescriptor("github.com/acme/first", "v1.1.0"),
-		createTestDescriptor("github.com/acme/second", "v2.0.0"),
+		descriptortest.New("github.com/acme/first", "v1.0.0", noResources),
+		descriptortest.New("github.com/acme/first", "v1.1.0", noResources),
+		descriptortest.New("github.com/acme/second", "v2.0.0", noResources),
 	)
 	r.NoError(err)
 
@@ -803,7 +786,7 @@ func setupOCIImageTransferFixture(t *testing.T) (fromRef string, targetArg strin
 	t.Helper()
 	r := require.New(t)
 
-	fromDesc := createTestDescriptor("ocm.software/uploader-flag-test", "1.0.0")
+	fromDesc := descriptortest.New("ocm.software/uploader-flag-test", "1.0.0", noResources)
 	fromDesc.Component.Resources = []descriptor.Resource{
 		{
 			ElementMeta: descriptor.ElementMeta{

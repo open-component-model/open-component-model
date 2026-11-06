@@ -15,6 +15,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha2"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha3"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/descriptortest"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
@@ -27,7 +28,7 @@ func TestBuildGraphDefinition_VerifiesMixedReferenceDigests(t *testing.T) {
 
 	// A versioned signing label makes the v4 alphas disagree, so each digest is
 	// only valid under its own algorithm.
-	child := testDescriptor("ocm.software/child", "1.0.0", nil, nil)
+	child := descriptortest.New("ocm.software/child", "1.0.0", testProvider)
 	child.Component.Labels = []descriptor.Label{{Name: "sig", Value: []byte(`"v"`), Signing: true, Version: "v1"}}
 
 	mint := func(norm, hash string) descriptor.Digest {
@@ -59,7 +60,8 @@ func TestBuildGraphDefinition_VerifiesMixedReferenceDigests(t *testing.T) {
 				Digest:      d,
 			})
 		}
-		parent := testDescriptor("ocm.software/parent", "1.0.0", nil, refs)
+		parent := descriptortest.New("ocm.software/parent", "1.0.0", testProvider,
+			descriptortest.WithReferences(refs...))
 		source := testOCIRepo("ghcr.io/source")
 		resolver := testMultiResolver(map[string]struct {
 			spec runtime.Typed

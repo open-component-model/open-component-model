@@ -21,6 +21,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/descriptortest"
 	"ocm.software/open-component-model/bindings/go/internal/testutil/pkitest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
@@ -49,26 +50,6 @@ func setupTestRepositoryWithDescriptorLibrary(t *testing.T, versions ...*descrip
 	return archivePath, nil
 }
 
-// createTestDescriptor creates a test component descriptor with the given name and version
-func createTestDescriptor(name, version string) *descriptor.Descriptor {
-	return &descriptor.Descriptor{
-		Meta: descriptor.Meta{
-			Version: "v2",
-		},
-		Component: descriptor.Component{
-			ComponentMeta: descriptor.ComponentMeta{
-				ObjectMeta: descriptor.ObjectMeta{
-					Name:    name,
-					Version: version,
-				},
-			},
-			Provider: descriptor.Provider{
-				Name: "ocm.software",
-			},
-		},
-	}
-}
-
 // trimTreeOutput normalizes a rendered tree for comparison in order to make
 // expected values in tests easier to read as the column alignment fits
 func trimTreeOutput(s string) string {
@@ -88,7 +69,7 @@ func trimTreeOutput(s string) string {
 // Test_Get_Component_Version_Formats tests the different output formats for the get cv command
 func Test_Get_Component_Version_Formats(t *testing.T) {
 	// Setup test repository with a single component version
-	desc := createTestDescriptor("ocm.software/test-component", "0.0.1")
+	desc := descriptortest.New("ocm.software/test-component", "0.0.1")
 	archivePath, err := setupTestRepositoryWithDescriptorLibrary(t, desc)
 	require.NoError(t, err)
 
@@ -221,7 +202,7 @@ COMPONENT                   │ VERSION │ PROVIDER
 
 // Test_Get_Component_Version_WideTree tests the `-o widetree` output format,
 func Test_Get_Component_Version_WideTree(t *testing.T) {
-	leaf := createTestDescriptor("ocm.software/leaf", "0.0.1")
+	leaf := descriptortest.New("ocm.software/leaf", "0.0.1")
 	// Two resources sharing a name, distinguished only by their extra identity.
 	leaf.Component.Resources = []descriptor.Resource{
 		{
@@ -244,7 +225,7 @@ func Test_Get_Component_Version_WideTree(t *testing.T) {
 		},
 	}
 
-	root := createTestDescriptor("ocm.software/root", "0.0.1")
+	root := descriptortest.New("ocm.software/root", "0.0.1")
 	root.Component.Resources = []descriptor.Resource{
 		{
 			ElementMeta: descriptor.ElementMeta{
@@ -337,7 +318,7 @@ func Test_Get_Component_Version_WideTree(t *testing.T) {
 // Test_Get_Component_Version_Invalid_Semver tests the get cv command with invalid semver constraint
 func Test_Get_Component_Version_Invalid_Semver(t *testing.T) {
 	// Setup test repository with a single component version
-	desc := createTestDescriptor("ocm.software/test-component", "0.0.1")
+	desc := descriptortest.New("ocm.software/test-component", "0.0.1")
 	archivePath, err := setupTestRepositoryWithDescriptorLibrary(t, desc)
 	require.NoError(t, err)
 
@@ -360,9 +341,9 @@ func Test_Get_Component_Version_Invalid_Semver(t *testing.T) {
 // Test_Get_Component_Version_Formats_Recursive tests the different output formats for the get cv command
 func Test_Get_Component_Version_Formats_Recursive(t *testing.T) {
 	// Setup test repository
-	leafa := createTestDescriptor("ocm.software/leaf-a", "0.0.1")
-	leafb := createTestDescriptor("ocm.software/leaf-b", "0.0.1")
-	root := createTestDescriptor("ocm.software/root", "0.0.1")
+	leafa := descriptortest.New("ocm.software/leaf-a", "0.0.1")
+	leafb := descriptortest.New("ocm.software/leaf-b", "0.0.1")
+	root := descriptortest.New("ocm.software/root", "0.0.1")
 	root.Component.References = []descriptor.Reference{
 		{
 			ElementMeta: descriptor.ElementMeta{
@@ -577,8 +558,8 @@ COMPONENT           │ VERSION │ PROVIDER
 // Test_List_Component_Version_Variations tests different variations of listing component versions
 func Test_List_Component_Version_Variations(t *testing.T) {
 	// Setup test repository with multiple component versions
-	desc1 := createTestDescriptor("ocm.software/test-component", "0.0.1")
-	desc2 := createTestDescriptor("ocm.software/test-component", "0.0.2")
+	desc1 := descriptortest.New("ocm.software/test-component", "0.0.1")
+	desc2 := descriptortest.New("ocm.software/test-component", "0.0.2")
 	archivePath, err := setupTestRepositoryWithDescriptorLibrary(t, desc1, desc2)
 	require.NoError(t, err)
 
@@ -675,10 +656,10 @@ COMPONENT                   │ VERSION │ PROVIDER
 // Test_List_Component_Version_Variations tests different variations of listing component versions
 func Test_List_Component_Version_Variations_Recursive(t *testing.T) {
 	// Setup test repository
-	leafa := createTestDescriptor("ocm.software/leaf-a", "0.0.1")
-	leafb := createTestDescriptor("ocm.software/leaf-b", "0.0.1")
-	desc1 := createTestDescriptor("ocm.software/root", "0.0.1")
-	desc2 := createTestDescriptor("ocm.software/root", "0.0.2")
+	leafa := descriptortest.New("ocm.software/leaf-a", "0.0.1")
+	leafb := descriptortest.New("ocm.software/leaf-b", "0.0.1")
+	desc1 := descriptortest.New("ocm.software/root", "0.0.1")
+	desc2 := descriptortest.New("ocm.software/root", "0.0.2")
 
 	desc1.Component.References = []descriptor.Reference{
 		{
@@ -799,8 +780,8 @@ COMPONENT           │ VERSION │ PROVIDER
 // Test_Get_Component_Version_CTF_Dir tests the call to `ocm get cv <ctf_dir>` command.
 // The command has to list all component versions contained in the CTF folder.
 func Test_Get_Component_Version_CTF_Dir(t *testing.T) {
-	roota := createTestDescriptor("ocm.software/root-a", "0.0.1")
-	rootb := createTestDescriptor("ocm.software/root-b", "0.0.2")
+	roota := descriptortest.New("ocm.software/root-a", "0.0.1")
+	rootb := descriptortest.New("ocm.software/root-b", "0.0.2")
 
 	archivePath, err := setupTestRepositoryWithDescriptorLibrary(t, roota, rootb)
 	require.NoError(t, err)
