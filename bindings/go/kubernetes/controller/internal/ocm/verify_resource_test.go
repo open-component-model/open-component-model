@@ -8,18 +8,12 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	git "github.com/go-git/go-git/v6"
-	"github.com/go-git/go-git/v6/plumbing"
-	"github.com/go-git/go-git/v6/plumbing/filemode"
-	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -31,6 +25,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
 // content is what every fake source serves.
@@ -71,7 +66,10 @@ var _ = Describe("VerifyResource", Ordered, func() {
 
 		servers = map[string]string{"https": srv.URL, "host": host}
 
-		gitRepo, commit = newGitRepository()
+		gitPath, first := testgit.Repository(GinkgoTB(), testgit.Options{
+			Bare: true, DefaultBranch: "main", Commits: []testgit.Commit{{Content: string(content)}},
+		})
+		gitRepo, commit = gittest.Serve(GinkgoT(), gitPath), first.String()
 
 		cfg := &genericv1.Config{
 			Type: runtime.NewVersionedType(genericv1.ConfigType, genericv1.ConfigTypeV1),
@@ -194,42 +192,6 @@ func serveOCIImage(mux *http.ServeMux, repo, tag string) {
 			_, _ = w.Write(data)
 		}
 	})
-}
-
-// newGitRepository creates a bare repository with one commit on main and returns its path
-// and commit. Objects are stored directly, so no git configuration (e.g. signing) applies.
-func newGitRepository() (string, string) {
-	dir := filepath.Join(GinkgoT().TempDir(), "repo.git")
-	repo, err := git.PlainInit(dir, true)
-	Expect(err).NotTo(HaveOccurred())
-	store := func(obj interface {
-		Encode(plumbing.EncodedObject) error
-	},
-	) plumbing.Hash {
-		encoded := repo.Storer.NewEncodedObject()
-		Expect(obj.Encode(encoded)).To(Succeed())
-		hash, err := repo.Storer.SetEncodedObject(encoded)
-		Expect(err).NotTo(HaveOccurred())
-		return hash
-	}
-	blob := repo.Storer.NewEncodedObject()
-	blob.SetType(plumbing.BlobObject)
-	w, err := blob.Writer()
-	Expect(err).NotTo(HaveOccurred())
-	_, err = w.Write(content)
-	Expect(err).NotTo(HaveOccurred())
-	Expect(w.Close()).To(Succeed())
-	blobHash, err := repo.Storer.SetEncodedObject(blob)
-	Expect(err).NotTo(HaveOccurred())
-	signature := object.Signature{Name: "test", Email: "test@example.invalid", When: time.Unix(1700000000, 0).UTC()}
-	commit := store(&object.Commit{
-		Author:    signature,
-		Committer: signature,
-		Message:   "init\n",
-		TreeHash:  store(&object.Tree{Entries: []object.TreeEntry{{Name: "README.md", Mode: filemode.Regular, Hash: blobHash}}}),
-	})
-	Expect(repo.Storer.SetReference(plumbing.NewHashReference("refs/heads/main", commit))).To(Succeed())
-	return gittest.Serve(GinkgoT(), dir), commit.String()
 }
 
 func mustJSON(v any) []byte {
