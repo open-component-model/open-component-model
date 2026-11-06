@@ -222,6 +222,7 @@ linters:
           files: ["**/bindings/go/blob/**"]
           allow:
             - "ocm.software/open-component-model/bindings/go/blob"
+            - "ocm.software/open-component-model/bindings/go/internal/testutil"
             - "ocm.software/open-component-model/bindings/go/runtime"
           deny:
             - pkg: "ocm.software/open-component-model/bindings/go/"

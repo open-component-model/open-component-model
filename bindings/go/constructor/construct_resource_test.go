@@ -1,6 +1,7 @@
 package constructor
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
@@ -204,7 +206,7 @@ func TestConstructPreservesResourceSourceRefs(t *testing.T) {
 `,
 			inputMethods: map[runtime.Type]ResourceInputMethod{
 				runtime.NewVersionedType("mock", "v1"): &mockInputMethod{
-					processedBlob: &mockBlob{mediaType: "application/octet-stream", data: []byte("test")},
+					processedBlob: inmemory.New(bytes.NewReader([]byte("test")), inmemory.WithMediaType("application/octet-stream")),
 				},
 			},
 		},
@@ -379,7 +381,7 @@ func TestAddColocatedResourceLocalBlob_AttachesOwnershipOptIn(t *testing.T) {
 				Relation:    constructorruntime.LocalRelation,
 				Options:     constructorruntime.ResourceOptions{OwnershipPolicy: tt.policy},
 			}
-			data := &mockBlob{mediaType: "application/octet-stream", data: []byte("payload")}
+			data := inmemory.New(bytes.NewReader([]byte("payload")), inmemory.WithMediaType("application/octet-stream"))
 
 			out, err := addColocatedResourceLocalBlob(context.Background(), tt.repo, component, version, res, data)
 			if tt.wantErr {

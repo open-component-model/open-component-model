@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"sigs.k8s.io/yaml"
 
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
 	constructorv1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -281,10 +282,7 @@ func TestConstructWithSourceCredentialResolution(t *testing.T) {
 func TestConstructWithSourceBlob(t *testing.T) {
 	// Create a mock source input method that returns blob data
 	mockInput := &mockSourceInputMethod{
-		processedBlob: &mockBlob{
-			mediaType: "application/octet-stream",
-			data:      []byte("test source data"),
-		},
+		processedBlob: inmemory.New(bytes.NewReader([]byte("test source data")), inmemory.WithMediaType("application/octet-stream")),
 	}
 
 	// Create a mock source input method provider

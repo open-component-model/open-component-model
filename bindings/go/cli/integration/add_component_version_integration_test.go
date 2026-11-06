@@ -32,6 +32,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/blobtest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -1231,7 +1232,7 @@ components:
 
 	outputBlob, err := filesystem.GetBlobFromOSPath(output)
 	r.NoError(err)
-	r.Equal(content, readAllFromBlob(t, outputBlob), "downloaded content should match the object in the bucket")
+	r.Equal(content, blobtest.ReadAll(t, outputBlob), "downloaded content should match the object in the bucket")
 
 	// get component-version reads the s3-access component back through the CLI.
 	getOutput := new(bytes.Buffer)
@@ -1313,7 +1314,7 @@ components:
 
 	blobData, _, err := repo.GetLocalResource(ctx, componentName, componentVersion, res.ToIdentity())
 	r.NoError(err)
-	r.Equal(content, readAllFromBlob(t, blobData), "local blob should hold the object from the bucket")
+	r.Equal(content, blobtest.ReadAll(t, blobData), "local blob should hold the object from the bucket")
 }
 
 // Test_Integration_AddComponentVersion_GitAccess verifies that a resource declaring a Git
