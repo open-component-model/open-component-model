@@ -52,11 +52,18 @@ Dynamically calculates safe truncation to ensure total name length <= 63 chars.
 {{/*
 Port the manager serves metrics on, parsed from manager.metricsServer.bindAddress.
 Empty when metrics are disabled ("0", the manager default). dig keeps a helm
-upgrade --reuse-values from a release without the key working.
+upgrade --reuse-values from a release without the key working. atoi reads the
+digits as decimal like the manager does; rendered raw, ":01024" would be YAML octal.
 */}}
 {{- define "ocm-k8s-toolkit.metricsPort" -}}
 {{- $addr := dig "metricsServer" "bindAddress" "0" .Values.manager | toString }}
-{{- if ne $addr "0" }}{{ regexFind "[0-9]+$" $addr }}{{ end }}
+{{- if ne $addr "0" }}
+{{- $port := regexFind "[0-9]+$" $addr | atoi }}
+{{- if eq $port 0 }}
+{{- fail (printf "manager.metricsServer.bindAddress %q has no usable port; set a port such as \":8443\", or \"0\" to disable metrics" $addr) }}
+{{- end }}
+{{- $port }}
+{{- end }}
 {{- end }}
 
 {{/*
