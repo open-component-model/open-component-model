@@ -49,7 +49,7 @@ spec:
                     {{- /* Health probe */}}
                     - --health-probe-bind-address={{ .Values.manager.healthProbe.bindAddress | default ":8081" }}
                     {{- /* Metrics */}}
-                    {{- if .Values.manager.metricsServer.bindAddress }}
+                    {{- if include "ocm-k8s-toolkit.metricsPort" . }}
                     - --metrics-bind-address={{ .Values.manager.metricsServer.bindAddress }}
                     {{- end }}
                     {{- if .Values.manager.metricsServer.secure }}
@@ -188,15 +188,21 @@ spec:
                     initialDelaySeconds: {{ .Values.manager.livenessProbe.initialDelaySeconds }}
                     periodSeconds: {{ .Values.manager.livenessProbe.periodSeconds }}
                   name: manager
+                  {{- $metricsPort := include "ocm-k8s-toolkit.metricsPort" . }}
+                  {{- if or $metricsPort .Values.webhook.enable }}
                   ports:
-                    - containerPort: 9090
-                      name: http
+                    {{- if $metricsPort }}
+                    {{- /* monitoring/service.yaml targets this port by name. */}}
+                    - containerPort: {{ $metricsPort }}
+                      name: metrics
                       protocol: TCP
+                    {{- end }}
                     {{- if .Values.webhook.enable }}
                     - containerPort: 9443
                       name: webhook-server
                       protocol: TCP
                     {{- end }}
+                  {{- end }}
                   readinessProbe:
                     httpGet:
                         path: {{ .Values.manager.readinessProbe.path }}

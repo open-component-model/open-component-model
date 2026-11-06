@@ -75,7 +75,7 @@ Kubernetes: `>=1.26.0-0`
 | manager.deployer.enabled | bool | `true` | Run the controller for the cluster-scoped Deployer. It applies with the permissions of the controller itself. Deprecated: Use NamespacedDeployer instead. |
 | manager.env | list | `[]` | Environment variables for the controller |
 | manager.extraArgs | list | `[]` | Extra arguments to pass to the controller |
-| manager.healthProbe.bindAddress | string | `":8081"` | Address the health probe endpoint binds to |
+| manager.healthProbe.bindAddress | string | `":8081"` | Address the health probe endpoint binds to, as host:port with a numeric port |
 | manager.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy |
 | manager.image.repository | string | `"ghcr.io/open-component-model/kubernetes/controller"` | Controller image repository |
 | manager.image.tag | string | `"latest"` | Controller image tag |
@@ -88,9 +88,9 @@ Kubernetes: `>=1.26.0-0`
 | manager.logging.development | bool | `false` | Enable development mode (console encoder, debug level, warn stacktrace) |
 | manager.logging.encoder | string | `"json"` | Log encoding: 'json' or 'console' |
 | manager.logging.level | string | `"info"` | Zap log level: 'debug', 'info', 'error', 'panic' or integer > 0 |
-| manager.metricsServer.bindAddress | string | `"0"` | Address the metric endpoint binds to. Set to "0" to disable |
+| manager.metricsServer.bindAddress | string | `"0"` | Address the metric endpoint binds to, as host:port with a numeric port, for example ":8443". "0" disables metrics. Required by prometheus.enable, and then it must be reachable from the pod network |
 | manager.metricsServer.enableHttp2 | bool | `false` | Enable HTTP/2 for metrics and webhook servers |
-| manager.metricsServer.secure | bool | `false` | Serve metrics endpoint securely |
+| manager.metricsServer.secure | bool | `false` | Serve the metrics endpoint over TLS with a certificate the manager generates at startup. The ServiceMonitor then scrapes over https without verification |
 | manager.namespacedDeployer.enabled | bool | `true` | Run the controller for the NamespacedDeployer and grant the controller permission to impersonate service accounts. A NamespacedDeployer without spec.serviceAccountName impersonates the default service account of its namespace. |
 | manager.networkPolicy.egress | list | `[]` | Egress rules replacing the defaults (DNS on 53, TCP 443 and 6443 to any destination). Set this to reach registries on other ports; it replaces all defaults, so include DNS. Leave empty to keep defaults |
 | manager.networkPolicy.enabled | bool | `false` | Enable NetworkPolicy for the controller manager |
@@ -120,7 +120,7 @@ Kubernetes: `>=1.26.0-0`
 | manager.resources | object | `{"limits":{"cpu":"500m","memory":"512Mi"},"requests":{"cpu":"100m","memory":"256Mi"}}` | Resource limits and requests |
 | manager.securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true}` | Container-level security context |
 | manager.tolerations | list | `[]` | Pod tolerations |
-| prometheus.enable | bool | `false` | Enable Prometheus ServiceMonitor (requires prometheus-operator) |
+| prometheus.enable | bool | `false` | Render a metrics Service and a Prometheus ServiceMonitor (requires prometheus-operator and manager.metricsServer.bindAddress) |
 | rbacHelpers.aggregateToDefaultRoles | bool | `true` | Install ClusterRoles that aggregate OCM resource permissions into the built-in `admin`, `edit` and `view` cluster roles |
 | rbacHelpers.enable | bool | `false` | Install convenience admin/editor/viewer roles for CRDs |
 | webhook.certSecret | string | `""` | Secret name for webhook TLS certificates (when not using cert-manager, create this secret manually) |

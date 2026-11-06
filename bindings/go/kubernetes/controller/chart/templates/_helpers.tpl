@@ -48,3 +48,55 @@ Dynamically calculates safe truncation to ensure total name length <= 63 chars.
 {{- printf "%s-%s" $fullname $suffix | trunc 63 | trimSuffix "-" }}
 {{- end }}
 {{- end }}
+
+{{/*
+Port of a manager listen address (dict "addr" value "key" "values.path"), or empty
+when the address is "" or "0", which the manager treats as disabled. Fails the
+render for anything net.Listen would reject or that has no numeric port. atoi reads
+the digits as decimal like the manager does; int would read ":08081" as octal.
+*/}}
+{{- define "ocm-k8s-toolkit.portFromAddress" -}}
+{{- $addr := .addr | toString }}
+{{- if and $addr (ne $addr "0") }}
+{{- if not (mustRegexMatch `^(\[[0-9A-Fa-f:.]+\]|[^:\[\]]*):[0-9]+$` $addr) }}
+{{- fail (printf "%s %q must be host:port, for example \":8443\", or \"0\" to disable" .key $addr) }}
+{{- end }}
+{{- $port := regexFind "[0-9]+$" $addr | atoi }}
+{{- if or (lt $port 1) (gt $port 65535) }}
+{{- fail (printf "%s %q has port %d outside 1-65535" .key $addr $port) }}
+{{- end }}
+{{- $port }}
+{{- end }}
+{{- end }}
+
+{{/*
+Port the manager serves metrics on, empty when metrics are disabled. Every
+template that depends on metrics being on must use this, so they agree.
+*/}}
+{{- define "ocm-k8s-toolkit.metricsPort" -}}
+{{- include "ocm-k8s-toolkit.portFromAddress" (dict "addr" .Values.manager.metricsServer.bindAddress "key" "manager.metricsServer.bindAddress") }}
+{{- end }}
+
+{{/*
+Port the manager serves health probes on. Never empty: the liveness and readiness
+probes and the NetworkPolicy ingress rule need it.
+*/}}
+{{- define "ocm-k8s-toolkit.healthProbePort" -}}
+{{- $port := include "ocm-k8s-toolkit.portFromAddress" (dict "addr" (.Values.manager.healthProbe.bindAddress | default ":8081") "key" "manager.healthProbe.bindAddress") }}
+{{- if not $port }}
+{{- fail "manager.healthProbe.bindAddress must not be \"0\"; the liveness and readiness probes need the health endpoint" }}
+{{- end }}
+{{- $port }}
+{{- end }}
+
+{{/*
+Same as metricsPort, but fails the render when metrics are disabled. Used by
+the Prometheus objects, which are useless without a metrics endpoint.
+*/}}
+{{- define "ocm-k8s-toolkit.prometheusMetricsPort" -}}
+{{- $port := include "ocm-k8s-toolkit.metricsPort" . }}
+{{- if not $port }}
+{{- fail "prometheus.enable=true requires manager.metricsServer.bindAddress to be set (for example \":8443\"); the manager serves no metrics with the default \"0\"" }}
+{{- end }}
+{{- $port }}
+{{- end }}

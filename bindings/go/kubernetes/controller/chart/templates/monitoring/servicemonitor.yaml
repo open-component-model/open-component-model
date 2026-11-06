@@ -1,4 +1,5 @@
 {{- if .Values.prometheus.enable }}
+{{- $_ := include "ocm-k8s-toolkit.prometheusMetricsPort" . }}
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -13,31 +14,17 @@ metadata:
 spec:
   endpoints:
     - path: /metrics
-      port: https
+      {{- /* Port name of monitoring/service.yaml. */}}
+      port: metrics
+      {{- if .Values.manager.metricsServer.secure }}
       scheme: https
-      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
       tlsConfig:
-        {{- if .Values.certManager.enable }}
-        serverName: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "controller-manager-metrics-service" "context" $) }}.{{ .Release.Namespace }}.svc
-        # Apply secure TLS configuration with cert-manager
-        insecureSkipVerify: false
-        ca:
-          secret:
-            name: metrics-server-cert
-            key: ca.crt
-        cert:
-          secret:
-            name: metrics-server-cert
-            key: tls.crt
-        keySecret:
-          name: metrics-server-cert
-          key: tls.key
-        {{- else }}
-        # Development/Test mode (insecure configuration)
+        {{- /* The manager generates its own certificate at startup and cannot load one from a secret, so there is no CA to verify against. */}}
         insecureSkipVerify: true
-        {{- end }}
+      {{- end }}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
       control-plane: controller-manager
 {{- end }}
