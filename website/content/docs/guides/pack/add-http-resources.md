@@ -464,6 +464,20 @@ read. When OCM needs the size, media type, or advertised checksum before reading
 into an OCI layer, a `GET` download sends a single `HEAD` request first. If the server refuses `HEAD`, these stay
 unknown until the body is read.
 
+**Compression is only a transport optimisation (input type).** The input type asks the server for gzip, but it stores
+exactly what a download without compression would return, so the content and its digest never depend on whether the
+server compressed:
+
+- A server that compresses because OCM asked for it (CDNs, proxies, `mod_deflate`, nginx `gzip`) is decoded.
+- A server that labels a stored file as compressed for every request (Apache `AddEncoding x-gzip .gz`, S3 objects
+  with `Content-Encoding` metadata) keeps the file as served, so a `.tar.gz` stays a `.tar.gz`.
+
+To tell the two apart, OCM sends one small follow-up request whenever a response is compressed. It asks for the
+first byte without compression, which also tells OCM the exact size of the content. A `Content-Digest` header
+covers the compressed bytes and is verified against them.
+
+The access type always stores the bytes as served, without asking for compression.
+
 **Timeouts, retries, and per-host settings** come from the `http.config.ocm.software/v1alpha1` configuration and apply
 to every Wget request:
 

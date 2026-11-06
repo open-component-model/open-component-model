@@ -13,6 +13,10 @@ type Expected struct {
 	Algorithm Algorithm
 	// Value is the lowercase hex-encoded checksum.
 	Value string
+	// Transferred reports that Value covers the bytes as transferred, with any
+	// content coding still applied (RFC 9530 Content-Digest), rather than the
+	// content after decoding.
+	Transferred bool
 }
 
 // FromHeaders extracts expected checksums from response headers, trying RFC
@@ -40,9 +44,11 @@ func FromHeaders(header http.Header, extra []string) []Expected {
 }
 
 // parseContentDigest parses RFC 9530 Content-Digest fields. Each is a
-// structured-field Dictionary of `key=:base64:`. Repr-Digest is intentionally
-// ignored: it is computed over the representation, whereas we persist the
-// transferred content bytes.
+// structured-field Dictionary of `key=:base64:`. Content-Digest covers the
+// message content as transferred, with any content coding applied, so the
+// results are marked [Expected.Transferred]. Repr-Digest is intentionally
+// ignored: it covers the selected representation, which need not be the bytes
+// received.
 func parseContentDigest(values []string) []Expected {
 	var out []Expected
 	for _, value := range values {
@@ -62,7 +68,7 @@ func parseContentDigest(values []string) []Expected {
 			if err != nil || len(decoded) != alg.Hash.Size() {
 				continue
 			}
-			out = append(out, Expected{Algorithm: alg, Value: hex.EncodeToString(decoded)})
+			out = append(out, Expected{Algorithm: alg, Value: hex.EncodeToString(decoded), Transferred: true})
 		}
 	}
 	return out
@@ -166,6 +172,18 @@ func isHex(s string, size int) bool {
 	}
 	_, err := hex.DecodeString(s)
 	return err == nil
+}
+
+// contentCandidates drops candidates that cover the transferred bytes rather
+// than the content.
+func contentCandidates(candidates []Expected) []Expected {
+	out := make([]Expected, 0, len(candidates))
+	for _, c := range candidates {
+		if !c.Transferred {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // Select picks the strongest candidate whose algorithm appears in prefer.

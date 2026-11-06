@@ -1,13 +1,19 @@
 package input_test
 
 import (
+	"bytes"
+	"compress/gzip"
+	"crypto/sha256"
 	"crypto/sha512"
+	"encoding/base64"
 	"encoding/hex"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -274,4 +280,112 @@ func TestProcessResource_ChecksumPolicy_ConfigDriven(t *testing.T) {
 		require.ErrorContains(t, readErr, "checksum mismatch")
 		require.ErrorContains(t, closeErr, "checksum mismatch")
 	})
+}
+
+// TestProcessResource_ContentEncoding asserts that compression is a transport
+// concern: negotiated gzip is decoded and the content digested and sized, while
+// Content-Digest is verified against the transferred bytes; a content coding the
+// server keeps for uncompressed requests is part of the stored content.
+func TestProcessResource_ContentEncoding(t *testing.T) {
+	t.Parallel()
+	content := bytes.Repeat([]byte("hello world "), 50)
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	_, err := zw.Write(content)
+	require.NoError(t, err)
+	require.NoError(t, zw.Close())
+	encoded := buf.Bytes()
+	contentSum, encodedSum := sha256.Sum256(content), sha256.Sum256(encoded)
+	tamperedSum := sha256.Sum256([]byte("tampered"))
+	contentDigest := func(sum [32]byte) string {
+		return "sha-256=:" + base64.StdEncoding.EncodeToString(sum[:]) + ":"
+	}
+
+	tests := []struct {
+		name string
+		// stored makes the server send the gzip bytes with Content-Encoding to
+		// every request, like a stored .gz file; otherwise it compresses only
+		// for requests accepting gzip.
+		stored bool
+		header map[string]string
+		// contentDigest is the Content-Digest sent with gzip responses: it covers
+		// the bytes as transferred, so uncompressed responses do not carry it.
+		contentDigest string
+		// want is the stored content; wantDigest is "" when no digest is known up front.
+		want        []byte
+		wantDigest  string
+		wantReadErr string
+	}{
+		{
+			name:          "decoded content is stored and pinned from the content checksum",
+			header:        map[string]string{"X-Checksum-Sha256": hex.EncodeToString(contentSum[:])},
+			contentDigest: contentDigest(encodedSum),
+			want:          content,
+			wantDigest:    "sha256:" + hex.EncodeToString(contentSum[:]),
+		},
+		{
+			name:          "Content-Digest verifies the transferred bytes but does not pin the content",
+			contentDigest: contentDigest(encodedSum),
+			want:          content,
+		},
+		{
+			name:          "tampered Content-Digest fails while reading",
+			contentDigest: contentDigest(tamperedSum),
+			wantReadErr:   "checksum mismatch",
+		},
+		{
+			name:       "a stored content coding is kept",
+			stored:     true,
+			header:     map[string]string{"X-Checksum-Sha256": hex.EncodeToString(encodedSum[:])},
+			want:       encoded,
+			wantDigest: "sha256:" + hex.EncodeToString(encodedSum[:]),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				for k, v := range tt.header {
+					w.Header().Set(k, v)
+				}
+				body := content
+				if tt.stored || strings.Contains(req.Header.Get("Accept-Encoding"), "gzip") {
+					w.Header().Set("Content-Encoding", "gzip")
+					// ServeContent omits Content-Length for an encoded body.
+					w.Header().Set("Content-Length", strconv.Itoa(len(encoded)))
+					body = encoded
+					if tt.contentDigest != "" {
+						w.Header().Set("Content-Digest", tt.contentDigest)
+					}
+				}
+				http.ServeContent(w, req, "", time.Time{}, bytes.NewReader(body))
+			}))
+			t.Cleanup(server.Close)
+
+			method := &input.InputMethod{ChecksumConfig: requireMode()}
+			result, err := method.ProcessResource(t.Context(), wgetInputResource(t, map[string]any{
+				"url": server.URL + "/artifact",
+			}), nil)
+			r.NoError(err)
+
+			digest, known := result.ProcessedBlobData.(blob.DigestAware).Digest()
+			r.Equal(tt.wantDigest != "", known)
+			r.Equal(tt.wantDigest, digest)
+
+			rc, err := result.ProcessedBlobData.ReadCloser()
+			r.NoError(err)
+			data, readErr := io.ReadAll(rc)
+			closeErr := rc.Close()
+			if tt.wantReadErr != "" {
+				r.ErrorContains(readErr, tt.wantReadErr)
+				r.ErrorContains(closeErr, tt.wantReadErr)
+				return
+			}
+			r.NoError(readErr)
+			r.NoError(closeErr)
+			r.Equal(tt.want, data)
+			r.Equal(int64(len(tt.want)), result.ProcessedBlobData.(blob.SizeAware).Size(), "the content size is known up front")
+		})
+	}
 }

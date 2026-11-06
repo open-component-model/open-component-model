@@ -1,6 +1,7 @@
 package download
 
 import (
+	"compress/gzip"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -67,6 +68,8 @@ type metadata struct {
 // representation is a response together with how its body maps to the content.
 type representation struct {
 	resp *http.Response
+	// decoded reports that the body is gzip and has to be decoded into the content.
+	decoded bool
 	// size is the content size, or [blob.SizeUnknown].
 	size int64
 }
@@ -124,7 +127,7 @@ func (b *Blob) metadata() metadata {
 		// Learning nothing leaves the metadata to the response of a reader.
 		return unknown
 	}
-	return b.learn(header, size)
+	return b.learn(header, size, false)
 }
 
 func (b *Blob) learned() (metadata, bool) {
@@ -137,11 +140,13 @@ func (b *Blob) learned() (metadata, bool) {
 }
 
 // learn records the metadata announced by header unless metadata was already
-// learned, and returns the learned metadata.
-func (b *Blob) learn(header http.Header, size int64) metadata {
+// learned, and returns the learned metadata. decoded reports that header belongs
+// to a response decoded from gzip, so it may advertise checksums over the
+// transferred bytes rather than the content.
+func (b *Blob) learn(header http.Header, size int64, decoded bool) metadata {
 	m := metadata{size: size, contentType: header.Get("Content-Type")}
 	if b.advertised != nil {
-		m.digest, _ = b.advertised(header)
+		m.digest, _ = b.advertised(header, decoded)
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -166,6 +171,10 @@ func (b *Blob) head() (http.Header, int64) {
 	}
 	isHead := r.Method == http.MethodHead
 	r.Method = http.MethodHead
+	if b.fetch.compressTransfer {
+		// The metadata describes what a request accepting no compression yields.
+		r.Header.Set("Accept-Encoding", "identity")
+	}
 	resp, err := b.fetch.client.Do(r)
 	if err != nil {
 		slog.DebugContext(ctx, "http: HEAD request for metadata failed", "url", b.fetch.safeURL, "err", err)
@@ -312,17 +321,21 @@ func (b *Blob) open() (io.ReadCloser, error) {
 			return nil, err
 		}
 	}
-	m := b.learn(rep.resp.Header, rep.size)
+	m := b.learn(rep.resp.Header, rep.size, rep.decoded)
 	if m.size >= 0 && rep.size >= 0 && rep.size != m.size {
 		_ = rep.resp.Body.Close()
 		return nil, fmt.Errorf("response body from %s announces %d bytes, expected %d", b.fetch.safeURL, rep.size, m.size)
 	}
-	return &bodyReader{
+	br := &bodyReader{
 		blob:     b,
 		rep:      rep,
 		expected: m.size,
 		hashers:  newHashers(b.algorithms),
-	}, nil
+	}
+	if rep.decoded {
+		br.transferred = newHashers(b.algorithms)
+	}
+	return br, nil
 }
 
 func newHashers(algorithms []DigestAlgorithm) map[string]hash.Hash {
@@ -333,16 +346,22 @@ func newHashers(algorithms []DigestAlgorithm) map[string]hash.Hash {
 	return hashers
 }
 
-// bodyReader streams one response body, hashing it and checking it at its end.
+// bodyReader streams one response body, decoding it if needed, hashing it and
+// checking it at its end.
 type bodyReader struct {
 	blob *Blob
-	// rep is the response read; its size is the length the response announced,
-	// or [blob.SizeUnknown].
+	// rep is the response read; its size is the content size it announced, or
+	// [blob.SizeUnknown].
 	rep representation
 	// expected is the learned content size, or [blob.SizeUnknown].
 	expected int64
-	hashers  map[string]hash.Hash
-	read     int64
+	// content is what Read returns; set on the first Read.
+	content io.Reader
+	// hashers hash the content; transferred hash the received bytes of a
+	// decoded response and are nil otherwise.
+	hashers     map[string]hash.Hash
+	transferred map[string]hash.Hash
+	read        int64
 	// err is the terminal error of the reader; once set, it is returned by every
 	// Read and by Close.
 	err    error
@@ -361,7 +380,14 @@ func (r *bodyReader) Read(p []byte) (int, error) {
 		return 0, io.EOF
 	}
 
-	n, err := r.rep.resp.Body.Read(p)
+	if r.content == nil {
+		if err := r.openContent(); err != nil {
+			r.err = err
+			return 0, r.err
+		}
+	}
+
+	n, err := r.content.Read(p)
 	r.read += int64(n)
 	if maxSize := r.blob.fetch.maxSize; maxSize > 0 && r.read > maxSize {
 		r.err = r.blob.fetch.tooLarge()
@@ -375,9 +401,10 @@ func (r *bodyReader) Read(p []byte) (int, error) {
 		h.Write(p[:n])
 	}
 
-	// Consumers that know the size may stop reading there without seeing EOF,
-	// so the end of a body of announced length is its last byte.
-	if errors.Is(err, io.EOF) || (r.rep.size >= 0 && r.read == r.rep.size) {
+	// Consumers that know the size may stop reading there without seeing EOF, so
+	// the end of an undecoded body of announced length is its last byte. A gzip
+	// stream ends with its trailer, which the gzip reader checks before EOF.
+	if errors.Is(err, io.EOF) || (!r.rep.decoded && r.rep.size >= 0 && r.read == r.rep.size) {
 		if r.err = r.finish(); r.err != nil {
 			return n, r.err
 		}
@@ -397,7 +424,31 @@ func (r *bodyReader) finish() error {
 	if r.blob.verify == nil {
 		return nil
 	}
-	return r.blob.verify(r.rep.resp.Header, Computed{Content: sums(r.hashers), Pinned: r.blob.pinned()})
+	computed := Computed{Content: sums(r.hashers), Pinned: r.blob.pinned()}
+	computed.Transferred = computed.Content
+	if r.rep.decoded {
+		computed.Transferred = sums(r.transferred)
+	}
+	return r.blob.verify(r.rep.resp.Header, computed)
+}
+
+// openContent sets up content. The gzip header is read here rather than when
+// the reader is opened, so handing out a reader never blocks on the network.
+func (r *bodyReader) openContent() error {
+	if !r.rep.decoded {
+		r.content = r.rep.resp.Body
+		return nil
+	}
+	writers := make([]io.Writer, 0, len(r.transferred))
+	for _, h := range r.transferred {
+		writers = append(writers, h)
+	}
+	gz, err := gzip.NewReader(io.TeeReader(r.rep.resp.Body, io.MultiWriter(writers...)))
+	if err != nil {
+		return fmt.Errorf("error decoding gzip response from %s: %w", r.blob.fetch.safeURL, err)
+	}
+	r.content = gz
+	return nil
 }
 
 func (r *bodyReader) sizeMismatch() error {

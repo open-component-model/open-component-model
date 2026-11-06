@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -442,7 +443,7 @@ func TestDownload_UnreadReaderSendsNothing(t *testing.T) {
 func TestDownload_Metadata(t *testing.T) {
 	t.Parallel()
 	content := []byte("metadata content")
-	advertised := download.WithAdvertisedDigest(func(header http.Header) (string, bool) {
+	advertised := download.WithAdvertisedDigest(func(header http.Header, _ bool) (string, bool) {
 		d := header.Get("X-Digest")
 		return d, d != ""
 	})
@@ -823,8 +824,279 @@ func TestDownload_Verifier(t *testing.T) {
 			r.Equal("v", gotHeader.Get("X-Test"))
 			r.Equal(hex.EncodeToString(sum[:]), gotComputed.Content["sha256"])
 			r.Equal(tt.pinned, gotComputed.Pinned)
+			r.Equal(gotComputed.Content, gotComputed.Transferred, "undecoded bytes are transferred as read")
 		})
 	}
+}
+
+// compressible is gzip-compressible content and its gzip encoding.
+func compressible(t *testing.T) (content, encoded []byte) {
+	t.Helper()
+	content = bytes.Repeat([]byte("compressible content "), 100)
+	return content, gzipBytes(t, content)
+}
+
+// serveIdentity serves body for requests not accepting gzip, honouring ranges.
+func serveIdentity(body []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(body))
+	}
+}
+
+// serveNegotiated compresses only for requests accepting gzip, like a proxy or CDN.
+func serveNegotiated(compressed []byte, coding string, otherwise http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			w.Header().Set("Content-Encoding", coding)
+			_, _ = w.Write(compressed)
+			return
+		}
+		otherwise(w, r)
+	}
+}
+
+// serveStored always labels body with coding, like httpd AddEncoding or S3 metadata.
+func serveStored(body []byte, coding string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Encoding", coding)
+		http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(body))
+	}
+}
+
+func serveForbidden(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusForbidden) }
+
+// probeRecorder serves requests and records the Accept-Encoding of downloads,
+// whether an identity range probe was sent and the Accept-Encoding of HEAD
+// requests for metadata.
+type probeRecorder struct {
+	mu      sync.Mutex
+	accepts []string
+	heads   []string
+	probed  bool
+}
+
+func (p *probeRecorder) serve(t *testing.T, handler http.HandlerFunc) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		p.mu.Lock()
+		switch {
+		case req.Method == http.MethodHead:
+			p.heads = append(p.heads, req.Header.Get("Accept-Encoding"))
+		case req.Header.Get("Range") != "":
+			p.probed = true
+		default:
+			p.accepts = append(p.accepts, req.Header.Get("Accept-Encoding"))
+		}
+		p.mu.Unlock()
+		handler(w, req)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func (p *probeRecorder) observed() (accepts, heads []string, probed bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.accepts, p.heads, p.probed
+}
+
+// TestDownload_CompressTransfer covers compression as a transport concern: the blob
+// yields what a request accepting no compression would, and an identity range
+// probe tells negotiated gzip from a content coding that is part of the content
+// and announces the content size.
+func TestDownload_CompressTransfer(t *testing.T) {
+	t.Parallel()
+	content, encoded := compressible(t)
+	hexSum := func(b []byte) string {
+		s := sha256.Sum256(b)
+		return hex.EncodeToString(s[:])
+	}
+
+	tests := []struct {
+		name          string
+		noCompression bool
+		header        map[string][]string
+		serve         http.HandlerFunc
+		wantAccept    string
+		wantProbe     bool
+		want          []byte
+		wantDecoded   bool
+		wantSize      int64
+	}{
+		{
+			name:  "negotiated gzip is decoded and sized by the probe",
+			serve: serveNegotiated(encoded, "gzip", serveIdentity(content)), wantAccept: "gzip", wantProbe: true,
+			want: content, wantDecoded: true, wantSize: int64(len(content)),
+		},
+		{
+			name: "a probe answered without range support is sized by its Content-Length",
+			serve: serveNegotiated(encoded, "gzip", func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Length", strconv.Itoa(len(content)))
+				_, _ = w.Write(content)
+			}),
+			wantAccept: "gzip", wantProbe: true, want: content, wantDecoded: true, wantSize: int64(len(content)),
+		},
+		{
+			name:  "a failing probe still decodes negotiated gzip with unknown size",
+			serve: serveNegotiated(encoded, "gzip", serveForbidden), wantAccept: "gzip", wantProbe: true,
+			want: content, wantDecoded: true, wantSize: blob.SizeUnknown,
+		},
+		{
+			name:  "a coding kept for identity requests is part of the content",
+			serve: serveStored(encoded, "gzip"), wantAccept: "gzip", wantProbe: true,
+			want: encoded, wantSize: int64(len(encoded)),
+		},
+		{
+			name:  "an unknown coding kept for identity requests is part of the content",
+			serve: serveStored(encoded, "br"), wantAccept: "gzip", wantProbe: true,
+			want: encoded, wantSize: int64(len(encoded)),
+		},
+		{
+			name:  "an uncompressed response needs no probe",
+			serve: serveIdentity(content), wantAccept: "gzip",
+			want: content, wantSize: int64(len(content)),
+		},
+		{
+			name: "an Accept-Encoding of the request wins", header: map[string][]string{"Accept-Encoding": {"identity"}},
+			serve: serveNegotiated(encoded, "gzip", serveIdentity(content)), wantAccept: "identity",
+			want: content, wantSize: int64(len(content)),
+		},
+		{
+			name: "without transfer compression the bytes are kept as served", noCompression: true,
+			serve: serveStored(encoded, "gzip"), wantAccept: "identity",
+			want: encoded, wantSize: int64(len(encoded)),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+			var rec probeRecorder
+			srv := rec.serve(t, tt.serve)
+
+			var computed download.Computed
+			b, err := download.Download(t.Context(),
+				download.Request{URL: srv.URL, Header: tt.header, CompressTransfer: !tt.noCompression},
+				download.WithDigestAlgorithms(download.DigestAlgorithm{Name: "sha256", New: sha256.New}),
+				download.WithVerifier(func(_ http.Header, c download.Computed) error {
+					computed = c
+					return nil
+				}))
+			r.NoError(err)
+
+			r.Equal(tt.want, readBlob(t, b))
+			r.Equal(tt.wantSize, b.Size(), "size learned from the response")
+			accepts, heads, probed := rec.observed()
+			r.Equal([]string{tt.wantAccept}, accepts)
+			r.Empty(heads, "metadata is learned from the read response")
+			r.Equal(tt.wantProbe, probed, "probe sent")
+
+			r.Equal(hexSum(tt.want), computed.Content["sha256"])
+			wantTransferred := tt.want
+			if tt.wantDecoded {
+				wantTransferred = encoded
+			}
+			r.Equal(hexSum(wantTransferred), computed.Transferred["sha256"], "transferred bytes are digested as received")
+		})
+	}
+}
+
+// TestDownload_CompressTransferMetadata asserts that metadata learned before the
+// first read describes the content a request accepting no compression yields,
+// not the compressed transfer.
+func TestDownload_CompressTransferMetadata(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	content, encoded := compressible(t)
+	var rec probeRecorder
+	srv := rec.serve(t, serveNegotiated(encoded, "gzip", serveIdentity(content)))
+
+	b, err := download.Download(t.Context(), download.Request{URL: srv.URL, CompressTransfer: true})
+	r.NoError(err)
+	r.Equal(int64(len(content)), b.Size())
+	r.Equal(content, readBlob(t, b))
+	_, heads, _ := rec.observed()
+	r.Equal([]string{"identity"}, heads)
+}
+
+// TestDownload_CompressTransferFailures covers responses that cannot be turned
+// into the content and limits that apply to the decoded content.
+func TestDownload_CompressTransferFailures(t *testing.T) {
+	t.Parallel()
+	content, encoded := compressible(t)
+
+	tests := []struct {
+		name    string
+		serve   http.HandlerFunc
+		maxSize int64
+		wantErr string
+		// failsOpen marks failures before a body is handed out: they fail the
+		// first Read only, as there is no body for Close to check.
+		failsOpen bool
+	}{
+		{
+			name:      "an unknown negotiated coding is rejected",
+			serve:     serveNegotiated(encoded, "br", serveIdentity(content)),
+			wantErr:   `unsupported content encoding "br"`,
+			failsOpen: true,
+		},
+		{
+			name:    "corrupt gzip fails the read",
+			serve:   serveNegotiated(content, "gzip", serveIdentity(content)),
+			wantErr: "gzip",
+		},
+		{
+			name:    "a probe announcing the wrong size fails the read",
+			serve:   serveNegotiated(encoded, "gzip", serveIdentity(append(bytes.Clone(content), '!'))),
+			wantErr: fmt.Sprintf("does not have the expected %d bytes", len(content)+1),
+		},
+		{
+			name:      "probed content above the size limit is rejected before transfer",
+			serve:     serveNegotiated(encoded, "gzip", serveIdentity(content)),
+			maxSize:   int64(len(content)) - 1,
+			wantErr:   "exceeds maximum allowed size",
+			failsOpen: true,
+		},
+		{
+			name:    "unprobed content above the size limit fails the read",
+			serve:   serveNegotiated(encoded, "gzip", serveForbidden),
+			maxSize: int64(len(content)) - 1,
+			wantErr: "exceeds maximum allowed size",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+			var rec probeRecorder
+			srv := rec.serve(t, tt.serve)
+
+			var opts []download.Option
+			if tt.maxSize > 0 {
+				opts = append(opts, download.WithMaxDownloadSize(tt.maxSize))
+			}
+			b, err := download.Download(t.Context(), download.Request{URL: srv.URL, CompressTransfer: true}, opts...)
+			r.NoError(err)
+
+			rc, err := b.ReadCloser()
+			r.NoError(err)
+			_, readErr := io.ReadAll(rc)
+			r.ErrorContains(readErr, tt.wantErr)
+			if !tt.failsOpen {
+				r.ErrorContains(rc.Close(), tt.wantErr)
+			}
+		})
+	}
+}
+
+func gzipBytes(t *testing.T, b []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	_, err := zw.Write(b)
+	require.NoError(t, err)
+	require.NoError(t, zw.Close())
+	return buf.Bytes()
 }
 
 // TestDownload_MaxDownloadSize covers both rejection paths: a response that

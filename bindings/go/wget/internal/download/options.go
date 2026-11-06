@@ -97,7 +97,9 @@ func WithHeaderCheck(check HeaderCheck) Option {
 
 // AdvertisedDigest returns the digest a response header advertises for the
 // content, in the form reported by [Blob.Digest], or false if it advertises none.
-type AdvertisedDigest func(header http.Header) (string, bool)
+// decoded reports that the response was decoded from gzip, so checksums over the
+// transferred bytes (Content-Digest) do not describe the content.
+type AdvertisedDigest func(header http.Header, decoded bool) (string, bool)
 
 // WithAdvertisedDigest makes [Blob.Digest] report the digest advertised by the
 // headers the blob's metadata is learned from, unless a precalculated digest is

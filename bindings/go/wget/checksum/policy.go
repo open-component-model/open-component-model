@@ -58,9 +58,26 @@ type Input struct {
 	// Headers are the download response headers.
 	Headers map[string][]string
 	// Computed maps algorithm OCM names to the hex digest computed over the
-	// downloaded bytes. MUST contain every algorithm any source may verify
+	// downloaded content. MUST contain every algorithm any source may verify
 	// against; the caller pre-computes them during the download.
 	Computed map[string]string
+	// ComputedTransferred is Computed for the bytes as transferred, which differ
+	// from the content when it was decoded from a content coding. Checksums over
+	// the transferred bytes (Content-Digest) are verified against it. Nil means
+	// the transferred bytes are the content.
+	ComputedTransferred map[string]string
+	// Decoded reports that the content was decoded from a content coding, so
+	// [ResolveAdvertised] ignores checksums over the transferred bytes: they do
+	// not describe the content.
+	Decoded bool
+}
+
+// computedFor returns the computed digests exp has to be verified against.
+func (in Input) computedFor(exp Expected) map[string]string {
+	if exp.Transferred && in.ComputedTransferred != nil {
+		return in.ComputedTransferred
+	}
+	return in.Computed
 }
 
 // Resolve verifies in.Computed against the checksum [Expect] yields from
@@ -72,7 +89,7 @@ func Resolve(ctx context.Context, policy Policy, in Input) (expected Expected, v
 	if err != nil || !ok {
 		return Expected{}, false, err
 	}
-	if err := Verify(in.Computed, exp); err != nil {
+	if err := Verify(in.computedFor(exp), exp); err != nil {
 		return Expected{}, false, err
 	}
 	return exp, true, nil
@@ -151,6 +168,9 @@ func ResolveAdvertised(ctx context.Context, policy Policy, in Input, prefer []Al
 			return Expected{}, false, nil
 		case SourceHTTPHeader:
 			candidates := FromHeaders(in.Headers, src.Headers)
+			if in.Decoded {
+				candidates = contentCandidates(candidates)
+			}
 			if exp, ok := Select(candidates, intersect(src.Algorithms, prefer)); ok {
 				return exp, true, nil
 			}
