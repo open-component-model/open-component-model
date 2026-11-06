@@ -1,9 +1,14 @@
-// Package nexustest talks to a Sonatype Nexus server in integration tests.
+// Package nexustest starts and talks to a Sonatype Nexus server in integration tests.
+//
+// [Start] needs Docker, accepts the EULA, terminates Nexus when the test ends, and returns
+// its base URL and admin password. Repositories and realms stay with the caller:
+//
+//	nexus := nexustest.Start(t, nexustest.WithExposedPorts("5000/tcp"))
 //
 // [Request] sends one request as the admin user and returns the status code and the
 // response body. A non-nil body is sent as JSON:
 //
-//	status, body := nexustest.Request(t, http.MethodPost, url, adminPassword, jsonBody)
+//	status, body := nexustest.Request(t, http.MethodPost, url, nexus.Password, jsonBody)
 package nexustest
 
 import (
