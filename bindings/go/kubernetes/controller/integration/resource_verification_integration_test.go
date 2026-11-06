@@ -64,7 +64,9 @@ func Test_Integration_ResourceVerification(t *testing.T) {
 	s3Endpoint := "http://" + s3test.Start(t)
 	s3Content := []byte("s3 object content")
 	const s3Bucket, s3Key = "verification", "path/to/object.txt"
-	putS3Object(t, ctx, s3Endpoint, s3Bucket, s3Key, s3Content)
+	s3Client := s3test.Client(t, s3Endpoint)
+	s3test.CreateBucket(t, ctx, s3Client, s3Bucket)
+	s3test.PutObject(t, ctx, s3Client, s3Bucket, s3Key, s3Content)
 
 	wgetContent := []byte("wget file content")
 	chart, err := os.ReadFile(filepath.Join("..", "..", "..", "helm", "testdata", "mychart-0.1.0.tgz"))

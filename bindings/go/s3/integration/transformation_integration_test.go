@@ -45,9 +45,9 @@ func Test_Integration_S3Transformation(t *testing.T) {
 
 	const bucket, key = "transformation-bucket", "path/to/blob.txt"
 	content := []byte("hello ocm from the s3 transformer")
-	setup := newSetupClient(t, ctx, endpoint, s3test.AccessKey, s3test.SecretKey)
-	createBucket(t, ctx, setup, bucket)
-	putObject(t, ctx, setup, bucket, key, content)
+	setup := s3test.Client(t, endpoint)
+	s3test.CreateBucket(t, ctx, setup, bucket)
+	s3test.PutObject(t, ctx, setup, bucket, key, content)
 
 	scheme := runtime.NewScheme()
 	v2.MustAddToScheme(scheme)
