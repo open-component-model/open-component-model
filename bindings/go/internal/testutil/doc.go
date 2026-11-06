@@ -3,6 +3,7 @@
 //
 //   - blobtest: read a [blob.ReadOnlyBlob] into memory
 //   - descriptortest: a [descriptor.Descriptor] with defaults
+//   - githubtest: a fake GitHub API server
 //   - logtest: capture [log/slog] records
 //   - nexustest: requests to a Nexus server in integration tests
 //   - pkitest: throwaway keys and certificates
