@@ -9,7 +9,7 @@
 //   - nexustest: requests to a Nexus server in integration tests
 //   - pkitest: throwaway keys and certificates
 //   - registrytest: OCI registries for integration tests
-//   - s3test: an S3 server for integration tests
+//   - s3test: an S3 server for integration tests and a fake for unit tests
 //   - tartest: gzipped tar archives
 //   - tsatest: a mock RFC 3161 timestamp authority
 //   - typedtest: a [runtime.Typed] value no scheme knows

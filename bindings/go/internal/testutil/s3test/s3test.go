@@ -10,6 +10,13 @@
 //		AccessKeyID:     s3test.AccessKey,
 //		SecretAccessKey: s3test.SecretKey,
 //	}
+//
+// [StartFake] needs no Docker: it serves one canned [Object] over httptest for unit tests
+// and records the requests it answered:
+//
+//	fake := s3test.StartFake(t, s3test.Object{Body: []byte("content"), VersionID: "v-1"})
+//	// point the client at fake.URL with path-style addressing, then
+//	requests := fake.Recorded()
 package s3test
 
 import (
