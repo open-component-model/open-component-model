@@ -10,6 +10,7 @@
 //   - registrytest: OCI registries for integration tests
 //   - s3test: an S3 server for integration tests
 //   - tartest: gzipped tar archives
+//   - tsatest: a mock RFC 3161 timestamp authority
 //   - typedtest: a [runtime.Typed] value no scheme knows
 //
 // The subpackages import only the standard library, test libraries, blob, runtime and
