@@ -68,6 +68,10 @@ configurations:
 `, token)
 	}
 
+	cfg += `- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true
+`
+
 	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
 	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), 0o600))
 	return cfgPath

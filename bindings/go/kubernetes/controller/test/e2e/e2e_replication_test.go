@@ -67,8 +67,12 @@ var _ = Describe("Replication E2E Tests", func() {
 			targetRegistry := os.Getenv("PROTECTED_REGISTRY_URL")
 			Expect(targetRegistry).NotTo(BeEmpty(), "PROTECTED_REGISTRY_URL must be set for replication tests")
 
-			cmd := exec.CommandContext(ctx, "ocm",
+			plainHTTPConfig, err := utils.PlainHTTPConfig(GinkgoT().TempDir())
+			Expect(err).NotTo(HaveOccurred())
+
+			cmd := exec.CommandContext(ctx, utils.OCMBinary(),
 				"--config", filepath.Join(exampleDir, ".ocmconfig"),
+				"--config", plainHTTPConfig,
 				"get", "cv",
 				targetRegistry+"//"+component+":1.0.0",
 			)

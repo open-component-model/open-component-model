@@ -132,6 +132,11 @@ configurations:
         password: %q`, o.Host, o.Port, o.User, o.Password)
 	}
 
+	// The test registries run without TLS, and an http:// prefix alone no
+	// longer selects plain HTTP: the HTTP configuration must say so.
+	cfg += "\n" + `- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`
+
 	if err := os.WriteFile(cfgPath, []byte(cfg), os.ModePerm); err != nil { //nolint:gosec // test code
 		return "", err
 	}

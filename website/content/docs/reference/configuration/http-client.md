@@ -55,6 +55,7 @@ All fields are optional. When omitted, OCM applies these defaults:
 | All other timeout fields | No limit (OS default for TCP fields) |
 | `insecureSkipVerify`     | `false`                              |
 | `disableHTTP2`           | `false` (HTTP/2 negotiated via ALPN) |
+| `plainHTTP`              | `false` (OCI registries over HTTPS)  |
 
 {{< callout context="caution" title="No overall timeout by default" >}}
 With `timeout` omitted or set to `0s` (the default), OCM does not bound response-body duration. A stalled peer can therefore leave an operation waiting indefinitely. Set a positive `timeout` when bounded completion is more important than allowing arbitrarily long transfers.
@@ -112,6 +113,35 @@ configurations:
       ghcr.io:
         disableHTTP2: true
 ```
+
+### Plain HTTP
+
+OCM talks HTTPS to every OCI registry. `plainHTTP: true` makes OCM's OCI
+registry clients use cleartext HTTP for a host. It is meant for development
+and air-gapped registries without TLS. Traffic, including credentials, is
+unencrypted, so set it per host and never for a public registry. OCM logs a
+warning on the first request to each plain HTTP host.
+
+This setting alone decides the connection. A scheme prefix on a repository
+base URL or a reference is deprecated and only checked against it: `http://`
+on a host that is not `plainHTTP` is an error, `https://` on a `plainHTTP` host
+warns about the downgrade, and every prefix logs a deprecation warning. See
+[Migrate from http:// prefixes]({{< relref "docs/guides/transfer/configure-http.md#migrate-from-http-prefixes" >}}).
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    hosts:
+      "registry.local:5000":
+        plainHTTP: true
+```
+
+`plainHTTP` covers OCM's OCI repositories, `ociArtifact` access, and Helm
+chart downloads. A chart at an `oci://` URL follows the setting for its
+registry host. A classic Helm repository URL keeps its scheme as part of the
+address: an `http://` URL is accepted only when its host is `plainHTTP`, and an
+`https://` URL stays HTTPS.
 
 ### Per-Host Merge Semantics
 

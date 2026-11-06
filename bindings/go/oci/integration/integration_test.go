@@ -47,6 +47,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
@@ -323,7 +324,7 @@ func Test_Integration_OCIRepository(t *testing.T) {
 		r.NoError(err)
 
 		t.Run("basic connectivity and resolution failure", func(t *testing.T) {
-			repoProvider := provider.NewComponentVersionRepositoryProvider()
+			repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithHTTPConfig(plainHTTPConfig()))
 			repoSpec := &ocirepospecv1.Repository{BaseUrl: registryAddress}
 			id, err := repoProvider.GetComponentVersionRepositoryCredentialConsumerIdentity(t.Context(), repoSpec)
 			r.NoError(err)
@@ -494,7 +495,7 @@ func Test_Integration_Transformers(t *testing.T) {
 		}
 
 		t.Run("get oci artifact", func(t *testing.T) {
-			resourceRepo := resource.NewResourceRepository(&filesystemv1alpha1.Config{})
+			resourceRepo := resource.NewResourceRepository(&filesystemv1alpha1.Config{}, resource.WithHTTPConfig(plainHTTPConfig()))
 
 			t.Run("get oci transformation", func(t *testing.T) {
 				transformGetOCIArtifact(t, resourceRepo, testUsername, password, "ghcr.io/test:v1.0.0", reference("new-test:v1.0.0"))
@@ -502,7 +503,7 @@ func Test_Integration_Transformers(t *testing.T) {
 		})
 
 		t.Run("add oci artifact", func(t *testing.T) {
-			resourceRepo := resource.NewResourceRepository(&filesystemv1alpha1.Config{})
+			resourceRepo := resource.NewResourceRepository(&filesystemv1alpha1.Config{}, resource.WithHTTPConfig(plainHTTPConfig()))
 
 			t.Run("add oci transformation", func(t *testing.T) {
 				transformAddOCIArtifact(t, resourceRepo, testUsername, password, reference("add-test:v1.0.0"))
@@ -755,6 +756,13 @@ func testResolverConnectivity(t *testing.T, address, reference string, client *a
 	_, err = store.Resolve(ctx, reference)
 	r.ErrorIs(err, errdef.ErrNotFound)
 	r.ErrorContains(err, fmt.Sprintf("%s: not found", reference))
+}
+
+// plainHTTPConfig returns an HTTP client configuration that turns plain HTTP
+// on for every host. The test registries have no TLS, and only this
+// configuration (not an http:// prefix on a reference) decides that.
+func plainHTTPConfig() *httpv1alpha1.Config {
+	return &httpv1alpha1.Config{ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: new(true)}}
 }
 
 func createAuthClient(address, username, password string) *auth.Client {
@@ -1971,7 +1979,7 @@ func Test_Integration_OCIImageLayer(t *testing.T) {
 
 	t.Run("resource plugin processes and downloads with credentials", func(t *testing.T) {
 		r := require.New(t)
-		resourceRepo := resource.NewResourceRepository(&filesystemv1alpha1.Config{})
+		resourceRepo := resource.NewResourceRepository(&filesystemv1alpha1.Config{}, resource.WithHTTPConfig(plainHTTPConfig()))
 
 		// The path `ocm add cv` takes, where issue #2873 surfaced.
 		newRes, err := resourceRepo.ProcessResourceDigest(
@@ -1995,7 +2003,7 @@ func Test_Integration_OCIImageLayer(t *testing.T) {
 
 	t.Run("legacy ociBlob access type is routed the same way", func(t *testing.T) {
 		r := require.New(t)
-		resourceRepo := resource.NewResourceRepository(&filesystemv1alpha1.Config{})
+		resourceRepo := resource.NewResourceRepository(&filesystemv1alpha1.Config{}, resource.WithHTTPConfig(plainHTTPConfig()))
 
 		// ociBlob/v1 is the name the old CLI wrote, an alias of OCIImageLayer.
 		// Deserialize through the scheme so the alias is what gets routed.

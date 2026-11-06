@@ -165,7 +165,8 @@ configurations:
       properties:
         username: %[3]q
         password: %[4]q
-`, registry.Host, registry.Port, registry.User, registry.Password)
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`, registry.Host, registry.Port, registry.User, registry.Password)
 	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
@@ -639,6 +640,13 @@ func Test_Integration_DownloadResource_HelmAccess(t *testing.T) {
 		"--skip-reference-digest-processing",
 	})
 	r.NoError(addCMD.ExecuteContext(ctx), "add component-version should succeed")
+	// The chart server runs without TLS, and an http:// URL alone no longer selects plain HTTP.
+	cfgPath := filepath.Join(tempDir, "ocmconfig.yaml")
+	r.NoError(os.WriteFile(cfgPath, []byte(`type: generic.config.ocm.software/v1
+configurations:
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true
+`), os.ModePerm))
 
 	output := filepath.Join(t.TempDir(), "downloaded-chart")
 	downloadCMD := cmd.New()
@@ -649,6 +657,7 @@ func Test_Integration_DownloadResource_HelmAccess(t *testing.T) {
 		"--identity", "name=mychart,version=0.1.0",
 		"--output", output,
 		"--extraction-policy", "disable",
+		"--config", cfgPath,
 	})
 	r.NoError(downloadCMD.ExecuteContext(ctx), "download resource with helm access should succeed")
 

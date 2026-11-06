@@ -207,7 +207,7 @@ func Test_Integration_Transfer_Git(t *testing.T) {
 	gitPath, commit := newGitFixture(t)
 	gitServerURL := gittest.Serve(t, gitPath)
 
-	repoProvider := provider.NewComponentVersionRepositoryProvider()
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithHTTPConfig(loadHTTPConfig(t, cfgPath)))
 	ocmconf, err := configuration.GetConfigFromPath(cfgPath)
 	r.NoError(err)
 	credconf, err := runtime.LookupCredentialConfig(ocmconf)
