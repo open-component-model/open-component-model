@@ -4,6 +4,12 @@ name: Image scan
 # built, per architecture: with Trivy and govulncheck's OpenVEX (findings warn;
 # a broken scan fails), against the DISA GPOS SRG as tailored in .github/stig,
 # and against the CIS Docker Benchmark (dockle). STIG and CIS findings fail.
+# The controller chart, rendered with its opt-in NetworkPolicy, is checked
+# against the CIS Kubernetes Benchmark (Trivy config) and NSA/CISA and MITRE
+# (Kubescape); the image build files get Trivy's Dockerfile checks. OCM's own
+# Trivy checks are in .github/trivy-checks (unit-tested by trivy-checks.yml),
+# accepted findings and check settings in .github/benchmarks.
+# Benchmark findings fail.
 on:
   workflow_call:
     inputs:
@@ -203,7 +209,7 @@ jobs:
           exit "$fail"
 
       # CIS Docker Benchmark section 4. Fails on WARN and FATAL; INFO (content
-      # trust, HEALTHCHECK) and SKIP (no /etc/passwd in scratch) do not fail.
+      # trust) and SKIP (no /etc/passwd in scratch) do not fail.
       - name: CIS Docker Benchmark (dockle)
         if: ${{ !cancelled() }}
         run: |
@@ -218,4 +224,147 @@ jobs:
           path: |
             trivy.json
             stig/
+          if-no-files-found: ignore
+
+  # The chart is rendered with the opt-in NetworkPolicy. That render is the
+  # default render plus the NetworkPolicy, so it covers every default template
+  # and lets Kubescape check the policy against C-0030 (Ingress and Egress blocked).
+  chart:
+    name: chart
+    runs-on: ubuntu-26.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          sparse-checkout: |
+            .github/benchmarks
+            .github/trivy-checks/*.rego
+            .env
+            bindings/go/kubernetes/controller/chart
+            bindings/go/kubernetes/controller/Dockerfile
+            bindings/go/cli/Containerfile
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Load .env
+        run: grep -E '^(TRIVY_VERSION|TRIVY_CHECKS_IMAGE|KUBESCAPE_IMAGE|KUBESCAPE_CONTROLS_VERSION)=' .env >> "$GITHUB_ENV"
+
+      - name: Install Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          # renovate: datasource=github-releases depName=helm/helm
+          version: v4.3.0
+
+      # One file per template, so accepted Trivy findings are scoped to the
+      # template that needs them. The image build files sit next to them for
+      # Trivy's Dockerfile checks; Kubescape ignores them.
+      - name: Render chart
+        run: |
+          mkdir -p tmp/chart-scan
+          helm template ocm-k8s-toolkit bindings/go/kubernetes/controller/chart \
+            --namespace ocm-k8s-toolkit-system --set manager.networkPolicy.enabled=true \
+            --output-dir tmp/chart
+          install -D -m 0644 bindings/go/cli/Containerfile tmp/chart/build/cli/Containerfile
+          install -D -m 0644 bindings/go/kubernetes/controller/Dockerfile tmp/chart/build/controller/Dockerfile
+
+      - name: CIS Kubernetes Benchmark (Trivy config)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          # OCM's own checks (OCM-*) for what no built-in check covers.
+          TRIVY_CONFIG_CHECK: .github/trivy-checks
+          TRIVY_CHECK_NAMESPACES: user
+          # Settings of built-in checks (KSV-0125 trusted registries).
+          TRIVY_CONFIG_DATA: .github/benchmarks/trivy-data
+          TRIVY_CHECKS_BUNDLE_REPOSITORY: ${{ env.TRIVY_CHECKS_IMAGE }}
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          # A config scan needs no vulnerability DB, and a restored cache could
+          # hold a checks bundle other than the pinned one: Trivy reuses a bundle
+          # downloaded within the last day without comparing digests.
+          cache: 'false'
+          scan-type: config
+          scan-ref: tmp/chart
+          trivyignores: .github/benchmarks/trivyignore.yaml
+          exit-code: '1'
+          format: json
+          output: tmp/chart-scan/trivy.json
+
+      # Trivy's JSON lists only failed checks; accepted findings are dropped.
+      # trivy convert renders the failed ones with their source lines.
+      - name: Render CIS Kubernetes Benchmark findings
+        if: ${{ !cancelled() && hashFiles('tmp/chart-scan/trivy.json') != '' }}
+        run: trivy convert --format table --table-mode detailed --scanners misconfig --output tmp/chart-scan/trivy.txt tmp/chart-scan/trivy.json
+
+      - name: CIS Kubernetes Benchmark summary
+        if: ${{ !cancelled() }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const fs = require('node:fs');
+            const read = (f) => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : '');
+            const report = read('tmp/chart-scan/trivy.json');
+            if (!report) return core.setFailed('Trivy wrote no report for the chart');
+            const results = JSON.parse(report).Results ?? [];
+            const passed = results.reduce((n, r) => n + (r.MisconfSummary?.Successes ?? 0), 0);
+            const failed = results.reduce((n, r) => n + (r.Misconfigurations?.length ?? 0), 0);
+            const table = read('tmp/chart-scan/trivy.txt');
+            core.info(table);
+            core.summary
+              .addHeading('☸️ CIS Kubernetes Benchmark: controller chart and image build files (Trivy config)', 3)
+              .addRaw(`${passed} checks passed, ${failed} failed in ${results.length} files. Accepted findings: \`.github/benchmarks/trivyignore.yaml\`.`, true);
+            if (table) core.summary.addRaw(`\n\`\`\`text\n${table}\`\`\`\n`);
+            await core.summary.write();
+
+      # Kubescape fails on an empty input, but its thresholds count controls
+      # covered by an exception as failed, so the open ones are selected below.
+      - name: NSA/CISA and MITRE (Kubescape)
+        if: ${{ !cancelled() }}
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e KS_SKIP_UPDATE_CHECK=true -v "$PWD:/work" -w /work "$KUBESCAPE_IMAGE" \
+            scan framework nsa,mitre tmp/chart --controls-version "$KUBESCAPE_CONTROLS_VERSION" \
+            --exceptions .github/benchmarks/kubescape-exceptions.json \
+            --format pretty-printer,json --output tmp/chart-scan/kubescape
+
+      - name: NSA/CISA and MITRE summary
+        if: ${{ !cancelled() && hashFiles('tmp/chart-scan/kubescape.json') != '' }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        with:
+          script: |
+            const report = JSON.parse(require('node:fs').readFileSync('tmp/chart-scan/kubescape.json', 'utf8'));
+            // Resource IDs chain the objects a control relates (path=<n>/api=<group>/<ns>/<Kind>/<name>/...);
+            // only Kind/name pairs are kept. The report omits results and controls when empty.
+            const failed = (report.results ?? []).flatMap((r) => {
+              const resource = [...r.resourceID.matchAll(/(?:^|\/)([A-Z][A-Za-z]+)\/([^/]+)/g)]
+                .map((m) => `${m[1]}/${m[2]}`).join(' → ');
+              return (r.controls ?? [])
+                .filter((c) => c.status?.status === 'failed')
+                .map((c) => ({ resource, id: c.controlID, name: c.name, accepted: c.status.subStatus === 'w/exceptions' }));
+            });
+            const open = failed.filter((f) => !f.accepted);
+
+            core.summary
+              .addHeading('🛡️ NSA/CISA and MITRE: controller chart (Kubescape)', 3)
+              .addList((report.summaryDetails?.frameworks ?? [])
+                .map((f) => `${f.name}: compliance score ${Math.round(f.complianceScore * 100) / 100}%`))
+              .addRaw(`${open.length} open, ${failed.length - open.length} accepted (\`.github/benchmarks/kubescape-exceptions.json\`) control failures.`, true);
+            if (failed.length > 0) {
+              failed.sort((a, b) => a.accepted - b.accepted || a.id.localeCompare(b.id));
+              core.summary.addTable([
+                ['Control', 'Name', 'Resource', 'Status'].map((data) => ({ data, header: true })),
+                ...failed.map((f) => [f.id, f.name, f.resource, f.accepted ? 'accepted' : '❌ open']),
+              ]);
+            }
+            await core.summary.write();
+            for (const f of open) core.error(`${f.id} ${f.name} fails on ${f.resource}`);
+            if (open.length > 0) core.setFailed(`${open.length} open Kubescape control failures`);
+
+      - name: Upload reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: chart-scan
+          path: |
+            tmp/chart-scan/
+            tmp/chart/
           if-no-files-found: ignore
