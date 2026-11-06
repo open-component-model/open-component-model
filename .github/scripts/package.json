@@ -21,9 +21,6 @@
   },
   "overrides": {
     "minimatch@<11.0.1": "11.0.1",
-    "@actions/github": {
-      "undici": "^6.29.1"
-    },
     "@actions/http-client": {
       "undici": "^8.12.2"
     }

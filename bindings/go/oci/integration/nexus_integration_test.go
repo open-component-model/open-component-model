@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,10 +24,34 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 )
 
+const nexusImage = "sonatype/nexus3:3.96.3"
+
+type nexusRepositoryFormat string
+
 const (
-	nexusImage            = "sonatype/nexus3:3.96.3"
-	nexusDockerConnector  = "5000/tcp" // in-container port the docker hosted repo listens on
-	nexusDockerRepository = "docker-hosted"
+	nexusFormatDocker nexusRepositoryFormat = "docker"
+	nexusFormatOCI    nexusRepositoryFormat = "oci"
+)
+
+// nexusHostedRepository describes a hosted repository with redeploy disabled, listening on
+// its own connector.
+type nexusHostedRepository struct {
+	format    nexusRepositoryFormat
+	name      string
+	connector string // in-container port the repository listens on
+	strict    bool   // strict content type validation
+}
+
+var (
+	nexusDockerRepository = nexusHostedRepository{format: nexusFormatDocker, name: "docker-hosted", connector: "5000/tcp"}
+
+	// nexusHostedRepositories lists every repository variant. startNexus exposes their connectors.
+	nexusHostedRepositories = []nexusHostedRepository{
+		{format: nexusFormatOCI, name: "oci-hosted", connector: "5002/tcp"},
+		{format: nexusFormatOCI, name: "oci-hosted-strict", connector: "5003/tcp", strict: true},
+		nexusDockerRepository,
+		{format: nexusFormatDocker, name: "docker-hosted-strict", connector: "5001/tcp", strict: true},
+	}
 )
 
 // Test_Integration_Nexus_RedeployDisabled drives the OCI uploader against a real
@@ -42,7 +68,8 @@ func Test_Integration_Nexus_RedeployDisabled(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	resolver, repo, dockerEndpoint, _ := startNexusDockerHosted(t, ctx)
+	nexus := startNexus(t, ctx)
+	resolver, repo, dockerEndpoint := nexus.addHostedRepository(t, ctx, nexusDockerRepository)
 
 	t.Run("component version re-add is idempotent", func(t *testing.T) {
 		r := require.New(t)
@@ -138,16 +165,26 @@ func barebonesDescriptor(name, version, provider string) *descriptor.Descriptor 
 	return desc
 }
 
-// startNexusDockerHosted boots Nexus, accepts the Community-edition EULA, enables
-// the Docker bearer-token realm, and creates a docker (hosted) repository with
-// redeploy disabled. It returns a resolver and repository wired to that repo's
-// docker connector, plus the connector endpoint and admin password.
-func startNexusDockerHosted(t *testing.T, ctx context.Context) (*urlresolver.CachingResolver, *oci.Repository, string, string) {
+// nexusServer is a running Nexus with the EULA accepted and the Docker and OCI bearer-token realms enabled.
+type nexusServer struct {
+	container *testcontainers.DockerContainer
+	baseURL   string
+	password  string
+}
+
+// startNexus boots Nexus with all repository connector ports exposed, accepts the
+// Community-edition EULA and enables the Docker and OCI bearer-token realms.
+func startNexus(t *testing.T, ctx context.Context) *nexusServer {
 	t.Helper()
 	r := require.New(t)
 
+	ports := []string{"8081/tcp"}
+	for _, repository := range nexusHostedRepositories {
+		ports = append(ports, repository.connector)
+	}
+
 	container, err := testcontainers.Run(ctx, nexusImage,
-		testcontainers.WithExposedPorts("8081/tcp", nexusDockerConnector),
+		testcontainers.WithExposedPorts(ports...),
 		testcontainers.WithEnv(map[string]string{
 			"INSTALL4J_ADD_VM_PARAMS": "-Xms1g -Xmx1g -XX:MaxDirectMemorySize=1g -Djava.util.prefs.userRoot=/nexus-data/javaprefs",
 		}),
@@ -184,38 +221,45 @@ func startNexusDockerHosted(t *testing.T, ctx context.Context) (*urlresolver.Cac
 		r.Equal(http.StatusNoContent, status, string(respBody))
 	}
 
-	// Docker clients authenticate via the bearer-token realm.
+	// Clients authenticate via the bearer-token realm of the repository format.
 	status, body = nexusAdminRequest(t, http.MethodPut, baseURL+"/service/rest/v1/security/realms/active", password,
-		[]byte(`["NexusAuthenticatingRealm","DockerToken"]`))
+		[]byte(`["NexusAuthenticatingRealm","DockerToken","OciBearerToken"]`))
 	r.Equal(http.StatusNoContent, status, string(body))
 
-	// A docker hosted repo with redeploy disabled, listening on its own connector.
-	connectorPort := nexusDockerConnector[:len(nexusDockerConnector)-len("/tcp")]
-	status, body = nexusAdminRequest(t, http.MethodPost, baseURL+"/service/rest/v1/repositories/docker/hosted", password,
-		[]byte(`{"name":"`+nexusDockerRepository+`","online":true,`+
-			`"storage":{"blobStoreName":"default","strictContentTypeValidation":false,"writePolicy":"allow_once"},`+
-			`"docker":{"v1Enabled":false,"forceBasicAuth":true,"httpPort":`+connectorPort+`}}`))
+	return &nexusServer{container: container, baseURL: baseURL, password: password}
+}
+
+// addHostedRepository creates the hosted repository. It returns a resolver and repository
+// wired to its connector, plus the connector endpoint.
+func (n *nexusServer) addHostedRepository(t *testing.T, ctx context.Context, repository nexusHostedRepository) (*urlresolver.CachingResolver, *oci.Repository, string) {
+	t.Helper()
+	r := require.New(t)
+
+	status, body := nexusAdminRequest(t, http.MethodPost, n.baseURL+"/service/rest/v1/repositories/"+string(repository.format)+"/hosted", n.password,
+		[]byte(`{"name":"`+repository.name+`","online":true,`+
+			`"storage":{"blobStoreName":"default","strictContentTypeValidation":`+strconv.FormatBool(repository.strict)+`,"writePolicy":"allow_once"},`+
+			`"`+string(repository.format)+`":{"v1Enabled":false,"forceBasicAuth":true,"httpPort":`+strings.TrimSuffix(repository.connector, "/tcp")+`}}`))
 	r.Equal(http.StatusCreated, status, string(body))
 
-	dockerEndpoint, err := container.PortEndpoint(ctx, nexusDockerConnector, "")
+	endpoint, err := n.container.PortEndpoint(ctx, repository.connector, "")
 	r.NoError(err)
 
-	client := createAuthClient(dockerEndpoint, "admin", password)
+	client := createAuthClient(endpoint, "admin", n.password)
 
-	// The docker connector comes up asynchronously after the repo is created.
+	// The connector comes up asynchronously after the repo is created.
 	r.Eventually(func() bool {
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+dockerEndpoint+"/v2/", nil)
-		req.SetBasicAuth("admin", password)
+		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+endpoint+"/v2/", nil)
+		req.SetBasicAuth("admin", n.password)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			return false
 		}
 		_ = resp.Body.Close()
 		return resp.StatusCode == http.StatusOK
-	}, time.Minute, 2*time.Second, "docker connector never became ready")
+	}, time.Minute, 2*time.Second, "repository connector never became ready")
 
 	resolver, err := urlresolver.New(
-		urlresolver.WithBaseURL(dockerEndpoint),
+		urlresolver.WithBaseURL(endpoint),
 		urlresolver.WithPlainHTTP(true),
 		urlresolver.WithBaseClient(client),
 	)
@@ -224,7 +268,7 @@ func startNexusDockerHosted(t *testing.T, ctx context.Context) (*urlresolver.Cac
 	repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
 	r.NoError(err)
 
-	return resolver, repo, dockerEndpoint, password
+	return resolver, repo, endpoint
 }
 
 func nexusAdminRequest(t *testing.T, method, target, password string, body []byte) (int, []byte) {

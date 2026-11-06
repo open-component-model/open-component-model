@@ -1,9 +1,14 @@
 package cache
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
+	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -12,6 +17,7 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/registry"
 
 	identityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
@@ -132,6 +138,256 @@ func TestBlobCache_Always_MissesAreNotCollapsed(t *testing.T) {
 	r.NoError(<-allowedErr)
 	r.EqualValues(1, base.fetches.Load())
 	r.Zero(base.exists.Load(), "a miss proves access through its own fetch")
+}
+
+// lyingRepository claims to hold every blob, but can only serve its own bytes.
+type lyingRepository struct {
+	*fakeReadOnly
+	served []byte
+}
+
+func (s *lyingRepository) Exists(context.Context, ociImageSpecV1.Descriptor) (bool, error) {
+	s.exists.Add(1)
+	return true, nil
+}
+
+func (s *lyingRepository) Fetch(context.Context, ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
+	s.fetches.Add(1)
+	return io.NopCloser(bytes.NewReader(s.served)), nil
+}
+
+func TestBlobCache_Always_LyingRepositoryDoesNotGetAnotherRepositorysBlob(t *testing.T) {
+	r := require.New(t)
+	c := newTestCache(t, Options{RemotePolicy: RemotePolicyAlways})
+	victim := newFakeRepository("registry.example", "victim")
+	manifest := []byte(`{"schemaVersion":2,"private":true}`)
+	desc := victim.put(ociImageSpecV1.MediaTypeImageManifest, manifest)
+
+	rc, err := c.Fetch(t.Context(), victim, desc)
+	r.NoError(err)
+	r.Equal(manifest, readAllAndClose(t, rc))
+
+	forged := []byte(`{"schemaVersion":2,"private":nil_}`)
+	r.Len(forged, len(manifest), "the forgery must only be caught by its digest")
+	attacker := &lyingRepository{
+		fakeReadOnly: newFakeRepository("evil.example", "attacker"),
+		served:       forged,
+	}
+	_, err = c.Fetch(t.Context(), attacker, desc)
+	r.ErrorIs(err, content.ErrMismatchedDigest, "the attacker's Exists must not unlock the cached blob")
+	r.EqualValues(1, attacker.fetches.Load(), "the attacker must have to serve the blob itself")
+}
+
+func TestBlobCache_Always_RepositoryThatServesTheBlobGetsHits(t *testing.T) {
+	r := require.New(t)
+	c := newTestCache(t, Options{RemotePolicy: RemotePolicyAlways})
+	first := newFakeRepository("registry.example", "first")
+	second := newFakeRepository("registry.example", "second")
+	manifest := []byte(`{"schemaVersion":2}`)
+	desc := first.put(ociImageSpecV1.MediaTypeImageManifest, manifest)
+	second.put(ociImageSpecV1.MediaTypeImageManifest, manifest)
+
+	rc, err := c.Fetch(t.Context(), first, desc)
+	r.NoError(err)
+	_ = readAllAndClose(t, rc)
+
+	rc, err = c.Fetch(t.Context(), second, desc)
+	r.NoError(err)
+	r.Equal(manifest, readAllAndClose(t, rc))
+	r.EqualValues(1, second.fetches.Load(), "the first read from a repository must fetch")
+	r.Zero(second.exists.Load())
+
+	rc, err = c.Fetch(t.Context(), second, desc)
+	r.NoError(err)
+	r.Equal(manifest, readAllAndClose(t, rc))
+	r.EqualValues(1, second.fetches.Load(), "the repository served the blob, so this is a hit")
+	r.EqualValues(1, second.exists.Load())
+}
+
+func TestBlobCache_Always_WhatARepositoryServedSurvivesARestart(t *testing.T) {
+	r := require.New(t)
+	dir := filepath.Join(t.TempDir(), "blobcache")
+	base := newFakeReadOnly()
+	manifest := []byte(`{"schemaVersion":2}`)
+	desc := base.put(ociImageSpecV1.MediaTypeImageManifest, manifest)
+
+	rc, err := newTestCache(t, Options{Dir: dir, RemotePolicy: RemotePolicyAlways}).Fetch(t.Context(), base, desc)
+	r.NoError(err)
+	_ = readAllAndClose(t, rc)
+
+	restarted := newTestCache(t, Options{Dir: dir, RemotePolicy: RemotePolicyAlways})
+	rc, err = restarted.Fetch(t.Context(), base, desc)
+	r.NoError(err)
+	r.Equal(manifest, readAllAndClose(t, rc))
+	r.EqualValues(1, base.fetches.Load(), "the repository served the blob before the restart")
+	r.EqualValues(1, base.exists.Load())
+
+	attacker := &lyingRepository{
+		fakeReadOnly: newFakeRepository("evil.example", "attacker"),
+		served:       []byte(`{"schemaVersion":3}`),
+	}
+	_, err = restarted.Fetch(t.Context(), attacker, desc)
+	r.Error(err, "a restart must not unlock the blob for another repository")
+	r.EqualValues(1, attacker.fetches.Load())
+}
+
+// A reseeded blob gets a fresh TTL, so what a repository served must not expire
+// before the blob does.
+func TestBlobCache_Always_WhatARepositoryServedDoesNotExpireBeforeTheBlob(t *testing.T) {
+	r := require.New(t)
+	dir := filepath.Join(t.TempDir(), "blobcache")
+	base := newFakeReadOnly()
+	desc := base.put(ociImageSpecV1.MediaTypeImageManifest, []byte(`{"schemaVersion":2}`))
+
+	rc, err := newTestCache(t, Options{Dir: dir, TTL: time.Hour, RemotePolicy: RemotePolicyAlways}).Fetch(t.Context(), base, desc)
+	r.NoError(err)
+	_ = readAllAndClose(t, rc)
+
+	snapshots := servedSnapshots(t, dir)
+	r.Len(snapshots, 1)
+	raw, err := os.ReadFile(snapshots[0])
+	r.NoError(err)
+	var snap referenceFileSnapshot
+	r.NoError(json.Unmarshal(raw, &snap))
+	r.Len(snap.References, 1)
+	for ref, entry := range snap.References {
+		entry.SavedAt = time.Now().Add(-2 * time.Hour)
+		snap.References[ref] = entry
+	}
+	rewritten, err := json.Marshal(snap)
+	r.NoError(err)
+	r.NoError(os.WriteFile(snapshots[0], rewritten, 0o600))
+
+	restarted := newTestCache(t, Options{Dir: dir, TTL: time.Hour, RemotePolicy: RemotePolicyAlways})
+	r.True(restarted.Has(desc.Digest), "precondition: the blob must have survived the restart")
+	rc, err = restarted.Fetch(t.Context(), base, desc)
+	r.NoError(err)
+	_ = readAllAndClose(t, rc)
+	r.EqualValues(1, base.fetches.Load(), "the blob and what its repository served must age together")
+	r.EqualValues(1, base.exists.Load())
+}
+
+// digestBlindRepository ignores the reference it is asked to parse.
+type digestBlindRepository struct{ *lyingRepository }
+
+func (s *digestBlindRepository) ParseReference(string) (registry.Reference, error) {
+	return s.ref, nil
+}
+
+func TestBlobCache_Always_RecordsAreBoundToTheDigest(t *testing.T) {
+	r := require.New(t)
+	c := newTestCache(t, Options{RemotePolicy: RemotePolicyAlways})
+
+	other := newFakeRepository("registry.example", "other")
+	cached := other.put(ociImageSpecV1.MediaTypeImageManifest, []byte(`{"schemaVersion":2}`))
+	rc, err := c.Fetch(t.Context(), other, cached)
+	r.NoError(err)
+	_ = readAllAndClose(t, rc)
+
+	served := []byte(`{"schemaVersion":3}`)
+	blind := &digestBlindRepository{&lyingRepository{
+		fakeReadOnly: newFakeRepository("registry.example", "blind"),
+		served:       served,
+	}}
+	own := blind.put(ociImageSpecV1.MediaTypeImageManifest, served)
+	rc, err = c.Fetch(t.Context(), blind, own)
+	r.NoError(err)
+	_ = readAllAndClose(t, rc)
+
+	_, err = c.Fetch(t.Context(), blind, cached)
+	r.ErrorIs(err, content.ErrMismatchedDigest, "serving one blob must not unlock another")
+}
+
+func servedSnapshots(t *testing.T, dir string) []string {
+	t.Helper()
+	snapshots, err := filepath.Glob(filepath.Join(dir, servedSubdir, referenceSubdir, "*"+referenceFileExt))
+	require.NoError(t, err)
+	return snapshots
+}
+
+func TestBlobCache_Always_RefetchOfAKnownBlobDoesNotRewriteRecords(t *testing.T) {
+	r := require.New(t)
+	dir := filepath.Join(t.TempDir(), "blobcache")
+	c := newTestCache(t, Options{Dir: dir, TTL: 50 * time.Millisecond, RemotePolicy: RemotePolicyAlways})
+	base := newFakeReadOnly()
+	desc := base.put(ociImageSpecV1.MediaTypeImageManifest, []byte(`{"schemaVersion":2}`))
+
+	rc, err := c.Fetch(t.Context(), base, desc)
+	r.NoError(err)
+	_ = readAllAndClose(t, rc)
+	snapshots := servedSnapshots(t, dir)
+	r.Len(snapshots, 1)
+	before, err := os.ReadFile(snapshots[0])
+	r.NoError(err)
+
+	r.Eventually(func() bool { return !c.Has(desc.Digest) }, 5*time.Second, 5*time.Millisecond)
+
+	rc, err = c.Fetch(t.Context(), base, desc)
+	r.NoError(err)
+	_ = readAllAndClose(t, rc)
+	r.EqualValues(2, base.fetches.Load(), "the blob expired, so it must be fetched again")
+
+	after, err := os.ReadFile(snapshots[0])
+	r.NoError(err)
+	r.Equal(string(before), string(after), "the record already exists, so nothing needs writing")
+}
+
+func TestBlobCache_Always_RecordsDoNotKeepAnnotations(t *testing.T) {
+	r := require.New(t)
+	dir := filepath.Join(t.TempDir(), "blobcache")
+	c := newTestCache(t, Options{Dir: dir, RemotePolicy: RemotePolicyAlways})
+	base := newFakeReadOnly()
+	desc := base.put(ociImageSpecV1.MediaTypeImageManifest, []byte(`{"schemaVersion":2}`))
+	desc.Annotations = map[string]string{"large": strings.Repeat("x", 1<<20)}
+
+	rc, err := c.Fetch(t.Context(), base, desc)
+	r.NoError(err)
+	_ = readAllAndClose(t, rc)
+
+	snapshots := servedSnapshots(t, dir)
+	r.Len(snapshots, 1)
+	info, err := os.Stat(snapshots[0])
+	r.NoError(err)
+	r.Less(info.Size(), int64(4096), "a record only says a repository served a digest")
+}
+
+// unidentifiableRepository cannot tell which repository it belongs to.
+type unidentifiableRepository struct{ *fakeReadOnly }
+
+func (*unidentifiableRepository) ParseReference(string) (registry.Reference, error) {
+	return registry.Reference{}, errors.New("no repository")
+}
+
+func TestBlobCache_Always_UnidentifiableRepositoryIsRejected(t *testing.T) {
+	r := require.New(t)
+	c := newTestCache(t, Options{RemotePolicy: RemotePolicyAlways})
+	base := &unidentifiableRepository{newFakeReadOnly()}
+	desc := base.put(ociImageSpecV1.MediaTypeImageManifest, []byte(`{"schemaVersion":2}`))
+
+	_, err := c.Fetch(t.Context(), base, desc)
+	r.ErrorContains(err, "identify repository")
+	r.Zero(base.fetches.Load())
+}
+
+// TestBlobCache_IfNotPresent_HitIsNotBoundToRepository pins the accepted risk of
+// [RemotePolicyIfNotPresent]: whoever knows a digest gets a cached blob.
+func TestBlobCache_IfNotPresent_HitIsNotBoundToRepository(t *testing.T) {
+	r := require.New(t)
+	c := newTestCache(t, Options{RemotePolicy: RemotePolicyIfNotPresent})
+	first := newFakeRepository("registry.example", "first")
+	manifest := []byte(`{"schemaVersion":2}`)
+	desc := first.put(ociImageSpecV1.MediaTypeImageManifest, manifest)
+
+	rc, err := c.Fetch(t.Context(), first, desc)
+	r.NoError(err)
+	_ = readAllAndClose(t, rc)
+
+	other := newFakeRepository("registry.example", "other")
+	rc, err = c.Fetch(t.Context(), other, desc)
+	r.NoError(err)
+	r.Equal(manifest, readAllAndClose(t, rc))
+	r.Zero(other.fetches.Load())
+	r.Zero(other.exists.Load())
 }
 
 // ---- ReferenceCache remote policy ----

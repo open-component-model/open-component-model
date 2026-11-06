@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/git/internal/endpoint"
 	v1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -77,8 +78,8 @@ func TestDownloadRevisions(t *testing.T) {
 				t.Run(tc.name, func(t *testing.T) {
 					r := require.New(t)
 					spec := &v1.Git{Repository: fixture.Path, Ref: tc.ref, Commit: tc.commit}
-					result, err := download(t.Context(), spec, nil, Options{TempDir: t.TempDir()})
-					pinned, pinErr := Pin(t.Context(), spec, nil, Options{})
+					result, err := download(t.Context(), spec, nil, Options{AllowLocal: true, TempDir: t.TempDir()})
+					pinned, pinErr := Pin(t.Context(), spec, nil, Options{AllowLocal: true})
 					if head == "missing HEAD" && tc.missingHeadError != "" {
 						r.ErrorContains(err, tc.missingHeadError)
 						r.Nil(result)
@@ -120,7 +121,7 @@ func TestDownloadURLFragment(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			spec := &v1.Git{Repository: fixture.Path + "#" + tc.fragment, Ref: tc.ref}
-			result, err := download(t.Context(), spec, nil, Options{TempDir: t.TempDir()})
+			result, err := download(t.Context(), spec, nil, Options{AllowLocal: true, TempDir: t.TempDir()})
 			r.NoError(err)
 			r.Equal(tc.want.String(), result.Commit)
 		})
@@ -146,10 +147,10 @@ func TestDownloadArchive(t *testing.T) {
 	r := require.New(t)
 	fixture := newRepository(t)
 	dir := t.TempDir()
-	streamed, err := download(t.Context(), &v1.Git{Repository: fixture.Path, Ref: "main"}, nil, Options{TempDir: dir})
+	streamed, err := download(t.Context(), &v1.Git{Repository: fixture.Path, Ref: "main"}, nil, Options{AllowLocal: true, TempDir: dir})
 	r.NoError(err)
 
-	b := NewBlob(t.Context(), &v1.Git{Repository: fixture.Path, Ref: "main"}, nil, Options{TempDir: dir})
+	b := NewBlob(t.Context(), &v1.Git{Repository: fixture.Path, Ref: "main"}, nil, Options{AllowLocal: true, TempDir: dir})
 	mt, ok := b.MediaType()
 	r.True(ok)
 	r.Equal("application/x-tgz", mt)
@@ -192,12 +193,12 @@ func TestBlobFromClone(t *testing.T) {
 		fixture := newRepository(t)
 		dir := t.TempDir()
 		access := &v1.Git{Repository: fixture.Path, Ref: "main"}
-		want, err := download(t.Context(), access, nil, Options{TempDir: dir})
+		want, err := download(t.Context(), access, nil, Options{AllowLocal: true, TempDir: dir})
 		r.NoError(err)
 
-		clone, err := Fetch(t.Context(), access, nil, Options{TempDir: dir})
+		clone, err := Fetch(t.Context(), access, nil, Options{AllowLocal: true, TempDir: dir})
 		r.NoError(err)
-		b := NewBlobFromClone(t.Context(), clone, access, nil, Options{TempDir: dir})
+		b := NewBlobFromClone(t.Context(), clone, access, nil, Options{AllowLocal: true, TempDir: dir})
 		// Without the source, only the clone can serve the read.
 		r.NoError(os.RemoveAll(fixture.Path))
 		r.Equal(want.Data, readBlob(t, b))
@@ -216,9 +217,9 @@ func TestBlobFromClone(t *testing.T) {
 		fixture := newRepository(t)
 		dir := t.TempDir()
 		ctx, cancel := context.WithCancel(t.Context())
-		clone, err := Fetch(ctx, &v1.Git{Repository: fixture.Path, Ref: "main"}, nil, Options{TempDir: dir})
+		clone, err := Fetch(ctx, &v1.Git{Repository: fixture.Path, Ref: "main"}, nil, Options{AllowLocal: true, TempDir: dir})
 		r.NoError(err)
-		NewBlobFromClone(ctx, clone, &v1.Git{Repository: fixture.Path, Ref: "main"}, nil, Options{TempDir: dir})
+		NewBlobFromClone(ctx, clone, &v1.Git{Repository: fixture.Path, Ref: "main"}, nil, Options{AllowLocal: true, TempDir: dir})
 		files, err := os.ReadDir(dir)
 		r.NoError(err)
 		r.Len(files, 1)
@@ -296,7 +297,7 @@ func TestDownloadFailureCleanup(t *testing.T) {
 				cancel()
 			}
 
-			result, err := download(ctx, &v1.Git{Repository: fixture.Path, Ref: tc.ref, Commit: tc.commit}, nil, Options{TempDir: dir})
+			result, err := download(ctx, &v1.Git{Repository: fixture.Path, Ref: tc.ref, Commit: tc.commit}, nil, Options{AllowLocal: true, TempDir: dir})
 			r.ErrorContains(err, tc.wantError)
 			if tc.wantCause != nil {
 				r.ErrorIs(err, tc.wantCause)
@@ -364,24 +365,55 @@ func TestDownloadInProgressCancellationCleanup(t *testing.T) {
 	}
 }
 
+// TestRejectsLocalRepository checks that every transport rejects a local repository
+// unless AllowLocal is set, also for callers that skip Git.Validate.
+func TestRejectsLocalRepository(t *testing.T) {
+	fixture := newRepository(t)
+	for _, tc := range []struct{ name, repository string }{
+		{name: "plain path", repository: fixture.Path},
+		{name: "file URL", repository: "file://" + fixture.Path},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			spec := &v1.Git{Repository: tc.repository, Ref: "main"}
+
+			_, err := download(t.Context(), spec, nil, Options{TempDir: t.TempDir()})
+			r.ErrorIs(err, endpoint.ErrLocalRepository)
+			_, err = Fetch(t.Context(), spec, nil, Options{TempDir: t.TempDir()})
+			r.ErrorIs(err, endpoint.ErrLocalRepository)
+			_, err = Pin(t.Context(), spec, nil, Options{})
+			r.ErrorIs(err, endpoint.ErrLocalRepository)
+
+			ep, err := endpoint.Parse(tc.repository)
+			r.NoError(err)
+			_, _, err = ClientOptions(t.Context(), ep, nil, Options{})
+			r.ErrorIs(err, endpoint.ErrLocalRepository)
+
+			result, err := download(t.Context(), spec, nil, Options{TempDir: t.TempDir(), AllowLocal: true})
+			r.NoError(err)
+			r.Equal(fixture.Second.String(), result.Commit)
+		})
+	}
+}
+
 func TestArchiveSizeBoundary(t *testing.T) {
 	r := require.New(t)
 
 	fixture := newRepository(t)
 	spec := &v1.Git{Repository: fixture.Path, Commit: fixture.First.String()}
-	result, err := download(t.Context(), spec, nil, Options{TempDir: t.TempDir()})
+	result, err := download(t.Context(), spec, nil, Options{AllowLocal: true, TempDir: t.TempDir()})
 	r.NoError(err)
 
 	data := result.Data
 	size := int64(len(data))
 	r.Greater(int64(len(gunzipArchive(t, data))), size, "the limit applies to compressed bytes only")
 
-	result, err = download(t.Context(), spec, nil, Options{TempDir: t.TempDir(), MaxArchiveSize: size})
+	result, err = download(t.Context(), spec, nil, Options{AllowLocal: true, TempDir: t.TempDir(), MaxArchiveSize: size})
 	r.NoError(err)
 	r.Equal(data, result.Data)
 
 	dir := t.TempDir()
-	result, err = download(t.Context(), spec, nil, Options{TempDir: dir, MaxArchiveSize: size - 1})
+	result, err = download(t.Context(), spec, nil, Options{AllowLocal: true, TempDir: dir, MaxArchiveSize: size - 1})
 	r.ErrorContains(err, "git archive exceeds the maximum size")
 	r.Nil(result)
 	entries, err := os.ReadDir(dir)

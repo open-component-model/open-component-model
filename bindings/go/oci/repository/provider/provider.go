@@ -141,8 +141,8 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 		),
 		httpConfig:         options.HTTPConfig,
 		tempDir:            options.TempDir,
-		blobCacheOpts:      options.BlobCacheOptions,
-		referenceCacheOpts: options.ReferenceCacheOptions,
+		blobCacheOpts:      applyCacheConfig(options.BlobCacheOptions, options.CacheConfig),
+		referenceCacheOpts: applyCacheConfig(options.ReferenceCacheOptions, options.CacheConfig),
 	}
 	// Wire the shared blob cache constructor now that prov exists so the
 	// closure can read its final field values. sync.OnceValue guarantees
