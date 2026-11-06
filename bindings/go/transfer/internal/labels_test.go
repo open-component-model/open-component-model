@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/descriptortest"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
@@ -79,8 +80,11 @@ func TestBuildGraphDefinition_Labels(t *testing.T) {
 	r := require.New(t)
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
-	desc := testDescriptor("ocm.software/my-app", "1.0.0",
-		[]descriptor.Resource{localBlobResource("icons", "1.0.0"), wgetResource("docs", "1.0.0", "https://source.example/docs.tar")}, nil)
+	desc := descriptortest.New("ocm.software/my-app", "1.0.0", testProvider,
+		descriptortest.WithResources(
+			localBlobResource("icons", "1.0.0"),
+			wgetResource("docs", "1.0.0", "https://source.example/docs.tar"),
+		))
 	resolver := testResolverFor("ocm.software/my-app", "1.0.0", sourceRepo, desc)
 
 	tgd, err := BuildGraphDefinition(t.Context(),

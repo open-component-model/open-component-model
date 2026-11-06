@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/descriptortest"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
@@ -187,7 +188,8 @@ func TestBuildGraphDefinition_LocalBlobAndReferenceUploaders(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			desc := testDescriptor("ocm.software/test", "1.0.0", append([]descriptor.Resource{tc.resource}, tc.extra...), nil)
+			desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+				descriptortest.WithResources(append([]descriptor.Resource{tc.resource}, tc.extra...)...))
 			resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
 			roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
 
@@ -225,7 +227,8 @@ func TestBuildGraphDefinition_UnmatchedResourceWarning(t *testing.T) {
 			slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
 			t.Cleanup(func() { slog.SetDefault(prev) })
 
-			desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{localBlobResource("my-blob", "1.0.0")}, nil)
+			desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+				descriptortest.WithResources(localBlobResource("my-blob", "1.0.0")))
 			resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
 			roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
 

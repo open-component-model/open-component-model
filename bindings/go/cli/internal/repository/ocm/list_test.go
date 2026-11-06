@@ -9,6 +9,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/descriptortest"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -79,27 +80,23 @@ func (m *mockComponentVersionRepository) Close() error {
 	return nil
 }
 
-// Helper function to create a descriptor for testing
-func makeDescriptor(name, version string) *descriptor.Descriptor {
-	return &descriptor.Descriptor{
-		Component: descriptor.Component{
-			ComponentMeta: descriptor.ComponentMeta{
-				ObjectMeta: descriptor.ObjectMeta{
-					Name:    name,
-					Version: version,
-				},
-			},
-		},
-	}
+// bareDescriptor leaves the schema version and provider unset: listing reads only the
+// component name and version.
+var bareDescriptor = []descriptortest.Option{
+	descriptortest.WithMetaVersion(""),
+	descriptortest.WithProvider(""),
 }
 
 func TestListComponentVersions(t *testing.T) {
 	t.Run("SortEnabled_DefaultBehavior", func(t *testing.T) {
 		ctx := context.Background()
 		repo := newMockComponentVersionRepository()
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("test-component", "1.0.0")))
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("test-component", "2.0.0")))
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("test-component", "1.5.0")))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("test-component", "1.0.0",
+			bareDescriptor...)))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("test-component", "2.0.0",
+			bareDescriptor...)))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("test-component", "1.5.0",
+			bareDescriptor...)))
 
 		descs, err := ListComponentVersions(ctx, repo,
 			WithComponentNames([]string{"test-component"}),
@@ -116,10 +113,10 @@ func TestListComponentVersions(t *testing.T) {
 	t.Run("MultipleComponents_Sorted", func(t *testing.T) {
 		ctx := context.Background()
 		repo := newMockComponentVersionRepository()
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("comp-a", "1.0.0")))
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("comp-a", "2.0.0")))
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("comp-b", "1.5.0")))
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("comp-b", "3.0.0")))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("comp-a", "1.0.0", bareDescriptor...)))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("comp-a", "2.0.0", bareDescriptor...)))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("comp-b", "1.5.0", bareDescriptor...)))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("comp-b", "3.0.0", bareDescriptor...)))
 
 		descs, err := ListComponentVersions(ctx, repo,
 			WithComponentNames([]string{"comp-a", "comp-b"}),
@@ -137,10 +134,14 @@ func TestListComponentVersions(t *testing.T) {
 	t.Run("WithSemverConstraint", func(t *testing.T) {
 		ctx := context.Background()
 		repo := newMockComponentVersionRepository()
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("test-component", "1.0.0")))
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("test-component", "2.0.0")))
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("test-component", "2.5.0")))
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("test-component", "3.0.0")))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("test-component", "1.0.0",
+			bareDescriptor...)))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("test-component", "2.0.0",
+			bareDescriptor...)))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("test-component", "2.5.0",
+			bareDescriptor...)))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("test-component", "3.0.0",
+			bareDescriptor...)))
 
 		descs, err := ListComponentVersions(ctx, repo,
 			WithComponentNames([]string{"test-component"}),
@@ -157,9 +158,12 @@ func TestListComponentVersions(t *testing.T) {
 	t.Run("WithLatestOnly", func(t *testing.T) {
 		ctx := context.Background()
 		repo := newMockComponentVersionRepository()
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("test-component", "1.0.0")))
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("test-component", "2.0.0")))
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("test-component", "1.5.0")))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("test-component", "1.0.0",
+			bareDescriptor...)))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("test-component", "2.0.0",
+			bareDescriptor...)))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("test-component", "1.5.0",
+			bareDescriptor...)))
 
 		descs, err := ListComponentVersions(ctx, repo,
 			WithComponentNames([]string{"test-component"}),
@@ -175,11 +179,11 @@ func TestListComponentVersions(t *testing.T) {
 	t.Run("WithLatestOnly_MultipleComponents", func(t *testing.T) {
 		ctx := context.Background()
 		repo := newMockComponentVersionRepository()
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("comp-a", "1.0.0")))
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("comp-a", "2.0.0")))
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("comp-b", "1.5.0")))
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("comp-b", "3.0.0")))
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("comp-c", "3.0.0")))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("comp-a", "1.0.0", bareDescriptor...)))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("comp-a", "2.0.0", bareDescriptor...)))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("comp-b", "1.5.0", bareDescriptor...)))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("comp-b", "3.0.0", bareDescriptor...)))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("comp-c", "3.0.0", bareDescriptor...)))
 
 		descs, err := ListComponentVersions(ctx, repo,
 			WithComponentNames([]string{"comp-a", "comp-b"}),
@@ -201,7 +205,7 @@ func TestListComponentVersions(t *testing.T) {
 		ctx := context.Background()
 		repo := newMockComponentVersionRepository()
 		// Create a component with no versions (empty version map)
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("comp-c", "3.0.0")))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("comp-c", "3.0.0", bareDescriptor...)))
 
 		descs, err := ListComponentVersions(ctx, repo,
 			WithComponentNames([]string{"comp-c"}),
@@ -240,8 +244,8 @@ func TestListComponentVersions(t *testing.T) {
 	t.Run("WithConcurrencyLimit", func(t *testing.T) {
 		ctx := context.Background()
 		repo := newMockComponentVersionRepository()
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("comp-a", "1.0.0")))
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("comp-b", "2.0.0")))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("comp-a", "1.0.0", bareDescriptor...)))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("comp-b", "2.0.0", bareDescriptor...)))
 
 		descs, err := ListComponentVersions(ctx, repo,
 			WithComponentNames([]string{"comp-a", "comp-b"}),
@@ -262,12 +266,12 @@ func TestListComponentVersions(t *testing.T) {
 	t.Run("ComplexSorting_MixedVersions", func(t *testing.T) {
 		ctx := context.Background()
 		repo := newMockComponentVersionRepository()
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("app-a", "0.1.0")))
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("app-a", "10.0.0")))
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("app-a", "2.0.0")))
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("app-b", "1.0.0")))
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("app-b", "1.2.3")))
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("app-b", "1.10.0")))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("app-a", "0.1.0", bareDescriptor...)))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("app-a", "10.0.0", bareDescriptor...)))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("app-a", "2.0.0", bareDescriptor...)))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("app-b", "1.0.0", bareDescriptor...)))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("app-b", "1.2.3", bareDescriptor...)))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("app-b", "1.10.0", bareDescriptor...)))
 
 		descs, err := ListComponentVersions(ctx, repo,
 			WithComponentNames([]string{"app-a", "app-b"}),
@@ -287,7 +291,8 @@ func TestListComponentVersions(t *testing.T) {
 	t.Run("InvalidSemverConstraint", func(t *testing.T) {
 		ctx := context.Background()
 		repo := newMockComponentVersionRepository()
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("test-component", "1.0.0")))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("test-component", "1.0.0",
+			bareDescriptor...)))
 
 		_, err := ListComponentVersions(ctx, repo,
 			WithComponentNames([]string{"test-component"}),
@@ -303,7 +308,8 @@ func TestListComponentVersions(t *testing.T) {
 		// they are listed and ordered via the registry's lexical fallback.
 		ctx := context.Background()
 		repo := newMockComponentVersionRepository()
-		require.NoError(t, repo.AddComponentVersion(ctx, makeDescriptor("test-component", "latest")))
+		require.NoError(t, repo.AddComponentVersion(ctx, descriptortest.New("test-component", "latest",
+			bareDescriptor...)))
 
 		descs, err := ListComponentVersions(ctx, repo,
 			WithComponentNames([]string{"test-component"}),

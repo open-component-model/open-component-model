@@ -21,6 +21,7 @@ import (
 	githubv1alpha1 "ocm.software/open-component-model/bindings/go/github/transformation/spec/v1alpha1"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/descriptortest"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -71,22 +72,8 @@ func testTransferRoots(component, version string, target runtime.Typed, resolver
 	}
 }
 
-func testDescriptor(component, version string, resources []descriptor.Resource, refs []descriptor.Reference) *descriptor.Descriptor {
-	return &descriptor.Descriptor{
-		Meta: descriptor.Meta{Version: "v2"},
-		Component: descriptor.Component{
-			ComponentMeta: descriptor.ComponentMeta{
-				ObjectMeta: descriptor.ObjectMeta{
-					Name:    component,
-					Version: version,
-				},
-			},
-			Provider:   descriptor.Provider{Name: "test-provider"},
-			Resources:  resources,
-			References: refs,
-		},
-	}
-}
+// testProvider sets the provider name the transfer tests use.
+var testProvider = descriptortest.WithProvider("test-provider")
 
 func testResolverFor(component, version string, repoSpec runtime.Typed, desc *descriptor.Descriptor) *mockCVRepoResolver {
 	key := component + ":" + version
@@ -198,7 +185,7 @@ func githubResource(name, version, repoURL, commit string) descriptor.Resource {
 func TestBuildGraphDefinition_NoResources(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
-	desc := testDescriptor("ocm.software/test", "1.0.0", nil, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider)
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -214,8 +201,8 @@ func TestBuildGraphDefinition_NoResources(t *testing.T) {
 func TestBuildGraphDefinition_LocalBlobResource(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{localBlobResource("my-resource", "1.0.0")}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources(localBlobResource("my-resource", "1.0.0")))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -238,8 +225,8 @@ func TestBuildGraphDefinition_RelativeOCIReference_CopiesAsLocalBlob(t *testing.
 	r := require.New(t)
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{relativeOCIReferenceResource("my-relative", "1.0.0", "ocm/value:v2.0")}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources(relativeOCIReferenceResource("my-relative", "1.0.0", "ocm/value:v2.0")))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -263,8 +250,8 @@ func TestBuildGraphDefinition_RelativeOCIReference_CopiesAsLocalBlob(t *testing.
 func TestBuildGraphDefinition_OCIImageSkippedInDefaultMode(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources(ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -278,8 +265,8 @@ func TestBuildGraphDefinition_OCIImageSkippedInDefaultMode(t *testing.T) {
 func TestBuildGraphDefinition_OCIImageWithLocalBlobUploader(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources(ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -294,8 +281,8 @@ func TestBuildGraphDefinition_OCIImageWithLocalBlobUploader(t *testing.T) {
 func TestBuildGraphDefinition_OCIImage_OCIUploader(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources(ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -311,8 +298,8 @@ func TestBuildGraphDefinition_OCIImage_OCIUploader(t *testing.T) {
 func TestBuildGraphDefinition_HelmResource(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{helmResource("my-chart", "1.0.0", "https://charts.example.com", "my-chart")}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources(helmResource("my-chart", "1.0.0", "https://charts.example.com", "my-chart")))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -327,10 +314,10 @@ func TestBuildGraphDefinition_HelmResource(t *testing.T) {
 func TestBuildGraphDefinition_GitHubResource(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{githubResource("my-source", "1.0.0",
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources([]descriptor.Resource{githubResource("my-source", "1.0.0",
 			"https://github.com/open-component-model/open-component-model",
-			"f58349914e3c775747dc1ee9af1bc83db4652266")}, nil)
+			"f58349914e3c775747dc1ee9af1bc83db4652266")}...))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -347,10 +334,10 @@ func TestBuildGraphDefinition_GitHubResource(t *testing.T) {
 func TestBuildGraphDefinition_GitHubResource_OCIUploader(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{githubResource("my-source", "1.0.0",
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources([]descriptor.Resource{githubResource("my-source", "1.0.0",
 			"https://github.com/open-component-model/open-component-model",
-			"f58349914e3c775747dc1ee9af1bc83db4652266")}, nil)
+			"f58349914e3c775747dc1ee9af1bc83db4652266")}...))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -366,8 +353,8 @@ func TestBuildGraphDefinition_GitHubResource_OCIUploader(t *testing.T) {
 func TestBuildGraphDefinition_CTFTarget(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testCTFRepo("/tmp/target-archive")
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{localBlobResource("my-resource", "1.0.0")}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources(localBlobResource("my-resource", "1.0.0")))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -383,15 +370,14 @@ func TestBuildGraphDefinition_Recursive(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
 
-	childDesc := testDescriptor("ocm.software/child", "2.0.0", nil, nil)
-	rootDesc := testDescriptor("ocm.software/root", "1.0.0", nil,
-		[]descriptor.Reference{{
+	childDesc := descriptortest.New("ocm.software/child", "2.0.0", testProvider)
+	rootDesc := descriptortest.New("ocm.software/root", "1.0.0", testProvider,
+		descriptortest.WithReferences([]descriptor.Reference{{
 			ElementMeta: descriptor.ElementMeta{
 				ObjectMeta: descriptor.ObjectMeta{Name: "child-ref", Version: "2.0.0"},
 			},
 			Component: "ocm.software/child",
-		}},
-	)
+		}}...))
 
 	resolver := testMultiResolver(map[string]struct {
 		spec runtime.Typed
@@ -423,7 +409,7 @@ func TestBuildGraphDefinition_ResolverError(t *testing.T) {
 
 func TestBuildGraphDefinition_PinnedRoot(t *testing.T) {
 	r := require.New(t)
-	desc := testDescriptor("ocm.software/test", "1.0.0", nil, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider)
 	resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
 	actual, err := signing.GenerateDigest(t.Context(), desc, slog.Default(), v4alpha1.Algorithm, crypto.SHA256.String())
 	r.NoError(err)
@@ -505,14 +491,15 @@ func (s *signallingRepo) GetComponentVersion(ctx context.Context, component, ver
 // digest of its own: the reference digest must not replace the pin.
 func TestBuildGraphDefinition_PinnedRootReferencedByOtherRoot(t *testing.T) {
 	r := require.New(t)
-	child := testDescriptor("ocm.software/child", "1.0.0", nil, nil)
+	child := descriptortest.New("ocm.software/child", "1.0.0", testProvider)
 	childDigest, err := signing.GenerateDigest(t.Context(), child, slog.Default(), v4alpha1.Algorithm, crypto.SHA256.String())
 	r.NoError(err)
-	parent := testDescriptor("ocm.software/parent", "1.0.0", nil, []descriptor.Reference{{
-		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "child", Version: "1.0.0"}},
-		Component:   "ocm.software/child",
-		Digest:      *childDigest,
-	}})
+	parent := descriptortest.New("ocm.software/parent", "1.0.0", testProvider,
+		descriptortest.WithReferences([]descriptor.Reference{{
+			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "child", Version: "1.0.0"}},
+			Component:   "ocm.software/child",
+			Digest:      *childDigest,
+		}}...))
 
 	childSpec := testOCIRepo("ghcr.io/source")
 	resolver := newGatedResolver(testMultiResolver(map[string]struct {
@@ -541,7 +528,7 @@ func TestBuildGraphDefinition_PinnedRootReferencedByOtherRoot(t *testing.T) {
 // references are discovered.
 func TestBuildGraphDefinition_ReferenceDigestsOfSeveralParents(t *testing.T) {
 	r := require.New(t)
-	child := testDescriptor("ocm.software/child", "1.0.0", nil, nil)
+	child := descriptortest.New("ocm.software/child", "1.0.0", testProvider)
 	sha256Digest, err := signing.GenerateDigest(t.Context(), child, slog.Default(), v4alpha1.Algorithm, crypto.SHA256.String())
 	r.NoError(err)
 	sha512Digest, err := signing.GenerateDigest(t.Context(), child, slog.Default(), v4alpha1.Algorithm, crypto.SHA512.String())
@@ -569,11 +556,12 @@ func TestBuildGraphDefinition_ReferenceDigestsOfSeveralParents(t *testing.T) {
 			t.Run(tc.name+"/"+slow+" resolved last", func(t *testing.T) {
 				r := require.New(t)
 				parent := func(name string, dig descriptor.Digest) *descriptor.Descriptor {
-					return testDescriptor(name, "1.0.0", nil, []descriptor.Reference{{
-						ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "child", Version: "1.0.0"}},
-						Component:   "ocm.software/child",
-						Digest:      dig,
-					}})
+					return descriptortest.New(name, "1.0.0", testProvider,
+						descriptortest.WithReferences([]descriptor.Reference{{
+							ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "child", Version: "1.0.0"}},
+							Component:   "ocm.software/child",
+							Digest:      dig,
+						}}...))
 				}
 				specs := map[string]runtime.Typed{
 					"a":     testOCIRepo("ghcr.io/source"),
@@ -608,7 +596,7 @@ func TestBuildGraphDefinition_MultiTarget(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	target1 := testOCIRepo("ghcr.io/target1")
 	target2 := testOCIRepo("ghcr.io/target2")
-	desc := testDescriptor("ocm.software/test", "1.0.0", nil, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider)
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 
 	roots := map[string]TransferRoot{
@@ -636,8 +624,8 @@ func TestBuildGraphDefinition_MultipleRootsDifferentResolvers(t *testing.T) {
 	targetA := testOCIRepo("ghcr.io/target-a")
 	targetB := testOCIRepo("ghcr.io/target-b")
 
-	descA := testDescriptor("ocm.software/a", "1.0.0", nil, nil)
-	descB := testDescriptor("ocm.software/b", "2.0.0", nil, nil)
+	descA := descriptortest.New("ocm.software/a", "1.0.0", testProvider)
+	descB := descriptortest.New("ocm.software/b", "2.0.0", testProvider)
 
 	resolverA := testResolverFor("ocm.software/a", "1.0.0", sourceA, descA)
 	resolverB := testResolverFor("ocm.software/b", "2.0.0", sourceB, descB)
@@ -667,8 +655,8 @@ func TestBuildGraphDefinition_MultiTargetWithResources(t *testing.T) {
 	target1 := testOCIRepo("ghcr.io/target1")
 	target2 := testOCIRepo("ghcr.io/target2")
 
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{localBlobResource("my-resource", "1.0.0")}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources(localBlobResource("my-resource", "1.0.0")))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 
 	roots := map[string]TransferRoot{
@@ -690,15 +678,14 @@ func TestBuildGraphDefinition_RecursiveTargetPropagation(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
 
-	childDesc := testDescriptor("ocm.software/child", "2.0.0", nil, nil)
-	rootDesc := testDescriptor("ocm.software/root", "1.0.0", nil,
-		[]descriptor.Reference{{
+	childDesc := descriptortest.New("ocm.software/child", "2.0.0", testProvider)
+	rootDesc := descriptortest.New("ocm.software/root", "1.0.0", testProvider,
+		descriptortest.WithReferences([]descriptor.Reference{{
 			ElementMeta: descriptor.ElementMeta{
 				ObjectMeta: descriptor.ObjectMeta{Name: "child-ref", Version: "2.0.0"},
 			},
 			Component: "ocm.software/child",
-		}},
-	)
+		}}...))
 
 	resolver := testMultiResolver(map[string]struct {
 		spec runtime.Typed
@@ -728,15 +715,14 @@ func TestBuildGraphDefinition_RecursiveResolverPropagation(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
 
-	childDesc := testDescriptor("ocm.software/child", "2.0.0", nil, nil)
-	rootDesc := testDescriptor("ocm.software/root", "1.0.0", nil,
-		[]descriptor.Reference{{
+	childDesc := descriptortest.New("ocm.software/child", "2.0.0", testProvider)
+	rootDesc := descriptortest.New("ocm.software/root", "1.0.0", testProvider,
+		descriptortest.WithReferences([]descriptor.Reference{{
 			ElementMeta: descriptor.ElementMeta{
 				ObjectMeta: descriptor.ObjectMeta{Name: "child-ref", Version: "2.0.0"},
 			},
 			Component: "ocm.software/child",
-		}},
-	)
+		}}...))
 
 	// Single resolver that knows about both root and child
 	resolver := testMultiResolver(map[string]struct {
@@ -799,8 +785,8 @@ func cleanupFileExpressions(t *testing.T, cleanup *transformv1alpha1.GenericTran
 func TestBuildGraphDefinition_NoCleanupForStreamedLocalBlob(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{localBlobResource("my-resource", "1.0.0")}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources(localBlobResource("my-resource", "1.0.0")))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -813,8 +799,8 @@ func TestBuildGraphDefinition_NoCleanupForStreamedLocalBlob(t *testing.T) {
 func TestBuildGraphDefinition_CleanupReferencesAddSpec_Wget(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{wgetResource("blob", "1.0.0", "https://source.example/blob.tar")}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources(wgetResource("blob", "1.0.0", "https://source.example/blob.tar")))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -835,8 +821,8 @@ func TestBuildGraphDefinition_CleanupReferencesAddSpec_Wget(t *testing.T) {
 func TestBuildGraphDefinition_NoCleanupForStreamingOCIArtifact_OCIUploader(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources(ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -851,8 +837,8 @@ func TestBuildGraphDefinition_NoCleanupForStreamingOCIArtifact_OCIUploader(t *te
 func TestBuildGraphDefinition_CleanupReferencesConvertAndAddSpec_Helm(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{helmResource("my-chart", "1.0.0", "https://charts.example.com", "my-chart")}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources(helmResource("my-chart", "1.0.0", "https://charts.example.com", "my-chart")))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -885,7 +871,7 @@ func TestBuildGraphDefinition_CleanupReferencesConvertAndAddSpec_Helm(t *testing
 func TestBuildGraphDefinition_NoCleanupWhenNoResources(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
-	desc := testDescriptor("ocm.software/test", "1.0.0", nil, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider)
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -900,8 +886,8 @@ func TestBuildGraphDefinition_NoCleanupWhenResourcesSkipped(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
 	// No uploader selects the OCI image resource, so it stays by reference.
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources(ociImageResource("my-image", "1.0.0", "oci://ghcr.io/org/image:v1")))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -917,8 +903,8 @@ func TestBuildGraphDefinition_CleanupMultiTarget_AggregatesAllRefs(t *testing.T)
 	target1 := testOCIRepo("ghcr.io/target1")
 	target2 := testOCIRepo("ghcr.io/target2")
 
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{wgetResource("blob", "1.0.0", "https://source.example/blob.tar")}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources(wgetResource("blob", "1.0.0", "https://source.example/blob.tar")))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 
 	roots := map[string]TransferRoot{
@@ -1168,8 +1154,8 @@ func dockerManifestLocalBlobResource(name, version string) descriptor.Resource {
 func TestBuildGraphDefinition_DockerManifestLocalBlob_OCIUploader(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{dockerManifestLocalBlobResource("my-image", "1.0.0")}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources(dockerManifestLocalBlobResource("my-image", "1.0.0")))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -1184,8 +1170,8 @@ func TestBuildGraphDefinition_DockerManifestLocalBlob_OCIUploader(t *testing.T) 
 func TestBuildGraphDefinition_DockerManifestLocalBlob_FallsBackToLocalBlobWithoutOCIUploader(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{dockerManifestLocalBlobResource("my-image", "1.0.0")}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources(dockerManifestLocalBlobResource("my-image", "1.0.0")))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -1207,16 +1193,17 @@ func TestBuildGraphDefinition_WarnsAboutNonDefaultReferenceDigests(t *testing.T)
 	t.Cleanup(func() { slog.SetDefault(previous) })
 	const warning = "component reference digest was computed with an older normalisation algorithm"
 
-	child := testDescriptor("ocm.software/child", "1.0.0", nil, nil)
+	child := descriptortest.New("ocm.software/child", "1.0.0", testProvider)
 	transfer := func(t *testing.T, normalisationAlgorithm string) {
 		t.Helper()
 		dig, err := signing.GenerateDigest(t.Context(), child, slog.New(slog.DiscardHandler), normalisationAlgorithm, crypto.SHA256.String())
 		require.NoError(t, err)
-		parent := testDescriptor("ocm.software/parent", "1.0.0", nil, []descriptor.Reference{{
-			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "child", Version: "1.0.0"}},
-			Component:   "ocm.software/child",
-			Digest:      *dig,
-		}})
+		parent := descriptortest.New("ocm.software/parent", "1.0.0", testProvider,
+			descriptortest.WithReferences([]descriptor.Reference{{
+				ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "child", Version: "1.0.0"}},
+				Component:   "ocm.software/child",
+				Digest:      *dig,
+			}}...))
 		source := testOCIRepo("ghcr.io/source")
 		resolver := testMultiResolver(map[string]struct {
 			spec runtime.Typed
@@ -1249,8 +1236,8 @@ func TestBuildGraphDefinition_KeepsReferenceDigests(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(previous) })
 	r := require.New(t)
 
-	pinned := testDescriptor("ocm.software/pinned", "1.0.0", nil, nil)
-	unpinned := testDescriptor("ocm.software/unpinned", "1.0.0", nil, nil)
+	pinned := descriptortest.New("ocm.software/pinned", "1.0.0", testProvider)
+	unpinned := descriptortest.New("ocm.software/unpinned", "1.0.0", testProvider)
 	dig, err := signing.GenerateDigest(t.Context(), pinned, slog.New(slog.DiscardHandler), v4alpha1.Algorithm, crypto.SHA256.String())
 	r.NoError(err)
 	refs := []descriptor.Reference{
@@ -1264,7 +1251,7 @@ func TestBuildGraphDefinition_KeepsReferenceDigests(t *testing.T) {
 			Component:   "ocm.software/unpinned",
 		},
 	}
-	parent := testDescriptor("ocm.software/parent", "1.0.0", nil, refs)
+	parent := descriptortest.New("ocm.software/parent", "1.0.0", testProvider, descriptortest.WithReferences(refs...))
 	source := testOCIRepo("ghcr.io/source")
 	resolver := testMultiResolver(map[string]struct {
 		spec runtime.Typed

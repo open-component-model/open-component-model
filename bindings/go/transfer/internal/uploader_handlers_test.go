@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/descriptortest"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
@@ -21,7 +21,8 @@ func TestEveryRegisteredUploaderHasAHandler(t *testing.T) {
 		r.NoError(err, typ.String())
 		r.NoError(json.Unmarshal([]byte(`{"match":"true","targetURL":"${\"https://example.com/x\"}"}`), obj), typ.String())
 
-		desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{localBlobResource("blob", "1.0.0")}, nil)
+		desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+			descriptortest.WithResources(localBlobResource("blob", "1.0.0")))
 		resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
 		roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
 		_, err = BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, []transferv1alpha1.UploaderConfig{obj.(transferv1alpha1.UploaderConfig)})
