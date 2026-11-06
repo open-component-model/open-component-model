@@ -24,11 +24,11 @@ import (
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/git/gittest"
 	"ocm.software/open-component-model/bindings/go/git/repository"
 	"ocm.software/open-component-model/bindings/go/git/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
 func TestResourceDigestAndDownload(t *testing.T) {
@@ -39,7 +39,7 @@ func TestResourceDigestAndDownload(t *testing.T) {
 	dir := t.TempDir()
 	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &dir})
 
-	res := &descriptor.Resource{Access: &v1.Git{Type: runtime.NewUnversionedType("git"), Repository: gittest.Serve(t, path), Ref: "refs/heads/main"}}
+	res := &descriptor.Resource{Access: &v1.Git{Type: runtime.NewUnversionedType("git"), Repository: testgit.Serve(t, path), Ref: "refs/heads/main"}}
 	pinned, err := repo.ProcessResourceDigest(t.Context(), res, nil)
 	r.NoError(err)
 	r.Equal("SHA-256", pinned.Digest.HashAlgorithm)

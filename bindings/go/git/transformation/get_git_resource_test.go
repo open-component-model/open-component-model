@@ -22,7 +22,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/git/gittest"
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	"ocm.software/open-component-model/bindings/go/git/spec/access"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
@@ -55,7 +54,7 @@ func servedRepository(t *testing.T) (url, firstCommit string) {
 		{File: "README", Content: "original"},
 		{File: "README", Content: "updated"},
 	}})
-	return gittest.Serve(t, path), first.String()
+	return testgit.Serve(t, path), first.String()
 }
 
 func TestGetGitResourceLocalRepository(t *testing.T) {

@@ -24,7 +24,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/git/gittest"
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	gitaccess "ocm.software/open-component-model/bindings/go/git/spec/access"
 	gitv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
@@ -146,7 +145,7 @@ func newBareGitRepository(t *testing.T) (path, url string) {
 	path = t.TempDir()
 	_, err := git.PlainInit(path, true)
 	require.NoError(t, err)
-	return path, gittest.Serve(t, path)
+	return path, testgit.Serve(t, path)
 }
 
 // Test_Integration_Transfer_Git transfers a resource with a Git access from a CTF
@@ -178,7 +177,7 @@ func Test_Integration_Transfer_Git(t *testing.T) {
 	// Create the fixture locally to get the commit hash, then expose it over HTTP
 	// so all accesses use a remote URL (local-path git accesses are rejected by Validate).
 	gitPath, commit := newGitFixture(t)
-	gitServerURL := gittest.Serve(t, gitPath)
+	gitServerURL := testgit.Serve(t, gitPath)
 
 	repoProvider := provider.NewComponentVersionRepositoryProvider()
 	ocmconf, err := configuration.GetConfigFromPath(cfgPath)

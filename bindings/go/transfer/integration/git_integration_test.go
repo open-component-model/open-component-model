@@ -12,7 +12,6 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/git/gittest"
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	gitaccess "ocm.software/open-component-model/bindings/go/git/spec/access"
 	gitv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
@@ -33,7 +32,7 @@ func newBareGitRepository(t *testing.T) (path, url string) {
 	path = t.TempDir()
 	_, err := git.PlainInit(path, true)
 	require.NoError(t, err)
-	return path, gittest.Serve(t, path)
+	return path, testgit.Serve(t, path)
 }
 
 // newGitRepository creates a repository with two commits on main and the lightweight tag
@@ -41,7 +40,7 @@ func newBareGitRepository(t *testing.T) (path, url string) {
 func newGitRepository(t *testing.T) (url string, first plumbing.Hash) {
 	t.Helper()
 	path, first := testgit.Repository(t, testgit.Options{DefaultBranch: "main", Tags: []string{"v1.0.0"}})
-	return gittest.Serve(t, path), first
+	return testgit.Serve(t, path), first
 }
 
 // Transfers a Git resource pinned to a commit from a source CTF to an OCI registry, and
