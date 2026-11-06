@@ -32,6 +32,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/ocitest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/internal/identity"
@@ -1044,7 +1045,7 @@ func TestRepository_AddLocalResourceOCILayout(t *testing.T) {
 		},
 	}
 
-	data, _ := createSingleLayerOCIImage(t, []byte("test content"), "test-image:latest")
+	data, _ := ocitest.SingleLayerImage(t, []byte("test content"), "test-image:latest")
 
 	// Create a resource with OCI layout media type
 	resource := &descriptor.Resource{
@@ -1173,32 +1174,6 @@ func TestRepository_AddLocalResourceOCIImageLayer(t *testing.T) {
 	r.Equal(content, downloadedContent, "Downloaded content should match original content")
 }
 
-func createSingleLayerOCIImage(t *testing.T, data []byte, ref string) ([]byte, *v1.OCIImage) {
-	t.Helper()
-	r := require.New(t)
-	var buf bytes.Buffer
-	w, err := tar.NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
-	r.NoError(err)
-
-	desc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageLayer, data)
-	r.NoError(w.Push(t.Context(), desc, bytes.NewReader(data)))
-
-	manifest, err := oras.PackManifest(t.Context(), w, oras.PackManifestVersion1_1, ociImageSpecV1.MediaTypeImageLayer, oras.PackManifestOptions{
-		Layers: []ociImageSpecV1.Descriptor{desc},
-	})
-	r.NoError(err)
-
-	r.NoError(w.Push(t.Context(), desc, bytes.NewReader(data)))
-
-	r.NoError(w.Tag(t.Context(), manifest, ref))
-
-	r.NoError(w.Close())
-
-	return buf.Bytes(), &v1.OCIImage{
-		ImageReference: ref,
-	}
-}
-
 func TestRepository_GetLocalResource_VerifiesResourceDigest(t *testing.T) {
 	const component, version = "ocm.software/test-component", "1.0.0"
 	other := digest.FromString("other").Encoded()
@@ -1214,7 +1189,7 @@ func TestRepository_GetLocalResource_VerifiesResourceDigest(t *testing.T) {
 			return &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: descriptor.OCIArtifactDigestV1, Value: value}
 		}
 	}
-	layoutData, _ := createSingleLayerOCIImage(t, []byte("test content"), "test-image:latest")
+	layoutData, _ := ocitest.SingleLayerImage(t, []byte("test content"), "test-image:latest")
 	legacyData, err := os.ReadFile("../ctf/testdata/compatibility/02/with-resource/blobs/sha256.e40e3a2f1ab1a98328dfd14539a79d27aff5c4d5c34cd16a85f0288bfa76490b")
 	require.NoError(t, err)
 	const legacyMediaType = "application/vnd.oci.image.manifest.v1+tar+gzip"
@@ -2661,7 +2636,7 @@ func TestRepository_AddComponentVersionAlias_OCIImageIndex(t *testing.T) {
 			},
 		}
 
-		data, _ := createSingleLayerOCIImage(t, []byte("content-"+version), "image:"+version)
+		data, _ := ocitest.SingleLayerImage(t, []byte("content-"+version), "image:"+version)
 
 		resource := &descriptor.Resource{
 			Relation: descriptor.LocalRelation,
@@ -4326,7 +4301,7 @@ func TestRepository_AddOwnership_CreatesByValueReferrer(t *testing.T) {
 	)
 
 	// A single-manifest OCI layout with no ownership referrer of its own.
-	layoutBytes, _ := createSingleLayerOCIImage(t, []byte("by-value payload"), "irrelevant:latest")
+	layoutBytes, _ := ocitest.SingleLayerImage(t, []byte("by-value payload"), "irrelevant:latest")
 
 	fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
 	r.NoError(err)

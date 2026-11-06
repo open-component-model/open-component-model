@@ -16,6 +16,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/internal/testutil/nexustest"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/ocitest"
 	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -94,7 +95,7 @@ func Test_Integration_Nexus_RedeployDisabled(t *testing.T) {
 		r := require.New(t)
 		target := fmt.Sprintf("%s/nexus/artifact:1.0.0", dockerEndpoint)
 
-		data, access := createSingleLayerOCIImage(t, []byte("nexus-artifact-payload"), "ghcr.io/src:1.0.0")
+		data, access := ocitest.SingleLayerImage(t, []byte("nexus-artifact-payload"), "ghcr.io/src:1.0.0")
 		access.ImageReference = target
 		res := &descriptor.Resource{
 			ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "artifact", Version: "1.0.0"}},

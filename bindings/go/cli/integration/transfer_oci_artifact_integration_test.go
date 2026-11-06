@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto"
 	"crypto/x509"
-	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
@@ -17,7 +16,6 @@ import (
 	"time"
 
 	"github.com/opencontainers/go-digest"
-	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/content/memory"
@@ -36,6 +34,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/ocitest"
 	"ocm.software/open-component-model/bindings/go/internal/testutil/pkitest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
@@ -127,7 +126,7 @@ configurations:
 	// prepare artifact upload
 	originalData := []byte("foobar")
 
-	data, access := createSingleLayerOCIImage(t, originalData, "ghcr.io/test-oci-resource:v1.0.0")
+	data, access := ocitest.SingleLayerImage(t, originalData, "ghcr.io/test-oci-resource:v1.0.0")
 	r.NotNil(access)
 
 	access.Type = ocmruntime.Type{
@@ -606,7 +605,7 @@ configurations:
 
 	// Upload OCI artifact to source registry
 	originalData := []byte("signed-artifact-data")
-	data, access := createSingleLayerOCIImage(t, originalData, "ghcr.io/test-signed:v1.0.0")
+	data, access := ocitest.SingleLayerImage(t, originalData, "ghcr.io/test-signed:v1.0.0")
 	r.NotNil(access)
 	access.Type = ocmruntime.Type{Name: "ociArtifact", Version: "v1"}
 
@@ -766,7 +765,7 @@ func Test_Integration_Transfer_OCIArtifact_PreservesV1DescriptorDigest(t *testin
 	sourceRepo := sourceRegistry.Connect(t)
 	resourceRepo := ocires.NewResourceRepository(&filesystemv1alpha1.Config{}, ocires.WithHTTPConfig(loadHTTPConfig(t, cfgPath)))
 	originalData := []byte("issue-3674-artifact")
-	data, access := createSingleLayerOCIImage(t, originalData,
+	data, access := ocitest.SingleLayerImage(t, originalData,
 		"http://"+sourceRegistry.Reference("issue-3674-artifact:1.0.0"))
 	access.Type = ocmruntime.NewVersionedType("ociArtifact", "v1")
 
@@ -933,64 +932,6 @@ func Test_Integration_Transfer_OCIArtifact_PreservesV1DescriptorDigest(t *testin
 			}
 		}
 	}
-}
-
-func createSingleLayerOCIImage(t *testing.T, data []byte, ref ...string) ([]byte, *v1.OCIImage) {
-	t.Helper()
-	r := require.New(t)
-	var buf bytes.Buffer
-	w, err := tar.NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
-	r.NoError(err)
-
-	desc := ociImageSpecV1.Descriptor{}
-	desc.Digest = digest.FromBytes(data)
-	desc.Size = int64(len(data))
-	desc.MediaType = ociImageSpecV1.MediaTypeImageLayer
-
-	r.NoError(w.Push(t.Context(), desc, bytes.NewReader(data)))
-
-	configRaw, err := json.Marshal(map[string]string{})
-	r.NoError(err)
-	configDesc := ociImageSpecV1.Descriptor{
-		Digest:    digest.FromBytes(configRaw),
-		Size:      int64(len(configRaw)),
-		MediaType: "application/json",
-	}
-	r.NoError(w.Push(t.Context(), configDesc, bytes.NewReader(configRaw)))
-
-	manifest := ociImageSpecV1.Manifest{
-		Versioned: specs.Versioned{SchemaVersion: 2},
-		MediaType: ociImageSpecV1.MediaTypeImageManifest,
-		Config:    configDesc,
-		Layers: []ociImageSpecV1.Descriptor{
-			desc,
-		},
-	}
-	manifestRaw, err := json.Marshal(manifest)
-	r.NoError(err)
-
-	manifestDesc := ociImageSpecV1.Descriptor{
-		Digest:    digest.FromBytes(manifestRaw),
-		Size:      int64(len(manifestRaw)),
-		MediaType: ociImageSpecV1.MediaTypeImageManifest,
-	}
-	r.NoError(w.Push(t.Context(), manifestDesc, bytes.NewReader(manifestRaw)))
-
-	for _, ref := range ref {
-		r.NoError(w.Tag(t.Context(), manifestDesc, ref))
-	}
-
-	r.NoError(w.Close())
-
-	var access *v1.OCIImage
-
-	if len(ref) > 0 {
-		access = &v1.OCIImage{
-			ImageReference: ref[0],
-		}
-	}
-
-	return buf.Bytes(), access
 }
 
 // Regression: v1 stores OCI artifacts as local tar.gz artifact sets whose

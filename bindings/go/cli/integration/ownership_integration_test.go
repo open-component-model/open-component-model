@@ -13,14 +13,13 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2/content"
-	orasregistry "oras.land/oras-go/v2/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/cli/cmd"
 	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/ocitest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -354,7 +353,7 @@ func addComponentVersionViaCLI(t *testing.T, ctx context.Context, reg *internal.
 func pushByReferenceImage(t *testing.T, ctx context.Context, repo *oci.Repository, resourceName, version, imageRef string, payload []byte) string {
 	t.Helper()
 	r := require.New(t)
-	data, access := createSingleLayerOCIImage(t, payload, imageRef)
+	data, access := ocitest.SingleLayerImage(t, payload, imageRef)
 	uploaded, err := repo.UploadResource(ctx, &descriptor.Resource{
 		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: resourceName, Version: version}},
 		Type:        "ociArtifact",
@@ -421,7 +420,7 @@ func ociImageReference(t *testing.T, ctx context.Context, repo *oci.Repository, 
 // to dir/name — the on-disk artifact a file/v1 input feeds into a by-value resource.
 func writeOCILayoutTarball(t *testing.T, dir, name string, payload []byte) {
 	t.Helper()
-	data, _ := createSingleLayerOCIImage(t, payload)
+	data, _ := ocitest.SingleLayerImage(t, payload)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, name), data, 0o600))
 }
 
@@ -434,7 +433,7 @@ func assertOwnershipReferrer(t *testing.T, ctx context.Context, resolver oci.Res
 	t.Helper()
 	r := require.New(t)
 
-	referrers := listOwnershipReferrers(t, ctx, resolver, subjectRef)
+	referrers := ocitest.OwnershipReferrers(t, ctx, resolver, subjectRef)
 	if !wantReferrer {
 		r.Empty(referrers, "resource %q must not carry an ownership referrer", resourceName)
 		return
@@ -468,24 +467,6 @@ func assertOwnershipReferrer(t *testing.T, ctx context.Context, resolver oci.Res
 	r.NoError(json.NewDecoder(rc).Decode(&manifest))
 	r.NotNil(manifest.Subject, "ownership referrer manifest must carry a subject")
 	assert.Equal(t, subject.Digest, manifest.Subject.Digest, "referrer subject must match the target subject manifest digest")
-}
-
-// listOwnershipReferrers walks the OCI Referrers API for the subject identified by
-// reference and returns every referrer carrying [annotations.OwnershipArtifactType].
-func listOwnershipReferrers(t *testing.T, ctx context.Context, resolver oci.Resolver, reference string) []ociImageSpecV1.Descriptor {
-	t.Helper()
-	r := require.New(t)
-	store, err := resolver.StoreForReference(ctx, reference)
-	r.NoError(err)
-	graphStore, ok := store.(content.ReadOnlyGraphStorage)
-	r.Truef(ok, "store %T must implement content.ReadOnlyGraphStorage for referrers discovery", store)
-	ref, err := looseref.ParseReference(reference)
-	r.NoError(err)
-	subject, err := store.Resolve(ctx, ref.ReferenceOrTag())
-	r.NoError(err)
-	refs, err := orasregistry.Referrers(ctx, graphStore, subject, annotations.OwnershipArtifactType)
-	r.NoError(err)
-	return refs
 }
 
 // newOwnershipRepository builds an oci.Repository backed by resolver with a
