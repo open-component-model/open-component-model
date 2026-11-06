@@ -218,7 +218,9 @@ EOF
 }
 
 install_kro() {
-  helm install kro oci://registry.k8s.io/kro/charts/kro --namespace kro --create-namespace --version=0.9.2
+  helm install kro oci://registry.k8s.io/kro/charts/kro \
+    --namespace kro --create-namespace --version=0.9.4 \
+    --set rbac.mode=aggregation --wait || return 1
 }
 
 pids=()
