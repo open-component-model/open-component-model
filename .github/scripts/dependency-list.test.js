@@ -148,11 +148,19 @@ linters:
           files: ["$all", "!$test", "!**/bindings/go/testutils/**"]
           deny:
             - pkg: "ocm.software/open-component-model/bindings/go/testutils"
+        # A scoped rule whose files match the testutils tree would otherwise make
+        # testutils a binding key; the parser must still skip it.
+        testutils:
+          list-mode: lax
+          files: ["**/bindings/go/testutils/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/testutils"
 `
   );
   const deps = parseDepguardRules(config);
   // testutils is a test-only helper: it is granted to beta's tests but must not
-  // appear as a production dependency edge, and it is not a binding of its own.
+  // appear as a production dependency edge, and it is never a binding key even
+  // when a rule scopes its own tree.
   assert.deepStrictEqual(deps.get("beta"), []);
   assert.strictEqual(deps.has("testutils"), false);
   assert.strictEqual(deps.has("testutils-test-only"), false);

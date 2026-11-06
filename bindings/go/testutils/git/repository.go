@@ -92,11 +92,13 @@ func Repository(tb testing.TB, opts Options) (path string, first plumbing.Hash) 
 		if message == "" {
 			message = c.Content
 		}
-		r.NoError(os.WriteFile(filepath.Join(work, file), []byte(c.Content), 0o600))
+		absFile := filepath.Join(work, file)
+		r.NoError(os.MkdirAll(filepath.Dir(absFile), 0o755))
+		r.NoError(os.WriteFile(absFile, []byte(c.Content), 0o600))
 		_, err := tree.Add(file)
 		r.NoError(err)
 		author := fixtureAuthor
-		hash, err := tree.Commit(message, &git.CommitOptions{Author: &author})
+		hash, err := tree.Commit(message, &git.CommitOptions{Author: &author, AllowEmptyCommits: true})
 		r.NoError(err)
 		if i == 0 {
 			first = hash
@@ -112,7 +114,7 @@ func Repository(tb testing.TB, opts Options) (path string, first plumbing.Hash) 
 
 	if opts.Bare {
 		path = filepath.Join(tb.TempDir(), "fixture.git")
-		_, err = git.PlainClone(path, &git.CloneOptions{URL: work, Bare: true})
+		_, err = git.PlainClone(path, &git.CloneOptions{URL: work, Bare: true, AllowEmptyRepo: len(commits) == 0})
 		r.NoError(err)
 		return path, first
 	}

@@ -44,6 +44,9 @@ export function parseDepguardRules(configPath) {
         if (!match) continue;
 
         const binding = match[1];
+        // A test-only helper is never a production binding, even if it gains its own
+        // depguard rule, so it must not become a key in the dependency graph.
+        if (TEST_ONLY_BINDINGS.has(binding)) continue;
         const allows = (rule.allow ?? [])
             .filter((/** @type {string} */ a) => a.startsWith(BINDING_PREFIX))
             .map((/** @type {string} */ a) => a.slice(BINDING_PREFIX.length))
