@@ -62,3 +62,76 @@ subjects:
   - kind: ServiceAccount
     name: ocm-k8s-toolkit-controller-manager
     namespace: ocm-k8s-toolkit-system
+---
+# Aggregation-mode RBAC for the kro controller.
+# kro runs with rbac.mode=aggregation (see setup.sh install_kro), which ships kro with only
+# enough access to manage ResourceGraphDefinitions and CustomResourceDefinitions. This
+# ClusterRole is aggregated into kro's controller ClusterRole via the
+# rbac.kro.run/aggregate-to-controller label and grants kro access to every resource type the
+# E2E example RGDs create or read. Not intended for production use.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kro-controller-ocm-e2e
+  labels:
+    rbac.kro.run/aggregate-to-controller: "true"
+rules:
+  # Generated instance CRDs (schema group defaults to kro.run), one plural per RGD schema
+  # kind across examples/ and test/e2e/testdata/. kro reconciles these instances, so it
+  # needs full control plus status/finalizers.
+  - apiGroups: ["kro.run"]
+    resources:
+      - helmsimples
+      - helmnesteds
+      - helmnestedsigneds
+      - helmsignings
+      - helmconfigurationlocalizations
+      - helmsimplenestedstatuses
+      - kustomizeconfigurationlocalizations
+      - kustomizesimples
+      - basicauths
+      - dockerconfigjsons
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["kro.run"]
+    resources:
+      - helmsimples/status
+      - helmnesteds/status
+      - helmnestedsigneds/status
+      - helmsignings/status
+      - helmconfigurationlocalizations/status
+      - helmsimplenestedstatuses/status
+      - kustomizeconfigurationlocalizations/status
+      - kustomizesimples/status
+      - basicauths/status
+      - dockerconfigjsons/status
+      - helmsimples/finalizers
+      - helmnesteds/finalizers
+      - helmnestedsigneds/finalizers
+      - helmsignings/finalizers
+      - helmconfigurationlocalizations/finalizers
+      - helmsimplenestedstatuses/finalizers
+      - kustomizeconfigurationlocalizations/finalizers
+      - kustomizesimples/finalizers
+      - basicauths/finalizers
+      - dockerconfigjsons/finalizers
+    verbs: ["get", "patch", "update"]
+  # OCM resources the RGDs declare (delivery.ocm.software/v1alpha1 Resource).
+  - apiGroups: ["delivery.ocm.software"]
+    resources: ["resources", "resources/status"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  # FluxCD sources the RGDs create.
+  - apiGroups: ["source.toolkit.fluxcd.io"]
+    resources: ["ocirepositories", "gitrepositories"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  # FluxCD Helm appliers the RGDs create.
+  - apiGroups: ["helm.toolkit.fluxcd.io"]
+    resources: ["helmreleases"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  # FluxCD Kustomize appliers the RGDs create.
+  - apiGroups: ["kustomize.toolkit.fluxcd.io"]
+    resources: ["kustomizations"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  # ArgoCD Applications the RGDs create.
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
