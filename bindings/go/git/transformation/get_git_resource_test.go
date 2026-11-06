@@ -12,16 +12,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	git "github.com/go-git/go-git/v6"
-	"github.com/go-git/go-git/v6/config"
-	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	filesystemconfig "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -32,8 +29,10 @@ import (
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/git/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/git/transformation/spec/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/blobtest"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
 func gitResource(t *testing.T, url, ref, commit, accessType string) *v2.Resource {
@@ -54,30 +53,11 @@ func gitResource(t *testing.T, url, ref, commit, accessType string) *v2.Resource
 // the first commit.
 func servedRepository(t *testing.T) (url, firstCommit string) {
 	t.Helper()
-	r := require.New(t)
-	work := t.TempDir()
-	repo, err := git.PlainInit(work, false)
-	r.NoError(err)
-	// Ignore host signing settings when creating test fixtures.
-	cfg, err := repo.Config()
-	r.NoError(err)
-	cfg.Commit.GpgSign = config.OptBoolFalse
-	r.NoError(repo.SetConfig(cfg))
-	worktree, err := repo.Worktree()
-	r.NoError(err)
-	for _, content := range []string{"original", "updated"} {
-		r.NoError(os.WriteFile(filepath.Join(work, "README"), []byte(content), 0o644))
-		_, err = worktree.Add("README")
-		r.NoError(err)
-		hash, err := worktree.Commit(content, &git.CommitOptions{Author: &object.Signature{
-			Name: "Test", Email: "test@example.com", When: time.Unix(1, 0),
-		}})
-		r.NoError(err)
-		if firstCommit == "" {
-			firstCommit = hash.String()
-		}
-	}
-	return gittest.Serve(t, work), firstCommit
+	path, first := testgit.Repository(t, testgit.Options{Commits: []testgit.Commit{
+		{File: "README", Content: "original"},
+		{File: "README", Content: "updated"},
+	}})
+	return gittest.Serve(t, path), first.String()
 }
 
 func TestGetGitResourceLocalRepository(t *testing.T) {
@@ -174,17 +154,6 @@ func (f resolverFunc) Resolve(ctx context.Context, identity runtime.Identity) (r
 	return f(ctx, identity)
 }
 
-type testBlob struct {
-	readErr error
-}
-
-func (b *testBlob) ReadCloser() (io.ReadCloser, error) {
-	if b.readErr != nil {
-		return nil, b.readErr
-	}
-	return io.NopCloser(strings.NewReader("archive")), nil
-}
-
 func TestGetGitResourceCredentialsAndCleanup(t *testing.T) {
 	r := require.New(t)
 	failure := errors.New("test failure")
@@ -208,7 +177,10 @@ func TestGetGitResourceCredentialsAndCleanup(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			outDir := t.TempDir()
-			b := &testBlob{readErr: tc.readErr}
+			var b blob.ReadOnlyBlob = inmemory.New(strings.NewReader("archive"))
+			if tc.readErr != nil {
+				b = blobtest.Failing(tc.readErr)
+			}
 			downloaded, resolvedCalls := false, 0
 			repo := &testRepository{identity: runtime.Identity{"type": "Git", "hostname": "example.com"}, identityErr: tc.identityErr}
 			if tc.noIdentity {

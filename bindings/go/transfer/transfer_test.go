@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/descriptortest"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
@@ -85,21 +86,8 @@ func testOCITarget(baseURL string) *oci.Repository {
 	}
 }
 
-func testDescriptor(component, version string, refs []descriptor.Reference) *descriptor.Descriptor {
-	return &descriptor.Descriptor{
-		Meta: descriptor.Meta{Version: "v2"},
-		Component: descriptor.Component{
-			ComponentMeta: descriptor.ComponentMeta{
-				ObjectMeta: descriptor.ObjectMeta{
-					Name:    component,
-					Version: version,
-				},
-			},
-			Provider:   descriptor.Provider{Name: "test-provider"},
-			References: refs,
-		},
-	}
-}
+// testProvider sets the provider name the transfer tests use.
+var testProvider = descriptortest.WithProvider("test-provider")
 
 func testResolverFor(component, version string, repoSpec runtime.Typed, desc *descriptor.Descriptor) *mockCVRepoResolver {
 	key := component + ":" + version
@@ -137,7 +125,7 @@ func testMultiComponentResolver(entries map[string]struct {
 func TestBuildGraphDefinition_SingleMapping(t *testing.T) {
 	sourceRepo := testOCITarget("ghcr.io/source")
 	targetRepo := testOCITarget("ghcr.io/target")
-	desc := testDescriptor("ocm.software/test", "1.0.0", nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider)
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 
 	tgd, err := BuildGraphDefinition(t.Context(), nil, nil,
@@ -167,8 +155,8 @@ func TestBuildGraphDefinition_MultipleComponentsSameTarget(t *testing.T) {
 	sourceRepo := testOCITarget("ghcr.io/source")
 	targetRepo := testOCITarget("ghcr.io/target")
 
-	descA := testDescriptor("ocm.software/a", "1.0.0", nil)
-	descB := testDescriptor("ocm.software/b", "2.0.0", nil)
+	descA := descriptortest.New("ocm.software/a", "1.0.0", testProvider)
+	descB := descriptortest.New("ocm.software/b", "2.0.0", testProvider)
 
 	resolver := testMultiComponentResolver(map[string]struct {
 		spec runtime.Typed
@@ -206,8 +194,8 @@ func TestBuildGraphDefinition_DifferentComponentsDifferentTargets(t *testing.T) 
 	targetA := testOCITarget("ghcr.io/target-a")
 	targetB := testOCITarget("ghcr.io/target-b")
 
-	descA := testDescriptor("ocm.software/a", "1.0.0", nil)
-	descB := testDescriptor("ocm.software/b", "2.0.0", nil)
+	descA := descriptortest.New("ocm.software/a", "1.0.0", testProvider)
+	descB := descriptortest.New("ocm.software/b", "2.0.0", testProvider)
 
 	resolverA := testResolverFor("ocm.software/a", "1.0.0", sourceA, descA)
 	resolverB := testResolverFor("ocm.software/b", "2.0.0", sourceB, descB)
@@ -242,7 +230,7 @@ func TestBuildGraphDefinition_SameComponentMultipleTargets(t *testing.T) {
 	target1 := testOCITarget("ghcr.io/target1")
 	target2 := testOCITarget("ghcr.io/target2")
 
-	desc := testDescriptor("ocm.software/test", "1.0.0", nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider)
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 
 	tgd, err := BuildGraphDefinition(t.Context(), nil, nil,
@@ -280,7 +268,7 @@ func TestBuildGraphDefinition_RepositoryResolver(t *testing.T) {
 	sourceSpec := testOCITarget("ghcr.io/source")
 	targetRepo := testOCITarget("ghcr.io/target")
 
-	desc := testDescriptor("ocm.software/test", "1.0.0", nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider)
 	mockRepo := &mockCVRepo{
 		descriptors: map[string]*descriptor.Descriptor{
 			"ocm.software/test:1.0.0": desc,
@@ -310,8 +298,8 @@ func TestBuildGraphDefinition_ComponentLister(t *testing.T) {
 	sourceRepo := testOCITarget("ghcr.io/source")
 	targetRepo := testOCITarget("ghcr.io/target")
 
-	descA := testDescriptor("ocm.software/a", "1.0.0", nil)
-	descB := testDescriptor("ocm.software/b", "2.0.0", nil)
+	descA := descriptortest.New("ocm.software/a", "1.0.0", testProvider)
+	descB := descriptortest.New("ocm.software/b", "2.0.0", testProvider)
 
 	resolver := testMultiComponentResolver(map[string]struct {
 		spec runtime.Typed
@@ -347,15 +335,16 @@ func TestBuildGraphDefinition_Recursive(t *testing.T) {
 	sourceRepo := testOCITarget("ghcr.io/source")
 	targetRepo := testOCITarget("ghcr.io/target")
 
-	childDesc := testDescriptor("ocm.software/child", "2.0.0", nil)
-	parentDesc := testDescriptor("ocm.software/parent", "1.0.0", []descriptor.Reference{
-		{
-			ElementMeta: descriptor.ElementMeta{
-				ObjectMeta: descriptor.ObjectMeta{Name: "child-ref", Version: "2.0.0"},
+	childDesc := descriptortest.New("ocm.software/child", "2.0.0", testProvider)
+	parentDesc := descriptortest.New("ocm.software/parent", "1.0.0", testProvider,
+		descriptortest.WithReferences([]descriptor.Reference{
+			{
+				ElementMeta: descriptor.ElementMeta{
+					ObjectMeta: descriptor.ObjectMeta{Name: "child-ref", Version: "2.0.0"},
+				},
+				Component: "ocm.software/child",
 			},
-			Component: "ocm.software/child",
-		},
-	})
+		}...))
 
 	resolver := testMultiComponentResolver(map[string]struct {
 		spec runtime.Typed

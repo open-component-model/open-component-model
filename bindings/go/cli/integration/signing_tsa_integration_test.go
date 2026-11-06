@@ -1,23 +1,15 @@
 package integration
 
 import (
-	"crypto"
-	"crypto/rand"
 	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/asn1"
 	"encoding/pem"
 	"fmt"
-	"io"
-	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/digitorus/timestamp"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob/direct"
@@ -25,6 +17,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/pkitest"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/tsatest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	"ocm.software/open-component-model/bindings/go/signing/tsa"
@@ -37,14 +31,14 @@ func Test_Integration_Signing_TSA(t *testing.T) {
 	r := require.New(t)
 	t.Parallel()
 
-	tsaServer, tsaCert := newMockTSA(t)
+	tsaServer := tsatest.Start(t)
 	tsaServerURL, err := url.Parse(tsaServer.URL)
 	r.NoError(err)
 
 	registry, err := internal.CreateOCIRegistry(t)
 	r.NoError(err)
 
-	k := mustRSAKey(t)
+	k := pkitest.RSAKey(t)
 	privPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(k)})
 	pubPEM := pem.EncodeToMemory(&pem.Block{Type: "RSA PUBLIC KEY", Bytes: x509.MarshalPKCS1PublicKey(&k.PublicKey)})
 
@@ -82,7 +76,7 @@ configurations:
     - type: TSACredentials/v1alpha1
       rootCertsPEMFile: %[10]q
 `, registry.Host, registry.Port, registry.User, registry.Password, pubPEM, privPEM,
-		tsaServerURL.Hostname(), tsaServerURL.Port(), tsaServerURL.Scheme, writePEMCertFile(t, dir, "tsa-root.pem", tsaCert))), 0o600))
+		tsaServerURL.Hostname(), tsaServerURL.Port(), tsaServerURL.Scheme, pkitest.WriteCerts(t, dir, "tsa-root.pem", tsaServer.Cert))), 0o600))
 
 	resolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(registry.RegistryAddress),
@@ -125,57 +119,4 @@ configurations:
 	verifyCMD := cmd.New()
 	verifyCMD.SetArgs([]string{"verify", "cv", ref, "--config", config})
 	r.NoError(verifyCMD.ExecuteContext(t.Context()))
-}
-
-// newMockTSA starts a local RFC 3161 TSA signing with a self-signed certificate
-// that carries the critical id-kp-timeStamping EKU.
-func newMockTSA(t *testing.T) (*httptest.Server, *x509.Certificate) {
-	t.Helper()
-	r := require.New(t)
-	key := mustRSAKey(t)
-	ekuVal, err := asn1.Marshal([]asn1.ObjectIdentifier{{1, 3, 6, 1, 5, 5, 7, 3, 8}})
-	r.NoError(err)
-	tmpl := &x509.Certificate{
-		SerialNumber:          mustRand128Bit(t),
-		Subject:               pkix.Name{CommonName: "Test TSA"},
-		NotBefore:             time.Now().Add(-time.Hour),
-		NotAfter:              time.Now().Add(time.Hour),
-		KeyUsage:              x509.KeyUsageDigitalSignature,
-		BasicConstraintsValid: true,
-		IsCA:                  true,
-		ExtraExtensions:       []pkix.Extension{{Id: asn1.ObjectIdentifier{2, 5, 29, 37}, Critical: true, Value: ekuVal}},
-	}
-	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
-	r.NoError(err)
-	cert, err := x509.ParseCertificate(der)
-	r.NoError(err)
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		body, err := io.ReadAll(req.Body)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		tsReq, err := timestamp.ParseRequest(body)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		out, err := (&timestamp.Timestamp{
-			HashAlgorithm:     tsReq.HashAlgorithm,
-			HashedMessage:     tsReq.HashedMessage,
-			Nonce:             tsReq.Nonce,
-			Time:              time.Now().UTC().Truncate(time.Second),
-			Policy:            asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 0},
-			AddTSACertificate: tsReq.Certificates,
-		}).CreateResponseWithOpts(cert, key, crypto.SHA256)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/timestamp-reply")
-		_, _ = w.Write(out)
-	}))
-	t.Cleanup(srv.Close)
-	return srv, cert
 }

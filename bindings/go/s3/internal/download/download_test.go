@@ -3,20 +3,13 @@ package download
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
-	"encoding/binary"
 	"errors"
-	"fmt"
-	"hash/crc32"
 	"io"
 	"math"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -28,160 +21,13 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/blobtest"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/s3test"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	credv1 "ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1"
 )
 
-// s3Object is the canned response [fakeS3] serves for a GetObject request.
-type s3Object struct {
-	// body is the object content.
-	body []byte
-	// contentType is served as the Content-Type header. Empty sends none, which is
-	// what an object stored without one looks like.
-	contentType string
-	// versionID is served as the x-amz-version-id header. Empty sends none, as a
-	// store that does not report versions does.
-	versionID string
-	// errStatus and errCode serve an S3 error in place of the object.
-	errStatus int
-	errCode   string
-	// chunked serves the body without a Content-Length, which is how a store that
-	// does not know the object size up front answers.
-	chunked bool
-	// abortAfter drops the connection after that many bytes of body, simulating a
-	// store failing mid-object. It implies chunked, since a length cannot be declared
-	// for a body that is never finished.
-	abortAfter *int
-	// suppressBody serves the headers of an object but none of it, telling a caller that
-	// decides from the reported length apart from one that reads first.
-	suppressBody bool
-	// declaredLength overrides the Content-Length header. Nil reports the true length
-	// of body.
-	//
-	// It cannot understate the real length: the transport enforces the declared count,
-	// so a store cannot hand out more than it announced.
-	declaredLength *int64
-}
-
-// s3Request is one request a [fakeS3] answered.
-type s3Request struct {
-	method string
-	// path is the request path, which is /bucket/key for path-style addressing.
-	path string
-	// versionID is the versionId query parameter, empty when none was sent.
-	versionID string
-	header    http.Header
-}
-
-// fakeS3 is an httptest server answering S3 GetObject requests with a canned object,
-// so that the download is exercised over the wire it actually uses: the request is
-// signed, addressed and parsed by the real AWS SDK, and only the store is fake. It
-// authenticates nothing; what is under test is the download, not S3's auth.
-type fakeS3 struct {
-	*httptest.Server
-
-	object s3Object
-
-	mu       sync.Mutex
-	requests []s3Request
-}
-
-// newFakeS3 starts a server serving object, and stops it when the test ends.
-func newFakeS3(t *testing.T, object s3Object) *fakeS3 {
-	t.Helper()
-
-	f := &fakeS3{object: object}
-	f.Server = httptest.NewServer(http.HandlerFunc(f.serve))
-	t.Cleanup(f.Close)
-
-	return f
-}
-
-// recorded returns the requests the server answered, in the order it answered them.
-func (f *fakeS3) recorded() []s3Request {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	return append([]s3Request(nil), f.requests...)
-}
-
-func (f *fakeS3) serve(w http.ResponseWriter, r *http.Request) {
-	f.mu.Lock()
-	f.requests = append(f.requests, s3Request{
-		method:    r.Method,
-		path:      r.URL.Path,
-		versionID: r.URL.Query().Get("versionId"),
-		header:    r.Header.Clone(),
-	})
-	f.mu.Unlock()
-
-	if f.object.errStatus != 0 {
-		w.Header().Set("Content-Type", "application/xml")
-		w.WriteHeader(f.object.errStatus)
-		fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?><Error><Code>%s</Code></Error>`, f.object.errCode)
-		return
-	}
-
-	if f.object.contentType != "" {
-		w.Header().Set("Content-Type", f.object.contentType)
-	} else {
-		// A nil entry suppresses the type the server would otherwise sniff from the
-		// body, so that an object stored without a content type stays without one.
-		w.Header()["Content-Type"] = nil
-	}
-	if f.object.versionID != "" {
-		w.Header().Set("X-Amz-Version-Id", f.object.versionID)
-	}
-
-	// Real S3 reports a checksum, and the SDK warns about every response carrying
-	// none. A body that is cut short or never sent cannot be summed.
-	if !f.object.suppressBody && f.object.abortAfter == nil {
-		w.Header().Set("X-Amz-Checksum-Crc32", checksumCRC32(f.object.body))
-	}
-
-	length := int64(len(f.object.body))
-	if f.object.declaredLength != nil {
-		length = *f.object.declaredLength
-	}
-
-	// Flushing before the body is written is what makes the response chunked: the headers
-	// go out before the length is known. An unflushed one has its Content-Length filled in.
-	if f.object.chunked || f.object.abortAfter != nil {
-		w.WriteHeader(http.StatusOK)
-		w.(http.Flusher).Flush()
-	} else {
-		w.Header().Set("Content-Length", strconv.FormatInt(length, 10))
-		w.WriteHeader(http.StatusOK)
-	}
-
-	if f.object.suppressBody {
-		return
-	}
-
-	body := f.object.body
-	if n := f.object.abortAfter; n != nil {
-		if *n < len(body) {
-			body = body[:*n]
-		}
-		_, _ = w.Write(body)
-		w.(http.Flusher).Flush()
-		// The connection is dropped with the object half-delivered. ErrAbortHandler is
-		// the panic the server swallows silently rather than logging as a failure.
-		panic(http.ErrAbortHandler)
-	}
-
-	_, _ = w.Write(body)
-}
-
-// checksumCRC32 is the CRC32 of body in the base64 form S3 reports it in.
-func checksumCRC32(body []byte) string {
-	sum := make([]byte, 4)
-	binary.BigEndian.PutUint32(sum, crc32.ChecksumIEEE(body))
-
-	return base64.StdEncoding.EncodeToString(sum)
-}
-
-// fakeCredentials are static credentials for [fakeS3]. Their value is irrelevant, since
+// fakeCredentials are static credentials for [s3test.Fake]. Their value is irrelevant, since
 // the fake verifies no signature, but supplying them keeps the AWS default credential
 // chain and its instance-metadata lookups out of the tests.
 func fakeCredentials() *credv1.S3Credentials {
@@ -194,14 +40,14 @@ func fakeCredentials() *credv1.S3Credentials {
 
 // at addresses req to srv. The fake serves no bucket subdomains, so the request is
 // addressed path-style.
-func at(srv *fakeS3, req Request) Request {
+func at(srv *s3test.Fake, req Request) Request {
 	req.Endpoint = srv.URL
 	req.UsePathStyle = true
 	return req
 }
 
 // streamFrom streams req from srv with [fakeCredentials] and returns what was written.
-func streamFrom(t *testing.T, srv *fakeS3, req Request, opts ...Option) (*Result, []byte, error) {
+func streamFrom(t *testing.T, srv *s3test.Fake, req Request, opts ...Option) (*Result, []byte, error) {
 	t.Helper()
 
 	var buf bytes.Buffer
@@ -210,28 +56,17 @@ func streamFrom(t *testing.T, srv *fakeS3, req Request, opts ...Option) (*Result
 }
 
 // blobFrom returns req at srv as a lazy blob with [fakeCredentials].
-func blobFrom(t *testing.T, srv *fakeS3, req Request, opts ...Option) *Blob {
+func blobFrom(t *testing.T, srv *s3test.Fake, req Request, opts ...Option) *Blob {
 	t.Helper()
 
 	return NewBlob(t.Context(), at(srv, req), append([]Option{WithCredentials(fakeCredentials())}, opts...)...)
 }
 
-func readBlob(t *testing.T, b blob.ReadOnlyBlob) []byte {
-	t.Helper()
-	r := require.New(t)
-	rc, err := b.ReadCloser()
-	r.NoError(err)
-	defer func() { _ = rc.Close() }()
-	data, err := io.ReadAll(rc)
-	r.NoError(err)
-	return data
-}
-
 // methods returns the HTTP methods of requests, in order.
-func methods(requests []s3Request) []string {
+func methods(requests []s3test.Request) []string {
 	out := make([]string, 0, len(requests))
 	for _, req := range requests {
-		out = append(out, req.method)
+		out = append(out, req.Method)
 	}
 	return out
 }
@@ -262,7 +97,7 @@ func TestDownload_RequiredFields(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
-			srv := newFakeS3(t, s3Object{body: []byte("unused")})
+			srv := s3test.StartFake(t, s3test.Object{Body: []byte("unused")})
 
 			_, _, err := streamFrom(t, srv, tt.req)
 			r.ErrorContains(err, tt.wantErr)
@@ -272,7 +107,7 @@ func TestDownload_RequiredFields(t *testing.T) {
 			r.ErrorContains(err, tt.wantErr)
 			r.Equal(blob.SizeUnknown, b.Size())
 
-			r.Empty(srv.recorded(), "validation must happen before the object is requested")
+			r.Empty(srv.Recorded(), "validation must happen before the object is requested")
 		})
 	}
 }
@@ -280,7 +115,7 @@ func TestDownload_RequiredFields(t *testing.T) {
 func TestStream_WritesObject(t *testing.T) {
 	r := require.New(t)
 	content := []byte("hello from s3")
-	srv := newFakeS3(t, s3Object{body: content, contentType: "text/plain", versionID: "v-1"})
+	srv := s3test.StartFake(t, s3test.Object{Body: content, ContentType: "text/plain", VersionID: "v-1"})
 
 	res, written, err := streamFrom(t, srv, Request{BucketName: "my-bucket", ObjectKey: "path/blob.txt"},
 		WithDigestAlgorithm(digest.SHA256))
@@ -293,17 +128,17 @@ func TestStream_WritesObject(t *testing.T) {
 		MediaType: "text/plain",
 	}, res)
 
-	requests := srv.recorded()
+	requests := srv.Recorded()
 	r.Len(requests, 1)
-	r.Equal(http.MethodGet, requests[0].method)
-	r.Equal("/my-bucket/path/blob.txt", requests[0].path)
-	r.Empty(requests[0].versionID, "no version pinned means the latest object")
-	r.NotEmpty(requests[0].header.Get("Authorization"), "the request must be signed")
+	r.Equal(http.MethodGet, requests[0].Method)
+	r.Equal("/my-bucket/path/blob.txt", requests[0].Path)
+	r.Empty(requests[0].VersionID, "no version pinned means the latest object")
+	r.NotEmpty(requests[0].Header.Get("Authorization"), "the request must be signed")
 }
 
 func TestStream_DigestOnlyOnRequest(t *testing.T) {
 	r := require.New(t)
-	srv := newFakeS3(t, s3Object{body: []byte("content")})
+	srv := s3test.StartFake(t, s3test.Object{Body: []byte("content")})
 
 	res, _, err := streamFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"})
 	r.NoError(err)
@@ -312,17 +147,17 @@ func TestStream_DigestOnlyOnRequest(t *testing.T) {
 
 func TestDownload_PinnedVersionIsForwarded(t *testing.T) {
 	r := require.New(t)
-	srv := newFakeS3(t, s3Object{body: []byte("versioned")})
+	srv := s3test.StartFake(t, s3test.Object{Body: []byte("versioned")})
 	req := Request{BucketName: "b", ObjectKey: "k", Version: "v-1"}
 
 	_, _, err := streamFrom(t, srv, req)
 	r.NoError(err)
-	readBlob(t, blobFrom(t, srv, req))
+	blobtest.ReadAll(t, blobFrom(t, srv, req))
 
-	requests := srv.recorded()
+	requests := srv.Recorded()
 	r.Len(requests, 2)
 	for _, request := range requests {
-		r.Equal("v-1", request.versionID)
+		r.Equal("v-1", request.VersionID)
 	}
 }
 
@@ -352,7 +187,7 @@ func TestStream_ResolvedVersionIsReturned(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
-			srv := newFakeS3(t, s3Object{body: []byte("content"), versionID: tt.versionID})
+			srv := s3test.StartFake(t, s3test.Object{Body: []byte("content"), VersionID: tt.versionID})
 
 			res, _, err := streamFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"})
 			r.NoError(err)
@@ -394,7 +229,7 @@ func TestDownload_MediaType(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
-			srv := newFakeS3(t, s3Object{body: []byte("content"), contentType: tt.contentType})
+			srv := s3test.StartFake(t, s3test.Object{Body: []byte("content"), ContentType: tt.contentType})
 			req := Request{BucketName: "b", ObjectKey: "k", MediaType: tt.mediaType}
 
 			res, _, err := streamFrom(t, srv, req)
@@ -403,7 +238,7 @@ func TestDownload_MediaType(t *testing.T) {
 
 			for name, b := range map[string]*Blob{"before a read": blobFrom(t, srv, req), "after a read": blobFrom(t, srv, req)} {
 				if name == "after a read" {
-					readBlob(t, b)
+					blobtest.ReadAll(t, b)
 				}
 				got, known := b.MediaType()
 				r.True(known, name)
@@ -415,7 +250,7 @@ func TestDownload_MediaType(t *testing.T) {
 
 func TestDownload_GetObjectErrorIsWrapped(t *testing.T) {
 	r := require.New(t)
-	srv := newFakeS3(t, s3Object{errStatus: http.StatusForbidden, errCode: "AccessDenied"})
+	srv := s3test.StartFake(t, s3test.Object{ErrStatus: http.StatusForbidden, ErrCode: "AccessDenied"})
 	req := Request{BucketName: "my-bucket", ObjectKey: "my-key"}
 
 	_, _, err := streamFrom(t, srv, req)
@@ -429,7 +264,7 @@ func TestDownload_GetObjectErrorIsWrapped(t *testing.T) {
 
 func TestStream_BodyReadErrorIsWrapped(t *testing.T) {
 	r := require.New(t)
-	srv := newFakeS3(t, s3Object{body: []byte("0123456789"), abortAfter: new(5)})
+	srv := s3test.StartFake(t, s3test.Object{Body: []byte("0123456789"), AbortAfter: new(5)})
 
 	_, _, err := streamFrom(t, srv, Request{BucketName: "my-bucket", ObjectKey: "my-key"})
 	r.ErrorContains(err, "error streaming s3 object my-bucket/my-key")
@@ -437,7 +272,7 @@ func TestStream_BodyReadErrorIsWrapped(t *testing.T) {
 
 func TestStream_WriterErrorIsWrapped(t *testing.T) {
 	r := require.New(t)
-	srv := newFakeS3(t, s3Object{body: []byte("content")})
+	srv := s3test.StartFake(t, s3test.Object{Body: []byte("content")})
 	failed := errors.New("disk full")
 
 	_, err := Stream(t.Context(), at(srv, Request{BucketName: "b", ObjectKey: "k"}), failingWriter{failed},
@@ -457,7 +292,7 @@ func TestDownload_MaxDownloadSize(t *testing.T) {
 		name    string
 		maxSize int64
 		unset   bool
-		object  s3Object
+		object  s3test.Object
 		wantErr bool
 	}{
 		{name: "body below the limit", maxSize: 100},
@@ -472,7 +307,7 @@ func TestDownload_MaxDownloadSize(t *testing.T) {
 			// the body first would fail on the truncated transfer rather than on the limit.
 			name:    "oversized object is rejected from its reported length",
 			maxSize: 5,
-			object:  s3Object{declaredLength: new(int64(1 << 30)), suppressBody: true},
+			object:  s3test.Object{DeclaredLength: new(int64(1 << 30)), SuppressBody: true},
 			wantErr: true,
 		},
 		{
@@ -480,7 +315,7 @@ func TestDownload_MaxDownloadSize(t *testing.T) {
 			// declared — but one that declares none can hand out more than the limit.
 			name:    "a store reporting no length is caught while streaming",
 			maxSize: 5,
-			object:  s3Object{chunked: true},
+			object:  s3test.Object{Chunked: true},
 			wantErr: true,
 		},
 	}
@@ -488,10 +323,10 @@ func TestDownload_MaxDownloadSize(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			object := tt.object
-			if object.body == nil {
-				object.body = content
+			if object.Body == nil {
+				object.Body = content
 			}
-			srv := newFakeS3(t, object)
+			srv := s3test.StartFake(t, object)
 			req := Request{BucketName: "my-bucket", ObjectKey: "my-key"}
 
 			var opts []Option
@@ -533,7 +368,7 @@ func TestDownload_MaxDownloadSize(t *testing.T) {
 
 func TestStream_EmptyObject(t *testing.T) {
 	r := require.New(t)
-	srv := newFakeS3(t, s3Object{body: []byte{}})
+	srv := s3test.StartFake(t, s3test.Object{Body: []byte{}})
 
 	res, written, err := streamFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"})
 	r.NoError(err)
@@ -556,14 +391,14 @@ func TestDownload_CredentialConversionErrorIsWrapped(t *testing.T) {
 func TestBlob_EveryReadRequestsTheObject(t *testing.T) {
 	r := require.New(t)
 	content := []byte("read me twice")
-	srv := newFakeS3(t, s3Object{body: content})
+	srv := s3test.StartFake(t, s3test.Object{Body: content})
 
 	b := blobFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"})
-	r.Empty(srv.recorded(), "creating the blob must not request the object")
+	r.Empty(srv.Recorded(), "creating the blob must not request the object")
 
-	r.Equal(content, readBlob(t, b))
-	r.Equal(content, readBlob(t, b))
-	r.Equal([]string{http.MethodGet, http.MethodGet}, methods(srv.recorded()))
+	r.Equal(content, blobtest.ReadAll(t, b))
+	r.Equal(content, blobtest.ReadAll(t, b))
+	r.Equal([]string{http.MethodGet, http.MethodGet}, methods(srv.Recorded()))
 }
 
 func TestBlob_PinsVersionOfFirstRead(t *testing.T) {
@@ -580,17 +415,17 @@ func TestBlob_PinsVersionOfFirstRead(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
-			srv := newFakeS3(t, s3Object{body: []byte("content"), versionID: tt.versionID})
+			srv := s3test.StartFake(t, s3test.Object{Body: []byte("content"), VersionID: tt.versionID})
 			b := blobFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"})
 
-			readBlob(t, b)
-			readBlob(t, b)
+			blobtest.ReadAll(t, b)
+			blobtest.ReadAll(t, b)
 			r.Equal(int64(len("content")), b.Size(), "the size is learned from the first read")
 
-			requests := srv.recorded()
+			requests := srv.Recorded()
 			r.Len(requests, 2, "size must not need a request of its own after a read")
-			r.Empty(requests[0].versionID)
-			r.Equal(tt.want, requests[1].versionID)
+			r.Empty(requests[0].VersionID)
+			r.Equal(tt.want, requests[1].VersionID)
 		})
 	}
 }
@@ -598,52 +433,52 @@ func TestBlob_PinsVersionOfFirstRead(t *testing.T) {
 func TestBlob_DescribedByHeadBeforeRead(t *testing.T) {
 	r := require.New(t)
 	content := []byte("described")
-	srv := newFakeS3(t, s3Object{body: content, contentType: "text/plain"})
+	srv := s3test.StartFake(t, s3test.Object{Body: content, ContentType: "text/plain"})
 	b := blobFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"})
 
 	r.Equal(int64(len(content)), b.Size())
 	mediaType, known := b.MediaType()
 	r.True(known)
 	r.Equal("text/plain", mediaType)
-	r.Equal([]string{http.MethodHead}, methods(srv.recorded()), "one HeadObject describes the object")
+	r.Equal([]string{http.MethodHead}, methods(srv.Recorded()), "one HeadObject describes the object")
 
-	r.Equal(content, readBlob(t, b))
-	r.Equal([]string{http.MethodHead, http.MethodGet}, methods(srv.recorded()))
+	r.Equal(content, blobtest.ReadAll(t, b))
+	r.Equal([]string{http.MethodHead, http.MethodGet}, methods(srv.Recorded()))
 }
 
 func TestBlob_PinsVersionDescribedByHead(t *testing.T) {
 	r := require.New(t)
-	srv := newFakeS3(t, s3Object{body: []byte("described"), versionID: "v-1"})
+	srv := s3test.StartFake(t, s3test.Object{Body: []byte("described"), VersionID: "v-1"})
 	b := blobFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"})
 
 	r.Equal(int64(len("described")), b.Size())
-	readBlob(t, b)
+	blobtest.ReadAll(t, b)
 
-	requests := srv.recorded()
+	requests := srv.Recorded()
 	r.Equal([]string{http.MethodHead, http.MethodGet}, methods(requests))
-	r.Equal("v-1", requests[1].versionID, "reads serve the version the size describes")
+	r.Equal("v-1", requests[1].VersionID, "reads serve the version the size describes")
 }
 
 func TestBlob_FailedHeadLeavesItUndescribed(t *testing.T) {
 	r := require.New(t)
-	srv := newFakeS3(t, s3Object{errStatus: http.StatusForbidden, errCode: "AccessDenied"})
+	srv := s3test.StartFake(t, s3test.Object{ErrStatus: http.StatusForbidden, ErrCode: "AccessDenied"})
 	b := blobFrom(t, srv, Request{BucketName: "b", ObjectKey: "k"})
 
 	r.Equal(blob.SizeUnknown, b.Size())
 	_, known := b.MediaType()
 	r.False(known)
-	r.Equal([]string{http.MethodHead}, methods(srv.recorded()), "a failed HeadObject is not repeated")
+	r.Equal([]string{http.MethodHead}, methods(srv.Recorded()), "a failed HeadObject is not repeated")
 
 	withType := blobFrom(t, srv, Request{BucketName: "b", ObjectKey: "k", MediaType: "application/custom"})
 	mediaType, known := withType.MediaType()
 	r.True(known)
 	r.Equal("application/custom", mediaType)
-	r.Len(srv.recorded(), 1, "a media type of the request needs no request")
+	r.Len(srv.Recorded(), 1, "a media type of the request needs no request")
 }
 
 func TestBlob_ReadsAreBoundToContext(t *testing.T) {
 	r := require.New(t)
-	srv := newFakeS3(t, s3Object{body: []byte("content")})
+	srv := s3test.StartFake(t, s3test.Object{Body: []byte("content")})
 	ctx, cancel := context.WithCancel(t.Context())
 	b := NewBlob(ctx, at(srv, Request{BucketName: "b", ObjectKey: "k"}), WithCredentials(fakeCredentials()))
 	cancel()

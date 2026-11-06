@@ -3,15 +3,10 @@ package integration_test
 import (
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"testing"
-	"time"
 
-	"github.com/go-git/go-git/v6"
-	"github.com/go-git/go-git/v6/config"
+	git "github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/plumbing"
-	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/stretchr/testify/require"
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
@@ -21,12 +16,14 @@ import (
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	gitaccess "ocm.software/open-component-model/bindings/go/git/spec/access"
 	gitv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	ctfrepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 	"ocm.software/open-component-model/bindings/go/transfer"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
@@ -44,35 +41,7 @@ func newBareGitRepository(t *testing.T) (path, url string) {
 // v1.0.0 on the first, and returns its URL and the first commit.
 func newGitRepository(t *testing.T) (url string, first plumbing.Hash) {
 	t.Helper()
-	r := require.New(t)
-
-	path := t.TempDir()
-	repo, err := git.PlainInit(path, false)
-	r.NoError(err)
-	// go-git reads the global Git config; a host commit.gpgSign must not sign fixtures.
-	cfg, err := repo.Config()
-	r.NoError(err)
-	cfg.Commit.GpgSign = config.OptBoolFalse
-	r.NoError(repo.SetConfig(cfg))
-	r.NoError(repo.Storer.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, "refs/heads/main")))
-
-	tree, err := repo.Worktree()
-	r.NoError(err)
-	for _, content := range []string{"first\n", "second\n"} {
-		r.NoError(os.WriteFile(filepath.Join(path, "README.md"), []byte(content), 0o600))
-		_, err := tree.Add("README.md")
-		r.NoError(err)
-		hash, err := tree.Commit(content, &git.CommitOptions{Author: &object.Signature{
-			Name:  "OCM fixture",
-			Email: "fixture@example.invalid",
-			When:  time.Unix(1700000000, 0).UTC(),
-		}})
-		r.NoError(err)
-		if first.IsZero() {
-			first = hash
-		}
-	}
-	r.NoError(repo.Storer.SetReference(plumbing.NewHashReference("refs/tags/v1.0.0", first)))
+	path, first := testgit.Repository(t, testgit.Options{DefaultBranch: "main", Tags: []string{"v1.0.0"}})
 	return gittest.Serve(t, path), first
 }
 
@@ -166,7 +135,7 @@ func Test_Integration_TransferGit_CTFToOCI(t *testing.T) {
 	r.NoError(graph.Process(ctx))
 
 	// 5. Verify the resource landed in the target as a localBlob.
-	client := createAuthClient(registryAddr, user, password)
+	client := registrytest.AuthClient(registryAddr, user, password)
 	urlRes, err := urlresolver.New(
 		urlresolver.WithBaseURL(registryAddr),
 		urlresolver.WithPlainHTTP(true),
@@ -285,7 +254,7 @@ func Test_Integration_TransferGit_GitUploader(t *testing.T) {
 		urlRes, err := urlresolver.New(
 			urlresolver.WithBaseURL(registryAddr+"/"+subPath),
 			urlresolver.WithPlainHTTP(true),
-			urlresolver.WithBaseClient(createAuthClient(registryAddr, user, password)),
+			urlresolver.WithBaseClient(registrytest.AuthClient(registryAddr, user, password)),
 		)
 		r.NoError(err)
 		targetRepo, err := oci.NewRepository(oci.WithResolver(urlRes), oci.WithTempDir(t.TempDir()))

@@ -20,12 +20,15 @@ import (
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/s3test"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
 const (
@@ -55,13 +58,15 @@ func Test_Integration_ResourceVerification(t *testing.T) {
 
 	k8sClient := startResourceController(t)
 
-	registryAddress := startRegistry(t, ctx)
+	registryAddress := registrytest.Start(t).Address
 	ociDigest := pushArtifact(t, ctx, registryAddress, "verification/artifact", "v1.0.0", []byte("oci artifact content"))
 
-	s3Endpoint := startRustFS(t, ctx)
+	s3Endpoint := "http://" + s3test.Start(t)
 	s3Content := []byte("s3 object content")
 	const s3Bucket, s3Key = "verification", "path/to/object.txt"
-	putS3Object(t, ctx, s3Endpoint, s3Bucket, s3Key, s3Content)
+	s3Client := s3test.Client(t, s3Endpoint)
+	s3test.CreateBucket(t, ctx, s3Client, s3Bucket)
+	s3test.PutObject(t, ctx, s3Client, s3Bucket, s3Key, s3Content)
 
 	wgetContent := []byte("wget file content")
 	chart, err := os.ReadFile(filepath.Join("..", "..", "..", "helm", "testdata", "mychart-0.1.0.tgz"))
@@ -77,7 +82,9 @@ func Test_Integration_ResourceVerification(t *testing.T) {
 	})
 	trustedCAs := certificatePEM(fileServer)
 
-	gitPath, gitCommit := newGitRepository(t, "verification\n")
+	gitPath, gitCommit := testgit.Repository(t, testgit.Options{
+		Bare: true, DefaultBranch: "main", Commits: []testgit.Commit{{Content: "verification\n"}},
+	})
 	gitURL, gitServer := startGitServer(t, gitPath)
 	if gitServer != nil {
 		trustedCAs += certificatePEM(gitServer)
@@ -105,8 +112,8 @@ func Test_Integration_ResourceVerification(t *testing.T) {
 					},
 					"credentials": []any{map[string]any{
 						"type":            "S3Credentials/v1",
-						"accessKeyId":     rustfsAccessKey,
-						"secretAccessKey": rustfsSecretKey,
+						"accessKeyId":     s3test.AccessKey,
+						"secretAccessKey": s3test.SecretKey,
 					}},
 				}},
 			},

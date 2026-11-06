@@ -13,6 +13,7 @@ import (
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	helmv1alpha1 "ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/descriptortest"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -71,8 +72,8 @@ func TestBuildGraphDefinition_Uploader_EmitsHTTPStreaming(t *testing.T) {
 	r := require.New(t)
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{wgetResource("blob", "1.0.0", "https://source.example/artifacts/blob.tar")}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources(wgetResource("blob", "1.0.0", "https://source.example/artifacts/blob.tar")))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -146,7 +147,7 @@ func TestBuildGraphDefinition_RepositoryUploaders(t *testing.T) {
 	buildArtifactory := func(t *testing.T, resource descriptor.Resource, u *transferv1alpha1.ArtifactoryUploaderConfig) (*transformv1alpha1.TransformationGraphDefinition, transformv1alpha1.GenericTransformation) {
 		t.Helper()
 		r := require.New(t)
-		desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{resource}, nil)
+		desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider, descriptortest.WithResources(resource))
 		resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
 		roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
 
@@ -201,7 +202,8 @@ func TestBuildGraphDefinition_RepositoryUploaders(t *testing.T) {
 
 	t.Run("pinned LocalBlob carries digest", func(t *testing.T) {
 		r := require.New(t)
-		desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{localBlobResource("chart", "1.0.0")}, nil)
+		desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+			descriptortest.WithResources(localBlobResource("chart", "1.0.0")))
 		pinnableRepo := &mockPinnableCVRepo{mockCVRepo: mockCVRepo{descriptors: map[string]*descriptor.Descriptor{"ocm.software/test:1.0.0": desc}}}
 		key := "ocm.software/test:1.0.0"
 		resolver := &mockCVRepoResolver{
@@ -252,7 +254,8 @@ func TestBuildGraphDefinition_RepositoryUploaders(t *testing.T) {
 			URL:        "https://nexus.example",
 			Repository: "helm-hosted",
 		}
-		desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{chartResource}, nil)
+		desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+			descriptortest.WithResources(chartResource))
 		resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
 		roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
 
@@ -276,8 +279,8 @@ func TestBuildGraphDefinition_NoUploader_KeepsDownloadWgetPath(t *testing.T) {
 	r := require.New(t)
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{wgetResource("blob", "1.0.0", "https://source.example/artifacts/blob.tar")}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources(wgetResource("blob", "1.0.0", "https://source.example/artifacts/blob.tar")))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -301,8 +304,8 @@ func TestBuildGraphDefinition_UploaderPreservesResourceInStringLiteral(t *testin
 	r := require.New(t)
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{wgetResource("blob", "1.0.0", "https://source.example/artifacts/blob.tar")}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources(wgetResource("blob", "1.0.0", "https://source.example/artifacts/blob.tar")))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -338,7 +341,7 @@ func TestBuildGraphDefinition_UploaderTemplatesHeaders(t *testing.T) {
 		NormalisationAlgorithm: "genericBlobDigest/v1",
 		Value:                  "abc123",
 	}
-	desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{res}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider, descriptortest.WithResources(res))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -400,7 +403,7 @@ func TestBuildGraphDefinition_UploaderUsesLabelValueAndIdentityMatch(t *testing.
 	res := wgetResource("blob", "1.0.0", "https://source.example/artifacts/blob.tar")
 	res.Labels = []descriptor.Label{{Name: "region", Value: []byte(`"eu"`)}}
 	res.ExtraIdentity = runtime.Identity{"tier": "public"}
-	desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{res}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider, descriptortest.WithResources(res))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -443,8 +446,8 @@ func TestBuildGraphDefinition_UploaderMatchesNonWgetSource(t *testing.T) {
 	r := require.New(t)
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{ociResource("image", "1.0.0", "ghcr.io/source/image:1.0.0")}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources(ociResource("image", "1.0.0", "ghcr.io/source/image:1.0.0")))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -485,8 +488,8 @@ func TestBuildGraphDefinition_UploaderLiteralTargetURL(t *testing.T) {
 	r := require.New(t)
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
-	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{wgetResource("blob", "1.0.0", "https://source.example/artifacts/blob.tar")}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources(wgetResource("blob", "1.0.0", "https://source.example/artifacts/blob.tar")))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -519,8 +522,8 @@ func TestBuildGraphDefinition_DeterministicOrder(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	for _, n := range names {
 		key := n + ":1.0.0"
-		d := testDescriptor(n, "1.0.0",
-			[]descriptor.Resource{wgetResource("blob", "1.0.0", "https://source.example/"+n+"/blob.tar")}, nil)
+		d := descriptortest.New(n, "1.0.0", testProvider,
+			descriptortest.WithResources(wgetResource("blob", "1.0.0", "https://source.example/"+n+"/blob.tar")))
 		multiEntries[key] = struct {
 			spec runtime.Typed
 			desc *descriptor.Descriptor
@@ -589,7 +592,7 @@ func TestResourceNodePath_ExtraIdentitySelectorEvaluatesOverMixedResources(t *te
 	blob := wgetResource("blob", "1.0.0", "https://source.example/blob.tar")
 	blob.ExtraIdentity = runtime.Identity{"tier": "public"}
 
-	desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{plain, blob}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider, descriptortest.WithResources(plain, blob))
 	v2desc, err := descriptor.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), desc)
 	r.NoError(err)
 

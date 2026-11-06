@@ -2,15 +2,9 @@ package repository
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/binary"
 	"errors"
-	"hash/crc32"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 
 	_ "crypto/sha512"
@@ -20,6 +14,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/s3test"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/internal/download"
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
@@ -28,65 +23,7 @@ import (
 	identityv1 "ocm.software/open-component-model/bindings/go/s3/spec/identity/v1"
 )
 
-// fakeS3 is an httptest server answering GetObject with a canned object, so that the
-// repository is exercised over the real AWS SDK rather than a stubbed client. It serves
-// only a body and a version; the rest of the response is covered in the download package.
-type fakeS3 struct {
-	*httptest.Server
-
-	body      []byte
-	versionID string
-
-	mu       sync.Mutex
-	requests []s3Request
-}
-
-// s3Request is one request a [fakeS3] answered.
-type s3Request struct {
-	// path is the request path, which is /bucket/key for path-style addressing.
-	path string
-	// versionID is the versionId query parameter, empty when none was sent.
-	versionID string
-}
-
-// newFakeS3 starts a server serving body, reporting versionID as the object version
-// when it is not empty, and stops it when the test ends.
-func newFakeS3(t *testing.T, body []byte, versionID string) *fakeS3 {
-	t.Helper()
-
-	f := &fakeS3{body: body, versionID: versionID}
-	f.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		f.mu.Lock()
-		f.requests = append(f.requests, s3Request{
-			path:      r.URL.Path,
-			versionID: r.URL.Query().Get("versionId"),
-		})
-		f.mu.Unlock()
-
-		if f.versionID != "" {
-			w.Header().Set("X-Amz-Version-Id", f.versionID)
-		}
-		// Real S3 reports a checksum, and the SDK warns about every response carrying none.
-		sum := make([]byte, 4)
-		binary.BigEndian.PutUint32(sum, crc32.ChecksumIEEE(f.body))
-		w.Header().Set("X-Amz-Checksum-Crc32", base64.StdEncoding.EncodeToString(sum))
-
-		_, _ = w.Write(f.body)
-	}))
-	t.Cleanup(f.Close)
-
-	return f
-}
-
-// recorded returns the requests the server answered, in the order it answered them.
-func (f *fakeS3) recorded() []s3Request {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	return append([]s3Request(nil), f.requests...)
-}
-
-// fakeCredentials are static credentials for [fakeS3]. Their value is irrelevant, since
+// fakeCredentials are static credentials for [s3test.Fake]. Their value is irrelevant, since
 // the fake verifies no signature, but supplying them keeps the AWS default credential
 // chain and its instance-metadata lookups out of the tests.
 func fakeCredentials() *credv1.S3Credentials {
@@ -106,7 +43,7 @@ func s3Resource(spec *v2.S3) *descriptor.Resource {
 
 // servedBy points spec at srv. The fake serves no bucket subdomains, so the access is
 // addressed path-style.
-func servedBy(srv *fakeS3, spec *v2.S3) *v2.S3 {
+func servedBy(srv *s3test.Fake, spec *v2.S3) *v2.S3 {
 	spec.Endpoint = srv.URL
 	spec.UsePathStyle = true
 
@@ -173,14 +110,14 @@ func read(t *testing.T, b blob.ReadOnlyBlob) ([]byte, error) {
 func Test_DownloadResource(t *testing.T) {
 	r := require.New(t)
 	content := []byte("hello from s3")
-	srv := newFakeS3(t, content, "")
+	srv := s3test.StartFake(t, s3test.Object{Body: content})
 	repo := NewResourceRepository()
 
 	b, err := repo.DownloadResource(t.Context(),
 		s3Resource(servedBy(srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt", Version: "v-1"})),
 		fakeCredentials())
 	r.NoError(err)
-	r.Empty(srv.recorded(), "the object is requested when the blob is read")
+	r.Empty(srv.Recorded(), "the object is requested when the blob is read")
 
 	for range 2 {
 		got, err := read(t, b)
@@ -188,11 +125,11 @@ func Test_DownloadResource(t *testing.T) {
 		r.Equal(content, got)
 	}
 
-	requests := srv.recorded()
+	requests := srv.Recorded()
 	r.Len(requests, 2, "every read requests the object")
 	for _, request := range requests {
-		r.Equal("/my-bucket/path/blob.txt", request.path)
-		r.Equal("v-1", request.versionID)
+		r.Equal("/my-bucket/path/blob.txt", request.Path)
+		r.Equal("v-1", request.VersionID)
 	}
 }
 
@@ -200,9 +137,9 @@ func Test_DownloadResource_DigestVerification(t *testing.T) {
 	content := []byte("hello from s3")
 
 	// downloadWith serves body and downloads it for a resource carrying dig.
-	downloadWith := func(t *testing.T, body []byte, dig *descriptor.Digest) (*fakeS3, blob.ReadOnlyBlob, error) {
+	downloadWith := func(t *testing.T, body []byte, dig *descriptor.Digest) (*s3test.Fake, blob.ReadOnlyBlob, error) {
 		t.Helper()
-		srv := newFakeS3(t, body, "")
+		srv := s3test.StartFake(t, s3test.Object{Body: body})
 		res := s3Resource(servedBy(srv, &v2.S3{BucketName: "b", ObjectKey: "k"}))
 		res.Digest = dig
 
@@ -269,13 +206,13 @@ func Test_DownloadResource_DigestVerification(t *testing.T) {
 			Value:                  godigest.FromBytes(content).Encoded(),
 		})
 		r.ErrorContains(err, "unsupported hash algorithm")
-		r.Empty(srv.recorded(), "a refused object must not be requested")
+		r.Empty(srv.Recorded(), "a refused object must not be requested")
 	})
 }
 
 func Test_ProcessResourceDigest(t *testing.T) {
 	content := []byte("digest me")
-	srv := newFakeS3(t, content, "")
+	srv := s3test.StartFake(t, s3test.Object{Body: content})
 	repo := NewResourceRepository()
 
 	res, err := repo.ProcessResourceDigest(context.Background(),
@@ -329,7 +266,7 @@ func Test_ProcessResourceDigest_VerifiesLeniently(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			srv := newFakeS3(t, content, "")
+			srv := s3test.StartFake(t, s3test.Object{Body: content})
 			repo := NewResourceRepository()
 
 			resource := s3Resource(servedBy(srv, &v2.S3{BucketName: "b", ObjectKey: "k"}))
@@ -420,7 +357,7 @@ func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			srv := newFakeS3(t, []byte("digest me"), tt.versionID)
+			srv := s3test.StartFake(t, s3test.Object{Body: []byte("digest me"), VersionID: tt.versionID})
 			repo := NewResourceRepository()
 
 			resource := s3Resource(servedBy(srv, &v2.S3{BucketName: "b", ObjectKey: "k", Version: tt.specVersion}))

@@ -37,18 +37,12 @@ func TestConstructWithSourceAndResourceAndReferences(t *testing.T) {
 
 	// Mock source input method - returns blob data instead of processed source
 	mockSourceInput := &mockSourceInputMethod{
-		processedBlob: &mockBlob{
-			mediaType: "application/octet-stream",
-			data:      []byte("test source data"),
-		},
+		processedBlob: inmemory.New(bytes.NewReader([]byte("test source data")), inmemory.WithMediaType("application/octet-stream")),
 	}
 
 	// Mock resource input method - returns blob data instead of processed resource
 	mockResourceInput := &mockInputMethod{
-		processedBlob: &mockBlob{
-			mediaType: "application/json",
-			data:      []byte(`{"test": "resource"}`),
-		},
+		processedBlob: inmemory.New(bytes.NewReader([]byte(`{"test": "resource"}`)), inmemory.WithMediaType("application/json")),
 	}
 
 	sourceProvider := &mockSourceInputMethodProvider{
@@ -181,10 +175,7 @@ components:
 	}
 
 	// Add local resource to the external repository first (required by OCI repository)
-	externalResourceData := &mockBlob{
-		mediaType: "application/json",
-		data:      []byte(`{"external": "resource data"}`),
-	}
+	externalResourceData := inmemory.New(bytes.NewReader([]byte(`{"external": "resource data"}`)), inmemory.WithMediaType("application/json"))
 
 	// Add the local resource BEFORE adding the component version
 	// The AddLocalResource call updates the resource descriptor with storage information
@@ -891,7 +882,7 @@ func TestConstruct_InvalidComponentVersionFailsBeforeUpload(t *testing.T) {
 	resourceProvider := &mockInputMethodProvider{
 		methods: map[runtime.Type]ResourceInputMethod{
 			runtime.NewVersionedType("mock", "v1"): &mockInputMethod{
-				processedBlob: &mockBlob{mediaType: "application/json", data: []byte(`{"test":"resource"}`)},
+				processedBlob: inmemory.New(bytes.NewReader([]byte(`{"test":"resource"}`)), inmemory.WithMediaType("application/json")),
 			},
 		},
 	}
@@ -938,7 +929,7 @@ func TestConstruct_InvalidResourceVersionRejected(t *testing.T) {
 	resourceProvider := &mockInputMethodProvider{
 		methods: map[runtime.Type]ResourceInputMethod{
 			runtime.NewVersionedType("mock", "v1"): &mockInputMethod{
-				processedBlob: &mockBlob{mediaType: "application/json", data: []byte(`{"test":"resource"}`)},
+				processedBlob: inmemory.New(bytes.NewReader([]byte(`{"test":"resource"}`)), inmemory.WithMediaType("application/json")),
 			},
 		},
 	}

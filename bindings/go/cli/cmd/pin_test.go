@@ -17,6 +17,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/ctf"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	v4alpha1 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/pkitest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 )
@@ -301,8 +302,8 @@ func Test_Pinned_Reference(t *testing.T) {
 func pinSigningConfig(t *testing.T) string {
 	t.Helper()
 	r := require.New(t)
-	key := mustKey(t)
-	privateKey, publicKey := writeKeyAndChain(t, t.TempDir(), key, mustSelfSigned(t, "CN=signer", key))
+	key := pkitest.RSAKey(t)
+	privateKey, publicKey := pkitest.WriteKeyAndChain(t, t.TempDir(), key, pkitest.SelfSigned(t, "CN=signer", key))
 	config := filepath.Join(t.TempDir(), "ocm-config.yaml")
 	r.NoError(os.WriteFile(config, fmt.Appendf(nil, `
 type: generic.config.ocm.software/v1

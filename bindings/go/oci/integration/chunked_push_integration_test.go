@@ -19,6 +19,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	"ocm.software/open-component-model/bindings/go/oci/internal/pack"
@@ -41,7 +42,7 @@ func Test_Integration_OCIRepository_ChunkedPush(t *testing.T) {
 	ctx := t.Context()
 
 	password := generateRandomPassword(t, passwordLength)
-	htpasswd := generateHtpasswd(t, testUsername, password)
+	htpasswd := registrytest.Htpasswd(t, testUsername, password)
 	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
 		registry.WithHtpasswd(htpasswd),
 		testcontainers.WithEnv(map[string]string{"REGISTRY_VALIDATION_DISABLED": "true"}),
@@ -58,7 +59,7 @@ func Test_Integration_OCIRepository_ChunkedPush(t *testing.T) {
 	resolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(address),
 		urlresolver.WithPlainHTTP(true),
-		urlresolver.WithBaseClient(createAuthClient(address, testUsername, password)),
+		urlresolver.WithBaseClient(registrytest.AuthClient(address, testUsername, password)),
 		urlresolver.WithChunkedPush(chunkSize, 1),
 	)
 	r.NoError(err)
@@ -191,7 +192,7 @@ func Test_Integration_OCIRepository_StreamingDoesNotBuffer(t *testing.T) {
 	ctx := t.Context()
 
 	password := generateRandomPassword(t, passwordLength)
-	htpasswd := generateHtpasswd(t, testUsername, password)
+	htpasswd := registrytest.Htpasswd(t, testUsername, password)
 	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
 		registry.WithHtpasswd(htpasswd),
 		testcontainers.WithEnv(map[string]string{"REGISTRY_VALIDATION_DISABLED": "true"}),
@@ -204,7 +205,7 @@ func Test_Integration_OCIRepository_StreamingDoesNotBuffer(t *testing.T) {
 	r.NoError(err)
 
 	// Auth client whose transport signals the first PATCH.
-	authClient := createAuthClient(address, testUsername, password)
+	authClient := registrytest.AuthClient(address, testUsername, password)
 	base := http.DefaultTransport
 	if authClient.Client != nil && authClient.Client.Transport != nil {
 		base = authClient.Client.Transport
@@ -312,7 +313,7 @@ func Test_Integration_OCIRepository_AddComponentVersion_Streaming(t *testing.T) 
 	ctx := t.Context()
 
 	password := generateRandomPassword(t, passwordLength)
-	htpasswd := generateHtpasswd(t, testUsername, password)
+	htpasswd := registrytest.Htpasswd(t, testUsername, password)
 	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
 		registry.WithHtpasswd(htpasswd),
 		testcontainers.WithEnv(map[string]string{"REGISTRY_VALIDATION_DISABLED": "true"}),
@@ -331,7 +332,7 @@ func Test_Integration_OCIRepository_AddComponentVersion_Streaming(t *testing.T) 
 	resolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(address),
 		urlresolver.WithPlainHTTP(true),
-		urlresolver.WithBaseClient(createAuthClient(address, testUsername, password)),
+		urlresolver.WithBaseClient(registrytest.AuthClient(address, testUsername, password)),
 		urlresolver.WithChunkedPush(1024 /*1 KiB chunks*/, 1 /*threshold*/),
 	)
 	r.NoError(err)

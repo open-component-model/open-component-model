@@ -28,13 +28,11 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/log"
 	"github.com/testcontainers/testcontainers-go/modules/registry"
-	"golang.org/x/crypto/bcrypt"
 	"oras.land/oras-go/v2/content"
 	orasoci "oras.land/oras-go/v2/content/oci"
 	"oras.land/oras-go/v2/errdef"
 	orasregistry "oras.land/oras-go/v2/registry"
 	"oras.land/oras-go/v2/registry/remote/auth"
-	"oras.land/oras-go/v2/registry/remote/retry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -47,6 +45,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/ocitest"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
@@ -92,7 +92,7 @@ func Test_Integration_OCIRepository_BackwardsCompatibility(t *testing.T) {
 
 	resolver, err := urlresolver.New(urlresolver.WithBaseURL(reg))
 	r.NoError(err)
-	resolver.SetClient(createAuthClient(reg, user, password))
+	resolver.SetClient(registrytest.AuthClient(reg, user, password))
 
 	scheme := ocmruntime.NewScheme()
 	ocmoci.MustAddToScheme(scheme)
@@ -177,7 +177,7 @@ func Test_Integration_HealthCheck_Authentication(t *testing.T) {
 
 		resolver, err := urlresolver.New(urlresolver.WithBaseURL(reg))
 		r.NoError(err)
-		resolver.SetClient(createAuthClient(reg, user, password))
+		resolver.SetClient(registrytest.AuthClient(reg, user, password))
 
 		repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))
 		r.NoError(err)
@@ -205,7 +205,7 @@ func Test_Integration_HealthCheck_Authentication(t *testing.T) {
 
 		resolver, err := urlresolver.New(urlresolver.WithBaseURL(reg))
 		r.NoError(err)
-		resolver.SetClient(createAuthClient(reg, user, password))
+		resolver.SetClient(registrytest.AuthClient(reg, user, password))
 
 		// Direct resolver ping should succeed with valid credentials
 		err = resolver.Ping(t.Context())
@@ -233,7 +233,7 @@ func Test_Integration_OCIRepository(t *testing.T) {
 
 	// Setup credentials and htpasswd
 	password := generateRandomPassword(t, passwordLength)
-	htpasswd := generateHtpasswd(t, testUsername, password)
+	htpasswd := registrytest.Htpasswd(t, testUsername, password)
 
 	// Start containerized registry
 	t.Logf("Launching test registry (%s)...", distributionRegistryImage)
@@ -261,7 +261,7 @@ func Test_Integration_OCIRepository(t *testing.T) {
 			return fmt.Sprintf("%s/%s", registryAddress, ref)
 		}
 
-		client := createAuthClient(registryAddress, testUsername, password)
+		client := registrytest.AuthClient(registryAddress, testUsername, password)
 
 		resolver, err := urlresolver.New(
 			urlresolver.WithBaseURL(registryAddress),
@@ -465,7 +465,7 @@ func Test_Integration_Transformers(t *testing.T) {
 
 	// Setup credentials and htpasswd
 	password := generateRandomPassword(t, passwordLength)
-	htpasswd := generateHtpasswd(t, testUsername, password)
+	htpasswd := registrytest.Htpasswd(t, testUsername, password)
 
 	// Start containerized registry
 	t.Logf("Launching test registry (%s)...", distributionRegistryImage)
@@ -518,7 +518,7 @@ func uploadDownloadLocalResourceOCILayout(t *testing.T, repo *oci.Repository, co
 
 	originalData := []byte("foobar")
 
-	data, _ := createSingleLayerOCIImage(t, originalData)
+	data, _ := ocitest.SingleLayerImage(t, originalData)
 
 	blob := inmemory.New(bytes.NewReader(data))
 
@@ -593,7 +593,7 @@ func uploadDownloadBarebonesOCIImage(t *testing.T, repo *oci.Repository, from, t
 
 	originalData := []byte("foobar")
 
-	data, access := createSingleLayerOCIImage(t, originalData, from)
+	data, access := ocitest.SingleLayerImage(t, originalData, from)
 
 	blob := inmemory.New(bytes.NewReader(data))
 
@@ -670,7 +670,7 @@ func processResourceDigest(t *testing.T, repo *oci.Repository, from, to string) 
 
 	originalData := []byte("foobar")
 
-	data, access := createSingleLayerOCIImage(t, originalData, from)
+	data, access := ocitest.SingleLayerImage(t, originalData, from)
 
 	blob := inmemory.New(bytes.NewReader(data))
 
@@ -757,30 +757,6 @@ func testResolverConnectivity(t *testing.T, address, reference string, client *a
 	r.ErrorContains(err, fmt.Sprintf("%s: not found", reference))
 }
 
-func createAuthClient(address, username, password string) *auth.Client {
-	url, err := ocmruntime.ParseURLAndAllowNoScheme(address)
-	if err != nil {
-		panic(fmt.Sprintf("invalid address %q: %v", address, err))
-	}
-	return &auth.Client{
-		Client: retry.DefaultClient,
-		Header: http.Header{
-			"User-Agent": []string{userAgent},
-		},
-		Credential: auth.StaticCredential(url.Host, auth.Credential{
-			Username: username,
-			Password: password,
-		}),
-	}
-}
-
-func generateHtpasswd(t *testing.T, username, password string) string {
-	t.Helper()
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	require.NoError(t, err)
-	return fmt.Sprintf("%s:%s", username, hashedPassword)
-}
-
 func generateRandomPassword(t *testing.T, length int) string {
 	t.Helper()
 	password := make([]byte, length)
@@ -790,64 +766,6 @@ func generateRandomPassword(t *testing.T, length int) string {
 		password[i] = charset[randomIndex.Int64()]
 	}
 	return string(password)
-}
-
-func createSingleLayerOCIImage(t *testing.T, data []byte, ref ...string) ([]byte, *v1.OCIImage) {
-	t.Helper()
-	r := require.New(t)
-	var buf bytes.Buffer
-	w, err := tar.NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
-	r.NoError(err)
-
-	desc := ociImageSpecV1.Descriptor{}
-	desc.Digest = digest.FromBytes(data)
-	desc.Size = int64(len(data))
-	desc.MediaType = ociImageSpecV1.MediaTypeImageLayer
-
-	r.NoError(w.Push(t.Context(), desc, bytes.NewReader(data)))
-
-	configRaw, err := json.Marshal(map[string]string{})
-	r.NoError(err)
-	configDesc := ociImageSpecV1.Descriptor{
-		Digest:    digest.FromBytes(configRaw),
-		Size:      int64(len(configRaw)),
-		MediaType: "application/json",
-	}
-	r.NoError(w.Push(t.Context(), configDesc, bytes.NewReader(configRaw)))
-
-	manifest := ociImageSpecV1.Manifest{
-		Versioned: specs.Versioned{SchemaVersion: 2},
-		MediaType: ociImageSpecV1.MediaTypeImageManifest,
-		Config:    configDesc,
-		Layers: []ociImageSpecV1.Descriptor{
-			desc,
-		},
-	}
-	manifestRaw, err := json.Marshal(manifest)
-	r.NoError(err)
-
-	manifestDesc := ociImageSpecV1.Descriptor{
-		Digest:    digest.FromBytes(manifestRaw),
-		Size:      int64(len(manifestRaw)),
-		MediaType: ociImageSpecV1.MediaTypeImageManifest,
-	}
-	r.NoError(w.Push(t.Context(), manifestDesc, bytes.NewReader(manifestRaw)))
-
-	for _, ref := range ref {
-		r.NoError(w.Tag(t.Context(), manifestDesc, ref))
-	}
-
-	r.NoError(w.Close())
-
-	var access *v1.OCIImage
-
-	if len(ref) > 0 {
-		access = &v1.OCIImage{
-			ImageReference: ref[0],
-		}
-	}
-
-	return buf.Bytes(), access
 }
 
 func uploadDownloadLocalResource(t *testing.T, repo repository.ComponentVersionRepository, name, version string) {
@@ -1063,7 +981,7 @@ func transformGetOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 
 	originalData := []byte("foobar")
 
-	data, access := createSingleLayerOCIImage(t, originalData, from)
+	data, access := ocitest.SingleLayerImage(t, originalData, from)
 	r.NotNil(access)
 
 	access.Type = ocmruntime.Type{
@@ -1159,7 +1077,7 @@ func transformAddOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 
 	originalData := []byte("foobar-add")
 
-	data, access := createSingleLayerOCIImage(t, originalData, "ghcr.io/test-add:v1.0.0")
+	data, access := ocitest.SingleLayerImage(t, originalData, "ghcr.io/test-add:v1.0.0")
 	r.NotNil(access)
 
 	access.Type = ocmruntime.Type{
@@ -1610,7 +1528,7 @@ func startOwnershipRegistry(t *testing.T, ctx context.Context) (*urlresolver.Cac
 	r := require.New(t)
 
 	password := generateRandomPassword(t, passwordLength)
-	htpasswd := generateHtpasswd(t, testUsername, password)
+	htpasswd := registrytest.Htpasswd(t, testUsername, password)
 	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
 		registry.WithHtpasswd(htpasswd),
 		testcontainers.WithEnv(map[string]string{
@@ -1629,7 +1547,7 @@ func startOwnershipRegistry(t *testing.T, ctx context.Context) (*urlresolver.Cac
 	resolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(address),
 		urlresolver.WithPlainHTTP(true),
-		urlresolver.WithBaseClient(createAuthClient(address, testUsername, password)),
+		urlresolver.WithBaseClient(registrytest.AuthClient(address, testUsername, password)),
 	)
 	r.NoError(err)
 
@@ -1656,7 +1574,7 @@ func newCTFOwnershipRepo(t *testing.T) (*ocictf.Store, *oci.Repository) {
 func pushOwnershipByReferenceImage(t *testing.T, ctx context.Context, repo *oci.Repository, imageRef string, payload []byte) string {
 	t.Helper()
 	r := require.New(t)
-	data, access := createSingleLayerOCIImage(t, payload, imageRef)
+	data, access := ocitest.SingleLayerImage(t, payload, imageRef)
 	uploaded, err := repo.UploadResource(ctx, &descriptor.Resource{
 		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "image", Version: "v1.0.0"}},
 		Type:        "ociArtifact",
@@ -1686,7 +1604,7 @@ func byReferenceResource(name, version, imageRef string) *descriptor.Resource {
 func addByValueOwnedResource(t *testing.T, ctx context.Context, resolver oci.Resolver, repo *oci.Repository, component, version, resourceName string, payload []byte) (*descriptor.Resource, string) {
 	t.Helper()
 	r := require.New(t)
-	data, _ := createSingleLayerOCIImage(t, payload)
+	data, _ := ocitest.SingleLayerImage(t, payload)
 	res, err := repo.AddLocalResource(ctx, component, version, &descriptor.Resource{
 		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: resourceName, Version: version}},
 		Type:        "ociArtifact",
@@ -1736,30 +1654,11 @@ func transferByReferenceResourceStream(t *testing.T, ctx context.Context, src, d
 	return uploaded.Access.(*v1.OCIImage).ImageReference
 }
 
-// listOwnershipReferrers walks the OCI Referrers API for the subject
-// identified by reference (a full OCI reference, by tag or digest) and
-// returns every referrer carrying [annotations.OwnershipArtifactType].
-func listOwnershipReferrers(t *testing.T, ctx context.Context, resolver oci.Resolver, reference string) []ociImageSpecV1.Descriptor {
-	t.Helper()
-	r := require.New(t)
-	store, err := resolver.StoreForReference(ctx, reference)
-	r.NoError(err)
-	graphStore, ok := store.(content.ReadOnlyGraphStorage)
-	r.Truef(ok, "store %T must implement content.ReadOnlyGraphStorage for referrers discovery", store)
-	ref, err := looseref.ParseReference(reference)
-	r.NoError(err)
-	subject, err := store.Resolve(ctx, ref.ReferenceOrTag())
-	r.NoError(err)
-	refs, err := orasregistry.Referrers(ctx, graphStore, subject, annotations.OwnershipArtifactType)
-	r.NoError(err)
-	return refs
-}
-
 // assertOwnershipReferrerCount asserts that exactly want ownership referrers
 // (artifact type [annotations.OwnershipArtifactType]) are indexed for subject.
 func assertOwnershipReferrerCount(t *testing.T, ctx context.Context, resolver oci.Resolver, subject string, want int) {
 	t.Helper()
-	got := listOwnershipReferrers(t, ctx, resolver, subject)
+	got := ocitest.OwnershipReferrers(t, ctx, resolver, subject)
 	require.Lenf(t, got, want, "subject %q should have %d ownership referrers, got %d", subject, want, len(got))
 }
 
@@ -1770,7 +1669,7 @@ func assertOwnershipReferrerCount(t *testing.T, ctx context.Context, resolver oc
 func assertOwnershipReferrerPresent(t *testing.T, ctx context.Context, resolver oci.Resolver, subjectRef, component, version, resourceName string) {
 	t.Helper()
 	r := require.New(t)
-	for _, ref := range listOwnershipReferrers(t, ctx, resolver, subjectRef) {
+	for _, ref := range ocitest.OwnershipReferrers(t, ctx, resolver, subjectRef) {
 		if ref.Annotations[annotations.OwnershipComponentName] != component {
 			continue
 		}
@@ -1797,7 +1696,7 @@ func assertOwnershipReferrerPresent(t *testing.T, ctx context.Context, resolver 
 func assertOwnershipReferrerAnnotations(t *testing.T, ctx context.Context, resolver oci.Resolver, subjectRef, component, version, resourceName string) {
 	t.Helper()
 	r := require.New(t)
-	referrers := listOwnershipReferrers(t, ctx, resolver, subjectRef)
+	referrers := ocitest.OwnershipReferrers(t, ctx, resolver, subjectRef)
 	r.NotEmpty(referrers, "subject %q must carry an ownership referrer", subjectRef)
 	ref := referrers[0]
 
@@ -1835,7 +1734,7 @@ func Test_Integration_OCIImageLayer(t *testing.T) {
 	ctx := t.Context()
 
 	password := generateRandomPassword(t, passwordLength)
-	htpasswd := generateHtpasswd(t, testUsername, password)
+	htpasswd := registrytest.Htpasswd(t, testUsername, password)
 
 	t.Logf("Launching test registry (%s)...", distributionRegistryImage)
 	registryContainer, err := registry.Run(ctx, distributionRegistryImage,
@@ -1855,7 +1754,7 @@ func Test_Integration_OCIImageLayer(t *testing.T) {
 	registryAddress, err := registryContainer.HostAddress(ctx)
 	r.NoError(err)
 
-	client := createAuthClient(registryAddress, testUsername, password)
+	client := registrytest.AuthClient(registryAddress, testUsername, password)
 	resolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(registryAddress),
 		urlresolver.WithPlainHTTP(true),
@@ -1872,7 +1771,7 @@ func Test_Integration_OCIImageLayer(t *testing.T) {
 	layerDigest := digest.FromBytes(layerData)
 	imageReference := fmt.Sprintf("%s/layer-test:v1.0.0", registryAddress)
 
-	layoutData, _ := createSingleLayerOCIImage(t, layerData, "ghcr.io/test:v1.0.0")
+	layoutData, _ := ocitest.SingleLayerImage(t, layerData, "ghcr.io/test:v1.0.0")
 	_, err = repo.UploadResource(ctx, &descriptor.Resource{
 		ElementMeta: descriptor.ElementMeta{
 			ObjectMeta: descriptor.ObjectMeta{Name: "carrier", Version: "v1.0.0"},

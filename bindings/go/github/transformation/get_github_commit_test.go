@@ -1,12 +1,7 @@
 package transformation
 
 import (
-	"archive/tar"
-	"bytes"
-	"compress/gzip"
 	"context"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,42 +17,9 @@ import (
 	accessv1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	credsv1 "ocm.software/open-component-model/bindings/go/github/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/github/transformation/spec/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/githubtest"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
-
-const testCommit = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
-
-func gzippedTar(t *testing.T, name, content string) []byte {
-	t.Helper()
-	var buf bytes.Buffer
-	gz := gzip.NewWriter(&buf)
-	tw := tar.NewWriter(gz)
-	require.NoError(t, tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(content)), Typeflag: tar.TypeReg}))
-	_, err := tw.Write([]byte(content))
-	require.NoError(t, err)
-	require.NoError(t, tw.Close())
-	require.NoError(t, gz.Close())
-	return buf.Bytes()
-}
-
-// mockGitHub emulates the GitHub archive API and returns its base URL plus the
-// exact archive bytes served.
-func mockGitHub(t *testing.T) (baseURL string, payload []byte) {
-	t.Helper()
-	payload = gzippedTar(t, "octocat-Hello-World-"+testCommit+"/README", "hello world")
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.HasSuffix(r.URL.Path, "/repos/octocat/Hello-World/tarball/"+testCommit):
-			http.Redirect(w, r, "http://"+r.Host+"/codeload", http.StatusFound)
-		case r.URL.Path == "/codeload":
-			_, _ = w.Write(payload)
-		default:
-			http.Error(w, "unexpected path "+r.URL.Path, http.StatusNotFound)
-		}
-	}))
-	t.Cleanup(server.Close)
-	return server.URL, payload
-}
 
 func githubV2Resource(t *testing.T, repoURL, commit string) *v2.Resource {
 	t.Helper()
@@ -77,7 +39,7 @@ func githubV2Resource(t *testing.T, repoURL, commit string) *v2.Resource {
 }
 
 func TestGetGitHubCommit_Transform(t *testing.T) {
-	baseURL, payload := mockGitHub(t)
+	srv := githubtest.Start(t)
 
 	transformer := &GetGitHubCommit{
 		Scheme:             v1alpha1.Scheme,
@@ -89,7 +51,7 @@ func TestGetGitHubCommit_Transform(t *testing.T) {
 		Type: v1alpha1.GetGitHubCommitV1alpha1,
 		ID:   "get-github-commit",
 		Spec: &v1alpha1.GetGitHubCommitSpec{
-			Resource:   githubV2Resource(t, baseURL+"/octocat/Hello-World", testCommit),
+			Resource:   githubV2Resource(t, srv.RepoURL, githubtest.Commit),
 			OutputPath: outDir,
 		},
 	}
@@ -108,7 +70,7 @@ func TestGetGitHubCommit_Transform(t *testing.T) {
 
 	written, err := os.ReadFile(contentPath)
 	require.NoError(t, err)
-	assert.Equal(t, payload, written, "buffered file must be the exact archive GitHub served")
+	assert.Equal(t, srv.Payload, written, "buffered file must be the exact archive GitHub served")
 
 	// The output resource is what the Add node's digest propagation reads, so
 	// the full spec resource must survive the scheme round-trip intact.
@@ -119,7 +81,7 @@ func TestGetGitHubCommit_Transform(t *testing.T) {
 // download does not leave the buffered output file behind: the graph's cleanup
 // node never sees a file that did not reach a consuming node's spec.
 func TestGetGitHubCommit_Transform_RemovesOutputOnFailure(t *testing.T) {
-	baseURL, _ := mockGitHub(t)
+	srv := githubtest.Start(t)
 	outDir := t.TempDir()
 
 	transformer := &GetGitHubCommit{
@@ -127,12 +89,12 @@ func TestGetGitHubCommit_Transform_RemovesOutputOnFailure(t *testing.T) {
 		ResourceRepository: resource.NewResourceRepository(),
 	}
 
-	// The mock only serves testCommit, so any other commit 404s the archive link.
+	// The mock only serves githubtest.Commit, so any other commit 404s the archive link.
 	_, err := transformer.Transform(t.Context(), &v1alpha1.GetGitHubCommit{
 		Type: v1alpha1.GetGitHubCommitV1alpha1,
 		ID:   "get-github-commit",
 		Spec: &v1alpha1.GetGitHubCommitSpec{
-			Resource:   githubV2Resource(t, baseURL+"/octocat/Hello-World", strings.Repeat("a", 40)),
+			Resource:   githubV2Resource(t, srv.RepoURL, strings.Repeat("a", 40)),
 			OutputPath: outDir,
 		},
 	})
@@ -160,18 +122,18 @@ func (s *stubResolver) Resolve(_ context.Context, _ runtime.Identity) (runtime.T
 // ErrNotFound downgrades to an anonymous download, any other resolver error
 // fails the transform, and resolved credentials reach the download as a token.
 func TestGetGitHubCommit_Transform_ResolveCredentials(t *testing.T) {
-	step := func(baseURL string) *v1alpha1.GetGitHubCommit {
+	step := func(repoURL string) *v1alpha1.GetGitHubCommit {
 		return &v1alpha1.GetGitHubCommit{
 			Type: v1alpha1.GetGitHubCommitV1alpha1,
 			ID:   "get-github-commit",
 			Spec: &v1alpha1.GetGitHubCommitSpec{
-				Resource: githubV2Resource(t, baseURL+"/octocat/Hello-World", testCommit),
+				Resource: githubV2Resource(t, repoURL, githubtest.Commit),
 			},
 		}
 	}
 
 	t.Run("ErrNotFound means anonymous", func(t *testing.T) {
-		baseURL, _ := mockGitHub(t)
+		srv := githubtest.Start(t)
 		resolver := &stubResolver{err: credentials.ErrNotFound}
 		transformer := &GetGitHubCommit{
 			Scheme:             v1alpha1.Scheme,
@@ -179,7 +141,7 @@ func TestGetGitHubCommit_Transform_ResolveCredentials(t *testing.T) {
 			CredentialProvider: resolver,
 		}
 
-		result, err := transformer.Transform(t.Context(), step(baseURL))
+		result, err := transformer.Transform(t.Context(), step(srv.RepoURL))
 		require.NoError(t, err, "missing credentials must downgrade to an anonymous download")
 		require.Equal(t, 1, resolver.calls)
 
@@ -189,32 +151,19 @@ func TestGetGitHubCommit_Transform_ResolveCredentials(t *testing.T) {
 	})
 
 	t.Run("other resolver errors fail the transform", func(t *testing.T) {
-		baseURL, _ := mockGitHub(t)
+		srv := githubtest.Start(t)
 		transformer := &GetGitHubCommit{
 			Scheme:             v1alpha1.Scheme,
 			ResourceRepository: resource.NewResourceRepository(),
 			CredentialProvider: &stubResolver{err: assert.AnError},
 		}
 
-		_, err := transformer.Transform(t.Context(), step(baseURL))
+		_, err := transformer.Transform(t.Context(), step(srv.RepoURL))
 		require.ErrorIs(t, err, assert.AnError)
 	})
 
 	t.Run("resolved credentials reach the download", func(t *testing.T) {
-		var gotAuth string
-		payload := gzippedTar(t, "octocat-Hello-World-"+testCommit+"/README", "hello world")
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			switch {
-			case strings.HasSuffix(r.URL.Path, "/repos/octocat/Hello-World/tarball/"+testCommit):
-				gotAuth = r.Header.Get("Authorization")
-				http.Redirect(w, r, "http://"+r.Host+"/codeload", http.StatusFound)
-			case r.URL.Path == "/codeload":
-				_, _ = w.Write(payload)
-			default:
-				http.Error(w, "unexpected path "+r.URL.Path, http.StatusNotFound)
-			}
-		}))
-		t.Cleanup(server.Close)
+		srv := githubtest.Start(t)
 
 		transformer := &GetGitHubCommit{
 			Scheme:             v1alpha1.Scheme,
@@ -225,9 +174,9 @@ func TestGetGitHubCommit_Transform_ResolveCredentials(t *testing.T) {
 			}},
 		}
 
-		result, err := transformer.Transform(t.Context(), step(server.URL))
+		result, err := transformer.Transform(t.Context(), step(srv.RepoURL))
 		require.NoError(t, err)
-		assert.Equal(t, "Bearer secret-token", gotAuth, "the resolved token must authenticate the archive request")
+		assert.Equal(t, "Bearer secret-token", srv.Authorization(), "the resolved token must authenticate the archive request")
 
 		var transformed v1alpha1.GetGitHubCommit
 		require.NoError(t, v1alpha1.Scheme.Convert(result, &transformed))

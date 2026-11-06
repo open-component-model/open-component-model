@@ -7,14 +7,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	credv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/typedtest"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
-
-type fakeTyped struct{}
-
-func (f *fakeTyped) GetType() runtime.Type        { return runtime.NewUnversionedType("Unknown") }
-func (f *fakeTyped) SetType(_ runtime.Type)       {}
-func (f *fakeTyped) DeepCopyTyped() runtime.Typed { return &fakeTyped{} }
 
 // fakeOIDCTyped simulates the sigstore OIDCIdentityToken credential type without
 // importing it (avoids a cycle and keeps this test self-contained). The convertScheme
@@ -77,7 +72,7 @@ func TestConvertToTrustedRoot(t *testing.T) {
 		},
 		{
 			name:    "unknown type returns error",
-			input:   &fakeTyped{},
+			input:   &typedtest.Unregistered{},
 			wantErr: true,
 		},
 		{

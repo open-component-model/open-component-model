@@ -1,7 +1,6 @@
 package constructor
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -362,23 +361,6 @@ func (m *mockAccess) DeepCopyTyped() runtime.Typed {
 		Reference:   m.Reference,
 		Description: m.Description,
 	}
-}
-
-type mockBlob struct {
-	mediaType string
-	data      []byte
-}
-
-func (m *mockBlob) Get() ([]byte, error) {
-	return m.data, nil
-}
-
-func (m *mockBlob) MediaType() (string, error) {
-	return m.mediaType, nil
-}
-
-func (m *mockBlob) ReadCloser() (io.ReadCloser, error) {
-	return io.NopCloser(bytes.NewReader(m.data)), nil
 }
 
 type mockInputType struct {

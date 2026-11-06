@@ -9,6 +9,7 @@ import {
   GENERATED_TABLE_END,
   GENERATED_TABLE_START,
   generatePackagesReadme,
+  parseDepguardRules,
 } from "./dependency-list.js";
 
 const GOLANGCI_YML = `
@@ -22,11 +23,22 @@ linters:
           allow:
             - "ocm.software/open-component-model/bindings/go/beta"
             - "ocm.software/open-component-model/bindings/go/alpha"
+            - "ocm.software/open-component-model/bindings/go/internal/testutil"
         alpha:
           list-mode: lax
           files: ["**/bindings/go/alpha/**"]
           allow:
             - "ocm.software/open-component-model/bindings/go/alpha"
+        internal-testutil:
+          list-mode: lax
+          files: ["**/bindings/go/internal/testutil/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/alpha"
+        internal-testutil-test-only:
+          list-mode: lax
+          files: ["$all", "!$test", "!**/bindings/go/internal/testutil/**"]
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/internal/testutil"
 `;
 
 const README = `# Bindings
@@ -84,6 +96,15 @@ test("extractPackageSummary strips a command prefix and joins wrapped lines", ()
   );
 });
 
+test("parseDepguardRules leaves out internal packages and their allow entries", () => {
+  const { config } = setup();
+
+  const deps = parseDepguardRules(config);
+
+  assert.deepStrictEqual([...deps.keys()].sort(), ["alpha", "beta"]);
+  assert.deepStrictEqual(deps.get("beta"), ["alpha"]);
+});
+
 test("generatePackagesReadme replaces only the marked block and sorts packages", () => {
   const { config, readme } = setup();
   const bindingsDir = join(readme, "..");
@@ -124,4 +145,35 @@ test("generatePackagesReadme fails when the markers are missing", () => {
     () => generatePackagesReadme(config, readme),
     /does not contain the generated packages table markers/
   );
+});
+
+test("parseDepguardRules excludes test-only helper bindings from allows", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dependency-list-"));
+  const config = join(dir, "golangci.yml");
+  writeFileSync(
+    config,
+    `
+linters:
+  settings:
+    depguard:
+      rules:
+        beta:
+          list-mode: lax
+          files: ["**/bindings/go/beta/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/beta"
+            - "ocm.software/open-component-model/bindings/go/testutils"
+        testutils-test-only:
+          list-mode: lax
+          files: ["$all", "!$test", "!**/bindings/go/testutils/**"]
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/testutils"
+`
+  );
+  const deps = parseDepguardRules(config);
+  // testutils is a test-only helper: it is granted to beta's tests but must not
+  // appear as a production dependency edge, and it is not a binding of its own.
+  assert.deepStrictEqual(deps.get("beta"), []);
+  assert.strictEqual(deps.has("testutils"), false);
+  assert.strictEqual(deps.has("testutils-test-only"), false);
 });

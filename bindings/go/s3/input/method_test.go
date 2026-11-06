@@ -2,15 +2,9 @@ package input
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/binary"
 	"errors"
-	"hash/crc32"
 	"io"
-	"net/http"
-	"net/http/httptest"
 	"os"
-	"sync"
 	"testing"
 	"time"
 
@@ -19,82 +13,14 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	constructorruntime "ocm.software/open-component-model/bindings/go/constructor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/s3test"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	credv1 "ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1"
 	inputspec "ocm.software/open-component-model/bindings/go/s3/spec/input"
 	"ocm.software/open-component-model/bindings/go/s3/spec/input/v2"
 )
 
-// fakeS3 is an httptest server answering GetObject with a canned object, so that the
-// input method is exercised over the real AWS SDK rather than a stubbed client.
-type fakeS3 struct {
-	*httptest.Server
-
-	mu        sync.Mutex
-	body      []byte
-	versionID string
-	requests  []s3Request
-}
-
-// s3Request is one request a [fakeS3] answered.
-type s3Request struct {
-	// path is the request path, which is /bucket/key for path-style addressing.
-	path string
-	// versionID is the versionId query parameter, empty when none was sent.
-	versionID string
-}
-
-// newFakeS3 starts a server serving body with contentType, and stops it when the test
-// ends.
-func newFakeS3(t *testing.T, body []byte, contentType string) *fakeS3 {
-	t.Helper()
-
-	f := &fakeS3{body: body}
-	f.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		f.mu.Lock()
-		f.requests = append(f.requests, s3Request{
-			path:      r.URL.Path,
-			versionID: r.URL.Query().Get("versionId"),
-		})
-		body, versionID := f.body, f.versionID
-		f.mu.Unlock()
-
-		if contentType != "" {
-			w.Header().Set("Content-Type", contentType)
-		}
-		if versionID != "" {
-			w.Header().Set("X-Amz-Version-Id", versionID)
-		}
-		// Real S3 reports a checksum, and the SDK warns about every response carrying none.
-		sum := make([]byte, 4)
-		binary.BigEndian.PutUint32(sum, crc32.ChecksumIEEE(body))
-		w.Header().Set("X-Amz-Checksum-Crc32", base64.StdEncoding.EncodeToString(sum))
-
-		_, _ = w.Write(body)
-	}))
-	t.Cleanup(f.Close)
-
-	return f
-}
-
-// serve makes the server answer with body from now on, reporting versionID as the
-// object version when it is not empty.
-func (f *fakeS3) serve(body []byte, versionID string) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	f.body, f.versionID = body, versionID
-}
-
-// recorded returns the requests the server answered, in the order it answered them.
-func (f *fakeS3) recorded() []s3Request {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	return append([]s3Request(nil), f.requests...)
-}
-
-// fakeCredentials are static credentials for [fakeS3]. Their value is irrelevant, since
+// fakeCredentials are static credentials for [s3test.Fake]. Their value is irrelevant, since
 // the fake verifies no signature, but supplying them keeps the AWS default credential
 // chain and its instance-metadata lookups out of the tests.
 func fakeCredentials() *credv1.S3Credentials {
@@ -118,7 +44,7 @@ func s3InputResource(spec *v2.S3) *constructorruntime.Resource {
 
 // servedBy points spec at srv. The fake serves no bucket subdomains, so the input is
 // addressed path-style.
-func servedBy(srv *fakeS3, spec *v2.S3) *v2.S3 {
+func servedBy(srv *s3test.Fake, spec *v2.S3) *v2.S3 {
 	spec.Endpoint = srv.URL
 	spec.UsePathStyle = true
 
@@ -175,7 +101,7 @@ func read(t *testing.T, b blob.ReadOnlyBlob) ([]byte, error) {
 func Test_ProcessResource(t *testing.T) {
 	content := []byte("hello from s3 input")
 
-	process := func(t *testing.T, method *InputMethod, srv *fakeS3, spec *v2.S3) (blob.ReadOnlyBlob, error) {
+	process := func(t *testing.T, method *InputMethod, srv *s3test.Fake, spec *v2.S3) (blob.ReadOnlyBlob, error) {
 		t.Helper()
 		result, err := method.ProcessResource(t.Context(), s3InputResource(servedBy(srv, spec)), fakeCredentials())
 		if err != nil {
@@ -194,12 +120,12 @@ func Test_ProcessResource(t *testing.T) {
 
 	t.Run("the object is downloaded once and its file removed after the first read", func(t *testing.T) {
 		r := require.New(t)
-		srv := newFakeS3(t, content, "text/plain")
+		srv := s3test.StartFake(t, s3test.Object{Body: content, ContentType: "text/plain"})
 		dir := t.TempDir()
 
 		b, err := process(t, &InputMethod{TempFolder: dir}, srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt"})
 		r.NoError(err)
-		r.Len(srv.recorded(), 1, "the object is downloaded once to describe it")
+		r.Len(srv.Recorded(), 1, "the object is downloaded once to describe it")
 		r.Len(files(t, dir), 1, "the download is kept for the first read")
 
 		digestAware, ok := b.(blob.DigestAware)
@@ -219,23 +145,23 @@ func Test_ProcessResource(t *testing.T) {
 		got, err := read(t, b)
 		r.NoError(err)
 		r.Equal(content, got)
-		r.Len(srv.recorded(), 1, "the first read is served from the download")
+		r.Len(srv.Recorded(), 1, "the first read is served from the download")
 		r.Empty(files(t, dir), "closing the first reader removes the download")
 
 		got, err = read(t, b)
 		r.NoError(err)
 		r.Equal(content, got)
-		requests := srv.recorded()
+		requests := srv.Recorded()
 		r.Len(requests, 2, "later reads request the object again")
 		for _, request := range requests {
-			r.Equal("/my-bucket/path/blob.txt", request.path)
-			r.Empty(request.versionID, "an unpinned input reads the latest version")
+			r.Equal("/my-bucket/path/blob.txt", request.Path)
+			r.Empty(request.VersionID, "an unpinned input reads the latest version")
 		}
 	})
 
 	t.Run("an unread download is removed when the context ends", func(t *testing.T) {
 		r := require.New(t)
-		srv := newFakeS3(t, content, "")
+		srv := s3test.StartFake(t, s3test.Object{Body: content})
 		dir := t.TempDir()
 		ctx, cancel := context.WithCancel(t.Context())
 
@@ -249,7 +175,7 @@ func Test_ProcessResource(t *testing.T) {
 
 	t.Run("a pinned version is requested", func(t *testing.T) {
 		r := require.New(t)
-		srv := newFakeS3(t, content, "")
+		srv := s3test.StartFake(t, s3test.Object{Body: content})
 
 		b, err := process(t, &InputMethod{TempFolder: t.TempDir()}, srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt", Version: "v-1"})
 		r.NoError(err)
@@ -258,10 +184,10 @@ func Test_ProcessResource(t *testing.T) {
 			r.NoError(err)
 		}
 
-		requests := srv.recorded()
+		requests := srv.Recorded()
 		r.Len(requests, 2)
 		for _, request := range requests {
-			r.Equal("v-1", request.versionID)
+			r.Equal("v-1", request.VersionID)
 		}
 	})
 
@@ -276,8 +202,7 @@ func Test_ProcessResource(t *testing.T) {
 		} {
 			t.Run(tt.name, func(t *testing.T) {
 				r := require.New(t)
-				srv := newFakeS3(t, content, "")
-				srv.serve(content, tt.versionID)
+				srv := s3test.StartFake(t, s3test.Object{Body: content, VersionID: tt.versionID})
 
 				b, err := process(t, &InputMethod{TempFolder: t.TempDir()}, srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt"})
 				r.NoError(err)
@@ -286,21 +211,21 @@ func Test_ProcessResource(t *testing.T) {
 					r.NoError(err)
 				}
 
-				requests := srv.recorded()
+				requests := srv.Recorded()
 				r.Len(requests, 2)
-				r.Empty(requests[0].versionID)
-				r.Equal(tt.want, requests[1].versionID)
+				r.Empty(requests[0].VersionID)
+				r.Equal(tt.want, requests[1].VersionID)
 			})
 		}
 	})
 
 	t.Run("an object overwritten after it was downloaded fails a later read", func(t *testing.T) {
 		r := require.New(t)
-		srv := newFakeS3(t, content, "")
+		srv := s3test.StartFake(t, s3test.Object{Body: content})
 
 		b, err := process(t, &InputMethod{TempFolder: t.TempDir()}, srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt"})
 		r.NoError(err)
-		srv.serve([]byte("overwritten content"), "")
+		srv.Serve(s3test.Object{Body: []byte("overwritten content")})
 
 		got, err := read(t, b)
 		r.NoError(err, "the first read serves the download")
@@ -311,7 +236,7 @@ func Test_ProcessResource(t *testing.T) {
 
 	t.Run("the spec media type overrides the one the store reports", func(t *testing.T) {
 		r := require.New(t)
-		srv := newFakeS3(t, content, "text/plain")
+		srv := s3test.StartFake(t, s3test.Object{Body: content, ContentType: "text/plain"})
 
 		b, err := process(t, &InputMethod{}, srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt", MediaType: "application/custom"})
 		r.NoError(err)
@@ -324,7 +249,7 @@ func Test_ProcessResource(t *testing.T) {
 	})
 
 	t.Run("an object exceeding the maximum size is rejected", func(t *testing.T) {
-		srv := newFakeS3(t, content, "")
+		srv := s3test.StartFake(t, s3test.Object{Body: content})
 		maxDownloadSize := int64(1)
 
 		_, err := process(t, &InputMethod{MaxDownloadSize: &maxDownloadSize}, srv, &v2.S3{BucketName: "my-bucket", ObjectKey: "path/blob.txt"})
@@ -333,11 +258,11 @@ func Test_ProcessResource(t *testing.T) {
 
 	t.Run("an invalid input spec is rejected before anything is requested", func(t *testing.T) {
 		r := require.New(t)
-		srv := newFakeS3(t, content, "")
+		srv := s3test.StartFake(t, s3test.Object{Body: content})
 
 		_, err := process(t, &InputMethod{}, srv, &v2.S3{BucketName: "my-bucket"})
 		r.ErrorContains(err, "objectKey is required")
-		r.Empty(srv.recorded())
+		r.Empty(srv.Recorded())
 	})
 }
 

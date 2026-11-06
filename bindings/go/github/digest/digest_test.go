@@ -1,8 +1,6 @@
 package digest
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -13,6 +11,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/github/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/githubtest"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -26,40 +25,12 @@ func pinnedAccess(t *testing.T, res *descriptor.Resource) *v1.GitHub {
 	return gitHub
 }
 
-const (
-	testCommit = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
-	payload    = "abc"
-)
+const payload = "abc"
 
 // payloadDigest is the generic blob digest the processor produces: sha256 over
 // the exact bytes served, matching old OCM. The processor never untars or
 // decompresses the download, so any bytes stand in for a real archive.
 var payloadDigest = godigest.FromString(payload).Encoded()
-
-// mockGitHub emulates the GitHub archive API against the processor's real
-// download path. Refs resolve to resolvedCommit; the tarball for testCommit
-// serves payload. If resolveCalls is non-nil it counts ref resolutions. It
-// returns the repo URL to point a resource at.
-func mockGitHub(t *testing.T, resolvedCommit string, resolveCalls *int) string {
-	t.Helper()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.HasSuffix(r.URL.Path, "/repos/octocat/Hello-World/commits/main"):
-			if resolveCalls != nil {
-				*resolveCalls++
-			}
-			_, _ = w.Write([]byte(resolvedCommit))
-		case strings.HasSuffix(r.URL.Path, "/repos/octocat/Hello-World/tarball/"+testCommit):
-			http.Redirect(w, r, "http://"+r.Host+"/codeload", http.StatusFound)
-		case r.URL.Path == "/codeload":
-			_, _ = w.Write([]byte(payload))
-		default:
-			http.Error(w, "unexpected path "+r.URL.Path, http.StatusNotFound)
-		}
-	}))
-	t.Cleanup(server.Close)
-	return server.URL + "/octocat/Hello-World"
-}
 
 func githubResource(repoURL, commit string) *descriptor.Resource {
 	return githubResourceRef(repoURL, "", commit)
@@ -83,10 +54,10 @@ func TestDigestProcessor(t *testing.T) {
 	processor := NewDigestProcessor()
 
 	t.Run("ProcessResourceDigest", func(t *testing.T) {
-		repoURL := mockGitHub(t, testCommit, nil)
+		repoURL := githubtest.Start(t, githubtest.WithPayload([]byte(payload))).RepoURL
 
 		t.Run("applies the generic blob digest of the downloaded archive", func(t *testing.T) {
-			res := githubResource(repoURL, testCommit)
+			res := githubResource(repoURL, githubtest.Commit)
 			processed, err := processor.ProcessResourceDigest(t.Context(), res, nil)
 			require.NoError(t, err)
 
@@ -99,7 +70,7 @@ func TestDigestProcessor(t *testing.T) {
 		})
 
 		t.Run("verifies a matching pre-set digest", func(t *testing.T) {
-			res := githubResource(repoURL, testCommit)
+			res := githubResource(repoURL, githubtest.Commit)
 			res.Digest = &descriptor.Digest{
 				HashAlgorithm:          "SHA-256",
 				NormalisationAlgorithm: "genericBlobDigest/v1",
@@ -134,7 +105,7 @@ func TestDigestProcessor(t *testing.T) {
 				},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
-					res := githubResource(repoURL, testCommit)
+					res := githubResource(repoURL, githubtest.Commit)
 					res.Digest = &tc.digest
 					_, err := processor.ProcessResourceDigest(t.Context(), res, nil)
 					assert.ErrorContains(t, err, tc.expect)
@@ -143,7 +114,7 @@ func TestDigestProcessor(t *testing.T) {
 		})
 
 		t.Run("rejects an invalid access before downloading", func(t *testing.T) {
-			res := githubResource("", testCommit)
+			res := githubResource("", githubtest.Commit)
 			_, err := processor.ProcessResourceDigest(t.Context(), res, nil)
 			assert.ErrorContains(t, err, "invalid github access")
 		})
@@ -154,7 +125,7 @@ func TestDigestProcessor(t *testing.T) {
 			require.NoError(t, err)
 
 			pinned := pinnedAccess(t, processed)
-			assert.Equal(t, testCommit, pinned.Commit, "commit must be pinned to the resolved sha")
+			assert.Equal(t, githubtest.Commit, pinned.Commit, "commit must be pinned to the resolved sha")
 			require.NotNil(t, processed.Digest)
 			assert.Equal(t, payloadDigest, processed.Digest.Value)
 
@@ -163,14 +134,13 @@ func TestDigestProcessor(t *testing.T) {
 		})
 
 		t.Run("resolves the ref once, not again for the download", func(t *testing.T) {
-			var resolveCalls int
-			repoURL := mockGitHub(t, testCommit, &resolveCalls)
+			srv := githubtest.Start(t, githubtest.WithPayload([]byte(payload)))
 
-			res := githubResourceRef(repoURL, "main", "")
+			res := githubResourceRef(srv.RepoURL, "main", "")
 			_, err := processor.ProcessResourceDigest(t.Context(), res, nil)
 			require.NoError(t, err)
 
-			assert.Equal(t, 1, resolveCalls, "the ref must be resolved once to pin the commit, not again for the download")
+			assert.Equal(t, 1, srv.ResolveCalls(), "the ref must be resolved once to pin the commit, not again for the download")
 		})
 
 		t.Run("a moved ref does not invalidate a pinned commit", func(t *testing.T) {
@@ -179,13 +149,13 @@ func TestDigestProcessor(t *testing.T) {
 			// version. The ref resolves to a sha the mock serves no tarball
 			// for, so a processor that re-resolved the pinned commit could not
 			// download.
-			repoURL := mockGitHub(t, strings.Repeat("1", 40), nil)
-			res := githubResourceRef(repoURL, "main", testCommit)
+			repoURL := githubtest.Start(t, githubtest.WithCommit(strings.Repeat("1", 40)), githubtest.WithPayload([]byte(payload))).RepoURL
+			res := githubResourceRef(repoURL, "main", githubtest.Commit)
 			processed, err := processor.ProcessResourceDigest(t.Context(), res, nil)
 			require.NoError(t, err)
 
 			pinned := pinnedAccess(t, processed)
-			assert.Equal(t, testCommit, pinned.Commit, "the pinned commit stays authoritative")
+			assert.Equal(t, githubtest.Commit, pinned.Commit, "the pinned commit stays authoritative")
 			assert.Equal(t, "main", pinned.Ref, "the ref is preserved as informational")
 			require.NotNil(t, processed.Digest)
 			assert.Equal(t, payloadDigest, processed.Digest.Value)
@@ -197,7 +167,7 @@ func TestDigestProcessor(t *testing.T) {
 			// sides together. This pins the output to a literal: the well-known
 			// sha256 of "abc".
 			const golden = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
-			res := githubResource(repoURL, testCommit)
+			res := githubResource(repoURL, githubtest.Commit)
 			processed, err := processor.ProcessResourceDigest(t.Context(), res, nil)
 			require.NoError(t, err)
 
@@ -208,7 +178,7 @@ func TestDigestProcessor(t *testing.T) {
 
 	t.Run("GetResourceDigestProcessorCredentialConsumerIdentity", func(t *testing.T) {
 		identity, err := processor.GetResourceDigestProcessorCredentialConsumerIdentity(t.Context(),
-			githubResource("https://github.com/open-component-model/ocm", testCommit))
+			githubResource("https://github.com/open-component-model/ocm", githubtest.Commit))
 		require.NoError(t, err)
 		assert.Equal(t, "GitHubRepository", identity[runtime.IdentityAttributeType])
 	})

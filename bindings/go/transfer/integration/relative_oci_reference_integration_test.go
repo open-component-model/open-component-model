@@ -12,6 +12,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ociresource "ocm.software/open-component-model/bindings/go/oci/repository/resource"
@@ -49,7 +50,7 @@ func Test_Integration_TransferRelativeOCIReference(t *testing.T) {
 	pushTestOCIImage(t, sourceAddr, sourceUser, sourcePwd, relativeRepo, relativeTag)
 
 	// Seed a component carrying a relativeOciReference access into the source OCI registry.
-	sourceClient := createAuthClient(sourceAddr, sourceUser, sourcePwd)
+	sourceClient := registrytest.AuthClient(sourceAddr, sourceUser, sourcePwd)
 	sourceURLRes, err := urlresolver.New(
 		urlresolver.WithBaseURL(sourceAddr),
 		urlresolver.WithPlainHTTP(true),
@@ -177,7 +178,7 @@ func Test_Integration_TransferRelativeOCIReference(t *testing.T) {
 		r.NoError(err)
 		r.NoError(graph.Process(ctx))
 
-		targetClient := createAuthClient(targetAddr, targetUser, targetPwd)
+		targetClient := registrytest.AuthClient(targetAddr, targetUser, targetPwd)
 		targetURLRes, err := urlresolver.New(
 			urlresolver.WithBaseURL(targetAddr),
 			urlresolver.WithPlainHTTP(true),

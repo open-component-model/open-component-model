@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	desc "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/descriptortest"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 )
@@ -22,17 +23,6 @@ func ctfRepo(t *testing.T, descs ...*desc.Descriptor) []byte {
 	t.Helper()
 
 	return ctfRepoAt(t, t.TempDir(), descs...)
-}
-
-// makeDescriptor builds a v2 descriptor with the given references.
-func makeDescriptor(name, version string, refs ...desc.Reference) *desc.Descriptor {
-	d := &desc.Descriptor{}
-	d.Meta.Version = "v2"
-	d.Component.Name = name
-	d.Component.Version = version
-	d.Component.Provider.Name = "ocm.software"
-	d.Component.References = refs
-	return d
 }
 
 func makeRef(name, component, version string) desc.Reference {
@@ -149,15 +139,15 @@ func TestReconcile_PathMatcherResolutionAcrossRepositories(t *testing.T) {
 
 	// root (repo A) -> child (repo B) -> grand (repo C); root also references
 	// an unmatched "other" that lives in A (catch-all).
-	root := makeDescriptor("ocm.software/root", "1.0.0",
-		makeRef("child", "ocm.software/child", "1.0.0"),
-		makeRef("other", "ocm.software/other", "1.0.0"),
-	)
-	other := makeDescriptor("ocm.software/other", "1.0.0")
-	child := makeDescriptor("ocm.software/child", "1.0.0",
-		makeRef("grand", "ocm.software/grand", "1.0.0"),
-	)
-	grand := makeDescriptor("ocm.software/grand", "1.0.0")
+	root := descriptortest.New("ocm.software/root", "1.0.0",
+		descriptortest.WithReferences(
+			makeRef("child", "ocm.software/child", "1.0.0"),
+			makeRef("other", "ocm.software/other", "1.0.0"),
+		))
+	other := descriptortest.New("ocm.software/other", "1.0.0")
+	child := descriptortest.New("ocm.software/child", "1.0.0",
+		descriptortest.WithReferences(makeRef("grand", "ocm.software/grand", "1.0.0")))
+	grand := descriptortest.New("ocm.software/grand", "1.0.0")
 
 	repoA := ctfRepo(t, root, other)
 	repoB := ctfRepo(t, child)
@@ -207,13 +197,14 @@ func TestReconcile_FallbackResolutionAcrossRepositories(t *testing.T) {
 	// root and shared live in A; child and shared live in B. The base repo A
 	// is highest priority, so shared resolves from A and child (missing in A)
 	// falls back to B.
-	root := makeDescriptor("ocm.software/root", "1.0.0",
-		makeRef("child", "ocm.software/child", "1.0.0"),
-		makeRef("shared", "ocm.software/shared", "1.0.0"),
-	)
-	sharedA := makeDescriptor("ocm.software/shared", "1.0.0")
-	child := makeDescriptor("ocm.software/child", "1.0.0")
-	sharedB := makeDescriptor("ocm.software/shared", "1.0.0")
+	root := descriptortest.New("ocm.software/root", "1.0.0",
+		descriptortest.WithReferences(
+			makeRef("child", "ocm.software/child", "1.0.0"),
+			makeRef("shared", "ocm.software/shared", "1.0.0"),
+		))
+	sharedA := descriptortest.New("ocm.software/shared", "1.0.0")
+	child := descriptortest.New("ocm.software/child", "1.0.0")
+	sharedB := descriptortest.New("ocm.software/shared", "1.0.0")
 
 	repoA := ctfRepo(t, root, sharedA)
 	repoB := ctfRepo(t, child, sharedB)
@@ -257,10 +248,9 @@ func TestReconcile_MatchedRepositoryMissingChildDoesNotFallThrough(t *testing.T)
 	// root (repo A) -> child. root and child both live in A, but the child
 	// matcher points to B (which lacks the child): path matching selects one
 	// repository and must not fall through to the A catch-all.
-	root := makeDescriptor("ocm.software/root", "1.0.0",
-		makeRef("child", "ocm.software/child", "1.0.0"),
-	)
-	child := makeDescriptor("ocm.software/child", "1.0.0")
+	root := descriptortest.New("ocm.software/root", "1.0.0",
+		descriptortest.WithReferences(makeRef("child", "ocm.software/child", "1.0.0")))
+	child := descriptortest.New("ocm.software/child", "1.0.0")
 
 	repoA := ctfRepo(t, root, child)
 	repoB := ctfRepo(t) // empty
@@ -322,7 +312,7 @@ func TestReconcile_MixedResolverTypesFailRetryablyAndRetainPayload(t *testing.T)
 
 	const ns = "default"
 
-	root := makeDescriptor("ocm.software/root", "1.0.0")
+	root := descriptortest.New("ocm.software/root", "1.0.0")
 	repoA := ctfRepo(t, root)
 
 	// Start with a valid path matcher config to establish a payload.
@@ -380,10 +370,9 @@ func TestReconcile_InheritedEffectiveConfigResolution(t *testing.T) {
 
 	const ns = "default"
 
-	root := makeDescriptor("ocm.software/root", "1.0.0",
-		makeRef("child", "ocm.software/child", "1.0.0"),
-	)
-	child := makeDescriptor("ocm.software/child", "1.0.0")
+	root := descriptortest.New("ocm.software/root", "1.0.0",
+		descriptortest.WithReferences(makeRef("child", "ocm.software/child", "1.0.0")))
+	child := descriptortest.New("ocm.software/child", "1.0.0")
 	repoA := ctfRepo(t, root)
 	repoB := ctfRepo(t, child)
 

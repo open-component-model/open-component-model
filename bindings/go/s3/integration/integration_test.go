@@ -1,7 +1,6 @@
 package integration_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -9,18 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
-	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/s3test"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/repository"
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
@@ -28,44 +21,20 @@ import (
 	credv1 "ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1"
 )
 
-const (
-	rustfsImage     = "rustfs/rustfs:1.0.0-rc.6"
-	rustfsAccessKey = "ocm-test"
-	rustfsSecretKey = "ocm-test-secret"
-)
-
-// startRustFS starts a RustFS S3 server and returns its host:port.
-func startRustFS(t *testing.T, ctx context.Context) string {
-	t.Helper()
-	r := require.New(t)
-
-	container, err := testcontainers.Run(ctx, rustfsImage,
-		testcontainers.WithExposedPorts("9000/tcp"),
-		testcontainers.WithEnv(map[string]string{"RUSTFS_ACCESS_KEY": rustfsAccessKey, "RUSTFS_SECRET_KEY": rustfsSecretKey}),
-		testcontainers.WithWaitStrategy(wait.ForHTTP("/health/ready").WithPort("9000/tcp")),
-	)
-	r.NoError(err)
-	t.Cleanup(func() { r.NoError(testcontainers.TerminateContainer(container)) })
-
-	hostPort, err := container.PortEndpoint(ctx, "9000/tcp", "")
-	r.NoError(err)
-	return hostPort
-}
-
 // Test_Integration_S3 exercises the S3 ResourceRepository end to end against a RustFS
 // container.
 func Test_Integration_S3(t *testing.T) {
 	ctx := context.Background()
 
-	hostPort := startRustFS(t, ctx)
+	hostPort := s3test.Start(t)
 	endpoint := "http://" + hostPort
 
-	setup := newSetupClient(t, ctx, endpoint, rustfsAccessKey, rustfsSecretKey)
+	setup := s3test.Client(t, endpoint)
 
 	creds := &credv1.S3Credentials{
 		Type:            credv1.S3CredentialsVersionedType,
-		AccessKeyID:     rustfsAccessKey,
-		SecretAccessKey: rustfsSecretKey,
+		AccessKeyID:     s3test.AccessKey,
+		SecretAccessKey: s3test.SecretKey,
 	}
 	// A real http configuration: the retry section drives the SDK's attempt count, and
 	// the per-host entry routes S3 requests through the host-specific transport.
@@ -105,8 +74,8 @@ func Test_Integration_S3(t *testing.T) {
 		r := require.New(t)
 		const bucket, key = "download-bucket", "path/to/blob.txt"
 		content := []byte("hello ocm from s3")
-		createBucket(t, ctx, setup, bucket)
-		putObject(t, ctx, setup, bucket, key, content)
+		s3test.CreateBucket(t, ctx, setup, bucket)
+		s3test.PutObject(t, ctx, setup, bucket, key, content)
 
 		res := resourceFor(access(bucket, key, ""))
 
@@ -129,12 +98,13 @@ func Test_Integration_S3(t *testing.T) {
 	t.Run("pinned object version", func(t *testing.T) {
 		r := require.New(t)
 		const bucket, key = "versioned-bucket", "blob"
-		createBucket(t, ctx, setup, bucket)
-		enableVersioning(t, ctx, setup, bucket)
+		s3test.CreateBucket(t, ctx, setup, bucket)
+		s3test.EnableVersioning(t, ctx, setup, bucket)
 
 		v1Content := []byte("version one")
-		v1ID := putObjectReturningVersion(t, ctx, setup, bucket, key, v1Content)
-		putObject(t, ctx, setup, bucket, key, []byte("version two"))
+		v1ID := s3test.PutObject(t, ctx, setup, bucket, key, v1Content)
+		r.NotEmpty(v1ID)
+		s3test.PutObject(t, ctx, setup, bucket, key, []byte("version two"))
 
 		b, err := repo.DownloadResource(ctx, resourceFor(access(bucket, key, v1ID)), creds)
 		r.NoError(err)
@@ -152,9 +122,9 @@ func Test_Integration_S3(t *testing.T) {
 		defer cancel()
 		const bucket, key = "ocmv1-compatibility", "path/to/blob.txt"
 		content := []byte("object referenced by an OCM v1 access record")
-		createBucket(t, ctx, setup, bucket)
-		enableVersioning(t, ctx, setup, bucket)
-		version := putObjectReturningVersion(t, ctx, setup, bucket, key, content)
+		s3test.CreateBucket(t, ctx, setup, bucket)
+		s3test.EnableVersioning(t, ctx, setup, bucket)
+		version := s3test.PutObject(t, ctx, setup, bucket, key, content)
 		r.NotEmpty(version)
 
 		for _, tt := range []struct {
@@ -216,7 +186,7 @@ func Test_Integration_S3(t *testing.T) {
 	t.Run("missing object errors", func(t *testing.T) {
 		r := require.New(t)
 		const bucket = "missing-bucket"
-		createBucket(t, ctx, setup, bucket)
+		s3test.CreateBucket(t, ctx, setup, bucket)
 
 		// The blob is lazy, so the missing object surfaces when it is read.
 		b, err := repo.DownloadResource(ctx, resourceFor(access(bucket, "does/not/exist", "")), creds)
@@ -228,8 +198,8 @@ func Test_Integration_S3(t *testing.T) {
 	t.Run("http config timeout is enforced", func(t *testing.T) {
 		r := require.New(t)
 		const bucket, key = "timeout-bucket", "blob"
-		createBucket(t, ctx, setup, bucket)
-		putObject(t, ctx, setup, bucket, key, []byte("never read"))
+		s3test.CreateBucket(t, ctx, setup, bucket)
+		s3test.PutObject(t, ctx, setup, bucket, key, []byte("never read"))
 
 		// A timeout no request can meet, with retries off so the single attempt fails fast.
 		strict := repository.NewResourceRepository(repository.WithHTTPConfig(&httpv1alpha1.Config{
@@ -244,54 +214,4 @@ func Test_Integration_S3(t *testing.T) {
 		r.ErrorAs(err, &netErr)
 		r.True(netErr.Timeout(), "download must fail on the configured timeout, got %v", err)
 	})
-}
-
-func newSetupClient(t *testing.T, ctx context.Context, endpoint, user, pass string) *s3.Client {
-	t.Helper()
-	cfg, err := config.LoadDefaultConfig(ctx,
-		config.WithRegion("us-east-1"),
-		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(user, pass, "")),
-	)
-	require.NoError(t, err)
-	return s3.NewFromConfig(cfg, func(o *s3.Options) {
-		o.BaseEndpoint = new(endpoint)
-		o.UsePathStyle = true
-	})
-}
-
-func createBucket(t *testing.T, ctx context.Context, client *s3.Client, bucket string) {
-	t.Helper()
-	_, err := client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: new(bucket)})
-	require.NoError(t, err)
-}
-
-func enableVersioning(t *testing.T, ctx context.Context, client *s3.Client, bucket string) {
-	t.Helper()
-	_, err := client.PutBucketVersioning(ctx, &s3.PutBucketVersioningInput{
-		Bucket:                  new(bucket),
-		VersioningConfiguration: &types.VersioningConfiguration{Status: types.BucketVersioningStatusEnabled},
-	})
-	require.NoError(t, err)
-}
-
-func putObject(t *testing.T, ctx context.Context, client *s3.Client, bucket, key string, content []byte) {
-	t.Helper()
-	_, err := client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: new(bucket),
-		Key:    new(key),
-		Body:   bytes.NewReader(content),
-	})
-	require.NoError(t, err)
-}
-
-func putObjectReturningVersion(t *testing.T, ctx context.Context, client *s3.Client, bucket, key string, content []byte) string {
-	t.Helper()
-	out, err := client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket: new(bucket),
-		Key:    new(key),
-		Body:   bytes.NewReader(content),
-	})
-	require.NoError(t, err)
-	require.NotNil(t, out.VersionId)
-	return aws.ToString(out.VersionId)
 }

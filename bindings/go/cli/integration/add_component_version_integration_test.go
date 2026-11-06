@@ -19,13 +19,8 @@ import (
 	"testing"
 	"time"
 
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
-	awscreds "github.com/aws/aws-sdk-go-v2/credentials"
-	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
 	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/cli/cmd"
@@ -33,6 +28,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/git/gittest"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/blobtest"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/s3test"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -1210,7 +1207,7 @@ components:
 
 	outputBlob, err := filesystem.GetBlobFromOSPath(output)
 	r.NoError(err)
-	r.Equal(content, readAllFromBlob(t, outputBlob), "downloaded content should match the object in the bucket")
+	r.Equal(content, blobtest.ReadAll(t, outputBlob), "downloaded content should match the object in the bucket")
 
 	// get component-version reads the s3-access component back through the CLI.
 	getOutput := new(bytes.Buffer)
@@ -1292,7 +1289,7 @@ components:
 
 	blobData, _, err := repo.GetLocalResource(ctx, componentName, componentVersion, res.ToIdentity())
 	r.NoError(err)
-	r.Equal(content, readAllFromBlob(t, blobData), "local blob should hold the object from the bucket")
+	r.Equal(content, blobtest.ReadAll(t, blobData), "local blob should hold the object from the bucket")
 }
 
 // Test_Integration_AddComponentVersion_GitAccess verifies that a resource declaring a Git
@@ -1510,33 +1507,15 @@ func startS3WithObject(t *testing.T, registry *internal.OCIRegistry, bucket, key
 	r := require.New(t)
 	ctx := t.Context()
 
-	const s3AccessKey, s3SecretKey = "ocm-test", "ocm-test-secret"
-	container, err := testcontainers.Run(ctx, "rustfs/rustfs:1.0.0-rc.6",
-		testcontainers.WithExposedPorts("9000/tcp"),
-		testcontainers.WithEnv(map[string]string{"RUSTFS_ACCESS_KEY": s3AccessKey, "RUSTFS_SECRET_KEY": s3SecretKey}),
-		testcontainers.WithWaitStrategy(wait.ForHTTP("/health/ready").WithPort("9000/tcp")),
-	)
-	r.NoError(err)
-	t.Cleanup(func() { r.NoError(testcontainers.TerminateContainer(container)) })
-	hostPort, err := container.PortEndpoint(ctx, "9000/tcp", "")
-	r.NoError(err)
+	const s3AccessKey, s3SecretKey = s3test.AccessKey, s3test.SecretKey
+	hostPort := s3test.Start(t)
 	host, port, err := net.SplitHostPort(hostPort)
 	r.NoError(err)
 	endpoint = "http://" + hostPort
 
-	awsCfg, err := awsconfig.LoadDefaultConfig(ctx,
-		awsconfig.WithRegion("us-east-1"),
-		awsconfig.WithCredentialsProvider(awscreds.NewStaticCredentialsProvider(s3AccessKey, s3SecretKey, "")),
-	)
-	r.NoError(err)
-	client := awss3.NewFromConfig(awsCfg, func(o *awss3.Options) {
-		o.BaseEndpoint = &endpoint
-		o.UsePathStyle = true
-	})
-	_, err = client.CreateBucket(ctx, &awss3.CreateBucketInput{Bucket: &bucket})
-	r.NoError(err)
-	_, err = client.PutObject(ctx, &awss3.PutObjectInput{Bucket: &bucket, Key: &key, Body: bytes.NewReader(content)})
-	r.NoError(err)
+	client := s3test.Client(t, endpoint)
+	s3test.CreateBucket(t, ctx, client, bucket)
+	s3test.PutObject(t, ctx, client, bucket, key, content)
 
 	cfg := fmt.Sprintf(`
 type: generic.config.ocm.software/v1
