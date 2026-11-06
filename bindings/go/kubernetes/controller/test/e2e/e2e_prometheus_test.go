@@ -11,9 +11,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/test/utils"
 )
 
+// Release installed by the helm/install task in Taskfile.yml.
+const prometheusReleaseSelector = "app.kubernetes.io/instance=ocm-k8s-toolkit,app.kubernetes.io/name=ocm-k8s-toolkit,control-plane=controller-manager"
+
 var _ = Describe("Prometheus metrics E2E", Ordered, func() {
-	// Names resolved in BeforeAll by label, never by string concatenation; the chart's
-	// resourceName helper may truncate names.
+	// Names resolved in BeforeAll by release labels and (for the Service) by metrics port
+	// name, never by string concatenation; the chart's resourceName helper may truncate names.
 	var svc, sm string
 
 	AfterEach(func() {
@@ -25,22 +28,25 @@ var _ = Describe("Prometheus metrics E2E", Ordered, func() {
 	BeforeAll(func(ctx SpecContext) {
 		for _, kind := range []struct {
 			resource string
+			jsonpath string
 			target   *string
 		}{
-			{"service", &svc},
-			{"servicemonitor", &sm},
+			// The metrics Service is the one whose port is named metrics (monitoring/service.yaml).
+			{"service", `{.items[?(@.spec.ports[0].name=="metrics")].metadata.name}`, &svc},
+			// The chart renders exactly one ServiceMonitor per release.
+			{"servicemonitor", "{.items[*].metadata.name}", &sm},
 		} {
 			cmd := exec.CommandContext(ctx, "kubectl", "get", kind.resource,
 				"-n", namespace,
-				"-l", "control-plane=controller-manager",
-				"-o", "jsonpath={.items[*].metadata.name}",
+				"-l", prometheusReleaseSelector,
+				"-o", "jsonpath="+kind.jsonpath,
 			)
 			out, err := utils.Run(cmd)
 			Expect(err).NotTo(HaveOccurred(),
-				fmt.Sprintf("listing %s labeled control-plane=controller-manager", kind.resource))
+				fmt.Sprintf("listing %s labeled %s", kind.resource, prometheusReleaseSelector))
 			names := strings.Fields(string(out))
 			Expect(names).To(HaveLen(1),
-				fmt.Sprintf("%s labeled control-plane=controller-manager", kind.resource))
+				fmt.Sprintf("metrics %s of release ocm-k8s-toolkit", kind.resource))
 			*kind.target = names[0]
 		}
 	})
