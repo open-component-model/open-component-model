@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,9 +11,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/log"
-	"github.com/testcontainers/testcontainers-go/wait"
 	"oras.land/oras-go/v2/registry/remote/errcode"
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
@@ -25,8 +21,6 @@ import (
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 )
-
-const nexusImage = "sonatype/nexus3:3.96.3"
 
 type nexusRepositoryFormat string
 
@@ -70,7 +64,7 @@ func Test_Integration_Nexus_RedeployDisabled(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 
-	nexus := startNexus(t, ctx)
+	nexus := startNexus(t)
 	resolver, repo, dockerEndpoint := nexus.addHostedRepository(t, ctx, nexusDockerRepository)
 
 	t.Run("component version re-add is idempotent", func(t *testing.T) {
@@ -169,66 +163,26 @@ func barebonesDescriptor(name, version, provider string) *descriptor.Descriptor 
 
 // nexusServer is a running Nexus with the EULA accepted and the Docker and OCI bearer-token realms enabled.
 type nexusServer struct {
-	container *testcontainers.DockerContainer
-	baseURL   string
-	password  string
+	nexustest.Nexus
 }
 
-// startNexus boots Nexus with all repository connector ports exposed, accepts the
-// Community-edition EULA and enables the Docker and OCI bearer-token realms.
-func startNexus(t *testing.T, ctx context.Context) *nexusServer {
+// startNexus boots Nexus with all repository connector ports exposed and enables the
+// Docker and OCI bearer-token realms.
+func startNexus(t *testing.T) *nexusServer {
 	t.Helper()
-	r := require.New(t)
 
-	ports := []string{"8081/tcp"}
+	var ports []string
 	for _, repository := range nexusHostedRepositories {
 		ports = append(ports, repository.connector)
 	}
-
-	container, err := testcontainers.Run(ctx, nexusImage,
-		testcontainers.WithExposedPorts(ports...),
-		testcontainers.WithEnv(map[string]string{
-			"INSTALL4J_ADD_VM_PARAMS": "-Xms1g -Xmx1g -XX:MaxDirectMemorySize=1g -Djava.util.prefs.userRoot=/nexus-data/javaprefs",
-		}),
-		// WithWaitStrategy caps the wait at a 60s deadline regardless of the strategy's
-		// own timeout; the Nexus JVM routinely needs longer under CI load, so set the
-		// deadline explicitly. Both the deadline and the strategy timeout must allow 5m.
-		testcontainers.WithWaitStrategyAndDeadline(5*time.Minute,
-			wait.ForHTTP("/service/rest/v1/status/writable").WithPort("8081/tcp").WithStartupTimeout(5*time.Minute),
-		),
-		testcontainers.WithLogger(log.TestLogger(t)),
-	)
-	r.NoError(err)
-	t.Cleanup(func() { r.NoError(testcontainers.TerminateContainer(container)) })
-
-	apiEndpoint, err := container.PortEndpoint(ctx, "8081/tcp", "")
-	r.NoError(err)
-	baseURL := "http://" + apiEndpoint
-
-	rc, err := container.CopyFileFromContainer(ctx, "/nexus-data/admin.password")
-	r.NoError(err)
-	pwRaw, err := io.ReadAll(rc)
-	r.NoError(err)
-	r.NoError(rc.Close())
-	password := string(bytes.TrimSpace(pwRaw))
-
-	// Community edition blocks uploads until the EULA is accepted.
-	eulaURL := baseURL + "/service/rest/v1/system/eula"
-	status, body := nexustest.Request(t, http.MethodGet, eulaURL, password, nil)
-	if status != http.StatusNotFound {
-		r.Equal(http.StatusOK, status, string(body))
-		body = bytes.Replace(body, []byte(`"accepted" : false`), []byte(`"accepted" : true`), 1)
-		body = bytes.Replace(body, []byte(`"accepted":false`), []byte(`"accepted":true`), 1)
-		status, respBody := nexustest.Request(t, http.MethodPost, eulaURL, password, body)
-		r.Equal(http.StatusNoContent, status, string(respBody))
-	}
+	nexus := nexustest.Start(t, nexustest.WithExposedPorts(ports...))
 
 	// Clients authenticate via the bearer-token realm of the repository format.
-	status, body = nexustest.Request(t, http.MethodPut, baseURL+"/service/rest/v1/security/realms/active", password,
+	status, body := nexustest.Request(t, http.MethodPut, nexus.BaseURL+"/service/rest/v1/security/realms/active", nexus.Password,
 		[]byte(`["NexusAuthenticatingRealm","DockerToken","OciBearerToken"]`))
-	r.Equal(http.StatusNoContent, status, string(body))
+	require.Equal(t, http.StatusNoContent, status, string(body))
 
-	return &nexusServer{container: container, baseURL: baseURL, password: password}
+	return &nexusServer{Nexus: nexus}
 }
 
 // addHostedRepository creates the hosted repository. It returns a resolver and repository
@@ -237,21 +191,21 @@ func (n *nexusServer) addHostedRepository(t *testing.T, ctx context.Context, rep
 	t.Helper()
 	r := require.New(t)
 
-	status, body := nexustest.Request(t, http.MethodPost, n.baseURL+"/service/rest/v1/repositories/"+string(repository.format)+"/hosted", n.password,
+	status, body := nexustest.Request(t, http.MethodPost, n.BaseURL+"/service/rest/v1/repositories/"+string(repository.format)+"/hosted", n.Password,
 		[]byte(`{"name":"`+repository.name+`","online":true,`+
 			`"storage":{"blobStoreName":"default","strictContentTypeValidation":`+strconv.FormatBool(repository.strict)+`,"writePolicy":"allow_once"},`+
 			`"`+string(repository.format)+`":{"v1Enabled":false,"forceBasicAuth":true,"httpPort":`+strings.TrimSuffix(repository.connector, "/tcp")+`}}`))
 	r.Equal(http.StatusCreated, status, string(body))
 
-	endpoint, err := n.container.PortEndpoint(ctx, repository.connector, "")
+	endpoint, err := n.Container.PortEndpoint(ctx, repository.connector, "")
 	r.NoError(err)
 
-	client := registrytest.AuthClient(endpoint, "admin", n.password)
+	client := registrytest.AuthClient(endpoint, "admin", n.Password)
 
 	// The connector comes up asynchronously after the repo is created.
 	r.Eventually(func() bool {
 		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+endpoint+"/v2/", nil)
-		req.SetBasicAuth("admin", n.password)
+		req.SetBasicAuth("admin", n.Password)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			return false

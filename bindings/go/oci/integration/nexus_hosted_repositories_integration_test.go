@@ -42,7 +42,7 @@ func Test_Integration_OCIRepository_NexusHostedRepositories(t *testing.T) {
 	}
 	t.Parallel()
 
-	nexus := startNexus(t, t.Context())
+	nexus := startNexus(t)
 
 	for _, repository := range nexusHostedRepositories {
 		resolver, repo, endpoint := nexus.addHostedRepository(t, t.Context(), repository)

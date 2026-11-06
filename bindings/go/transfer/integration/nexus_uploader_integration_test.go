@@ -14,8 +14,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -33,7 +31,6 @@ import (
 )
 
 const (
-	nexusImage          = "sonatype/nexus3:3.96.3"
 	nexusHelmRepository = "helm-hosted"
 	nexusNpmRepository  = "npm-hosted"
 )
@@ -228,52 +225,16 @@ func npmTarball(t *testing.T, packageJSON string) []byte {
 	return buf.Bytes()
 }
 
-// startNexus starts a Nexus Repository 3 container, accepts the Community Edition EULA and
-// creates Helm, raw and npm hosted repositories with redeploy disabled. It returns the base URL and the
-// admin password.
+// startNexus starts Nexus and creates Helm, raw and npm hosted repositories with redeploy
+// disabled. It returns the base URL and the admin password.
 func startNexus(t *testing.T) (baseURL, adminPassword string) {
 	t.Helper()
 	r := require.New(t)
-	ctx := t.Context()
 
-	container, err := testcontainers.Run(ctx, nexusImage,
-		testcontainers.WithExposedPorts("8081/tcp"),
-		testcontainers.WithEnv(map[string]string{
-			"INSTALL4J_ADD_VM_PARAMS": "-Xms1g -Xmx1g -XX:MaxDirectMemorySize=1g -Djava.util.prefs.userRoot=/nexus-data/javaprefs",
-		}),
-		// WithWaitStrategy caps the wait at a 60s deadline regardless of the strategy's
-		// own timeout; the Nexus JVM routinely needs longer under CI load, so set the
-		// deadline explicitly. Both the deadline and the strategy timeout must allow 5m.
-		testcontainers.WithWaitStrategyAndDeadline(5*time.Minute, wait.ForHTTP("/service/rest/v1/status/writable").WithPort("8081/tcp").WithStartupTimeout(5*time.Minute)),
-	)
-	r.NoError(err)
-	t.Cleanup(func() { r.NoError(testcontainers.TerminateContainer(container)) })
-	hostPort, err := container.PortEndpoint(ctx, "8081/tcp", "")
-	r.NoError(err)
-	baseURL = "http://" + hostPort
+	nexus := nexustest.Start(t)
+	baseURL, adminPassword = nexus.BaseURL, nexus.Password
 
-	rc, err := container.CopyFileFromContainer(ctx, "/nexus-data/admin.password")
-	r.NoError(err)
-	password, err := io.ReadAll(rc)
-	r.NoError(err)
-	r.NoError(rc.Close())
-	adminPassword = string(bytes.TrimSpace(password))
-
-	// Nexus Community Edition blocks uploads until the EULA is accepted.
-	eulaURL := baseURL + "/service/rest/v1/system/eula"
-	status, body := nexustest.Request(t, http.MethodGet, eulaURL, adminPassword, nil)
-	if status != http.StatusNotFound {
-		r.Equal(http.StatusOK, status, string(body))
-		var eula map[string]any
-		r.NoError(json.Unmarshal(body, &eula))
-		eula["accepted"] = true
-		accepted, err := json.Marshal(eula)
-		r.NoError(err)
-		status, body = nexustest.Request(t, http.MethodPost, eulaURL, adminPassword, accepted)
-		r.Equal(http.StatusNoContent, status, string(body))
-	}
-
-	status, body = nexustest.Request(t, http.MethodPost, baseURL+"/service/rest/v1/repositories/helm/hosted", adminPassword,
+	status, body := nexustest.Request(t, http.MethodPost, baseURL+"/service/rest/v1/repositories/helm/hosted", adminPassword,
 		[]byte(`{"name":"`+nexusHelmRepository+`","online":true,"storage":{"blobStoreName":"default","strictContentTypeValidation":true,"writePolicy":"allow_once"}}`))
 	r.Equal(http.StatusCreated, status, string(body))
 

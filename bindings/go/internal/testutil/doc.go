@@ -6,7 +6,7 @@
 //   - githubtest: a fake GitHub API server
 //   - helmtest: a fake Helm chart registry
 //   - logtest: capture [log/slog] records
-//   - nexustest: requests to a Nexus server in integration tests
+//   - nexustest: a Nexus server for integration tests
 //   - pkitest: throwaway keys and certificates
 //   - registrytest: OCI registries for integration tests
 //   - s3test: an S3 server for integration tests and a fake for unit tests
