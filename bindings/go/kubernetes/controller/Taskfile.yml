@@ -101,7 +101,7 @@ tasks:
     cmds:
       - task: helm/install
         vars:
-          VALUES: test/e2e/hacks/values.yaml
+          EXTRA_VALUES: test/e2e/hacks/values.yaml
       - PROJECT_DIR='{{.TASKFILE_DIR}}' go run github.com/onsi/ginkgo/v2/ginkgo --procs=4 -v --timeout=30m {{.CLI_ARGS}} '{{.TASKFILE_DIR}}/test/e2e/'
 
   test/e2e/fresh:
@@ -323,7 +323,7 @@ tasks:
       - helm template ocm-k8s-toolkit chart/ --namespace ocm-k8s-toolkit-system -f chart/test-values.yaml > dist/generated.yaml
 
   helm/install:
-    desc: "Install the Helm chart into a namespace that enforces the restricted Pod Security Standard. VALUES and KUBE_CONTEXT override the values file and the target context."
+    desc: "Install the Helm chart into a namespace that enforces the restricted Pod Security Standard. VALUES and KUBE_CONTEXT override the values file and the target context; EXTRA_VALUES layers a second values file on top of VALUES."
     vars:
       VALUES: '{{.VALUES | default "chart/test-values.yaml"}}'
       # kubectl and Helm must target the same cluster, or the namespace lands on the current context.
@@ -336,7 +336,7 @@ tasks:
       - kubectl {{.KUBECTL_CONTEXT}} label namespace ocm-k8s-toolkit-system --overwrite pod-security.kubernetes.io/enforce=restricted pod-security.kubernetes.io/enforce-version=latest
       - |
         helm upgrade --install ocm-k8s-toolkit chart/ \
-          {{if .KUBE_CONTEXT}}--kube-context {{.KUBE_CONTEXT}} {{end}}-f {{.VALUES}} \
+          {{if .KUBE_CONTEXT}}--kube-context {{.KUBE_CONTEXT}} {{end}}-f {{.VALUES}} {{if .EXTRA_VALUES}}-f {{.EXTRA_VALUES}} {{end}}\
           --namespace ocm-k8s-toolkit-system \
           --wait \
           --timeout 120s

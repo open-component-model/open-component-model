@@ -19,10 +19,18 @@ var _ = Describe("Prometheus metrics E2E", Ordered, func() {
 	// name, never by string concatenation; the chart's resourceName helper may truncate names.
 	var svc, sm string
 
-	AfterEach(func() {
-		if CurrentSpecReport().Failed() {
-			utils.DumpLogs(namespace, "servicemonitor")
+	AfterEach(func(ctx SpecContext) {
+		if !CurrentSpecReport().Failed() {
+			return
 		}
+		// Controller logs are collected by the suite and the CI workflow; this adds the metrics wiring.
+		out, err := utils.Run(exec.CommandContext(ctx, "kubectl", "get",
+			"service,endpointslices,servicemonitor",
+			"-n", namespace,
+			"-l", "app.kubernetes.io/instance=ocm-k8s-toolkit",
+			"-o", "wide",
+		))
+		GinkgoLogr.Info("[DIAG] metrics wiring", "output", string(out), "error", err)
 	})
 
 	BeforeAll(func(ctx SpecContext) {
@@ -69,16 +77,21 @@ var _ = Describe("Prometheus metrics E2E", Ordered, func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(targetPort).To(Equal("metrics"))
 
-		By("waiting for the Service Endpoints to be populated (pod selector match)")
+		By("waiting for a ready EndpointSlice address on the metrics port (pod selector and port-name match)")
 		Eventually(func() string {
-			v, err := utils.GetResourceField(ctx, "endpoints/"+svc+" -n "+namespace,
-				"{.subsets[0].addresses[0].ip}")
+			// EndpointSlice, not v1 Endpoints: reading Endpoints prints a deprecation warning on
+			// Kubernetes 1.33+, which utils.Run returns with stdout and would pass this check.
+			// The port filter matters: an unresolvable targetPort still yields a slice with the
+			// pod address, only with no ports.
+			v, err := utils.GetResourceField(ctx,
+				"endpointslices -n "+namespace+" -l kubernetes.io/service-name="+svc,
+				`{.items[?(@.ports[0].name=="metrics")].endpoints[?(@.conditions.ready==true)].addresses[0]}`)
 			if err != nil {
 				return ""
 			}
 			return v
 		}, timeout).ShouldNot(BeEmpty(),
-			"Endpoints IP must be non-empty; empty means selector or port-name mismatch")
+			"EndpointSlice address must be non-empty; empty means selector or port-name mismatch")
 	})
 
 	It("serves controller metrics through the Service", func(ctx SpecContext) {
@@ -89,8 +102,8 @@ var _ = Describe("Prometheus metrics E2E", Ordered, func() {
 			)
 			out, err := utils.Run(cmd)
 			g.Expect(err).NotTo(HaveOccurred())
-			// controller_runtime_reconcile_total is registered unconditionally at init;
-			// its presence proves the proxy reached the metrics endpoint.
+			// controller-runtime creates the controller_runtime_reconcile_total series when a
+			// controller starts; their presence proves the proxy reached the manager's metrics endpoint.
 			g.Expect(string(out)).To(ContainSubstring("controller_runtime_reconcile_total"))
 		}, timeout).Should(Succeed())
 	})

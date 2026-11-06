@@ -19,6 +19,10 @@ for cmd in "${cmds[@]}"; do
   fi
 done
 
+## Check required versions before anything is started (see bindings/go/kubernetes/controller/.env)
+: "${KIND_NODE_IMAGE_VERSION:?KIND_NODE_IMAGE_VERSION must be set, see bindings/go/kubernetes/controller/.env}"
+prometheus_operator_version="${PROMETHEUS_OPERATOR_VERSION:?PROMETHEUS_OPERATOR_VERSION must be set, see bindings/go/kubernetes/controller/.env}"
+
 ## Check that there is not a kind cluster already running
 if kind get clusters | grep -q "^ocm-e2e$"; then
   echo "Kind cluster 'ocm-e2e' is already running. Please delete it before running this script."
@@ -50,7 +54,6 @@ if [ "$(docker inspect -f '{{.State.Running}}' "${reg_name}" 2>/dev/null || true
 fi
 
 KIND_NODE_IMAGE="kindest/node:v${KIND_NODE_IMAGE_VERSION}"
-prometheus_operator_version="${PROMETHEUS_OPERATOR_VERSION:?PROMETHEUS_OPERATOR_VERSION must be set, see bindings/go/kubernetes/controller/.env}"
 
 # Create kind cluster with
 # - Port mappings for additional cluster OCI registries (replication tests).
