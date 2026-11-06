@@ -26,4 +26,5 @@ dist/chart/*.tgz
 
 README.md.gotmpl
 test-values.yaml
+tests/
 .helmignore
