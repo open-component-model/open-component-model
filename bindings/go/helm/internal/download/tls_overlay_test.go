@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/helmtest"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 )
 
@@ -31,7 +32,8 @@ func TestNewReadOnlyChartFromRemote_InputTLSOverridesHTTPConfig(t *testing.T) {
 	tgz, err := os.ReadFile("../../testdata/mychart-0.1.0.tgz")
 	r.NoError(err)
 
-	reg, manifest := newChartRegistry(t, "charts/mychart", "0.1.0", tgz, nil)
+	reg := helmtest.ChartRegistry(t, "charts/mychart", "0.1.0", tgz)
+	manifest := reg.Manifest
 	ociRef := "oci://" + strings.TrimPrefix(reg.URL, "https://") + "/charts/mychart:0.1.0"
 
 	files := httptest.NewTLSServer(http.FileServer(http.Dir("../../testdata")))
@@ -40,7 +42,7 @@ func TestNewReadOnlyChartFromRemote_InputTLSOverridesHTTPConfig(t *testing.T) {
 
 	// httptest servers share one certificate, so the wrong CA is generated.
 	other := foreignCAPEM(t)
-	right := certPEM(reg)
+	right := certPEM(reg.Server)
 
 	config := func(rootsPEM string) *httpv1alpha1.Config {
 		return &httpv1alpha1.Config{TLSConfig: httpv1alpha1.TLSConfig{RootCAsPEM: rootsPEM}}
@@ -83,7 +85,7 @@ func TestNewReadOnlyChartFromRemote_HTTPConfigKeepsOCICredentials(t *testing.T) 
 	tgz, err := os.ReadFile("../../testdata/mychart-0.1.0.tgz")
 	r.NoError(err)
 
-	reg, _ := newChartRegistry(t, "charts/mychart", "0.1.0", tgz, nil)
+	reg := helmtest.ChartRegistry(t, "charts/mychart", "0.1.0", tgz)
 	target, err := url.Parse(reg.URL)
 	r.NoError(err)
 	proxy := httputil.NewSingleHostReverseProxy(target)

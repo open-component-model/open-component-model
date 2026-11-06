@@ -12,17 +12,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/opencontainers/go-digest"
-	"github.com/opencontainers/image-spec/specs-go"
-	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"helm.sh/helm/v4/pkg/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
@@ -30,6 +26,7 @@ import (
 	helmdigest "ocm.software/open-component-model/bindings/go/helm/digest"
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/helmtest"
 	ocicredentialsspecv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -323,7 +320,8 @@ func TestDownloadResource_RealOCIRepo(t *testing.T) {
 func TestManifestPin(t *testing.T) {
 	tgz, err := os.ReadFile("../../testdata/mychart-0.1.0.tgz")
 	require.NoError(t, err)
-	srv, manifest := newChartRegistry(t, "charts/mychart", "0.1.0", tgz)
+	srv := helmtest.ChartRegistry(t, "charts/mychart", "0.1.0", tgz)
+	manifest := srv.Manifest
 	caPEM := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw}))
 	repo := NewResourceRepository(nil, WithHTTPConfig(&httpv1alpha1.Config{TLSConfig: httpv1alpha1.TLSConfig{RootCAsPEM: caPEM}}))
 	chartRef := "oci://" + strings.TrimPrefix(srv.URL, "https://") + "/charts/mychart:0.1.0"
@@ -393,64 +391,4 @@ func TestManifestPin(t *testing.T) {
 			r.Equal(tc.want, got)
 		})
 	}
-}
-
-// newChartRegistry serves tgz as a helm chart at repo:tag from a read-only OCI distribution
-// endpoint over TLS and returns the server and the chart's manifest digest.
-func newChartRegistry(t *testing.T, repo, tag string, tgz []byte) (*httptest.Server, digest.Digest) {
-	t.Helper()
-	config := []byte(`{"apiVersion":"v2","name":"mychart","version":"0.1.0"}`)
-	manifest, err := json.Marshal(ociImageSpecV1.Manifest{
-		Versioned: specs.Versioned{SchemaVersion: 2},
-		MediaType: ociImageSpecV1.MediaTypeImageManifest,
-		Config: ociImageSpecV1.Descriptor{
-			MediaType: registry.ConfigMediaType,
-			Digest:    digest.FromBytes(config),
-			Size:      int64(len(config)),
-		},
-		Layers: []ociImageSpecV1.Descriptor{{
-			MediaType: registry.ChartLayerMediaType,
-			Digest:    digest.FromBytes(tgz),
-			Size:      int64(len(tgz)),
-		}},
-	})
-	require.NoError(t, err)
-	manifestDigest := digest.FromBytes(manifest)
-
-	manifests := map[string][]byte{tag: manifest, manifestDigest.String(): manifest}
-	blobs := map[string][]byte{
-		digest.FromBytes(config).String(): config,
-		digest.FromBytes(tgz).String():    tgz,
-	}
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		if req.URL.Path == "/v2/" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		rest, ok := strings.CutPrefix(req.URL.Path, "/v2/"+repo+"/")
-		if !ok {
-			http.NotFound(w, req)
-			return
-		}
-		var data []byte
-		mediaType := "application/octet-stream"
-		if ref, isManifest := strings.CutPrefix(rest, "manifests/"); isManifest {
-			data, mediaType = manifests[ref], ociImageSpecV1.MediaTypeImageManifest
-		} else if ref, isBlob := strings.CutPrefix(rest, "blobs/"); isBlob {
-			data = blobs[ref]
-		}
-		if data == nil {
-			http.NotFound(w, req)
-			return
-		}
-		w.Header().Set("Content-Type", mediaType)
-		w.Header().Set("Docker-Content-Digest", digest.FromBytes(data).String())
-		w.Header().Set("Content-Length", strconv.Itoa(len(data)))
-		if req.Method == http.MethodHead {
-			return
-		}
-		_, _ = w.Write(data)
-	}))
-	t.Cleanup(srv.Close)
-	return srv, manifestDigest
 }
