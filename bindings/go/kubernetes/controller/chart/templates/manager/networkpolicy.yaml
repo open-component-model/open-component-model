@@ -25,11 +25,9 @@ spec:
         - ports:
             - port: {{ regexFind "[0-9]+$" (.Values.manager.healthProbe.bindAddress | default ":8081" | toString) | int }}
               protocol: TCP
-            {{- with .Values.manager.metricsServer.bindAddress }}
-            {{- if ne (toString .) "0" }}
-            - port: {{ regexFind "[0-9]+$" (toString .) | int }}
+            {{- with include "ocm-k8s-toolkit.metricsPort" . }}
+            - port: {{ . | int }}
               protocol: TCP
-            {{- end }}
             {{- end }}
             {{- if .Values.webhook.enable }}
             - port: 9443
