@@ -7,6 +7,8 @@
 //   - helmtest: a fake Helm chart registry
 //   - logtest: capture [log/slog] records
 //   - nexustest: a Nexus server for integration tests
+//   - ocilayouttest: OCI layout tars written by hand
+//   - ocitest: OCI images and ownership referrers
 //   - pkitest: throwaway keys and certificates
 //   - registrytest: OCI registries for integration tests
 //   - s3test: an S3 server for integration tests and a fake for unit tests
@@ -14,8 +16,8 @@
 //   - tsatest: a mock RFC 3161 timestamp authority
 //   - typedtest: a [runtime.Typed] value no scheme knows
 //
-// The subpackages import only the standard library, test libraries, blob, runtime and
-// descriptor/runtime, so every binding's tests can use them without an import cycle.
-// They are for tests only: a non-test file that imports them fails lint. depguard
-// enforces both rules.
+// The subpackages import only the standard library, test libraries, blob, runtime,
+// descriptor/runtime and the oci leaf packages looseref, spec and tar, so every
+// binding's tests can use them without an import cycle. They are for tests only: a
+// non-test file that imports them fails lint. depguard enforces both rules.
 package testutil

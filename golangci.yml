@@ -708,8 +708,9 @@ linters:
           deny:
             - pkg: "ocm.software/open-component-model/bindings/go/"
               desc: "kubernetes-controller must not import bindings outside its allowed set"
-        # Shared test helpers. The package may use only blob, descriptor/runtime and
-        # runtime so that every binding's tests can import it without an import cycle.
+        # Shared test helpers. The package may use only blob, descriptor/runtime, runtime
+        # and the oci leaf packages (looseref, spec, tar) so that every binding's tests
+        # can import it without an import cycle.
         internal-testutil:
           list-mode: lax
           files: ["**/bindings/go/internal/testutil/**"]
@@ -717,6 +718,9 @@ linters:
             - "ocm.software/open-component-model/bindings/go/blob"
             - "ocm.software/open-component-model/bindings/go/descriptor/runtime"
             - "ocm.software/open-component-model/bindings/go/internal/testutil"
+            - "ocm.software/open-component-model/bindings/go/oci/looseref"
+            - "ocm.software/open-component-model/bindings/go/oci/spec"
+            - "ocm.software/open-component-model/bindings/go/oci/tar"
             - "ocm.software/open-component-model/bindings/go/runtime"
           deny:
             - pkg: "ocm.software/open-component-model/bindings/go/"

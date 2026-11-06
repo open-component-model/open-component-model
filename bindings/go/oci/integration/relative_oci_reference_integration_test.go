@@ -14,6 +14,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/ocitest"
 	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -67,7 +68,7 @@ func Test_Integration_RelativeOCIReference_Read(t *testing.T) {
 	)
 	payload := []byte("relative artifact payload")
 	stagedRef := registryAddress + "/" + relativeRef
-	layoutBytes, access := createSingleLayerOCIImage(t, payload, stagedRef)
+	layoutBytes, access := ocitest.SingleLayerImage(t, payload, stagedRef)
 	stageResource := descriptor.Resource{
 		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "staged", Version: version}},
 		Type:        "ociImage",

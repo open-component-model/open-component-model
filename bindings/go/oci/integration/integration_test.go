@@ -45,6 +45,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/ocitest"
 	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
@@ -517,7 +518,7 @@ func uploadDownloadLocalResourceOCILayout(t *testing.T, repo *oci.Repository, co
 
 	originalData := []byte("foobar")
 
-	data, _ := createSingleLayerOCIImage(t, originalData)
+	data, _ := ocitest.SingleLayerImage(t, originalData)
 
 	blob := inmemory.New(bytes.NewReader(data))
 
@@ -592,7 +593,7 @@ func uploadDownloadBarebonesOCIImage(t *testing.T, repo *oci.Repository, from, t
 
 	originalData := []byte("foobar")
 
-	data, access := createSingleLayerOCIImage(t, originalData, from)
+	data, access := ocitest.SingleLayerImage(t, originalData, from)
 
 	blob := inmemory.New(bytes.NewReader(data))
 
@@ -669,7 +670,7 @@ func processResourceDigest(t *testing.T, repo *oci.Repository, from, to string) 
 
 	originalData := []byte("foobar")
 
-	data, access := createSingleLayerOCIImage(t, originalData, from)
+	data, access := ocitest.SingleLayerImage(t, originalData, from)
 
 	blob := inmemory.New(bytes.NewReader(data))
 
@@ -765,64 +766,6 @@ func generateRandomPassword(t *testing.T, length int) string {
 		password[i] = charset[randomIndex.Int64()]
 	}
 	return string(password)
-}
-
-func createSingleLayerOCIImage(t *testing.T, data []byte, ref ...string) ([]byte, *v1.OCIImage) {
-	t.Helper()
-	r := require.New(t)
-	var buf bytes.Buffer
-	w, err := tar.NewOCILayoutWriterWithTempFile(&buf, t.TempDir())
-	r.NoError(err)
-
-	desc := ociImageSpecV1.Descriptor{}
-	desc.Digest = digest.FromBytes(data)
-	desc.Size = int64(len(data))
-	desc.MediaType = ociImageSpecV1.MediaTypeImageLayer
-
-	r.NoError(w.Push(t.Context(), desc, bytes.NewReader(data)))
-
-	configRaw, err := json.Marshal(map[string]string{})
-	r.NoError(err)
-	configDesc := ociImageSpecV1.Descriptor{
-		Digest:    digest.FromBytes(configRaw),
-		Size:      int64(len(configRaw)),
-		MediaType: "application/json",
-	}
-	r.NoError(w.Push(t.Context(), configDesc, bytes.NewReader(configRaw)))
-
-	manifest := ociImageSpecV1.Manifest{
-		Versioned: specs.Versioned{SchemaVersion: 2},
-		MediaType: ociImageSpecV1.MediaTypeImageManifest,
-		Config:    configDesc,
-		Layers: []ociImageSpecV1.Descriptor{
-			desc,
-		},
-	}
-	manifestRaw, err := json.Marshal(manifest)
-	r.NoError(err)
-
-	manifestDesc := ociImageSpecV1.Descriptor{
-		Digest:    digest.FromBytes(manifestRaw),
-		Size:      int64(len(manifestRaw)),
-		MediaType: ociImageSpecV1.MediaTypeImageManifest,
-	}
-	r.NoError(w.Push(t.Context(), manifestDesc, bytes.NewReader(manifestRaw)))
-
-	for _, ref := range ref {
-		r.NoError(w.Tag(t.Context(), manifestDesc, ref))
-	}
-
-	r.NoError(w.Close())
-
-	var access *v1.OCIImage
-
-	if len(ref) > 0 {
-		access = &v1.OCIImage{
-			ImageReference: ref[0],
-		}
-	}
-
-	return buf.Bytes(), access
 }
 
 func uploadDownloadLocalResource(t *testing.T, repo repository.ComponentVersionRepository, name, version string) {
@@ -1038,7 +981,7 @@ func transformGetOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 
 	originalData := []byte("foobar")
 
-	data, access := createSingleLayerOCIImage(t, originalData, from)
+	data, access := ocitest.SingleLayerImage(t, originalData, from)
 	r.NotNil(access)
 
 	access.Type = ocmruntime.Type{
@@ -1134,7 +1077,7 @@ func transformAddOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 
 	originalData := []byte("foobar-add")
 
-	data, access := createSingleLayerOCIImage(t, originalData, "ghcr.io/test-add:v1.0.0")
+	data, access := ocitest.SingleLayerImage(t, originalData, "ghcr.io/test-add:v1.0.0")
 	r.NotNil(access)
 
 	access.Type = ocmruntime.Type{
@@ -1631,7 +1574,7 @@ func newCTFOwnershipRepo(t *testing.T) (*ocictf.Store, *oci.Repository) {
 func pushOwnershipByReferenceImage(t *testing.T, ctx context.Context, repo *oci.Repository, imageRef string, payload []byte) string {
 	t.Helper()
 	r := require.New(t)
-	data, access := createSingleLayerOCIImage(t, payload, imageRef)
+	data, access := ocitest.SingleLayerImage(t, payload, imageRef)
 	uploaded, err := repo.UploadResource(ctx, &descriptor.Resource{
 		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "image", Version: "v1.0.0"}},
 		Type:        "ociArtifact",
@@ -1661,7 +1604,7 @@ func byReferenceResource(name, version, imageRef string) *descriptor.Resource {
 func addByValueOwnedResource(t *testing.T, ctx context.Context, resolver oci.Resolver, repo *oci.Repository, component, version, resourceName string, payload []byte) (*descriptor.Resource, string) {
 	t.Helper()
 	r := require.New(t)
-	data, _ := createSingleLayerOCIImage(t, payload)
+	data, _ := ocitest.SingleLayerImage(t, payload)
 	res, err := repo.AddLocalResource(ctx, component, version, &descriptor.Resource{
 		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: resourceName, Version: version}},
 		Type:        "ociArtifact",
@@ -1711,30 +1654,11 @@ func transferByReferenceResourceStream(t *testing.T, ctx context.Context, src, d
 	return uploaded.Access.(*v1.OCIImage).ImageReference
 }
 
-// listOwnershipReferrers walks the OCI Referrers API for the subject
-// identified by reference (a full OCI reference, by tag or digest) and
-// returns every referrer carrying [annotations.OwnershipArtifactType].
-func listOwnershipReferrers(t *testing.T, ctx context.Context, resolver oci.Resolver, reference string) []ociImageSpecV1.Descriptor {
-	t.Helper()
-	r := require.New(t)
-	store, err := resolver.StoreForReference(ctx, reference)
-	r.NoError(err)
-	graphStore, ok := store.(content.ReadOnlyGraphStorage)
-	r.Truef(ok, "store %T must implement content.ReadOnlyGraphStorage for referrers discovery", store)
-	ref, err := looseref.ParseReference(reference)
-	r.NoError(err)
-	subject, err := store.Resolve(ctx, ref.ReferenceOrTag())
-	r.NoError(err)
-	refs, err := orasregistry.Referrers(ctx, graphStore, subject, annotations.OwnershipArtifactType)
-	r.NoError(err)
-	return refs
-}
-
 // assertOwnershipReferrerCount asserts that exactly want ownership referrers
 // (artifact type [annotations.OwnershipArtifactType]) are indexed for subject.
 func assertOwnershipReferrerCount(t *testing.T, ctx context.Context, resolver oci.Resolver, subject string, want int) {
 	t.Helper()
-	got := listOwnershipReferrers(t, ctx, resolver, subject)
+	got := ocitest.OwnershipReferrers(t, ctx, resolver, subject)
 	require.Lenf(t, got, want, "subject %q should have %d ownership referrers, got %d", subject, want, len(got))
 }
 
@@ -1745,7 +1669,7 @@ func assertOwnershipReferrerCount(t *testing.T, ctx context.Context, resolver oc
 func assertOwnershipReferrerPresent(t *testing.T, ctx context.Context, resolver oci.Resolver, subjectRef, component, version, resourceName string) {
 	t.Helper()
 	r := require.New(t)
-	for _, ref := range listOwnershipReferrers(t, ctx, resolver, subjectRef) {
+	for _, ref := range ocitest.OwnershipReferrers(t, ctx, resolver, subjectRef) {
 		if ref.Annotations[annotations.OwnershipComponentName] != component {
 			continue
 		}
@@ -1772,7 +1696,7 @@ func assertOwnershipReferrerPresent(t *testing.T, ctx context.Context, resolver 
 func assertOwnershipReferrerAnnotations(t *testing.T, ctx context.Context, resolver oci.Resolver, subjectRef, component, version, resourceName string) {
 	t.Helper()
 	r := require.New(t)
-	referrers := listOwnershipReferrers(t, ctx, resolver, subjectRef)
+	referrers := ocitest.OwnershipReferrers(t, ctx, resolver, subjectRef)
 	r.NotEmpty(referrers, "subject %q must carry an ownership referrer", subjectRef)
 	ref := referrers[0]
 
@@ -1847,7 +1771,7 @@ func Test_Integration_OCIImageLayer(t *testing.T) {
 	layerDigest := digest.FromBytes(layerData)
 	imageReference := fmt.Sprintf("%s/layer-test:v1.0.0", registryAddress)
 
-	layoutData, _ := createSingleLayerOCIImage(t, layerData, "ghcr.io/test:v1.0.0")
+	layoutData, _ := ocitest.SingleLayerImage(t, layerData, "ghcr.io/test:v1.0.0")
 	_, err = repo.UploadResource(ctx, &descriptor.Resource{
 		ElementMeta: descriptor.ElementMeta{
 			ObjectMeta: descriptor.ObjectMeta{Name: "carrier", Version: "v1.0.0"},
