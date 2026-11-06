@@ -330,7 +330,7 @@ func plainHTTPFor(ctx context.Context, helmRepo string, cfg *httpv1alpha1.Config
 	switch u.Scheme {
 	case "http":
 		if !plain {
-			return false, fmt.Errorf("helm repository %q uses http://, but plain HTTP is not enabled for host %q: set plainHTTP: true for the host in the HTTP client configuration, or use https://", helmRepo, host)
+			return false, fmt.Errorf("helm repository %q uses http://, but plain HTTP is not enabled for host %q. Enable plainHTTP for the host in the HTTP client configuration, or use https://", helmRepo, host)
 		}
 	case "oci":
 	default:

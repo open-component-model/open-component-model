@@ -425,9 +425,9 @@ func TestNewResourceRepositoryHTTPConfig_PlainHTTP(t *testing.T) {
 	}{
 		{name: "without config the client speaks TLS to a plain server", reference: host + "/test/img:v1.0.0", wantErr: "server gave HTTP response to HTTPS client"},
 		{name: "per-host plainHTTP reaches the registry", reference: host + "/test/img:v1.0.0", httpConfig: perHost, expectHit: true},
-		{name: "explicit http reference without the host entry is rejected", reference: "http://" + host + "/test/img:v1.0.0", wantErr: "plainHTTP: true"},
+		{name: "explicit http reference without the host entry is rejected", reference: "http://" + host + "/test/img:v1.0.0", wantErr: "plain HTTP is not enabled"},
 		{name: "explicit http reference with per-host plainHTTP reaches the registry", reference: "http://" + host + "/test/img:v1.0.0", httpConfig: perHost, expectHit: true},
-		{name: "explicit http reference against per-host plainHTTP false is rejected", reference: "http://" + host + "/test/img:v1.0.0", httpConfig: perHostFalse, wantErr: "plainHTTP: true"},
+		{name: "explicit http reference against per-host plainHTTP false is rejected", reference: "http://" + host + "/test/img:v1.0.0", httpConfig: perHostFalse, wantErr: "plain HTTP is not enabled"},
 	}
 
 	for _, tt := range tests {

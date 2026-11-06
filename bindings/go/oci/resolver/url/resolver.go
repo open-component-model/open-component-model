@@ -225,7 +225,7 @@ func (resolver *CachingResolver) plainHTTPFor(ctx context.Context, scheme, host 
 	}
 	switch {
 	case scheme == "http" && !plain:
-		return false, fmt.Errorf("the URL uses http://, but plain HTTP is not enabled for host %q: set plainHTTP: true for the host in the HTTP client configuration and drop the prefix (see %s)", host, httpPrefixMigrationGuide)
+		return false, fmt.Errorf("the URL uses http://, but plain HTTP is not enabled for host %q. Enable plainHTTP for the host in the HTTP client configuration and drop the prefix (see %s)", host, httpPrefixMigrationGuide)
 	case plain && scheme != "http":
 		slog.WarnContext(ctx, "plain HTTP is enabled for this host; the connection is downgraded to cleartext HTTP and OCI registry requests, including credentials, are sent unencrypted",
 			slog.String("host", host))

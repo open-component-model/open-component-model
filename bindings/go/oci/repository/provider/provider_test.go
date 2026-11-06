@@ -265,7 +265,7 @@ func TestWithHTTPConfig_PerHostPlainHTTP(t *testing.T) {
 	}{
 		{name: "without config the client speaks TLS to a plain server", baseURL: host, wantErr: "server gave HTTP response to HTTPS client"},
 		{name: "per-host plainHTTP reaches the registry", baseURL: host, cfg: perHost, expectHit: true},
-		{name: "http base URL without the host entry is rejected", baseURL: srv.URL, wantErr: "plainHTTP: true"},
+		{name: "http base URL without the host entry is rejected", baseURL: srv.URL, wantErr: "plain HTTP is not enabled"},
 		{name: "http base URL with the host entry reaches the registry", baseURL: srv.URL, cfg: perHost, expectHit: true},
 	}
 

@@ -94,7 +94,7 @@ components:
 	t.Run("without the host entry an http prefix is rejected before any request", func(t *testing.T) {
 		r := require.New(t)
 		err := addComponentVersion(t, writeConfig(t, credentialsConfig), "http://"+registry.RegistryAddress)
-		r.ErrorContains(err, "plainHTTP: true", "the prefix alone must not downgrade to plain HTTP")
+		r.ErrorContains(err, "plain HTTP is not enabled", "the prefix alone must not downgrade to plain HTTP")
 		r.ErrorContains(err, registry.RegistryAddress, "the error must name the host")
 	})
 
