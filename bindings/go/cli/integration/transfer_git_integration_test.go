@@ -27,6 +27,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/git/gittest"
+	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	gitaccess "ocm.software/open-component-model/bindings/go/git/spec/access"
 	gitv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
@@ -165,6 +167,15 @@ func assertGitArchiveREADME(t *testing.T, data []byte, want string) {
 	r.Equal(map[string]string{"README.md": want}, files, "unexpected Git archive content")
 }
 
+// newBareGitRepository creates an empty bare repository and returns its path and URL.
+func newBareGitRepository(t *testing.T) (path, url string) {
+	t.Helper()
+	path = t.TempDir()
+	_, err := git.PlainInit(path, true)
+	require.NoError(t, err)
+	return path, gittest.Serve(t, path)
+}
+
 // Test_Integration_Transfer_Git transfers a resource with a Git access from a CTF
 // to an OCI registry.
 //
@@ -190,7 +201,11 @@ func Test_Integration_Transfer_Git(t *testing.T) {
 		Password: targetRegistry.Password,
 	}})
 	r.NoError(err)
+
+	// Create the fixture locally to get the commit hash, then expose it over HTTP
+	// so all accesses use a remote URL (local-path git accesses are rejected by Validate).
 	gitPath, commit := newGitFixture(t)
+	gitServerURL := gittest.Serve(t, gitPath)
 
 	repoProvider := provider.NewComponentVersionRepositoryProvider()
 	ocmconf, err := configuration.GetConfigFromPath(cfgPath)
@@ -215,50 +230,56 @@ func Test_Integration_Transfer_Git(t *testing.T) {
 		resourceVersion  = "v1.0.0"
 	)
 
-	// gitConstructor renders a constructor holding one Git resource, selected by
-	// pinField — "commit" or "ref".
-	gitConstructor := func(pinField, pinValue string) string {
-		return fmt.Sprintf(`components:
-- name: %[1]s
-  version: %[2]s
-  provider:
-    name: ocm.software
-  resources:
-  - name: %[3]s
-    version: %[4]s
-    type: directoryTree
-    relation: external
-    access:
-      type: Git/v1
-      repository: %[5]q
-      %[6]s: %[7]s
-`, componentName, componentVersion, resourceName, resourceVersion, gitPath, pinField, pinValue)
-	}
-
-	// addToCTF adds the constructor to a CTF in its own directory and returns the
-	// stored component version's reference and the CTF path.
-	addToCTF := func(t *testing.T, constructor string, extraArgs ...string) (ref, ctf string) {
+	// seedCTF writes a component version with a remote Git access into a CTF,
+	// using the HTTP git server for the source repository. pinDigest controls
+	// whether ProcessResourceDigest is called to pin the commit and record the
+	// archive digest (mirrors --skip-reference-digest-processing).
+	seedCTF := func(t *testing.T, ref, commit string, pinDigest bool) (ctfRef, ctfPath string) {
 		t.Helper()
 		r := require.New(t)
 
-		dir := t.TempDir()
-		constructorPath := filepath.Join(dir, "constructor.yaml")
-		r.NoError(os.WriteFile(constructorPath, []byte(constructor), 0o600))
+		gitRepo := gitrepository.NewResourceRepository(nil)
 
-		ctf = filepath.Join(dir, "source-ctf")
-		addCMD := cmd.New()
-		addCMD.SetArgs(append([]string{
-			"add", "component-version",
-			"--repository", fmt.Sprintf("ctf::%s", ctf),
-			"--constructor", constructorPath,
-			"--config", cfgPath,
-		}, extraArgs...))
+		access := &gitv1.Git{
+			Type:       ocmruntime.NewVersionedType(gitv1.Type, gitv1.Version),
+			Repository: gitServerURL,
+			Ref:        ref,
+			Commit:     commit,
+		}
+		raw := &ocmruntime.Raw{}
+		r.NoError(gitaccess.Scheme.Convert(access, raw))
 
-		ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
-		defer cancel()
-		r.NoError(addCMD.ExecuteContext(ctx), "creation of component version should succeed")
+		res := descriptor.Resource{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{Name: resourceName, Version: resourceVersion},
+			},
+			Type:     "directoryTree",
+			Relation: descriptor.ExternalRelation,
+			Access:   raw,
+		}
 
-		return fmt.Sprintf("ctf::%s//%s:%s", ctf, componentName, componentVersion), ctf
+		if pinDigest {
+			pinned, err := gitRepo.ProcessResourceDigest(t.Context(), &res, nil)
+			r.NoError(err, "digest processing must succeed for remote git repository")
+			res = *pinned
+		}
+
+		ctfPath = filepath.Join(t.TempDir(), "source-ctf")
+		repo, err := createRepo(t.Context(), repoProvider, credentialResolver, &ctfv1.Repository{
+			FilePath:   ctfPath,
+			AccessMode: ctfv1.AccessModeCreate + "|" + ctfv1.AccessModeReadWrite,
+		})
+		r.NoError(err)
+		r.NoError(repo.AddComponentVersion(t.Context(), &descriptor.Descriptor{
+			Meta: descriptor.Meta{Version: "v2"},
+			Component: descriptor.Component{
+				Provider:      descriptor.Provider{Name: "ocm.software"},
+				ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: componentName, Version: componentVersion}},
+				Resources:     []descriptor.Resource{res},
+			},
+		}))
+
+		return fmt.Sprintf("ctf::%s//%s:%s", ctfPath, componentName, componentVersion), ctfPath
 	}
 
 	// runTransfer transfers fromRef into a fresh repository of the target
@@ -279,10 +300,10 @@ func Test_Integration_Transfer_Git(t *testing.T) {
 		return targetRef, transferCMD.ExecuteContext(ctx)
 	}
 
-	// 2. Build a source CTF with one commit-pinned Git resource. Digest
-	//    processing archives the commit to hash it, giving the resource the
-	//    digest the transfer must preserve.
-	ctfRef, sourceCTF := addToCTF(t, gitConstructor("commit", commit))
+	// 2. Build a source CTF with one commit-pinned Git resource using the remote HTTP
+	//    server. The commit from newGitFixture is the first commit; the HTTP server
+	//    serves the full history so pinning to that commit resolves correctly.
+	ctfRef, sourceCTF := seedCTF(t, "refs/heads/main", commit, true)
 
 	sourceRepo, err := createRepo(ctx, repoProvider, credentialResolver, &ctfv1.Repository{FilePath: sourceCTF})
 	r.NoError(err, "should be able to open the source CTF")
@@ -354,16 +375,16 @@ func Test_Integration_Transfer_Git(t *testing.T) {
 	t.Run("a git uploader pushes the commit into the target repository", func(t *testing.T) {
 		r := require.New(t)
 
-		targetGit := t.TempDir()
-		_, err := git.PlainInit(targetGit, true)
-		r.NoError(err)
+		// Use a remote HTTP git server as the upload target so the git uploader
+		// can push without hitting the local-path rejection in Validate.
+		targetGitPath, targetGitURL := newBareGitRepository(t)
 		uploaderCfg := filepath.Join(t.TempDir(), "git-uploader.yaml")
 		r.NoError(os.WriteFile(uploaderCfg, []byte(fmt.Sprintf(`type: generic.config.ocm.software/v1
 configurations:
 - type: git.uploader.transfer.config.ocm.software/v1alpha1
   repository: %q
   ref: refs/heads/mirror
-`, targetGit)), 0o600))
+`, targetGitURL)), 0o600))
 
 		desc, targetRef := transferAndFetch(t, "git-transfer-uploader", "--config", uploaderCfg)
 
@@ -371,16 +392,10 @@ configurations:
 		r.Equal("Git/v1", res.Access.GetType().String(), "the pushed resource must be published with Git access")
 		var published gitv1.Git
 		r.NoError(gitaccess.Scheme.Convert(res.Access, &published))
-		r.Equal(targetGit, published.Repository)
+		r.Equal(targetGitURL, published.Repository)
 		r.Equal("refs/heads/mirror", published.Ref)
 		r.Equal(commit, published.Commit, "the commit SHA must be unchanged")
 		r.Equal(sourceDigest.Value, res.Digest.Value)
-
-		pushed, err := git.PlainOpen(targetGit)
-		r.NoError(err)
-		ref, err := pushed.Reference("refs/heads/mirror", false)
-		r.NoError(err)
-		r.Equal(commit, ref.Hash().String())
 
 		// Downloading through the published access must yield the archive the digest
 		// was taken over.
@@ -398,6 +413,12 @@ configurations:
 		r.NoError(err)
 		r.Equal(sourceDigest.Value, godigest.FromBytes(archive).Encoded())
 		assertGitArchiveAtFirstCommit(t, archive)
+
+		pushed, err := git.PlainOpen(targetGitPath)
+		r.NoError(err)
+		ref, err := pushed.Reference("refs/heads/mirror", false)
+		r.NoError(err)
+		r.Equal(commit, ref.Hash().String(), "the commit must land on refs/heads/mirror")
 	})
 
 	t.Run("a resource that is not pinned to a commit is transferred at the ref's commit", func(t *testing.T) {
@@ -407,7 +428,7 @@ configurations:
 		// commit is that processor's job. Transfer no longer refuses a ref-only resource; it
 		// embeds the archive at the commit the ref resolves to now (main's second commit),
 		// matching how an unpinned OCI resource transfers by tag without a digest.
-		refOnlyRef, _ := addToCTF(t, gitConstructor("ref", "refs/heads/main"), "--skip-reference-digest-processing")
+		refOnlyRef, _ := seedCTF(t, "refs/heads/main", "", false)
 
 		targetRef, err := runTransfer(t, refOnlyRef, "git-transfer-refonly", "--copy-resources")
 		r.NoError(err, "transferring a ref-only Git resource must succeed")

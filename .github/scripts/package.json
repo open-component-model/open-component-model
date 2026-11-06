@@ -20,9 +20,7 @@
     "globals": "17.13.0"
   },
   "overrides": {
-    "@actions/github": {
-      "undici": "^6.29.1"
-    },
+    "minimatch@<11.0.1": "11.0.1",
     "@actions/http-client": {
       "undici": "^8.12.2"
     }

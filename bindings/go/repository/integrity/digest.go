@@ -17,7 +17,7 @@ func ParseDigest(d *descriptor.Digest) (digest.Digest, error) {
 	if d == nil {
 		return "", nil
 	}
-	if strings.EqualFold(d.HashAlgorithm, descriptor.NoDigest) || strings.EqualFold(d.NormalisationAlgorithm, descriptor.ExcludeFromSignature) {
+	if isExcluded(d) {
 		return "", nil
 	}
 	if d.Value == "" && d.HashAlgorithm == "" {
@@ -48,6 +48,13 @@ func ParseDigest(d *descriptor.Digest) (digest.Digest, error) {
 	}
 
 	return parsed, nil
+}
+
+// isExcluded reports whether d keeps content out of verification. The spec defines the
+// marker as both NO-DIGEST and EXCLUDE-FROM-SIGNATURE, but either one excludes, as in
+// signing: a signed descriptor using only one cannot be corrected without signing it again.
+func isExcluded(d *descriptor.Digest) bool {
+	return strings.EqualFold(d.HashAlgorithm, descriptor.NoDigest) || strings.EqualFold(d.NormalisationAlgorithm, descriptor.ExcludeFromSignature)
 }
 
 // HashAlgorithm maps a hash algorithm name ("SHA-256" as the spec spells it, or "sha256")
