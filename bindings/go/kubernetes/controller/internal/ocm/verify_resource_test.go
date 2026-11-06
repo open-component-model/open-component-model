@@ -26,11 +26,11 @@ import (
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/git/gittest"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
 // content is what every fake source serves.
@@ -229,7 +229,7 @@ func newGitRepository() (string, string) {
 		TreeHash:  store(&object.Tree{Entries: []object.TreeEntry{{Name: "README.md", Mode: filemode.Regular, Hash: blobHash}}}),
 	})
 	Expect(repo.Storer.SetReference(plumbing.NewHashReference("refs/heads/main", commit))).To(Succeed())
-	return gittest.Serve(GinkgoT(), dir), commit.String()
+	return testgit.Serve(GinkgoT(), dir), commit.String()
 }
 
 func mustJSON(v any) []byte {

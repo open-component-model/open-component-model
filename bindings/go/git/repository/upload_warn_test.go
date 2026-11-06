@@ -12,7 +12,7 @@ import (
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/git/gittest"
+	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
 // warnCapture is a slog.Handler that records Warn records so a test can assert on them.
@@ -82,7 +82,7 @@ func TestUploadTagToEmptyRepositoryWarns(t *testing.T) {
 			r.NoError(err)
 			// PlainInit points HEAD at master; hosts point it at the first pushed branch.
 			r.NoError(bare.Storer.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, "refs/heads/main")))
-			targetURL := gittest.Serve(t, targetPath)
+			targetURL := testgit.Serve(t, targetPath)
 
 			if tc.seedBranch {
 				// Give the target a branch before the tag push so hasBranch(refs) is true;
