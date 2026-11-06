@@ -2,6 +2,7 @@ package blobtest_test
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -25,5 +26,18 @@ func TestReadAll(t *testing.T) {
 			got := blobtest.ReadAll(t, inmemory.New(bytes.NewReader(tt.content)))
 			r.Equal(tt.content, got)
 		})
+	}
+}
+
+func TestFailing(t *testing.T) {
+	r := require.New(t)
+	want := errors.New("cannot open")
+
+	b := blobtest.Failing(want)
+
+	for range 2 {
+		rc, err := b.ReadCloser()
+		r.ErrorIs(err, want)
+		r.Nil(rc)
 	}
 }

@@ -5,6 +5,11 @@
 //
 //	data := blobtest.ReadAll(t, b)
 //	r.Equal("hello", string(data))
+//
+// [Failing] returns a blob that cannot be opened, to test how code handles that error:
+//
+//	_, err := compression.Compress(blobtest.Failing(errBoom)).ReadCloser()
+//	r.ErrorIs(err, errBoom)
 package blobtest
 
 import (
@@ -30,4 +35,15 @@ func ReadAll(t *testing.T, b blob.ReadOnlyBlob) []byte {
 	r.NoError(rc.Close())
 
 	return data
+}
+
+// Failing returns a blob whose ReadCloser always returns err.
+func Failing(err error) blob.ReadOnlyBlob {
+	return failingBlob{err: err}
+}
+
+type failingBlob struct{ err error }
+
+func (b failingBlob) ReadCloser() (io.ReadCloser, error) {
+	return nil, b.err
 }

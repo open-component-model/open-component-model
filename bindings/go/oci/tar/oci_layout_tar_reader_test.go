@@ -18,6 +18,7 @@ import (
 	"oras.land/oras-go/v2/content"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 )
 
@@ -89,18 +90,6 @@ func createGzippedOCILayout(t *testing.T, data []byte) []byte {
 	return buf.Bytes()
 }
 
-type testBlob struct {
-	data []byte
-}
-
-func (b *testBlob) ReadCloser() (io.ReadCloser, error) {
-	return io.NopCloser(bytes.NewReader(b.data)), nil
-}
-
-func (b *testBlob) Size() int64 {
-	return int64(len(b.data))
-}
-
 func TestReadOCILayout(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -110,27 +99,27 @@ func TestReadOCILayout(t *testing.T) {
 	}{
 		{
 			name:    "valid OCI layout tarball",
-			blob:    &testBlob{data: createTestOCILayout(t, []byte("test"))},
+			blob:    inmemory.New(bytes.NewReader(createTestOCILayout(t, []byte("test")))),
 			wantErr: false,
 		},
 		{
 			name:              "valid OCI layout tarball with other blob content",
-			blob:              &testBlob{data: createTestOCILayout(t, []byte("other"))},
+			blob:              inmemory.New(bytes.NewReader(createTestOCILayout(t, []byte("other")))),
 			expectInvalidBlob: true,
 		},
 		{
 			name:    "valid gzipped OCI layout tarball",
-			blob:    &testBlob{data: createGzippedOCILayout(t, []byte("test"))},
+			blob:    inmemory.New(bytes.NewReader(createGzippedOCILayout(t, []byte("test")))),
 			wantErr: false,
 		},
 		{
 			name:    "empty blob",
-			blob:    &testBlob{data: []byte{}},
+			blob:    inmemory.New(bytes.NewReader([]byte{})),
 			wantErr: true,
 		},
 		{
 			name:    "invalid tarball",
-			blob:    &testBlob{data: []byte("not a tarball")},
+			blob:    inmemory.New(bytes.NewReader([]byte("not a tarball"))),
 			wantErr: true,
 		},
 	}
@@ -170,14 +159,14 @@ func TestReadOCILayout(t *testing.T) {
 
 func TestReadOCILayout_SizeAware(t *testing.T) {
 	// Test with a blob that's too small for gzip detection
-	smallBlob := &testBlob{data: []byte{0x1F}} // Only one byte of gzip magic
+	smallBlob := inmemory.New(bytes.NewReader([]byte{0x1F})) // Only one byte of gzip magic
 	_, err := ReadOCILayout(context.Background(), smallBlob)
 	assert.Error(t, err, "Expected error for blob too small for gzip detection")
 }
 
 func TestReadOCILayout_Close(t *testing.T) {
 	data := createTestOCILayout(t, []byte("test"))
-	store, err := ReadOCILayout(context.Background(), &testBlob{data: data})
+	store, err := ReadOCILayout(context.Background(), inmemory.New(bytes.NewReader(data)))
 	require.NoError(t, err)
 	assert.NoError(t, store.Close())
 }
@@ -272,7 +261,7 @@ func readLayout(t *testing.T, build func(w *OCILayoutWriter)) *CloseableReadOnly
 	require.NoError(t, err)
 	build(w)
 	require.NoError(t, w.Close())
-	store, err := ReadOCILayout(t.Context(), &testBlob{data: buf.Bytes()})
+	store, err := ReadOCILayout(t.Context(), inmemory.New(bytes.NewReader(buf.Bytes())))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, store.Close()) })
 	return store

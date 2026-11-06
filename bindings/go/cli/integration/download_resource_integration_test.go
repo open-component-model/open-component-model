@@ -36,6 +36,7 @@ import (
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	gitaccessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	helmblob "ocm.software/open-component-model/bindings/go/helm/blob"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/blobtest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
@@ -676,7 +677,7 @@ func assertHelmChartTar(t *testing.T, tarPath, originalChartPath, originalProvPa
 
 	chartArchive, err := chartBlob.ChartArchive()
 	r.NoError(err, "tar should contain the chart .tgz")
-	r.Equal(expectedChart, readAllFromBlob(t, chartArchive), "downloaded chart should match the original")
+	r.Equal(expectedChart, blobtest.ReadAll(t, chartArchive), "downloaded chart should match the original")
 
 	provFile, err := chartBlob.ProvFile()
 	r.NoError(err, "reading prov file from chart blob should succeed")
@@ -684,20 +685,8 @@ func assertHelmChartTar(t *testing.T, tarPath, originalChartPath, originalProvPa
 		r.NotNil(provFile, "tar should contain the .prov file")
 		expectedProv, err := os.ReadFile(originalProvPath)
 		r.NoError(err, "should read original prov file")
-		r.Equal(expectedProv, readAllFromBlob(t, provFile), "downloaded prov file should match the original")
+		r.Equal(expectedProv, blobtest.ReadAll(t, provFile), "downloaded prov file should match the original")
 	}
-}
-
-// readAllFromBlob reads the full content of a read-only blob, failing the test on error.
-func readAllFromBlob(t *testing.T, b blob.ReadOnlyBlob) []byte {
-	t.Helper()
-	r := require.New(t)
-	rc, err := b.ReadCloser()
-	r.NoError(err, "should open blob reader")
-	defer func() { _ = rc.Close() }()
-	data, err := io.ReadAll(rc)
-	r.NoError(err, "should read blob content")
-	return data
 }
 
 func Test_Integration_ConstructorCompress(t *testing.T) {
