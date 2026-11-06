@@ -42,7 +42,12 @@ type CachingResolver struct {
 	baseURL    string
 	subPath    string
 	baseClient remote.Client
-	plainHTTP  bool
+	// baseScheme is the scheme prefix the base URL was given with, "" for
+	// none. It is deprecated input: see plainHTTPFor.
+	baseScheme string
+	// plainHTTP is the programmatic default for hosts the HTTP configuration
+	// does not decide. See WithPlainHTTP.
+	plainHTTP bool
 	// httpConfig is the central HTTP client configuration, if any.
 	httpConfig *httpv1alpha1.Config
 
@@ -121,12 +126,9 @@ func (resolver *CachingResolver) Ping(ctx context.Context) error {
 		return fmt.Errorf("failed to create registry client: %w", err)
 	}
 	// Per-host settings are keyed by the host the request goes to, which for docker.io is registry-1.docker.io.
-	r.PlainHTTP, err = resolver.plainHTTPFor(parsedURL.Scheme, r.Reference.Host())
+	r.PlainHTTP, err = resolver.plainHTTPFor(ctx, parsedURL.Scheme, r.Reference.Host())
 	if err != nil {
 		return fmt.Errorf("failed to determine plain HTTP setting for host %s: %w", r.Reference.Host(), err)
-	}
-	if r.PlainHTTP {
-		resolver.warnPlainHTTP(ctx, parsedURL.Scheme, r.Reference.Host())
 	}
 	if resolver.baseClient != nil {
 		r.Client = resolver.baseClient
@@ -165,12 +167,9 @@ func (resolver *CachingResolver) StoreForReference(ctx context.Context, referenc
 		return cache.Wrap(remoteStore, resolver.blobCache.Load(), resolver.referenceCache.Load()), nil
 	}
 
-	plainHTTP, err := resolver.plainHTTPFor(ref.Scheme, ref.Host())
+	plainHTTP, err := resolver.plainHTTPFor(ctx, ref.Scheme, ref.Host())
 	if err != nil {
 		return nil, fmt.Errorf("cannot resolve %q: %w", reference, err)
-	}
-	if plainHTTP {
-		resolver.warnPlainHTTP(ctx, ref.Scheme, ref.Host())
 	}
 
 	repo := &remote.Repository{
@@ -201,35 +200,42 @@ func (resolver *CachingResolver) StoreForReference(ctx context.Context, referenc
 	return cache.Wrap(store, resolver.blobCache.Load(), resolver.referenceCache.Load()), nil
 }
 
-// plainHTTPFor reports whether host must be reached over cleartext HTTP: on an
-// http:// prefix (base URL or reference), or when the HTTP configuration sets
-// plainHTTP for the host. The configuration applies to https:// references too,
-// since a base URL loses its scheme before it gets here. An http:// prefix
-// against an explicit plainHTTP: false for the host is an error: a URL must not
-// downgrade a host the configuration pins to HTTPS.
-func (resolver *CachingResolver) plainHTTPFor(scheme, host string) (bool, error) {
-	plain := resolver.httpConfig.ResolveHost(host).PlainHTTP
-	forced := resolver.plainHTTP || scheme == "http"
-	if forced && plain != nil && !*plain {
-		return false, fmt.Errorf("the http:// prefix conflicts with plainHTTP: false for host %q in the HTTP client configuration; drop the prefix or set plainHTTP: true (see %s)", host, httpPrefixMigrationGuide)
+// plainHTTPFor decides whether host is reached over cleartext HTTP and logs
+// the warnings that decision carries.
+//
+// Only the HTTP configuration turns plain HTTP on (or WithPlainHTTP, for
+// hosts the configuration does not decide). A scheme prefix on the reference
+// or the base URL never changes the connection: it is deprecated input and
+// only checked against the decision. An http:// prefix on a host that stays
+// on HTTPS is an error, because the request would silently go over HTTPS
+// when the URL asked for cleartext. An https:// prefix on a plain HTTP host
+// only warns that the connection was downgraded; an http:// prefix on a plain
+// HTTP host asked for exactly that and gets no downgrade warning.
+func (resolver *CachingResolver) plainHTTPFor(ctx context.Context, scheme, host string) (bool, error) {
+	if scheme == "" {
+		scheme = resolver.baseScheme
 	}
-	return forced || (plain != nil && *plain), nil
-}
-
-// httpPrefixMigrationGuide explains how to replace an http:// prefix with
-// plainHTTP in the HTTP client configuration.
-const httpPrefixMigrationGuide = "https://ocm.software/docs/guides/transfer/configure-http/#migrate-from-http-prefixes"
-
-func (resolver *CachingResolver) warnPlainHTTP(ctx context.Context, scheme, host string) {
+	plain := resolver.plainHTTP
+	if configured := resolver.httpConfig.ResolveHost(host).PlainHTTP; configured != nil {
+		plain = *configured
+	}
+	if scheme != "" {
+		slog.WarnContext(ctx, "the scheme prefix on a registry URL is deprecated; drop it and set plainHTTP in the HTTP client configuration for hosts without TLS",
+			slog.String("host", host), slog.String("scheme", scheme), slog.String("url", httpPrefixMigrationGuide))
+	}
 	switch {
-	case scheme == "http", resolver.plainHTTP:
-		slog.WarnContext(ctx, "the http:// prefix is deprecated and a future release will stop downgrading to plain HTTP; set plainHTTP: true for this host in the HTTP client configuration instead",
-			slog.String("host", host), slog.String("url", httpPrefixMigrationGuide))
-	default:
-		slog.WarnContext(ctx, "plainHTTP is enabled for this host in the HTTP client configuration; OCI registry requests, including credentials, go over cleartext HTTP",
+	case scheme == "http" && !plain:
+		return false, fmt.Errorf("the URL uses http://, but plain HTTP is not enabled for host %q: set plainHTTP: true for the host in the HTTP client configuration and drop the prefix (see %s)", host, httpPrefixMigrationGuide)
+	case plain && scheme != "http":
+		slog.WarnContext(ctx, "plain HTTP is enabled for this host; the connection is downgraded to cleartext HTTP and OCI registry requests, including credentials, are sent unencrypted",
 			slog.String("host", host))
 	}
+	return plain, nil
 }
+
+// httpPrefixMigrationGuide explains how to replace a scheme prefix with
+// plainHTTP in the HTTP client configuration.
+const httpPrefixMigrationGuide = "https://ocm.software/docs/guides/transfer/configure-http/#migrate-from-http-prefixes"
 
 func (resolver *CachingResolver) addToCache(reference string, store *remotestore.RemoteStore) {
 	resolver.cacheMu.Lock()

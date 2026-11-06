@@ -261,7 +261,7 @@ func TestNewReadOnlyChartFromRemote_BasicAuthAccessTokenFallback(t *testing.T) {
 			srv := newBasicAuthChartServer(t, testDataDir, tt.serverUser, tt.serverPass)
 			chartURL := srv.URL + "/mychart-0.1.0.tgz"
 
-			var opts []Option
+			opts := []Option{WithHTTPConfig(plainHTTPConfig())}
 			if tt.helmCreds != nil {
 				opts = append(opts, WithCredentials(tt.helmCreds))
 			}
@@ -336,7 +336,7 @@ func TestNewReadOnlyChartFromRemote_HTTPRepoResolvesViaIndexYAML(t *testing.T) {
 	//   url.JoinPath(repoURL, chartName) + ":" + version
 	helmRepoRef := srv.URL + "/mychart:0.1.0"
 
-	chart, err := NewReadOnlyChartFromRemote(t.Context(), helmRepoRef, t.TempDir())
+	chart, err := NewReadOnlyChartFromRemote(t.Context(), helmRepoRef, t.TempDir(), WithHTTPConfig(plainHTTPConfig()))
 	r.NoError(err)
 	r.NotNil(chart)
 	assert.Equal(t, "mychart", chart.Name)
@@ -388,7 +388,7 @@ func TestNewReadOnlyChartFromRemote_VersionOverrideTakesPrecedenceInIndexLookup(
 	// opt.Version = "0.1.0" must win so the index lookup succeeds.
 	helmRepoRef := srv.URL + "/mychart:wrong-tag"
 
-	chart, err := NewReadOnlyChartFromRemote(t.Context(), helmRepoRef, t.TempDir(), WithVersion("0.1.0"))
+	chart, err := NewReadOnlyChartFromRemote(t.Context(), helmRepoRef, t.TempDir(), WithVersion("0.1.0"), WithHTTPConfig(plainHTTPConfig()))
 	r.NoError(err)
 	r.NotNil(chart)
 	assert.Equal(t, "mychart", chart.Name)
@@ -554,13 +554,17 @@ func TestNewReadOnlyChartFromRemote_CredentialsStayOnRepositoryHost(t *testing.T
 	require.NoError(t, err)
 	chartPath := filepath.Join(workDir, "..", "..", "testdata", "mychart-0.1.0.tgz")
 
-	for name, opts := range map[string][]Option{
-		"default client": nil,
-		"http config":    {WithHTTPConfig(&httpv1alpha1.Config{})},
+	// Both servers use TLS: the default-client path has no HTTP configuration,
+	// and without one an http:// repository is rejected.
+	for name, opts := range map[string]func(caPEM string) []Option{
+		"default client": func(caPEM string) []Option { return []Option{WithCACert(caPEM)} },
+		"http config": func(caPEM string) []Option {
+			return []Option{WithHTTPConfig(&httpv1alpha1.Config{TLSConfig: httpv1alpha1.TLSConfig{RootCAsPEM: caPEM}})}
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := require.New(t)
-			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				if req.Header.Get("Authorization") != "" {
 					http.Error(w, "unexpected credentials", http.StatusUnauthorized)
 					return
@@ -568,7 +572,7 @@ func TestNewReadOnlyChartFromRemote_CredentialsStayOnRepositoryHost(t *testing.T
 				http.ServeFile(w, req, chartPath)
 			}))
 			t.Cleanup(upstream.Close)
-			repo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			repo := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 				if user, pass, ok := req.BasicAuth(); !ok || user != "user" || pass != "pw" {
 					http.Error(w, "unauthorized", http.StatusUnauthorized)
 					return
@@ -577,10 +581,61 @@ func TestNewReadOnlyChartFromRemote_CredentialsStayOnRepositoryHost(t *testing.T
 			}))
 			t.Cleanup(repo.Close)
 
-			opts := append([]Option{WithCredentials(&helmcredsv1.HelmHTTPCredentials{Username: "user", Password: "pw"})}, opts...)
+			// httptest signs every TLS server with the same certificate.
+			opts := append([]Option{WithCredentials(&helmcredsv1.HelmHTTPCredentials{Username: "user", Password: "pw"})}, opts(certPEM(repo))...)
 			chart, err := NewReadOnlyChartFromRemote(t.Context(), repo.URL+"/mychart:0.1.0", t.TempDir(), opts...)
 			r.NoError(err)
 			r.Equal("mychart", chart.Name)
+		})
+	}
+}
+
+// plainHTTPConfig marks every host as plain HTTP, which the httptest servers
+// in this package are.
+func plainHTTPConfig() *httpv1alpha1.Config {
+	return &httpv1alpha1.Config{ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: new(true)}}
+}
+
+// TestPlainHTTPFor pins the rule for chart downloads: only the HTTP
+// configuration turns plain HTTP on; a classic http:// URL needs it, https://
+// stays HTTPS, and an oci:// chart follows the setting for its host.
+func TestPlainHTTPFor(t *testing.T) {
+	hostCfg := func(plain *bool) *httpv1alpha1.Config {
+		if plain == nil {
+			return nil
+		}
+		return &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{
+			"charts.local:5000": {ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: plain}},
+		}}
+	}
+	tests := []struct {
+		name      string
+		url       string
+		plain     *bool
+		wantPlain bool
+		wantErr   string
+	}{
+		{name: "oci without config stays HTTPS", url: "oci://charts.local:5000/charts/mychart:0.1.0"},
+		{name: "oci with per-host false stays HTTPS", url: "oci://charts.local:5000/charts/mychart:0.1.0", plain: new(false)},
+		{name: "oci with per-host true uses plain HTTP", url: "oci://charts.local:5000/charts/mychart:0.1.0", plain: new(true), wantPlain: true},
+		{name: "http without config is rejected", url: "http://charts.local:5000/mychart-0.1.0.tgz", wantErr: "plainHTTP: true"},
+		{name: "http with per-host false is rejected", url: "http://charts.local:5000/mychart-0.1.0.tgz", plain: new(false), wantErr: "plainHTTP: true"},
+		{name: "http with per-host true uses plain HTTP", url: "http://charts.local:5000/mychart-0.1.0.tgz", plain: new(true), wantPlain: true},
+		{name: "https stays HTTPS without config", url: "https://charts.local:5000/mychart-0.1.0.tgz"},
+		{name: "https stays HTTPS with per-host true", url: "https://charts.local:5000/mychart-0.1.0.tgz", plain: new(true)},
+		{name: "entry for another host does not apply", url: "http://other.local/mychart-0.1.0.tgz", plain: new(true), wantErr: `host "other.local"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			plain, err := plainHTTPFor(t.Context(), tt.url, hostCfg(tt.plain))
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
+				r.ErrorContains(err, tt.url, "the error must name the URL")
+				return
+			}
+			r.NoError(err)
+			r.Equal(tt.wantPlain, plain)
 		})
 	}
 }

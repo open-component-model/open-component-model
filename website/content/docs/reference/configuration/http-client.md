@@ -116,15 +116,16 @@ configurations:
 
 ### Plain HTTP
 
-OCM talks HTTPS to every OCI registry unless the reference starts with
-`http://`. `plainHTTP: true` makes OCM's OCI registry clients use cleartext
-HTTP for a host without changing the reference. It is meant for development and air-gapped registries
-without TLS. Traffic, including credentials, is unencrypted, so set it per host
-and never for a public registry. It applies to a reference with an explicit
-`https://` prefix as well. An `http://` prefix on a repository base URL or a
-reference still forces plain HTTP, but it is deprecated: OCM logs a warning,
-and a future release will stop downgrading on the prefix. Against an explicit
-`plainHTTP: false` for the host, the prefix is an error. See
+OCM talks HTTPS to every OCI registry. `plainHTTP: true` makes OCM's OCI
+registry clients use cleartext HTTP for a host. It is meant for development
+and air-gapped registries without TLS. Traffic, including credentials, is
+unencrypted, so set it per host and never for a public registry. OCM logs a
+warning on the first request to each plain HTTP host.
+
+This setting alone decides the connection. A scheme prefix on a repository
+base URL or a reference is deprecated and only checked against it: `http://`
+on a host that is not `plainHTTP` is an error, `https://` on a `plainHTTP` host
+warns about the downgrade, and every prefix logs a deprecation warning. See
 [Migrate from http:// prefixes]({{< relref "docs/guides/transfer/configure-http.md#migrate-from-http-prefixes" >}}).
 
 ```yaml
@@ -136,9 +137,11 @@ configurations:
         plainHTTP: true
 ```
 
-`plainHTTP` covers OCM's OCI repositories and `ociArtifact` access only. Helm
-chart downloads ignore it, including charts at `oci://` URLs. A classic Helm
-repository uses plain HTTP only with an `http://` URL.
+`plainHTTP` covers OCM's OCI repositories, `ociArtifact` access, and Helm
+chart downloads. A chart at an `oci://` URL follows the setting for its
+registry host. A classic Helm repository URL keeps its scheme as part of the
+address: an `http://` URL is accepted only when its host is `plainHTTP`, and an
+`https://` URL stays HTTPS.
 
 ### Per-Host Merge Semantics
 

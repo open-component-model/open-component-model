@@ -27,7 +27,7 @@
     },
     "plainHTTP": {
       "type": "boolean",
-      "description": "PlainHTTP makes OCI registry clients use cleartext HTTP, also for https://\nreferences. Credentials go unencrypted: set it per host, never for a\npublic registry. Helm chart downloads ignore it.\n\nNil means HTTPS at the top level and \"inherit\" in a HostConfig; an\nexplicit false on a host wins over a global true.\n\nAn http:// prefix still forces plain HTTP but is deprecated: OCM warns,\nand a future release stops downgrading. Against an explicit false for the\nhost the prefix is an error. Set this field to true and drop the prefix."
+      "description": "PlainHTTP makes OCI registry clients use cleartext HTTP, also for https://\nreferences. Credentials go unencrypted: set it per host, never for a\npublic registry. Helm charts follow it too: an oci:// chart uses the\nsetting for its registry host, and a classic http:// repository URL is\naccepted only when its host is plainHTTP.\n\nNil means HTTPS at the top level and \"inherit\" in a HostConfig; an\nexplicit false on a host wins over a global true.\n\nThis field alone decides the connection. A scheme prefix on a reference\nor base URL is deprecated and only checked against it: http:// on a host\nthat is not plainHTTP is an error, https:// on a plainHTTP host warns\nabout the downgrade. Set this field to true and drop the prefix."
     },
     "responseHeaderTimeout": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
@@ -100,7 +100,7 @@
         },
         "plainHTTP": {
           "type": "boolean",
-          "description": "PlainHTTP makes OCI registry clients use cleartext HTTP, also for https://\nreferences. Credentials go unencrypted: set it per host, never for a\npublic registry. Helm chart downloads ignore it.\n\nNil means HTTPS at the top level and \"inherit\" in a HostConfig; an\nexplicit false on a host wins over a global true.\n\nAn http:// prefix still forces plain HTTP but is deprecated: OCM warns,\nand a future release stops downgrading. Against an explicit false for the\nhost the prefix is an error. Set this field to true and drop the prefix."
+          "description": "PlainHTTP makes OCI registry clients use cleartext HTTP, also for https://\nreferences. Credentials go unencrypted: set it per host, never for a\npublic registry. Helm charts follow it too: an oci:// chart uses the\nsetting for its registry host, and a classic http:// repository URL is\naccepted only when its host is plainHTTP.\n\nNil means HTTPS at the top level and \"inherit\" in a HostConfig; an\nexplicit false on a host wins over a global true.\n\nThis field alone decides the connection. A scheme prefix on a reference\nor base URL is deprecated and only checked against it: http:// on a host\nthat is not plainHTTP is an error, https:// on a plainHTTP host warns\nabout the downgrade. Set this field to true and drop the prefix."
         },
         "responseHeaderTimeout": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
@@ -150,7 +150,7 @@
         },
         "plainHTTP": {
           "type": "boolean",
-          "description": "PlainHTTP makes OCI registry clients use cleartext HTTP, also for https://\nreferences. Credentials go unencrypted: set it per host, never for a\npublic registry. Helm chart downloads ignore it.\n\nNil means HTTPS at the top level and \"inherit\" in a HostConfig; an\nexplicit false on a host wins over a global true.\n\nAn http:// prefix still forces plain HTTP but is deprecated: OCM warns,\nand a future release stops downgrading. Against an explicit false for the\nhost the prefix is an error. Set this field to true and drop the prefix."
+          "description": "PlainHTTP makes OCI registry clients use cleartext HTTP, also for https://\nreferences. Credentials go unencrypted: set it per host, never for a\npublic registry. Helm charts follow it too: an oci:// chart uses the\nsetting for its registry host, and a classic http:// repository URL is\naccepted only when its host is plainHTTP.\n\nNil means HTTPS at the top level and \"inherit\" in a HostConfig; an\nexplicit false on a host wins over a global true.\n\nThis field alone decides the connection. A scheme prefix on a reference\nor base URL is deprecated and only checked against it: http:// on a host\nthat is not plainHTTP is an error, https:// on a plainHTTP host warns\nabout the downgrade. Set this field to true and drop the prefix."
         }
       },
       "additionalProperties": false

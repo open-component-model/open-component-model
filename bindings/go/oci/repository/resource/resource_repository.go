@@ -264,6 +264,7 @@ func createRepository(
 
 	resolverOpts := []urlresolver.Option{
 		urlresolver.WithBaseURL(urlString),
+		urlresolver.WithBaseURLScheme(url.Scheme),
 		urlresolver.WithBaseClient(&auth.Client{
 			Client: httpClient,
 			Header: map[string][]string{

@@ -177,13 +177,15 @@ func TestWithHTTPConfig_CustomConfigIsUsed(t *testing.T) {
 
 	timeout := httpv1alpha1.NewTimeout(5 * time.Second)
 	cfg := &httpv1alpha1.Config{TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: timeout}}
+	cfg.PlainHTTP = new(true) // the httptest server has no TLS
+	host := strings.TrimPrefix(srv.URL, "http://")
 	prov := provider.NewComponentVersionRepositoryProvider(
 		provider.WithHTTPConfig(cfg),
 	)
 	require.NotNil(t, prov)
 
 	repoSpec := &ocirepospecv1.Repository{
-		BaseUrl: srv.URL,
+		BaseUrl: host,
 		SubPath: "test/repo",
 	}
 	repo, err := prov.GetComponentVersionRepository(t.Context(), repoSpec, nil)
@@ -225,12 +227,14 @@ func TestWithHTTPConfig_ShortTimeoutCausesError(t *testing.T) {
 
 	timeout := httpv1alpha1.NewTimeout(10 * time.Millisecond)
 	cfg := &httpv1alpha1.Config{TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: timeout}}
+	cfg.PlainHTTP = new(true) // the httptest server has no TLS
+	host := strings.TrimPrefix(srv.URL, "http://")
 	prov := provider.NewComponentVersionRepositoryProvider(
 		provider.WithHTTPConfig(cfg),
 	)
 
 	repoSpec := &ocirepospecv1.Repository{
-		BaseUrl: srv.URL,
+		BaseUrl: host,
 		SubPath: "test/repo",
 	}
 	repo, err := prov.GetComponentVersionRepository(t.Context(), repoSpec, nil)
@@ -248,9 +252,8 @@ func TestWithHTTPConfig_PerHostPlainHTTP(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	host := strings.TrimPrefix(srv.URL, "http://")
-	tr := true
 	perHost := &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{
-		host: {ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: &tr}},
+		host: {ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: new(true)}},
 	}}
 
 	tests := []struct {
@@ -258,9 +261,12 @@ func TestWithHTTPConfig_PerHostPlainHTTP(t *testing.T) {
 		baseURL   string
 		cfg       *httpv1alpha1.Config
 		expectHit bool
+		wantErr   string
 	}{
-		{name: "without config the client speaks TLS to a plain server", baseURL: host},
+		{name: "without config the client speaks TLS to a plain server", baseURL: host, wantErr: "server gave HTTP response to HTTPS client"},
 		{name: "per-host plainHTTP reaches the registry", baseURL: host, cfg: perHost, expectHit: true},
+		{name: "http base URL without the host entry is rejected", baseURL: srv.URL, wantErr: "plainHTTP: true"},
+		{name: "http base URL with the host entry reaches the registry", baseURL: srv.URL, cfg: perHost, expectHit: true},
 	}
 
 	for _, tt := range tests {
@@ -272,8 +278,8 @@ func TestWithHTTPConfig_PerHostPlainHTTP(t *testing.T) {
 			r.NoError(err)
 			_, err = repo.ListComponentVersions(t.Context(), "example.org/component")
 			r.Equal(tt.expectHit, serverHit.Load())
-			if !tt.expectHit {
-				r.ErrorContains(err, "server gave HTTP response to HTTPS client", "the request must have tried TLS")
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
 			}
 		})
 	}

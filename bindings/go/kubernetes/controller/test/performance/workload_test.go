@@ -47,11 +47,11 @@ func TestWorkloadObjectsToCreate(t *testing.T) {
 		scenario scenario
 		want     int
 	}{
-		{scenario: scenarioCold, want: 1 + 3},
-		{scenario: scenarioShared, want: 1 + 3},
-		{scenario: scenarioUpdate, want: 3 + 1 + 3*3},
-		{scenario: scenarioComplex, want: 1 + 3 + 3 + 3*3},
-		{scenario: scenarioFanout, want: 1 + 3*(1+defaultFanout)},
+		{scenario: scenarioCold, want: 1 + 1 + 3},
+		{scenario: scenarioShared, want: 1 + 1 + 3},
+		{scenario: scenarioUpdate, want: 1 + 3 + 1 + 3*3},
+		{scenario: scenarioComplex, want: 1 + 1 + 3 + 3 + 3*3},
+		{scenario: scenarioFanout, want: 1 + 1 + 3*(1+defaultFanout)},
 	}
 	for _, tt := range tests {
 		t.Run(string(tt.scenario), func(t *testing.T) {
@@ -62,7 +62,9 @@ func TestWorkloadObjectsToCreate(t *testing.T) {
 			r.NoError(err)
 			r.Len(objs, tt.want)
 			for _, o := range objs {
-				r.Equal("run", o.GetLabels()[runLabel])
+				if o.GetName() != plainHTTPConfigName {
+					r.Equal("run", o.GetLabels()[runLabel])
+				}
 				r.Equal(w.namespace, o.GetNamespace(), "namespace deletion must clean up every object")
 				if d, ok := o.(*v1alpha1.NamespacedDeployer); ok {
 					r.Equal(deployerAccount, d.Spec.ServiceAccountName)
@@ -90,10 +92,11 @@ func TestWorkloadComplex(t *testing.T) {
 
 	objs, err := w.objectsToCreate()
 	r.NoError(err)
-	r.IsType(&corev1.Secret{}, objs[0], "the signing Secret must exist before the Components that verify with it")
-	r.IsType(&corev1.ServiceAccount{}, objs[1], "the deployer account must exist before the Deployers impersonate it")
-	r.IsType(&v1alpha1.Repository{}, objs[3+defaultRepositories])
-	r.IsType(&v1alpha1.Component{}, objs[3+defaultRepositories+1], "objects share a capped number of Repositories")
+	r.IsType(&corev1.ConfigMap{}, objs[0], "the plain HTTP ConfigMap must exist before the Repositories that reference it")
+	r.IsType(&corev1.Secret{}, objs[1], "the signing Secret must exist before the Components that verify with it")
+	r.IsType(&corev1.ServiceAccount{}, objs[2], "the deployer account must exist before the Deployers impersonate it")
+	r.IsType(&v1alpha1.Repository{}, objs[4+defaultRepositories])
+	r.IsType(&v1alpha1.Component{}, objs[4+defaultRepositories+1], "objects share a capped number of Repositories")
 
 	// The last object wraps around onto the second Repository.
 	i := defaultRepositories + 1
@@ -107,6 +110,8 @@ func TestWorkloadComplex(t *testing.T) {
 	r.NoError(err)
 	r.JSONEq(`{"type":"OCIRegistry","baseUrl":"http://registry:5000","subPath":"`+w.subPath(1)+`"}`,
 		string(repo.Spec.RepositorySpec.Raw), "the Repository must point at the sub-path its component versions were published to")
+	r.Equal(plainHTTPConfigName, repo.Spec.OCMConfig[0].Name, "an http:// baseUrl needs plainHTTP in the HTTP client configuration")
+	r.Equal(plainHTTPConfigName, w.component(i).Spec.OCMConfig[1].Name, "an own config replaces the Repository's, so it must list the plain HTTP config too")
 
 	root := byName[w.component(i).Spec.Component]
 	r.Equal(w.subPath(1), root.SubPath)
@@ -148,7 +153,7 @@ func TestWorkloadFanout(t *testing.T) {
 		res, ok := o.(*v1alpha1.Resource)
 		if !ok {
 			switch o.(type) {
-			case *v1alpha1.Repository, *v1alpha1.Component:
+			case *v1alpha1.Repository, *v1alpha1.Component, *corev1.ConfigMap:
 			default:
 				r.Failf("unexpected object", "the fanout scenario creates no %T", o)
 			}

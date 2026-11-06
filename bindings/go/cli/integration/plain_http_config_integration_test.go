@@ -71,12 +71,12 @@ components:
       text: "Hello over plain HTTP from the HTTP config!"
 `, componentName, componentVersion), os.ModePerm))
 
-	addComponentVersion := func(t *testing.T, cfgPath string) error {
+	addComponentVersion := func(t *testing.T, cfgPath, repository string) error {
 		t.Helper()
 		addCMD := cmd.New()
 		addCMD.SetArgs([]string{
 			"add", "component-version",
-			"--repository", registry.RegistryAddress, // no scheme: the config decides
+			"--repository", repository,
 			"--constructor", constructorPath,
 			"--config", cfgPath,
 		})
@@ -87,14 +87,26 @@ components:
 
 	t.Run("without the host entry a scheme-less reference tries TLS and fails", func(t *testing.T) {
 		r := require.New(t)
-		err := addComponentVersion(t, writeConfig(t, credentialsConfig))
+		err := addComponentVersion(t, writeConfig(t, credentialsConfig), registry.RegistryAddress)
 		r.ErrorContains(err, "server gave HTTP response to HTTPS client", "the failure must come from TLS against a plain HTTP registry")
+	})
+
+	t.Run("without the host entry an http prefix is rejected before any request", func(t *testing.T) {
+		r := require.New(t)
+		err := addComponentVersion(t, writeConfig(t, credentialsConfig), "http://"+registry.RegistryAddress)
+		r.ErrorContains(err, "plainHTTP: true", "the prefix alone must not downgrade to plain HTTP")
+		r.ErrorContains(err, registry.RegistryAddress, "the error must name the host")
+	})
+
+	t.Run("with plainHTTP for the host an http prefix still works", func(t *testing.T) {
+		r := require.New(t)
+		r.NoError(addComponentVersion(t, writeConfig(t, credentialsConfig+plainHTTPConfig), "http://"+registry.RegistryAddress))
 	})
 
 	t.Run("with plainHTTP for the host add and get work over cleartext", func(t *testing.T) {
 		r := require.New(t)
 		cfgPath := writeConfig(t, credentialsConfig+plainHTTPConfig)
-		r.NoError(addComponentVersion(t, cfgPath))
+		r.NoError(addComponentVersion(t, cfgPath, registry.RegistryAddress)) // no scheme: the config decides
 
 		getCMD := cmd.New()
 		getCMD.SetArgs([]string{

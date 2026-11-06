@@ -230,14 +230,17 @@ type ProtocolConfig struct {
 
 	// PlainHTTP makes OCI registry clients use cleartext HTTP, also for https://
 	// references. Credentials go unencrypted: set it per host, never for a
-	// public registry. Helm chart downloads ignore it.
+	// public registry. Helm charts follow it too: an oci:// chart uses the
+	// setting for its registry host, and a classic http:// repository URL is
+	// accepted only when its host is plainHTTP.
 	//
 	// Nil means HTTPS at the top level and "inherit" in a HostConfig; an
 	// explicit false on a host wins over a global true.
 	//
-	// An http:// prefix still forces plain HTTP but is deprecated: OCM warns,
-	// and a future release stops downgrading. Against an explicit false for the
-	// host the prefix is an error. Set this field to true and drop the prefix.
+	// This field alone decides the connection. A scheme prefix on a reference
+	// or base URL is deprecated and only checked against it: http:// on a host
+	// that is not plainHTTP is an error, https:// on a plainHTTP host warns
+	// about the downgrade. Set this field to true and drop the prefix.
 	PlainHTTP *bool `json:"plainHTTP,omitempty"`
 }
 

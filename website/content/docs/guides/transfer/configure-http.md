@@ -303,9 +303,8 @@ pin against (e.g. a bare `kind` cluster with no cert at all).
 
 ## Use plain HTTP for a local registry
 
-OCM talks HTTPS to every OCI registry unless the reference starts with
-`http://`. For a development or air-gapped registry without TLS, mark the host
-as plain HTTP instead of changing every reference:
+OCM talks HTTPS to every OCI registry. For a development or air-gapped registry
+without TLS, mark the host as plain HTTP:
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -319,20 +318,23 @@ configurations:
 {{< callout context="danger" >}}
 `plainHTTP: true` sends every OCI registry request to that host, including
 credentials, in cleartext. **Never enable it for a public registry or in
-production.**
+production.** OCM logs a warning on the first request to each plain HTTP host.
 {{< /callout >}}
 
-`plainHTTP` covers OCM's OCI repositories and `ociArtifact` access only. Helm
-chart downloads ignore it, including charts at `oci://` URLs. A classic Helm
-repository uses plain HTTP only with an `http://` URL.
+`plainHTTP` covers OCM's OCI repositories, `ociArtifact` access, and Helm
+chart downloads. A chart at an `oci://` URL follows the setting for its
+registry host. A classic Helm repository URL keeps its scheme as part of the
+address: an `http://` URL is accepted only when its host is `plainHTTP`, and an
+`https://` URL stays HTTPS.
 
 ### Migrate from http:// prefixes
 
-An `http://` prefix on a repository base URL or a reference is deprecated. OCM
-still uses plain HTTP for it, but logs a warning, and a future release will
-stop downgrading to plain HTTP on the prefix alone. If the HTTP configuration
-sets `plainHTTP: false` for that host, the prefix is an error: the
-configuration pins the host to HTTPS, and a URL cannot downgrade it.
+A scheme prefix (`http://` or `https://`) on a repository base URL or a
+reference is deprecated, and OCM logs a warning whenever it sees one. The
+prefix no longer selects the connection: only `plainHTTP` in the HTTP
+configuration does. An `http://` prefix on a host that is not `plainHTTP` is
+an error, because the request would silently go over HTTPS when the URL asked
+for cleartext.
 
 To migrate, drop the prefix and mark the host as plain HTTP. Before:
 

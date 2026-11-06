@@ -35,14 +35,25 @@ func WithBaseClient(client remote.Client) Option {
 	})
 }
 
-// WithPlainHTTP forces plain HTTP for every reference, even an https:// one.
-// The OCI repository provider sets it for an http:// base URL. Forcing plain
-// HTTP is deprecated: it warns, stops working in a future release, and is
-// already an error for a host whose HTTP configuration sets plainHTTP: false.
-// Set plainHTTP: true for the host instead.
+// WithPlainHTTP uses cleartext HTTP for every host the HTTP configuration
+// does not decide; an explicit plainHTTP value for the host in the
+// configuration wins. It is the programmatic counterpart of a global
+// plainHTTP: true, meant for tools and tests that talk to a local registry.
+// User-facing input goes through the HTTP configuration instead.
 func WithPlainHTTP(plainHTTP bool) Option {
 	return OptionFunc(func(resolver *CachingResolver) {
 		resolver.plainHTTP = plainHTTP
+	})
+}
+
+// WithBaseURLScheme records the scheme prefix ("http" or "https") the base
+// URL was given with, so the resolver can check it against the HTTP
+// configuration. The prefix is deprecated and never decides the connection:
+// http:// is an error for a host that is not plainHTTP, https:// on a
+// plainHTTP host warns about the downgrade. Pass "" for no prefix.
+func WithBaseURLScheme(scheme string) Option {
+	return OptionFunc(func(resolver *CachingResolver) {
+		resolver.baseScheme = scheme
 	})
 }
 

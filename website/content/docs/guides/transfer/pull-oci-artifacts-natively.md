@@ -71,10 +71,10 @@ ocm transfer cv \
   <your-registry>
 ```
 
-Replace `<your-registry>` with your registry address (e.g. `http://localhost:5001` for a local HTTP registry, or `ghcr.io/my-org/ocm` for a remote HTTPS registry).
+Replace `<your-registry>` with your registry address (e.g. `localhost:5001` for a local registry, or `ghcr.io/my-org/ocm` for a remote HTTPS registry).
 
 {{< callout context="note" title="Note" icon="outline/info-circle" >}}
-For local registries running without TLS, use the `http://` scheme prefix (e.g. `http://localhost:5001`). HTTPS registries work without a scheme prefix.
+For local registries running without TLS, set `plainHTTP: true` for the host in the HTTP configuration; see [Use plain HTTP for a local registry]({{< relref "docs/guides/transfer/configure-http.md#use-plain-http-for-a-local-registry" >}}). An `http://` prefix on its own is deprecated and no longer selects plain HTTP.
 {{< /callout >}}
 
 During transfer, OCM stores the OCI manifest and its layers as native OCI objects in the registry. The component version's index references the manifest directly.
@@ -152,7 +152,7 @@ ocm transfer cv \
 ```
 
 {{< callout context="note" title="Note" icon="outline/info-circle" >}}
-For local registries running without TLS, use the `http://` scheme prefix (e.g. `http://localhost:5001`). HTTPS registries work without a scheme prefix.
+For local registries running without TLS, set `plainHTTP: true` for the host in the HTTP configuration; see [Use plain HTTP for a local registry]({{< relref "docs/guides/transfer/configure-http.md#use-plain-http-for-a-local-registry" >}}). An `http://` prefix on its own is deprecated and no longer selects plain HTTP.
 {{< /callout >}}
 
 With the local blob uploader configuration, OCM:

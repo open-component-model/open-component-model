@@ -220,7 +220,6 @@ func TestNewResourceRepositoryHTTPConfig_InsecureSkipVerify(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	host := strings.TrimPrefix(server.URL, "https://")
-	tr := true
 
 	tests := []struct {
 		name                 string
@@ -238,7 +237,7 @@ func TestNewResourceRepositoryHTTPConfig_InsecureSkipVerify(t *testing.T) {
 				Hosts: map[string]*httpv1alpha1.HostConfig{
 					host: {
 						TLSConfig: httpv1alpha1.TLSConfig{
-							InsecureSkipVerify: &tr,
+							InsecureSkipVerify: new(true),
 						},
 					},
 				},
@@ -365,7 +364,8 @@ func TestOCIImageLayer_RegistryEndpoint(t *testing.T) {
 						MediaType: tt.mediaType,
 					}, raw))
 					res.Access = raw
-					repo := NewResourceRepository(nil)
+					plain := &httpv1alpha1.Config{ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: new(true)}}
+					repo := NewResourceRepository(nil, WithHTTPConfig(plain))
 					processed, err := repo.ProcessResourceDigest(t.Context(), res, nil)
 					r.NoError(err)
 					r.Equal(dig.Encoded(), processed.Digest.Value)
@@ -405,15 +405,14 @@ func TestNewResourceRepositoryHTTPConfig_PlainHTTP(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	host := strings.TrimPrefix(server.URL, "http://")
-	tr, fa := true, false
 	perHost := &httpv1alpha1.Config{
 		Hosts: map[string]*httpv1alpha1.HostConfig{
-			host: {ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: &tr}},
+			host: {ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: new(true)}},
 		},
 	}
 	perHostFalse := &httpv1alpha1.Config{
 		Hosts: map[string]*httpv1alpha1.HostConfig{
-			host: {ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: &fa}},
+			host: {ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: new(false)}},
 		},
 	}
 
@@ -426,8 +425,9 @@ func TestNewResourceRepositoryHTTPConfig_PlainHTTP(t *testing.T) {
 	}{
 		{name: "without config the client speaks TLS to a plain server", reference: host + "/test/img:v1.0.0", wantErr: "server gave HTTP response to HTTPS client"},
 		{name: "per-host plainHTTP reaches the registry", reference: host + "/test/img:v1.0.0", httpConfig: perHost, expectHit: true},
-		{name: "explicit http reference reaches the registry", reference: "http://" + host + "/test/img:v1.0.0", expectHit: true},
-		{name: "explicit http reference against per-host plainHTTP false is rejected", reference: "http://" + host + "/test/img:v1.0.0", httpConfig: perHostFalse, wantErr: "plainHTTP: false"},
+		{name: "explicit http reference without the host entry is rejected", reference: "http://" + host + "/test/img:v1.0.0", wantErr: "plainHTTP: true"},
+		{name: "explicit http reference with per-host plainHTTP reaches the registry", reference: "http://" + host + "/test/img:v1.0.0", httpConfig: perHost, expectHit: true},
+		{name: "explicit http reference against per-host plainHTTP false is rejected", reference: "http://" + host + "/test/img:v1.0.0", httpConfig: perHostFalse, wantErr: "plainHTTP: true"},
 	}
 
 	for _, tt := range tests {
