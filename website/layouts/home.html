@@ -31,8 +31,30 @@
     </div>
   </div>
 
-  <div class="container container--after-hero">
-    <div class="ocm-card-grid ocm-card-grid--action">
+  {{- with partial "main/cli-try-command.html" . }}
+  {{- $installCmd := printf "curl -sfL https://ocm.software/install-cli.sh | %sbash" (partial "main/site-version.html" (dict "page" $ "format" "env")) }}
+  <div class="container">
+    <section class="lp-section" aria-labelledby="quickstart-title">
+      <h2 id="quickstart-title" class="section-title section-title--left">Try It Out</h2>
+      <ol class="quickstart-steps">
+        <li class="quickstart-step">
+          <span class="quickstart-step-title">Install the CLI (Linux, macOS)</span>
+          {{ printf "```shell\n%s\n```" $installCmd | $.RenderString (dict "display" "block") }}
+          <a class="quickstart-more" href='{{ relref $ "docs/getting-started/ocm-cli-installation.md" }}'>View more installation options</a>
+        </li>
+        <li class="quickstart-step">
+          <span class="quickstart-step-title">Inspect the public CLI component</span>
+          {{ printf "```shell\n%s\n```" . | $.RenderString (dict "display" "block") }}
+        </li>
+      </ol>
+    </section>
+  </div>
+  {{- end }}
+
+  <div class="container">
+    <section class="lp-section" aria-labelledby="how-title">
+      <h2 id="how-title" class="section-title section-title--left">How OCM Works</h2>
+      <div class="ocm-card-grid ocm-card-grid--action">
       {{ range .Params.actions }}
       <a href="{{ relref $ .link }}" class="ocm-card">
         <div class="ocm-card-content">
@@ -50,15 +72,14 @@
         </div>
       </a>
       {{ end }}
-    </div>
+      </div>
+    </section>
   </div>
 
   <div class="container">
-    <hr class="section-divider" />
-  </div>
-  
-  <div class="container">
-    <div class="ocm-card-grid ocm-card-grid--benefit">
+    <section class="lp-section" aria-labelledby="why-title">
+      <h2 id="why-title" class="section-title section-title--left">Why OCM</h2>
+      <div class="ocm-card-grid ocm-card-grid--benefit">
       {{ range .Params.benefits }}
       {{ if .link }}
       <a href="{{ relref $ .link }}" class="ocm-card ocm-card--benefit">
@@ -94,7 +115,8 @@
       </div>
       {{ end }}
       {{ end }}
-    </div>
+      </div>
+    </section>
   </div>
 
 </div>

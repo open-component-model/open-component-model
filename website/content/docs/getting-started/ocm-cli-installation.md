@@ -262,6 +262,18 @@ in your PATH or remove the v1 binary. Common v1 install locations are `/opt/home
 profile store.
 {{< /callout >}}
 
+## Try It Out
+
+Inspect the public component version that ships the OCM CLI itself. No credentials are needed:
+
+```shell
+{{< cli-try-command >}}
+```
+
+The tree lists the component version and its resources: the `cli` executable for every
+supported platform and the CLI container image. This is the same component the
+`OCM Component` installation method above downloads from.
+
 ## Verify Binary Authenticity
 
 The install script automatically verifies binaries using [GitHub attestations](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations/using-artifact-attestations-to-establish-provenance-for-builds) when the [GitHub CLI](https://cli.github.com/) is authenticated.
