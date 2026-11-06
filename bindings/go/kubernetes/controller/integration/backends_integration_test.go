@@ -11,16 +11,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/go-git/go-git/v6"
-	"github.com/go-git/go-git/v6/plumbing"
-	"github.com/go-git/go-git/v6/plumbing/filemode"
-	"github.com/go-git/go-git/v6/plumbing/object"
 	godigest "github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
@@ -104,54 +99,6 @@ entries:
 		index += fmt.Sprintf("    digest: %s\n", digest.Encoded())
 	}
 	return []byte(index)
-}
-
-// newGitRepository creates a bare repository with one commit of README.md on main and
-// returns its path and the commit. The objects are written directly, so no Git
-// configuration of the host (for example commit signing) applies.
-func newGitRepository(t *testing.T, readme string) (string, plumbing.Hash) {
-	t.Helper()
-	r := require.New(t)
-
-	path := filepath.Join(t.TempDir(), "fixture.git")
-	repo, err := git.PlainInit(path, true)
-	r.NoError(err)
-
-	write := func(typ plumbing.ObjectType, encode func(obj plumbing.EncodedObject) error) plumbing.Hash {
-		obj := repo.Storer.NewEncodedObject()
-		obj.SetType(typ)
-		r.NoError(encode(obj))
-		hash, err := repo.Storer.SetEncodedObject(obj)
-		r.NoError(err)
-		return hash
-	}
-
-	blobHash := write(plumbing.BlobObject, func(obj plumbing.EncodedObject) error {
-		w, err := obj.Writer()
-		if err != nil {
-			return err
-		}
-		if _, err := w.Write([]byte(readme)); err != nil {
-			return err
-		}
-		return w.Close()
-	})
-	treeHash := write(plumbing.TreeObject, (&object.Tree{Entries: []object.TreeEntry{
-		{Name: "README.md", Mode: filemode.Regular, Hash: blobHash},
-	}}).Encode)
-	signature := object.Signature{Name: "OCM fixture", Email: "fixture@example.invalid", When: time.Unix(1700000000, 0).UTC()}
-	commitHash := write(plumbing.CommitObject, (&object.Commit{
-		Author:    signature,
-		Committer: signature,
-		Message:   "fixture\n",
-		TreeHash:  treeHash,
-	}).Encode)
-
-	main := plumbing.NewBranchReferenceName("main")
-	r.NoError(repo.Storer.SetReference(plumbing.NewHashReference(main, commitHash)))
-	r.NoError(repo.Storer.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, main)))
-
-	return path, commitHash
 }
 
 // startGitServer serves the bare repository at path over HTTPS with git http-backend and

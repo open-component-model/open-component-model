@@ -28,6 +28,7 @@ import (
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
 const (
@@ -79,7 +80,9 @@ func Test_Integration_ResourceVerification(t *testing.T) {
 	})
 	trustedCAs := certificatePEM(fileServer)
 
-	gitPath, gitCommit := newGitRepository(t, "verification\n")
+	gitPath, gitCommit := testgit.Repository(t, testgit.Options{
+		Bare: true, DefaultBranch: "main", Commits: []testgit.Commit{{Content: "verification\n"}},
+	})
 	gitURL, gitServer := startGitServer(t, gitPath)
 	if gitServer != nil {
 		trustedCAs += certificatePEM(gitServer)
