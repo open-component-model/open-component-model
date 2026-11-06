@@ -16,7 +16,7 @@ spec:
     - path: /metrics
       {{- /* Port name of monitoring/service.yaml. */}}
       port: metrics
-      {{- if dig "metricsServer" "secure" false .Values.manager }}
+      {{- if .Values.manager.metricsServer.secure }}
       scheme: https
       tlsConfig:
         {{- /* The manager generates its own certificate at startup and cannot load one from a secret, so there is no CA to verify against. */}}

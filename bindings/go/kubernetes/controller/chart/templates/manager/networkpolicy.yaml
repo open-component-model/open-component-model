@@ -23,10 +23,10 @@ spec:
     ingress:
         {{- /* Mirror the ports the manager listens on, see manager.yaml. */}}
         - ports:
-            - port: {{ regexFind "[0-9]+$" (.Values.manager.healthProbe.bindAddress | default ":8081" | toString) | int }}
+            - port: {{ include "ocm-k8s-toolkit.healthProbePort" . }}
               protocol: TCP
             {{- with include "ocm-k8s-toolkit.metricsPort" . }}
-            - port: {{ . | int }}
+            - port: {{ . }}
               protocol: TCP
             {{- end }}
             {{- if .Values.webhook.enable }}
