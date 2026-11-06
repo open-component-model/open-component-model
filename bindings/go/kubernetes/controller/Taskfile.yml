@@ -18,6 +18,8 @@ vars:
     sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "$ENVTEST_K8S_VERSION"'
   KIND_NODE_IMAGE_VERSION:
     sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "$KIND_NODE_IMAGE_VERSION"'
+  PROMETHEUS_OPERATOR_VERSION:
+    sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "$PROMETHEUS_OPERATOR_VERSION"'
   HELM_DOCS_VERSION:
     sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "${HELM_DOCS_VERSION:-v1.14.2}"'
   YQ_VERSION:
@@ -84,7 +86,7 @@ tasks:
         vars:
           LOAD: "true"
     cmds:
-      - 'KIND_NODE_IMAGE_VERSION={{.KIND_NODE_IMAGE_VERSION}} bash test/e2e/hacks/setup.sh'
+      - 'KIND_NODE_IMAGE_VERSION={{.KIND_NODE_IMAGE_VERSION}} PROMETHEUS_OPERATOR_VERSION={{.PROMETHEUS_OPERATOR_VERSION}} bash test/e2e/hacks/setup.sh'
       - 'kind load docker-image {{.CONTROLLER_IMG}} --name ocm-e2e'
 
   test/e2e/setup/teardown:
@@ -98,6 +100,8 @@ tasks:
     dotenv: [ '{{.TASKFILE_DIR}}/test/e2e/hacks/.env' ]
     cmds:
       - task: helm/install
+        vars:
+          VALUES: test/e2e/hacks/values.yaml
       - PROJECT_DIR='{{.TASKFILE_DIR}}' go run github.com/onsi/ginkgo/v2/ginkgo --procs=4 -v --timeout=30m {{.CLI_ARGS}} '{{.TASKFILE_DIR}}/test/e2e/'
 
   test/e2e/fresh:

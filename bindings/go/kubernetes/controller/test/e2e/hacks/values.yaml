@@ -1,0 +1,24 @@
+# Helm values for the e2e suite: chart/test-values.yaml plus the metrics endpoint and
+# ServiceMonitor, so e2e_prometheus_test.go can verify the Prometheus wiring.
+manager:
+  replicas: 1
+  image:
+    repository: ghcr.io/open-component-model/kubernetes/controller
+    tag: latest
+  concurrency:
+    resource: 10
+  logging:
+    level: "debug"
+    development: true
+  metricsServer:
+    bindAddress: ":8443"
+    # Plain HTTP so the spec scrapes through the API server service proxy without a token or TLS.
+    secure: false
+
+crd:
+  enable: true
+  keep: true
+
+# Needs the ServiceMonitor CRD, which test/e2e/hacks/setup.sh installs.
+prometheus:
+  enable: true

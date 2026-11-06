@@ -50,6 +50,7 @@ if [ "$(docker inspect -f '{{.State.Running}}' "${reg_name}" 2>/dev/null || true
 fi
 
 KIND_NODE_IMAGE="kindest/node:v${KIND_NODE_IMAGE_VERSION}"
+prometheus_operator_version="${PROMETHEUS_OPERATOR_VERSION:?PROMETHEUS_OPERATOR_VERSION must be set, see bindings/go/kubernetes/controller/.env}"
 
 # Create kind cluster with
 # - Port mappings for additional cluster OCI registries (replication tests).
@@ -215,11 +216,17 @@ install_kro() {
     --set rbac.mode=aggregation --wait || return 1
 }
 
+# Only the CRD: the chart's ServiceMonitor (prometheus.enable in values.yaml) must apply; nothing scrapes it.
+install_servicemonitor_crd() {
+  kubectl apply --server-side -f "https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/${prometheus_operator_version}/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml"
+}
+
 pids=()
 run_step "image-registries"   install_registries & pids+=($!)
 run_step "flux"               install_flux       & pids+=($!)
 run_step "argocd"             install_argocd     & pids+=($!)
 run_step "kro"                install_kro        & pids+=($!)
+run_step "servicemonitor-crd" install_servicemonitor_crd & pids+=($!)
 
 fail=0
 for pid in "${pids[@]}"; do
