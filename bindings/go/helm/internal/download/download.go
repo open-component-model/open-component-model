@@ -106,7 +106,7 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		verify = downloader.VerifyIfPossible
 	}
 
-	plainHTTP, err := plainHTTPFor(ctx, helmRepo, opt.HTTPConfig)
+	plainHTTP, err := chartPlainHTTP(ctx, helmRepo, opt.HTTPConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -313,32 +313,29 @@ func renameChart(savedPath, target string) (string, error) {
 	return target, nil
 }
 
-// plainHTTPFor decides whether the chart at helmRepo is fetched over cleartext
-// HTTP, by the same rule the OCI resolver applies: only plainHTTP in the HTTP
-// configuration turns cleartext on. An oci:// chart follows the setting for its
-// registry host. A classic repository URL carries its scheme as part of the
-// address, so http:// is accepted only when the host is plainHTTP, and https://
-// stays HTTPS whatever the configuration says.
-func plainHTTPFor(ctx context.Context, helmRepo string, cfg *httpv1alpha1.Config) (bool, error) {
+// chartPlainHTTP decides whether the chart at helmRepo is fetched over
+// cleartext HTTP, by the shared rule in ocmhttp.PlainHTTPFor: only plainHTTP in
+// the HTTP configuration turns cleartext on, and an http:// URL needs it. An
+// oci:// chart follows the setting for its registry host. Unlike an OCI
+// reference, a classic repository URL carries its scheme as part of the
+// address, so https:// stays HTTPS whatever the configuration says, and no
+// prefix is deprecated.
+func chartPlainHTTP(ctx context.Context, helmRepo string, cfg *httpv1alpha1.Config) (bool, error) {
 	u, err := url.Parse(helmRepo)
 	if err != nil {
 		return false, fmt.Errorf("invalid helm repository URL %q: %w", helmRepo, err)
 	}
-	host := u.Host
-	configured := cfg.ResolveHost(host).PlainHTTP
-	plain := configured != nil && *configured
-	switch u.Scheme {
+	scheme := u.Scheme
+	switch scheme {
 	case "http":
-		if !plain {
-			return false, fmt.Errorf("helm repository %q uses http://, but plain HTTP is not enabled for host %q. Enable plainHTTP for the host in the HTTP client configuration, or use https://", helmRepo, host)
-		}
 	case "oci":
+		scheme = ""
 	default:
 		return false, nil
 	}
-	if plain {
-		slog.WarnContext(ctx, "plain HTTP is enabled for this host; the Helm chart is fetched over cleartext HTTP and credentials are sent unencrypted",
-			slog.String("host", host), slog.String("scheme", u.Scheme))
+	plain, err := ocmhttp.PlainHTTPFor(ctx, cfg, u.Host, scheme, false)
+	if err != nil {
+		return false, fmt.Errorf("helm repository %q: %w", helmRepo, err)
 	}
 	return plain, nil
 }
@@ -397,7 +394,7 @@ func ResolveOCIManifestDigest(ctx context.Context, chartReference string, creden
 	if httpConfig != nil {
 		regClientOpts = append(regClientOpts, registry.ClientOptHTTPClient(ocmhttp.New(ocmhttp.WithConfig(httpConfig))))
 	}
-	plainHTTP, err := plainHTTPFor(ctx, chartReference, httpConfig)
+	plainHTTP, err := chartPlainHTTP(ctx, chartReference, httpConfig)
 	if err != nil {
 		return "", err
 	}

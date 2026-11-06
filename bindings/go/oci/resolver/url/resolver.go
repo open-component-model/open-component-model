@@ -12,6 +12,7 @@ import (
 	"oras.land/oras-go/v2/registry/remote"
 	"oras.land/oras-go/v2/registry/remote/errcode"
 
+	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
@@ -200,35 +201,24 @@ func (resolver *CachingResolver) StoreForReference(ctx context.Context, referenc
 	return cache.Wrap(store, resolver.blobCache.Load(), resolver.referenceCache.Load()), nil
 }
 
-// plainHTTPFor decides whether host is reached over cleartext HTTP and logs
-// the warnings that decision carries.
+// plainHTTPFor decides whether host is reached over cleartext HTTP by the
+// shared rule in ocmhttp.PlainHTTPFor, with WithPlainHTTP as the default for
+// hosts the HTTP configuration does not decide.
 //
-// Only the HTTP configuration turns plain HTTP on (or WithPlainHTTP, for
-// hosts the configuration does not decide). A scheme prefix on the reference
-// or the base URL never changes the connection: it is deprecated input and
-// only checked against the decision. An http:// prefix on a host that stays
-// on HTTPS is an error, because the request would silently go over HTTPS
-// when the URL asked for cleartext. An https:// prefix on a plain HTTP host
-// only warns that the connection was downgraded; an http:// prefix on a plain
-// HTTP host asked for exactly that and gets no downgrade warning.
+// A scheme prefix on the reference or the base URL is deprecated input: it
+// never changes the connection and only logs a warning that points at the
+// migration guide before the shared rule checks it.
 func (resolver *CachingResolver) plainHTTPFor(ctx context.Context, scheme, host string) (bool, error) {
 	if scheme == "" {
 		scheme = resolver.baseScheme
-	}
-	plain := resolver.plainHTTP
-	if configured := resolver.httpConfig.ResolveHost(host).PlainHTTP; configured != nil {
-		plain = *configured
 	}
 	if scheme != "" {
 		slog.WarnContext(ctx, "the scheme prefix on a registry URL is deprecated; drop it and set plainHTTP in the HTTP client configuration for hosts without TLS",
 			slog.String("host", host), slog.String("scheme", scheme), slog.String("url", httpPrefixMigrationGuide))
 	}
-	switch {
-	case scheme == "http" && !plain:
-		return false, fmt.Errorf("the URL uses http://, but plain HTTP is not enabled for host %q. Enable plainHTTP for the host in the HTTP client configuration and drop the prefix (see %s)", host, httpPrefixMigrationGuide)
-	case plain && scheme != "http":
-		slog.WarnContext(ctx, "plain HTTP is enabled for this host; the connection is downgraded to cleartext HTTP and OCI registry requests, including credentials, are sent unencrypted",
-			slog.String("host", host))
+	plain, err := ocmhttp.PlainHTTPFor(ctx, resolver.httpConfig, host, scheme, resolver.plainHTTP)
+	if err != nil {
+		return false, fmt.Errorf("%w and drop the prefix (see %s)", err, httpPrefixMigrationGuide)
 	}
 	return plain, nil
 }

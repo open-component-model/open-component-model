@@ -596,10 +596,10 @@ func plainHTTPConfig() *httpv1alpha1.Config {
 	return &httpv1alpha1.Config{ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: new(true)}}
 }
 
-// TestPlainHTTPFor pins the rule for chart downloads: only the HTTP
+// TestChartPlainHTTP pins the rule for chart downloads: only the HTTP
 // configuration turns plain HTTP on; a classic http:// URL needs it, https://
 // stays HTTPS, and an oci:// chart follows the setting for its host.
-func TestPlainHTTPFor(t *testing.T) {
+func TestChartPlainHTTP(t *testing.T) {
 	hostCfg := func(plain *bool) *httpv1alpha1.Config {
 		if plain == nil {
 			return nil
@@ -628,7 +628,7 @@ func TestPlainHTTPFor(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
-			plain, err := plainHTTPFor(t.Context(), tt.url, hostCfg(tt.plain))
+			plain, err := chartPlainHTTP(t.Context(), tt.url, hostCfg(tt.plain))
 			if tt.wantErr != "" {
 				r.ErrorContains(err, tt.wantErr)
 				r.ErrorContains(err, tt.url, "the error must name the URL")
