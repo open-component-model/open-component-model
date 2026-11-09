@@ -21,7 +21,6 @@ var convertScheme = runtime.NewScheme()
 func init() {
 	convertScheme.MustRegisterWithAlias(&WgetCredentials{},
 		runtime.NewVersionedType(HTTPCredentialsType, Version),
-		runtime.NewUnversionedType(HTTPCredentialsType),
 		WgetCredentialsVersionedType,
 		runtime.NewUnversionedType(WgetCredentialsType),
 	)
