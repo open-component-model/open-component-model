@@ -69,8 +69,8 @@ func TestDownloadRevisions(t *testing.T) {
 				missingHeadCause error
 			}{
 				{name: "default HEAD", ref: "HEAD", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: "cannot fetch git repository: transport failed; check repository access and server trust: reference not found"},
-				{name: "short main branch", ref: "main", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: "cannot resolve git ref: reference not found", missingHeadCause: plumbing.ErrReferenceNotFound},
-				{name: "qualified main branch", ref: "refs/heads/main", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: "cannot resolve git ref: reference not found", missingHeadCause: plumbing.ErrReferenceNotFound},
+				{name: "short main branch", ref: "main", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: `cannot resolve git ref: reference not found: "main"`, missingHeadCause: plumbing.ErrReferenceNotFound},
+				{name: "qualified main branch", ref: "refs/heads/main", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: `cannot resolve git ref: reference not found: "refs/heads/main"`, missingHeadCause: plumbing.ErrReferenceNotFound},
 				{name: "branch wins over same-named tag", ref: "feature", want: fixture.Second, wantRef: "refs/heads/feature"},
 				{name: "remote tracking branch", ref: "refs/remotes/origin/feature", want: fixture.Second, wantRef: "refs/heads/feature"},
 				{name: "qualified tag wins over same-named branch", ref: "refs/tags/feature", want: fixture.First, wantRef: "refs/tags/feature"},
@@ -393,6 +393,22 @@ func TestResolveRefBelowRefFile(t *testing.T) {
 
 	_, _, err = resolveRef(repo, "release/missing")
 	r.ErrorIs(err, plumbing.ErrReferenceNotFound)
+	r.ErrorContains(err, `"release/missing"`)
+}
+
+// On disk, a name that leaves the reference storage is invalid under every rule.
+func TestResolveRefInvalidName(t *testing.T) {
+	r := require.New(t)
+	repo, err := git.PlainInit(t.TempDir(), true)
+	r.NoError(err)
+	for _, name := range []string{"../x", "x/"} {
+		t.Run(name, func(t *testing.T) {
+			r := require.New(t)
+			_, _, err := resolveRef(repo, name)
+			r.ErrorIs(err, plumbing.ErrInvalidReferenceName)
+			r.NotErrorIs(err, plumbing.ErrReferenceNotFound)
+		})
+	}
 }
 
 func TestDownloadInProgressCancellationCleanup(t *testing.T) {

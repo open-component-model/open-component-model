@@ -548,7 +548,7 @@ func resolveRef(repo *git.Repository, name string) (plumbing.Hash, plumbing.Refe
 		}
 	}
 	if notFound {
-		return plumbing.ZeroHash, "", plumbing.ErrReferenceNotFound
+		return plumbing.ZeroHash, "", fmt.Errorf("%w: %q", plumbing.ErrReferenceNotFound, name)
 	}
 	return plumbing.ZeroHash, "", invalidErr
 }
