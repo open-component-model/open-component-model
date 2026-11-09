@@ -84,6 +84,22 @@ func TestValidate(t *testing.T) {
 			repository: "https://example.com/repo.git#branch=main",
 			ref:        "dev",
 		},
+		// local repositories must always be rejected by Validate
+		{
+			name:       "file:// URL rejected",
+			repository: "file:///srv/repo.git",
+			ref:        "main",
+		},
+		{
+			name:       "file://localhost URL rejected",
+			repository: "file://localhost/srv/repo.git",
+			ref:        "main",
+		},
+		{
+			name:       "plain absolute path rejected",
+			repository: "/srv/repo.git",
+			ref:        "main",
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
@@ -100,6 +116,12 @@ func TestValidate(t *testing.T) {
 	t.Run("nil access", func(t *testing.T) {
 		var g *v1.Git
 		require.Error(t, g.Validate())
+	})
+
+	t.Run("local repository error contains expected substring", func(t *testing.T) {
+		r := require.New(t)
+		err := (&v1.Git{Repository: "file:///srv/repo.git", Ref: "main"}).Validate()
+		r.ErrorContains(err, "local git repository")
 	})
 }
 
@@ -226,6 +248,82 @@ func TestNormalize(t *testing.T) {
 			r.Equal(tc.wantRef, got.Ref)
 			r.Equal(tc.wantCommit, got.Commit)
 			r.Equal(tc.repository, in.Repository, "the input is not modified")
+		})
+	}
+}
+
+func TestValidateStructure(t *testing.T) {
+	for _, tc := range []struct {
+		name, repository, ref, commit string
+		valid                         bool
+	}{
+		// local repositories must be ACCEPTED by ValidateStructure (fetch/input path)
+		{
+			name:       "file:// URL accepted",
+			repository: "file:///srv/repo.git",
+			ref:        "main",
+			valid:      true,
+		},
+		{
+			name:       "file://localhost URL accepted",
+			repository: "file://localhost/srv/repo.git",
+			ref:        "main",
+			valid:      true,
+		},
+		{
+			name:       "plain absolute path accepted",
+			repository: "/srv/repo.git",
+			ref:        "main",
+			valid:      true,
+		},
+		// remote repositories accepted
+		{
+			name:       "https accepted",
+			repository: "https://example.com/org/repo.git",
+			ref:        "main",
+			valid:      true,
+		},
+		{
+			name:       "ssh accepted",
+			repository: "ssh://git@example.com/org/repo.git",
+			ref:        "refs/heads/main",
+			valid:      true,
+		},
+		{
+			name:       "scp-like accepted",
+			repository: "git@example.com:org/repo.git",
+			ref:        "main",
+			valid:      true,
+		},
+		// structural errors still rejected
+		{
+			name: "empty repository",
+			ref:  "main",
+		},
+		{
+			name:       "empty selectors",
+			repository: "https://example.com/repo",
+		},
+		{
+			name:       "short commit",
+			repository: "https://example.com/repo",
+			commit:     "abc123",
+		},
+		{
+			name:       "invalid ref",
+			repository: "https://example.com/repo",
+			ref:        "refs/heads/../main",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+
+			err := (&v1.Git{Repository: tc.repository, Ref: tc.ref, Commit: tc.commit}).ValidateStructure()
+			if tc.valid {
+				r.NoError(err)
+			} else {
+				r.Error(err)
+			}
 		})
 	}
 }

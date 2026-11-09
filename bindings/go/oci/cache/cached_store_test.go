@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"sync"
 	"testing"
 
@@ -96,6 +97,69 @@ func TestCachedStore_Resolve_WithFullReferenceAndNormalization(t *testing.T) {
 	gotFull, err := repo.Resolve(t.Context(), "ghcr.io/owner/repo@"+desc.Digest.String())
 	require.NoError(t, err)
 	assert.Equal(t, desc, gotFull)
+}
+
+// TestCachedStore_Fetch_Always_HitsAreBoundToTheRepository drives the real
+// [*remote.Repository]: two repositories of one registry, one of which claims to
+// hold every blob but cannot serve the bytes.
+func TestCachedStore_Fetch_Always_HitsAreBoundToTheRepository(t *testing.T) {
+	r := require.New(t)
+	manifest := []byte(`{"schemaVersion":2,"private":true}`)
+	forged := []byte(`{"schemaVersion":2,"private":nil_}`)
+	r.Len(forged, len(manifest))
+	desc := ociImageSpecV1.Descriptor{
+		MediaType: ociImageSpecV1.MediaTypeImageManifest,
+		Digest:    digest.FromBytes(manifest),
+		Size:      int64(len(manifest)),
+	}
+
+	manifestPath := func(repo string) string { return "/v2/" + repo + "/manifests/" + desc.Digest.String() }
+
+	var mu sync.Mutex
+	requests := map[string]int{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		mu.Lock()
+		requests[req.Method+" "+req.URL.Path]++
+		mu.Unlock()
+		body := manifest
+		if req.URL.Path == manifestPath("attacker") {
+			body = forged
+		} else if req.URL.Path != manifestPath("victim") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", desc.MediaType)
+		w.Header().Set("Docker-Content-Digest", desc.Digest.String())
+		w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+		if req.Method == http.MethodGet {
+			_, _ = w.Write(body)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	repoAt := func(name string) *remote.Repository {
+		repo, err := remote.NewRepository(srv.Listener.Addr().String() + "/" + name)
+		r.NoError(err)
+		repo.PlainHTTP = true
+		repo.Client = &http.Client{}
+		return repo
+	}
+	c := newTestCache(t, Options{RemotePolicy: RemotePolicyAlways})
+	victim := newCachedStore(repoAt("victim"), c, nil)
+	attacker := newCachedStore(repoAt("attacker"), c, nil)
+
+	for range 2 {
+		rc, err := victim.Fetch(t.Context(), desc)
+		r.NoError(err)
+		r.Equal(manifest, readAllAndClose(t, rc))
+	}
+	r.Equal(1, requests["GET "+manifestPath("victim")], "the second read must be served from the cache")
+	r.Equal(1, requests["HEAD "+manifestPath("victim")], "the second read must ask the registry")
+
+	_, err := attacker.Fetch(t.Context(), desc)
+	r.Error(err, "the attacker must not get the cached blob")
+	r.Equal(1, requests["GET "+manifestPath("attacker")], "the attacker must have to serve the blob itself")
+	r.Zero(requests["HEAD "+manifestPath("attacker")])
 }
 
 func TestCachedStore_Unwrap_ReturnsEmbedded(t *testing.T) {

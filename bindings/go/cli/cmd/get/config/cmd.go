@@ -20,6 +20,7 @@ import (
 	credentialsruntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	ocicachev1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/cache/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
@@ -137,6 +138,12 @@ func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 		return nil, fmt.Errorf("config lookup failed for http: %w", err)
 	} else if httpCfg != nil && httpCfg.Type != (runtime.Type{}) {
 		result.Configurations = append(result.Configurations, httpCfg)
+	}
+
+	if ociCacheCfg, err := ocicachev1alpha1.LookupConfig(cfg); err != nil {
+		return nil, fmt.Errorf("config lookup failed for oci cache: %w", err)
+	} else if ociCacheCfg != nil {
+		result.Configurations = append(result.Configurations, ociCacheCfg)
 	}
 
 	//nolint:staticcheck // displaying deprecated config for user visibility

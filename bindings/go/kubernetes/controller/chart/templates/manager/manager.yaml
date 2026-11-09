@@ -23,6 +23,10 @@ spec:
         metadata:
             annotations:
                 kubectl.kubernetes.io/default-container: manager
+                {{- /* The controller reads its OCM config only at startup, so a change must restart the pods. */}}
+                {{- if .Values.manager.ocmConfig }}
+                checksum/ocm-config: {{ include (print $.Template.BasePath "/manager/ocm-config.yaml") . | sha256sum }}
+                {{- end }}
             labels:
                 app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
                 app.kubernetes.io/instance: {{ .Release.Name }}
@@ -147,6 +151,9 @@ spec:
                     - --deployer-download-max-resource-size={{ .deployerDownloadMaxResourceSize }}
                     {{- end }}
                     {{- end }}
+                    {{- if .Values.manager.ocmConfig }}
+                    - --ocm-config=/etc/ocm/config.yaml
+                    {{- end }}
                     {{- /* Deployers */}}
                     {{- /* dig: a helm upgrade --reuse-values from a release without these keys must not fail */}}
                     - --enable-deployer={{ dig "deployer" "enabled" true .Values.manager }}
@@ -213,6 +220,11 @@ spec:
                       name: data
                     - mountPath: /tmp
                       name: tmp
+                    {{- if .Values.manager.ocmConfig }}
+                    - mountPath: /etc/ocm
+                      name: ocm-config
+                      readOnly: true
+                    {{- end }}
                     {{- if .Values.webhook.enable }}
                     - mountPath: /tmp/k8s-webhook-server/serving-certs
                       name: cert
@@ -231,6 +243,11 @@ spec:
                   name: data
                 - emptyDir: {}
                   name: tmp
+                {{- if .Values.manager.ocmConfig }}
+                - name: ocm-config
+                  configMap:
+                    name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "ocm-config" "context" $) }}
+                {{- end }}
                 {{- if .Values.webhook.enable }}
                 - name: cert
                   secret:
