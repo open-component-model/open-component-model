@@ -41,6 +41,11 @@ func TestDownloadRevisions(t *testing.T) {
 			r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/feature", fixture.Second)))
 			r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/tags/feature", fixture.First)))
 			r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/releases/stable", fixture.First)))
+			// Refs whose names run below the path of another ref, which git allows across namespaces.
+			r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/release", fixture.Second)))
+			r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/tags/release/v1", fixture.First)))
+			r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/tags/x", fixture.Second)))
+			r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/remotes/x/y", fixture.First)))
 			inner, err := fixture.Git.Reference("refs/tags/annotated", true)
 			r.NoError(err)
 			tag := storeObject(t, fixture.Git, &object.Tag{
@@ -70,6 +75,8 @@ func TestDownloadRevisions(t *testing.T) {
 				{name: "remote tracking branch", ref: "refs/remotes/origin/feature", want: fixture.Second, wantRef: "refs/heads/feature"},
 				{name: "qualified tag wins over same-named branch", ref: "refs/tags/feature", want: fixture.First, wantRef: "refs/tags/feature"},
 				{name: "custom ref namespace", ref: "refs/releases/stable", want: fixture.First, wantRef: "refs/releases/stable"},
+				{name: "short tag below a branch name", ref: "release/v1", want: fixture.First, wantRef: "refs/tags/release/v1"},
+				{name: "short remote ref below a tag name", ref: "x/y", want: fixture.First, wantRef: "refs/remotes/x/y"},
 				{name: "short lightweight tag", ref: "v1", want: fixture.First, wantRef: "refs/tags/v1"},
 				{name: "short annotated tag", ref: "annotated", want: fixture.First, wantRef: "refs/tags/annotated"},
 				{name: "short nested tag", ref: "nested", want: fixture.First, wantRef: "refs/tags/nested"},
@@ -369,6 +376,23 @@ func TestResolveRefUnreadableCandidate(t *testing.T) {
 			r.Equal(tc.wantRef, got)
 		})
 	}
+}
+
+func TestResolveRefBelowRefFile(t *testing.T) {
+	r := require.New(t)
+	hash := plumbing.NewHash("1111111111111111111111111111111111111111")
+	repo, err := git.PlainInit(t.TempDir(), true)
+	r.NoError(err)
+	for _, n := range []plumbing.ReferenceName{"refs/heads/release", "refs/remotes/origin/release", "refs/tags/release/v1"} {
+		r.NoError(repo.Storer.SetReference(plumbing.NewHashReference(n, hash)))
+	}
+
+	_, got, err := resolveRef(repo, "release/v1")
+	r.NoError(err)
+	r.Equal(plumbing.ReferenceName("refs/tags/release/v1"), got)
+
+	_, _, err = resolveRef(repo, "release/missing")
+	r.ErrorIs(err, plumbing.ErrReferenceNotFound)
 }
 
 func TestDownloadInProgressCancellationCleanup(t *testing.T) {
