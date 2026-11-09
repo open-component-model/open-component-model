@@ -22,17 +22,7 @@
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",
       "oneOf": [
         {
-          "const": "Wget/v1"
-        },
-        {
           "const": "HTTP/v1"
-        },
-        {
-          "const": "http/v1"
-        },
-        {
-          "deprecated": true,
-          "const": "Wget"
         },
         {
           "deprecated": true,
@@ -40,7 +30,19 @@
         },
         {
           "deprecated": true,
+          "const": "http/v1"
+        },
+        {
+          "deprecated": true,
           "const": "http"
+        },
+        {
+          "deprecated": true,
+          "const": "Wget/v1"
+        },
+        {
+          "deprecated": true,
+          "const": "Wget"
         }
       ]
     }

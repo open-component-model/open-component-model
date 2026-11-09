@@ -208,11 +208,13 @@ identity is derived from the Helm repository URL using the same URL-based attrib
 
 ## HTTP {#wget}
 
+<a id="wget--http"></a>
+
 Used when OCM fetches a resource over plain HTTP or HTTPS through the
 [`Wget/v1` access type]({{< relref "input-and-access-types.md#wgetv1-access" >}}) and the
 [`Wget/v1` input type]({{< relref "input-and-access-types.md#wgetv1-input" >}}). The identity is derived from the resource
 `url`; the access type and the input type derive it identically, so a single consumer entry covers both.
-Prefer the `HTTP` type name; `Wget` and the other spellings are accepted as aliases (see the caution below).
+Prefer the `HTTP` type name; `HTTP/v1`, `Wget/v1`, `Wget`, and the lowercase `http`/`http/v1` spellings are accepted as aliases (see the caution below).
 
 ### Identity Attributes
 
@@ -233,7 +235,7 @@ Prefer the `HTTP` type name; `Wget` and the other spellings are accepted as alia
 | `scheme`   | `https`                    |
 | `path`     | `myapp/1.0.0/myapp.tar.gz` |
 
-The derived `type` is the canonical `Wget`. A consumer entry written as `HTTP` (or its other aliases) still matches it.
+The derived `type` is the canonical `Wget`. A consumer entry written as `HTTP` (or any other accepted alias) still matches it.
 
 The URL carries no explicit port, so no `port` attribute is derived. Default ports stay implicit in the identity and
 are applied by the URL matcher instead, so this identity matches a consumer entry with `port: "443"` as well as one
@@ -251,7 +253,7 @@ with no `port` at all. A URL that names its port (`https://downloads.example.com
 | `privateKey`           | PEM-encoded private key paired with `certificate`                                                           |
 | `certificateAuthority` | PEM-encoded CA certificate used to verify the server certificate. Only applied together with `certificate`. |
 
-Use [`HTTPCredentials/v1`]({{< relref "credential-types.md#wgetcredentialsv1" >}}) (also registered as the legacy `WgetCredentials/v1`) for the typed field reference.
+Use [`HTTPCredentials/v1`]({{< relref "credential-types.md#wgetcredentialsv1" >}}) (the deprecated `WgetCredentials/v1` still resolves) for the typed field reference. The `HTTP` aliases resolve only because the wget consumer-identity type is registered in the credential graph's identity scheme; a custom graph without it would not match them.
 
 Basic Auth and a bearer token both set the `Authorization` header and are therefore mutually exclusive. When both are
 configured, the bearer token wins and a warning is logged. The mutual TLS certificate is a transport-layer credential

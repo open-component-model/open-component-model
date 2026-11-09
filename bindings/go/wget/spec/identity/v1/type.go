@@ -26,8 +26,8 @@ var VersionedType = runtime.NewVersionedType(WgetIdentityType, Version)
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type WgetIdentity struct {
-	// +ocm:jsonschema-gen:enum=Wget/v1,HTTP/v1,http/v1
-	// +ocm:jsonschema-gen:enum:deprecated=Wget,HTTP,http
+	// +ocm:jsonschema-gen:enum=HTTP/v1
+	// +ocm:jsonschema-gen:enum:deprecated=HTTP,http/v1,http,Wget/v1,Wget
 	Type     runtime.Type `json:"type"`
 	Hostname string       `json:"hostname,omitempty"`
 	Scheme   string       `json:"scheme,omitempty"`
