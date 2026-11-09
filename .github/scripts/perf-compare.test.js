@@ -58,10 +58,13 @@ function complexResult(total, requests) {
       controllerCounters: {
         'controller_runtime_reconcile_time_seconds_count{controller="namespaceddeployer"}': 2000,
         'controller_runtime_reconcile_time_seconds_count{controller="component"}': 0,
-        'ocm_system_ocm_k8s_toolkit_oci_blob_cache_fetches_total{kind="metadata",result="hit"}': 6000,
-        'ocm_system_ocm_k8s_toolkit_oci_blob_cache_fetches_total{kind="blob",result="bypass"}': 1000,
       },
-      registryCounters: {},
+      registryCounters: {
+        'registry_http_requests_total{code="200",handler="manifest",method="head"}': requests - 10,
+        'registry_http_requests_total{code="404",handler="manifest",method="head"}': 10,
+        'registry_http_requests_total{code="200",handler="blob",method="get"}': 0,
+        'registry_http_request_duration_seconds_count{handler="manifest",method="head"}': requests,
+      },
     },
   };
 }
@@ -71,8 +74,8 @@ test("drift rows come from the drift block", () => {
 
   assert.match(table, /^\| Drift: registry requests \| 8000 \| 4000 \| -50\.0% \|$/m);
   assert.match(table, /^\| Drift: total \(s\) \\\* \| 30 \| 30 \| 0% \|$/m);
-  assert.match(table, /^\| Drift: blob cache metadata hit \| 6000 \| 6000 \| 0% \|$/m);
-  assert.match(table, /^\| Drift: blob cache blob bypass \| 1000 \| 1000 \| 0% \|$/m);
+  assert.match(table, /^\| Drift: registry manifest head \| 8000 \| 4000 \| -50\.0% \|$/m, "summed over status codes");
+  assert.doesNotMatch(table, /Drift: registry blob get/, "requests the drift never made get no row");
   assert.match(table, /^\| Drift: namespaceddeployer: reconciles \| 2000 \| 2000 \| 0% \|$/m);
   assert.doesNotMatch(table, /Drift: component/, "controllers idle during the drift get no row");
 });

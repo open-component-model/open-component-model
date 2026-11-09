@@ -184,7 +184,6 @@ Metric sources:
 | Peak working set   | max of kubelet `container_memory_working_set_bytes`. cAdvisor refreshes it on its own housekeeping interval, not per scrape, so it lags on short runs.                                 |
 | OCI requests       | delta of the registry's `registry_http_requests_total`, split by handler and method                                                                                                    |
 | Controller metrics | deltas of every `controller_runtime_*`, `workqueue_*`, `ocm_system_*` and `rest_client_requests_total` series. Per-component labels are folded away.                                   |
-| Blob cache         | `ocm_system_ocm_k8s_toolkit_oci_blob_cache_fetches_total`, by `kind` (`metadata`: manifests and descriptors, `blob`: everything else) and `result` (`hit`, `miss`, `bypass`)          |
 
 ## Profiling
 

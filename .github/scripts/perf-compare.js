@@ -59,25 +59,42 @@ function activeControllers(results) {
   return [...names].sort();
 }
 
-const blobCacheFetches = /^ocm_system_ocm_k8s_toolkit_oci_blob_cache_fetches_total\{kind="(.+)",result="(.+)"\}$/;
+const registryRequest = /^registry_http_requests_total\{.*handler="(.+)",method="(.+)"\}$/;
 
 /**
- * The blob cache series of the drift blocks: the counter key with its kind and result.
+ * Registry requests by handler and method, summed over status codes.
  *
- * @param {any[]} drifts
- * @returns {{ key: string, kind: string, result: string }[]}
+ * @param {any} window - A result or its drift block.
+ * @returns {Map<string, number>} keyed by "handler method".
  */
-function blobCacheSeries(drifts) {
-  const series = new Map();
-  for (const drift of drifts) {
-    for (const key of Object.keys(drift.controllerCounters ?? {})) {
-      const match = key.match(blobCacheFetches);
-      if (match) {
-        series.set(key, { key, kind: match[1], result: match[2] });
+function registryRequests(window) {
+  const sums = new Map();
+  for (const [key, value] of Object.entries(window.registryCounters ?? {})) {
+    const match = key.match(registryRequest);
+    if (match) {
+      const name = `${match[1]} ${match[2]}`;
+      sums.set(name, (sums.get(name) ?? 0) + value);
+    }
+  }
+  return sums;
+}
+
+/**
+ * The handler and method pairs that any of the windows sent requests for.
+ *
+ * @param {any[]} windows
+ * @returns {string[]}
+ */
+function activeRegistryRequests(windows) {
+  const names = new Set();
+  for (const window of windows) {
+    for (const [name, value] of registryRequests(window)) {
+      if (value > 0) {
+        names.add(name);
       }
     }
   }
-  return [...series.keys()].sort().map((key) => series.get(key));
+  return [...names].sort();
 }
 
 /**
@@ -140,9 +157,9 @@ function driftRows(results) {
   return [
     { label: "Drift: total (s)", value: ofDrift((d) => d.durations.total), runnerDependent: true },
     { label: "Drift: registry requests", value: ofDrift((d) => d.usage.registryRequests) },
-    ...blobCacheSeries(drifts).map(({ key, kind, result }) => ({
-      label: `Drift: blob cache ${kind} ${result}`,
-      value: ofDrift((d) => d.controllerCounters[key] ?? 0),
+    ...activeRegistryRequests(drifts).map((name) => ({
+      label: `Drift: registry ${name}`,
+      value: ofDrift((d) => registryRequests(d).get(name) ?? 0),
     })),
     ...activeControllers(drifts).map((c) => ({
       label: `Drift: ${c}: reconciles`,
