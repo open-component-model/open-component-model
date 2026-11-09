@@ -1,6 +1,6 @@
 ---
 title: "Run the OCM Controllers in Production"
-description: "Size, tune, and operate the OCM Kubernetes Controller Toolkit for production workloads."
+description: "Size, tune, and operate the OCM Kubernetes Controller Toolkit for production workloads with settings that make the controller run in an optimal way."
 weight: 80
 toc: true
 ---
