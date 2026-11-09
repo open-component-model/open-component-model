@@ -416,9 +416,11 @@ configurations:
 			"a ref-only Git access must become a local blob once copied")
 		r.Equal(transferv1alpha1.GitLocalBlobMediaType, localBlobAccess.MediaType)
 
+		// The source recorded no digest, and a transfer copies that absence: a digest is
+		// computed when a component version is added, not while it is transferred.
+		r.Nil(res.Digest, "a transfer must not add a digest the source did not record")
+
 		stored := readLocalResource(t, t.Context(), targetRepo, componentName, componentVersion, res.ToIdentity())
-		r.Equal(res.Digest.Value, godigest.FromBytes(stored).Encoded(),
-			"the stored blob must hash to the digest it was published under")
 		assertGitArchiveREADME(t, stored, "second\n")
 	})
 }

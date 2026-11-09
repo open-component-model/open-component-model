@@ -199,9 +199,9 @@ func Test_Integration_TransferWgetResource_UploaderStreamsToHTTPTarget(t *testin
 	r.NoError(wgetaccess.Scheme.Convert(gotAccess, &typedWget))
 	r.Equal(targetSrv.URL+expectedPath, typedWget.URL, "resource access URL should point at the target upload URL")
 
-	r.NotNil(gotResource.Digest, "transferred resource should carry a digest")
-	r.Equal(digestOf(resourceData).Encoded(), gotResource.Digest.Value,
-		"resource digest should be the sha256 of the streamed content")
+	// The source carried no digest, so transfer must preserve that absence rather than
+	// injecting the sha256 it computed while streaming.
+	r.Nil(gotResource.Digest, "transfer must not inject a digest the source lacked")
 
 	// The target server must re-serve exactly what was streamed.
 	getReq, err := http.NewRequestWithContext(ctx, http.MethodGet, targetSrv.URL+expectedPath, nil)
