@@ -519,30 +519,40 @@ func resolveRef(repo *git.Repository, name string) (plumbing.Hash, plumbing.Refe
 		}
 	}
 
-	var firstErr, invalidErr error
+	// Candidate lookups fail in three ways we rank by how much they explain: a storage
+	// error that could not read the ref (most meaningful), a plain not-found, and a name
+	// the storage refuses to even look up (least meaningful, says nothing about the ref).
+	var storageErr, notFoundErr, invalidErr error
 	for _, rule := range plumbing.RefRevParseRules {
 		// Resolving follows symbolic refs, so the name of HEAD is the branch it points to.
 		ref, err := repo.Reference(plumbing.ReferenceName(fmt.Sprintf(rule, name)), true)
 		if err == nil {
 			return ref.Hash(), sourceRefName(ref.Name()), nil
 		}
-		// A candidate the storage refuses to name, such as the bare "main" of the "%s"
-		// rule, says nothing about whether the ref exists; report a real lookup error.
-		if errors.Is(err, plumbing.ErrInvalidReferenceName) {
+		switch {
+		case errors.Is(err, plumbing.ErrInvalidReferenceName):
+			// The bare "main" of the "%s" rule, say; it does not exist as a name at all.
 			if invalidErr == nil {
 				invalidErr = err
 			}
-			continue
-		}
-		if firstErr == nil {
-			firstErr = err
+		case errors.Is(err, plumbing.ErrReferenceNotFound):
+			if notFoundErr == nil {
+				notFoundErr = err
+			}
+		default:
+			if storageErr == nil {
+				storageErr = err
+			}
 		}
 	}
-	if firstErr == nil {
-		firstErr = invalidErr
+	switch {
+	case storageErr != nil:
+		return plumbing.ZeroHash, "", storageErr
+	case notFoundErr != nil:
+		return plumbing.ZeroHash, "", notFoundErr
+	default:
+		return plumbing.ZeroHash, "", invalidErr
 	}
-
-	return plumbing.ZeroHash, "", firstErr
 }
 
 // sourceRefName maps the remote-tracking name a fetched branch is stored under back to

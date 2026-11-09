@@ -19,6 +19,8 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/filemode"
 	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/go-git/go-git/v6/plumbing/transport"
+	"github.com/go-git/go-git/v6/storage"
+	"github.com/go-git/go-git/v6/storage/memory"
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
@@ -57,10 +59,13 @@ func TestDownloadRevisions(t *testing.T) {
 				// branch to point to it stays HEAD.
 				wantRef          string
 				missingHeadError string
+				// missingHeadCause is the sentinel the missing-HEAD error must wrap, when
+				// resolveRef is the one that reports it.
+				missingHeadCause error
 			}{
 				{name: "default HEAD", ref: "HEAD", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: "cannot fetch git repository: transport failed; check repository access and server trust: reference not found"},
-				{name: "short main branch", ref: "main", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: "cannot resolve git ref: reference not found"},
-				{name: "qualified main branch", ref: "refs/heads/main", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: "cannot resolve git ref: reference not found"},
+				{name: "short main branch", ref: "main", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: "cannot resolve git ref: reference not found", missingHeadCause: plumbing.ErrReferenceNotFound},
+				{name: "qualified main branch", ref: "refs/heads/main", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: "cannot resolve git ref: reference not found", missingHeadCause: plumbing.ErrReferenceNotFound},
 				{name: "branch wins over same-named tag", ref: "feature", want: fixture.Second, wantRef: "refs/heads/feature"},
 				{name: "remote tracking branch", ref: "refs/remotes/origin/feature", want: fixture.Second, wantRef: "refs/heads/feature"},
 				{name: "qualified tag wins over same-named branch", ref: "refs/tags/feature", want: fixture.First, wantRef: "refs/tags/feature"},
@@ -82,6 +87,9 @@ func TestDownloadRevisions(t *testing.T) {
 					pinned, pinErr := Pin(t.Context(), spec, nil, Options{AllowLocal: true})
 					if head == "missing HEAD" && tc.missingHeadError != "" {
 						r.ErrorContains(err, tc.missingHeadError)
+						if tc.missingHeadCause != nil {
+							r.ErrorIs(err, tc.missingHeadCause)
+						}
 						r.Nil(result)
 						r.Error(pinErr, "a ref the fetch cannot resolve is not pinned")
 						return
@@ -308,6 +316,37 @@ func TestDownloadFailureCleanup(t *testing.T) {
 			r.Empty(files)
 		})
 	}
+}
+
+// errAtRef makes a repository's reference storage fail with a sentinel error for one
+// exact reference name while behaving normally for every other name.
+type errAtRef struct {
+	storage.Storer
+	name plumbing.ReferenceName
+	err  error
+}
+
+func (s errAtRef) Reference(name plumbing.ReferenceName) (*plumbing.Reference, error) {
+	if name == s.name {
+		return nil, s.err
+	}
+	return s.Storer.Reference(name)
+}
+
+func TestResolveRefStorageErrorWins(t *testing.T) {
+	r := require.New(t)
+
+	// A qualified candidate (refs/heads/main) cannot be read while every other
+	// candidate for the short name "main" is simply absent. The storage failure must
+	// win over the not-found results so the real problem is not masked.
+	wantErr := errors.New("disk on fire")
+	base := memory.NewStorage()
+	repo, err := git.Init(errAtRef{Storer: base, name: "refs/heads/main", err: wantErr})
+	r.NoError(err)
+
+	_, _, err = resolveRef(repo, "main")
+	r.ErrorIs(err, wantErr)
+	r.NotErrorIs(err, plumbing.ErrReferenceNotFound)
 }
 
 func TestDownloadInProgressCancellationCleanup(t *testing.T) {
