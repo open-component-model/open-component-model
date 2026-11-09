@@ -1,6 +1,6 @@
 ---
 title: "Install the OCM CLI"
-description: "Learn how to install the OCM CLI on Linux, macOS, and Windows using package managers, the install script, or downloading the binary."
+description: "Learn how to install the OCM CLI on Linux, macOS, and Windows using package managers, the install script, GitHub Actions, or downloading the binary."
 icon: "💻"
 weight: 10
 toc: true
@@ -38,6 +38,33 @@ wget -qO- https://ocm.software/install-cli.sh | {{< site-version "env" >}}bash
 ```shell
 curl -sfL https://ocm.software/install-cli.sh | {{< site-version "env" >}}bash
 ```
+
+{{< /tab >}}
+{{< tab "GitHub Actions" >}}
+
+In GitHub Actions workflows, use [`open-component-model/ocm-setup-action`](https://github.com/open-component-model/ocm-setup-action).
+It installs the CLI for the runner's OS and architecture (Linux, macOS, Windows on x64 and arm64), verifies the
+binary's SHA-256 digest and its [GitHub attestation](#verify-binary-authenticity), caches it with `actions/cache`,
+and adds `ocm` to the `PATH` of subsequent steps:
+
+```yaml
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: open-component-model/ocm-setup-action@v2
+        with:
+          version: {{< site-version "semver" >}}
+      - run: ocm version
+```
+
+Omit `version` to install the latest stable release. Set `cache: false` to always download the binary, and
+`verify-attestation: false` on self-hosted runners without the [GitHub CLI](https://cli.github.com/).
+The action outputs the installed `version`, the binary `path`, and `cache-hit`.
+See the [action's README](https://github.com/open-component-model/ocm-setup-action#readme) for all inputs and outputs.
 
 {{< /tab >}}
 {{< tab "OCM Component" >}}
