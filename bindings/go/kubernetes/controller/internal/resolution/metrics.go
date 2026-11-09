@@ -1,9 +1,8 @@
 package resolution
 
 import (
+	"github.com/prometheus/client_golang/prometheus"
 	kmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
-
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/metrics"
 )
 
 func init() {
@@ -22,21 +21,17 @@ const (
 )
 
 const (
-	// ComponentLabel is the name of the label for the passed in component's name.
-	ComponentLabel = "component"
-	// VersionLabel is the name of the label for the passed in component's version.
-	VersionLabel = "version"
 	// VerificationStateLabel is the name of the label for the verification state of a resolved component version.
 	VerificationStateLabel = "verification_state"
 )
 
 // ResolutionDurationHistogram tracks the duration of component version resolutions.
-// [component, version, verification_state].
-var ResolutionDurationHistogram = metrics.MustRegisterHistogramVec(
-	MetricsNamespace,
-	OcmComponent,
-	ResolutionDurationHistogramLabel,
-	"Duration of component version resolutions in seconds.",
-	[]float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
-	ComponentLabel, VersionLabel, VerificationStateLabel,
-)
+// Component name and version are deliberately not labels: series are never deleted,
+// so every resolved version would add a histogram for the lifetime of the process.
+var ResolutionDurationHistogram = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+	Namespace: MetricsNamespace,
+	Subsystem: OcmComponent,
+	Name:      ResolutionDurationHistogramLabel,
+	Help:      "Duration of component version resolutions in seconds.",
+	Buckets:   []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10},
+}, []string{VerificationStateLabel})

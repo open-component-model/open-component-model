@@ -10,6 +10,7 @@ import (
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/golang-lru/v2/expirable"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -96,9 +97,12 @@ func (r *Resolver) GetComponentVersion(ctx context.Context, opts *Options, verif
 		digest:          verify.Digest,
 		signingRegistry: opts.PluginManager.SigningRegistry,
 	})
-	ResolutionDurationHistogram.
-		WithLabelValues(component, version, verificationState(verify.Verifications, verify.Digest)).
-		Observe(time.Since(start).Seconds())
+	duration := time.Since(start)
+	state := verificationState(verify.Verifications, verify.Digest)
+	ResolutionDurationHistogram.WithLabelValues(state).Observe(duration.Seconds())
+	// Per-version timing lives here because component and version are unbounded as metric labels.
+	log.FromContext(ctx).V(1).Info("resolved component version", "component", component, "version", version,
+		"verificationState", state, "duration", duration, "error", err)
 
 	return desc, err
 }
