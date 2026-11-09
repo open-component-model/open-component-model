@@ -436,10 +436,16 @@ tasks:
   helm-unittest-plugin:
     internal: true
     silent: true
-    desc: "Install the helm-unittest plugin at the version pinned in .env, replacing any other version"
+    desc: "Install the helm-unittest plugin if not present; fail if another version than the one pinned in .env is installed"
     # helm plugin list prints the version without the "v" prefix.
+    # Never replace another installed version: it belongs to the developer, not to this repo.
     cmd: |
-      helm plugin uninstall unittest 2>/dev/null || true
-      helm plugin install https://github.com/helm-unittest/helm-unittest.git --version {{.HELM_UNITTEST_VERSION}} --verify=false
+      installed=$(helm plugin list | awk '$1=="unittest"{print "v"$2}')
+      if [ -z "$installed" ]; then
+        helm plugin install https://github.com/helm-unittest/helm-unittest.git --version {{.HELM_UNITTEST_VERSION}} --verify=false
+      elif [ "$installed" != "{{.HELM_UNITTEST_VERSION}}" ]; then
+        echo "ERROR: helm-unittest plugin $installed is installed, but .env pins {{.HELM_UNITTEST_VERSION}}. Run 'helm plugin uninstall unittest', then rerun this task." >&2
+        exit 1
+      fi
     status:
       - helm plugin list | awk '$1=="unittest"{print "v"$2}' | grep -qx "{{.HELM_UNITTEST_VERSION}}"
