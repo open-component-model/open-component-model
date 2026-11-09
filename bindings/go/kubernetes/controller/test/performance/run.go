@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -110,7 +112,7 @@ func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (
 		defer func() {
 			log.Info("cleaning up", "namespaces", len(w.namespaces()))
 			cleanupStart := time.Now()
-			if err := r.cleanup(context.WithoutCancel(ctx), w); err != nil {
+			if err := r.cleanup(context.WithoutCancel(ctx), log, w); err != nil {
 				log.Error("cleaning up", "error", err)
 			}
 			log.Info("cleaned up", "duration", time.Since(cleanupStart))
@@ -137,12 +139,11 @@ func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (
 	}
 	res.window = rollout.window
 	res.Durations.Publish = published
-	res.ControllerRestarted = r.restartedSince(ctx, pod)
 	if err := rollout.writeRaw(dir, ""); err != nil {
 		return nil, err
 	}
 
-	if err := r.drift(ctx, pod, w, rollout, res, dir); err != nil {
+	if err := r.drift(ctx, log, pod, w, rollout, res, dir); err != nil {
 		return nil, err
 	}
 
@@ -156,13 +157,13 @@ func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (
 // drift measures the drift phase into res.Drift: every deployed ConfigMap is
 // changed, until each Deployer has reverted its own. It needs a finished rollout
 // with drained queues: a Deployer only watches an object once it applied it.
-func (r *runner) drift(ctx context.Context, pod *corev1.Pod, w workload, rollout *measurement, res *result, dir string) error {
+func (r *runner) drift(ctx context.Context, log *slog.Logger, pod *corev1.Pod, w workload, rollout *measurement, res *result, dir string) error {
 	keys := w.driftedConfigMaps()
 	if len(keys) == 0 {
 		return nil
 	}
-	if !rollout.complete() || res.ControllerRestarted {
-		slog.Warn("skipping the drift phase, the rollout did not finish", "run", w.runID)
+	if !rollout.complete() {
+		log.Warn("skipping the drift phase, the rollout did not finish")
 		return nil
 	}
 	m, err := r.measure(ctx, pod, w, phase{
@@ -175,7 +176,6 @@ func (r *runner) drift(ctx context.Context, pod *corev1.Pod, w workload, rollout
 	if err != nil {
 		return fmt.Errorf("drift: %w", err)
 	}
-	m.ControllerRestarted = r.restartedSince(ctx, pod)
 	res.Drift = &m.window
 	return m.writeRaw(dir, "drift-")
 }
@@ -251,34 +251,44 @@ func (r *runner) driftConfigMaps(ctx context.Context, keys []client.ObjectKey) e
 // account can still prune what they deployed, then the rest of the pipelines, then the
 // namespaces. Deleting the namespaces right away deletes all of it at once; the Deployers
 // then fail on their half-deleted RBAC and every kind waits for the next with backoff.
-func (r *runner) cleanup(ctx context.Context, w workload) error {
+// A stage that fails or times out does not stop the next: the namespaces are always deleted.
+func (r *runner) cleanup(ctx context.Context, log *slog.Logger, w workload) error {
 	stages := [][]client.Object{
 		{&v1alpha1.NamespacedDeployer{}},
 		{&v1alpha1.Resource{}, &v1alpha1.Component{}, &v1alpha1.Repository{}},
 	}
+	var errs []error
 	for _, kinds := range stages {
 		start := time.Now()
 		for _, kind := range kinds {
 			if err := r.forEachNamespace(ctx, w, func(ctx context.Context, namespace string) error {
 				return r.c.client.DeleteAllOf(ctx, kind, client.InNamespace(namespace), client.MatchingLabels{runLabel: w.runID})
 			}); err != nil {
-				return fmt.Errorf("deleting %T: %w", kind, err)
+				errs = append(errs, fmt.Errorf("deleting %T: %w", kind, err))
 			}
 		}
 		for _, kind := range kinds {
 			if err := r.c.waitGone(ctx, kind, w.runID, r.opts.timeout); err != nil {
-				return err
+				errs = append(errs, err)
 			}
 		}
-		slog.Info("deleted", "run", w.runID, "kinds", len(kinds), "first", fmt.Sprintf("%T", kinds[0]), "duration", time.Since(start))
+		log.Info("deleted pipeline objects", "kinds", kindNames(kinds), "duration", time.Since(start))
 	}
 	// Waiting once for all of them, so finalizer work from one run does not overlap the next.
 	if err := r.forEachNamespace(ctx, w, func(ctx context.Context, namespace string) error {
 		return r.c.deleteNamespace(ctx, namespace)
 	}); err != nil {
-		return fmt.Errorf("deleting namespaces: %w", err)
+		errs = append(errs, fmt.Errorf("deleting namespaces: %w", err))
 	}
-	return r.c.waitGone(ctx, &corev1.Namespace{}, w.runID, r.opts.timeout)
+	return errors.Join(append(errs, r.c.waitGone(ctx, &corev1.Namespace{}, w.runID, r.opts.timeout))...)
+}
+
+func kindNames(objs []client.Object) []string {
+	names := make([]string, len(objs))
+	for i, obj := range objs {
+		names[i] = reflect.TypeOf(obj).Elem().Name()
+	}
+	return names
 }
 
 func (r *runner) forEachNamespace(ctx context.Context, w workload, f func(context.Context, string) error) error {

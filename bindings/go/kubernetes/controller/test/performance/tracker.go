@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	toolscache "k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // tracker watches the target kind of a run and records when each object is
@@ -88,7 +89,7 @@ func (t *tracker) observe(obj any) {
 	if !ok {
 		return
 	}
-	key := u.GetNamespace() + "/" + u.GetName()
+	key := client.ObjectKeyFromObject(u).String()
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -159,7 +160,7 @@ func (t *tracker) summary() trackerSummary {
 func revertedState(version string) func(*unstructured.Unstructured) objectState {
 	drifted := map[string]bool{}
 	return func(u *unstructured.Unstructured) objectState {
-		key := u.GetNamespace() + "/" + u.GetName()
+		key := client.ObjectKeyFromObject(u).String()
 		v, _, _ := unstructured.NestedString(u.Object, "data", "version")
 		if v == driftedVersion {
 			drifted[key] = true

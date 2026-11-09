@@ -13,6 +13,7 @@ import (
 	"oras.land/oras-go/v2/registry"
 
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
+	ocicache "ocm.software/open-component-model/bindings/go/oci/cache"
 )
 
 type blobs map[digest.Digest][]byte
@@ -45,12 +46,14 @@ func TestNewBlobCache_CountsFetches(t *testing.T) {
 	manifest := upstream.put(ociImageSpecV1.MediaTypeImageManifest, []byte(`{}`))
 	layer := upstream.put(ociImageSpecV1.MediaTypeImageLayerGzip, []byte("layer"))
 
-	count := func(kind, result string) float64 {
+	count := func(kind string, result ocicache.FetchResult) float64 {
 		m := &dto.Metric{}
-		r.NoError(setup.BlobCacheFetches.WithLabelValues(kind, result).Write(m))
+		r.NoError(setup.BlobCacheFetches.WithLabelValues(kind, string(result)).Write(m))
 		return m.GetCounter().GetValue()
 	}
-	metadataMiss, metadataHit, blobBypass := count("metadata", "miss"), count("metadata", "hit"), count("blob", "bypass")
+	metadataMiss := count(setup.BlobCacheKindMetadata, ocicache.FetchResultMiss)
+	metadataHit := count(setup.BlobCacheKindMetadata, ocicache.FetchResultHit)
+	blobBypass := count(setup.BlobCacheKindBlob, ocicache.FetchResultBypass)
 
 	for _, desc := range []ociImageSpecV1.Descriptor{manifest, manifest, layer} {
 		rc, err := c.Fetch(t.Context(), upstream, desc)
@@ -58,7 +61,7 @@ func TestNewBlobCache_CountsFetches(t *testing.T) {
 		r.NoError(rc.Close())
 	}
 
-	r.InDelta(1, count("metadata", "miss")-metadataMiss, 0)
-	r.InDelta(1, count("metadata", "hit")-metadataHit, 0)
-	r.InDelta(1, count("blob", "bypass")-blobBypass, 0)
+	r.InDelta(1, count(setup.BlobCacheKindMetadata, ocicache.FetchResultMiss)-metadataMiss, 0)
+	r.InDelta(1, count(setup.BlobCacheKindMetadata, ocicache.FetchResultHit)-metadataHit, 0)
+	r.InDelta(1, count(setup.BlobCacheKindBlob, ocicache.FetchResultBypass)-blobBypass, 0)
 }

@@ -33,9 +33,10 @@ type measurement struct {
 	samples       []sample
 }
 
-// complete reports whether every object of the phase was done and the queues drained.
+// complete reports whether every object of the phase was done, the queues drained
+// and the controller kept running.
 func (m *measurement) complete() bool {
-	return !m.Outcome.TimedOut && !m.Outcome.Unsettled
+	return !m.Outcome.TimedOut && !m.Outcome.Unsettled && !m.ControllerRestarted
 }
 
 // measure scrapes, triggers the phase, waits until its objects are done and the
@@ -113,6 +114,7 @@ func (r *runner) measure(ctx context.Context, pod *corev1.Pod, w workload, p pha
 	if err := r.summarize(&m.window, m.before, m.after, m.samples, elapsed); err != nil {
 		m.Errors = append(m.Errors, err.Error())
 	}
+	m.ControllerRestarted = r.restartedSince(ctx, pod)
 	return m, nil
 }
 

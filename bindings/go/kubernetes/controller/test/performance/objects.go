@@ -24,7 +24,7 @@ func (w workload) repository(i int) (*v1alpha1.Repository, error) {
 		return nil, err
 	}
 	return &v1alpha1.Repository{
-		ObjectMeta: w.meta(i, w.repositoryName(i)),
+		ObjectMeta: w.meta(w.namespaceOf(i), w.repositoryName(i)),
 		Spec: v1alpha1.RepositorySpec{
 			RepositorySpec: &apiextensionsv1.JSON{Raw: spec},
 			Interval:       metav1.Duration{Duration: reconcileInterval},
@@ -38,7 +38,7 @@ func (w workload) component(i int) *v1alpha1.Component {
 		semver = versionConstraint
 	}
 	c := &v1alpha1.Component{
-		ObjectMeta: w.meta(i, fmt.Sprintf("c-%04d", i)),
+		ObjectMeta: w.meta(w.namespaceOf(i), fmt.Sprintf("c-%04d", i)),
 		Spec: v1alpha1.ComponentSpec{
 			RepositoryRef: corev1.LocalObjectReference{Name: w.repositoryName(i)},
 			Component:     w.componentName(i),
@@ -66,7 +66,7 @@ func (w workload) signingSecret() (*corev1.Secret, error) {
 		return nil, err
 	}
 	return &corev1.Secret{
-		ObjectMeta: w.meta(0, signingSecretName),
+		ObjectMeta: w.meta(w.namespace, signingSecretName),
 		StringData: map[string]string{v1alpha1.OCMConfigKey: cfg},
 	}, nil
 }
@@ -79,7 +79,7 @@ func (w workload) resource(i int) *v1alpha1.Resource {
 		}
 	}
 	return &v1alpha1.Resource{
-		ObjectMeta: w.meta(i, fmt.Sprintf("r-%04d", i)),
+		ObjectMeta: w.meta(w.namespaceOf(i), fmt.Sprintf("r-%04d", i)),
 		Spec: v1alpha1.ResourceSpec{
 			ComponentRef: corev1.LocalObjectReference{Name: fmt.Sprintf("c-%04d", i)},
 			Resource:     v1alpha1.ResourceID{ByReference: ref},
@@ -91,7 +91,7 @@ func (w workload) resource(i int) *v1alpha1.Resource {
 // there are more Resources than descriptor entries.
 func (w workload) fanoutResource(i, j int) *v1alpha1.Resource {
 	return &v1alpha1.Resource{
-		ObjectMeta: w.meta(i, fmt.Sprintf("r-%04d-%03d", i, j)),
+		ObjectMeta: w.meta(w.namespaceOf(i), fmt.Sprintf("r-%04d-%03d", i, j)),
 		Spec: v1alpha1.ResourceSpec{
 			ComponentRef: corev1.LocalObjectReference{Name: fmt.Sprintf("c-%04d", i)},
 			Resource: v1alpha1.ResourceID{ByReference: v1alpha1.ResourceReference{
@@ -103,7 +103,7 @@ func (w workload) fanoutResource(i, j int) *v1alpha1.Resource {
 
 func (w workload) deployer(i int) *v1alpha1.NamespacedDeployer {
 	return &v1alpha1.NamespacedDeployer{
-		ObjectMeta: w.meta(i, fmt.Sprintf("d-%04d", i)),
+		ObjectMeta: w.meta(w.namespaceOf(i), fmt.Sprintf("d-%04d", i)),
 		Spec: v1alpha1.NamespacedDeployerSpec{
 			ResourceRef:        corev1.LocalObjectReference{Name: fmt.Sprintf("r-%04d", i)},
 			ServiceAccountName: deployerAccount,
@@ -114,9 +114,9 @@ func (w workload) deployer(i int) *v1alpha1.NamespacedDeployer {
 // deployerRBAC is the service account the NamespacedDeployers of object i's namespace apply the ConfigMaps as.
 func (w workload) deployerRBAC(i int) []client.Object {
 	return []client.Object{
-		&corev1.ServiceAccount{ObjectMeta: w.meta(i, deployerAccount)},
+		&corev1.ServiceAccount{ObjectMeta: w.meta(w.namespaceOf(i), deployerAccount)},
 		&rbacv1.Role{
-			ObjectMeta: w.meta(i, deployerAccount),
+			ObjectMeta: w.meta(w.namespaceOf(i), deployerAccount),
 			Rules: []rbacv1.PolicyRule{{
 				APIGroups: []string{""},
 				Resources: []string{"configmaps"},
@@ -124,7 +124,7 @@ func (w workload) deployerRBAC(i int) []client.Object {
 			}},
 		},
 		&rbacv1.RoleBinding{
-			ObjectMeta: w.meta(i, deployerAccount),
+			ObjectMeta: w.meta(w.namespaceOf(i), deployerAccount),
 			RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: deployerAccount},
 			Subjects:   []rbacv1.Subject{{Kind: rbacv1.ServiceAccountKind, Name: deployerAccount, Namespace: w.namespaceOf(i)}},
 		},
@@ -175,7 +175,6 @@ func (w workload) objectsToCreate() ([]client.Object, error) {
 	return objs, nil
 }
 
-// meta is the metadata of an object in object i's namespace.
-func (w workload) meta(i int, name string) metav1.ObjectMeta {
-	return metav1.ObjectMeta{Name: name, Namespace: w.namespaceOf(i), Labels: map[string]string{runLabel: w.runID}}
+func (w workload) meta(namespace, name string) metav1.ObjectMeta {
+	return metav1.ObjectMeta{Name: name, Namespace: namespace, Labels: map[string]string{runLabel: w.runID}}
 }

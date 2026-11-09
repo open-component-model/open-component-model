@@ -63,7 +63,9 @@ The benchmark is a standalone Go program, run with `go run`. It builds and measu
 | `hacks/`                 | Cluster and registry setup, Helm values                                   |
 
 One run restarts the controller, publishes fresh component names, scrapes the metrics, creates the objects,
-waits until they are ready and the controller queues are drained, scrapes again and cleans up.
+waits until they are ready and the controller queues are drained, and scrapes again. `complex` then measures its drift
+phase the same way. The run cleans up the way a user would: the NamespacedDeployers first, while their service account
+can still prune what they deployed, then the Resources, Components and Repositories, then its namespaces.
 
 ## Environment
 

@@ -190,3 +190,9 @@ func TestSettledAt(t *testing.T) {
 		})
 	}
 }
+
+func TestResultNotesIncludeDrift(t *testing.T) {
+	r := require.New(t)
+	res := &result{Scenario: scenarioComplex, Drift: &window{Outcome: outcome{TimedOut: true}}}
+	r.Equal([]string{"drift timed out"}, res.notes(), "a failed drift phase makes the run unusable")
+}

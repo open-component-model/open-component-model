@@ -97,6 +97,17 @@ type usage struct {
 	RegistryRequests *float64 `json:"registryRequests"`
 }
 
+// notes lists what makes a run unusable as a benchmark number, its drift phase included.
+func (r *result) notes() []string {
+	notes := r.window.notes()
+	if r.Drift != nil {
+		for _, n := range r.Drift.notes() {
+			notes = append(notes, "drift "+n)
+		}
+	}
+	return notes
+}
+
 // notes lists what makes a window unusable as a benchmark number.
 func (w *window) notes() []string {
 	var notes []string
