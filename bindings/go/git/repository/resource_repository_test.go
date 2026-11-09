@@ -19,11 +19,11 @@ import (
 
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/git/gittest"
 	"ocm.software/open-component-model/bindings/go/git/repository"
 	"ocm.software/open-component-model/bindings/go/git/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
 func TestResourceDigestPinning(t *testing.T) {
@@ -367,5 +367,5 @@ func newRepository(t *testing.T) repositoryFixture {
 	_, err = bare.CreateTag("annotated", first, &git.CreateTagOptions{Tagger: signature, Message: "release\n"})
 	r.NoError(err)
 
-	return repositoryFixture{Path: path, URL: gittest.Serve(t, path), Git: bare, First: first, Second: second}
+	return repositoryFixture{Path: path, URL: testgit.Serve(t, path), Git: bare, First: first, Second: second}
 }

@@ -14,9 +14,6 @@ import (
 	"time"
 
 	"github.com/go-git/go-git/v6"
-	"github.com/go-git/go-git/v6/config"
-	"github.com/go-git/go-git/v6/plumbing"
-	"github.com/go-git/go-git/v6/plumbing/object"
 	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
@@ -27,7 +24,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/git/gittest"
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	gitaccess "ocm.software/open-component-model/bindings/go/git/spec/access"
 	gitv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
@@ -35,6 +31,7 @@ import (
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
+	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
@@ -105,33 +102,8 @@ func Test_Integration_AddGitFragmentWithoutDigestProcessing(t *testing.T) {
 // network access or host Git configuration deciding how fixture commits are signed.
 func newGitFixture(t *testing.T) (path, first string) {
 	t.Helper()
-	r := require.New(t)
-
-	path = t.TempDir()
-	repo, err := git.PlainInit(path, false)
-	r.NoError(err)
-	cfg, err := repo.Config()
-	r.NoError(err)
-	cfg.Commit.GpgSign = config.OptBoolFalse
-	r.NoError(repo.SetConfig(cfg))
-	r.NoError(repo.Storer.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, "refs/heads/main")))
-	tree, err := repo.Worktree()
-	r.NoError(err)
-	for _, content := range []string{"first\n", "second\n"} {
-		r.NoError(os.WriteFile(filepath.Join(path, "README.md"), []byte(content), 0o600))
-		_, err := tree.Add("README.md")
-		r.NoError(err)
-		hash, err := tree.Commit(content, &git.CommitOptions{Author: &object.Signature{
-			Name:  "OCM fixture",
-			Email: "fixture@example.invalid",
-			When:  time.Unix(1700000000, 0).UTC(),
-		}})
-		r.NoError(err)
-		if first == "" {
-			first = hash.String()
-		}
-	}
-	return path, first
+	repoPath, firstCommit := testgit.Repository(t, testgit.Options{DefaultBranch: "main"})
+	return repoPath, firstCommit.String()
 }
 
 // assertGitArchiveAtFirstCommit checks that data is the archive of the fixture's
@@ -173,7 +145,7 @@ func newBareGitRepository(t *testing.T) (path, url string) {
 	path = t.TempDir()
 	_, err := git.PlainInit(path, true)
 	require.NoError(t, err)
-	return path, gittest.Serve(t, path)
+	return path, testgit.Serve(t, path)
 }
 
 // Test_Integration_Transfer_Git transfers a resource with a Git access from a CTF
@@ -205,7 +177,7 @@ func Test_Integration_Transfer_Git(t *testing.T) {
 	// Create the fixture locally to get the commit hash, then expose it over HTTP
 	// so all accesses use a remote URL (local-path git accesses are rejected by Validate).
 	gitPath, commit := newGitFixture(t)
-	gitServerURL := gittest.Serve(t, gitPath)
+	gitServerURL := testgit.Serve(t, gitPath)
 
 	repoProvider := provider.NewComponentVersionRepositoryProvider()
 	ocmconf, err := configuration.GetConfigFromPath(cfgPath)
