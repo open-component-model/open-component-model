@@ -228,10 +228,12 @@ Prefer the `HTTP` type name; `Wget` and the other spellings are accepted as alia
 
 | Attribute  | Value                      |
 |------------|----------------------------|
-| `type`     | `Wget` (canonical; `HTTP` and its other aliases match it) |
+| `type`     | `Wget`                     |
 | `hostname` | `downloads.example.com`    |
 | `scheme`   | `https`                    |
 | `path`     | `myapp/1.0.0/myapp.tar.gz` |
+
+The derived `type` is the canonical `Wget`. A consumer entry written as `HTTP` (or its other aliases) still matches it.
 
 The URL carries no explicit port, so no `port` attribute is derived. Default ports stay implicit in the identity and
 are applied by the URL matcher instead, so this identity matches a consumer entry with `port: "443"` as well as one
