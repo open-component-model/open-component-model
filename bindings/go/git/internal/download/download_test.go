@@ -333,20 +333,42 @@ func (s errAtRef) Reference(name plumbing.ReferenceName) (*plumbing.Reference, e
 	return s.Storer.Reference(name)
 }
 
-func TestResolveRefStorageErrorWins(t *testing.T) {
-	r := require.New(t)
+func TestResolveRefUnreadableCandidate(t *testing.T) {
+	hash := plumbing.NewHash("1111111111111111111111111111111111111111")
+	readErr := errors.New("disk on fire")
+	for _, tc := range []struct {
+		name, ref  string
+		unreadable plumbing.ReferenceName
+		existing   []plumbing.ReferenceName
+		wantErr    error
+		wantRef    plumbing.ReferenceName
+	}{
+		// A tag outranks a branch; if the tag cannot be read, the branch must not win.
+		{name: "unreadable tag before existing branch", ref: "main", unreadable: "refs/tags/main", existing: []plumbing.ReferenceName{"refs/heads/main"}, wantErr: readErr},
+		// A fetched branch outranks a tag; if it cannot be read, the tag must not win.
+		{name: "unreadable fetched branch before existing tag", ref: "main", unreadable: "refs/remotes/origin/main", existing: []plumbing.ReferenceName{"refs/tags/main"}, wantErr: readErr},
+		{name: "unreadable candidate after not-found ones", ref: "main", unreadable: "refs/heads/main", wantErr: readErr},
+		{name: "unreadable candidate after the hit", ref: "main", unreadable: "refs/remotes/main", existing: []plumbing.ReferenceName{"refs/heads/main"}, wantRef: "refs/heads/main"},
+		{name: "all candidates absent", ref: "main", wantErr: plumbing.ErrReferenceNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			base := memory.NewStorage()
+			for _, n := range tc.existing {
+				r.NoError(base.SetReference(plumbing.NewHashReference(n, hash)))
+			}
+			repo, err := git.Init(errAtRef{Storer: base, name: tc.unreadable, err: readErr})
+			r.NoError(err)
 
-	// A qualified candidate (refs/heads/main) cannot be read while every other
-	// candidate for the short name "main" is simply absent. The storage failure must
-	// win over the not-found results so the real problem is not masked.
-	wantErr := errors.New("disk on fire")
-	base := memory.NewStorage()
-	repo, err := git.Init(errAtRef{Storer: base, name: "refs/heads/main", err: wantErr})
-	r.NoError(err)
-
-	_, _, err = resolveRef(repo, "main")
-	r.ErrorIs(err, wantErr)
-	r.NotErrorIs(err, plumbing.ErrReferenceNotFound)
+			_, got, err := resolveRef(repo, tc.ref)
+			if tc.wantErr != nil {
+				r.ErrorIs(err, tc.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.Equal(tc.wantRef, got)
+		})
+	}
 }
 
 func TestDownloadInProgressCancellationCleanup(t *testing.T) {

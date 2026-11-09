@@ -513,25 +513,27 @@ func fetchRepository(ctx context.Context, dir, url, commit string, clientOptions
 // peelCommit, including tag-to-tag targets.
 func resolveRef(repo *git.Repository, name string) (plumbing.Hash, plumbing.ReferenceName, error) {
 	if name != "HEAD" && (strings.HasPrefix(name, "refs/heads/") || !strings.HasPrefix(name, "refs/")) {
-		ref, err := repo.Reference(plumbing.ReferenceName("refs/remotes/origin/"+strings.TrimPrefix(name, "refs/heads/")), true)
+		candidate := plumbing.ReferenceName("refs/remotes/origin/" + strings.TrimPrefix(name, "refs/heads/"))
+		ref, err := repo.Reference(candidate, true)
 		if err == nil {
 			return ref.Hash(), sourceRefName(ref.Name()), nil
+		}
+		if !refAbsent(err) {
+			return plumbing.ZeroHash, "", fmt.Errorf("cannot read %s: %w", candidate, err)
 		}
 	}
 
-	// Candidate lookups fail in three ways we rank by how much they explain: a storage
-	// error that could not read the ref (most meaningful), a plain not-found, and a name
-	// the storage refuses to even look up (least meaningful, says nothing about the ref).
-	var storageErr, notFoundErr, invalidErr error
+	var notFoundErr, invalidErr error
 	for _, rule := range plumbing.RefRevParseRules {
+		candidate := plumbing.ReferenceName(fmt.Sprintf(rule, name))
 		// Resolving follows symbolic refs, so the name of HEAD is the branch it points to.
-		ref, err := repo.Reference(plumbing.ReferenceName(fmt.Sprintf(rule, name)), true)
-		if err == nil {
-			return ref.Hash(), sourceRefName(ref.Name()), nil
-		}
+		ref, err := repo.Reference(candidate, true)
 		switch {
+		case err == nil:
+			return ref.Hash(), sourceRefName(ref.Name()), nil
 		case errors.Is(err, plumbing.ErrInvalidReferenceName):
-			// The bare "main" of the "%s" rule, say; it does not exist as a name at all.
+			// The storage cannot hold a ref by this name, such as the bare "main" of the
+			// "%s" rule, so the candidate is absent.
 			if invalidErr == nil {
 				invalidErr = err
 			}
@@ -540,19 +542,20 @@ func resolveRef(repo *git.Repository, name string) (plumbing.Hash, plumbing.Refe
 				notFoundErr = err
 			}
 		default:
-			if storageErr == nil {
-				storageErr = err
-			}
+			// The candidate may exist; a later, lower-precedence hit could select a
+			// different commit than the one name denotes.
+			return plumbing.ZeroHash, "", fmt.Errorf("cannot read %s: %w", candidate, err)
 		}
 	}
-	switch {
-	case storageErr != nil:
-		return plumbing.ZeroHash, "", storageErr
-	case notFoundErr != nil:
+	if notFoundErr != nil {
 		return plumbing.ZeroHash, "", notFoundErr
-	default:
-		return plumbing.ZeroHash, "", invalidErr
 	}
+	return plumbing.ZeroHash, "", invalidErr
+}
+
+// refAbsent reports whether a lookup error only says the ref does not exist.
+func refAbsent(err error) bool {
+	return errors.Is(err, plumbing.ErrReferenceNotFound) || errors.Is(err, plumbing.ErrInvalidReferenceName)
 }
 
 // sourceRefName maps the remote-tracking name a fetched branch is stored under back to
