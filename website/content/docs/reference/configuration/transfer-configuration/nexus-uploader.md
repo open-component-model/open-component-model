@@ -125,7 +125,7 @@ extracted from an OCI artifact gets the SHA-256 of the uploaded bytes.
 ## Credentials
 
 Resolved for the `HelmChartRepository` identity of
-`<url>/repository/<repository>`, falling back to its `Wget` identity:
+`<url>/repository/<repository>`, falling back to its `HTTP` identity:
 
 ```yaml
   - type: credentials.config.ocm.software

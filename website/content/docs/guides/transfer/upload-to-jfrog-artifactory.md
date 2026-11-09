@@ -57,8 +57,8 @@ consumer command for each supported repository type.
 ## Configure credentials
 
 The uploader resolves credentials for the `HelmChartRepository` identity of
-`<url>/artifactory/api/helm/<repository>`, falling back to the `Wget` identity of
-`<url>/artifactory/<repository>`. A `Wget` consumer without a path covers every
+`<url>/artifactory/api/helm/<repository>`, falling back to the `HTTP` identity of
+`<url>/artifactory/<repository>`. An `HTTP` consumer without a path covers every
 repository on the server:
 
 ```yaml
@@ -67,11 +67,11 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: Wget
+          type: HTTP
           hostname: myorg.jfrog.io
           scheme: https
         credentials:
-          - type: WgetCredentials/v1
+          - type: HTTPCredentials/v1
             identityToken: <ARTIFACTORY_IDENTITY_TOKEN>
 ```
 
@@ -108,11 +108,11 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: Wget
+          type: HTTP
           hostname: myorg.jfrog.io
           scheme: https
         credentials:
-          - type: WgetCredentials/v1
+          - type: HTTPCredentials/v1
             identityToken: <ARTIFACTORY_IDENTITY_TOKEN>
   - type: artifactory.uploader.transfer.config.ocm.software/v1alpha1
     match: resource.access.isType("LocalBlob") && resource.name == "chart"
@@ -193,11 +193,11 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: Wget
+          type: HTTP
           hostname: myorg.jfrog.io
           scheme: https
         credentials:
-          - type: WgetCredentials/v1
+          - type: HTTPCredentials/v1
             identityToken: <ARTIFACTORY_IDENTITY_TOKEN>
   - type: artifactory.uploader.transfer.config.ocm.software/v1alpha1
     match: resource.access.isType("LocalBlob") && resource.name == "jar"
@@ -265,11 +265,11 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: Wget
+          type: HTTP
           hostname: myorg.jfrog.io
           scheme: https
         credentials:
-          - type: WgetCredentials/v1
+          - type: HTTPCredentials/v1
             identityToken: <ARTIFACTORY_IDENTITY_TOKEN>
   - type: artifactory.uploader.transfer.config.ocm.software/v1alpha1
     match: resource.access.isType("LocalBlob") && resource.name == "my-package"
@@ -343,11 +343,11 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: Wget
+          type: HTTP
           hostname: myorg.jfrog.io
           scheme: https
         credentials:
-          - type: WgetCredentials/v1
+          - type: HTTPCredentials/v1
             identityToken: <ARTIFACTORY_IDENTITY_TOKEN>
   - type: artifactory.uploader.transfer.config.ocm.software/v1alpha1
     match: resource.access.isType("LocalBlob")

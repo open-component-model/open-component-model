@@ -114,6 +114,6 @@ instead.
 The uploader resolves credentials for the **target** URL independently from the
 source resource, using the target host's
 [consumer identity]({{< relref "docs/reference/configuration/credential-consumer-identities.md" >}})
-(the same `Wget` identity used for downloads). Configure target-side credentials
+(the same `HTTP` identity used for downloads). Configure target-side credentials
 the same way you would for any HTTP endpoint; see
 [Credential Types]({{< relref "docs/reference/configuration/credential-types.md" >}}).

@@ -43,7 +43,7 @@ The following types are defined by the core OCM modules:
 |-----------------------------------------------|-----------------------------------------------------|
 | [`OCIRegistry`](#ociregistry)                 | Authenticating against OCI registries               |
 | [`HelmChartRepository`](#helmchartrepository) | Authenticating against Helm chart repositories      |
-| [`Wget / HTTP`](#wget--http)                  | Authenticating against plain HTTP/HTTPS servers     |
+| [`HTTP`](#wget)                               | Authenticating against plain HTTP/HTTPS servers     |
 | [`S3`](#s3)                                   | Authenticating against S3 and S3-compatible buckets |
 | [`GitHubRepository`](#githubrepository)       | Authenticating against the GitHub REST API          |
 | [`Git`](#git)                                 | Authenticating against Git servers (HTTPS and SSH)  |
@@ -206,19 +206,19 @@ identity is derived from the Helm repository URL using the same URL-based attrib
 
 ---
 
-## Wget / HTTP
+## HTTP {#wget}
 
 Used when OCM fetches a resource over plain HTTP or HTTPS through the
 [`Wget/v1` access type]({{< relref "input-and-access-types.md#wgetv1-access" >}}) and the
 [`Wget/v1` input type]({{< relref "input-and-access-types.md#wgetv1-input" >}}). The identity is derived from the resource
 `url`; the access type and the input type derive it identically, so a single consumer entry covers both.
-Both identity type and access type names allow using the `HTTP` alias.
+Prefer the `HTTP` type name; `Wget` and the other spellings are accepted as aliases (see the caution below).
 
 ### Identity Attributes
 
 | Attribute  | Required | Description                                                                                                                            |
 |------------|----------|----------------------------------------------------------------------------------------------------------------------------------------|
-| `type`     | Yes      | `Wget` (recommended); also accepts `Wget/v1`, `HTTP`, `HTTP/v1`, `http`, and `http/v1`                                                 |
+| `type`     | Yes      | `HTTP` (recommended); also accepts `HTTP/v1`, `http`, `http/v1`, `Wget`, and `Wget/v1`                                                 |
 | `hostname` | Yes      | Server hostname (e.g. `downloads.example.com`)                                                                                         |
 | `path`     | No       | URL path without the leading `/`. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname. |
 | `scheme`   | No       | URL scheme (`https`, `http`). If omitted, matches any scheme. If set, must match exactly.                                              |
@@ -228,7 +228,7 @@ Both identity type and access type names allow using the `HTTP` alias.
 
 | Attribute  | Value                      |
 |------------|----------------------------|
-| `type`     | `Wget`                     |
+| `type`     | `Wget` (canonical; `HTTP` and its other aliases match it) |
 | `hostname` | `downloads.example.com`    |
 | `scheme`   | `https`                    |
 | `path`     | `myapp/1.0.0/myapp.tar.gz` |
@@ -249,7 +249,7 @@ with no `port` at all. A URL that names its port (`https://downloads.example.com
 | `privateKey`           | PEM-encoded private key paired with `certificate`                                                           |
 | `certificateAuthority` | PEM-encoded CA certificate used to verify the server certificate. Only applied together with `certificate`. |
 
-Use [`WgetCredentials/v1`]({{< relref "credential-types.md#wgetcredentialsv1" >}}) for the typed field reference.
+Use [`HTTPCredentials/v1`]({{< relref "credential-types.md#wgetcredentialsv1" >}}) (also registered as the legacy `WgetCredentials/v1`) for the typed field reference.
 
 Basic Auth and a bearer token both set the `Authorization` header and are therefore mutually exclusive. When both are
 configured, the bearer token wins and a warning is logged. The mutual TLS certificate is a transport-layer credential
@@ -262,8 +262,8 @@ The same three chained checks as [`OCIRegistry`](#ociregistry) apply: path glob,
 default-port handling), then exact equality on the remaining attributes.
 
 {{< callout context="caution" >}}
-Consumer entries are canonicalized to the unversioned spelling before matching. Prefer `type: Wget`; the aliases
-`Wget/v1`, `HTTP`, `HTTP/v1`, `http`, and `http/v1` (the aliases of the
+Consumer entries are canonicalized to the unversioned spelling before matching. Prefer `type: HTTP`; the aliases
+`HTTP/v1`, `http`, `http/v1`, `Wget`, and `Wget/v1` (the latter two are the legacy name of the
 [access type]({{< relref "input-and-access-types.md#wgetv1-access" >}})) are also accepted. The lowercase `wget`
 spelling used by OCM v1 never matches. A non-matching entry fails silently: no credentials are resolved and the
 request goes out unauthenticated, so the symptom is a `401` from the server rather than a configuration error.
@@ -275,10 +275,10 @@ request goes out unauthenticated, so the symptom is a `401` from the server rath
 
 ```yaml
 - identity:
-    type: Wget
+    type: HTTP
     hostname: downloads.example.com
   credentials:
-    - type: WgetCredentials/v1
+    - type: HTTPCredentials/v1
       username: download-user
       password: download-token
 ```
@@ -287,12 +287,12 @@ request goes out unauthenticated, so the symptom is a `401` from the server rath
 
 ```yaml
 - identity:
-    type: Wget
+    type: HTTP
     hostname: api.example.com
     scheme: https
     path: artifacts/*
   credentials:
-    - type: WgetCredentials/v1
+    - type: HTTPCredentials/v1
       identityToken: eyJhbGciOi...
 ```
 
@@ -300,12 +300,12 @@ request goes out unauthenticated, so the symptom is a `401` from the server rath
 
 ```yaml
 - identity:
-    type: Wget
+    type: HTTP
     hostname: artifacts.internal
     scheme: https
     port: "8443"
   credentials:
-    - type: WgetCredentials/v1
+    - type: HTTPCredentials/v1
       certificate: |
         -----BEGIN CERTIFICATE-----
         MIIDdzCCAl+gAwIBAgIEbGVnYWw...

@@ -129,7 +129,7 @@ gets the SHA-256 of the uploaded bytes (the OCI layout tar or chart .tgz).
 ## Credentials
 
 Resolved for the `HelmChartRepository` identity of
-`<url>/artifactory/api/helm/<repository>`, falling back to the `Wget` identity
+`<url>/artifactory/api/helm/<repository>`, falling back to the `HTTP` identity
 of `<url>/artifactory/<repository>`:
 
 ```yaml

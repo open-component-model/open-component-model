@@ -8,9 +8,13 @@ import (
 
 var WgetCredentialsVersionedType = runtime.NewVersionedType(WgetCredentialsType, Version)
 
-// MustRegisterCredentialType registers WgetCredentials/v1 (and its unversioned alias) in the given scheme.
+// MustRegisterCredentialType registers the wget credential type under its
+// preferred HTTP-first names (HTTPCredentials/v1 and HTTPCredentials) and its
+// legacy aliases (WgetCredentials/v1, WgetCredentials) in the given scheme.
 func MustRegisterCredentialType(scheme *runtime.Scheme) {
 	scheme.MustRegisterWithAlias(&WgetCredentials{},
+		runtime.NewVersionedType(HTTPCredentialsType, Version),
+		runtime.NewUnversionedType(HTTPCredentialsType),
 		WgetCredentialsVersionedType,
 		runtime.NewUnversionedType(WgetCredentialsType),
 	)
@@ -31,8 +35,8 @@ func MustRegisterCredentialType(scheme *runtime.Scheme) {
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type WgetCredentials struct {
-	// +ocm:jsonschema-gen:enum=WgetCredentials/v1
-	// +ocm:jsonschema-gen:enum:deprecated=WgetCredentials
+	// +ocm:jsonschema-gen:enum=HTTPCredentials/v1,WgetCredentials/v1
+	// +ocm:jsonschema-gen:enum:deprecated=HTTPCredentials,WgetCredentials
 	Type runtime.Type `json:"type"`
 	// Username is the username for HTTP Basic Authentication. Used together with Password.
 	// Ignored if IdentityToken is set.

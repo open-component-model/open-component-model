@@ -57,7 +57,7 @@ consumer command for each supported repository format.
 ## Configure credentials
 
 The uploader resolves credentials for the `HelmChartRepository` identity of
-`<url>/repository/<repository>`, falling back to its `Wget` identity. A `Wget`
+`<url>/repository/<repository>`, falling back to its `HTTP` identity. An `HTTP`
 consumer without a path covers every repository on the server:
 
 ```yaml
@@ -66,11 +66,11 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: Wget
+          type: HTTP
           hostname: nexus.example.com
           scheme: https
         credentials:
-          - type: WgetCredentials/v1
+          - type: HTTPCredentials/v1
             username: <USERNAME>
             password: <PASSWORD_OR_USER_TOKEN>
 ```
@@ -105,11 +105,11 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: Wget
+          type: HTTP
           hostname: nexus.example.com
           scheme: https
         credentials:
-          - type: WgetCredentials/v1
+          - type: HTTPCredentials/v1
             username: <USERNAME>
             password: <PASSWORD_OR_USER_TOKEN>
   - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
@@ -187,11 +187,11 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: Wget
+          type: HTTP
           hostname: nexus.example.com
           scheme: https
         credentials:
-          - type: WgetCredentials/v1
+          - type: HTTPCredentials/v1
             username: <USERNAME>
             password: <PASSWORD_OR_USER_TOKEN>
   - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
@@ -280,11 +280,11 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: Wget
+          type: HTTP
           hostname: nexus.example.com
           scheme: https
         credentials:
-          - type: WgetCredentials/v1
+          - type: HTTPCredentials/v1
             username: <USERNAME>
             password: <PASSWORD_OR_USER_TOKEN>
   - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
@@ -350,11 +350,11 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: Wget
+          type: HTTP
           hostname: nexus.example.com
           scheme: https
         credentials:
-          - type: WgetCredentials/v1
+          - type: HTTPCredentials/v1
             username: <USERNAME>
             password: <PASSWORD_OR_USER_TOKEN>
   - type: nexus.uploader.transfer.config.ocm.software/v1alpha1
