@@ -246,7 +246,7 @@ the controller is actually using, then watch keep an eye on the metrics as you s
 1. Check the resources and the `GOMEMLIMIT` environment variable:
 
    ```bash
-   kubectl -n <release namespace> get deploy -l control-plane=controller-manager \
+   kubectl -n <release namespace> get deploy -l app.kubernetes.io/name=ocm-k8s-toolkit,app.kubernetes.io/instance=<release name> \
      -o jsonpath='{.items[0].spec.template.spec.containers[0].resources}{"\n"}{.items[0].spec.template.spec.containers[0].env}{"\n"}'
    ```
 
@@ -257,10 +257,13 @@ the controller is actually using, then watch keep an eye on the metrics as you s
      -o jsonpath='{.spec.holderIdentity}{"\n"}{.spec.renewTime}{"\n"}'
    ```
 
-3. Check that the metrics endpoint serves controller metrics:
+3. Check that the metrics endpoint serves controller metrics. Only the leader reconciles, so forward to the leader pod.
+   Its name is the holder identity from step 2, up to the first `_`:
 
    ```bash
-   kubectl -n <release namespace> port-forward svc/ocm-k8s-toolkit-controller-manager-metrics-service 8443 &
+   LEADER=$(kubectl -n <release namespace> get lease 56490b8c.ocm.software -o jsonpath='{.spec.holderIdentity}')
+   kubectl -n <release namespace> port-forward "pod/${LEADER%%_*}" 8443 &
+   PF_PID=$!
    curl -sk https://localhost:8443/metrics | grep controller_runtime_reconcile_total
    ```
 
@@ -268,13 +271,19 @@ the controller is actually using, then watch keep an eye on the metrics as you s
    [Metrics Server](https://github.com/kubernetes-sigs/metrics-server) in the cluster:
 
    ```bash
-   kubectl -n <release namespace> top pod -l control-plane=controller-manager
+   kubectl -n <release namespace> top pod -l app.kubernetes.io/name=ocm-k8s-toolkit,app.kubernetes.io/instance=<release name>
    ```
 
 5. Check that `workqueue_depth` drains. Repeat this a few times and compare the values on the leader:
 
    ```bash
    curl -sk https://localhost:8443/metrics | grep '^workqueue_depth'
+   ```
+
+   When you are done, stop the port-forward from step 3:
+
+   ```bash
+   kill "$PF_PID"
    ```
 
 {{< callout context="tip" title="Rehearse before going live" >}}
