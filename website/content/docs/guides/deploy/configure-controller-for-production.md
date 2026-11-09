@@ -37,7 +37,8 @@ Memory limit was applied via constraints on the deployment.
 | up to ~4000         | `1Gi`        | `900MiB`     | 945 MiB at 4000  |
 
 At 4000 pipelines the peak working set sits within 80 MiB of the `1Gi` limit. Treat that row as the ceiling, not a target,
-and raise the limit if you expect to grow.
+and raise the limit if you expect to grow. That run also used a `GOMEMLIMIT` of ~88% of the limit, tighter than the
+[~80% recommendation](#set-gomemlimit).
 
 You might wonder, what is a `pipeline`? A pipeline is a complex component version with a number of resources, component references
 and other data. It looks something like this:
@@ -181,8 +182,14 @@ manager:
 ```
 
 With `secure: true` the endpoint is served over TLS with a self-signed certificate. However, as of this writing, the
-endpoint does no authentication or authorization, so metrics endpoint is open. Therefore, we recommend enabling
-`manager.networkPolicy.enabled`, which admits the metrics port automatically, and restricting who can reach it.
+endpoint does no authentication or authorization, so metrics endpoint is open.
+
+`manager.networkPolicy.enabled` does not close it. The chart's policy admits the metrics port from any source, and rules
+in `manager.networkPolicy.ingress` are added to it, so they can't narrow it. To restrict who can scrape metrics, disable
+the chart's policy and apply your own, or use a cluster-wide network control.
+
+If you enable the chart's policy, note that its default egress only allows DNS (53) and TCP 443 and 6443. Registries on
+other ports are blocked. `manager.networkPolicy.egress` replaces the defaults, so include DNS when you set it.
 
 The chart can create a Prometheus Operator `ServiceMonitor` with `prometheus.enable: true`. As of this writing, the chart
 doesn't ship the metrics `Service` the `ServiceMonitor` selects, so you have to create it yourself:
@@ -257,11 +264,17 @@ the controller is actually using, then watch keep an eye on the metrics as you s
    curl -sk https://localhost:8443/metrics | grep controller_runtime_reconcile_total
    ```
 
-4. Under real load, compare the working set against the memory limit and `GOMEMLIMIT`, and check that
-   `workqueue_depth` drains:
+4. Under real load, compare the working set against the memory limit and `GOMEMLIMIT`. `kubectl top` needs
+   [Metrics Server](https://github.com/kubernetes-sigs/metrics-server) in the cluster:
 
    ```bash
    kubectl -n <release namespace> top pod -l control-plane=controller-manager
+   ```
+
+5. Check that `workqueue_depth` drains. Repeat this a few times and compare the values on the leader:
+
+   ```bash
+   curl -sk https://localhost:8443/metrics | grep '^workqueue_depth'
    ```
 
 {{< callout context="tip" title="Rehearse before going live" >}}
@@ -270,15 +283,17 @@ To rehearse your sizing, run the `complex` scenario of the
 on a throwaway Kind cluster. From `bindings/go/kubernetes/controller/` in a checkout of the repository:
 
 ```bash
-# assumes NOT running in production because the performance suite uses http metrics
 task test/performance/setup/local
-helm upgrade ocm-k8s-toolkit chart/ --kube-context kind-ocm-perf -n ocm-k8s-toolkit-system \
-  --reuse-values -f <your production values> --wait
-go run ./test/performance --scenarios=complex --objects=<your object count> --repeats=1
+# The suite scrapes metrics over plain HTTP on 8080, so the --set flags override your metrics settings.
+helm upgrade --install ocm-k8s-toolkit chart/ --kube-context kind-ocm-perf -n ocm-k8s-toolkit-system --create-namespace \
+  -f test/performance/hacks/values.yaml -f <your production values> \
+  --set manager.metricsServer.bindAddress=:8080 --set manager.metricsServer.secure=false --wait
+go run ./test/performance --scenarios=complex --objects=<your pipeline count> --repeats=1
 task test/performance/setup/teardown
 ```
 
-Use `--versions` and `--depth` to match your component graph.
+Use `--versions` and `--depth` to match your component graph. The suite's values raise every rate limiter to `10000`.
+Set `manager.rateLimiter` in your values to rehearse with your production limits.
 {{< /callout >}}
 
 ## Related documentation
