@@ -18,12 +18,13 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2/content"
+	"oras.land/oras-go/v2/registry"
 )
 
-// fakeReadOnly is a minimal in-memory [content.ReadOnlyStorage] used
-// to drive Fetch tests without pulling in a full registry.
+// fakeReadOnly is a minimal in-memory [ReadOnlyRepository] used to
+// drive Fetch tests without pulling in a full registry.
 type fakeReadOnly struct {
+	ref     registry.Reference
 	mu      sync.Mutex
 	blobs   map[digest.Digest][]byte
 	media   map[digest.Digest]string
@@ -32,7 +33,21 @@ type fakeReadOnly struct {
 }
 
 func newFakeReadOnly() *fakeReadOnly {
-	return &fakeReadOnly{blobs: map[digest.Digest][]byte{}, media: map[digest.Digest]string{}}
+	return newFakeRepository("registry.example", "repo")
+}
+
+func newFakeRepository(host, repository string) *fakeReadOnly {
+	return &fakeReadOnly{
+		ref:   registry.Reference{Registry: host, Repository: repository},
+		blobs: map[digest.Digest][]byte{},
+		media: map[digest.Digest]string{},
+	}
+}
+
+func (s *fakeReadOnly) ParseReference(reference string) (registry.Reference, error) {
+	ref := s.ref
+	ref.Reference = reference
+	return ref, nil
 }
 
 func (s *fakeReadOnly) put(mt string, data []byte) ociImageSpecV1.Descriptor {
@@ -71,7 +86,7 @@ func (s *fakeReadOnly) remove(dgst digest.Digest) {
 	delete(s.media, dgst)
 }
 
-var _ content.ReadOnlyStorage = (*fakeReadOnly)(nil)
+var _ ReadOnlyRepository = (*fakeReadOnly)(nil)
 
 func readAllAndClose(t *testing.T, rc io.ReadCloser) []byte {
 	t.Helper()
