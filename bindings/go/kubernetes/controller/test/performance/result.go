@@ -27,9 +27,19 @@ type result struct {
 	RunID        string      `json:"runID"`
 	StartedAt    time.Time   `json:"startedAt"`
 	Environment  environment `json:"environment"`
-	Durations    durations   `json:"durations"`
-	Outcome      outcome     `json:"outcome"`
-	Usage        usage       `json:"usage"`
+	// window is the measured rollout, inlined at the top level.
+	window
+	// Drift is the window of the drift phase of scenarioComplex: every deployed
+	// ConfigMap changed, until every Deployer reverted its own. It is nil for the
+	// other scenarios and when the rollout did not finish.
+	Drift *window `json:"drift,omitempty"`
+}
+
+// window holds the numbers of one measured phase of a run.
+type window struct {
+	Durations durations `json:"durations"`
+	Outcome   outcome   `json:"outcome"`
+	Usage     usage     `json:"usage"`
 	// ControllerCounters are end-minus-start deltas over the measurement window.
 	ControllerCounters map[string]float64 `json:"controllerCounters"`
 	// ControllerGaugePeaks are the maxima of the sampled gauges.
@@ -50,9 +60,12 @@ type environment struct {
 	KubernetesVersion   string                      `json:"kubernetesVersion"`
 }
 
-// durations are in seconds, measured from the moment object creation starts.
+// durations are in seconds, measured from the moment the window's change starts:
+// object creation, or the patches of an update or a drift.
 type durations struct {
-	Publish    float64 `json:"publish"`
+	// Publish is only set for the rollout.
+	Publish float64 `json:"publish,omitempty"`
+	// Create is how long applying the change took.
 	Create     float64 `json:"create"`
 	Total      float64 `json:"total"`
 	FirstReady float64 `json:"firstReady"`
@@ -84,19 +97,19 @@ type usage struct {
 	RegistryRequests *float64 `json:"registryRequests"`
 }
 
-// notes lists what makes a run unusable as a benchmark number.
-func (r *result) notes() []string {
+// notes lists what makes a window unusable as a benchmark number.
+func (w *window) notes() []string {
 	var notes []string
-	if r.Outcome.TimedOut {
+	if w.Outcome.TimedOut {
 		notes = append(notes, "timed out")
 	}
-	if r.Outcome.Unsettled {
+	if w.Outcome.Unsettled {
 		notes = append(notes, "queues not drained")
 	}
-	if r.ControllerRestarted {
+	if w.ControllerRestarted {
 		notes = append(notes, "controller restarted")
 	}
-	if len(r.Errors) > 0 {
+	if len(w.Errors) > 0 {
 		notes = append(notes, "metric errors")
 	}
 	return notes
@@ -126,20 +139,27 @@ func writeSummary(dir string, results []*result) error {
 	b.WriteString("| Scenario | Objects | Repeat | Image | Signed | Ready | Failed | Pending | Total (s) | Settled (s) | p50 (s) | p90 (s) | CPU (s) | Avg cores | Peak cores | Peak WS (MiB) | Registry reqs | Notes |\n")
 	b.WriteString("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")
 	for _, r := range results {
-		requests := "n/a"
-		if r.Usage.RegistryRequests != nil {
-			requests = fmt.Sprintf("%.0f", *r.Usage.RegistryRequests)
+		writeSummaryRow(&b, r, string(r.Scenario), &r.window)
+		if r.Drift != nil {
+			writeSummaryRow(&b, r, string(r.Scenario)+" (drift)", r.Drift)
 		}
-		signed := "no"
-		if r.Signed {
-			signed = "yes"
-		}
-		fmt.Fprintf(&b, "| %s | %d | %d | %s | %s | %d | %d | %d | %.1f | %.1f | %.1f | %.1f | %.1f | %.2f | %.2f | %.0f | %s | %s |\n",
-			r.Scenario, r.Objects, r.Repeat, shortImageID(r.Environment.ControllerImageID), signed, r.Outcome.Ready, r.Outcome.Failed, r.Outcome.Pending,
-			r.Durations.Total, r.Durations.Settled, r.Durations.P50, r.Durations.P90, r.Usage.CPUSeconds, r.Usage.AvgCores, r.Usage.PeakCores,
-			r.Usage.PeakWorkingSetBytes/(1<<20), requests, strings.Join(r.notes(), ", "))
 	}
 	return os.WriteFile(filepath.Join(dir, "summary.md"), []byte(b.String()), 0o600)
+}
+
+func writeSummaryRow(b *strings.Builder, r *result, name string, w *window) {
+	requests := "n/a"
+	if w.Usage.RegistryRequests != nil {
+		requests = fmt.Sprintf("%.0f", *w.Usage.RegistryRequests)
+	}
+	signed := "no"
+	if r.Signed {
+		signed = "yes"
+	}
+	fmt.Fprintf(b, "| %s | %d | %d | %s | %s | %d | %d | %d | %.1f | %.1f | %.1f | %.1f | %.1f | %.2f | %.2f | %.0f | %s | %s |\n",
+		name, r.Objects, r.Repeat, shortImageID(r.Environment.ControllerImageID), signed, w.Outcome.Ready, w.Outcome.Failed, w.Outcome.Pending,
+		w.Durations.Total, w.Durations.Settled, w.Durations.P50, w.Durations.P90, w.Usage.CPUSeconds, w.Usage.AvgCores, w.Usage.PeakCores,
+		w.Usage.PeakWorkingSetBytes/(1<<20), requests, strings.Join(w.notes(), ", "))
 }
 
 // shortImageID keeps the first 12 hex digits of the digest, as docker does.

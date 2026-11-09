@@ -50,13 +50,15 @@ The benchmark is a standalone Go program, run with `go run`. It builds and measu
 |--------------------------|---------------------------------------------------------------------------|
 | `main.go`                | Flags and the matrix loop: scenarios x object counts x repeats            |
 | `workload.go`            | Per scenario: the component versions to publish and the objects to create |
+| `objects.go`             | The controller objects, Repositories to Deployers, and their RBAC         |
 | `publish.go`, `image.go` | Push component versions and a small image pool to the registry            |
 | `signing.go`             | Per-run RSA key, signatures, and the controller's verification config     |
 | `cluster.go`             | Kubernetes client, controller restart, metric scrapes, cleanup            |
 | `tracker.go`             | A watch that records when each target object first becomes ready          |
 | `sampler.go`             | Polls gauges, CPU and memory every `--sample-interval`                    |
 | `metrics.go`             | Prometheus parsing, counter deltas, gauge values                          |
-| `run.go`                 | One run from start to finish                                              |
+| `run.go`                 | One run from start to finish: the rollout, then the drift of `complex`    |
+| `measure.go`             | One measured window: scrapes, sampling, waiting, counter deltas           |
 | `result.go`              | `result.json` and `summary.md`                                            |
 | `hacks/`                 | Cluster and registry setup, Helm values                                   |
 
@@ -84,15 +86,19 @@ NamespacedDeployer controllers run with controller-runtime's default of one work
 | Scenario  | Objects created                                                                                                  | Measured until                                                                       |
 |-----------|------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------|
 | `cold`    | 1 Repository, N Components with N unique component versions                                                      | every Component is `Ready` for its current generation                                |
-| `shared`  | 1 Repository, N Components that all resolve the same component version                                           | every Component is `Ready`                                                           |
+| `shared`  | N tenant namespaces, each with a Repository, Component, Resource and NamespacedDeployer of one shared component version | every NamespacedDeployer is `Ready`                                            |
 | `update`  | 1 Repository, N each of Component, Resource and NamespacedDeployer, already rolled out at `1.0.0` (not measured) | every deployed ConfigMap carries `1.1.0` after all Components are patched to `1.1.0` |
-| `complex` | up to `--repositories` Repositories (default 10), N each of Component, Resource and NamespacedDeployer, signed   | every NamespacedDeployer is `Ready`                                                  |
+| `complex` | up to `--repositories` Repositories (default 10), N each of Component, Resource and NamespacedDeployer, signed   | every NamespacedDeployer is `Ready`; then its drift phase (below)                    |
 | `fanout`  | 1 Repository, N Components, `--fanout` Resources per Component (default 20)                                      | every Resource is `Ready`                                                            |
 
 What each one isolates:
 
 - `cold`: the baseline. Every Component misses the resolver cache once.
-- `shared`: the opposite. One cache miss, then N - 1 hits on the same component version.
+- `shared`: the opposite. One resolver cache miss, then N - 1 hits on the same component version. It also covers
+  many Deployers reading one digest, like one application deployed once per team: every tenant's Deployer deploys
+  the one resource of that component version. One digest means one manifest content, so the ConfigMap has no
+  namespace and each Deployer applies it into its own tenant namespace. In one shared namespace, the ApplySet of
+  the first Deployer would own it and every other Deployer would fail on the conflict.
 - `update`: re-resolving and redeploying a version change, not a first install.
 - `complex`: a product delivery in one pipeline. Every object has a root component with `--versions`
   versions (default 5), selected by the constraint `>=1.0.0`, whose descriptor lists `--resources` OCI
@@ -100,10 +106,23 @@ What each one isolates:
   through a `--depth` long reference path (default 5). The objects share up to `--repositories`
   Repositories, each a different `subPath` of the one registry, so the controller holds that many
   repository cache entries.
+
+  After the rollout, `complex` measures a drift phase: it waits until the controller queues drained, changes the
+  `version` of every deployed ConfigMap, and measures until each Deployer has reverted its own and the queues drained
+  again. This is a Deployer reading its component version and resource again for an object it already deployed, which
+  happens in production for every event of a deployed object. The phase has its own measurement window, in the
+  `drift` block of `result.json` and the `complex (drift)` row of `summary.md`, so the rollout numbers stay as they
+  were. It is skipped when the rollout timed out, did not drain or lost the controller.
 - `fanout`: load on the Resource controller, the only one of the three with more than one worker. Every
   Component has one component version whose descriptor lists `--resources` OCI images, and each of its
   Resources selects a different one. There are no Deployers, so the single Deployer worker does not bound
   the run. `Objects` in the results is N; the outcome counts all N x `--fanout` Resources.
+
+`complex` keeps all its objects in one namespace. Before it applies, a Deployer checks the objects of the applied kinds
+in its namespace for ApplySet conflicts ([ocm-project#1412](https://github.com/open-component-model/ocm-project/issues/1412)),
+and with many Deployers in one namespace that check dominates time and memory and hides the cost of reading the
+resource. The registry requests are unaffected by it, so they are the signal to judge a change to how the Deployer reads
+its resource by, in the rollout and in the drift phase. Time and CPU of such a change are reported but not judged.
 
 `complex` replaces scenarios that each covered one of its knobs. To find which knob a `complex` regression
 comes from, rerun it with that knob turned down: `--depth=0` puts the manifest into the root, `--versions=1`
@@ -122,7 +141,7 @@ The benchmark therefore writes every image and reference digest, and refuses to 
 that is not safely digestible, the same check `ocm sign cv` makes. Component versions are published level
 by level, leaves first, because a reference digest needs the referenced component version.
 
-The NamespacedDeployers apply one ConfigMap each as the `perf-deployer` service account, which a Role in the run
+The NamespacedDeployers apply one ConfigMap each as the `perf-deployer` service account, which a Role in their
 namespace allows to write ConfigMaps. The ConfigMap's data holds the component version, so the update scenario
 reads the rollout from the cluster itself, not from a status field.
 
@@ -145,8 +164,10 @@ Each invocation writes `test/performance/results/<timestamp>/`, which is git-ign
 - `<run>/controller-{start,end}.prom`, `<run>/registry-{start,end}.prom`: raw scrapes.
 - `<run>/samples.json`: gauges, cumulative CPU seconds and memory over time, `at` in seconds since the
   measurement started.
+- `<run>/drift-*`: the same raw scrapes and samples for the drift phase of `complex`.
 
-All durations count from the moment object creation starts, not from each object's own creation. `p50` and
+All durations count from the moment object creation starts, not from each object's own creation; in the drift phase,
+from the moment the first ConfigMap is changed. `p50` and
 `p90` therefore include the time the benchmark needed to create the objects that came before.
 
 Metric sources:
@@ -161,6 +182,7 @@ Metric sources:
 | Peak working set   | max of kubelet `container_memory_working_set_bytes`. cAdvisor refreshes it on its own housekeeping interval, not per scrape, so it lags on short runs.                                 |
 | OCI requests       | delta of the registry's `registry_http_requests_total`, split by handler and method                                                                                                    |
 | Controller metrics | deltas of every `controller_runtime_*`, `workqueue_*`, `ocm_system_*` and `rest_client_requests_total` series. Per-component labels are folded away.                                   |
+| Blob cache         | `ocm_system_ocm_k8s_toolkit_oci_blob_cache_fetches_total`, by `kind` (`metadata`: manifests and descriptors, `blob`: everything else) and `result` (`hit`, `miss`, `bypass`)          |
 
 ## Profiling
 

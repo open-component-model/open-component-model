@@ -4,17 +4,16 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"golang.org/x/sync/errgroup"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -100,18 +99,21 @@ func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (
 	if err := r.publish(ctx, sgn, w.imagePool(), cvs); err != nil {
 		return nil, err
 	}
-	res.Durations.Publish = time.Since(publishStart).Seconds()
+	published := time.Since(publishStart).Seconds()
 
-	if err := r.c.createNamespace(ctx, w.namespace, runID); err != nil {
-		return nil, fmt.Errorf("creating namespace: %w", err)
+	if err := r.forEachNamespace(ctx, w, func(ctx context.Context, namespace string) error {
+		return r.c.createNamespace(ctx, namespace, runID)
+	}); err != nil {
+		return nil, fmt.Errorf("creating namespaces: %w", err)
 	}
 	if !r.opts.keepNamespaces {
 		defer func() {
-			log.Info("cleaning up")
-			cctx := context.WithoutCancel(ctx)
-			if err := r.c.deleteNamespace(cctx, w.namespace, r.opts.timeout); err != nil {
-				log.Error("deleting namespace", "error", err)
+			log.Info("cleaning up", "namespaces", len(w.namespaces()))
+			cleanupStart := time.Now()
+			if err := r.cleanup(context.WithoutCancel(ctx), w); err != nil {
+				log.Error("cleaning up", "error", err)
 			}
+			log.Info("cleaned up", "duration", time.Since(cleanupStart))
 		}()
 	}
 
@@ -119,101 +121,63 @@ func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (
 	if err != nil {
 		return nil, err
 	}
+	trigger := func(ctx context.Context) error { return r.create(ctx, objs) }
 	if s == scenarioUpdate {
 		log.Info("preparing pipelines at initial version")
 		if err := r.prepareUpdate(ctx, w, objs); err != nil {
 			return nil, err
 		}
+		trigger = func(ctx context.Context) error { return r.updateComponents(ctx, w) }
 	}
 
 	gvk, state := w.target()
-	tr, err := startTracker(ctx, r.c, w, gvk, state, w.targets())
+	rollout, err := r.measure(ctx, pod, w, phase{name: "rollout", gvk: gvk, state: state, expected: w.targets(), trigger: trigger})
 	if err != nil {
 		return nil, err
 	}
-	defer tr.stop()
-
-	before, err := r.scrapeAll(ctx, pod)
-	if err != nil {
-		return nil, err
-	}
-
-	smpCtx, stopSampling := context.WithCancel(ctx)
-	smp := &sampler{c: r.c, pod: pod.Name, node: pod.Spec.NodeName, interval: r.opts.sampleInterval}
-	var wg sync.WaitGroup
-	wg.Go(func() { smp.run(smpCtx) })
-
-	log.Info("measuring", "target", gvk.Kind, "objects", objects, "targets", w.targets())
-	start := tr.markStart()
-	if s == scenarioUpdate {
-		err = r.updateComponents(ctx, w)
-	} else {
-		err = r.create(ctx, objs)
-	}
-	if err != nil {
-		stopSampling()
-		wg.Wait()
-		return nil, err
-	}
-	res.Durations.Create = time.Since(start).Seconds()
-
-	allReady := tr.wait(ctx, r.opts.timeout)
-	elapsed := time.Since(start)
-	// Ready objects still leave reconciles queued; usage has to cover those too.
-	if allReady {
-		log.Info("waiting for controller queues to drain")
-		if settled, ok := smp.waitSettled(ctx, elapsed.Seconds(), r.opts.timeout); ok {
-			elapsed = max(elapsed, time.Duration(settled*float64(time.Second)))
-			res.Durations.Settled = elapsed.Seconds()
-		} else {
-			res.Outcome.Unsettled = true
-			elapsed = time.Since(start)
-		}
-	}
-	stopSampling()
-	wg.Wait()
-
-	after, err := r.scrapeAll(ctx, pod)
-	if err != nil {
-		return nil, err
-	}
-
-	sum := tr.summary()
-	res.Outcome = outcome{
-		Expected:       w.targets(),
-		Ready:          sum.ready,
-		Failed:         sum.failed,
-		Pending:        sum.pending,
-		TimedOut:       !allReady,
-		Unsettled:      res.Outcome.Unsettled,
-		FailureReasons: sum.failureReasons,
-	}
-	res.Durations.Total = elapsed.Seconds()
-	if allReady {
-		res.Durations.Total = sum.latencies[len(sum.latencies)-1].Seconds()
-	}
-	if len(sum.latencies) > 0 {
-		res.Durations.FirstReady = sum.latencies[0].Seconds()
-	}
-	res.Durations.P50 = percentile(sum.latencies, 50).Seconds()
-	res.Durations.P90 = percentile(sum.latencies, 90).Seconds()
-	res.Durations.P99 = percentile(sum.latencies, 99).Seconds()
-
-	samples, sampleErrs := smp.result()
-	res.Errors = append(res.Errors, sampleErrs...)
-	if err := r.summarize(res, before, after, samples, elapsed); err != nil {
-		res.Errors = append(res.Errors, err.Error())
-	}
+	res.window = rollout.window
+	res.Durations.Publish = published
 	res.ControllerRestarted = r.restartedSince(ctx, pod)
-
-	if err := writeRaw(dir, before, after, samples); err != nil {
+	if err := rollout.writeRaw(dir, ""); err != nil {
 		return nil, err
 	}
+
+	if err := r.drift(ctx, pod, w, rollout, res, dir); err != nil {
+		return nil, err
+	}
+
 	if err := writeJSON(filepath.Join(dir, "result.json"), res); err != nil {
 		return nil, err
 	}
-	log.Info("run finished", "ready", sum.ready, "expected", w.targets(), "total", res.Durations.Total)
+	log.Info("run finished", "ready", res.Outcome.Ready, "expected", w.targets(), "total", res.Durations.Total)
 	return res, nil
+}
+
+// drift measures the drift phase into res.Drift: every deployed ConfigMap is
+// changed, until each Deployer has reverted its own. It needs a finished rollout
+// with drained queues: a Deployer only watches an object once it applied it.
+func (r *runner) drift(ctx context.Context, pod *corev1.Pod, w workload, rollout *measurement, res *result, dir string) error {
+	keys := w.driftedConfigMaps()
+	if len(keys) == 0 {
+		return nil
+	}
+	if !rollout.complete() || res.ControllerRestarted {
+		slog.Warn("skipping the drift phase, the rollout did not finish", "run", w.runID)
+		return nil
+	}
+	m, err := r.measure(ctx, pod, w, phase{
+		name:     "drift",
+		gvk:      configMapGVK,
+		state:    revertedState(initialVersion),
+		expected: len(keys),
+		trigger:  func(ctx context.Context) error { return r.driftConfigMaps(ctx, keys) },
+	})
+	if err != nil {
+		return fmt.Errorf("drift: %w", err)
+	}
+	m.ControllerRestarted = r.restartedSince(ctx, pod)
+	res.Drift = &m.window
+	return m.writeRaw(dir, "drift-")
 }
 
 // prepareUpdate brings every pipeline to initialVersion before the update is
@@ -265,6 +229,67 @@ func (r *runner) create(ctx context.Context, objs []client.Object) error {
 	return nil
 }
 
+// driftConfigMaps changes the version of every deployed ConfigMap, the way a
+// person editing a deployed object would.
+func (r *runner) driftConfigMaps(ctx context.Context, keys []client.ObjectKey) error {
+	patch := client.RawPatch(types.MergePatchType, fmt.Appendf(nil, `{"data":{"version":%q}}`, driftedVersion))
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(createWorkers)
+	for _, key := range keys {
+		g.Go(func() error {
+			cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: key.Name, Namespace: key.Namespace}}
+			if err := r.c.client.Patch(ctx, cm, patch); err != nil {
+				return fmt.Errorf("drifting %s: %w", key, err)
+			}
+			return nil
+		})
+	}
+	return g.Wait()
+}
+
+// cleanup deletes a run the way a user would: the Deployers first, while their service
+// account can still prune what they deployed, then the rest of the pipelines, then the
+// namespaces. Deleting the namespaces right away deletes all of it at once; the Deployers
+// then fail on their half-deleted RBAC and every kind waits for the next with backoff.
+func (r *runner) cleanup(ctx context.Context, w workload) error {
+	stages := [][]client.Object{
+		{&v1alpha1.NamespacedDeployer{}},
+		{&v1alpha1.Resource{}, &v1alpha1.Component{}, &v1alpha1.Repository{}},
+	}
+	for _, kinds := range stages {
+		start := time.Now()
+		for _, kind := range kinds {
+			if err := r.forEachNamespace(ctx, w, func(ctx context.Context, namespace string) error {
+				return r.c.client.DeleteAllOf(ctx, kind, client.InNamespace(namespace), client.MatchingLabels{runLabel: w.runID})
+			}); err != nil {
+				return fmt.Errorf("deleting %T: %w", kind, err)
+			}
+		}
+		for _, kind := range kinds {
+			if err := r.c.waitGone(ctx, kind, w.runID, r.opts.timeout); err != nil {
+				return err
+			}
+		}
+		slog.Info("deleted", "run", w.runID, "kinds", len(kinds), "first", fmt.Sprintf("%T", kinds[0]), "duration", time.Since(start))
+	}
+	// Waiting once for all of them, so finalizer work from one run does not overlap the next.
+	if err := r.forEachNamespace(ctx, w, func(ctx context.Context, namespace string) error {
+		return r.c.deleteNamespace(ctx, namespace)
+	}); err != nil {
+		return fmt.Errorf("deleting namespaces: %w", err)
+	}
+	return r.c.waitGone(ctx, &corev1.Namespace{}, w.runID, r.opts.timeout)
+}
+
+func (r *runner) forEachNamespace(ctx context.Context, w workload, f func(context.Context, string) error) error {
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(createWorkers)
+	for _, namespace := range w.namespaces() {
+		g.Go(func() error { return f(ctx, namespace) })
+	}
+	return g.Wait()
+}
+
 func (r *runner) updateComponents(ctx context.Context, w workload) error {
 	patch := client.RawPatch(types.MergePatchType, fmt.Appendf(nil, `{"spec":{"semver":%q}}`, updatedVersion))
 	g, ctx := errgroup.WithContext(ctx)
@@ -279,56 +304,6 @@ func (r *runner) updateComponents(ctx context.Context, w workload) error {
 		})
 	}
 	return g.Wait()
-}
-
-// scrapeAll fails only on the controller scrape. Registry numbers are
-// secondary, so a failed registry scrape is logged and the run goes on.
-func (r *runner) scrapeAll(ctx context.Context, pod *corev1.Pod) (scrapes, error) {
-	var s scrapes
-	var err error
-	if s.controller, err = r.c.scrapeController(ctx, pod.Name); err != nil {
-		return s, fmt.Errorf("scraping controller metrics: %w", err)
-	}
-	if s.registry, err = r.c.scrapeRegistry(ctx); err != nil {
-		slog.Warn("scraping registry metrics", "error", err)
-		s.registry, s.registryErr = nil, err
-	}
-	return s, nil
-}
-
-func (r *runner) summarize(res *result, before, after scrapes, samples []sample, elapsed time.Duration) error {
-	var errs []error
-
-	ctlBefore, err1 := parseScrape(before.controller)
-	ctlAfter, err2 := parseScrape(after.controller)
-	if err := errors.Join(err1, err2); err != nil {
-		errs = append(errs, fmt.Errorf("controller metrics: %w", err))
-	} else {
-		res.ControllerCounters = counterDeltas(ctlBefore, ctlAfter, controllerCounterPrefixes)
-		// The process counter is read at scrape time; kubelet's cAdvisor value
-		// lags by its housekeeping interval, which dominates short runs.
-		res.Usage.CPUSeconds = res.ControllerCounters[cpuCounter]
-		res.Usage.AvgCores = res.Usage.CPUSeconds / elapsed.Seconds()
-	}
-
-	if err := errors.Join(before.registryErr, after.registryErr); err != nil {
-		errs = append(errs, fmt.Errorf("registry metrics unavailable: %w", err))
-	} else {
-		rBefore, err1 := parseScrape(before.registry)
-		rAfter, err2 := parseScrape(after.registry)
-		if err := errors.Join(err1, err2); err != nil {
-			errs = append(errs, fmt.Errorf("registry metrics: %w", err))
-		} else {
-			res.RegistryCounters = counterDeltas(rBefore, rAfter, registryCounterPrefixes)
-			requests := sumSeries(res.RegistryCounters, "registry_http_requests_total")
-			res.Usage.RegistryRequests = &requests
-		}
-	}
-
-	res.Usage.PeakWorkingSetBytes, res.ControllerGaugePeaks = peaks(samples)
-	res.Usage.PeakRSSBytes = res.ControllerGaugePeaks["process_resident_memory_bytes"]
-	res.Usage.PeakCores = peakCores(samples)
-	return errors.Join(errs...)
 }
 
 func (r *runner) restartedSince(ctx context.Context, before *corev1.Pod) bool {
@@ -379,24 +354,6 @@ func restartCount(pod *corev1.Pod) int32 {
 		}
 	}
 	return 0
-}
-
-func writeRaw(dir string, before, after scrapes, samples []sample) error {
-	files := map[string][]byte{
-		"controller-start.prom": before.controller,
-		"controller-end.prom":   after.controller,
-		"registry-start.prom":   before.registry,
-		"registry-end.prom":     after.registry,
-	}
-	for name, data := range files {
-		if data == nil {
-			continue
-		}
-		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
-			return err
-		}
-	}
-	return writeJSON(filepath.Join(dir, "samples.json"), samples)
 }
 
 func randomSuffix() string {

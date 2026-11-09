@@ -1,12 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
@@ -48,7 +50,7 @@ func TestWorkloadObjectsToCreate(t *testing.T) {
 		want     int
 	}{
 		{scenario: scenarioCold, want: 1 + 3},
-		{scenario: scenarioShared, want: 1 + 3},
+		{scenario: scenarioShared, want: 3 * (3 + 1 + 3)},
 		{scenario: scenarioUpdate, want: 3 + 1 + 3*3},
 		{scenario: scenarioComplex, want: 1 + 3 + 3 + 3*3},
 		{scenario: scenarioFanout, want: 1 + 3*(1+defaultFanout)},
@@ -63,7 +65,7 @@ func TestWorkloadObjectsToCreate(t *testing.T) {
 			r.Len(objs, tt.want)
 			for _, o := range objs {
 				r.Equal("run", o.GetLabels()[runLabel])
-				r.Equal(w.namespace, o.GetNamespace(), "namespace deletion must clean up every object")
+				r.Contains(w.namespaces(), o.GetNamespace(), "namespace deletion must clean up every object")
 				if d, ok := o.(*v1alpha1.NamespacedDeployer); ok {
 					r.Equal(deployerAccount, d.Spec.ServiceAccountName)
 				}
@@ -318,4 +320,107 @@ func TestTrackerSummary(t *testing.T) {
 	tr.observe(obj("c", "True", "Succeeded"))
 	tr.observe(obj("d", "True", "Succeeded"))
 	r.True(tr.wait(t.Context(), time.Second))
+}
+
+func TestWorkloadDriftedConfigMaps(t *testing.T) {
+	for _, depth := range []int{0, defaultDepth} {
+		t.Run(fmt.Sprintf("depth %d", depth), func(t *testing.T) {
+			r := require.New(t)
+			w := newWorkload(scenarioComplex, 3, "run", "http://registry:5000")
+			w.depth = depth
+
+			cvs, err := w.componentVersions()
+			r.NoError(err)
+			deployed := map[client.ObjectKey]bool{}
+			for _, cv := range cvs {
+				for _, res := range cv.Resources {
+					if res.Blob == nil {
+						continue
+					}
+					var cm corev1.ConfigMap
+					r.NoError(yaml.Unmarshal(res.Blob, &cm))
+					deployed[client.ObjectKeyFromObject(&cm)] = true
+				}
+			}
+
+			drifted := w.driftedConfigMaps()
+			r.Len(drifted, 3)
+			for _, key := range drifted {
+				r.True(deployed[key], "%s is not deployed by any Deployer", key)
+			}
+		})
+	}
+	for _, s := range allScenarios {
+		if s != scenarioComplex {
+			require.Empty(t, newWorkload(s, 3, "run", "http://registry:5000").driftedConfigMaps(), s)
+		}
+	}
+}
+
+func TestWorkloadSharedTenants(t *testing.T) {
+	r := require.New(t)
+	w := newWorkload(scenarioShared, 3, "run", "http://registry:5000")
+
+	cvs, err := w.componentVersions()
+	r.NoError(err)
+	r.Len(cvs, 1, "every Deployer reads the same resource")
+	var cm corev1.ConfigMap
+	r.NoError(yaml.Unmarshal(cvs[0].Resources[0].Blob, &cm))
+	r.Empty(cm.Namespace, "one digest for all tenants, so each Deployer defaults the namespace")
+
+	gvk, _ := w.target()
+	r.Equal(deployerGVK, gvk)
+	r.Equal(3, w.targets())
+	r.Len(w.namespaces(), 3)
+
+	objs, err := w.objectsToCreate()
+	r.NoError(err)
+	byKind := map[string]map[string]int{}
+	for _, o := range objs {
+		kind := fmt.Sprintf("%T", o)
+		if byKind[kind] == nil {
+			byKind[kind] = map[string]int{}
+		}
+		byKind[kind][o.GetNamespace()]++
+		if d, ok := o.(*v1alpha1.NamespacedDeployer); ok {
+			r.Equal(deployerAccount, d.Spec.ServiceAccountName)
+		}
+		if c, ok := o.(*v1alpha1.Component); ok {
+			r.Equal(w.componentName(0), c.Spec.Component)
+		}
+	}
+	for _, kind := range []string{"*v1alpha1.Repository", "*v1alpha1.Component", "*v1alpha1.Resource", "*v1alpha1.NamespacedDeployer", "*v1.ServiceAccount", "*v1.Role", "*v1.RoleBinding"} {
+		r.Len(byKind[kind], 3, "one %s per tenant namespace", kind)
+		for _, ns := range w.namespaces() {
+			r.Equal(1, byKind[kind][ns], "%s in %s", kind, ns)
+		}
+	}
+}
+
+func TestRevertedState(t *testing.T) {
+	r := require.New(t)
+	cm := func(name, version string) *unstructured.Unstructured {
+		return &unstructured.Unstructured{Object: map[string]any{
+			"metadata": map[string]any{"name": name, "namespace": "ns"},
+			"data":     map[string]any{"version": version},
+		}}
+	}
+	state := revertedState(initialVersion)
+	r.False(state(cm("a", initialVersion)).ready, "not changed yet")
+	r.False(state(cm("a", driftedVersion)).ready, "changed, not reverted")
+	r.True(state(cm("a", initialVersion)).ready, "changed and reverted")
+	r.False(state(cm("b", initialVersion)).ready, "another ConfigMap was not changed")
+}
+
+func TestTrackerKeysByNamespace(t *testing.T) {
+	r := require.New(t)
+	tr := &tracker{expected: 2, state: readyState, readyAt: map[string]time.Time{}, last: map[string]objectState{}, done: make(chan struct{})}
+	tr.markStart()
+	for _, ns := range []string{"t0", "t1"} {
+		tr.observe(&unstructured.Unstructured{Object: map[string]any{
+			"metadata": map[string]any{"name": "d-0000", "namespace": ns},
+			"status":   map[string]any{"conditions": []any{map[string]any{"type": "Ready", "status": "True"}}},
+		}})
+	}
+	r.True(tr.wait(t.Context(), time.Second), "objects of the same name in different namespaces are different objects")
 }

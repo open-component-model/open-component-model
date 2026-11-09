@@ -46,9 +46,9 @@ func startTracker(ctx context.Context, c *cluster, w workload, gvk schema.GroupV
 		}
 	}()
 
+	// Cluster-wide, because tenants span one namespace each; the run label keeps it to this run.
 	informers, err := cache.New(c.cfg, cache.Options{
 		Scheme:               c.scheme,
-		DefaultNamespaces:    map[string]cache.Config{w.namespace: {}},
 		DefaultLabelSelector: labels.SelectorFromSet(labels.Set{runLabel: w.runID}),
 	})
 	if err != nil {
@@ -88,18 +88,20 @@ func (t *tracker) observe(obj any) {
 	if !ok {
 		return
 	}
-	s := t.state(u)
+	key := u.GetNamespace() + "/" + u.GetName()
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.last[u.GetName()] = s
+	// Under the lock: a state may remember what it saw before, see revertedState.
+	s := t.state(u)
+	t.last[key] = s
 	if !s.ready {
 		return
 	}
-	if _, seen := t.readyAt[u.GetName()]; seen {
+	if _, seen := t.readyAt[key]; seen {
 		return
 	}
-	t.readyAt[u.GetName()] = time.Now()
+	t.readyAt[key] = time.Now()
 	if len(t.readyAt) == t.expected {
 		close(t.done)
 	}
@@ -150,4 +152,18 @@ func (t *tracker) summary() trackerSummary {
 	// Objects never observed at all count as pending too.
 	s.pending = t.expected - s.ready - s.failed
 	return s
+}
+
+// revertedState is ready once a ConfigMap carried driftedVersion and then version
+// again: changed, and reverted by its Deployer. It is only safe under the tracker's lock.
+func revertedState(version string) func(*unstructured.Unstructured) objectState {
+	drifted := map[string]bool{}
+	return func(u *unstructured.Unstructured) objectState {
+		key := u.GetNamespace() + "/" + u.GetName()
+		v, _, _ := unstructured.NestedString(u.Object, "data", "version")
+		if v == driftedVersion {
+			drifted[key] = true
+		}
+		return objectState{ready: drifted[key] && v == version}
+	}
 }

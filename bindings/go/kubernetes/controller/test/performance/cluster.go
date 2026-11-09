@@ -168,20 +168,33 @@ func (c *cluster) createNamespace(ctx context.Context, name, runID string) error
 	return c.client.Create(ctx, ns)
 }
 
-// deleteNamespace waits until the namespace is gone so finalizer work from
-// one run does not overlap the next.
-func (c *cluster) deleteNamespace(ctx context.Context, name string, timeout time.Duration) error {
+// deleteNamespace starts the deletion of a namespace; [cluster.waitGone] waits for it.
+func (c *cluster) deleteNamespace(ctx context.Context, name string) error {
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name}}
 	if err := c.client.Delete(ctx, ns); err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
-	return wait.PollUntilContextTimeout(ctx, 2*pollInterval, timeout, true, func(ctx context.Context) (bool, error) {
-		err := c.client.Get(ctx, client.ObjectKeyFromObject(ns), ns)
-		if apierrors.IsNotFound(err) {
-			return true, nil
+	return nil
+}
+
+// waitGone waits until no object of kind is left with the run label of runID.
+func (c *cluster) waitGone(ctx context.Context, kind client.Object, runID string, timeout time.Duration) error {
+	gvk, err := c.client.GroupVersionKindFor(kind)
+	if err != nil {
+		return err
+	}
+	list := &metav1.PartialObjectMetadataList{}
+	list.SetGroupVersionKind(gvk.GroupVersion().WithKind(gvk.Kind + "List"))
+	err = wait.PollUntilContextTimeout(ctx, 2*pollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+		if err := c.client.List(ctx, list, client.MatchingLabels{runLabel: runID}, client.Limit(1)); err != nil {
+			return false, err
 		}
-		return false, err
+		return len(list.Items) == 0, nil
 	})
+	if err != nil {
+		return fmt.Errorf("waiting for every %s of run %s to be deleted: %w", gvk.Kind, runID, err)
+	}
+	return nil
 }
 
 func (c *cluster) serverVersion() string {

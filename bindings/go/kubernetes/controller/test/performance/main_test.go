@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -21,7 +22,8 @@ func TestParseFlags(t *testing.T) {
 		{
 			name: "defaults run the full matrix",
 			want: func(r *require.Assertions, o options) {
-				r.Equal(allScenarios, o.scenarios)
+				r.Equal([]scenario{"cold", "shared", "update", "complex", "fanout"}, o.scenarios,
+					"CI and --scenarios name these; drift is a phase of complex")
 				r.Equal([]int{100, 500, 1000}, o.sizes)
 				r.Equal(3, o.repeats)
 				r.Equal("kind-ocm-perf", o.kubeContext)
@@ -68,7 +70,7 @@ func TestParseFlags(t *testing.T) {
 
 func TestSummarizeRegistryUnavailable(t *testing.T) {
 	r := require.New(t)
-	res := &result{}
+	res := &window{}
 	after := scrapes{registryErr: errors.New("connection refused")}
 
 	err := (&runner{}).summarize(res, scrapes{}, after, nil, time.Second)
@@ -83,22 +85,61 @@ func TestWriteSummary(t *testing.T) {
 	requests := 42.0
 	results := []*result{
 		{
-			Scenario: scenarioComplex, Signed: true, Usage: usage{RegistryRequests: &requests},
+			Scenario: scenarioComplex, Signed: true,
 			Environment: environment{ControllerImageID: "docker.io/library/import-2026-10-26@sha256:18bb5d7f6bba0123456789"},
 		},
-		{Scenario: scenarioCold, Outcome: outcome{TimedOut: true}, ControllerRestarted: true},
+		{Scenario: scenarioCold, window: window{Outcome: outcome{TimedOut: true}, ControllerRestarted: true}},
 	}
+	results[0].Usage.RegistryRequests = &requests
+	driftRequests := 7.0
+	results[0].Drift = &window{Outcome: outcome{Ready: 3}, Usage: usage{RegistryRequests: &driftRequests}, Errors: []string{"boom"}}
 
 	r.NoError(writeSummary(dir, results))
 
 	raw, err := os.ReadFile(filepath.Join(dir, "summary.md"))
 	r.NoError(err)
 	rows := strings.Split(strings.TrimSpace(string(raw)), "\n")
-	r.Len(rows, 4)
+	r.Len(rows, 5)
 	r.Contains(rows[2], "| complex | 0 | 0 | 18bb5d7f6bba | yes |")
 	r.Contains(rows[2], "| 42 |  |")
-	r.Contains(rows[3], "| cold | 0 | 0 | n/a | no |")
-	r.Contains(rows[3], "| n/a | timed out, controller restarted |")
+	r.Contains(rows[3], "| complex (drift) | 0 | 0 | 18bb5d7f6bba | yes | 3 |")
+	r.Contains(rows[3], "| 7 | metric errors |")
+	r.Contains(rows[4], "| cold | 0 | 0 | n/a | no |")
+	r.Contains(rows[4], "| n/a | timed out, controller restarted |")
+}
+
+func TestResultJSON(t *testing.T) {
+	r := require.New(t)
+	requests := 5.0
+	res := &result{Scenario: scenarioComplex, window: window{
+		Durations:          durations{Total: 10},
+		ControllerCounters: map[string]float64{"a": 1},
+	}}
+
+	raw, err := json.Marshal(res)
+	r.NoError(err)
+	var got map[string]any
+	r.NoError(json.Unmarshal(raw, &got))
+	r.Contains(got, "durations", "the rollout window stays at the top level")
+	r.Contains(got, "controllerCounters")
+	r.NotContains(got, "drift", "only complex runs have a drift phase")
+
+	res.Drift = &window{
+		Durations:          durations{Total: 2},
+		Usage:              usage{RegistryRequests: &requests},
+		ControllerCounters: map[string]float64{"a": 3},
+		RegistryCounters:   map[string]float64{"b": 4},
+	}
+	raw, err = json.Marshal(res)
+	r.NoError(err)
+	got = nil
+	r.NoError(json.Unmarshal(raw, &got))
+	r.InDelta(10, got["durations"].(map[string]any)["total"], 0, "the drift phase leaves the rollout numbers alone")
+	drift := got["drift"].(map[string]any)
+	for _, key := range []string{"durations", "usage", "controllerCounters", "registryCounters"} {
+		r.Contains(drift, key)
+	}
+	r.InDelta(5, drift["usage"].(map[string]any)["registryRequests"], 0)
 }
 
 func TestPercentile(t *testing.T) {
