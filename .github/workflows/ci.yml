@@ -243,7 +243,7 @@ jobs:
           awk -v p="$pct" -v f="$floor" 'BEGIN{exit (p+0 < f+0)}' \
             || { echo "::error::integration coverage ${pct}% is below the ${floor}% floor"; exit 1; }
       - name: Publish integration test report
-        uses: mikepenz/action-junit-report@a9170d5795813c01ab4901ffb045b52bab4ab09d # v6.5.0
+        uses: mikepenz/action-junit-report@6ef3fdcfcd5f0b5d14df3e659ef19b8c6820f93d # v6.6.1
         if: always()
         with:
           report_paths: '${{ github.workspace }}/bindings/go/output/junit*.xml'
