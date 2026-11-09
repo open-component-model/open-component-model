@@ -873,6 +873,21 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 		)
 	})
 
+	t.Run("oci cache config is dropped", func(t *testing.T) {
+		cfg := makeGenericConfig(
+			`{"type":"http.config.ocm.software/v1alpha1","timeout":"45s"}`,
+			`{"type":"oci.cache.config.ocm.software/v1alpha1","remotePolicy":"IfNotPresent"}`,
+			`{"type":"oci.cache.config.ocm.software","remotePolicy":"IfNotPresent"}`,
+		)
+		result, err := filterAllowedConfigTypes(t.Context(), cfg)
+		require.NoError(t, err)
+		require.Len(t, result.Configurations, 1)
+		assert.Equal(t,
+			ocmruntime.NewVersionedType(httpv1alpha1.ConfigType, httpv1alpha1.Version),
+			result.Configurations[0].GetType(),
+		)
+	})
+
 	t.Run("dropped types are logged at V(1)", func(t *testing.T) {
 		cfg := makeGenericConfig(
 			`{"type":"credentials.config.ocm.software/v1","repositories":[]}`,

@@ -19,15 +19,16 @@ import (
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/git/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
 func TestAddGitResourceLocalRepository(t *testing.T) {
 	r := require.New(t)
-	source, commit := localRepository(t)
+	sourceURL, commit := servedRepository(t)
 	tempDir := t.TempDir()
 	repo := gitrepository.NewResourceRepository(&filesystemconfig.Config{TempFolder: &tempDir})
 
-	sourceResource, err := repo.ProcessResourceDigest(t.Context(), descriptor.ConvertFromV2Resource(gitResource(t, source, "", commit, "Git/v1")), nil)
+	sourceResource, err := repo.ProcessResourceDigest(t.Context(), descriptor.ConvertFromV2Resource(gitResource(t, sourceURL, "", commit, "Git/v1")), nil)
 	r.NoError(err)
 	archive, err := repo.DownloadResource(t.Context(), sourceResource, nil)
 	r.NoError(err)
@@ -50,11 +51,12 @@ func TestAddGitResourceLocalRepository(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			target := t.TempDir()
-			_, err := git.PlainInit(target, true)
+			targetPath := filepath.Join(t.TempDir(), "target.git")
+			_, err := git.PlainInit(targetPath, true)
 			r.NoError(err)
+			targetURL := testgit.Serve(t, targetPath)
 
-			resource := gitResource(t, target, tc.ref, tc.commit, "Git/v1")
+			resource := gitResource(t, targetURL, tc.ref, tc.commit, "Git/v1")
 			resource.Digest = &v2.Digest{
 				HashAlgorithm:          sourceResource.Digest.HashAlgorithm,
 				NormalisationAlgorithm: sourceResource.Digest.NormalisationAlgorithm,
@@ -77,12 +79,12 @@ func TestAddGitResourceLocalRepository(t *testing.T) {
 			r.NoError(scheme.Convert(result, &transformed))
 			var published accessv1.Git
 			r.NoError(access.Scheme.Convert(transformed.Output.Resource.Access, &published))
-			r.Equal(target, published.Repository)
+			r.Equal(targetURL, published.Repository)
 			r.Equal(tc.ref, published.Ref)
 			r.Equal(commit, published.Commit)
 			r.Equal(resource.Digest, transformed.Output.Resource.Digest)
 
-			pushed, err := git.PlainOpen(target)
+			pushed, err := git.PlainOpen(targetPath)
 			r.NoError(err)
 			ref, err := pushed.Reference(plumbing.ReferenceName(tc.ref), false)
 			r.NoError(err)

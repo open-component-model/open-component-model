@@ -1,0 +1,213 @@
+name: "Controller: Performance Benchmark"
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenarios:
+        description: "Comma-separated scenarios (cold, shared, update, complex, fanout). Empty runs all."
+        type: string
+        required: false
+      objects:
+        description: "Comma-separated object counts per run. Empty uses 100,500,1000."
+        type: string
+        required: false
+      repeats:
+        description: "Repetitions of every scenario and object count. Empty uses 3. Higher count means better averages."
+        type: string
+        required: false
+  # A "/perf" comment on a pull request benchmarks its head commit against its merge base with the base branch.
+  issue_comment:
+    types: [created]
+  schedule:
+    # Nightly: the standard suite, ~30 minutes, the same one /perf runs. Sundays run the full suite instead.
+    - cron: "0 2 * * *"
+
+permissions:
+  contents: read
+
+env:
+  GO_MODULE_ROOT: "bindings/go"
+  CONTROLLER_DIR: "bindings/go/kubernetes/controller"
+  # This is the configuration that is executed by the `/perf` command and the nightly run.
+  STANDARD_SUITE: "--scenarios=complex --objects=1000 --repeats=3"
+
+jobs:
+  parse:
+    name: Parse /perf comment
+    if: >-
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/perf') &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      # For the reactions.
+      pull-requests: write
+    outputs:
+      run: ${{ steps.parse.outputs.run }}
+      base_ref: ${{ steps.parse.outputs.base_ref }}
+      base_sha: ${{ steps.parse.outputs.base_sha }}
+      pr_sha: ${{ steps.parse.outputs.pr_sha }}
+    steps:
+      - name: Checkout scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Parse comment
+        id: parse
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/perf-command.js');
+            await script.default({ github, context, core });
+
+  benchmark:
+    name: Performance Benchmark (${{ matrix.side }})
+    needs: parse
+    # A failed parse should not try to run the default branch.
+    if: ${{ !cancelled() && (github.event_name != 'issue_comment' || (needs.parse.result == 'success' && needs.parse.outputs.run == 'true')) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # /perf benchmarks the base branch and the pull request side by side, everything else runs once.
+        side: ${{ fromJSON(github.event_name == 'issue_comment' && '["base", "pr"]' || '["run"]') }}
+    # Job level concurrency settings prevent a comment that never started a run from joining the concurrency group.
+    # A new /perf on the same pull request cancels the previous one to preserve resources.
+    concurrency:
+      group: controller-performance-${{ github.event.issue.number && format('pr-{0}-{1}', github.event.issue.number, matrix.side) || github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'issue_comment' }}
+      # GitHub rejects queue: max together with cancel-in-progress: true.
+      queue: ${{ github.event_name == 'issue_comment' && 'single' || 'max' }}
+    # /perf runs pull request code in the default branch cache scope, so this job must never save a cache.
+    cache-mode: read
+    runs-on: ubuntu-26.04-arm
+    # The hosted runner maximum. Hitting it cancels the job, which skips the report steps, so the step
+    # limits below add up to 355 (5 x 5 tools, 25 setup, 290 benchmark, 5 + 10 report), leaving 5 for the runner.
+    timeout-minutes: 360
+    steps:
+      - name: Checkout
+        timeout-minutes: 5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Empty outside of /perf, which checks out the selected or scheduled branch.
+          ref: ${{ matrix.side == 'base' && needs.parse.outputs.base_sha || needs.parse.outputs.pr_sha }}
+          persist-credentials: false
+
+      - name: Setup Go
+        timeout-minutes: 5
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: ${{ env.GO_MODULE_ROOT }}/go.mod
+          cache-dependency-path: ${{ env.GO_MODULE_ROOT }}/go.sum
+
+      - name: Install Task
+        timeout-minutes: 5
+        uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup docker/buildx
+        timeout-minutes: 5
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Install Helm
+        timeout-minutes: 5
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+          # renovate: datasource=github-releases depName=helm/helm
+          version: v4.3.0
+
+      - name: Set up cluster and registry
+        timeout-minutes: 25
+        run: task ${{ env.CONTROLLER_DIR }}:test/performance/setup/local
+
+      - name: Run benchmark
+        timeout-minutes: 290
+        env:
+          EVENT: ${{ github.event_name }}
+          SCENARIOS: ${{ inputs.scenarios }}
+          OBJECTS: ${{ inputs.objects }}
+          REPEATS: ${{ inputs.repeats }}
+        run: |
+          args=()
+          if [ "${EVENT}" = "workflow_dispatch" ]; then
+            [ -n "${SCENARIOS}" ] && args+=("--scenarios=${SCENARIOS}")
+            [ -n "${OBJECTS}" ] && args+=("--objects=${OBJECTS}")
+            [ -n "${REPEATS}" ] && args+=("--repeats=${REPEATS}")
+          elif [ "${EVENT}" != "schedule" ] || [ "$(date -u +%u)" != 7 ]; then
+            # Everything but the Sunday full suite.
+            read -r -a args <<< "${STANDARD_SUITE}"
+          fi
+          task ${{ env.CONTROLLER_DIR }}:test/performance -- "${args[@]}"
+
+      # This step writes the job's summary.md to the summary page of the run.
+      - name: Publish summary
+        timeout-minutes: 5
+        if: ${{ !cancelled() }}
+        run: |
+          summary="$(ls -d ${{ env.CONTROLLER_DIR }}/test/performance/results/*/summary.md 2>/dev/null | tail -n1)"
+          if [ -z "${summary}" ]; then
+            echo "### Controller performance: n/a (no run finished)" >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+          { echo "### Controller performance"; echo; cat "${summary}"; } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload results
+        timeout-minutes: 10
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: controller-performance-${{ github.run_id }}-${{ matrix.side }}
+          path: ${{ env.CONTROLLER_DIR }}/test/performance/results/
+          if-no-files-found: warn
+
+  report:
+    name: Report to pull request
+    needs: [parse, benchmark]
+    # A cancelled run was replaced by a newer /perf, which reports instead.
+    if: ${{ always() && needs.parse.result == 'success' && needs.parse.outputs.run == 'true' && needs.benchmark.result != 'cancelled' }}
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      # For the comment.
+      pull-requests: write
+    steps:
+      - name: Checkout scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+
+      - name: Download base results
+        if: needs.benchmark.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: controller-performance-${{ github.run_id }}-base
+          path: results/base
+
+      - name: Download pull request results
+        if: needs.benchmark.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: controller-performance-${{ github.run_id }}-pr
+          path: results/pr
+
+      - name: Comment comparison
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          BASE_REF: ${{ needs.parse.outputs.base_ref }}
+          BASE_SHA: ${{ needs.parse.outputs.base_sha }}
+          PR_SHA: ${{ needs.parse.outputs.pr_sha }}
+          RESULT: ${{ needs.benchmark.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/perf-compare.js');
+            await script.default({ github, context });

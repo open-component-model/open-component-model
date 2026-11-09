@@ -23,6 +23,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/git/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
 func TestResourceDigestPinning(t *testing.T) {
@@ -33,7 +34,7 @@ func TestResourceDigestPinning(t *testing.T) {
 
 	dir := t.TempDir()
 	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &dir})
-	original := &descriptor.Resource{Access: &v1.Git{Type: runtime.NewUnversionedType("git"), Repository: fixture.Path, Ref: "refs/heads/main"}}
+	original := &descriptor.Resource{Access: &v1.Git{Type: runtime.NewUnversionedType("git"), Repository: fixture.URL, Ref: "refs/heads/main"}}
 	before := original.DeepCopy()
 	pinned, err := repo.ProcessResourceDigest(t.Context(), original, nil)
 	r.NoError(err)
@@ -73,12 +74,12 @@ func TestDownloadResourcePinsRefOnDownload(t *testing.T) {
 	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{})
 
 	atSecond, err := readResource(t.Context(), repo, &descriptor.Resource{Access: &v1.Git{
-		Type: runtime.NewVersionedType(v1.Type, v1.Version), Repository: fixture.Path, Commit: fixture.Second.String(),
+		Type: runtime.NewVersionedType(v1.Type, v1.Version), Repository: fixture.URL, Commit: fixture.Second.String(),
 	}})
 	r.NoError(err)
 
 	b, err := repo.DownloadResource(t.Context(), &descriptor.Resource{Access: &v1.Git{
-		Type: runtime.NewVersionedType(v1.Type, v1.Version), Repository: fixture.Path, Ref: "main",
+		Type: runtime.NewVersionedType(v1.Type, v1.Version), Repository: fixture.URL, Ref: "main",
 	}}, nil)
 	r.NoError(err)
 	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/main", fixture.First)))
@@ -98,7 +99,7 @@ func TestDownloadResourceVerifiesWhileStreaming(t *testing.T) {
 	dir := t.TempDir()
 	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &dir})
 	res := &descriptor.Resource{
-		Access: &v1.Git{Type: runtime.NewUnversionedType("git"), Repository: fixture.Path, Commit: fixture.First.String()},
+		Access: &v1.Git{Type: runtime.NewUnversionedType("git"), Repository: fixture.URL, Commit: fixture.First.String()},
 		Digest: &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: digest.FromString("other").Encoded()},
 	}
 
@@ -146,7 +147,7 @@ func TestResourceDigestLeavesRefUnchanged(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			gitAccess := &v1.Git{Type: runtime.NewVersionedType(v1.Type, v1.Version), Repository: fixture.Path, Ref: tc.ref}
+			gitAccess := &v1.Git{Type: runtime.NewVersionedType(v1.Type, v1.Version), Repository: fixture.URL, Ref: tc.ref}
 			if !tc.commit.IsZero() {
 				gitAccess.Commit = tc.commit.String()
 			}
@@ -167,7 +168,7 @@ func TestResourceDigestVerification(t *testing.T) {
 	dir := t.TempDir()
 	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &dir})
 	res := &descriptor.Resource{Access: &v1.Git{
-		Type: runtime.NewVersionedType("Git", "v1"), Repository: fixture.Path, Commit: fixture.First.String(),
+		Type: runtime.NewVersionedType("Git", "v1"), Repository: fixture.URL, Commit: fixture.First.String(),
 	}}
 
 	compressed, err := readResource(t.Context(), repo, res)
@@ -232,7 +233,7 @@ func TestResourceDigestMovesURLFragmentIntoFields(t *testing.T) {
 			r := require.New(t)
 			repo := repository.NewResourceRepository(nil)
 			res := &descriptor.Resource{Access: &v1.Git{
-				Type: runtime.NewVersionedType("Git", "v1"), Repository: fixture.Path + "#" + tc.fragment,
+				Type: runtime.NewVersionedType("Git", "v1"), Repository: fixture.URL + "#" + tc.fragment,
 			}}
 
 			pinned, err := repo.ProcessResourceDigest(t.Context(), res, nil)
@@ -240,7 +241,7 @@ func TestResourceDigestMovesURLFragmentIntoFields(t *testing.T) {
 
 			var spec v1.Git
 			r.NoError(access.Scheme.Convert(pinned.Access, &spec))
-			r.Equal(fixture.Path, spec.Repository)
+			r.Equal(fixture.URL, spec.Repository)
 			r.Equal(tc.wantRef, spec.Ref)
 			r.NotEmpty(spec.Commit)
 		})
@@ -255,7 +256,7 @@ func TestResourceDigestKeepsPinnedCommit(t *testing.T) {
 	r.NoError(err)
 
 	// The annotated tag object peels to fixture.First, but the pinned value is kept.
-	res := &descriptor.Resource{Access: &v1.Git{Type: runtime.NewUnversionedType("git"), Repository: fixture.Path, Commit: tag.Hash().String()}}
+	res := &descriptor.Resource{Access: &v1.Git{Type: runtime.NewUnversionedType("git"), Repository: fixture.URL, Commit: tag.Hash().String()}}
 	tempDir := t.TempDir()
 	pinned, err := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempDir}).ProcessResourceDigest(t.Context(), res, nil)
 	r.NoError(err)
@@ -263,6 +264,26 @@ func TestResourceDigestKeepsPinnedCommit(t *testing.T) {
 	var spec v1.Git
 	r.NoError(access.Scheme.Convert(pinned.Access, &spec))
 	r.Equal(tag.Hash().String(), spec.Commit)
+}
+
+func TestLocalAccessRejected(t *testing.T) {
+	r := require.New(t)
+	fixture := newRepository(t)
+	repo := repository.NewResourceRepository(nil)
+
+	for _, path := range []string{fixture.Path, "file://" + fixture.Path} {
+		res := &descriptor.Resource{Access: &v1.Git{
+			Type:       runtime.NewVersionedType(v1.Type, v1.Version),
+			Repository: path,
+			Ref:        "refs/heads/main",
+		}}
+		_, err := repo.ProcessResourceDigest(t.Context(), res, nil)
+		r.ErrorContains(err, "local git repository",
+			"ProcessResourceDigest must reject local repository %q", path)
+		_, err = repo.DownloadResource(t.Context(), res, nil)
+		r.ErrorContains(err, "local git repository",
+			"DownloadResource must reject local repository %q", path)
+	}
 }
 
 func TestInvalidResource(t *testing.T) {
@@ -287,6 +308,7 @@ func TestInvalidResource(t *testing.T) {
 
 type repositoryFixture struct {
 	Path          string
+	URL           string
 	Git           *git.Repository
 	First, Second plumbing.Hash
 }
@@ -345,5 +367,5 @@ func newRepository(t *testing.T) repositoryFixture {
 	_, err = bare.CreateTag("annotated", first, &git.CreateTagOptions{Tagger: signature, Message: "release\n"})
 	r.NoError(err)
 
-	return repositoryFixture{Path: path, Git: bare, First: first, Second: second}
+	return repositoryFixture{Path: path, URL: testgit.Serve(t, path), Git: bare, First: first, Second: second}
 }

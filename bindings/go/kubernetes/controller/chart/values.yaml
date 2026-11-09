@@ -12,7 +12,7 @@ manager:
     # -- Controller image repository
     repository: ghcr.io/open-component-model/kubernetes/controller
     # -- Controller image tag
-    tag: latest@sha256:8dc6df07e4ac6a4eab85aac4afec67580bc40e961a058d59f34f5e0a26602a00
+    tag: latest@sha256:5468c8a2e86277bd2bd929ed73424d638bdde6d5590e1873e0819097e8926493
     # -- Image pull policy
     pullPolicy: IfNotPresent
   ## Cluster-scoped Deployer
@@ -82,6 +82,9 @@ manager:
     deployerDownloadSize: 1000
     # -- Maximum size of a single downloadable resource as a Kubernetes resource.Quantity (e.g. "2Mi", "512Ki"). "0" disables the limit.
     deployerDownloadMaxResourceSize: "2Mi"
+  # -- OCM configuration for the whole controller. Loaded _once_ at startup. Only `oci.cache.config.ocm.software` is accepted at the moment of this writing.
+  # `type` defaults to `generic.config.ocm.software/v1`. Example: `{configurations: [{type: oci.cache.config.ocm.software/v1alpha1, remotePolicy: Always}]}`
+  ocmConfig: {}
   ## Logging configuration (zap logger)
   logging:
     # -- Zap log level: 'debug', 'info', 'error', 'panic' or integer > 0
