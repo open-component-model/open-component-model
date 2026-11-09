@@ -43,11 +43,12 @@ func OCMBinary() string {
 }
 
 // PlainHTTPConfig writes an OCM config file into dir that lets the ocm CLI talk
-// plain HTTP to every registry. OCM rejects an http:// prefix unless the HTTP
+// plain HTTP to every e2e registry. OCM rejects an http:// prefix unless the HTTP
 // client configuration sets plainHTTP, so every CLI call against an e2e registry
-// passes the returned path via --config.
+// passes the returned path via --config. ghcr.io stays on HTTPS: the examples pull
+// public images from it, and it refuses cleartext requests.
 func PlainHTTPConfig(dir string) (string, error) {
-	cfg := "type: generic.config.ocm.software/v1\nconfigurations:\n  - type: http.config.ocm.software/v1alpha1\n    plainHTTP: true\n"
+	cfg := "type: generic.config.ocm.software/v1\nconfigurations:\n  - type: http.config.ocm.software/v1alpha1\n    plainHTTP: true\n    hosts:\n      ghcr.io:\n        plainHTTP: false\n"
 	path := filepath.Join(dir, "plain-http.ocmconfig")
 	if err := os.WriteFile(path, []byte(cfg), 0o600); err != nil {
 		return "", fmt.Errorf("could not write plain HTTP ocmconfig: %w", err)

@@ -73,6 +73,10 @@ spec:
         spec:
           repositorySpec: ${schema.spec.repository}
           interval: 10m
+          ocmConfig:
+            - apiVersion: v1
+              kind: ConfigMap
+              name: ocm-plain-http
 
     - id: productComponent
       readyWhen:

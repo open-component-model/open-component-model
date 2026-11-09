@@ -157,9 +157,10 @@ func Test_Integration_TransferOCIArtifact_ExcludedFromSignature(t *testing.T) {
 			r.Contains(types, tc.wantType)
 
 			graph, err := transfer.NewDefaultBuilder(
-				provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir())),
-				ociresource.NewResourceRepository(nil),
+				provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig())),
+				ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig())),
 				newCredResolver(t, sourceCreds, registryCreds{targetAddr, targetUser, targetPwd}),
+				transfer.WithHTTPConfig(plainHTTPConfig()),
 			).BuildAndCheck(definition)
 			r.NoError(err)
 			r.NoError(graph.Process(ctx))
