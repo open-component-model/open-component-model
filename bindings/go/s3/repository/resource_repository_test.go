@@ -452,3 +452,29 @@ func Test_ProcessResourceDigest_PinsAccess(t *testing.T) {
 		})
 	}
 }
+
+// A resource excluded from signing (ocm-spec: NO-DIGEST / EXCLUDE-FROM-SIGNATURE) keeps its
+// digest unchanged, and its object is never downloaded to compute or compare a digest.
+func Test_ProcessResourceDigest_ExcludedFromSignature(t *testing.T) {
+	tests := []struct {
+		name   string
+		digest *descriptor.Digest
+	}{
+		{name: "exclude triple", digest: descriptor.NewExcludeFromSignatureDigest()},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			srv := newFakeS3(t, []byte("content that must not be hashed"), "")
+			repo := NewResourceRepository()
+
+			resource := s3Resource(servedBy(srv, &v2.S3{BucketName: "b", ObjectKey: "k"}))
+			resource.Digest = tt.digest.DeepCopy()
+
+			res, err := repo.ProcessResourceDigest(t.Context(), resource, fakeCredentials())
+			r.NoError(err)
+			r.Equal(tt.digest, res.Digest)
+			r.Empty(srv.recorded(), "object of an excluded resource must not be downloaded")
+		})
+	}
+}

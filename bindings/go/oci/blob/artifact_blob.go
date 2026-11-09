@@ -10,6 +10,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory/cache"
 	"ocm.software/open-component-model/bindings/go/blob/verified"
+	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
@@ -26,7 +27,7 @@ type ArtifactBlob struct {
 	descriptor.Artifact
 	mediaType string
 	// Packing changes access metadata, not the representation of these bytes.
-	ociLayout bool
+	ociArchive bool
 
 	digestMu   sync.RWMutex
 	byteDigest string
@@ -45,11 +46,11 @@ func NewArtifactBlobWithMediaType(artifact descriptor.Artifact, b blob.ReadOnlyB
 		ReadOnlyBlob: b,
 		Artifact:     artifact,
 		mediaType:    mediaType,
-		ociLayout:    isOCILayout(artifact, b, mediaType),
+		ociArchive:   isOCIArchive(artifact, b, mediaType),
 	}
 
 	// Normalized OCI manifest digests do not describe the bytes of a layout archive.
-	if resource, ok := artifact.(*descriptor.Resource); ok && !result.ociLayout {
+	if resource, ok := artifact.(*descriptor.Resource); ok && !result.ociArchive {
 		if digAware, ok := b.(blob.DigestAware); ok {
 			if blobDig, ok := digAware.Digest(); ok {
 				expected, known, err := result.resourceByteDigest()
@@ -116,7 +117,7 @@ func (r *ArtifactBlob) Digest() (string, bool) {
 // A byte digest with any field set must be complete and valid; it is never ignored.
 func (r *ArtifactBlob) resourceByteDigest() (string, bool, error) {
 	resource, ok := r.Artifact.(*descriptor.Resource)
-	if !ok || r.ociLayout || !isByteDigest(resource.Digest) {
+	if !ok || r.ociArchive || !isByteDigest(resource.Digest) {
 		return "", false, nil
 	}
 	dig, err := digestSpecToDigest(resource.Digest)
@@ -133,14 +134,18 @@ func isByteDigest(dig *descriptor.Digest) bool {
 	return dig.NormalisationAlgorithm == "" || dig.NormalisationAlgorithm == internaldigest.GenericBlobDigestV1
 }
 
-func isOCILayout(artifact descriptor.Artifact, b blob.ReadOnlyBlob, mediaType string) bool {
+// isOCIArchive reports whether the content is an archive holding an OCI artifact: an OCI
+// layout or a legacy artifact set. The resource digest of such content describes the
+// artifact it holds, never the bytes of the archive.
+func isOCIArchive(artifact descriptor.Artifact, b blob.ReadOnlyBlob, mediaType string) bool {
 	isLayout := func(mediaType string) bool {
-		return mediaType == layout.MediaTypeOCIImageLayoutTarV1 || mediaType == layout.MediaTypeOCIImageLayoutTarGzipV1
+		return mediaType == layout.MediaTypeOCIImageLayoutTarV1 || mediaType == layout.MediaTypeOCIImageLayoutTarGzipV1 ||
+			ctf.IsArtifactSetMediaType(mediaType)
 	}
 	if isLayout(mediaType) {
 		return true
 	}
-	if wrapped, ok := b.(*ArtifactBlob); ok && wrapped.ociLayout {
+	if wrapped, ok := b.(*ArtifactBlob); ok && wrapped.ociArchive {
 		return true
 	}
 	if aware, ok := b.(blob.MediaTypeAware); ok {
@@ -284,7 +289,7 @@ func (r *ArtifactBlob) Buffer() (result *ArtifactBlob, err error) {
 		ReadOnlyBlob: inMemoryBlob,
 		Artifact:     r.Artifact,
 		mediaType:    r.mediaType,
-		ociLayout:    r.ociLayout,
+		ociArchive:   r.ociArchive,
 	}, nil
 }
 

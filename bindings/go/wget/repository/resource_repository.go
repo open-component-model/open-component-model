@@ -12,6 +12,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	ocmdigest "ocm.software/open-component-model/bindings/go/digest"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/repository/integrity"
@@ -197,6 +198,9 @@ func (r *ResourceRepository) GetResourceDigestProcessorCredentialConsumerIdentit
 // Prefer) or by downloading and hashing SHA-256 (Skip, or Prefer with nothing
 // advertised). A pinned Digest must agree with whichever authority was used.
 func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (*descriptor.Resource, error) {
+	if resource != nil && ocmdigest.IsExcluded(resource.Digest) {
+		return resource.DeepCopy(), nil
+	}
 	url := policyURL(resource)
 	mode := r.checksumConfig.ModeForURL(url)
 

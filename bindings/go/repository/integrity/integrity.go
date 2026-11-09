@@ -31,6 +31,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/verified"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	ocmdigest "ocm.software/open-component-model/bindings/go/digest"
 )
 
 // ErrUnverifiable reports a digest that the content cannot be checked against.
@@ -281,7 +282,7 @@ func newArtifactBlob(ctx context.Context, content blob.ReadOnlyBlob, root digest
 }
 
 func logUnverified(ctx context.Context, expected *descriptor.Digest, attrs []slog.Attr) {
-	if expected != nil && isExcluded(expected) {
+	if expected != nil && ocmdigest.IsExcluded(expected) {
 		if expected.Value != "" && !strings.EqualFold(expected.Value, descriptor.NoDigest) {
 			attrs = append(slices.Clone(attrs),
 				slog.String("hashAlgorithm", expected.HashAlgorithm),

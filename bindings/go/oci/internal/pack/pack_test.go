@@ -741,7 +741,6 @@ func TestResourceLocalBlobDigestMatchesStoredContent(t *testing.T) {
 	}{
 		{name: "oci layout", content: layoutContent, media: layout.MediaTypeOCIImageLayoutTarV1, expectedNormalization: "ociArtifactDigest/v1"},
 		{name: "oci layer", content: layerContent, media: "application/octet-stream", expectedNormalization: "genericBlobDigest/v1"},
-		{name: "oci layer with partial digest", content: layerContent, media: "application/octet-stream", initialDigest: &descriptor.Digest{NormalisationAlgorithm: "genericBlobDigest/v1"}, expectedNormalization: "genericBlobDigest/v1"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
@@ -899,7 +898,7 @@ func TestPackingPreservesResourceDigest(t *testing.T) {
 				{name: "legacy OCI digest", normalization: "ociArtifactDigest/v1", hasDigest: true},
 				{name: "generic blob digest", normalization: "genericBlobDigest/v1", hasDigest: true},
 				{name: "normalized JSON digest", normalization: "jsonNormalisation/v1", hasDigest: true},
-				{name: "intermediate blob digest", hasDigest: true},
+				{name: "partial digest is rejected", hasDigest: true},
 				{name: "missing digest"},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
@@ -932,6 +931,27 @@ func TestPackingPreservesResourceDigest(t *testing.T) {
 						},
 					}
 					packed, err := ArtifactBlob(t.Context(), store, b, Options{AccessScheme: scheme})
+					// A label the rule for the packed content does not know cannot be verified,
+					// so it is rejected and the recorded digest is left untouched.
+					if tc.normalization == "jsonNormalisation/v1" || (storageForm == "layer" && tc.normalization == "ociArtifactDigest/v1") {
+						r.ErrorContains(err, "normalisation algorithm mismatch")
+						r.Same(&original, resource.Digest)
+						r.Equal(before, *resource.Digest)
+						return
+					}
+					// A digest without a normalisation describes the bytes of a blob: the blob
+					// rule keeps it as recorded, while an OCI artifact digest cannot be
+					// verified against bytes.
+					if tc.hasDigest && tc.normalization == "" {
+						if storageForm != "layer" {
+							r.ErrorContains(err, "normalisation algorithm mismatch")
+						} else {
+							r.NoError(err)
+						}
+						r.Same(&original, resource.Digest)
+						r.Equal(before, *resource.Digest)
+						return
+					}
 					r.NoError(err)
 					r.True(content.Equal(root, packed))
 					updated, ok := resource.Access.(*v2.LocalBlob)
@@ -987,8 +1007,8 @@ func TestPackingRejectsInvalidOCILayoutDigest(t *testing.T) {
 		wantError  string
 		wantNoPush bool
 	}{
-		{name: "wrong root", hash: "SHA-256", value: other.Digest.Encoded(), wantError: "OCI artifact digest mismatch", wantNoPush: true},
-		{name: "wrong hash", hash: "SHA-512", value: root.Digest.Encoded(), wantError: "invalid digest", wantNoPush: true},
+		{name: "wrong root", hash: "SHA-256", value: other.Digest.Encoded(), wantError: "digest value mismatch", wantNoPush: true},
+		{name: "wrong hash", hash: "SHA-512", value: root.Digest.Encoded(), wantError: "hash algorithm mismatch", wantNoPush: true},
 		{name: "corrupt layer", hash: "SHA-256", value: root.Digest.Encoded(), corrupt: true, wantError: "mismatched digest"},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {

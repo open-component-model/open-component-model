@@ -7,12 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/algorithms"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha2"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	ocmdigest "ocm.software/open-component-model/bindings/go/digest"
 )
 
 const (
@@ -217,7 +217,7 @@ func ValidateDigestHashAlgorithms(cd *descruntime.Component) error {
 		}
 	}
 	for _, res := range cd.Resources {
-		if res.Digest == nil || res.Digest.HashAlgorithm == "" || isExcludedFromSignature(res.Digest) {
+		if res.Digest == nil || res.Digest.HashAlgorithm == "" || ocmdigest.IsExcluded(res.Digest) {
 			continue
 		}
 		if !isApprovedDigestHash(res.Digest.HashAlgorithm) {
@@ -236,14 +236,6 @@ func ValidateDigestHashAlgorithms(cd *descruntime.Component) error {
 func isApprovedDigestHash(name string) bool {
 	_, err := algorithms.Hash(name)
 	return err == nil
-}
-
-// isExcludedFromSignature reports whether a resource digest is the explicit
-// marker that keeps the resource content out of the signature. It matches the
-// marker the same way the repository's download verification does.
-func isExcludedFromSignature(d *descruntime.Digest) bool {
-	return strings.EqualFold(d.HashAlgorithm, descruntime.NoDigest) ||
-		strings.EqualFold(d.NormalisationAlgorithm, descruntime.ExcludeFromSignature)
 }
 
 // hasUsableAccess checks if a resource has an access type other than "None".
