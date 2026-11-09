@@ -350,10 +350,10 @@ func TestResolveRefUnreadableCandidate(t *testing.T) {
 		wantErr    error
 		wantRef    plumbing.ReferenceName
 	}{
-		// A tag outranks a branch; if the tag cannot be read, the branch must not win.
-		{name: "unreadable tag before existing branch", ref: "main", unreadable: "refs/tags/main", existing: []plumbing.ReferenceName{"refs/heads/main"}, wantErr: readErr},
+		// A fetched branch is looked up before any tag, so an unreadable tag does not matter.
+		{name: "unreadable tag behind a fetched branch", ref: "main", unreadable: "refs/tags/main", existing: []plumbing.ReferenceName{"refs/heads/main", "refs/remotes/origin/main"}, wantRef: "refs/heads/main"},
 		// A fetched branch outranks a tag; if it cannot be read, the tag must not win.
-		{name: "unreadable fetched branch before existing tag", ref: "main", unreadable: "refs/remotes/origin/main", existing: []plumbing.ReferenceName{"refs/tags/main"}, wantErr: readErr},
+		{name: "unreadable fetched branch before existing tag", ref: "main", unreadable: "refs/remotes/origin/main", existing: []plumbing.ReferenceName{"refs/heads/main", "refs/tags/main"}, wantErr: readErr},
 		{name: "unreadable candidate after not-found ones", ref: "main", unreadable: "refs/heads/main", wantErr: readErr},
 		{name: "unreadable candidate after the hit", ref: "main", unreadable: "refs/remotes/main", existing: []plumbing.ReferenceName{"refs/heads/main"}, wantRef: "refs/heads/main"},
 		{name: "all candidates absent", ref: "main", wantErr: plumbing.ErrReferenceNotFound},
