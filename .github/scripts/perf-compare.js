@@ -59,21 +59,21 @@ function activeControllers(results) {
   return [...names].sort();
 }
 
-const blobCacheFetches = "ocm_system_ocm_k8s_toolkit_oci_blob_cache_fetches_total";
+const blobCacheFetches = /^ocm_system_ocm_k8s_toolkit_oci_blob_cache_fetches_total\{kind="(.+)",result="(.+)"\}$/;
 
 /**
- * The blob cache series of the drift blocks, as [kind, result] pairs.
+ * The blob cache series of the drift blocks: the counter key with its kind and result.
  *
  * @param {any[]} drifts
- * @returns {[string, string][]}
+ * @returns {{ key: string, kind: string, result: string }[]}
  */
 function blobCacheSeries(drifts) {
   const series = new Map();
   for (const drift of drifts) {
     for (const key of Object.keys(drift.controllerCounters ?? {})) {
-      const match = key.match(new RegExp(`^${blobCacheFetches}\\{kind="(.+)",result="(.+)"\\}$`));
+      const match = key.match(blobCacheFetches);
       if (match) {
-        series.set(key, [match[1], match[2]]);
+        series.set(key, { key, kind: match[1], result: match[2] });
       }
     }
   }
@@ -140,9 +140,9 @@ function driftRows(results) {
   return [
     { label: "Drift: total (s)", value: ofDrift((d) => d.durations.total), runnerDependent: true },
     { label: "Drift: registry requests", value: ofDrift((d) => d.usage.registryRequests) },
-    ...blobCacheSeries(drifts).map(([kind, result]) => ({
+    ...blobCacheSeries(drifts).map(({ key, kind, result }) => ({
       label: `Drift: blob cache ${kind} ${result}`,
-      value: ofDrift((d) => d.controllerCounters[`${blobCacheFetches}{kind="${kind}",result="${result}"}`] ?? 0),
+      value: ofDrift((d) => d.controllerCounters[key] ?? 0),
     })),
     ...activeControllers(drifts).map((c) => ({
       label: `Drift: ${c}: reconciles`,
@@ -182,12 +182,14 @@ function delta(base, pr, rate) {
 }
 
 /**
+ * The values of a row. A missing drift block or a failed registry scrape (null) is no value, not 0.
+ *
  * @param {any[]} results
  * @param {Row} row
  * @returns {number[]}
  */
 function valuesOf(results, row) {
-  return /** @type {number[]} */ (results.map(row.value).filter((v) => v !== undefined));
+  return /** @type {number[]} */ (results.map(row.value).filter((v) => v !== undefined && v !== null));
 }
 
 /**

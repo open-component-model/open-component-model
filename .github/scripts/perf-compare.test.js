@@ -94,3 +94,13 @@ test("a side without drift blocks renders n/a", () => {
 test("no drift rows without drift blocks", () => {
   assert.doesNotMatch(renderTable([result(100, 0)], [result(100, 0)], "main"), /Drift/);
 });
+
+test("a failed registry scrape is no value, not 0", () => {
+  const failed = complexResult(100, 0);
+  failed.drift.usage.registryRequests = null;
+  failed.usage.registryRequests = null;
+  const table = renderTable([failed, complexResult(100, 100)], [failed], "main");
+
+  assert.match(table, /^\| Drift: registry requests \| 100 \| n\/a \| n\/a \|$/m);
+  assert.match(table, /^\| Registry requests \| 44000 \| n\/a \| n\/a \|$/m);
+});
