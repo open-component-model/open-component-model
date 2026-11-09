@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 )
@@ -52,4 +54,25 @@ func TestCleanup(t *testing.T) {
 			r.True(apierrors.IsNotFound(err), "component was not deleted: %v", err)
 		})
 	}
+}
+
+func TestWaitGoneRetriesFailedLists(t *testing.T) {
+	r := require.New(t)
+	scheme := runtime.NewScheme()
+	r.NoError(clientgoscheme.AddToScheme(scheme))
+
+	failed := false
+	c := fake.NewClientBuilder().WithScheme(scheme).WithInterceptorFuncs(interceptor.Funcs{
+		List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+			if !failed {
+				failed = true
+				return apierrors.NewServiceUnavailable("etcd leader changed")
+			}
+			return c.List(ctx, list, opts...)
+		},
+	}).Build()
+
+	cl := &cluster{client: c, scheme: scheme}
+	r.NoError(cl.waitGone(t.Context(), &corev1.Namespace{}, "run", 5*time.Second))
+	r.True(failed)
 }
