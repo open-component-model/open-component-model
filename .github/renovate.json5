@@ -318,6 +318,21 @@
       enabled: false,
     },
     {
+      // sigs.k8s.io/kustomize/{api,kyaml} are indirect (helm -> k8s.io/cli-runtime)
+      // and follow the Kubernetes release train: cli-runtime v0.37.x pins
+      // v0.21.1, v0.38.x pins v0.21.3. v0.21.3 needs a kube-openapi built on
+      // structured-merge-diff/v7, which apimachinery v0.37.x (smd/v6) cannot
+      // compile against (#4184, #4185). Same failure mode as kube-openapi (#3770).
+      // Not re-enabled on purpose: the 'Kubernetes dependencies' group PR raises
+      // them via MVS + gomodTidy when it bumps k8s.io/cli-runtime.
+      matchManagers: ['gomod'],
+      matchPackageNames: [
+        'sigs.k8s.io/kustomize/api',
+        'sigs.k8s.io/kustomize/kyaml',
+      ],
+      enabled: false,
+    },
+    {
       // The internal org workflows repo is tracked on @main intentionally
       // (see .github/workflows/stale.yaml). Disable Renovate so it does not
       // re-pin the ref to a SHA and then bump it on every upstream commit.
