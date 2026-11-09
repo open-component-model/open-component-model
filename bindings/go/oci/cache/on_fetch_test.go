@@ -1,8 +1,11 @@
 package cache
 
 import (
+	"context"
+	"io"
 	"sync"
 	"testing"
+	"time"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
@@ -89,4 +92,46 @@ func TestOnFetch_NilHook(t *testing.T) {
 		r.NoError(err)
 		_ = readAllAndClose(t, rc)
 	}
+}
+
+// gatedFetch blocks every upstream fetch until gate is closed.
+type gatedFetch struct {
+	*fakeReadOnly
+	gate chan struct{}
+}
+
+func (g *gatedFetch) Fetch(ctx context.Context, d ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
+	<-g.gate
+	return g.fakeReadOnly.Fetch(ctx, d)
+}
+
+func TestOnFetch_SharedFlightReportsOneMiss(t *testing.T) {
+	r := require.New(t)
+	rec := &fetchRecorder{}
+	c := newTestCache(t, Options{OnFetch: rec.record})
+	base := newFakeReadOnly()
+	desc := base.put(ociImageSpecV1.MediaTypeImageManifest, []byte(`{}`))
+	up := &gatedFetch{fakeReadOnly: base, gate: make(chan struct{})}
+
+	const callers = 8
+	var wg sync.WaitGroup
+	for range callers {
+		wg.Go(func() {
+			rc, err := c.Fetch(t.Context(), up, desc)
+			if err == nil {
+				_ = rc.Close()
+			}
+		})
+	}
+	time.Sleep(200 * time.Millisecond) // let every caller join the flight
+	close(up.gate)
+	wg.Wait()
+
+	counts := map[FetchResult]int{}
+	for _, res := range rec.got() {
+		counts[res]++
+	}
+	r.EqualValues(1, base.fetches.Load())
+	r.Equal(map[FetchResult]int{FetchResultMiss: 1, FetchResultHit: callers - 1}, counts,
+		"only the caller that fetched from upstream is a miss")
 }

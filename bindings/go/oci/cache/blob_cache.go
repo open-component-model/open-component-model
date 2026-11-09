@@ -294,7 +294,10 @@ func (c *BlobCache) fetch(ctx context.Context, upstream ReadOnlyRepository, targ
 	// acceptable. A ref-counted shared context that cancels when the
 	// last waiter leaves would be the more principled alternative.
 	fetchCtx := context.Background()
+	// Only the leader runs the function. The channel receive below orders its write before the read.
+	leader := false
 	ch := c.sf.DoChan(target.Digest.String(), func() (any, error) {
+		leader = true
 		// singleflight only collapses calls that overlap in time: a caller
 		// whose lookup above missed just before the previous flight
 		// populated the cache, but whose DoChan arrives after that flight
@@ -328,6 +331,10 @@ func (c *BlobCache) fetch(ctx context.Context, upstream ReadOnlyRepository, targ
 				slog.String("digest", target.Digest.String()))
 		}
 		f := res.Val.(flight)
+		if !leader {
+			// Served by another caller's flight, without an upstream fetch of its own.
+			f.result = FetchResultHit
+		}
 		return io.NopCloser(bytes.NewReader(f.data)), f.result, nil
 	}
 }
