@@ -242,29 +242,15 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream ReadOnlyRepository, targ
 	if c == nil {
 		return upstream.Fetch(ctx, target)
 	}
-	rc, result, err := c.fetch(ctx, upstream, target)
-	if err != nil {
-		return nil, err
-	}
-	if c.opts.OnFetch != nil {
-		c.opts.OnFetch(target, result)
-	}
-	return rc, nil
-}
-
-// fetch implements [BlobCache.Fetch] and reports how it served target.
-func (c *BlobCache) fetch(ctx context.Context, upstream ReadOnlyRepository, target ociImageSpecV1.Descriptor) (io.ReadCloser, FetchResult, error) {
 	if !c.Accept(target) {
-		rc, err := upstream.Fetch(ctx, target)
-		return rc, FetchResultBypass, err
+		return c.bypass(ctx, upstream, target)
 	}
 	if c.MaxBlobSize() > 0 && target.Size > c.MaxBlobSize() {
 		c.logger.DebugContext(ctx, "blobcache: skipping oversized descriptor, falling through",
 			slog.String("digest", target.Digest.String()),
 			slog.Int64("size", target.Size),
 			slog.Int64("max", c.MaxBlobSize()))
-		rc, err := upstream.Fetch(ctx, target)
-		return rc, FetchResultBypass, err
+		return c.bypass(ctx, upstream, target)
 	}
 
 	if c.opts.RemotePolicy == RemotePolicyAlways {
@@ -272,7 +258,8 @@ func (c *BlobCache) fetch(ctx context.Context, upstream ReadOnlyRepository, targ
 	}
 
 	if f := c.cached(ctx, target); f != nil {
-		return f, FetchResultHit, nil
+		c.report(target, FetchResultHit)
+		return f, nil
 	}
 
 	// Miss: collapse concurrent fetches for the same digest into one
@@ -294,10 +281,10 @@ func (c *BlobCache) fetch(ctx context.Context, upstream ReadOnlyRepository, targ
 	// acceptable. A ref-counted shared context that cancels when the
 	// last waiter leaves would be the more principled alternative.
 	fetchCtx := context.Background()
-	// Only the leader runs the function. The channel receive below orders its write before the read.
-	leader := false
+	// Only the leader's function runs and sets result; the channel receive below
+	// orders that write before the read. Callers that joined the flight keep "".
+	var result FetchResult
 	ch := c.sf.DoChan(target.Digest.String(), func() (any, error) {
-		leader = true
 		// singleflight only collapses calls that overlap in time: a caller
 		// whose lookup above missed just before the previous flight
 		// populated the cache, but whose DoChan arrives after that flight
@@ -306,44 +293,55 @@ func (c *BlobCache) fetch(ctx context.Context, upstream ReadOnlyRepository, targ
 			data, rerr := io.ReadAll(f)
 			_ = f.Close()
 			if rerr == nil {
-				return flight{data: data, result: FetchResultHit}, nil
+				result = FetchResultHit
+				return data, nil
 			}
 			c.logger.DebugContext(ctx, "blobcache: read cached file failed, falling through",
 				slog.String("digest", target.Digest.String()), slog.String("err", rerr.Error()))
 		}
 		c.logger.Debug("blobcache: singleflight leader: starting upstream fetch",
 			slog.String("digest", target.Digest.String()))
-		data, err := c.fetchAndPopulate(fetchCtx, upstream, target)
-		return flight{data: data, result: FetchResultMiss}, err
+		result = FetchResultMiss
+		return c.fetchAndPopulate(fetchCtx, upstream, target)
 	})
 	select {
 	case <-ctx.Done():
 		c.logger.DebugContext(ctx, "blobcache: caller canceled while waiting for fetch",
 			slog.String("digest", target.Digest.String()),
 			slog.String("err", ctx.Err().Error()))
-		return nil, "", ctx.Err()
+		return nil, ctx.Err()
 	case res := <-ch:
 		if res.Err != nil {
-			return nil, "", res.Err
+			return nil, res.Err
 		}
 		if res.Shared {
 			c.logger.DebugContext(ctx, "blobcache: singleflight: result shared across concurrent callers",
 				slog.String("digest", target.Digest.String()))
 		}
-		f := res.Val.(flight)
-		if !leader {
+		if result == "" {
 			// Served by another caller's flight, without an upstream fetch of its own.
-			f.result = FetchResultHit
+			result = FetchResultHit
 		}
-		return io.NopCloser(bytes.NewReader(f.data)), f.result, nil
+		c.report(target, result)
+		return io.NopCloser(bytes.NewReader(res.Val.([]byte))), nil
 	}
 }
 
-// flight is the shared result of a collapsed fetch: the bytes, and whether
-// the flight read them from disk or from upstream.
-type flight struct {
-	data   []byte
-	result FetchResult
+// bypass passes a fetch the cache does not admit through to upstream.
+func (c *BlobCache) bypass(ctx context.Context, upstream ReadOnlyRepository, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
+	rc, err := upstream.Fetch(ctx, target)
+	if err != nil {
+		return nil, err
+	}
+	c.report(target, FetchResultBypass)
+	return rc, nil
+}
+
+// report tells [Options.OnFetch], if set, how a successful fetch was served.
+func (c *BlobCache) report(target ociImageSpecV1.Descriptor, result FetchResult) {
+	if c.opts.OnFetch != nil {
+		c.opts.OnFetch(target, result)
+	}
 }
 
 // fetchAlways serves target under [RemotePolicyAlways]. A hit is only served if
@@ -352,10 +350,10 @@ type flight struct {
 // the caller controls can claim to hold any digest. Any other caller fetches the
 // blob itself, not collapsed with others, so it only ever gets bytes its own
 // repository served and that match the digest.
-func (c *BlobCache) fetchAlways(ctx context.Context, upstream ReadOnlyRepository, target ociImageSpecV1.Descriptor) (io.ReadCloser, FetchResult, error) {
+func (c *BlobCache) fetchAlways(ctx context.Context, upstream ReadOnlyRepository, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 	blobRef, err := upstream.ParseReference(target.Digest.String())
 	if err != nil {
-		return nil, "", fmt.Errorf("blobcache: identify repository of %s: %w", target.Digest, err)
+		return nil, fmt.Errorf("blobcache: identify repository of %s: %w", target.Digest, err)
 	}
 	// The record must be for this digest, whatever the implementation returns.
 	blobRef.Reference = target.Digest.String()
@@ -364,22 +362,24 @@ func (c *BlobCache) fetchAlways(ctx context.Context, upstream ReadOnlyRepository
 	if known {
 		if f := c.cached(ctx, target); f != nil {
 			if err := c.verifyRemoteAccess(ctx, upstream, target); err != nil {
-				return nil, "", errors.Join(err, f.Close())
+				return nil, errors.Join(err, f.Close())
 			}
-			return f, FetchResultHit, nil
+			c.report(target, FetchResultHit)
+			return f, nil
 		}
 	}
 
 	data, err := c.fetchAndPopulate(ctx, upstream, target)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 	if !known {
 		// Only the digest: annotations of a descriptor can be of any size, and
 		// writing a record rewrites the snapshot of its repository.
 		c.served.Add(blobRef, ociImageSpecV1.Descriptor{Digest: target.Digest})
 	}
-	return io.NopCloser(bytes.NewReader(data)), FetchResultMiss, nil
+	c.report(target, FetchResultMiss)
+	return io.NopCloser(bytes.NewReader(data)), nil
 }
 
 // fetchAndPopulate fetches target from upstream through [content.FetchAll],
