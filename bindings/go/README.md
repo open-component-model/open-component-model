@@ -19,6 +19,7 @@ Go bindings for the Open Component Model.
 | **descriptor/normalisation** | Provides canonical normalisation of component descriptors for digest and signature computation |
 | **descriptor/runtime** | Defines an internal runtime to work with component descriptors in all schema versions without restricting the code to the public API for future major changes |
 | **descriptor/v2** | Defines the main objects that compose a component version descriptor |
+| **digest** | Holds the shared rules for generating and verifying the resource digest recorded in a component descriptor |
 | **generator** | Contains the code generators of the Go bindings, including ocmtypegen and jsonschemagen |
 | **git** | Provides access to Git repositories as OCM resources and constructor inputs |
 | **github** | Provides access to GitHub repositories as OCM resources |
