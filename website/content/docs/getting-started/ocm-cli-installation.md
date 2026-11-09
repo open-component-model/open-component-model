@@ -56,12 +56,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: open-component-model/ocm-setup-action@v2
-        with:
-          version: {{< site-version "semver" >}}
-      - run: ocm version
+{{< site-version "action-with" >}}      - run: ocm version
 ```
 
-Omit `version` to install the latest stable release. Set `cache: false` to always download the binary, and
+On the `main` docs the example installs the latest stable release; versioned docs pin `version` to that release. Set `cache: false` to always download the binary, and
 `verify-attestation: false` on self-hosted runners without the [GitHub CLI](https://cli.github.com/).
 The action outputs the installed `version`, the binary `path`, and `cache-hit`.
 See the [action's README](https://github.com/open-component-model/ocm-setup-action#readme) for all inputs and outputs.
