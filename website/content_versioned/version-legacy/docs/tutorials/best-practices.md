@@ -313,7 +313,7 @@ jobs:
     steps:
       ...
       - name: setup OCM
-        uses: open-component-model/ocm-setup-action@main
+        uses: open-component-model/ocm-setup-action@v1
       ...
       - name: create OCM component version
         uses: open-component-model/ocm-action@main
