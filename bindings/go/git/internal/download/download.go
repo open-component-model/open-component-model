@@ -519,16 +519,27 @@ func resolveRef(repo *git.Repository, name string) (plumbing.Hash, plumbing.Refe
 		}
 	}
 
-	var firstErr error
+	var firstErr, invalidErr error
 	for _, rule := range plumbing.RefRevParseRules {
 		// Resolving follows symbolic refs, so the name of HEAD is the branch it points to.
 		ref, err := repo.Reference(plumbing.ReferenceName(fmt.Sprintf(rule, name)), true)
 		if err == nil {
 			return ref.Hash(), sourceRefName(ref.Name()), nil
 		}
+		// A candidate the storage refuses to name, such as the bare "main" of the "%s"
+		// rule, says nothing about whether the ref exists; report a real lookup error.
+		if errors.Is(err, plumbing.ErrInvalidReferenceName) {
+			if invalidErr == nil {
+				invalidErr = err
+			}
+			continue
+		}
 		if firstErr == nil {
 			firstErr = err
 		}
+	}
+	if firstErr == nil {
+		firstErr = invalidErr
 	}
 
 	return plumbing.ZeroHash, "", firstErr
