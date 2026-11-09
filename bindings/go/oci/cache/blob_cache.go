@@ -239,18 +239,15 @@ func (c *BlobCache) populate(ctx context.Context, dgst digest.Digest, size int64
 // that its repository served the blob before and that Exists passes, and
 // any other call is not collapsed but fetched by the caller itself.
 func (c *BlobCache) Fetch(ctx context.Context, upstream ReadOnlyRepository, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
-	if c == nil {
+	if c == nil || !c.Accept(target) {
 		return upstream.Fetch(ctx, target)
-	}
-	if !c.Accept(target) {
-		return c.bypass(ctx, upstream, target)
 	}
 	if c.MaxBlobSize() > 0 && target.Size > c.MaxBlobSize() {
 		c.logger.DebugContext(ctx, "blobcache: skipping oversized descriptor, falling through",
 			slog.String("digest", target.Digest.String()),
 			slog.Int64("size", target.Size),
 			slog.Int64("max", c.MaxBlobSize()))
-		return c.bypass(ctx, upstream, target)
+		return upstream.Fetch(ctx, target)
 	}
 
 	if c.opts.RemotePolicy == RemotePolicyAlways {
@@ -258,7 +255,6 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream ReadOnlyRepository, targ
 	}
 
 	if f := c.cached(ctx, target); f != nil {
-		c.report(target, FetchResultHit)
 		return f, nil
 	}
 
@@ -281,9 +277,6 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream ReadOnlyRepository, targ
 	// acceptable. A ref-counted shared context that cancels when the
 	// last waiter leaves would be the more principled alternative.
 	fetchCtx := context.Background()
-	// Only the leader's function runs and sets result; the channel receive below
-	// orders that write before the read. Callers that joined the flight keep "".
-	var result FetchResult
 	ch := c.sf.DoChan(target.Digest.String(), func() (any, error) {
 		// singleflight only collapses calls that overlap in time: a caller
 		// whose lookup above missed just before the previous flight
@@ -293,7 +286,6 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream ReadOnlyRepository, targ
 			data, rerr := io.ReadAll(f)
 			_ = f.Close()
 			if rerr == nil {
-				result = FetchResultHit
 				return data, nil
 			}
 			c.logger.DebugContext(ctx, "blobcache: read cached file failed, falling through",
@@ -301,7 +293,6 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream ReadOnlyRepository, targ
 		}
 		c.logger.Debug("blobcache: singleflight leader: starting upstream fetch",
 			slog.String("digest", target.Digest.String()))
-		result = FetchResultMiss
 		return c.fetchAndPopulate(fetchCtx, upstream, target)
 	})
 	select {
@@ -318,29 +309,7 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream ReadOnlyRepository, targ
 			c.logger.DebugContext(ctx, "blobcache: singleflight: result shared across concurrent callers",
 				slog.String("digest", target.Digest.String()))
 		}
-		if result == "" {
-			// Served by another caller's flight, without an upstream fetch of its own.
-			result = FetchResultHit
-		}
-		c.report(target, result)
 		return io.NopCloser(bytes.NewReader(res.Val.([]byte))), nil
-	}
-}
-
-// bypass passes a fetch the cache does not admit through to upstream.
-func (c *BlobCache) bypass(ctx context.Context, upstream ReadOnlyRepository, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
-	rc, err := upstream.Fetch(ctx, target)
-	if err != nil {
-		return nil, err
-	}
-	c.report(target, FetchResultBypass)
-	return rc, nil
-}
-
-// report tells [Options.OnFetch], if set, how a successful fetch was served.
-func (c *BlobCache) report(target ociImageSpecV1.Descriptor, result FetchResult) {
-	if c.opts.OnFetch != nil {
-		c.opts.OnFetch(target, result)
 	}
 }
 
@@ -364,7 +333,6 @@ func (c *BlobCache) fetchAlways(ctx context.Context, upstream ReadOnlyRepository
 			if err := c.verifyRemoteAccess(ctx, upstream, target); err != nil {
 				return nil, errors.Join(err, f.Close())
 			}
-			c.report(target, FetchResultHit)
 			return f, nil
 		}
 	}
@@ -378,7 +346,6 @@ func (c *BlobCache) fetchAlways(ctx context.Context, upstream ReadOnlyRepository
 		// writing a record rewrites the snapshot of its repository.
 		c.served.Add(blobRef, ociImageSpecV1.Descriptor{Digest: target.Digest})
 	}
-	c.report(target, FetchResultMiss)
 	return io.NopCloser(bytes.NewReader(data)), nil
 }
 

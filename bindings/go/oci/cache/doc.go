@@ -23,8 +23,7 @@
 // Both caches share an [Options] struct so a caller can configure
 // limits once and instantiate either or both. The blob-only fields
 // ([Options.MaxBlobSize] and [Options.Accept]) are ignored by
-// [ReferenceCache]. [Options.OnFetch] reports how the [BlobCache]
-// served each fetch (hit, miss or bypass), for metrics.
+// [ReferenceCache].
 //
 // Credential scoping:
 //

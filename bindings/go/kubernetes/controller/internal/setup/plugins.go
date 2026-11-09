@@ -73,7 +73,7 @@ func NewBlobCache(tempDir string, cfg *ocicachev1alpha1.Config) (*ocicache.BlobC
 	if tempDir == "" {
 		tempDir = os.TempDir()
 	}
-	opts := ocicache.Options{Dir: filepath.Join(tempDir, "ocm-oci-cas"), OnFetch: countBlobCacheFetch}
+	opts := ocicache.Options{Dir: filepath.Join(tempDir, "ocm-oci-cas")}
 	if cfg != nil {
 		opts.RemotePolicy = ocicache.RemotePolicy(cfg.RemotePolicy)
 	}

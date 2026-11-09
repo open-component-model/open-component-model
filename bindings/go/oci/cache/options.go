@@ -45,7 +45,7 @@ const (
 // [NewBlobCache] / [NewReferenceCache] when a caller passes a
 // partially-populated Options.
 //
-// MaxBlobSize, Accept and OnFetch are blob-specific and ignored by
+// MaxBlobSize and Accept are blob-specific and ignored by
 // [ReferenceCache].
 type Options struct {
 	// Dir is the absolute directory the cache owns — required. Both
@@ -80,29 +80,7 @@ type Options struct {
 	// RemotePolicy controls whether the upstream registry is contacted
 	// on a cache hit. Defaults to [RemotePolicyIfNotPresent].
 	RemotePolicy RemotePolicy
-
-	// OnFetch, if set, is called once for every [BlobCache.Fetch] that
-	// returns without error, with how the cache served it. It is called
-	// synchronously and must be cheap and safe for concurrent use.
-	// Optional; ignored by [ReferenceCache].
-	OnFetch func(desc ociImageSpecV1.Descriptor, result FetchResult)
 }
-
-// FetchResult is how a [BlobCache] served a fetch, as reported to
-// [Options.OnFetch].
-type FetchResult string
-
-const (
-	// FetchResultHit is a blob served without an upstream fetch of its own:
-	// from disk, or from a concurrent caller's fetch of the same blob. Under
-	// [RemotePolicyAlways] it is reported only after the access check passed.
-	FetchResultHit FetchResult = "hit"
-	// FetchResultMiss is an admitted blob that was fetched from upstream.
-	FetchResultMiss FetchResult = "miss"
-	// FetchResultBypass is a blob not admitted by [Options.Accept] or
-	// [Options.MaxBlobSize], passed through to upstream.
-	FetchResultBypass FetchResult = "bypass"
-)
 
 // noExpiry is an [Options.TTL] that disables time-based expiry.
 const noExpiry time.Duration = -1
