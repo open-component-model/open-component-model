@@ -59,7 +59,7 @@ func TestDownloadRevisions(t *testing.T) {
 				missingHeadError string
 			}{
 				{name: "default HEAD", ref: "HEAD", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: "cannot fetch git repository: transport failed; check repository access and server trust: reference not found"},
-				{name: "short main branch", ref: "main", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: `cannot resolve git ref: reference name escapes the reference storage: "main" is not under refs/ nor a valid pseudo-ref`},
+				{name: "short main branch", ref: "main", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: `cannot resolve git ref: reference name escapes the reference storage: invalid reference name: "main" is not a safe reference name`},
 				{name: "qualified main branch", ref: "refs/heads/main", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: "cannot resolve git ref: reference not found"},
 				{name: "branch wins over same-named tag", ref: "feature", want: fixture.Second, wantRef: "refs/heads/feature"},
 				{name: "remote tracking branch", ref: "refs/remotes/origin/feature", want: fixture.Second, wantRef: "refs/heads/feature"},
@@ -283,7 +283,7 @@ func TestDownloadFailureCleanup(t *testing.T) {
 		wantError         string
 		wantCause         error
 	}{
-		{name: "missing ref", ref: "absent", wantError: `cannot resolve git ref: reference name escapes the reference storage: "absent" is not under refs/ nor a valid pseudo-ref`},
+		{name: "missing ref", ref: "absent", wantError: `cannot resolve git ref: reference name escapes the reference storage: invalid reference name: "absent" is not a safe reference name`},
 		{name: "missing commit", commit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", wantError: "cannot fetch git repository"},
 		{name: "already canceled", ref: "main", cancel: true, wantError: "cannot fetch git repository: context canceled", wantCause: context.Canceled},
 	} {
