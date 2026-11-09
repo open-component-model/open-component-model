@@ -97,6 +97,9 @@ spec:
             - apiVersion: v1
               kind: Secret
               name: acme-signing-key
+            - apiVersion: v1
+              kind: ConfigMap
+              name: ocm-plain-http
     - id: rgdResource
       readyWhen:
         - ${rgdResource.status.conditions.exists(c, c.type == "Ready" && c.status == "True")}
