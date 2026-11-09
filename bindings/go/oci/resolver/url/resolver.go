@@ -44,7 +44,7 @@ type CachingResolver struct {
 	subPath    string
 	baseClient remote.Client
 	// baseScheme is the scheme prefix the base URL was given with, "" for
-	// none. It is deprecated input: see plainHTTPFor.
+	// none. It is deprecated input: see schemeFor and plainHTTPFor.
 	baseScheme string
 	// plainHTTP is the programmatic default for hosts the HTTP configuration
 	// does not decide. See WithPlainHTTP.
@@ -127,7 +127,7 @@ func (resolver *CachingResolver) Ping(ctx context.Context) error {
 		return fmt.Errorf("failed to create registry client: %w", err)
 	}
 	// Per-host settings are keyed by the host the request goes to, which for docker.io is registry-1.docker.io.
-	r.PlainHTTP, err = resolver.plainHTTPFor(ctx, parsedURL.Scheme, r.Reference.Host())
+	r.PlainHTTP, err = resolver.plainHTTPFor(ctx, resolver.schemeFor(parsedURL.Scheme, parsedURL.Host), r.Reference.Host())
 	if err != nil {
 		return fmt.Errorf("failed to determine plain HTTP setting for host %s: %w", r.Reference.Host(), err)
 	}
@@ -168,7 +168,7 @@ func (resolver *CachingResolver) StoreForReference(ctx context.Context, referenc
 		return cache.Wrap(remoteStore, resolver.blobCache.Load(), resolver.referenceCache.Load()), nil
 	}
 
-	plainHTTP, err := resolver.plainHTTPFor(ctx, ref.Scheme, ref.Host())
+	plainHTTP, err := resolver.plainHTTPFor(ctx, resolver.schemeFor(ref.Scheme, ref.Registry), ref.Host())
 	if err != nil {
 		return nil, fmt.Errorf("cannot resolve %q: %w", reference, err)
 	}
@@ -209,9 +209,6 @@ func (resolver *CachingResolver) StoreForReference(ctx context.Context, referenc
 // never changes the connection and only logs a warning that points at the
 // migration guide before the shared rule checks it.
 func (resolver *CachingResolver) plainHTTPFor(ctx context.Context, scheme, host string) (bool, error) {
-	if scheme == "" {
-		scheme = resolver.baseScheme
-	}
 	if scheme != "" {
 		slog.WarnContext(ctx, "the scheme prefix on a registry URL is deprecated; drop it and set plainHTTP in the HTTP client configuration for hosts without TLS",
 			slog.String("host", host), slog.String("scheme", scheme), slog.String("url", httpPrefixMigrationGuide))
@@ -223,9 +220,24 @@ func (resolver *CachingResolver) plainHTTPFor(ctx context.Context, scheme, host 
 	return plain, nil
 }
 
+// schemeFor returns the scheme prefix that applies to a reference on
+// registry: its own scheme, else the base URL's scheme when registry is the
+// base host, else none. A reference on another registry, such as a resource
+// on ghcr.io next to an http:// base URL, must not inherit the base scheme.
+func (resolver *CachingResolver) schemeFor(scheme, registry string) string {
+	if scheme != "" {
+		return scheme
+	}
+	base, err := runtime.ParseURLAndAllowNoScheme(resolver.baseURL)
+	if err != nil || base.Host != registry {
+		return ""
+	}
+	return resolver.baseScheme
+}
+
 // httpPrefixMigrationGuide explains how to replace a scheme prefix with
 // plainHTTP in the HTTP client configuration.
-const httpPrefixMigrationGuide = "https://ocm.software/docs/guides/transfer/configure-http/#migrate-from-http-prefixes"
+const httpPrefixMigrationGuide = "https://ocm.software/docs/changelog/migrate-from-http-prefixes/"
 
 func (resolver *CachingResolver) addToCache(reference string, store *remotestore.RemoteStore) {
 	resolver.cacheMu.Lock()

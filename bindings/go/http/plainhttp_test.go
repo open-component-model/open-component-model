@@ -83,6 +83,7 @@ func TestPlainHTTPFor(t *testing.T) {
 			if tt.wantErr {
 				r.ErrorContains(err, "plain HTTP is not enabled")
 				r.ErrorContains(err, host, "the error must name the host")
+				r.ErrorContains(err, "https://ocm.software/docs/guides/transfer/configure-http/#use-plain-http-for-a-local-registry", "the error must link the guide")
 				r.Empty(messages, "an error must not also warn")
 				return
 			}

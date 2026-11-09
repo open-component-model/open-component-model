@@ -120,13 +120,14 @@ OCM talks HTTPS to every OCI registry. `plainHTTP: true` makes OCM's OCI
 registry clients use cleartext HTTP for a host. It is meant for development
 and air-gapped registries without TLS. Traffic, including credentials, is
 unencrypted, so set it per host and never for a public registry. OCM logs a
-warning on the first request to each plain HTTP host.
+warning each time it opens a repository, pings a registry, or downloads a Helm
+chart on a plain HTTP host.
 
 This setting alone decides the connection. A scheme prefix on a repository
 base URL or a reference is deprecated and only checked against it: `http://`
 on a host that is not `plainHTTP` is an error, `https://` on a `plainHTTP` host
 warns about the downgrade, and every prefix logs a deprecation warning. See
-[Migrate from http:// prefixes]({{< relref "docs/guides/transfer/configure-http.md#migrate-from-http-prefixes" >}}).
+[Migrate from http:// Prefixes]({{< relref "docs/changelog/migrate-from-http-prefixes.md" >}}).
 
 ```yaml
 type: generic.config.ocm.software/v1

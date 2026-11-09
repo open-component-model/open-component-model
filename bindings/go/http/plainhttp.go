@@ -29,10 +29,14 @@ func PlainHTTPFor(ctx context.Context, cfg *httpv1alpha1.Config, host, scheme st
 	}
 	switch {
 	case scheme == "http" && !plain:
-		return false, fmt.Errorf("the URL uses http://, but plain HTTP is not enabled for host %q. Enable plainHTTP for the host in the HTTP client configuration", host)
+		return false, fmt.Errorf("the URL uses http://, but plain HTTP is not enabled for host %q. Enable plainHTTP for the host in the HTTP client configuration (see %s)", host, plainHTTPGuide)
 	case plain && scheme != "http":
 		slog.WarnContext(ctx, "plain HTTP is enabled for this host; the connection is downgraded to cleartext HTTP and requests, including credentials, are sent unencrypted",
 			slog.String("host", host))
 	}
 	return plain, nil
 }
+
+// plainHTTPGuide shows where plainHTTP is set. Callers such as the Helm
+// download pass the error on as it is, so the error itself must point there.
+const plainHTTPGuide = "https://ocm.software/docs/guides/transfer/configure-http/#use-plain-http-for-a-local-registry"

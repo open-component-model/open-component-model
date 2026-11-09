@@ -600,17 +600,21 @@ func plainHTTPConfig() *httpv1alpha1.Config {
 // configuration turns plain HTTP on; a classic http:// URL needs it, https://
 // stays HTTPS, and an oci:// chart follows the setting for its host.
 func TestChartPlainHTTP(t *testing.T) {
-	hostCfg := func(plain *bool) *httpv1alpha1.Config {
+	hostCfg := func(host string, plain *bool) *httpv1alpha1.Config {
 		if plain == nil {
 			return nil
 		}
+		if host == "" {
+			host = "charts.local:5000"
+		}
 		return &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{
-			"charts.local:5000": {ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: plain}},
+			host: {ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: plain}},
 		}}
 	}
 	tests := []struct {
 		name      string
 		url       string
+		host      string // host of the config entry; empty means charts.local:5000
 		plain     *bool
 		wantPlain bool
 		wantErr   string
@@ -618,6 +622,7 @@ func TestChartPlainHTTP(t *testing.T) {
 		{name: "oci without config stays HTTPS", url: "oci://charts.local:5000/charts/mychart:0.1.0"},
 		{name: "oci with per-host false stays HTTPS", url: "oci://charts.local:5000/charts/mychart:0.1.0", plain: new(false)},
 		{name: "oci with per-host true uses plain HTTP", url: "oci://charts.local:5000/charts/mychart:0.1.0", plain: new(true), wantPlain: true},
+		{name: "oci on docker.io follows the registry-1.docker.io entry", url: "oci://docker.io/charts/mychart:0.1.0", host: "registry-1.docker.io", plain: new(true), wantPlain: true},
 		{name: "http without config is rejected", url: "http://charts.local:5000/mychart-0.1.0.tgz", wantErr: "plain HTTP is not enabled"},
 		{name: "http with per-host false is rejected", url: "http://charts.local:5000/mychart-0.1.0.tgz", plain: new(false), wantErr: "plain HTTP is not enabled"},
 		{name: "http with per-host true uses plain HTTP", url: "http://charts.local:5000/mychart-0.1.0.tgz", plain: new(true), wantPlain: true},
@@ -628,7 +633,7 @@ func TestChartPlainHTTP(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
-			plain, err := chartPlainHTTP(t.Context(), tt.url, hostCfg(tt.plain))
+			plain, err := chartPlainHTTP(t.Context(), tt.url, hostCfg(tt.host, tt.plain))
 			if tt.wantErr != "" {
 				r.ErrorContains(err, tt.wantErr)
 				r.ErrorContains(err, tt.url, "the error must name the URL")

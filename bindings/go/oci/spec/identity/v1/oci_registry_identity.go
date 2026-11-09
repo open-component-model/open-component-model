@@ -30,8 +30,9 @@ type OCIRegistryIdentity struct {
 	// Primary matching attribute when resolving credentials for a registry request.
 	// Omit to match any hostname.
 	Hostname string `json:"hostname,omitempty"`
-	// Scheme is the URL scheme used to connect to the registry ("https" or "http").
-	// When set to "http", the client connects without TLS (plain HTTP).
+	// Scheme narrows credential matching to requests with this URL scheme ("https" or "http").
+	// It does not choose how the client connects: plainHTTP in the HTTP client
+	// configuration decides that.
 	// Omit to match both schemes.
 	Scheme string `json:"scheme,omitempty"`
 	// Port is the registry port as a string (e.g. "443", "5000").

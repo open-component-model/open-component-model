@@ -570,7 +570,7 @@ func (c *warnCapture) WithGroup(_ string) slog.Handler      { return c }
 // is not part of the contract, only that it is.
 func (c *warnCapture) deprecated() []string {
 	return c.hostsWhere(func(rec slog.Record, attrs map[string]string) bool {
-		return attrs["url"] == "https://ocm.software/docs/guides/transfer/configure-http/#migrate-from-http-prefixes"
+		return attrs["url"] == "https://ocm.software/docs/changelog/migrate-from-http-prefixes/"
 	})
 }
 
@@ -702,6 +702,68 @@ func TestURLPathResolver_PlainHTTP(t *testing.T) {
 
 			store, err := resolver.StoreForReference(t.Context(), host+"/repo:v1")
 			check(t, capture, store, err)
+		})
+	}
+}
+
+// TestURLPathResolver_BaseSchemeOnlyForBaseHost pins that the scheme prefix
+// of the base URL applies only to references on the base host. A resource on
+// another registry (for example ghcr.io next to an http:// base) has no
+// scheme of its own and must not inherit the base one.
+func TestURLPathResolver_BaseSchemeOnlyForBaseHost(t *testing.T) {
+	const baseHost = "base.local:5000"
+
+	tests := []struct {
+		name           string
+		cfg            *httpv1alpha1.Config
+		reference      string
+		wantPlain      bool
+		wantErr        string
+		wantDeprecated []string
+	}{
+		{
+			name:           "base host without config inherits http:// and fails",
+			reference:      baseHost + "/repo:v1",
+			wantErr:        "plain HTTP is not enabled",
+			wantDeprecated: []string{baseHost},
+		},
+		{
+			name:           "base host with plainHTTP inherits http://",
+			cfg:            &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{baseHost: hostCfg(new(true))}},
+			reference:      baseHost + "/repo:v1",
+			wantPlain:      true,
+			wantDeprecated: []string{baseHost},
+		},
+		{
+			name:           "other host without config keeps HTTPS silently",
+			reference:      "other.host/repo:v1",
+			wantDeprecated: []string{},
+		},
+		{
+			name:           "other host with plainHTTP only for the base host keeps HTTPS silently",
+			cfg:            &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{baseHost: hostCfg(new(true))}},
+			reference:      "other.host/repo:v1",
+			wantDeprecated: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			capture := captureWarnings(t)
+			resolver, err := url.New(url.WithBaseURL(baseHost), url.WithBaseURLScheme("http"), url.WithHTTPConfig(tt.cfg))
+			r.NoError(err)
+
+			store, err := resolver.StoreForReference(t.Context(), tt.reference)
+			r.Equal(tt.wantDeprecated, capture.deprecated(), "prefix deprecation warning")
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
+				return
+			}
+			r.NoError(err)
+			remoteStore, ok := store.(*remotestore.RemoteStore)
+			r.True(ok, "expected a bare RemoteStore when no cache is configured, got %T", store)
+			r.Equal(tt.wantPlain, remoteStore.PlainHTTP)
 		})
 	}
 }

@@ -38,9 +38,13 @@ const gitHubArchiveRoot = "open-component-model-open-component-model-"
 func CreateOCMConfigForGitHub(t *testing.T, registry *OCIRegistry) string {
 	t.Helper()
 
+	// The test registry runs without TLS, and an http:// prefix alone no
+	// longer selects plain HTTP: the HTTP configuration must say so.
 	cfg := fmt.Sprintf(`
 type: generic.config.ocm.software/v1
 configurations:
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true
 - type: credentials.config.ocm.software
   consumers:
   - identity:
@@ -67,10 +71,6 @@ configurations:
         token: %q
 `, token)
 	}
-
-	cfg += `- type: http.config.ocm.software/v1alpha1
-  plainHTTP: true
-`
 
 	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
 	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), 0o600))

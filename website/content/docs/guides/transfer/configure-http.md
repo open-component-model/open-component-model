@@ -318,7 +318,8 @@ configurations:
 {{< callout context="danger" >}}
 `plainHTTP: true` sends every OCI registry request to that host, including
 credentials, in cleartext. **Never enable it for a public registry or in
-production.** OCM logs a warning on the first request to each plain HTTP host.
+production.** OCM logs a warning each time it opens a repository, pings a
+registry, or downloads a Helm chart on a plain HTTP host.
 {{< /callout >}}
 
 `plainHTTP` covers OCM's OCI repositories, `ociArtifact` access, and Helm
@@ -330,37 +331,10 @@ address: an `http://` URL is accepted only when its host is `plainHTTP`, and an
 ### Migrate from http:// prefixes
 
 A scheme prefix (`http://` or `https://`) on a repository base URL or a
-reference is deprecated, and OCM logs a warning whenever it sees one. The
-prefix no longer selects the connection: only `plainHTTP` in the HTTP
-configuration does. An `http://` prefix on a host that is not `plainHTTP` is
-an error, because the request would silently go over HTTPS when the URL asked
-for cleartext.
-
-To migrate, drop the prefix and mark the host as plain HTTP. Before:
-
-```yaml
-type: OCIRepository/v1
-baseUrl: http://registry.local:5000/ocm
-```
-
-After:
-
-```yaml
-type: OCIRepository/v1
-baseUrl: registry.local:5000/ocm
-```
-
-```yaml
-type: generic.config.ocm.software/v1
-configurations:
-  - type: http.config.ocm.software/v1alpha1
-    hosts:
-      "registry.local:5000":
-        plainHTTP: true
-```
-
-Do the same for references: write `registry.local:5000/ocm` instead of
-`http://registry.local:5000/ocm`.
+reference is deprecated and no longer selects the connection: only `plainHTTP`
+does. An `http://` prefix on a host that is not `plainHTTP` is an error. To
+replace the prefix, see
+[Migrate from http:// Prefixes]({{< relref "docs/changelog/migrate-from-http-prefixes.md" >}}).
 
 ## Override settings per host
 

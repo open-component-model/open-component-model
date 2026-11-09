@@ -316,7 +316,9 @@ func renameChart(savedPath, target string) (string, error) {
 // chartPlainHTTP decides whether the chart at helmRepo is fetched over
 // cleartext HTTP, by the shared rule in ocmhttp.PlainHTTPFor: only plainHTTP in
 // the HTTP configuration turns cleartext on, and an http:// URL needs it. An
-// oci:// chart follows the setting for its registry host. Unlike an OCI
+// oci:// chart follows the setting for the host its requests go to, which is
+// the reference's Host(): oras sends docker.io requests to registry-1.docker.io,
+// and the OCI resolver keys the same setting that way. Unlike an OCI
 // reference, a classic repository URL carries its scheme as part of the
 // address, so https:// stays HTTPS whatever the configuration says, and no
 // prefix is deprecated.
@@ -325,15 +327,19 @@ func chartPlainHTTP(ctx context.Context, helmRepo string, cfg *httpv1alpha1.Conf
 	if err != nil {
 		return false, fmt.Errorf("invalid helm repository URL %q: %w", helmRepo, err)
 	}
-	scheme := u.Scheme
+	scheme, host := u.Scheme, u.Host
 	switch scheme {
 	case "http":
 	case "oci":
-		scheme = ""
+		ref, err := looseref.ParseReference(strings.TrimPrefix(helmRepo, "oci://"))
+		if err != nil {
+			return false, fmt.Errorf("invalid helm OCI reference %q: %w", helmRepo, err)
+		}
+		scheme, host = "", ref.Host()
 	default:
 		return false, nil
 	}
-	plain, err := ocmhttp.PlainHTTPFor(ctx, cfg, u.Host, scheme, false)
+	plain, err := ocmhttp.PlainHTTPFor(ctx, cfg, host, scheme, false)
 	if err != nil {
 		return false, fmt.Errorf("helm repository %q: %w", helmRepo, err)
 	}
@@ -465,8 +471,13 @@ func GetterProviders(client *http.Client, opts HTTPConfigGetterOpts) getter.Prov
 // IndexGetterProviders returns the getter providers that fetch the index of the HTTP/S
 // repository helmRepo with httpConfig and credentials, as chart downloads do. Their
 // requests end with ctx. Without httpConfig the default Helm client is used, which is
-// bounded by its own timeout instead.
+// bounded by its own timeout instead. An http:// repository is refused unless plainHTTP
+// is enabled for its host, as for chart downloads, so credentials do not go out in
+// cleartext by accident.
 func IndexGetterProviders(ctx context.Context, helmRepo string, credentials *helmcredsv1.HelmHTTPCredentials, httpConfig *httpv1alpha1.Config) (getter.Providers, error) {
+	if _, err := chartPlainHTTP(ctx, helmRepo, httpConfig); err != nil {
+		return nil, err
+	}
 	if httpConfig == nil {
 		return GetterProviders(nil, HTTPConfigGetterOpts{}), nil
 	}
