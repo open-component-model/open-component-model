@@ -19,9 +19,12 @@ export function loadResults(dir) {
 
 /**
  * @param {number[]} values
- * @returns {number}
+ * @returns {number} NaN for no values.
  */
 export function median(values) {
+  if (values.length === 0) {
+    return NaN;
+  }
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
@@ -56,12 +59,37 @@ function activeControllers(results) {
   return [...names].sort();
 }
 
+const blobCacheFetches = "ocm_system_ocm_k8s_toolkit_oci_blob_cache_fetches_total";
+
+/**
+ * The blob cache series of the drift blocks, as [kind, result] pairs.
+ *
+ * @param {any[]} drifts
+ * @returns {[string, string][]}
+ */
+function blobCacheSeries(drifts) {
+  const series = new Map();
+  for (const drift of drifts) {
+    for (const key of Object.keys(drift.controllerCounters ?? {})) {
+      const match = key.match(new RegExp(`^${blobCacheFetches}\\{kind="(.+)",result="(.+)"\\}$`));
+      if (match) {
+        series.set(key, [match[1], match[2]]);
+      }
+    }
+  }
+  return [...series.keys()].sort().map((key) => series.get(key));
+}
+
+/**
+ * @typedef {{ label: string, value: (result: any) => number | undefined, runnerDependent?: boolean, rate?: boolean }} Row
+ */
+
 /**
  * The compared rows. runnerDependent marks rows that vary with the runner's hardware.
  * Hand-picked sections of the result only. CPU is ignored as it can vary with the parallel runner.
  *
  * @param {string[]} controllers
- * @returns {{ label: string, value: (result: any) => number, runnerDependent?: boolean, rate?: boolean }[]}
+ * @returns {Row[]}
  */
 function rows(controllers) {
   return [
@@ -95,8 +123,39 @@ function rows(controllers) {
   ];
 }
 
+/**
+ * The rows of the drift phase of complex. Results without a drift block, such as those
+ * of a base branch that predates the phase, have no value for them.
+ *
+ * @param {any[]} results
+ * @returns {Row[]}
+ */
+function driftRows(results) {
+  const drifts = results.map((r) => r.drift).filter(Boolean);
+  if (drifts.length === 0) {
+    return [];
+  }
+  /** @param {(drift: any) => number} value */
+  const ofDrift = (value) => (/** @type {any} */ r) => (r.drift ? value(r.drift) : undefined);
+  return [
+    { label: "Drift: total (s)", value: ofDrift((d) => d.durations.total), runnerDependent: true },
+    { label: "Drift: registry requests", value: ofDrift((d) => d.usage.registryRequests) },
+    ...blobCacheSeries(drifts).map(([kind, result]) => ({
+      label: `Drift: blob cache ${kind} ${result}`,
+      value: ofDrift((d) => d.controllerCounters[`${blobCacheFetches}{kind="${kind}",result="${result}"}`] ?? 0),
+    })),
+    ...activeControllers(drifts).map((c) => ({
+      label: `Drift: ${c}: reconciles`,
+      value: ofDrift((d) => counter(d, "controller_runtime_reconcile_time_seconds_count", c)),
+    })),
+  ];
+}
+
 /** @param {number} value */
 function format(value) {
+  if (Number.isNaN(value)) {
+    return "n/a";
+  }
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
@@ -108,6 +167,9 @@ function format(value) {
  * @param {boolean} [rate]
  */
 function delta(base, pr, rate) {
+  if (Number.isNaN(base) || Number.isNaN(pr)) {
+    return "n/a";
+  }
   if (!rate && base === 0) {
     return pr === 0 ? "0%" : "n/a";
   }
@@ -120,6 +182,15 @@ function delta(base, pr, rate) {
 }
 
 /**
+ * @param {any[]} results
+ * @param {Row} row
+ * @returns {number[]}
+ */
+function valuesOf(results, row) {
+  return /** @type {number[]} */ (results.map(row.value).filter((v) => v !== undefined));
+}
+
+/**
  * Render the medians of both result sets as a markdown table.
  *
  * @param {any[]} base - Results of the base branch.
@@ -129,9 +200,10 @@ function delta(base, pr, rate) {
  */
 export function renderTable(base, pr, baseLabel) {
   const lines = [`| Metric | ${baseLabel} | PR | Δ |`, "|---|---:|---:|---:|"];
-  for (const row of rows(activeControllers([...base, ...pr]))) {
-    const a = median(base.map(row.value));
-    const b = median(pr.map(row.value));
+  const all = [...base, ...pr];
+  for (const row of [...rows(activeControllers(all)), ...driftRows(all)]) {
+    const a = median(valuesOf(base, row));
+    const b = median(valuesOf(pr, row));
     lines.push(`| ${row.label}${row.runnerDependent ? " \\*" : ""} | ${format(a)} | ${format(b)} | ${delta(a, b, row.rate)} |`);
   }
   lines.push("", "\\* Depends on the runner: both sides run on different machines.");
