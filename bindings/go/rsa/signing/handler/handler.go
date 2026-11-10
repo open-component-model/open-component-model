@@ -13,7 +13,6 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -420,14 +419,16 @@ func verifyIssuerForLeafCert(signed descruntime.Signature, leaf *x509.Certificat
 		return fmt.Errorf("parsing issuer %q failed: %w", iss, err)
 	}
 
-	for _, candidate := range []pkix.Name{leaf.Subject, leaf.Issuer} {
-		if rfc2253.Equal(want, candidate) == nil {
-			return nil
-		}
+	subjectErr := rfc2253.Equal(want, leaf.Subject)
+	if subjectErr == nil {
+		return nil
+	}
+	if rfc2253.Equal(want, leaf.Issuer) == nil {
+		return nil
 	}
 
-	return fmt.Errorf("issuer mismatch: %q matches neither the subject %q nor the issuer %q of the signing certificate",
-		want.String(), leaf.Subject.String(), leaf.Issuer.String())
+	return fmt.Errorf("issuer mismatch: %q matches neither the subject %q nor the issuer %q of the signing certificate: %w",
+		want.String(), leaf.Subject.String(), leaf.Issuer.String(), subjectErr)
 }
 
 // baseIdentity builds a typed RSA credential consumer identity.

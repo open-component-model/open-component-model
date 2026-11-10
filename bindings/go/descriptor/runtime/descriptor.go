@@ -381,7 +381,10 @@ type SignatureInfo struct {
 	// It provides consumers with the necessary context to decode and interpret the signature.
 	MediaType string `json:"-"`
 
-	// Issuer optionally identifies the signer of the signature.
+	// Issuer optionally identifies the signer of the signature. For X.509
+	// signatures it holds the subject of the signing certificate, which is what
+	// the specification and OCM v1 record there; verification also accepts the
+	// distinguished name of the authority that issued that certificate.
 	// Values can be:
 	//   - an RFC2253 Distinguished Name (DN) string,
 	//   - or a free-form string identifier for the signing authority.
