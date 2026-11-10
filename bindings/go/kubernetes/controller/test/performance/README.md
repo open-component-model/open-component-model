@@ -89,7 +89,7 @@ NamespacedDeployer controllers run with controller-runtime's default of one work
 `N` is the `--objects` value. Every run creates, in one namespace, up to `--repositories` Repositories (default 10) and N
 signed pipelines of a Component, a Resource and a NamespacedDeployer: a product delivery in one pipeline each.
 
-Every object has a root component with `--versions` versions (default 5), selected by the constraint `>=1.0.0`, whose
+Every object has a root component with `--versions` versions (default 5), selected by a version constraint, whose
 descriptor lists `--resources` OCI images (default 100) from a small pool pushed to the registry. The root reaches the
 deployed manifest through a `--depth` long reference path (default 5). The objects share the Repositories, each a
 different `subPath` of the one registry, so the controller holds that many repository cache entries.
@@ -98,12 +98,24 @@ different `subPath` of the one registry, so the controller holds that many repos
 
 A run measures these phases in order, each in a window of its own:
 
-| Phase     | Prepare (not measured)                          | Change                                                | Done when, per pipeline              | Models                                                                                           |
-|-----------|-------------------------------------------------|-------------------------------------------------------|--------------------------------------|--------------------------------------------------------------------------------------------------|
-| `rollout` | push the image pool, publish the component versions | create all objects                                | the NamespacedDeployer is `Ready`    | the first install, with cold caches                                                              |
-| `drift`   |                                                 | set `data.version: drifted` on every deployed ConfigMap | the ConfigMap is at `1.0.0` again  | any update of a deployed object, status churn included, enqueues its Deployer: warm caches, the same digest |
+| Phase     | Prepare (not measured)                     | Change                                                  | Done when, per pipeline           | Models                                                                                                      |
+|-----------|--------------------------------------------|---------------------------------------------------------|-----------------------------------|-------------------------------------------------------------------------------------------------------------|
+| `rollout` | push the image pool, publish release `1.0` | create all objects                                      | the NamespacedDeployer is `Ready` | the first install, with cold caches                                                                         |
+| `drift`   |                                            | set `data.version: drifted` on every deployed ConfigMap | the ConfigMap is at `1.0.0` again | any update of a deployed object, status churn included, enqueues its Deployer: warm caches, the same digest |
+| `update`  | publish release `1.1`                      | set `spec.semver` of every Component to `>=1.1.0`       | the ConfigMap is at `1.1.0`       | a release rolling out: a new digest down the whole reference chain                                          |
 
-The drift phase is a Deployer reading its component version and resource again for an object it already deployed.
+The drift phase is a Deployer reading its component version and resource again for an object it already deployed. The
+update has to change the Components: publishing alone triggers nothing before their next poll, 30 minutes away.
+
+A release is one published generation of every pipeline's component versions. Each phase publishes its own release in
+its own prepare: a release published earlier would add versions the rollout's constraint selects and lists.
+
+| Release | Root versions                    | Chain, leaf and deployed `data.version` | Constraint |
+|---------|----------------------------------|-----------------------------------------|------------|
+| `1.0`   | `1.0.0` … `1.0.<--versions - 1>` | `1.0.0`                                 | `>=1.0.0`  |
+| `1.1`   | `1.1.0` … `1.1.<--versions - 1>` | `1.1.0`                                 | `>=1.1.0`  |
+
+Both carry the same image resources per root. References pin versions, so every component version of the update is new.
 
 The tracker of a phase ignores the objects that existed before its change. A drifted ConfigMap is done at the version it
 had before the change, so only seeing it there again after the change counts.
@@ -132,8 +144,8 @@ that is not safely digestible, the same check `ocm sign cv` makes. Component ver
 by level, leaves first, because a reference digest needs the referenced component version.
 
 The NamespacedDeployers apply one ConfigMap each as the `perf-deployer` service account, which a Role in their
-namespace allows to write ConfigMaps. The ConfigMap's data holds the component version, so the drift phase reads the
-deployed state from the cluster itself, not from a status field.
+namespace allows to write ConfigMaps. The ConfigMap's data holds the release version, so the phases read the deployed
+state from the cluster itself, not from a status field.
 
 Objects are created in parallel, the Repositories, the signing Secret and the deployer RBAC first, the way a GitOps tool
 applies a directory. A watch records when each object first becomes ready.
@@ -161,8 +173,8 @@ Each invocation writes `test/performance/results/<timestamp>/`, which is git-ign
   phase's measurement started.
 
 All durations but `prepare` count from the moment the phase's change starts, not from each object's own change: the
-first object created, the first ConfigMap drifted. `p50` and `p90` therefore include the time the benchmark needed to
-change the objects that came before.
+first object created, the first ConfigMap drifted, the first Component updated. `p50` and `p90` therefore include the
+time the benchmark needed to change the objects that came before.
 
 Metric sources:
 

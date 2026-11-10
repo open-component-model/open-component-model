@@ -38,7 +38,7 @@ func (w workload) component(i int) *v1alpha1.Component {
 		Spec: v1alpha1.ComponentSpec{
 			RepositoryRef: corev1.LocalObjectReference{Name: w.repositoryName(i)},
 			Component:     w.componentName(i),
-			Semver:        versionConstraint,
+			Semver:        rolloutRelease.constraint(),
 			Interval:      metav1.Duration{Duration: reconcileInterval},
 		},
 	}

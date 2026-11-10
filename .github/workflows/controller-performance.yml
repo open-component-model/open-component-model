@@ -15,7 +15,7 @@ on:
   issue_comment:
     types: [created]
   schedule:
-    # Nightly: the standard suite, the same one /perf runs. Sundays run every object count instead.
+    # Nightly: the standard suite, the same one /perf runs: three 1000-object runs of 8 to 13 minutes each. Sundays run every object count instead.
     - cron: "0 2 * * *"
 
 permissions:

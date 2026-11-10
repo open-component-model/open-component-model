@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -11,6 +12,99 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 )
+
+func TestWorkloadReleases(t *testing.T) {
+	tests := []struct {
+		rel          release
+		version      string
+		rootVersions []string
+	}{
+		{rel: rolloutRelease, version: "1.0.0", rootVersions: []string{"1.0.0", "1.0.1", "1.0.2"}},
+		{rel: updateRelease, version: "1.1.0", rootVersions: []string{"1.1.0", "1.1.1", "1.1.2"}},
+	}
+	for _, depth := range []int{0, defaultDepth} {
+		for _, tt := range tests {
+			t.Run(fmt.Sprintf("%s depth %d", tt.version, depth), func(t *testing.T) {
+				r := require.New(t)
+				w := newWorkload(4, "run", "http://registry:5000")
+				w.depth, w.versions, w.resources = depth, 3, 7
+				r.Equal(">="+tt.version, tt.rel.constraint())
+
+				cvs, err := w.componentVersions(tt.rel)
+				r.NoError(err)
+				r.Len(cvs, 4*(3+depth))
+
+				byKey := map[string]componentVersion{}
+				for _, cv := range cvs {
+					byKey[cv.Name+":"+cv.Version] = cv
+				}
+				for i := range 4 {
+					var roots []string
+					for _, cv := range cvs {
+						if cv.Name == w.componentName(i) {
+							roots = append(roots, cv.Version)
+							r.Len(imageResources(cv), 7)
+						} else if strings.HasPrefix(cv.Name, w.componentName(i)+"/") {
+							r.Equal(tt.version, cv.Version, "the chain and the leaf are at the release version")
+						}
+					}
+					r.Equal(tt.rootVersions, roots)
+
+					// Follow the chain from the newest root to the manifest; every reference resolves inside the set.
+					cv := byKey[w.componentName(i)+":"+tt.rootVersions[2]]
+					for range depth {
+						r.Len(cv.References, 1)
+						next, ok := byKey[cv.References[0].Component+":"+cv.References[0].Version]
+						r.True(ok, "%s references %s:%s outside the release", cv.Name, cv.References[0].Component, cv.References[0].Version)
+						cv = next
+					}
+					var cm corev1.ConfigMap
+					r.NoError(yaml.Unmarshal(manifestOf(cv), &cm))
+					r.Equal(configMapName(i), cm.Name)
+					r.Equal(w.namespace, cm.Namespace)
+					r.Equal(tt.version, cm.Data["version"])
+				}
+			})
+		}
+	}
+}
+
+func TestWorkloadReleasesAreDisjoint(t *testing.T) {
+	r := require.New(t)
+	w := newWorkload(2, "run", "http://registry:5000")
+	rollout, err := w.componentVersions(rolloutRelease)
+	r.NoError(err)
+	update, err := w.componentVersions(updateRelease)
+	r.NoError(err)
+
+	published := map[string]bool{}
+	for _, cv := range rollout {
+		published[cv.Name+":"+cv.Version] = true
+	}
+	for _, cv := range update {
+		r.False(published[cv.Name+":"+cv.Version], "%s:%s is in both releases", cv.Name, cv.Version)
+		r.True(strings.HasPrefix(cv.Version, "1.1."), "the rollout constraint >=1.0.0 must not select a version before the update")
+	}
+}
+
+func imageResources(cv componentVersion) []resource {
+	var out []resource
+	for _, res := range cv.Resources {
+		if res.ImageReference != "" {
+			out = append(out, res)
+		}
+	}
+	return out
+}
+
+func manifestOf(cv componentVersion) []byte {
+	for _, res := range cv.Resources {
+		if res.Name == resourceName {
+			return res.Blob
+		}
+	}
+	return nil
+}
 
 func TestWorkloadObjectsToCreate(t *testing.T) {
 	r := require.New(t)
@@ -26,6 +120,9 @@ func TestWorkloadObjectsToCreate(t *testing.T) {
 		if d, ok := o.(*v1alpha1.NamespacedDeployer); ok {
 			r.Equal(deployerAccount, d.Spec.ServiceAccountName)
 		}
+		if c, ok := o.(*v1alpha1.Component); ok {
+			r.Equal(rolloutRelease.constraint(), c.Spec.Semver, "the update phase changes the release, not the setup")
+		}
 	}
 }
 
@@ -34,7 +131,7 @@ func TestWorkloadComplex(t *testing.T) {
 	w := newWorkload(defaultRepositories+2, "run", "http://registry:5000")
 	w.depth, w.resources, w.versions = 2, 7, 3
 
-	cvs, err := w.componentVersions()
+	cvs, err := w.componentVersions(rolloutRelease)
 	r.NoError(err)
 	byName := map[string]componentVersion{}
 	for _, cv := range cvs {
@@ -55,7 +152,7 @@ func TestWorkloadComplex(t *testing.T) {
 	// The last object wraps around onto the second Repository.
 	i := defaultRepositories + 1
 	r.Equal(w.repositoryName(1), w.component(i).Spec.RepositoryRef.Name)
-	r.Equal(versionConstraint, w.component(i).Spec.Semver)
+	r.Equal(">=1.0.0", w.component(i).Spec.Semver, "the rollout selects its release by constraint")
 	r.Equal(signingSecretName, w.component(i).Spec.OCMConfig[0].Name)
 	r.Equal(v1alpha1.ConfigurationPolicyPropagate, w.component(i).Spec.OCMConfig[0].Policy,
 		"the Resource and Deployer inherit the verification config")
@@ -89,7 +186,7 @@ func TestWorkloadComplexWithoutChain(t *testing.T) {
 	w := newWorkload(2, "run", "http://registry:5000")
 	w.depth, w.resources, w.versions = 0, 3, 4
 
-	cvs, err := w.componentVersions()
+	cvs, err := w.componentVersions(rolloutRelease)
 	r.NoError(err)
 	r.Len(cvs, 2*4, "only the root versions, no chain")
 	versions := map[string]bool{}
@@ -130,7 +227,7 @@ func TestWorkloadConfigMaps(t *testing.T) {
 			w := newWorkload(3, "run", "http://registry:5000")
 			w.depth = depth
 
-			cvs, err := w.componentVersions()
+			cvs, err := w.componentVersions(rolloutRelease)
 			r.NoError(err)
 			deployed := map[client.ObjectKey]bool{}
 			for _, cv := range cvs {

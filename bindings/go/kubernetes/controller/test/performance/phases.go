@@ -36,7 +36,7 @@ type phase struct {
 // phases are the measured phases of a run, in order. Each one starts from the state the
 // one before left: every pipeline done and the controller queues drained.
 func (r *run) phases() []phase {
-	return []phase{r.rollout(), r.drift()}
+	return []phase{r.rollout(), r.drift(), r.update()}
 }
 
 // rollout publishes the component versions and creates every pipeline; done when every
@@ -48,12 +48,7 @@ func (r *run) rollout() phase {
 			if err := r.pub.publishImages(ctx, r.w.imagePool()); err != nil {
 				return err
 			}
-			cvs, err := r.w.componentVersions()
-			if err != nil {
-				return err
-			}
-			r.log.Info("publishing component versions", "count", len(cvs))
-			return r.pub.publish(ctx, cvs)
+			return r.publish(ctx, rolloutRelease)
 		},
 		change: r.create,
 		watch:  deployerGVK,
@@ -70,8 +65,33 @@ func (r *run) drift() phase {
 		name:   "drift",
 		change: r.driftConfigMaps,
 		watch:  configMapGVK,
-		until:  configMapVersionState(initialVersion),
+		until:  configMapVersionState(rolloutRelease.version()),
 	}
+}
+
+// update publishes the next release and points every Component at it; done when every
+// Deployer deployed its new manifest. Models a release rolling out: a new digest down
+// the whole reference chain. Publishing alone triggers nothing before the Components'
+// next poll, reconcileInterval away.
+func (r *run) update() phase {
+	return phase{
+		name:    "update",
+		prepare: func(ctx context.Context) error { return r.publish(ctx, updateRelease) },
+		change:  func(ctx context.Context) error { return r.patchComponents(ctx, updateRelease.constraint()) },
+		watch:   configMapGVK,
+		until:   configMapVersionState(updateRelease.version()),
+	}
+}
+
+// publish pushes a release. Each phase publishes its own in its own prepare: a release
+// published earlier would change what the phases before it select and list.
+func (r *run) publish(ctx context.Context, rel release) error {
+	cvs, err := r.w.componentVersions(rel)
+	if err != nil {
+		return err
+	}
+	r.log.Info("publishing component versions", "release", rel.version(), "count", len(cvs))
+	return r.pub.publish(ctx, cvs)
 }
 
 // create applies the Repositories, the signing Secret and the deployer RBAC first, then
@@ -105,6 +125,21 @@ func (r *run) driftConfigMaps(ctx context.Context) error {
 		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: key.Name, Namespace: key.Namespace}}
 		if err := r.c.client.Patch(ctx, cm, patch); err != nil {
 			return fmt.Errorf("drifting %s: %w", key, err)
+		}
+		return nil
+	})
+}
+
+// patchComponents sets the version constraint of every Component.
+func (r *run) patchComponents(ctx context.Context, semver string) error {
+	patch := client.RawPatch(types.MergePatchType, fmt.Appendf(nil, `{"spec":{"semver":%q}}`, semver))
+	components := make([]*v1alpha1.Component, r.w.objects)
+	for i := range components {
+		components[i] = r.w.component(i)
+	}
+	return forEach(ctx, components, func(ctx context.Context, c *v1alpha1.Component) error {
+		if err := r.c.client.Patch(ctx, c, patch); err != nil {
+			return fmt.Errorf("updating %s: %w", c.Name, err)
 		}
 		return nil
 	})
