@@ -157,11 +157,10 @@ jobs:
           - bindings/go
           - conformance/scenarios/sovereign/components/notes
         # Windows-only code (plugin process handling, path helpers) sits behind
-        # build tags a linux-only lint run never type-checks. Linting it here is
-        # free, unlike the native windows test leg.
-        goos:
-          - linux
-          - windows
+        # build tags a linux-only lint run never type-checks. It pairs with the
+        # native windows unit tests and runs on pushes to main for the same reason:
+        # windows breakage is caught at merge time, not on every PR push.
+        goos: ${{ fromJSON(github.event_name == 'push' && '["linux","windows"]' || '["linux"]') }}
         exclude:
           - module: conformance/scenarios/sovereign/components/notes
             goos: windows
