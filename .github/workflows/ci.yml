@@ -18,6 +18,10 @@ jobs:
     outputs:
       run_go: ${{ steps.compute.outputs.run_go }}
       run_lint: ${{ steps.compute.outputs.run_lint }}
+      # Native windows legs (unit tests and the GOOS=windows lint run) are limited to
+      # pushes to main: windows runners are billed at a premium, so windows-only
+      # breakage is caught at merge time rather than on every PR push.
+      run_windows: ${{ steps.compute.outputs.run_windows }}
       dependency_list_changed: ${{ steps.filter.outputs.dependency_list }}
       lint_changed: ${{ steps.filter.outputs.lint }}
     steps:
@@ -66,10 +70,12 @@ jobs:
 
             core.setOutput('run_go', runGo);
             core.setOutput('run_lint', runLint);
+            core.setOutput('run_windows', isPush);
             await core.summary
               .addRaw('### CI Scope\n\n')
               .addRaw(`**build/test bindings/go:** ${runGo}\n\n`)
-              .addRaw(`**lint all Go modules:** ${runLint}\n`)
+              .addRaw(`**lint all Go modules:** ${runLint}\n\n`)
+              .addRaw(`**native windows legs:** ${isPush}\n`)
               .write();
 
   golangci_lint_verify:
@@ -157,10 +163,9 @@ jobs:
           - bindings/go
           - conformance/scenarios/sovereign/components/notes
         # Windows-only code (plugin process handling, path helpers) sits behind
-        # build tags a linux-only lint run never type-checks. It pairs with the
-        # native windows unit tests and runs on pushes to main for the same reason:
-        # windows breakage is caught at merge time, not on every PR push.
-        goos: ${{ fromJSON(github.event_name == 'push' && '["linux","windows"]' || '["linux"]') }}
+        # build tags a linux-only lint run never type-checks, so it is linted with
+        # GOOS=windows alongside the native windows unit tests.
+        goos: ${{ fromJSON(needs.changes.outputs.run_windows == 'true' && '["linux","windows"]' || '["linux"]') }}
         exclude:
           - module: conformance/scenarios/sovereign/components/notes
             goos: windows
@@ -190,7 +195,8 @@ jobs:
         run: |
           if [ "$GOOS" = windows ]; then
             # The controller ships as a linux image only and controller-runtime's
-            # envtest does not build for windows, mirroring bindings/go/Taskfile.yml.
+            # envtest does not build for windows; keep this filter in sync with the
+            # one in bindings/go/Taskfile.yml.
             # golangci-lint takes directories, not import paths.
             echo "pkgs=$(go list -f '{{.Dir}}' ./... | grep -v /kubernetes/controller | sed "s#^$PWD/#./#" | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
           else
@@ -292,8 +298,7 @@ jobs:
       matrix:
         # The CLI ships windows binaries that cli.yml only cross-compiles, so
         # OS-specific paths (file paths, plugin processes, sockets) need a native run.
-        # Windows runners are billed at a premium, so that run is limited to pushes to main.
-        include: ${{ fromJSON(github.event_name == 'push' && '[{"runner":"ubuntu-26.04-arm","goos":"linux","goarch":"arm64"},{"runner":"windows-latest","goos":"windows","goarch":"amd64","exe":".exe"}]' || '[{"runner":"ubuntu-26.04-arm","goos":"linux","goarch":"arm64"}]') }}
+        include: ${{ fromJSON(needs.changes.outputs.run_windows == 'true' && '[{"runner":"ubuntu-26.04-arm","goos":"linux","goarch":"arm64"},{"runner":"windows-latest","goos":"windows","goarch":"amd64","exe":".exe"}]' || '[{"runner":"ubuntu-26.04-arm","goos":"linux","goarch":"arm64"}]') }}
     defaults:
       run:
         # Task resolves grep/mkdir/mv from PATH; on Windows Git Bash provides them.
