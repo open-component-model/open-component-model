@@ -82,7 +82,12 @@ func (r *Resolver) GetComponentVersion(ctx context.Context, opts *Options, verif
 		return nil, err
 	}
 
-	repo, err := resolved.resolver.GetComponentVersionRepositoryForComponent(ctx, component, version)
+	// Resolving the spec first gives the metric the repository that is actually used, at no extra cost for path matchers.
+	spec, err := resolved.resolver.GetRepositorySpecificationForComponent(ctx, component, version)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get repository specification for component %s:%s: %w", component, version, err)
+	}
+	repo, err := resolved.resolver.GetComponentVersionRepositoryForSpecification(ctx, spec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get repository for component %s:%s: %w", component, version, err)
 	}
@@ -100,7 +105,7 @@ func (r *Resolver) GetComponentVersion(ctx context.Context, opts *Options, verif
 	duration := time.Since(start)
 	state := verificationState(verify.Verifications, verify.Digest)
 	ResolutionDurationHistogram.
-		WithLabelValues(state, resultLabel(err)).
+		WithLabelValues(state, repositoryLabel(spec), resultLabel(err)).
 		Observe(duration.Seconds())
 	// Per-version timing lives here because component and version are unbounded as metric labels.
 	log.FromContext(ctx).V(1).Info("resolved component version", "component", component, "version", version,
