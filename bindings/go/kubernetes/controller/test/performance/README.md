@@ -55,11 +55,12 @@ The benchmark is a standalone Go program, run with `go run`. It builds and measu
 | `signing.go`             | Per-run RSA key, signatures, and the controller's verification config     |
 | `cluster.go`             | Kubernetes client, controller restart, metric scrapes, cleanup            |
 | `phases.go`              | The phases: what each one prepares, changes and watches until it is done  |
-| `tracker.go`             | A watch that records when the object of each pipeline is first done       |
+| `tracker.go`             | Watcher: records when the object of each pipeline is first done           |
+| `meter.go`               | Meter: scrapes at either end of a window, sampling, counter deltas, peaks |
 | `sampler.go`             | Polls gauges, CPU and memory every `--sample-interval`                    |
 | `metrics.go`             | Prometheus parsing, counter deltas, gauge values                          |
 | `run.go`                 | One run from start to finish: setup, the phases in order, cleanup         |
-| `measure.go`             | One phase: prepare, then the window from its change to drained queues     |
+| `measure.go`             | One phase: prepare, then watch and meter the window from its change on    |
 | `result.go`              | `result.json` and `summary.md`                                            |
 | `hacks/`                 | Cluster and registry setup, Helm values                                   |
 

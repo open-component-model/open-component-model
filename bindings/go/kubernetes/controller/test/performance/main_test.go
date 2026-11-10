@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,17 +61,6 @@ func TestParseFlags(t *testing.T) {
 			tt.want(r, o)
 		})
 	}
-}
-
-func TestSummarizeRegistryUnavailable(t *testing.T) {
-	r := require.New(t)
-	var c cost
-	after := scrapes{registryErr: errors.New("connection refused")}
-
-	err := summarize(&c, scrapes{}, after, nil, time.Second)
-
-	r.ErrorContains(err, "registry metrics unavailable: connection refused")
-	r.Nil(c.RegistryRequests)
 }
 
 func TestWriteSummary(t *testing.T) {

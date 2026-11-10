@@ -19,24 +19,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 )
 
-const cpuCounter = "process_cpu_seconds_total"
-
-var (
-	controllerCounterPrefixes = []string{
-		"controller_runtime_",
-		"workqueue_",
-		"ocm_system_",
-		"rest_client_requests_total",
-		cpuCounter,
-	}
-	registryCounterPrefixes = []string{"registry_http_"}
-	// pipelineGVKs are the controller kinds of a pipeline, listed when a phase times out.
-	pipelineGVKs = []schema.GroupVersionKind{
-		v1alpha1.GroupVersion.WithKind("Component"),
-		v1alpha1.GroupVersion.WithKind("Resource"),
-		deployerGVK,
-	}
-)
+// pipelineGVKs are the controller kinds of a pipeline, listed when a phase times out.
+var pipelineGVKs = []schema.GroupVersionKind{
+	v1alpha1.GroupVersion.WithKind("Component"),
+	v1alpha1.GroupVersion.WithKind("Resource"),
+	deployerGVK,
+}
 
 // runner runs the benchmark invocation: every object count, every repeat.
 type runner struct {
@@ -80,7 +68,7 @@ func (r *runner) runOnce(ctx context.Context, objects, repeat int) (*result, err
 		}
 		res.Phases = append(res.Phases, m.phaseResult)
 		// Written after every phase, so a later failure keeps what was measured.
-		if err := errors.Join(m.writeRaw(filepath.Join(ru.dir, p.name)), writeJSON(filepath.Join(ru.dir, "result.json"), res)); err != nil {
+		if err := errors.Join(m.raw.write(filepath.Join(ru.dir, p.name)), writeJSON(filepath.Join(ru.dir, "result.json"), res)); err != nil {
 			return nil, err
 		}
 		if !m.Outcome.complete() {
