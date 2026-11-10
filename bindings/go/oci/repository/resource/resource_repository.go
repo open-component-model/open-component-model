@@ -65,6 +65,9 @@ type ResourceRepository struct {
 	filesystemConfig *filesystemv1alpha1.Config
 	userAgent        string
 	httpClient       *http.Client
+	// httpConfig is what httpClient was built from; the URL resolver reads
+	// its per-host plainHTTP entries.
+	httpConfig *httpv1alpha1.Config
 }
 
 // make sure that ResourceRepository implements the oci ResourceRepository interface
@@ -90,6 +93,7 @@ func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...
 			ocmhttp.WithConfig(options.HTTPConfig),
 			ocmhttp.WithUserAgent(options.UserAgent),
 		),
+		httpConfig: options.HTTPConfig,
 	}
 }
 
@@ -194,7 +198,7 @@ func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descr
 }
 
 func (p *ResourceRepository) getRepository(spec *ociv1.Repository, credentials *ocicredsv1.OCICredentials) (*oci.Repository, error) {
-	repo, err := createRepository(spec, credentials, p.filesystemConfig, p.userAgent, p.httpClient)
+	repo, err := createRepository(spec, credentials, p.filesystemConfig, p.userAgent, p.httpClient, p.httpConfig)
 	if err != nil {
 		return nil, fmt.Errorf("error creating repository: %w", err)
 	}
@@ -250,6 +254,7 @@ func createRepository(
 	filesystemConfig *filesystemv1alpha1.Config,
 	userAgent string,
 	httpClient *http.Client,
+	httpConfig *httpv1alpha1.Config,
 ) (*oci.Repository, error) {
 	url, err := runtime.ParseURLAndAllowNoScheme(spec.BaseUrl)
 	if err != nil {
@@ -257,15 +262,21 @@ func createRepository(
 	}
 	urlString := url.Host + url.Path
 
-	urlResolver, err := urlresolver.New(
+	resolverOpts := []urlresolver.Option{
 		urlresolver.WithBaseURL(urlString),
+		urlresolver.WithBaseURLScheme(url.Scheme),
 		urlresolver.WithBaseClient(&auth.Client{
 			Client: httpClient,
 			Header: map[string][]string{
 				"User-Agent": {userAgent},
 			},
 			Credential: auth.StaticCredential(url.Host, ocicredentials.MapCredentials(credentials)),
-		}))
+		}),
+	}
+	if httpConfig != nil {
+		resolverOpts = append(resolverOpts, urlresolver.WithHTTPConfig(httpConfig))
+	}
+	urlResolver, err := urlresolver.New(resolverOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create URL resolver: %w", err)
 	}

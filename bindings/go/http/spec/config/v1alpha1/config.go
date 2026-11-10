@@ -227,6 +227,21 @@ type ProtocolConfig struct {
 	// affects all in-flight transfers at once. With HTTP/1.1 each concurrent
 	// request uses its own connection, at the cost of more TLS handshakes.
 	DisableHTTP2 *bool `json:"disableHTTP2,omitempty"`
+
+	// PlainHTTP makes OCI registry clients use cleartext HTTP, also for https://
+	// references. Credentials go unencrypted: set it per host, never for a
+	// public registry. Helm charts follow it too: an oci:// chart uses the
+	// setting for its registry host, and a classic http:// repository URL is
+	// accepted only when its host is plainHTTP.
+	//
+	// Nil means HTTPS at the top level and "inherit" in a HostConfig; an
+	// explicit false on a host wins over a global true.
+	//
+	// This field alone decides the connection. A scheme prefix on a reference
+	// or base URL is deprecated and only checked against it: http:// on a host
+	// that is not plainHTTP is an error, https:// on a plainHTTP host warns
+	// about the downgrade. Set this field to true and drop the prefix.
+	PlainHTTP *bool `json:"plainHTTP,omitempty"`
 }
 
 // MergeProtocolConfig merges src into dst. Non-nil fields in src override dst.
@@ -235,8 +250,14 @@ func MergeProtocolConfig(dst, src *ProtocolConfig) ProtocolConfig {
 	if dst != nil {
 		out = *dst
 	}
-	if src != nil && src.DisableHTTP2 != nil {
+	if src == nil {
+		return out
+	}
+	if src.DisableHTTP2 != nil {
 		out.DisableHTTP2 = src.DisableHTTP2
+	}
+	if src.PlainHTTP != nil {
+		out.PlainHTTP = src.PlainHTTP
 	}
 	return out
 }
