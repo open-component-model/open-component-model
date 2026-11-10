@@ -18,7 +18,7 @@ import (
 	filev1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
 	descv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/helm/spec/access"
-	"ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
+	v1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/helm/transformation"
 	"ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
@@ -71,7 +71,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 			ID:   "test-convert-helm-to-oci",
 			Spec: &v1alpha1.ConvertHelmToOCISpec{
 				ChartFile: filev1alpha1.File{
-					URI: filesystem.URIFromFilePath(chartPath),
+					URI: fileURI(t, chartPath),
 				},
 				Resource: &descv2.Resource{
 					ElementMeta: descv2.ElementMeta{
@@ -141,10 +141,10 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 			ID:   "test-convert-helm-to-oci-prov",
 			Spec: &v1alpha1.ConvertHelmToOCISpec{
 				ChartFile: filev1alpha1.File{
-					URI: filesystem.URIFromFilePath(chartPath),
+					URI: fileURI(t, chartPath),
 				},
 				ProvFile: &filev1alpha1.File{
-					URI: filesystem.URIFromFilePath(provPath),
+					URI: fileURI(t, provPath),
 				},
 				Resource: &descv2.Resource{
 					ElementMeta: descv2.ElementMeta{
@@ -216,7 +216,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 			ID:   "test-convert-no-output-path",
 			Spec: &v1alpha1.ConvertHelmToOCISpec{
 				ChartFile: filev1alpha1.File{
-					URI: filesystem.URIFromFilePath(chartPath),
+					URI: fileURI(t, chartPath),
 				},
 				Resource: &descv2.Resource{
 					ElementMeta: descv2.ElementMeta{
@@ -397,4 +397,12 @@ func openFileAsBlob(path string) (*fileBlob, error) {
 
 func (f *fileBlob) ReadCloser() (io.ReadCloser, error) {
 	return os.Open(f.path)
+}
+
+// fileURI is the file:// URI of the absolute path p.
+func fileURI(t *testing.T, p string) string {
+	t.Helper()
+	uri, err := filesystem.URIFromFilePath(p)
+	require.NoError(t, err)
+	return uri
 }

@@ -81,8 +81,12 @@ func BlobToSpec(content blob.ReadOnlyBlob, path string) (*v1alpha1.File, error) 
 		digest, _ = digestAware.Digest()
 	}
 
+	uri, err := URIFromFilePath(absPath)
+	if err != nil {
+		return nil, err
+	}
 	spec := &v1alpha1.File{
-		URI:       URIFromFilePath(absPath),
+		URI:       uri,
 		MediaType: mediaType,
 		Digest:    digest,
 	}

@@ -44,6 +44,13 @@ func TestFilePathFromURI(t *testing.T) {
 			expectError: true,
 		},
 		{
+			// RFC 8089 requires the scheme; the File spec documents the URI as
+			// conforming to it, so a bare path is not a shorthand for one.
+			name:        "plain path without scheme",
+			uri:         "/tmp/some-file",
+			expectError: true,
+		},
+		{
 			name:        "invalid URI",
 			uri:         "://broken",
 			expectError: true,
@@ -92,10 +99,18 @@ func TestURIFromFilePath_Roundtrip(t *testing.T) {
 	r := require.New(t)
 	path := filepath.Join(t.TempDir(), "dir with space", "file#1.txt")
 
-	uri := filesystem.URIFromFilePath(path)
+	uri, err := filesystem.URIFromFilePath(path)
+	r.NoError(err)
 	r.Regexp(`^file:///[^/]`, uri)
 
 	result, err := filesystem.FilePathFromURI(uri)
 	r.NoError(err)
 	r.Equal(path, result)
+}
+
+func TestURIFromFilePath_RelativePathRejected(t *testing.T) {
+	r := require.New(t)
+
+	_, err := filesystem.URIFromFilePath(filepath.Join("rel", "file.txt"))
+	r.ErrorContains(err, "absolute path")
 }

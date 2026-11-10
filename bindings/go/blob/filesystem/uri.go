@@ -23,7 +23,7 @@ func FilePathFromURI(uri string) (string, error) {
 		return "", fmt.Errorf("invalid URI %q: %w", uri, err)
 	}
 	if parsed.Scheme != "file" {
-		return "", fmt.Errorf("unsupported URI scheme %q, expected \"file\"", parsed.Scheme)
+		return "", fmt.Errorf("unsupported URI scheme %q in %q, expected an absolute \"file\" URI such as file:///dir/file", parsed.Scheme, uri)
 	}
 	if parsed.Opaque != "" {
 		return "", fmt.Errorf("opaque file URI %q not supported, use file:///path form", uri)
@@ -34,21 +34,40 @@ func FilePathFromURI(uri string) (string, error) {
 	if parsed.Path == "" {
 		return "", fmt.Errorf("file URI %q has no path", uri)
 	}
-	path := parsed.Path
+	return FilePathFromURLPath(parsed.Path), nil
+}
+
+// FilePathFromURLPath turns the path component of a file URL into an OS path.
+// A Windows drive is carried as "/C:/dir" in a URL, which is not a usable path
+// on its own, so the leading slash is dropped.
+func FilePathFromURLPath(p string) string {
 	// VolumeName is only non-empty on Windows, where "/C:/dir" must become "C:/dir".
-	if len(path) > 1 && path[0] == '/' && filepath.VolumeName(path[1:]) != "" {
-		path = path[1:]
+	if len(p) > 1 && p[0] == '/' && filepath.VolumeName(p[1:]) != "" {
+		p = p[1:]
 	}
-	return filepath.FromSlash(path), nil
+	return filepath.FromSlash(p)
+}
+
+// URLPathFromFilePath turns an absolute OS path into the path component of a
+// file URL: slash separated and rooted, so a Windows path becomes "/C:/dir".
+// The result is not escaped; URIFromFilePath does that.
+func URLPathFromFilePath(path string) string {
+	path = filepath.ToSlash(path)
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return path
 }
 
 // URIFromFilePath returns the file:// URI for an absolute filesystem path, e.g.
 // "file:///dir/file" for "/dir/file" and "file:///C:/dir/file" for "C:\dir\file".
 // It is the inverse of FilePathFromURI.
-func URIFromFilePath(path string) string {
-	path = filepath.ToSlash(path)
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
+//
+// Relative paths are rejected rather than silently rooted: a file URI is absolute
+// by definition (RFC 8089), and only the caller knows what to resolve against.
+func URIFromFilePath(path string) (string, error) {
+	if !filepath.IsAbs(path) {
+		return "", fmt.Errorf("file URI requires an absolute path, got %q", path)
 	}
-	return (&url.URL{Scheme: "file", Path: path}).String()
+	return (&url.URL{Scheme: "file", Path: URLPathFromFilePath(path)}).String(), nil
 }

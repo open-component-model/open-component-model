@@ -42,8 +42,8 @@ func TestFileCleanup_Transform(t *testing.T) {
 				require.NoError(t, os.WriteFile(f2, []byte("blob2"), 0o600))
 
 				return []*accessv1alpha1.File{
-					{URI: filesystem.URIFromFilePath(f1)},
-					{URI: filesystem.URIFromFilePath(f2)},
+					{URI: fileURI(t, f1)},
+					{URI: fileURI(t, f2)},
 				}
 			},
 			expectedCleaned: 2,
@@ -69,7 +69,7 @@ func TestFileCleanup_Transform(t *testing.T) {
 				return []*accessv1alpha1.File{
 					nil,
 					{URI: ""},
-					{URI: filesystem.URIFromFilePath(f)},
+					{URI: fileURI(t, f)},
 					nil,
 				}
 			},
@@ -84,7 +84,7 @@ func TestFileCleanup_Transform(t *testing.T) {
 				require.NoError(t, os.WriteFile(existing, []byte("data"), 0o600))
 
 				return []*accessv1alpha1.File{
-					{URI: filesystem.URIFromFilePath(existing)},
+					{URI: fileURI(t, existing)},
 					{URI: "file:///tmp/cleanup-nonexistent-xyz"},
 				}
 			},
@@ -161,7 +161,7 @@ func TestFileCleanup_Transform_VerifiesFilesRemoved(t *testing.T) {
 		ID:   "testCleanup",
 		Spec: &FileCleanupSpec{
 			Files: []*accessv1alpha1.File{
-				{URI: filesystem.URIFromFilePath(f1)},
+				{URI: fileURI(t, f1)},
 			},
 		},
 	}
@@ -238,4 +238,12 @@ func TestFileCleanupExpressions_ReferenceConsumerNotProducer(t *testing.T) {
 			}
 		})
 	}
+}
+
+// fileURI is the file:// URI of the absolute path p.
+func fileURI(t *testing.T, p string) string {
+	t.Helper()
+	uri, err := filesystem.URIFromFilePath(p)
+	require.NoError(t, err)
+	return uri
 }

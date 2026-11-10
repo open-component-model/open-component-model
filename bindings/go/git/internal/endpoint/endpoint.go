@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 
 	"github.com/go-git/go-git/v6/plumbing/transport"
+
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 )
 
 // Endpoint is a parsed git repository URL with a lowercase protocol and host.
@@ -124,21 +125,15 @@ func (ep *Endpoint) IsLocal() bool { return ep.Protocol == protocolFile }
 // localPath turns the path of a file URL or a plain path into an OS path. A file
 // URL carries a Windows drive as /C:/path, which is not a valid path on its own.
 func localPath(p string) string {
-	if runtime.GOOS == "windows" && len(p) >= 3 && p[0] == '/' && p[2] == ':' {
-		p = p[1:]
-	}
-	return filepath.FromSlash(p)
+	return filesystem.FilePathFromURLPath(p)
 }
 
-// fileURL renders an absolute OS path as a file URL. go-git takes everything after
-// file:// verbatim as the path, so the path is not escaped; on Windows the drive is
-// written as /C:/path, which go-git strips back to C:/path.
+// fileURL renders an absolute OS path as a file URL. It does not go through
+// filesystem.URIFromFilePath: go-git takes everything after file:// verbatim as
+// the path, so an escaped path (a space as %20) would not resolve. On Windows the
+// drive is written as /C:/path, which go-git strips back to C:/path.
 func fileURL(path string) string {
-	path = filepath.ToSlash(path)
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-	return "file://" + path
+	return "file://" + filesystem.URLPathFromFilePath(path)
 }
 
 func Port(ep *Endpoint) string {

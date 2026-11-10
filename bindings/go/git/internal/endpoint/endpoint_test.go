@@ -4,11 +4,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/git/internal/endpoint"
 )
 
@@ -122,9 +122,5 @@ func fileURL(t *testing.T, p string) string {
 	t.Helper()
 	abs, err := filepath.Abs(filepath.FromSlash(p))
 	require.NoError(t, err)
-	abs = filepath.ToSlash(abs)
-	if !strings.HasPrefix(abs, "/") {
-		abs = "/" + abs
-	}
-	return "file://" + abs
+	return "file://" + filesystem.URLPathFromFilePath(abs)
 }

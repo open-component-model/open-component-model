@@ -25,7 +25,7 @@ func TestGetBlobFromSpec_SingleFile(t *testing.T) {
 
 	// Create File spec with file:// URI
 	spec := &v1alpha1.File{
-		URI:       filesystem.URIFromFilePath(testFile),
+		URI:       fileURI(t, testFile),
 		MediaType: "text/plain",
 	}
 
@@ -49,7 +49,7 @@ func TestGetBlobFromSpec_Directory(t *testing.T) {
 
 	// Create File spec with file:// URI pointing to directory
 	spec := &v1alpha1.File{
-		URI:       filesystem.URIFromFilePath(tmpDir),
+		URI:       fileURI(t, tmpDir),
 		MediaType: "application/x-tar",
 	}
 
@@ -73,7 +73,7 @@ func TestGetBlobFromSpec_MediaTypePreserved(t *testing.T) {
 	// Create File spec with custom media type
 	customMediaType := "application/json"
 	spec := &v1alpha1.File{
-		URI:       filesystem.URIFromFilePath(testFile),
+		URI:       fileURI(t, testFile),
 		MediaType: customMediaType,
 	}
 
@@ -103,7 +103,7 @@ func TestGetBlobFromSpec_UncleanPath(t *testing.T) {
 	// file:// URIs must use absolute paths per RFC 8089; dot segments are
 	// resolved lexically, so the missing "sub" directory does not matter.
 	spec := &v1alpha1.File{
-		URI: filesystem.URIFromFilePath(tmpDir) + "/sub/../test.txt",
+		URI: fileURI(t, tmpDir) + "/sub/../test.txt",
 	}
 
 	// Test: get blob from spec (should resolve to absolute path)
@@ -220,7 +220,7 @@ func TestBlobToSpec_SingleFile(t *testing.T) {
 	r.NotNil(spec)
 
 	// Verify: spec has correct URI
-	r.Equal(filesystem.URIFromFilePath(targetPath), spec.URI)
+	r.Equal(fileURI(t, targetPath), spec.URI)
 
 	// Verify: spec has correct media type
 	r.Equal("text/plain", spec.MediaType)
@@ -318,7 +318,7 @@ func TestBlobToSpec_DirectoryBlob(t *testing.T) {
 	r.NotNil(spec)
 
 	// Verify: spec has correct URI and media type
-	r.Equal(filesystem.URIFromFilePath(targetPath), spec.URI)
+	r.Equal(fileURI(t, targetPath), spec.URI)
 	r.Equal("application/x-tar", spec.MediaType)
 
 	// Verify: TAR file was created
@@ -350,7 +350,7 @@ func TestBlobSpec_Roundtrip(t *testing.T) {
 
 	// Step 1: Create spec from original file
 	originalSpec := &v1alpha1.File{
-		URI:       filesystem.URIFromFilePath(originalFile),
+		URI:       fileURI(t, originalFile),
 		MediaType: "text/plain",
 	}
 
@@ -393,4 +393,12 @@ func readBlobContent(t *testing.T, b blob.ReadOnlyBlob) string {
 	r.NoError(err)
 
 	return string(content)
+}
+
+// fileURI is the file:// URI of the absolute path p.
+func fileURI(t *testing.T, p string) string {
+	t.Helper()
+	uri, err := filesystem.URIFromFilePath(p)
+	require.NoError(t, err)
+	return uri
 }
