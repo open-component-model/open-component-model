@@ -13,10 +13,6 @@
         {{ with .Params.subheadline1 }}<p class="subheadline">{{ . }}</p>{{ end }}
         {{ with .Params.subheadline2 }}<p class="subheadline">{{ . }}</p>{{ end }}
       </div>
-      <div class="hero-actions">
-        <a class="hero-button hero-button--brand" href='{{ relref . "docs/getting-started/" }}'>Get Started</a>
-        <a class="hero-button hero-button--alt" href='{{ relref . "docs/overview/" }}'>Overview</a>
-      </div>
     </div>
     <div class="image">
       <div class="image-container">
@@ -31,25 +27,95 @@
     </div>
   </div>
 
-  {{- with partial "main/cli-try-command.html" . }}
-  {{- $installCmd := printf "curl -sfL https://ocm.software/install-cli.sh | %sbash\nexport PATH=\"$HOME/.local/bin:$PATH\"" (partial "main/site-version.html" (dict "page" $ "format" "env")) }}
+  {{- /* "Start Here" disclosure group: three peer expandables (native <details>, no JS).
+         The shared name makes them mutually exclusive where the browser supports it; older
+         browsers just open them independently. "Try It Out" opens by default when this docs
+         version has a v2 CLI command, otherwise "Get Started" opens instead. */ -}}
+  {{- $try := partial "main/cli-try-command.html" . -}}
+  {{- $installCmd := printf "curl -sfL https://ocm.software/install-cli.sh | %sbash\nexport PATH=\"$HOME/.local/bin:$PATH\"" (partial "main/site-version.html" (dict "page" $ "format" "env")) -}}
+  {{- $chevron := `<svg class="lp-disclosure-chevron" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>` -}}
   <div class="container">
-    <section class="lp-section" aria-labelledby="quickstart-title">
-      <h2 id="quickstart-title" class="section-title section-title--left">Try It Out</h2>
-      <ol class="quickstart-steps">
-        <li class="quickstart-step">
-          <span class="quickstart-step-title">Install the CLI (Linux, macOS)</span>
-          {{ printf "```shell\n%s\n```" $installCmd | $.RenderString (dict "display" "block") }}
-          <a class="quickstart-more" href='{{ relref $ "docs/getting-started/ocm-cli-installation.md" }}'>View more installation options</a>
-        </li>
-        <li class="quickstart-step">
-          <span class="quickstart-step-title">Inspect the public CLI component</span>
-          {{ printf "```shell\n%s\n```" . | $.RenderString (dict "display" "block") }}
-        </li>
-      </ol>
+    <section class="lp-section" aria-label="Get started with OCM">
+      <div class="lp-accordion">
+        {{- with $try }}
+        <details class="lp-disclosure" name="lp-start" open>
+          <summary class="lp-disclosure-summary">
+            <span class="lp-disclosure-heading">
+              <span class="lp-disclosure-title">Try It Out</span>
+              <span class="lp-disclosure-hint">Install and inspect the CLI in two commands. No account needed.</span>
+            </span>
+            {{ $chevron | safeHTML }}
+          </summary>
+          <div class="lp-disclosure-body">
+            <ol class="quickstart-steps">
+              <li class="quickstart-step">
+                <span class="quickstart-step-title">Install the CLI (Linux, macOS)</span>
+                {{ printf "```shell\n%s\n```" $installCmd | $.RenderString (dict "display" "block") }}
+                <a class="quickstart-more" href='{{ relref $ "docs/getting-started/ocm-cli-installation.md" }}'>View more installation options</a>
+              </li>
+              <li class="quickstart-step">
+                <span class="quickstart-step-title">Inspect the public CLI component</span>
+                {{ printf "```shell\n%s\n```" . | $.RenderString (dict "display" "block") }}
+              </li>
+            </ol>
+          </div>
+        </details>
+        {{- end }}
+        <details class="lp-disclosure" name="lp-start"{{ if not $try }} open{{ end }}>
+          <summary class="lp-disclosure-summary">
+            <span class="lp-disclosure-heading">
+              <span class="lp-disclosure-title">Get Started</span>
+              <span class="lp-disclosure-hint">Install, create, sign, and transport your first component</span>
+            </span>
+            {{ $chevron | safeHTML }}
+          </summary>
+          <div class="lp-disclosure-body">
+            {{- $gs := site.GetPage "/docs/getting-started" }}
+            <p class="lp-disclosure-text">{{ with $gs }}{{ .Description }}{{ else }}Install the CLI, create your first component version, and deploy it step by step.{{ end }}</p>
+            {{- with $gs }}
+            <ul class="lp-page-list">
+              {{- range .Pages.ByWeight }}
+              <li>
+                <a class="lp-page-link" href="{{ .RelPermalink }}">
+                  <span class="lp-page-title">{{ .LinkTitle }}</span>
+                  {{- with .Description }}<span class="lp-page-desc">{{ . }}</span>{{ end }}
+                </a>
+              </li>
+              {{- end }}
+            </ul>
+            <a class="hero-button hero-button--brand" href="{{ .RelPermalink }}">Open the getting started guide</a>
+            {{- end }}
+          </div>
+        </details>
+        <details class="lp-disclosure" name="lp-start">
+          <summary class="lp-disclosure-summary">
+            <span class="lp-disclosure-heading">
+              <span class="lp-disclosure-title">Overview</span>
+              <span class="lp-disclosure-hint">What OCM is and the problems it solves</span>
+            </span>
+            {{ $chevron | safeHTML }}
+          </summary>
+          <div class="lp-disclosure-body">
+            {{- $ov := site.GetPage "/docs/overview" }}
+            <p class="lp-disclosure-text">{{ with $ov }}{{ .Description }}{{ else }}Understand what OCM is, why it exists, and the problems it solves.{{ end }}</p>
+            {{- with $ov }}
+            <ul class="lp-page-list">
+              {{- range .Pages.ByWeight }}
+              <li>
+                <a class="lp-page-link" href="{{ .RelPermalink }}">
+                  <span class="lp-page-title">{{ .LinkTitle }}</span>
+                  {{- with .Description }}<span class="lp-page-desc">{{ . }}</span>{{ end }}
+                </a>
+              </li>
+              {{- end }}
+            </ul>
+            <a class="hero-button hero-button--alt" href="{{ .RelPermalink }}">Read the overview</a>
+            {{- end }}
+          </div>
+        </details>
+      </div>
     </section>
   </div>
-  {{- end }}
 
   <div class="container">
     <section class="lp-section" aria-labelledby="how-title">

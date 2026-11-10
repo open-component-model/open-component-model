@@ -120,13 +120,129 @@
         }
     }
 
-    /* Hero actions (buttons under subheadline) */
-    .hero-actions {
+    /* Hero actions removed: the primary paths now live in the "Start Here"
+       disclosure group below the hero (.lp-accordion). */
+
+    /* "Start Here" disclosure group: Try It Out, Get Started, Overview as peer expandables. */
+    .lp-accordion {
         display: flex;
-        flex-wrap: wrap;
+        flex-direction: column;
         gap: 12px;
-        padding-top: 34px;
-        justify-content: center;
+        width: 100%;
+    }
+
+    .lp-disclosure {
+        border: 1px solid var(--ocm-card-border);
+        border-radius: var(--ocm-card-border-radius);
+        background: var(--ocm-card-bg);
+        overflow: hidden;
+    }
+
+    .lp-disclosure-summary {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 18px 20px;
+        cursor: pointer;
+        list-style: none; /* hide the default disclosure triangle */
+        user-select: none;
+
+        &::-webkit-details-marker {
+            display: none;
+        }
+    }
+
+    .lp-disclosure-heading {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .lp-disclosure-title {
+        color: var(--lp-c-text-1);
+        font-size: 18px;
+        font-weight: 600;
+        line-height: 1.3;
+    }
+
+    .lp-disclosure-hint {
+        color: var(--lp-c-text-2);
+        font-size: 14px;
+        line-height: 1.4;
+    }
+
+    .lp-disclosure-chevron {
+        flex: 0 0 auto;
+        color: var(--lp-c-text-2);
+        transition: transform 0.2s ease;
+    }
+
+    .lp-disclosure[open] .lp-disclosure-chevron {
+        transform: rotate(180deg);
+    }
+
+    .lp-disclosure-body {
+        padding: 4px 20px 22px;
+    }
+
+    .lp-disclosure-text {
+        color: var(--lp-c-text-2);
+        font-size: 15px;
+        line-height: 1.5;
+        margin: 0 0 16px;
+        max-width: 70ch;
+    }
+
+    /* Linked sub-pages surfaced inside Get Started / Overview: title + description rows. */
+    .lp-page-list {
+        list-style: none;
+        margin: 0 0 20px;
+        padding: 0;
+        display: grid;
+        gap: 8px;
+    }
+
+    .lp-page-link {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        padding: 12px 14px;
+        border: 1px solid var(--ocm-card-border);
+        border-radius: 10px;
+        text-decoration: none;
+        transition: border-color 0.2s, background-color 0.2s;
+
+        &:hover,
+        &:focus-visible {
+            border-color: var(--lp-button-brand-bg);
+        }
+
+        &:hover .lp-page-title,
+        &:focus-visible .lp-page-title {
+            color: var(--lp-button-brand-bg);
+        }
+    }
+
+    .lp-page-title {
+        color: var(--lp-c-text-1);
+        font-size: 15px;
+        font-weight: 600;
+        line-height: 1.3;
+        transition: color 0.2s;
+    }
+
+    .lp-page-desc {
+        color: var(--lp-c-text-2);
+        font-size: 13px;
+        line-height: 1.45;
+    }
+
+    /* Inside a disclosure the steps stack full width; no side-by-side command row. */
+    .lp-disclosure-body .quickstart-steps {
+        flex-direction: column;
+        gap: 24px;
     }
 
     /* Sections below the hero: left-aligned title above full-width content */
@@ -368,10 +484,6 @@
 
         .tagline {
             margin: 0 0 32px;
-        }
-
-        .hero-actions {
-            justify-content: flex-start;
         }
 
         .image {
@@ -753,4 +865,9 @@ html[data-bs-theme="light"] .neonephos-logo--light {
     pre {
         background: var(--ocm-card-bg-dark);
     }
+}
+
+/* Dark Theme Overrides: "Start Here" disclosures match .ocm-card in dark mode */
+[data-bs-theme="dark"] .lp-home .lp-disclosure {
+    background: var(--ocm-card-bg-dark);
 }
