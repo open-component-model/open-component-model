@@ -268,6 +268,19 @@ jobs:
           install -D -m 0644 bindings/go/cli/Containerfile tmp/chart/build/cli/Containerfile
           install -D -m 0644 bindings/go/kubernetes/controller/Dockerfile tmp/chart/build/controller/Dockerfile
 
+      # The "# syntax=" frontend directive is a comment, so no Trivy check sees
+      # it, while BuildKit pulls and runs it. OCM-DS-0001 covers every other
+      # image a build pulls; this covers the frontend.
+      - name: Check build frontends are pinned by digest
+        run: |
+          for file in tmp/chart/build/*/*; do
+            if grep -qiE '^#[[:space:]]*syntax=' "$file" &&
+              ! grep -qiE '^#[[:space:]]*syntax=[^[:space:]]+@sha256:[a-f0-9]{64}[[:space:]]*$' "$file"; then
+              echo "::error file=$file::# syntax= frontend image is not pinned by digest"
+              exit 1
+            fi
+          done
+
       - name: CIS Kubernetes Benchmark (Trivy config)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         env:
