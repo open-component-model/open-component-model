@@ -44,6 +44,7 @@ var _ = Describe("controller", func() {
 
 			utils.DumpLogs("kro", "rgd")
 			utils.DumpLogs("argocd", "applications.argoproj.io")
+			utils.DumpCrossplaneDiagnostics()
 		})
 
 		for _, example := range examples {

@@ -398,6 +398,41 @@ func DumpLogs(namespace, resourceType string) {
 	logCmd("kro-logs", "kubectl", "logs", "-n", namespace, "--all-containers", "--tail=100", "-l", "app.kubernetes.io/name=kro")
 }
 
+// DumpCrossplaneDiagnostics dumps Crossplane composite/managed resource status and
+// crossplane-system logs on test failure. DumpLogs targets kro's
+// app.kubernetes.io/name=kro selector, which matches nothing in crossplane-system
+// (Crossplane pods carry app=crossplane), so the Crossplane flow needs its own dump
+// to surface the XR Ready condition, composed resources, and controller logs.
+// Creates its own context with a 30s timeout to survive parent context cancellation.
+func DumpCrossplaneDiagnostics() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	logLine := func(msg string) {
+		GinkgoLogr.Info(msg)
+	}
+
+	logCmd := func(label string, args ...string) {
+		cmd := exec.CommandContext(ctx, args[0], args[1:]...) //nolint:gosec // args are hardcoded in test code
+		output, err := Run(cmd)
+		if err != nil {
+			logLine(fmt.Sprintf("[DIAG] %s: error: %v", label, err))
+		} else {
+			for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+				logLine(fmt.Sprintf("[DIAG] %s: %s", label, line))
+			}
+		}
+	}
+
+	logCmd("xr-conditions",
+		"kubectl", "get", "composite", "-o",
+		"custom-columns=NAME:.metadata.name,READY:.status.conditions[?(@.type==\"Ready\")].status,READY_MSG:.status.conditions[?(@.type==\"Ready\")].message",
+	)
+	logCmd("crossplane-managed", "kubectl", "get", "managed", "-o", "wide")
+	logCmd("crossplane-events", "kubectl", "get", "events", "-n", "crossplane-system", "--sort-by=.lastTimestamp")
+	logCmd("crossplane-logs", "kubectl", "logs", "-n", "crossplane-system", "--all-containers", "--tail=100", "-l", "app=crossplane")
+}
+
 // CompareResourceField compares the value of a specific field in a Kubernetes resource
 // with an expected value.
 //
