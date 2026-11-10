@@ -428,7 +428,26 @@ func DumpCrossplaneDiagnostics() {
 		"kubectl", "get", "composite", "-o",
 		"custom-columns=NAME:.metadata.name,READY:.status.conditions[?(@.type==\"Ready\")].status,READY_MSG:.status.conditions[?(@.type==\"Ready\")].message",
 	)
-	logCmd("crossplane-managed", "kubectl", "get", "managed", "-o", "wide")
+	// Composed resources the Compositions create. Crossplane v2 has no `managed`
+	// category for these, so dump each kind's Ready condition across all namespaces
+	// to show which composed resource (e.g. the Flux Kustomization) blocks the XR.
+	readyCols := "custom-columns=NS:.metadata.namespace,NAME:.metadata.name," +
+		"READY:.status.conditions[?(@.type==\"Ready\")].status," +
+		"MSG:.status.conditions[?(@.type==\"Ready\")].message"
+	for _, kind := range []string{
+		"resources.delivery.ocm.software",
+		"gitrepositories.source.toolkit.fluxcd.io",
+		"ocirepositories.source.toolkit.fluxcd.io",
+		"kustomizations.kustomize.toolkit.fluxcd.io",
+		"helmreleases.helm.toolkit.fluxcd.io",
+	} {
+		logCmd("composed/"+kind, "kubectl", "get", kind, "-A", "-o", readyCols)
+	}
+	logCmd("composed/applications.argoproj.io",
+		"kubectl", "get", "applications.argoproj.io", "-A", "-o",
+		"custom-columns=NS:.metadata.namespace,NAME:.metadata.name,"+
+			"SYNC:.status.sync.status,HEALTH:.status.health.status",
+	)
 	logCmd("crossplane-events", "kubectl", "get", "events", "-n", "crossplane-system", "--sort-by=.lastTimestamp")
 	logCmd("crossplane-logs", "kubectl", "logs", "-n", "crossplane-system", "--all-containers", "--tail=100", "-l", "app=crossplane")
 }
