@@ -106,12 +106,10 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		verify = downloader.VerifyIfPossible
 	}
 
-	var plainHTTP bool
-	if strings.HasPrefix(helmRepo, "http://") {
-		slog.WarnContext(ctx, "using plain HTTP for chart download")
-		plainHTTP = true
+	plainHTTP, err := chartPlainHTTP(ctx, helmRepo, opt.HTTPConfig)
+	if err != nil {
+		return nil, err
 	}
-
 	helmGetterOpts = append(helmGetterOpts, getter.WithPlainHTTP(plainHTTP))
 
 	// Resolve credentials early so they can be passed to GetterProviders.
@@ -127,7 +125,7 @@ func NewReadOnlyChartFromRemote(ctx context.Context, helmRepo, targetDir string,
 		password = opt.OCICredentials.AccessToken
 	}
 
-	httpClient, indexClient, regClient, err := newClients(opt, caFile, username, password)
+	httpClient, indexClient, regClient, err := newClients(opt, caFile, username, password, plainHTTP)
 	if err != nil {
 		return nil, err
 	}
@@ -315,15 +313,51 @@ func renameChart(savedPath, target string) (string, error) {
 	return target, nil
 }
 
+// chartPlainHTTP decides whether the chart at helmRepo is fetched over
+// cleartext HTTP, by the shared rule in ocmhttp.PlainHTTPFor: only plainHTTP in
+// the HTTP configuration turns cleartext on, and an http:// URL needs it. An
+// oci:// chart follows the setting for the host its requests go to, which is
+// the reference's Host(): oras sends docker.io requests to registry-1.docker.io,
+// and the OCI resolver keys the same setting that way. Unlike an OCI
+// reference, a classic repository URL carries its scheme as part of the
+// address, so https:// stays HTTPS whatever the configuration says, and no
+// prefix is deprecated.
+func chartPlainHTTP(ctx context.Context, helmRepo string, cfg *httpv1alpha1.Config) (bool, error) {
+	u, err := url.Parse(helmRepo)
+	if err != nil {
+		return false, fmt.Errorf("invalid helm repository URL %q: %w", helmRepo, err)
+	}
+	scheme, host := u.Scheme, u.Host
+	switch scheme {
+	case "http":
+	case "oci":
+		ref, err := looseref.ParseReference(strings.TrimPrefix(helmRepo, "oci://"))
+		if err != nil {
+			return false, fmt.Errorf("invalid helm OCI reference %q: %w", helmRepo, err)
+		}
+		scheme, host = "", ref.Host()
+	default:
+		return false, nil
+	}
+	plain, err := ocmhttp.PlainHTTPFor(ctx, cfg, host, scheme, false)
+	if err != nil {
+		return false, fmt.Errorf("helm repository %q: %w", helmRepo, err)
+	}
+	return plain, nil
+}
+
 // newClients builds the registry client and, with an HTTP configuration, the clients for
 // downloads and for index.yaml. One configuration (per-host routing, timeouts), with the TLS
 // material of the input or credentials overriding its own, then serves the OCI registry
 // client, the OCI chart pull and the HTTP/S getter alike. The registry client carries the
 // resolved credentials, because with an HTTP configuration it also performs the OCI chart pull.
-func newClients(opt *option, caFile, username, password string) (httpClient, indexClient *http.Client, regClient *registry.Client, err error) {
+func newClients(opt *option, caFile, username, password string, plainHTTP bool) (httpClient, indexClient *http.Client, regClient *registry.Client, err error) {
 	var regClientOpts []registry.ClientOption
 	if username != "" && password != "" {
 		regClientOpts = append(regClientOpts, registry.ClientOptBasicAuth(username, password))
+	}
+	if plainHTTP {
+		regClientOpts = append(regClientOpts, registry.ClientOptPlainHTTP())
 	}
 	if opt.HTTPConfig != nil {
 		if httpClient, err = overlayInputTLS(ocmhttp.New(ocmhttp.WithConfig(opt.HTTPConfig)),
@@ -365,6 +399,13 @@ func ResolveOCIManifestDigest(ctx context.Context, chartReference string, creden
 	}
 	if httpConfig != nil {
 		regClientOpts = append(regClientOpts, registry.ClientOptHTTPClient(ocmhttp.New(ocmhttp.WithConfig(httpConfig))))
+	}
+	plainHTTP, err := chartPlainHTTP(ctx, chartReference, httpConfig)
+	if err != nil {
+		return "", err
+	}
+	if plainHTTP {
+		regClientOpts = append(regClientOpts, registry.ClientOptPlainHTTP())
 	}
 	regClient, err := registry.NewClient(regClientOpts...)
 	if err != nil {
@@ -430,15 +471,20 @@ func GetterProviders(client *http.Client, opts HTTPConfigGetterOpts) getter.Prov
 // IndexGetterProviders returns the getter providers that fetch the index of the HTTP/S
 // repository helmRepo with httpConfig and credentials, as chart downloads do. Their
 // requests end with ctx. Without httpConfig the default Helm client is used, which is
-// bounded by its own timeout instead.
+// bounded by its own timeout instead. An http:// repository is refused unless plainHTTP
+// is enabled for its host, as for chart downloads, so credentials do not go out in
+// cleartext by accident.
 func IndexGetterProviders(ctx context.Context, helmRepo string, credentials *helmcredsv1.HelmHTTPCredentials, httpConfig *httpv1alpha1.Config) (getter.Providers, error) {
+	if _, err := chartPlainHTTP(ctx, helmRepo, httpConfig); err != nil {
+		return nil, err
+	}
 	if httpConfig == nil {
 		return GetterProviders(nil, HTTPConfigGetterOpts{}), nil
 	}
 	if credentials == nil {
 		credentials = &helmcredsv1.HelmHTTPCredentials{}
 	}
-	_, indexClient, _, err := newClients(&option{Credentials: credentials, HTTPConfig: httpConfig}, "", credentials.Username, credentials.Password)
+	_, indexClient, _, err := newClients(&option{Credentials: credentials, HTTPConfig: httpConfig}, "", credentials.Username, credentials.Password, false)
 	if err != nil {
 		return nil, err
 	}

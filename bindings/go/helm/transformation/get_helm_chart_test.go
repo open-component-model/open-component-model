@@ -19,6 +19,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/helm/spec/access"
 	"ocm.software/open-component-model/bindings/go/helm/transformation"
 	"ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -43,6 +44,12 @@ func newTestScheme() *runtime.Scheme {
 	return scheme
 }
 
+// plainHTTPConfig marks every host as plain HTTP, which the httptest servers
+// in this package are.
+func plainHTTPConfig() *httpv1alpha1.Config {
+	return &httpv1alpha1.Config{ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: new(true)}}
+}
+
 func TestGetHelmChart_Transform(t *testing.T) {
 	t.Parallel()
 
@@ -63,7 +70,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 
 			transform := &transformation.GetHelmChart{
 				Scheme:             scheme,
-				ResourceRepository: helmresource.NewResourceRepository(nil),
+				ResourceRepository: helmresource.NewResourceRepository(nil, helmresource.WithHTTPConfig(plainHTTPConfig())),
 			}
 
 			helmAccessData, err := json.Marshal(map[string]string{
@@ -132,7 +139,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 
 			transform := &transformation.GetHelmChart{
 				Scheme:             scheme,
-				ResourceRepository: helmresource.NewResourceRepository(nil),
+				ResourceRepository: helmresource.NewResourceRepository(nil, helmresource.WithHTTPConfig(plainHTTPConfig())),
 			}
 
 			helmAccessData, err := json.Marshal(map[string]string{
@@ -203,7 +210,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 
 			transform := &transformation.GetHelmChart{
 				Scheme:             scheme,
-				ResourceRepository: helmresource.NewResourceRepository(nil),
+				ResourceRepository: helmresource.NewResourceRepository(nil, helmresource.WithHTTPConfig(plainHTTPConfig())),
 			}
 
 			helmAccessData, err := json.Marshal(map[string]string{
@@ -264,7 +271,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 
 		transform := &transformation.GetHelmChart{
 			Scheme:             scheme,
-			ResourceRepository: helmresource.NewResourceRepository(nil),
+			ResourceRepository: helmresource.NewResourceRepository(nil, helmresource.WithHTTPConfig(plainHTTPConfig())),
 		}
 
 		helmAccessData, err := json.Marshal(map[string]string{
@@ -332,7 +339,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 
 		transform := &transformation.GetHelmChart{
 			Scheme:             scheme,
-			ResourceRepository: helmresource.NewResourceRepository(nil),
+			ResourceRepository: helmresource.NewResourceRepository(nil, helmresource.WithHTTPConfig(plainHTTPConfig())),
 		}
 
 		spec := &v1alpha1.GetHelmChart{

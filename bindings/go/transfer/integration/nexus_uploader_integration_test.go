@@ -104,7 +104,7 @@ func Test_Integration_NexusUploader(t *testing.T) {
 		targetPath, targetSpec := newTargetCTF(t)
 		up := uploader(runtime.NewVersionedType(helmaccessv1.Type, helmaccessv1.LegacyTypeVersion), nexusHelmRepository, "")
 		for range 2 {
-			transferOnce(t, ctfRepo, sourceSpec, targetSpec, up, helmresource.NewResourceRepository(nil), creds, component, version)
+			transferOnce(t, ctfRepo, sourceSpec, targetSpec, up, helmresource.NewResourceRepository(nil, helmresource.WithHTTPConfig(plainHTTPConfig())), creds, component, version)
 		}
 
 		gotDesc, err := createCTFRepository(t, targetPath).GetComponentVersion(t.Context(), component, version)
