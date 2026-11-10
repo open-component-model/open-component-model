@@ -24,6 +24,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/git/repository"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
 func TestUploadResourceRoundTrip(t *testing.T) {
@@ -32,6 +33,7 @@ func TestUploadResourceRoundTrip(t *testing.T) {
 	targetPath := filepath.Join(t.TempDir(), "target.git")
 	_, err := git.PlainInit(targetPath, true)
 	r.NoError(err)
+	targetURL := testgit.Serve(t, targetPath)
 	uploader := newUploader(t)
 
 	for _, testCase := range []struct {
@@ -51,15 +53,15 @@ func TestUploadResourceRoundTrip(t *testing.T) {
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			r := require.New(t)
-			source, content := downloadResource(t, uploader, fixture.Path, testCase.sourceRef, testCase.commit)
-			uploaded, err := uploader.UploadResource(t.Context(), targetResource(source, targetPath, testCase.targetRef), content, nil)
+			source, content := downloadResource(t, uploader, fixture.URL, testCase.sourceRef, testCase.commit)
+			uploaded, err := uploader.UploadResource(t.Context(), targetResource(source, targetURL, testCase.targetRef), content, nil)
 			if testCase.wantErr != "" {
 				r.ErrorContains(err, testCase.wantErr)
 			} else {
 				r.NoError(err)
 				r.Equal(&accessv1.Git{
 					Type:       runtime.NewVersionedType(accessv1.Type, accessv1.Version),
-					Repository: targetPath,
+					Repository: targetURL,
 					Ref:        testCase.targetRef,
 					Commit:     testCase.commit.String(),
 				}, uploaded.Access)
@@ -89,14 +91,15 @@ func TestUploadResourceToURLFragmentTarget(t *testing.T) {
 	targetPath := filepath.Join(t.TempDir(), "target.git")
 	_, err := git.PlainInit(targetPath, true)
 	r.NoError(err)
+	targetURL := testgit.Serve(t, targetPath)
 	uploader := newUploader(t)
 
-	source, content := downloadResource(t, uploader, fixture.Path, "refs/heads/main", fixture.First)
-	uploaded, err := uploader.UploadResource(t.Context(), targetResource(source, targetPath+"#branch=release", ""), content, nil)
+	source, content := downloadResource(t, uploader, fixture.URL, "refs/heads/main", fixture.First)
+	uploaded, err := uploader.UploadResource(t.Context(), targetResource(source, targetURL+"#branch=release", ""), content, nil)
 	r.NoError(err)
 	r.Equal(&accessv1.Git{
 		Type:       runtime.NewVersionedType(accessv1.Type, accessv1.Version),
-		Repository: targetPath,
+		Repository: targetURL,
 		Ref:        "refs/heads/release",
 		Commit:     fixture.First.String(),
 	}, uploaded.Access, "the uploaded access carries the selector in Ref, not in the repository URL")
@@ -125,14 +128,15 @@ func TestUploadResourceToExistingAnnotatedTag(t *testing.T) {
 			targetPath := filepath.Join(t.TempDir(), "target.git")
 			_, err := git.PlainClone(targetPath, &git.CloneOptions{URL: fixture.Path, Bare: true, Tags: git.AllTags})
 			r.NoError(err)
+			targetURL := testgit.Serve(t, targetPath)
 			target, err := git.PlainOpen(targetPath)
 			r.NoError(err)
 			// fixture.Path tags fixture.First as an annotated tag, as if it had been pushed by hand.
 			before, err := target.Reference("refs/tags/annotated", false)
 			r.NoError(err)
 
-			source, content := downloadResource(t, uploader, fixture.Path, "refs/heads/main", testCase.commit)
-			_, err = uploader.UploadResource(t.Context(), targetResource(source, targetPath, "refs/tags/annotated"), content, nil)
+			source, content := downloadResource(t, uploader, fixture.URL, "refs/heads/main", testCase.commit)
+			_, err = uploader.UploadResource(t.Context(), targetResource(source, targetURL, "refs/tags/annotated"), content, nil)
 			if testCase.wantErr != "" {
 				r.ErrorContains(err, testCase.wantErr)
 			} else {
@@ -147,7 +151,7 @@ func TestUploadResourceToExistingAnnotatedTag(t *testing.T) {
 
 func TestDownloadResourceDependsOnCommitOnly(t *testing.T) {
 	fixture := newRepository(t)
-	want, _ := downloadResource(t, newUploader(t), fixture.Path, "refs/heads/main", fixture.First)
+	want, _ := downloadResource(t, newUploader(t), fixture.URL, "refs/heads/main", fixture.First)
 
 	for _, testCase := range []struct {
 		name string
@@ -158,7 +162,7 @@ func TestDownloadResourceDependsOnCommitOnly(t *testing.T) {
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			r := require.New(t)
-			got, _ := downloadResource(t, newUploader(t), fixture.Path, testCase.ref, fixture.First)
+			got, _ := downloadResource(t, newUploader(t), fixture.URL, testCase.ref, fixture.First)
 			r.Equal(want.Digest, got.Digest)
 		})
 	}
@@ -167,7 +171,7 @@ func TestDownloadResourceDependsOnCommitOnly(t *testing.T) {
 func TestUploadResourceRejectsArchive(t *testing.T) {
 	fixture := newRepository(t)
 	uploader := newUploader(t)
-	source, content := downloadResource(t, uploader, fixture.Path, "refs/heads/main", fixture.Second)
+	source, content := downloadResource(t, uploader, fixture.URL, "refs/heads/main", fixture.Second)
 
 	for _, testCase := range []struct {
 		name    string
@@ -247,7 +251,8 @@ func TestUploadResourceRejectsArchive(t *testing.T) {
 			targetPath := filepath.Join(t.TempDir(), "target.git")
 			target, err := git.PlainInit(targetPath, true)
 			r.NoError(err)
-			resource := targetResource(source, targetPath, "refs/heads/main")
+			targetURL := testgit.Serve(t, targetPath)
+			resource := targetResource(source, targetURL, "refs/heads/main")
 			resource.Digest = nil
 			if testCase.digest != "" {
 				resource.Digest = source.Digest.DeepCopy()
@@ -259,6 +264,19 @@ func TestUploadResourceRejectsArchive(t *testing.T) {
 			_, err = target.Reference("refs/heads/main", false)
 			r.ErrorIs(err, plumbing.ErrReferenceNotFound)
 		})
+	}
+}
+
+func TestLocalUploadTargetRejected(t *testing.T) {
+	r := require.New(t)
+	fixture := newRepository(t)
+	uploader := newUploader(t)
+	source, content := downloadResource(t, uploader, fixture.URL, "refs/heads/main", fixture.First)
+	// A local path as the upload target must be rejected by Validate inside UploadResource.
+	for _, targetPath := range []string{fixture.Path, "file://" + fixture.Path} {
+		_, err := uploader.UploadResource(t.Context(), targetResource(source, targetPath, "refs/heads/main"), content, nil)
+		r.ErrorContains(err, "local git repository",
+			"UploadResource must reject local target %q", targetPath)
 	}
 }
 

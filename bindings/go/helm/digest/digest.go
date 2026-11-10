@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"strings"
 
 	godigest "github.com/opencontainers/go-digest"
+	"helm.sh/helm/v4/pkg/getter"
 	"helm.sh/helm/v4/pkg/repo/v1"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -17,6 +19,7 @@ import (
 	helmv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	helmcreds "ocm.software/open-component-model/bindings/go/helm/spec/credentials"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/digestprocessor"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
@@ -35,12 +38,26 @@ var _ digestprocessor.BuiltinDigestProcessorPlugin = (*DigestProcessor)(nil)
 // For OCI repositories it resolves the OCI manifest digest.
 type DigestProcessor struct {
 	tempFolder string
+	httpConfig *httpv1alpha1.Config
+}
+
+// Option configures a [DigestProcessor].
+type Option func(*DigestProcessor)
+
+// WithHTTPConfig sets the HTTP client configuration for every request the processor
+// makes: OCI manifest resolution, repository index and chart downloads.
+func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
+	return func(p *DigestProcessor) { p.httpConfig = cfg }
 }
 
 // NewDigestProcessor creates a new Helm digest processor.
 // tempFolder specifies a base directory for temporary files; if empty, os.TempDir() is used.
-func NewDigestProcessor(tempFolder string) *DigestProcessor {
-	return &DigestProcessor{tempFolder: tempFolder}
+func NewDigestProcessor(tempFolder string, opts ...Option) *DigestProcessor {
+	p := &DigestProcessor{tempFolder: tempFolder}
+	for _, opt := range opts {
+		opt(p)
+	}
+	return p
 }
 
 func (p *DigestProcessor) GetResourceRepositoryScheme() *ocmruntime.Scheme {
@@ -100,7 +117,7 @@ func (p *DigestProcessor) ProcessResourceDigest(
 		if ref, err = helm.ChartReference(); err != nil {
 			return nil, fmt.Errorf("error constructing chart reference: %w", err)
 		}
-		resolvedDigest, err = download.ResolveOCIManifestDigest(ctx, ref, ociCreds, nil)
+		resolvedDigest, err = download.ResolveOCIManifestDigest(ctx, ref, ociCreds, p.httpConfig)
 	} else {
 		var helmCreds *helmcredsv1.HelmHTTPCredentials
 		if credentials != nil {
@@ -160,7 +177,11 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 		entry.KeyFile = credentials.KeyFile
 	}
 
-	chartRepo, err := repo.NewChartRepository(entry, download.GetterProviders(nil, download.HTTPConfigGetterOpts{}))
+	providers, err := download.IndexGetterProviders(ctx, helm.HelmRepository, credentials, p.httpConfig)
+	if err != nil {
+		return "", fmt.Errorf("error creating helm repository client: %w", err)
+	}
+	chartRepo, err := repo.NewChartRepository(entry, providers)
 	if err != nil {
 		return "", fmt.Errorf("error creating chart repository: %w", err)
 	}
@@ -203,7 +224,11 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 	}
 
 	if cv.Digest == "" {
-		return "", fmt.Errorf("chart %q version %q in repository index has no digest", chartName, version)
+		// The index does not vouch for the chart, so the chart it selected is downloaded
+		// and hashed, from the URL the index lists for it.
+		slog.InfoContext(ctx, "helm repository index lists no digest for the chart; downloading it to compute one",
+			"chart", chartName, "version", cv.Version)
+		return downloadChartDigest(ctx, providers, helm.HelmRepository, cv, credentials)
 	}
 
 	d, err := parseDigest(cv.Digest)
@@ -212,6 +237,63 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 	}
 
 	return d, nil
+}
+
+// downloadChartDigest downloads the chart cv names with the getters the index was fetched
+// with and returns its digest. Credentials are sent only to the host of repoURL, also if
+// the index points the chart elsewhere.
+func downloadChartDigest(ctx context.Context, providers getter.Providers, repoURL string, cv *repo.ChartVersion, credentials *helmcredsv1.HelmHTTPCredentials) (godigest.Digest, error) {
+	if len(cv.URLs) == 0 {
+		return "", fmt.Errorf("chart %q version %q in repository index has no download URL", cv.Name, cv.Version)
+	}
+	chartURL, err := repo.ResolveReferenceURL(repoURL, cv.URLs[0])
+	if err != nil {
+		return "", fmt.Errorf("error resolving download URL of chart %q version %q: %w", cv.Name, cv.Version, err)
+	}
+	u, err := url.Parse(chartURL)
+	if err != nil {
+		return "", fmt.Errorf("error parsing download URL %q: %w", chartURL, err)
+	}
+	g, err := providers.ByScheme(u.Scheme)
+	if err != nil {
+		return "", fmt.Errorf("error downloading helm chart %q: %w", chartURL, err)
+	}
+	// Helm's getter sends basic auth only to the host of the URL it is given.
+	opts := []getter.Option{getter.WithURL(repoURL)}
+	if credentials != nil {
+		if base, err := url.Parse(repoURL); err == nil && base.Scheme == u.Scheme && base.Host == u.Host {
+			opts = append(opts, getter.WithBasicAuth(credentials.Username, credentials.Password))
+		}
+		if credentials.CertFile != "" || credentials.KeyFile != "" {
+			opts = append(opts, getter.WithTLSClientConfig(credentials.CertFile, credentials.KeyFile, ""))
+		}
+	}
+
+	// Helm's getters do not accept a context: the configured getter ends its request with
+	// ctx (see download.IndexGetterProviders); the context is also selected on so the
+	// default getter, bounded by its own timeout, does not hold up cancellation.
+	type chartResult struct {
+		digest godigest.Digest
+		err    error
+	}
+	ch := make(chan chartResult, 1)
+	go func() {
+		buf, err := g.Get(chartURL, opts...)
+		if err != nil {
+			ch <- chartResult{err: err}
+			return
+		}
+		ch <- chartResult{digest: godigest.SHA256.FromBytes(buf.Bytes())}
+	}()
+	select {
+	case <-ctx.Done():
+		return "", fmt.Errorf("context cancelled while downloading helm chart %q: %w", chartURL, ctx.Err())
+	case res := <-ch:
+		if res.err != nil {
+			return "", fmt.Errorf("error downloading helm chart %q: %w", chartURL, res.err)
+		}
+		return res.digest, nil
+	}
 }
 
 // parseDigest parses a digest string that may be either in the standard

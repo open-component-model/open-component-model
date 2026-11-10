@@ -71,6 +71,22 @@ A `Resource` selects a specific artifact from within a resolved component versio
 
 You can attach CEL expressions via `additionalStatusFields` to extract values from the descriptor and surface them in `status.additional`. This is useful when downstream tools like [Kro](https://kro.run/) need to wire specific values — such as an image reference or chart version — into their own resources without parsing the full descriptor themselves.
 
+With `verificationPolicy: Always` (the default), the controller checks the resource content against the digest in the
+descriptor. Where it can, it checks against what the content is addressed by, without downloading it:
+
+| Access | Verified against | Downloads the content |
+| --- | --- | --- |
+| `localBlob`, `relativeOciReference` | the digest the OCI repository or CTF archive stores it under | only for an OCI layout stored as one blob |
+| `OCIImage`, `OCIImageLayer` | the resolved manifest or layer descriptor | no |
+| `Helm` | the OCI manifest, or the digest in the Helm repository index | only if the index lists no digest |
+| `wget` | a checksum the server advertises | if the server advertises none |
+| `Git`, `GitHub`, `s3` | the content | on every reconcile |
+
+The accesses in the last row are not optimized yet: their content is downloaded and hashed on every reconciliation,
+which costs time and bandwidth for large repositories or objects. If a downstream step verifies the content anyway, for
+example Flux fetching a pinned commit, set `verificationPolicy: Never` for such resources. A resource whose access type
+the controller cannot verify at all fails unless verification is set to `Never`.
+
 [API reference]({{< relref "/docs/reference/kubernetes-api/resource.md" >}})
 
 ### Deployer
@@ -154,7 +170,16 @@ The controller accepts a fixed set of OCM configuration types and silently drops
 | `transfer.config.ocm.software`    | replication settings                                                                                                           |
 | `http.config.ocm.software`        | HTTP client timeouts, retries, per-host overrides, and `insecureSkipVerify` for local registries with self-signed certificates |
 
-`filesystem.config.ocm.software` is deliberately **not** accepted.
+`filesystem.config.ocm.software` and `oci.cache.config.ocm.software` are deliberately **not** accepted. The OCI cache
+remote policy is set for the whole controller instead, see
+[Caching]({{< relref "docs/reference/configuration/caching.md#remote-policy-in-the-controller" >}}).
+
+{{<callout context="caution" title="Shared OCI cache" icon="outline/alert-triangle">}}
+One OCI blob cache serves every namespace. With the default remote policy `IfNotPresent`, cached manifests and
+component descriptors are returned without checking the registry first, so an object can read blobs that, potentially,
+it doesn't have credentials for. Use `Always` when namespaces MUST NOT share registry access. With `Always`, the cache
+will verify access, before serving a cached blob.
+{{</callout>}}
 
 ## Additional Status Fields
 

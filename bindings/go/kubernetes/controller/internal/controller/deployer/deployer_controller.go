@@ -50,7 +50,9 @@ import (
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
+	"ocm.software/open-component-model/bindings/go/repository/integrity"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -775,10 +777,12 @@ func (r *Reconciler) downloadResourceBlob(
 			return nil, fmt.Errorf("failed to get repository for component %s:%s: %w",
 				componentDescriptor.Component.Name, componentDescriptor.Component.Version, err)
 		}
-		blob, _, err := repo.GetLocalResource(ctx,
+		// The component version is read again by version, so the local resource must record
+		// the digest of the resolved one; otherwise a moved tag could substitute content.
+		blob, err := repository.GetLocalResource(ctx, repo,
 			componentDescriptor.Component.Name,
 			componentDescriptor.Component.Version,
-			resource.ToIdentity())
+			resource)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get local resource: %w", err)
 		}
@@ -842,14 +846,18 @@ func resolveResourceCredentials(
 // It uses the digest as cache key if possible because a changed digest indicates that the resource changed. If no
 // digest is available, a component version and resource identity plus the config hash, which could contain resolver
 // configuration, should be sufficient.
+//
+// A digest is only a key if downloads verify content against it. A digest excluded from signature (NO-DIGEST or
+// EXCLUDE-FROM-SIGNATURE) is not verified and may carry any value, so keying on it would let one resource's content be
+// served for another's. integrity.ParseDigest applies the same rule as download verification.
 func buildResourceCacheKey(
 	matchedResource *descriptor.Resource,
 	componentDescriptor *descriptor.Descriptor,
 	cfg *configuration.Configuration,
 	resourceIdentity string,
 ) string {
-	if matchedResource.Digest != nil {
-		return matchedResource.Digest.Value
+	if d, err := integrity.ParseDigest(matchedResource.Digest); err == nil && d != "" {
+		return d.String()
 	}
 
 	var key string

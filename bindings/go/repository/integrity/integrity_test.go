@@ -19,12 +19,11 @@ import (
 
 const content = "the content a digest was taken over"
 
-// sourceBlob counts how often it is opened and records whether it was closed.
+// sourceBlob counts how often it is opened.
 type sourceBlob struct {
 	content   string
 	mediaType string
 	opened    int
-	closed    bool
 }
 
 func (s *sourceBlob) ReadCloser() (io.ReadCloser, error) {
@@ -33,11 +32,6 @@ func (s *sourceBlob) ReadCloser() (io.ReadCloser, error) {
 }
 
 func (s *sourceBlob) MediaType() (string, bool) { return s.mediaType, s.mediaType != "" }
-
-func (s *sourceBlob) Close() error {
-	s.closed = true
-	return nil
-}
 
 // fakeArtifactVerifier passes content through and records the root it verifies against.
 type fakeArtifactVerifier struct {
@@ -154,6 +148,20 @@ func TestVerify_LogsAttrsOfUnverifiedContent(t *testing.T) {
 			r.NoError(call(descriptor.NewExcludeFromSignatureDigest(), WithLogAttrs(slog.String("resource", "excluded"))))
 			r.Contains(logged.String(), "excluded from signature")
 			r.Contains(logged.String(), "resource=excluded")
+			r.NotContains(logged.String(), "level=WARN", "the marker alone is not a risk")
+
+			value := digest.FromString("other content").Encoded()
+			for _, contradictory := range []*descriptor.Digest{
+				{HashAlgorithm: descriptor.NoDigest, NormalisationAlgorithm: descriptor.OCIArtifactDigestV1, Value: value},
+				{HashAlgorithm: "SHA-256", NormalisationAlgorithm: descriptor.ExcludeFromSignature, Value: value},
+				{HashAlgorithm: descriptor.NoDigest, NormalisationAlgorithm: descriptor.ExcludeFromSignature, Value: value},
+			} {
+				logged.Reset()
+				r.NoError(call(contradictory, WithLogAttrs(slog.String("resource", "contradictory"))))
+				r.Contains(logged.String(), "level=WARN")
+				r.Contains(logged.String(), "resource=contradictory")
+				r.Contains(logged.String(), value)
+			}
 		})
 	}
 }
@@ -172,7 +180,6 @@ func TestVerify_RefusesUnusableDigest(t *testing.T) {
 
 			_, err := Verify(t.Context(), expected, src)
 			r.Error(err)
-			r.True(src.closed, "refused content must be released")
 		})
 	}
 
@@ -183,7 +190,6 @@ func TestVerify_RefusesUnusableDigest(t *testing.T) {
 		_, err := Verify(t.Context(), withNormalisation(digest.FromString(content), "jsonNormalisation/v1"), src)
 		r.ErrorIs(err, ErrUnverifiable)
 		r.ErrorContains(err, `unsupported normalisation algorithm "jsonNormalisation/v1"`)
-		r.True(src.closed)
 	})
 }
 
@@ -234,16 +240,6 @@ func TestVerify_GenericBlobDigest(t *testing.T) {
 		_, err = rc.Read(make([]byte, 4))
 		r.NoError(err)
 		r.ErrorContains(rc.Close(), "incomplete read")
-	})
-
-	t.Run("forwards close to the content", func(t *testing.T) {
-		r := require.New(t)
-		src := &sourceBlob{content: content}
-		got, err := Verify(t.Context(), generic(expected), src)
-		r.NoError(err)
-
-		r.NoError(got.(io.Closer).Close())
-		r.True(src.closed)
 	})
 }
 
@@ -300,7 +296,6 @@ func TestVerifyPrecomputed(t *testing.T) {
 
 		_, err := VerifyPrecomputed(t.Context(), generic(digest.FromString(content)), digest.FromString("other"), src)
 		r.ErrorContains(err, "digest mismatch")
-		r.True(src.closed)
 	})
 
 	t.Run("verifies on read if the computed digest is of another algorithm", func(t *testing.T) {
@@ -323,7 +318,6 @@ func TestVerify_OCIArtifactDigest(t *testing.T) {
 
 		_, err := Verify(t.Context(), expected, src)
 		r.ErrorIs(err, ErrUnverifiable)
-		r.True(src.closed)
 	})
 
 	t.Run("is unverifiable for content the verifier does not accept", func(t *testing.T) {
@@ -359,6 +353,15 @@ func TestVerifyOCIArtifact(t *testing.T) {
 		{name: "matching root", expected: withNormalisation(root, descriptor.OCIArtifactDigestV1)},
 		{name: "matching root labelled as generic blob", expected: generic(root)},
 		{
+			name:     "matching root with the OCI hash spelling",
+			expected: &descriptor.Digest{HashAlgorithm: "sha256", NormalisationAlgorithm: descriptor.OCIArtifactDigestV1, Value: root.Encoded()},
+		},
+		{
+			name:     "hash algorithm contradicting the value",
+			expected: &descriptor.Digest{HashAlgorithm: "SHA-512", NormalisationAlgorithm: descriptor.OCIArtifactDigestV1, Value: root.Encoded()},
+			wantErr:  "invalid digest",
+		},
+		{
 			name:     "other root",
 			expected: withNormalisation(digest.FromString("other"), descriptor.OCIArtifactDigestV1),
 			wantErr:  "OCI artifact digest mismatch: expected " + digest.FromString("other").String() + ", got " + root.String(),
@@ -366,6 +369,11 @@ func TestVerifyOCIArtifact(t *testing.T) {
 		{
 			name:     "unsupported normalisation",
 			expected: withNormalisation(root, "jsonNormalisation/v1"),
+			wantErr:  "unsupported normalisation algorithm",
+		},
+		{
+			name:     "unsupported normalisation of a digest that does not parse",
+			expected: &descriptor.Digest{HashAlgorithm: "MD5", NormalisationAlgorithm: "jsonNormalisation/v1", Value: "not-hex"},
 			wantErr:  "unsupported normalisation algorithm",
 		},
 	}
@@ -378,6 +386,44 @@ func TestVerifyOCIArtifact(t *testing.T) {
 				return
 			}
 			r.ErrorContains(err, tt.wantErr)
+			if strings.Contains(tt.wantErr, "unsupported normalisation") {
+				r.ErrorIs(err, ErrUnverifiable)
+			}
+		})
+	}
+}
+
+// Only content whose digest is checked while it is read needs to be read to learn
+// whether it matches.
+func TestVerifiedOnRead(t *testing.T) {
+	expected := digest.FromString(content)
+	artifact := withNormalisation(digest.FromString("manifest"), descriptor.OCIArtifactDigestV1)
+	for _, tc := range []struct {
+		name   string
+		verify func(ctx context.Context) (blob.ReadOnlyBlob, error)
+		want   bool
+	}{
+		{name: "hashed while read", want: true, verify: func(ctx context.Context) (blob.ReadOnlyBlob, error) {
+			return Verify(ctx, generic(expected), &sourceBlob{content: content})
+		}},
+		{name: "addressed by its digest", verify: func(ctx context.Context) (blob.ReadOnlyBlob, error) {
+			return Verify(ctx, generic(expected), verified.New(&sourceBlob{content: content}, verified.Metadata{Digest: expected, Size: blob.SizeUnknown}))
+		}},
+		{name: "hashed while written", verify: func(ctx context.Context) (blob.ReadOnlyBlob, error) {
+			return VerifyPrecomputed(ctx, generic(expected), expected, &sourceBlob{content: content})
+		}},
+		{name: "artifact introspected while read", want: true, verify: func(ctx context.Context) (blob.ReadOnlyBlob, error) {
+			return Verify(ctx, artifact, &sourceBlob{content: content}, WithArtifactVerifier(&fakeArtifactVerifier{accepts: true}))
+		}},
+		{name: "without digest", verify: func(ctx context.Context) (blob.ReadOnlyBlob, error) {
+			return Verify(ctx, nil, &sourceBlob{content: content})
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			got, err := tc.verify(t.Context())
+			r.NoError(err)
+			r.Equal(tc.want, VerifiedOnRead(got))
 		})
 	}
 }
@@ -388,7 +434,6 @@ func TestVerifyContent(t *testing.T) {
 
 	src := &sourceBlob{content: content}
 	r.NoError(VerifyContent(t.Context(), expected, src))
-	r.False(src.closed, "content is not owned by VerifyContent")
 
 	r.ErrorContains(VerifyContent(t.Context(), expected, &sourceBlob{content: "tampered"}), "digest mismatch")
 }

@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/repository"
@@ -67,7 +66,7 @@ func Test_Integration_S3Transformation(t *testing.T) {
 
 	transform := &transformation.DownloadS3Resource{
 		Scheme:             scheme,
-		ResourceRepository: repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: new(t.TempDir())}),
+		ResourceRepository: repository.NewResourceRepository(),
 		CredentialProvider: staticCredentials{rustfsAccessKey, rustfsSecretKey},
 	}
 

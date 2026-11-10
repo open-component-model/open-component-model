@@ -40,6 +40,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
+	ocicachev1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/cache/v1alpha1"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 )
@@ -77,6 +78,7 @@ func main() {
 		enableHTTP2               bool
 		deployerDownloadCacheSize int
 		deployerMaxResourceSize   string
+		ocmConfigPath             string
 		repositoryConcurrency     int
 		componentConcurrency      int
 		resourceConcurrency       int
@@ -118,6 +120,8 @@ func main() {
 		"The maximum size of the deployer download object LRU cache.")
 	flag.StringVar(&deployerMaxResourceSize, "deployer-download-max-resource-size", defaultMaxResourceSize,
 		"Maximum size of a single downloadable resource as a Kubernetes resource.Quantity (e.g. \"2Mi\", \"512Ki\"). \"0\" disables the limit.")
+	flag.StringVar(&ocmConfigPath, "ocm-config", "",
+		"Path to an OCM configuration file read once at startup. Only oci.cache.config.ocm.software is accepted.")
 	flag.IntVar(&repositoryConcurrency, "repository-controller-concurrency", 4, //nolint:mnd // no magic number
 		"The repository controller concurrency. This is the number of active repository controller workers that can be kept alive.")
 	flag.IntVar(&componentConcurrency, "component-controller-concurrency", 4, //nolint:mnd // no magic number
@@ -209,6 +213,19 @@ func main() {
 	discoveryRateLimit.QPS = parseRateLimit("discovery", discoveryRateLimitQPS, discoveryRateLimit.Burst)
 	deployerRateLimit.QPS = parseRateLimit("deployer", deployerRateLimitQPS, deployerRateLimit.Burst)
 	namespacedDeployerRateLimit.QPS = parseRateLimit("namespaced-deployer", namespacedDeployerRateLimitQPS, namespacedDeployerRateLimit.Burst)
+
+	var ociCacheConfig *ocicachev1alpha1.Config
+	if ocmConfigPath != "" {
+		startupConfig, err := setup.LoadStartupConfig(ocmConfigPath)
+		if err != nil {
+			setupLog.Error(err, "invalid flag value", "flag", "ocm-config", "value", ocmConfigPath)
+			os.Exit(1)
+		}
+		if ociCacheConfig, err = ocicachev1alpha1.LookupConfig(startupConfig); err != nil {
+			setupLog.Error(err, "invalid flag value", "flag", "ocm-config", "value", ocmConfigPath)
+			os.Exit(1)
+		}
+	}
 	setupLog.Info("FIPS 140-3 mode", "enabled", fips140.Enabled(), "module", fips140.Version())
 
 	ctx := context.Background()
@@ -272,7 +289,7 @@ func main() {
 	// Plugins use object config so they need to be request based.
 	pluginLogger := slog.New(logr.ToSlogHandler(setupLog))
 	// The blob cache owns its directory on disk, so the per-request plugin managers share one instance.
-	blobCache, err := setup.NewBlobCache("")
+	blobCache, err := setup.NewBlobCache("", ociCacheConfig)
 	if err != nil {
 		setupLog.Error(err, "failed to create OCI blob cache")
 		os.Exit(1)

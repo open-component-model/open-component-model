@@ -257,7 +257,7 @@ func TestCache_Reseed_FromExistingDir(t *testing.T) {
 func TestCache_Reseed_StripsBadFiles(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "blobcache")
 	// BlobCache scopes its files under <Dir>/blobs/<algo>/...
-	algo := filepath.Join(dir, "blobs", "sha256")
+	algo := filepath.Join(dir, blobSubdir, "sha256")
 	require.NoError(t, os.MkdirAll(algo, 0o700))
 	bad := filepath.Join(algo, "not-a-hex")
 	require.NoError(t, os.WriteFile(bad, []byte("x"), 0o600))

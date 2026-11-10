@@ -245,7 +245,7 @@ func (c *Clone) Remove(ctx context.Context) error {
 }
 
 func fetch(ctx context.Context, access *accessv1.Git, creds runtime.Typed, opts Options) (_ *Clone, err error) {
-	if err := access.Validate(); err != nil {
+	if err := access.ValidateStructure(); err != nil {
 		return nil, fmt.Errorf("invalid git access: %w", err)
 	}
 	// go-git appends its request path to the URL, so a fragment must not reach it.
@@ -303,7 +303,7 @@ func fetch(ctx context.Context, access *accessv1.Git, creds runtime.Typed, opts 
 // HEAD as the commit of the branch it points to, an annotated tag as the commit it
 // peels to. An access with a commit is returned normalised and is not looked up.
 func Pin(ctx context.Context, access *accessv1.Git, creds runtime.Typed, opts Options) (*accessv1.Git, error) {
-	if err := access.Validate(); err != nil {
+	if err := access.ValidateStructure(); err != nil {
 		return nil, fmt.Errorf("invalid git access: %w", err)
 	}
 	pinned, err := access.Normalize()
@@ -435,9 +435,13 @@ func pinnedRefName(ctx context.Context, repo *git.Repository, ref string, client
 }
 
 // ClientOptions applies the same credential and HTTP client rules to fetch and push.
-// The caller calls release once it no longer uses the options; it closes the SSH agent
-// connection an agent authentication holds.
+// Every transport goes through it, so it also rejects a local repository unless
+// opts.AllowLocal is set. The caller calls release once it no longer uses the options;
+// it closes the SSH agent connection an agent authentication holds.
 func ClientOptions(ctx context.Context, ep *endpoint.Endpoint, creds runtime.Typed, opts Options) ([]client.Option, func(), error) {
+	if ep.IsLocal() && !opts.AllowLocal {
+		return nil, nil, endpoint.ErrLocalRepository
+	}
 	auth, err := authMethod(ep, creds, opts)
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot authenticate against git repository: %w", err)
@@ -582,16 +586,23 @@ func TransportError(ctx context.Context, operation string, err error) error {
 	}
 }
 
-// userinfo matches the credentials a quoted remote URL carries into an error.
-var userinfo = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.\-]*://)[^/@\s]+@`)
+// userinfo matches the credentials a quoted remote URL carries into an error. Like
+// url.Parse it ends userinfo at the last @ of the authority, so a password holding @ is
+// redacted whole.
+var userinfo = regexp.MustCompile(`([a-zA-Z][a-zA-Z0-9+.\-]*://)[^/?#\s]+@`)
 
 // maxCauseLength bounds the cause: go-git puts the whole response body of an
 // unrecognised status into its error.
 const maxCauseLength = 512
 
+// RedactURL removes the credentials of every URL s contains, so s is safe to log.
+func RedactURL(s string) string {
+	return userinfo.ReplaceAllString(s, "${1}xxxxx@")
+}
+
 // redact removes the credentials of every URL the message quotes.
 func redact(err error) string {
-	message := userinfo.ReplaceAllString(err.Error(), "${1}xxxxx@")
+	message := RedactURL(err.Error())
 	if len(message) > maxCauseLength {
 		message = message[:maxCauseLength] + "..."
 	}

@@ -120,6 +120,20 @@
       ],
     },
     {
+      // Collapse digest-only re-pins for .env-file Docker image pins managed
+      // by custom.regex (datasource=docker — e.g. OPENSCAP_IMAGE, DOCKLE_IMAGE)
+      // into the same weekly 'Digest pins' PR. Scoped to docker datasource only
+      // so envtest and other non-docker custom managers are unaffected.
+      matchManagers: ['custom.regex'],
+      matchDatasources: ['docker'],
+      matchUpdateTypes: ['digest', 'pinDigest'],
+      groupName: 'Digest pins',
+      groupSlug: 'digest-pins',
+      schedule: [
+        '* * * * 0' // At every minute on Sunday it is allowed to create branches
+      ],
+    },
+    {
       // Actual Go toolchain version bumps (go.mod `toolchain go1.X.Y`, setup-go,
       // golang image tags). The go.mod `go 1.X` directive is deliberately NOT
       // bumped here. See the depType 'golang' rule at the end of packageRules.
@@ -301,6 +315,21 @@
       // go.sum artifact step with a module-path mismatch (#2966, #3379).
       matchManagers: ['gomod'],
       matchDepNames: ['github.com/ThalesIgnite/crypto11'],
+      enabled: false,
+    },
+    {
+      // sigs.k8s.io/kustomize/{api,kyaml} are indirect (helm -> k8s.io/cli-runtime)
+      // and follow the Kubernetes release train: cli-runtime v0.37.x pins
+      // v0.21.1, v0.38.x pins v0.21.3. v0.21.3 needs a kube-openapi built on
+      // structured-merge-diff/v7, which apimachinery v0.37.x (smd/v6) cannot
+      // compile against (#4184, #4185). Same failure mode as kube-openapi (#3770).
+      // Not re-enabled on purpose: the 'Kubernetes dependencies' group PR raises
+      // them via MVS + gomodTidy when it bumps k8s.io/cli-runtime.
+      matchManagers: ['gomod'],
+      matchPackageNames: [
+        'sigs.k8s.io/kustomize/api',
+        'sigs.k8s.io/kustomize/kyaml',
+      ],
       enabled: false,
     },
     {

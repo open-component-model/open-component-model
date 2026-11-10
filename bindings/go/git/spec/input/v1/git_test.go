@@ -45,6 +45,22 @@ func TestGit_Validate(t *testing.T) {
 			ref:        "dev",
 			wantErr:    "conflicts",
 		},
+		// local repositories must be ACCEPTED for inputs (they are archived into a portable local blob)
+		{
+			name:       "file:// URL accepted",
+			repository: "file:///srv/repo.git",
+			ref:        "main",
+		},
+		{
+			name:       "file://localhost URL accepted",
+			repository: "file://localhost/srv/repo.git",
+			ref:        "main",
+		},
+		{
+			name:       "plain absolute path accepted",
+			repository: "/srv/repo.git",
+			ref:        "main",
+		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
