@@ -39,7 +39,7 @@ func dummyCapability(schema []byte) resourcev1.CapabilitySpec {
 
 func TestPluginFlow(t *testing.T) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
-	path := filepath.Join("..", "..", "..", "tmp", "testdata", osutil.ExecutableName("test-plugin-resource"))
+	path := filepath.Join("..", "..", "..", "tmp", "testdata", mtypes.ExecutableName("test-plugin-resource"))
 	_, err := os.Stat(path)
 	require.NoError(t, err, "test plugin not found, please build the plugin under tmp/testdata/test-plugin-resource first")
 	ctx := context.Background()

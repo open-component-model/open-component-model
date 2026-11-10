@@ -2,9 +2,7 @@ package signinghandler
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"os"
 	"sync"
 
 	signingv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/signing/v1"
@@ -140,20 +138,16 @@ type constructedPlugin struct {
 	process plugins.Process
 }
 
-// Shutdown will loop through all _STARTED_ plugins and will interrupt them.
-// All plugins should handle interrupts gracefully. For Go, this is done automatically by
-// the plugin SDK.
+// Shutdown shuts down all _STARTED_ plugins.
 func (r *SigningRegistry) Shutdown(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var errs error
+	processes := make([]plugins.Process, 0, len(r.constructedPlugins))
 	for _, p := range r.constructedPlugins {
-		if perr := p.process.Interrupt(ctx); perr != nil && !errors.Is(perr, os.ErrProcessDone) {
-			errs = errors.Join(errs, perr)
-		}
+		processes = append(processes, p.process)
 	}
 
-	return errs
+	return plugins.ShutdownAll(ctx, processes)
 }
 
 func startAndReturnPlugin(ctx context.Context, r *SigningRegistry, plugin *types.Plugin) (signingv1.SignatureHandlerContract[runtime.Typed], error) {

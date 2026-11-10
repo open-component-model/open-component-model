@@ -2,9 +2,7 @@ package componentversionrepository
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"os"
 	"sync"
 
 	ocmrepositoryv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
@@ -96,21 +94,16 @@ func (r *RepositoryRegistry) GetComponentVersionRepositoryScheme() *runtime.Sche
 // Ensure RepositoryRegistry implements ComponentVersionRepositoryProvider interface
 var _ repository.ComponentVersionRepositoryProvider = (*RepositoryRegistry)(nil)
 
-// Shutdown will loop through all _STARTED_ plugins and will interrupt them.
-// All plugins should handle interrupts gracefully. For Go, this is done automatically by
-// the plugin SDK.
+// Shutdown shuts down all _STARTED_ plugins.
 func (r *RepositoryRegistry) Shutdown(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var errs error
+	processes := make([]plugins.Process, 0, len(r.constructedPlugins))
 	for _, p := range r.constructedPlugins {
-		// TODO(Skarlso): Use context to wait for the plugin to actually shut down.
-		if perr := p.process.Interrupt(ctx); perr != nil && !errors.Is(perr, os.ErrProcessDone) {
-			errs = errors.Join(errs, perr)
-		}
+		processes = append(processes, p.process)
 	}
 
-	return errs
+	return plugins.ShutdownAll(ctx, processes)
 }
 
 // AddPlugin takes a plugin discovered by the manager and adds it to the stored plugin registry.

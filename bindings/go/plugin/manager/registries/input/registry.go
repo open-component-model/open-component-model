@@ -2,13 +2,9 @@ package input
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"os"
 	"slices"
 	"sync"
-
-	"golang.org/x/sync/errgroup"
 
 	"ocm.software/open-component-model/bindings/go/constructor"
 	inputv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
@@ -237,38 +233,16 @@ type constructedPlugin struct {
 	process plugins.Process
 }
 
-// Shutdown will loop through all _STARTED_ plugins and will interrupt them.
-// All plugins should handle interrupts gracefully. For Go, this is done automatically by
-// the plugin SDK.
+// Shutdown shuts down all _STARTED_ plugins.
 func (r *RepositoryRegistry) Shutdown(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	eg, ctx := errgroup.WithContext(ctx)
+	processes := make([]plugins.Process, 0, len(r.constructedPlugins))
 	for _, p := range r.constructedPlugins {
-		eg.Go(func() error {
-			if err := p.process.Interrupt(ctx); err != nil && !errors.Is(err, os.ErrProcessDone) {
-				return fmt.Errorf("failed to interrupt plugin: %w", errors.Join(err, p.process.Cmd.Process.Kill()))
-			}
-
-			shutdownSig := make(chan error, 1)
-			defer func() {
-				close(shutdownSig)
-			}()
-			go func() {
-				_, err := p.process.Cmd.Process.Wait()
-				shutdownSig <- err
-			}()
-
-			select {
-			case err := <-shutdownSig:
-				return err
-			case <-ctx.Done():
-				return errors.Join(ctx.Err(), p.process.Cmd.Process.Kill())
-			}
-		})
+		processes = append(processes, p.process)
 	}
 
-	return eg.Wait()
+	return plugins.ShutdownAll(ctx, processes)
 }
 
 func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *types.Plugin) (inputv1.InputPluginContract, error) {

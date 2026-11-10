@@ -2,12 +2,8 @@ package componentlister
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"os"
 	"sync"
-
-	"golang.org/x/sync/errgroup"
 
 	componentlisterv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
@@ -58,38 +54,16 @@ func (r *ComponentListerRegistry) GetComponentVersionRepositoryScheme() *runtime
 	return r.scheme
 }
 
-// Shutdown will loop through all _STARTED_ plugins and will interrupt them.
-// All plugins should handle interrupts gracefully. For Go, this is done automatically by
-// the plugin SDK.
+// Shutdown shuts down all _STARTED_ plugins.
 func (r *ComponentListerRegistry) Shutdown(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	eg, ctx := errgroup.WithContext(ctx)
+	processes := make([]plugins.Process, 0, len(r.constructedPlugins))
 	for _, p := range r.constructedPlugins {
-		eg.Go(func() error {
-			if err := p.process.Interrupt(ctx); err != nil && !errors.Is(err, os.ErrProcessDone) {
-				return fmt.Errorf("failed to interrupt plugin: %w", errors.Join(err, p.process.Cmd.Process.Kill()))
-			}
-
-			shutdownSig := make(chan error, 1)
-			defer func() {
-				close(shutdownSig)
-			}()
-			go func() {
-				_, err := p.process.Cmd.Process.Wait()
-				shutdownSig <- err
-			}()
-
-			select {
-			case err := <-shutdownSig:
-				return err
-			case <-ctx.Done():
-				return errors.Join(ctx.Err(), p.process.Cmd.Process.Kill())
-			}
-		})
+		processes = append(processes, p.process)
 	}
 
-	return eg.Wait()
+	return plugins.ShutdownAll(ctx, processes)
 }
 
 // AddPlugin takes a plugin discovered by the manager and adds it to the stored plugin registry.

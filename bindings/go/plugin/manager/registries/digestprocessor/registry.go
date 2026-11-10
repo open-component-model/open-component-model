@@ -2,9 +2,7 @@ package digestprocessor
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"os"
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/constructor"
@@ -64,17 +62,16 @@ type RepositoryRegistry struct {
 	internalDigestProcessorPlugins map[runtime.Type]constructor.ResourceDigestProcessor
 }
 
-// Shutdown will loop through all _STARTED_ plugins and will interrupt them.
+// Shutdown shuts down all _STARTED_ plugins.
 func (r *RepositoryRegistry) Shutdown(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var errs error
+	processes := make([]plugins.Process, 0, len(r.constructedPlugins))
 	for _, p := range r.constructedPlugins {
-		if perr := p.process.Interrupt(ctx); perr != nil && !errors.Is(perr, os.ErrProcessDone) {
-			errs = errors.Join(errs, perr)
-		}
+		processes = append(processes, p.process)
 	}
-	return errs
+
+	return plugins.ShutdownAll(ctx, processes)
 }
 
 // AddPlugin takes a plugin discovered by the manager and adds it to the stored plugin registry.

@@ -4,10 +4,10 @@ package osutil
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"os"
 	"path/filepath"
-	"runtime"
 
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
@@ -19,6 +19,8 @@ import (
 func ConnectionType(ctx context.Context) types.ConnectionType {
 	tmp, err := os.MkdirTemp("", "")
 	if err != nil {
+		// An unexpected TCP plugin is the first thing an operator looks for, so name the reason.
+		slog.DebugContext(ctx, "falling back to TCP: no temporary directory for a unix socket", "error", err)
 		return types.TCP
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
@@ -26,6 +28,7 @@ func ConnectionType(ctx context.Context) types.ConnectionType {
 	var lc net.ListenConfig
 	listener, err := lc.Listen(ctx, "unix", filepath.Join(tmp, "plugin.sock"))
 	if err != nil {
+		slog.DebugContext(ctx, "falling back to TCP: unix sockets are not supported", "error", err)
 		return types.TCP
 	}
 	_ = listener.Close()
@@ -34,18 +37,5 @@ func ConnectionType(ctx context.Context) types.ConnectionType {
 
 // SocketPath returns the unix domain socket location of the plugin with the given ID.
 func SocketPath(id string) string {
-	name := id + "-plugin.socket"
-	if runtime.GOOS == "windows" {
-		return filepath.Join(os.TempDir(), name)
-	}
-	// Not os.TempDir: on macOS it is long enough to push socket paths past the unix socket path limit.
-	return "/tmp/" + name
-}
-
-// ExecutableName returns the file name of an executable with the given base name on the current OS.
-func ExecutableName(name string) string {
-	if runtime.GOOS == "windows" {
-		return name + ".exe"
-	}
-	return name
+	return filepath.Join(socketDir(), id+"-plugin.socket")
 }

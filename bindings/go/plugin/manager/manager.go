@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	goruntime "runtime"
 	"strings"
 	"sync"
 	"time"
@@ -253,8 +252,9 @@ func pluginID(name string) (string, bool) {
 	ext := filepath.Ext(name)
 	switch {
 	case ext == "":
-		return name, goruntime.GOOS != "windows"
-	case goruntime.GOOS == "windows" && strings.EqualFold(ext, ".exe"):
+		// Without the extension this OS requires for executables, the file cannot be run.
+		return name, mtypes.ExecutableSuffix == ""
+	case mtypes.ExecutableSuffix != "" && strings.EqualFold(ext, mtypes.ExecutableSuffix):
 		return strings.TrimSuffix(name, ext), true
 	default:
 		return "", false
