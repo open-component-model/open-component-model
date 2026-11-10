@@ -133,6 +133,7 @@ func TestTraverse_ResolvesCompleteGraph(t *testing.T) {
 
 	graph, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, resolver)
 	r.NoError(err)
+	r.Equal(ComponentKey{Name: "root", Version: "1.0.0"}, graph.Root, "the traversal root is recorded for reference paths")
 	r.Equal([]ComponentKey{
 		{Name: "a", Version: "1.0.0"},
 		{Name: "b", Version: "1.0.0"},

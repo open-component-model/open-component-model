@@ -16,14 +16,21 @@ const KindDiscovery = "Discovery"
 // +kubebuilder:validation:XValidation:rule="(has(self.byResources) ? 1 : 0) + (has(self.byComponents) ? 1 : 0) + (has(self.expression) ? 1 : 0) == 1",message="exactly one of byResources, byComponents, or expression must be specified"
 type Extract struct {
 	// ByResources evaluates each map value as a CEL expression once per
-	// surviving (component, resource) pair with the bindings component and
-	// resource. An explicitly empty map emits one empty record per pair.
+	// surviving (component, resource) pair with the bindings component,
+	// resource, referencePath and resourceIdentity. referencePath and
+	// resourceIdentity can be used verbatim as a Resource's
+	// spec.resource.byReference referencePath and resource: referencePath is
+	// the shortest list of reference identities from the root component
+	// (empty for the root), resourceIdentity the resource identity, each
+	// carrying a version only where it is needed to disambiguate. An
+	// explicitly empty map emits one empty record per pair.
 	// +optional
 	ByResources map[string]string `json:"byResources,omitzero"`
 
 	// ByComponents evaluates each map value as a CEL expression once per
-	// surviving component with the binding component. An explicitly empty map
-	// emits one empty record per component.
+	// surviving component with the bindings component and referencePath (see
+	// byResources). An explicitly empty map emits one empty record per
+	// component.
 	// +optional
 	ByComponents map[string]string `json:"byComponents,omitzero"`
 

@@ -116,7 +116,7 @@ func Traverse(ctx context.Context, root ComponentKey, resolver resolvers.Compone
 	}
 
 	// Consume the discovered vertices only after the entire traversal succeeded.
-	graph := &Graph{}
+	graph := &Graph{Root: root}
 	if err := discoverer.Graph().WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
 		descriptors := make([]*descriptor.Descriptor, 0, len(d.Vertices))
 		for key, vertex := range d.Vertices {

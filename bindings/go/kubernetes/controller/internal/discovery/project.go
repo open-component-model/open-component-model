@@ -87,9 +87,9 @@ func (q *Query) Project(ctx context.Context, filtered *Filtered) (*Payload, erro
 	// a silent empty result.
 	switch q.extract.mode {
 	case extractByResources:
-		payload.Extracted, err = q.projectPerResource(ctx, descriptors)
+		payload.Extracted, err = q.projectPerResource(ctx, descriptors, filtered)
 	case extractByComponents:
-		payload.Extracted, err = q.projectPerComponent(ctx, descriptors)
+		payload.Extracted, err = q.projectPerComponent(ctx, descriptors, filtered)
 	case extractExpression:
 		payload.Extracted, err = q.projectExpression(ctx, descriptors)
 	default:
@@ -166,7 +166,10 @@ func resources(component map[string]any) []map[string]any {
 	return out
 }
 
-func (q *Query) projectPerResource(ctx context.Context, descriptors []*runtime.Unstructured) ([]map[string]any, error) {
+// projectPerResource evaluates the field map once per (component, resource)
+// pair. descriptors must be index-aligned with filtered.Descriptors, as
+// produced by unstructuredDescriptors.
+func (q *Query) projectPerResource(ctx context.Context, descriptors []*runtime.Unstructured, filtered *Filtered) ([]map[string]any, error) {
 	records := make([]map[string]any, 0, len(descriptors))
 	for i, desc := range descriptors {
 		if err := checkContext(ctx); err != nil {
@@ -176,11 +179,37 @@ func (q *Query) projectPerResource(ctx context.Context, descriptors []*runtime.U
 		if err != nil {
 			return nil, fmt.Errorf("failed to project resources of descriptor %d: %w", i, err)
 		}
-		for _, resource := range resources(comp) {
-			record, err := q.evalFields(ctx, map[string]any{
+		d := filtered.Descriptors[i]
+		list := resources(comp)
+		var identities []runtime.Identity
+		if q.extract.usesResourceIdentity {
+			// The v2 resource list is a conversion of the runtime one, so both
+			// share order and length. Pairing by index is only safe while that
+			// holds; refuse to guess otherwise.
+			if len(list) != len(d.Component.Resources) {
+				return nil, fmt.Errorf("failed to project resources of descriptor %s: %d v2 resources but %d runtime resources",
+					d.Component.String(), len(list), len(d.Component.Resources))
+			}
+			ids := make([]runtime.Identity, len(d.Component.Resources))
+			for j := range d.Component.Resources {
+				ids[j] = d.Component.Resources[j].ToIdentity()
+			}
+			identities = versionlessIdentities(ids)
+		}
+		path, hasPath := referencePathOf(filtered, d)
+
+		for j, resource := range list {
+			activation := map[string]any{
 				"component": comp,
 				"resource":  resource,
-			})
+			}
+			if identities != nil {
+				activation[bindingResourceIdentity] = identityValue(identities[j])
+			}
+			if hasPath {
+				activation[bindingReferencePath] = path
+			}
+			record, err := q.evalFields(ctx, activation)
 			if err != nil {
 				return nil, err
 			}
@@ -190,7 +219,20 @@ func (q *Query) projectPerResource(ctx context.Context, descriptors []*runtime.U
 	return records, nil
 }
 
-func (q *Query) projectPerComponent(ctx context.Context, descriptors []*runtime.Unstructured) ([]map[string]any, error) {
+// referencePathOf returns the CEL value of d's reference path. A component
+// without a known path leaves the binding unset, so expressions reading it
+// are a missing access and their field is omitted.
+func referencePathOf(filtered *Filtered, d *descriptor.Descriptor) ([]any, bool) {
+	path, ok := filtered.ReferencePaths[ComponentKey{Name: d.Component.Name, Version: d.Component.Version}]
+	if !ok {
+		return nil, false
+	}
+	return pathValue(path), true
+}
+
+// projectPerComponent evaluates the field map once per component. descriptors
+// must be index-aligned with filtered.Descriptors.
+func (q *Query) projectPerComponent(ctx context.Context, descriptors []*runtime.Unstructured, filtered *Filtered) ([]map[string]any, error) {
 	records := make([]map[string]any, 0, len(descriptors))
 	for i, desc := range descriptors {
 		if err := checkContext(ctx); err != nil {
@@ -200,7 +242,11 @@ func (q *Query) projectPerComponent(ctx context.Context, descriptors []*runtime.
 		if err != nil {
 			return nil, fmt.Errorf("failed to project descriptor %d: %w", i, err)
 		}
-		record, err := q.evalFields(ctx, map[string]any{"component": comp})
+		activation := map[string]any{"component": comp}
+		if path, ok := referencePathOf(filtered, filtered.Descriptors[i]); ok {
+			activation[bindingReferencePath] = path
+		}
+		record, err := q.evalFields(ctx, activation)
 		if err != nil {
 			return nil, err
 		}

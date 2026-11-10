@@ -98,10 +98,11 @@ componentSelector:
 
 Set exactly one extraction mode under `spec.extract`. `extract: {}` is invalid.
 
-- **`byResources`** (bindings `component`, `resource`) — Each map value is a CEL
-  expression evaluated once per surviving `(component, resource)` pair.
-- **`byComponents`** (binding `component`) — Each map value is a CEL expression
-  evaluated once per surviving component.
+- **`byResources`** (bindings `component`, `resource`, `referencePath`,
+  `resourceIdentity`) — Each map value is a CEL expression evaluated once per
+  surviving `(component, resource)` pair.
+- **`byComponents`** (bindings `component`, `referencePath`) — Each map value is
+  a CEL expression evaluated once per surviving component.
 - **`expression`** (binding `components`) — A single CEL expression evaluated
   once over the complete filtered descriptor list; must return a list of objects.
 
@@ -115,6 +116,92 @@ Notes:
   objects with string keys.
 - All modes must return a list of objects. Anything else fails with
   `ExtractFailed`.
+
+### Addressing a resource with a Resource object
+
+`referencePath` and `resourceIdentity` are computed by the controller so that a
+discovered resource can be consumed through a `Resource` object, which verifies
+what Discovery does not. Both go verbatim into its `spec.resource.byReference`:
+
+- **`referencePath`** is a list of reference identities leading from the root
+  component to the current one, empty for the root. It is computed on the
+  unfiltered graph, so a selector that drops an intermediate component does not
+  cut it. Where several paths lead to a component, the shortest wins, and among
+  equally short paths the lexicographically smallest.
+- **`resourceIdentity`** is the identity of the current resource, including its
+  `extraIdentity`. Pass it instead of building an identity from
+  `resource.name`, which does not match a resource with extra identity.
+
+Both carry `version` only where name and extra identity are not unique, in line
+with the [identity rules]({{< relref "docs/concepts/component-identity.md" >}}),
+so they keep matching when the root component moves to a new version. Raw mode
+and `expression` mode do not have these bindings.
+
+The detour through a `Resource` matters because Discovery publishes whatever the
+repository returns. If a nested component version is overwritten in the
+repository, a `Discovery` stays `Ready` and publishes the new content. A
+`Resource` built from the same record fails with `digest mismatch` instead: it
+checks the root component version against the signatures you configure, every
+component version on the reference path against the digest its parent records,
+and the resource digest. Take access data from the `Resource` status
+(`status.resource.access`) once it is `Ready`, not from the `Discovery` status.
+
+A record extracted with `referencePath: referencePath` and
+`resource: resourceIdentity`, such as
+
+```json
+{
+  "referencePath": [{ "name": "platform" }, { "name": "podinfo" }],
+  "resource": { "architecture": "amd64", "name": "image" }
+}
+```
+
+becomes this `Resource`, with `componentRef` naming the `Component` the
+`Discovery` references:
+
+```yaml
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: podinfo-image-amd64
+  namespace: default
+spec:
+  componentRef:
+    name: releasechannel
+  resource:
+    byReference:
+      referencePath:
+        - name: platform
+        - name: podinfo
+      resource:
+        name: image
+        architecture: amd64
+```
+
+### Creating the Resource objects
+
+Each discovered resource you consume needs its own `Resource`, and each one
+reconciles and verifies on its own, so select only what you consume. Selecting
+narrowly also keeps the `Discovery` status small: every extracted
+`referencePath` grows with the nesting depth and counts against the 1MiB limit
+(see [Status semantics](#status-semantics)). How you create the `Resource`
+objects depends on who consumes the result:
+
+- **`kubectl`** - For a few resources or a one-off, write the manifests, or
+  generate them from `status.extracted`, for example with `jq`, and apply them.
+  Generate and apply again when the `Discovery` result changes. With a common
+  label, `kubectl apply --prune -l <label> --prune-allowlist=delivery.ocm.software/v1alpha1/Resource`
+  deletes the `Resource` objects of records that are gone.
+- **kro** - A `ResourceGraphDefinition` with a collection (`forEach` over
+  `status.extracted`) keeps one `Resource` per record and deletes the `Resource`
+  objects of records that disappear. kro needs permission to manage
+  `discoveries`, which the [setup guide]({{< relref "docs/getting-started/setup-controller-environment.md" >}})
+  does not grant, and it fails the reconciliation when a collection exceeds its
+  size limit, 1000 by default.
+- **Your own controller** - A controller that reads the `Discovery` status, for
+  example to derive configuration from the discovered versions and accesses,
+  creates a `Resource` for every access it hands on, waits for `Ready=True`, and
+  takes the access from the `Resource` status.
 
 ### Absent, null, and missing
 
@@ -251,6 +338,9 @@ finalizer of its own and sets no owner reference on the `Component`.
 - Artifact/resource downloads.
 - Signature-verification guarantees for the filtered descriptors. Filtered
   descriptors are **not** signature-verification inputs.
+- Digest verification of the walked component versions or of resources. Create
+  `Resource` objects from the results to verify them, see
+  [Creating the Resource objects](#creating-the-resource-objects).
 - Multi-root discovery.
 
 ## Related Documentation

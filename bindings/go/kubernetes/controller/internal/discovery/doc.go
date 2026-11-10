@@ -30,9 +30,18 @@
 //
 // Bindings exposed to CEL expressions depend on the stage:
 //   - selectors: identity (map of string to string), labels (label name to decoded JSON value)
-//   - extract.byResources: component (inner component), resource
-//   - extract.byComponents: component (inner component)
+//   - extract.byResources: component (inner component), resource, referencePath, resourceIdentity
+//   - extract.byComponents: component (inner component), referencePath
 //   - extract.expression: components (list of full v2 descriptors)
+//
+// referencePath and resourceIdentity let a consumer address a discovered
+// resource with a Resource object (spec.resource.byReference), which verifies
+// what Discovery does not. referencePath is the shortest component reference
+// path from the root, computed on the unfiltered graph (see referencePaths);
+// resourceIdentity is the resource identity. Both drop the version attribute
+// where it is not needed to disambiguate (see versionlessIdentities). Each is
+// only computed when an extraction expression references it, which Compile
+// reads from the checked CEL AST.
 //
 // A missing access (missing map key, missing attribute, out-of-range index) is
 // not an error: it is a selector nonmatch and an omitted extraction field. All

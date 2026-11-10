@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // ComponentKey identifies a component by name and version.
@@ -20,6 +21,9 @@ func (k ComponentKey) String() string {
 
 // Graph is a fully resolved transitive component graph.
 type Graph struct {
+	// Root is the component the traversal started from. Reference paths are
+	// computed from it; a zero Root yields no reference paths.
+	Root ComponentKey
 	// Descriptors contains the resolved descriptors, including the root.
 	Descriptors []*descriptor.Descriptor
 }
@@ -40,6 +44,13 @@ type Filtered struct {
 	// EmptyStage names the selector stage that emptied the result, or is
 	// empty for an ordinary result. Its values are the Stage constants.
 	EmptyStage string
+	// ReferencePaths holds the shortest reference path from the graph root
+	// for every component reachable from it (see referencePaths). It is
+	// computed on the unfiltered graph, so a selector that drops an
+	// intermediate component never cuts a path. Nil when the graph has no
+	// root or no extraction expression references referencePath. Shared
+	// read-only.
+	ReferencePaths map[ComponentKey][]runtime.Identity
 }
 
 // Filter applies the reference, component, and resource selector stages of q
@@ -65,6 +76,11 @@ func (q *Query) Filter(ctx context.Context, graph Graph) (*Filtered, error) {
 		if _, exists := byKey[key]; !exists {
 			byKey[key] = d
 		}
+	}
+
+	var paths map[ComponentKey][]runtime.Identity
+	if q.extract != nil && q.extract.usesReferencePath {
+		paths = referencePaths(graph.Root, byKey)
 	}
 
 	survivors, err := q.filterReferences(ctx, byKey)
@@ -101,7 +117,7 @@ func (q *Query) Filter(ctx context.Context, graph Graph) (*Filtered, error) {
 	}
 
 	// Lexicographic order by (component.name, component.version).
-	return &Filtered{Descriptors: sortByComponentKey(filtered)}, nil
+	return &Filtered{Descriptors: sortByComponentKey(filtered), ReferencePaths: paths}, nil
 }
 
 // filterReferences applies the reference selector stage. Without a selector all
