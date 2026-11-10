@@ -44,13 +44,13 @@ type options struct {
 }
 
 func main() {
-	if err := run(); err != nil {
+	if err := benchmark(); err != nil {
 		slog.Error("benchmark failed", "error", err)
 		os.Exit(1)
 	}
 }
 
-func run() error {
+func benchmark() error {
 	// Without a logger controller-runtime prints a stack trace on first use.
 	ctrllog.SetLogger(logr.FromSlogHandler(slog.Default().Handler()))
 

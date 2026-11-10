@@ -3,11 +3,9 @@ package main
 import (
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
@@ -125,95 +123,6 @@ func TestWorkloadUnsigned(t *testing.T) {
 	r.NotContains(string(single.Spec.RepositorySpec.Raw), "subPath")
 }
 
-func TestReadyState(t *testing.T) {
-	tests := []struct {
-		name       string
-		generation int64
-		observed   int64
-		conditions []any
-		want       objectState
-	}{
-		{
-			name:       "ready and observed",
-			generation: 2, observed: 2,
-			conditions: []any{map[string]any{"type": "Ready", "status": "True", "reason": "Succeeded"}},
-			want:       objectState{ready: true, reason: "Succeeded"},
-		},
-		{
-			name:       "ready for an older generation",
-			generation: 3, observed: 2,
-			conditions: []any{map[string]any{"type": "Ready", "status": "True", "reason": "Succeeded"}},
-			want:       objectState{reason: "Succeeded"},
-		},
-		{
-			name:       "not ready",
-			generation: 1, observed: 1,
-			conditions: []any{map[string]any{"type": "Ready", "status": "False", "reason": "GetComponentVersionFailed"}},
-			want:       objectState{failed: true, reason: "GetComponentVersionFailed"},
-		},
-		{
-			name:       "no ready condition",
-			generation: 1, observed: 0,
-			conditions: []any{map[string]any{"type": "Other", "status": "True"}},
-			want:       objectState{},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := require.New(t)
-			u := &unstructured.Unstructured{Object: map[string]any{
-				"metadata": map[string]any{"generation": tt.generation},
-				"status":   map[string]any{"observedGeneration": tt.observed, "conditions": tt.conditions},
-			}}
-			r.Equal(tt.want, readyState(u))
-		})
-	}
-}
-
-func TestTrackerSummary(t *testing.T) {
-	r := require.New(t)
-	tr := &tracker{
-		expected: 4,
-		state:    readyState,
-		readyAt:  map[string]time.Time{},
-		last:     map[string]objectState{},
-		done:     make(chan struct{}),
-	}
-	tr.markStart()
-
-	obj := func(name, status, reason string) *unstructured.Unstructured {
-		return &unstructured.Unstructured{Object: map[string]any{
-			"metadata": map[string]any{"name": name},
-			"status": map[string]any{"conditions": []any{
-				map[string]any{"type": "Ready", "status": status, "reason": reason},
-			}},
-		}}
-	}
-	tr.observe(obj("a", "False", "Progressing"))
-	tr.observe(obj("a", "True", "Succeeded"))
-	tr.observe(obj("b", "True", "Succeeded"))
-	// Once ready, a later failure does not undo the recorded time.
-	tr.observe(obj("b", "False", "Broken"))
-	tr.observe(obj("c", "False", "GetComponentVersionFailed"))
-
-	sum := tr.summary()
-	r.Equal(2, sum.ready)
-	r.Equal(1, sum.failed)
-	r.Equal(1, sum.pending, "d was never observed")
-	r.Equal(map[string]int{"GetComponentVersionFailed": 1}, sum.failureReasons)
-	r.Len(sum.latencies, 2)
-	r.LessOrEqual(sum.latencies[0], sum.latencies[1])
-
-	select {
-	case <-tr.done:
-		r.Fail("tracker must not finish before all objects are ready")
-	default:
-	}
-	tr.observe(obj("c", "True", "Succeeded"))
-	tr.observe(obj("d", "True", "Succeeded"))
-	r.True(tr.wait(t.Context(), time.Second))
-}
-
 func TestWorkloadConfigMaps(t *testing.T) {
 	for _, depth := range []int{0, defaultDepth} {
 		t.Run(fmt.Sprintf("depth %d", depth), func(t *testing.T) {
@@ -243,19 +152,4 @@ func TestWorkloadConfigMaps(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestRevertedState(t *testing.T) {
-	r := require.New(t)
-	cm := func(name, version string) *unstructured.Unstructured {
-		return &unstructured.Unstructured{Object: map[string]any{
-			"metadata": map[string]any{"name": name, "namespace": "ns"},
-			"data":     map[string]any{"version": version},
-		}}
-	}
-	state := revertedState(initialVersion)
-	r.False(state(cm("a", initialVersion)).ready, "not changed yet")
-	r.False(state(cm("a", driftedVersion)).ready, "changed, not reverted")
-	r.True(state(cm("a", initialVersion)).ready, "changed and reverted")
-	r.False(state(cm("b", initialVersion)).ready, "another ConfigMap was not changed")
 }

@@ -9,69 +9,64 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
-
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// phase is one measured change of a run: the rollout, or the drift after it.
-type phase struct {
-	name string
-	// gvk and state decide when an object of the phase is done; expected is how many there are.
-	gvk      schema.GroupVersionKind
-	state    func(*unstructured.Unstructured) objectState
-	expected int
-	// trigger makes the change the phase measures.
-	trigger func(context.Context) error
+// scrapes holds one point-in-time snapshot of every metrics source.
+type scrapes struct {
+	controller, registry []byte
+	// registryErr is set when the registry scrape failed; registry is nil then.
+	registryErr error
 }
 
-// measurement is a measured phase, with the raw data behind its window.
+// measurement is a measured phase, with the raw data behind it.
 type measurement struct {
-	window
+	phaseResult
 	before, after scrapes
 	samples       []sample
 }
 
-// complete reports whether every object of the phase was done, the queues drained
-// and the controller kept running.
-func (m *measurement) complete() bool {
-	return !m.Outcome.TimedOut && !m.Outcome.Unsettled && !m.ControllerRestarted
-}
+// measure prepares the phase, scrapes, makes its change, waits until every pipeline
+// is done and the controller queues drained, and scrapes again.
+func (r *run) measure(ctx context.Context, p phase) (*measurement, error) {
+	m := &measurement{phaseResult: phaseResult{Name: p.name}}
+	if p.prepare != nil {
+		r.log.Info("preparing", "phase", p.name)
+		start := time.Now()
+		if err := p.prepare(ctx); err != nil {
+			return nil, fmt.Errorf("preparing: %w", err)
+		}
+		m.Durations.Prepare = time.Since(start).Seconds()
+	}
 
-// measure scrapes, triggers the phase, waits until its objects are done and the
-// controller queues drained, and scrapes again.
-func (r *runner) measure(ctx context.Context, pod *corev1.Pod, w workload, p phase) (*measurement, error) {
-	tr, err := startTracker(ctx, r.c, w, p.gvk, p.state, p.expected)
+	tr, err := startTracker(ctx, r.c, r.w, p.watch, p.until, r.w.objects)
 	if err != nil {
 		return nil, err
 	}
 	defer tr.stop()
 
-	m := &measurement{}
-	if m.before, err = r.scrapeAll(ctx, pod); err != nil {
+	if m.before, err = r.scrapeAll(ctx); err != nil {
 		return nil, err
 	}
 
 	smpCtx, stopSampling := context.WithCancel(ctx)
-	smp := &sampler{c: r.c, pod: pod.Name, node: pod.Spec.NodeName, interval: r.opts.sampleInterval}
+	smp := &sampler{c: r.c, pod: r.pod.Name, node: r.pod.Spec.NodeName, interval: r.opts.sampleInterval}
 	var wg sync.WaitGroup
 	wg.Go(func() { smp.run(smpCtx) })
 
-	slog.Info("measuring", "run", w.runID, "phase", p.name, "target", p.gvk.Kind, "targets", p.expected)
+	r.log.Info("measuring", "phase", p.name, "watch", p.watch.Kind, "objects", r.w.objects)
 	start := tr.markStart()
-	if err := p.trigger(ctx); err != nil {
+	if err := p.change(ctx); err != nil {
 		stopSampling()
 		wg.Wait()
 		return nil, err
 	}
-	m.Durations.Create = time.Since(start).Seconds()
+	m.Durations.Change = time.Since(start).Seconds()
 
 	allReady := tr.wait(ctx, r.opts.timeout)
 	elapsed := time.Since(start)
-	// Ready objects still leave reconciles queued; usage has to cover those too.
+	// Ready objects still leave reconciles queued; the cost has to cover those too.
 	if allReady {
-		slog.Info("waiting for controller queues to drain", "run", w.runID, "phase", p.name)
+		r.log.Info("waiting for controller queues to drain", "phase", p.name)
 		if settled, ok := smp.waitSettled(ctx, elapsed.Seconds(), r.opts.timeout); ok {
 			elapsed = max(elapsed, time.Duration(settled*float64(time.Second)))
 			m.Durations.Settled = elapsed.Seconds()
@@ -83,13 +78,13 @@ func (r *runner) measure(ctx context.Context, pod *corev1.Pod, w workload, p pha
 	stopSampling()
 	wg.Wait()
 
-	if m.after, err = r.scrapeAll(ctx, pod); err != nil {
+	if m.after, err = r.scrapeAll(ctx); err != nil {
 		return nil, err
 	}
 
 	sum := tr.summary()
 	m.Outcome = outcome{
-		Expected:       p.expected,
+		Expected:       r.w.objects,
 		Ready:          sum.ready,
 		Failed:         sum.failed,
 		Pending:        sum.pending,
@@ -111,19 +106,24 @@ func (r *runner) measure(ctx context.Context, pod *corev1.Pod, w workload, p pha
 	var sampleErrs []string
 	m.samples, sampleErrs = smp.result()
 	m.Errors = append(m.Errors, sampleErrs...)
-	if err := r.summarize(&m.window, m.before, m.after, m.samples, elapsed); err != nil {
+	if err := summarize(&m.Cost, m.before, m.after, m.samples, elapsed); err != nil {
 		m.Errors = append(m.Errors, err.Error())
 	}
-	m.ControllerRestarted = r.restartedSince(ctx, pod)
+	m.Outcome.ControllerRestarted = r.c.restartedSince(ctx, r.pod)
+	if m.Outcome.TimedOut {
+		if m.Outcome.NotReady, err = r.notReady(ctx); err != nil {
+			m.Errors = append(m.Errors, err.Error())
+		}
+	}
 	return m, nil
 }
 
 // scrapeAll fails only on the controller scrape. Registry numbers are
 // secondary, so a failed registry scrape is logged and the run goes on.
-func (r *runner) scrapeAll(ctx context.Context, pod *corev1.Pod) (scrapes, error) {
+func (r *run) scrapeAll(ctx context.Context) (scrapes, error) {
 	var s scrapes
 	var err error
-	if s.controller, err = r.c.scrapeController(ctx, pod.Name); err != nil {
+	if s.controller, err = r.c.scrapeController(ctx, r.pod.Name); err != nil {
 		return s, fmt.Errorf("scraping controller metrics: %w", err)
 	}
 	if s.registry, err = r.c.scrapeRegistry(ctx); err != nil {
@@ -133,7 +133,7 @@ func (r *runner) scrapeAll(ctx context.Context, pod *corev1.Pod) (scrapes, error
 	return s, nil
 }
 
-func (r *runner) summarize(res *window, before, after scrapes, samples []sample, elapsed time.Duration) error {
+func summarize(c *cost, before, after scrapes, samples []sample, elapsed time.Duration) error {
 	var errs []error
 
 	ctlBefore, err1 := parseScrape(before.controller)
@@ -141,11 +141,11 @@ func (r *runner) summarize(res *window, before, after scrapes, samples []sample,
 	if err := errors.Join(err1, err2); err != nil {
 		errs = append(errs, fmt.Errorf("controller metrics: %w", err))
 	} else {
-		res.ControllerCounters = counterDeltas(ctlBefore, ctlAfter, controllerCounterPrefixes)
+		c.ControllerCounters = counterDeltas(ctlBefore, ctlAfter, controllerCounterPrefixes)
 		// The process counter is read at scrape time; kubelet's cAdvisor value
 		// lags by its housekeeping interval, which dominates short runs.
-		res.Usage.CPUSeconds = res.ControllerCounters[cpuCounter]
-		res.Usage.AvgCores = res.Usage.CPUSeconds / elapsed.Seconds()
+		c.CPUSeconds = c.ControllerCounters[cpuCounter]
+		c.AvgCores = c.CPUSeconds / elapsed.Seconds()
 	}
 
 	if err := errors.Join(before.registryErr, after.registryErr); err != nil {
@@ -156,21 +156,23 @@ func (r *runner) summarize(res *window, before, after scrapes, samples []sample,
 		if err := errors.Join(err1, err2); err != nil {
 			errs = append(errs, fmt.Errorf("registry metrics: %w", err))
 		} else {
-			res.RegistryCounters = counterDeltas(rBefore, rAfter, registryCounterPrefixes)
-			requests := sumSeries(res.RegistryCounters, "registry_http_requests_total")
-			res.Usage.RegistryRequests = &requests
+			c.RegistryCounters = counterDeltas(rBefore, rAfter, registryCounterPrefixes)
+			requests := sumSeries(c.RegistryCounters, "registry_http_requests_total")
+			c.RegistryRequests = &requests
 		}
 	}
 
-	res.Usage.PeakWorkingSetBytes, res.ControllerGaugePeaks = peaks(samples)
-	res.Usage.PeakRSSBytes = res.ControllerGaugePeaks["process_resident_memory_bytes"]
-	res.Usage.PeakCores = peakCores(samples)
+	c.PeakWorkingSetBytes, c.ControllerGaugePeaks = peaks(samples)
+	c.PeakRSSBytes = c.ControllerGaugePeaks["process_resident_memory_bytes"]
+	c.PeakCores = peakCores(samples)
 	return errors.Join(errs...)
 }
 
-// writeRaw writes the scrapes and samples behind a window, each file name
-// starting with prefix.
-func (m *measurement) writeRaw(dir, prefix string) error {
+// writeRaw writes the scrapes and samples behind a phase into dir.
+func (m *measurement) writeRaw(dir string) error {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return err
+	}
 	files := map[string][]byte{
 		"controller-start.prom": m.before.controller,
 		"controller-end.prom":   m.after.controller,
@@ -181,9 +183,9 @@ func (m *measurement) writeRaw(dir, prefix string) error {
 		if data == nil {
 			continue
 		}
-		if err := os.WriteFile(filepath.Join(dir, prefix+name), data, 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
 			return err
 		}
 	}
-	return writeJSON(filepath.Join(dir, prefix+"samples.json"), m.samples)
+	return writeJSON(filepath.Join(dir, "samples.json"), m.samples)
 }

@@ -66,81 +66,99 @@ func TestParseFlags(t *testing.T) {
 
 func TestSummarizeRegistryUnavailable(t *testing.T) {
 	r := require.New(t)
-	res := &window{}
+	var c cost
 	after := scrapes{registryErr: errors.New("connection refused")}
 
-	err := (&runner{}).summarize(res, scrapes{}, after, nil, time.Second)
+	err := summarize(&c, scrapes{}, after, nil, time.Second)
 
 	r.ErrorContains(err, "registry metrics unavailable: connection refused")
-	r.Nil(res.Usage.RegistryRequests)
+	r.Nil(c.RegistryRequests)
 }
 
 func TestWriteSummary(t *testing.T) {
 	r := require.New(t)
 	dir := t.TempDir()
-	requests := 42.0
+	requests, driftRequests := 42.0, 7.0
 	results := []*result{
 		{
 			Signed:      true,
 			Environment: environment{ControllerImageID: "docker.io/library/import-2026-10-26@sha256:18bb5d7f6bba0123456789"},
+			Phases: []phaseResult{
+				{Name: "rollout", Cost: cost{RegistryRequests: &requests}},
+				{Name: "drift", Outcome: outcome{Ready: 3}, Cost: cost{RegistryRequests: &driftRequests}, Errors: []string{"boom"}},
+			},
 		},
-		{window: window{Outcome: outcome{TimedOut: true}, ControllerRestarted: true}},
+		{Phases: []phaseResult{{Name: "rollout", Outcome: outcome{TimedOut: true, ControllerRestarted: true}}}},
 	}
-	results[0].Usage.RegistryRequests = &requests
-	driftRequests := 7.0
-	results[0].Drift = &window{Outcome: outcome{Ready: 3}, Usage: usage{RegistryRequests: &driftRequests}, Errors: []string{"boom"}}
 
 	r.NoError(writeSummary(dir, results))
 
 	raw, err := os.ReadFile(filepath.Join(dir, "summary.md"))
 	r.NoError(err)
 	rows := strings.Split(strings.TrimSpace(string(raw)), "\n")
-	r.Len(rows, 5)
+	r.Len(rows, 2+3, "one row per phase; a run whose rollout did not complete has one")
 	r.Contains(rows[0], "| Phase |")
 	r.Contains(rows[2], "| rollout | 0 | 0 | 18bb5d7f6bba | yes |")
 	r.Contains(rows[2], "| 42 |  |")
 	r.Contains(rows[3], "| drift | 0 | 0 | 18bb5d7f6bba | yes | 3 |")
-	r.Contains(rows[3], "| 7 | metric errors |")
+	r.Contains(rows[3], "| 7 | drift metric errors |")
 	r.Contains(rows[4], "| rollout | 0 | 0 | n/a | no |")
-	r.Contains(rows[4], "| n/a | timed out, controller restarted |")
+	r.Contains(rows[4], "| n/a | rollout timed out, rollout controller restarted |")
 }
 
 func TestResultJSON(t *testing.T) {
 	r := require.New(t)
 	requests := 5.0
-	res := &result{window: window{
-		Durations:          durations{Total: 10},
-		ControllerCounters: map[string]float64{"a": 1},
+	res := &result{Phases: []phaseResult{
+		{
+			Name:      "rollout",
+			Outcome:   outcome{ControllerRestarted: true},
+			Durations: durations{Prepare: 70, Change: 3, Total: 10},
+			Cost:      cost{ControllerCounters: map[string]float64{"a": 1}},
+		},
+		{
+			Name:      "drift",
+			Outcome:   outcome{NotReady: map[string]int{"NamespacedDeployer/unknown": 1}},
+			Durations: durations{Total: 2},
+			Cost:      cost{RegistryRequests: &requests, RegistryCounters: map[string]float64{"b": 4}},
+		},
 	}}
 
 	raw, err := json.Marshal(res)
 	r.NoError(err)
 	var got map[string]any
 	r.NoError(json.Unmarshal(raw, &got))
-	r.Contains(got, "durations", "the rollout window stays at the top level")
-	r.Contains(got, "controllerCounters")
-	r.NotContains(got, "drift", "a run whose rollout did not finish has no drift phase")
-	r.NotContains(got, "scenario")
+	for _, key := range []string{"durations", "outcome", "usage", "controllerCounters", "scenario", "drift"} {
+		r.NotContains(got, key, "every phase lives in phases")
+	}
 	for _, key := range []string{"versions", "depth", "resources", "repositories", "signed"} {
 		r.Contains(got, key, "the workload knobs are always written, 0 and false included")
 	}
 
-	res.Drift = &window{
-		Durations:          durations{Total: 2},
-		Usage:              usage{RegistryRequests: &requests},
-		ControllerCounters: map[string]float64{"a": 3},
-		RegistryCounters:   map[string]float64{"b": 4},
+	phases := got["phases"].([]any)
+	r.Len(phases, 2)
+	rollout, drift := phases[0].(map[string]any), phases[1].(map[string]any)
+	r.Equal("rollout", rollout["name"])
+	r.Equal("drift", drift["name"], "in execution order")
+	r.ElementsMatch([]string{"name", "outcome", "durations", "cost"}, keys(rollout))
+
+	r.Equal(true, rollout["outcome"].(map[string]any)["controllerRestarted"])
+	r.NotContains(rollout["outcome"], "notReady", "only written when a phase timed out")
+	r.Equal(map[string]any{"NamespacedDeployer/unknown": 1.0}, drift["outcome"].(map[string]any)["notReady"])
+	r.InDelta(70, rollout["durations"].(map[string]any)["prepare"], 0)
+	r.InDelta(3, rollout["durations"].(map[string]any)["change"], 0)
+	r.InDelta(0, drift["durations"].(map[string]any)["prepare"], 0, "written for every phase")
+	r.InDelta(5, drift["cost"].(map[string]any)["registryRequests"], 0)
+	r.Contains(drift["cost"], "registryCounters")
+	r.Contains(rollout["cost"], "controllerCounters")
+}
+
+func keys(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
 	}
-	raw, err = json.Marshal(res)
-	r.NoError(err)
-	got = nil
-	r.NoError(json.Unmarshal(raw, &got))
-	r.InDelta(10, got["durations"].(map[string]any)["total"], 0, "the drift phase leaves the rollout numbers alone")
-	drift := got["drift"].(map[string]any)
-	for _, key := range []string{"durations", "usage", "controllerCounters", "registryCounters"} {
-		r.Contains(drift, key)
-	}
-	r.InDelta(5, drift["usage"].(map[string]any)["registryRequests"], 0)
+	return out
 }
 
 func TestPercentile(t *testing.T) {
@@ -192,8 +210,8 @@ func TestSettledAt(t *testing.T) {
 	}
 }
 
-func TestResultNotesIncludeDrift(t *testing.T) {
+func TestResultNotesNameTheirPhase(t *testing.T) {
 	r := require.New(t)
-	res := &result{Drift: &window{Outcome: outcome{TimedOut: true}}}
-	r.Equal([]string{"drift timed out"}, res.notes(), "a failed drift phase makes the run unusable")
+	res := &result{Phases: []phaseResult{{Name: "rollout"}, {Name: "drift", Outcome: outcome{Unsettled: true}}}}
+	r.Equal([]string{"drift queues not drained"}, res.notes(), "a phase that did not complete makes the run unusable")
 }

@@ -6,7 +6,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
@@ -230,31 +229,4 @@ func (w workload) manifest(i int, version string) ([]byte, error) {
 		Data: map[string]string{"version": version},
 	}
 	return yaml.Marshal(cm)
-}
-
-// objectState classifies a tracked object. failed means Ready=False at the
-// time of observation; the controller may still recover it.
-type objectState struct {
-	ready  bool
-	failed bool
-	reason string
-}
-
-func readyState(u *unstructured.Unstructured) objectState {
-	conditions, _, _ := unstructured.NestedSlice(u.Object, "status", "conditions")
-	observed, _, _ := unstructured.NestedInt64(u.Object, "status", "observedGeneration")
-	for _, c := range conditions {
-		cond, ok := c.(map[string]any)
-		if !ok || cond["type"] != v1alpha1.ReadyCondition {
-			continue
-		}
-		reason, _ := cond["reason"].(string)
-		switch cond["status"] {
-		case string(metav1.ConditionTrue):
-			return objectState{ready: observed >= u.GetGeneration(), reason: reason}
-		case string(metav1.ConditionFalse):
-			return objectState{failed: true, reason: reason}
-		}
-	}
-	return objectState{}
 }

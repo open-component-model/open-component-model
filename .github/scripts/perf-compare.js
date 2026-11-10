@@ -31,25 +31,79 @@ export function median(values) {
 }
 
 /**
+ * The phases of a result, in execution order.
+ *
+ * Results of a base branch that predates phases carry the rollout at the top level and
+ * the drift in a block of its own; they are read as their rollout alone.
+ * Remove the fallback once main writes phases.
+ *
  * @param {any} result
- * @param {string} name - Prometheus counter name.
- * @param {string} controller
- * @returns {number}
+ * @returns {any[]}
  */
-function counter(result, name, controller) {
-  return result.controllerCounters[`${name}{controller="${controller}"}`] ?? 0;
+function phasesOf(result) {
+  if (result.phases) {
+    return result.phases;
+  }
+  return [
+    {
+      name: "rollout",
+      outcome: { ...result.outcome, controllerRestarted: result.controllerRestarted },
+      durations: result.durations,
+      cost: {
+        ...result.usage,
+        controllerCounters: result.controllerCounters,
+        controllerGaugePeaks: result.controllerGaugePeaks,
+        registryCounters: result.registryCounters,
+      },
+    },
+  ];
 }
 
 /**
- * The controllers that reconciled anything in any of the results.
+ * @param {any} result
+ * @param {string} name
+ * @returns {any} The phase of that name; undefined when the result has none.
+ */
+function phaseOf(result, name) {
+  return phasesOf(result).find((phase) => phase.name === name);
+}
+
+/**
+ * The names of the phases of any of the results, in execution order.
  *
  * @param {any[]} results
  * @returns {string[]}
  */
-function activeControllers(results) {
+function phaseNames(results) {
   const names = new Set();
   for (const result of results) {
-    for (const [key, value] of Object.entries(result.controllerCounters)) {
+    for (const phase of phasesOf(result)) {
+      names.add(phase.name);
+    }
+  }
+  return [...names];
+}
+
+/**
+ * @param {any} phase
+ * @param {string} name - Prometheus counter name.
+ * @param {string} controller
+ * @returns {number}
+ */
+function counter(phase, name, controller) {
+  return phase.cost.controllerCounters?.[`${name}{controller="${controller}"}`] ?? 0;
+}
+
+/**
+ * The controllers that reconciled anything in any of the phases.
+ *
+ * @param {any[]} phases
+ * @returns {string[]}
+ */
+function activeControllers(phases) {
+  const names = new Set();
+  for (const phase of phases) {
+    for (const [key, value] of Object.entries(phase.cost.controllerCounters ?? {})) {
       const match = key.match(/^controller_runtime_reconcile_time_seconds_count\{controller="(.+)"\}$/);
       if (match && value > 0) {
         names.add(match[1]);
@@ -62,15 +116,15 @@ function activeControllers(results) {
 /**
  * Registry requests by handler and method, summed over every other label.
  *
- * @param {any} window - A result or its drift block.
+ * @param {any} phase
  * @returns {Map<string, number> | undefined} keyed by "handler method"; undefined when the registry scrape failed.
  */
-function registryRequests(window) {
-  if (!window.registryCounters) {
+function registryRequests(phase) {
+  if (!phase.cost.registryCounters) {
     return undefined;
   }
   const sums = new Map();
-  for (const [key, value] of Object.entries(window.registryCounters)) {
+  for (const [key, value] of Object.entries(phase.cost.registryCounters)) {
     if (!key.startsWith("registry_http_requests_total{")) {
       continue;
     }
@@ -85,15 +139,15 @@ function registryRequests(window) {
 }
 
 /**
- * The handler and method pairs that any of the windows sent requests for.
+ * The handler and method pairs that any of the phases sent requests for.
  *
- * @param {any[]} windows
+ * @param {any[]} phases
  * @returns {string[]}
  */
-function activeRegistryRequests(windows) {
+function activeRegistryRequests(phases) {
   const names = new Set();
-  for (const window of windows) {
-    for (const [name, value] of registryRequests(window) ?? []) {
+  for (const phase of phases) {
+    for (const [name, value] of registryRequests(phase) ?? []) {
       if (value > 0) {
         names.add(name);
       }
@@ -107,72 +161,60 @@ function activeRegistryRequests(windows) {
  */
 
 /**
- * The compared rows. runnerDependent marks rows that vary with the runner's hardware.
+ * The compared rows of one phase. runnerDependent marks rows that vary with the runner's hardware.
  * Hand-picked sections of the result only. CPU is ignored as it can vary with the parallel runner.
+ * A result without the phase has no value for any of them.
  *
- * @param {string[]} controllers
- * @returns {Row[]}
- */
-function rows(controllers) {
-  return [
-    { label: "Pass rate (%)", value: (r) => (100 * r.outcome.ready) / r.outcome.expected, rate: true },
-    { label: "Total (s)", value: (r) => r.durations.total, runnerDependent: true },
-    { label: "Settled (s)", value: (r) => r.durations.settled, runnerDependent: true },
-    { label: "p50 (s)", value: (r) => r.durations.p50, runnerDependent: true },
-    { label: "p90 (s)", value: (r) => r.durations.p90, runnerDependent: true },
-    { label: "Peak working set (MiB)", value: (r) => r.usage.peakWorkingSetBytes / MiB },
-    { label: "Peak RSS (MiB)", value: (r) => r.usage.peakRSSBytes / MiB },
-    { label: "Registry requests", value: (r) => r.usage.registryRequests },
-    ...controllers.flatMap((c) => [
-      {
-        label: `${c}: reconciles`,
-        value: (/** @type {any} */ r) => counter(r, "controller_runtime_reconcile_time_seconds_count", c),
-      },
-      {
-        label: `${c}: reconcile time (s)`,
-        value: (/** @type {any} */ r) => counter(r, "controller_runtime_reconcile_time_seconds_sum", c),
-        runnerDependent: true,
-      },
-      {
-        label: `${c}: error rate (%)`,
-        value: (/** @type {any} */ r) => {
-          const reconciles = counter(r, "controller_runtime_reconcile_time_seconds_count", c);
-          return reconciles ? (100 * counter(r, "controller_runtime_reconcile_errors_total", c)) / reconciles : 0;
-        },
-        rate: true,
-      },
-    ]),
-  ];
-}
-
-/**
- * The rows of the drift phase of complex. Results without a drift block, such as those
- * of a base branch that predates the phase, have no value for them.
- *
+ * @param {string} name - The phase.
  * @param {any[]} results
  * @returns {Row[]}
  */
-function driftRows(results) {
-  const drifts = results.map((r) => r.drift).filter(Boolean);
-  if (drifts.length === 0) {
-    return [];
-  }
-  /** @param {(drift: any) => number} value */
-  const ofDrift = (value) => (/** @type {any} */ r) => (r.drift ? value(r.drift) : undefined);
+function phaseRows(name, results) {
+  const phases = results.map((r) => phaseOf(r, name)).filter(Boolean);
+  const prefix = `${name.charAt(0).toUpperCase()}${name.slice(1)}:`;
+  /**
+   * @param {string} label
+   * @param {(phase: any) => number | undefined | null} value
+   * @param {{ runnerDependent?: boolean, rate?: boolean }} [opts]
+   * @returns {Row}
+   */
+  const row = (label, value, opts = {}) => ({
+    label: `${prefix} ${label}`,
+    value: (r) => {
+      const phase = phaseOf(r, name);
+      return phase ? (value(phase) ?? undefined) : undefined;
+    },
+    ...opts,
+  });
   return [
-    { label: "Drift: total (s)", value: ofDrift((d) => d.durations.total), runnerDependent: true },
-    { label: "Drift: registry requests", value: ofDrift((d) => d.usage.registryRequests) },
-    ...activeRegistryRequests(drifts).map((name) => ({
-      label: `Drift: registry ${name}`,
-      value: (/** @type {any} */ r) => {
-        const requests = r.drift && registryRequests(r.drift);
-        return requests ? (requests.get(name) ?? 0) : undefined;
-      },
-    })),
-    ...activeControllers(drifts).map((c) => ({
-      label: `Drift: ${c}: reconciles`,
-      value: ofDrift((d) => counter(d, "controller_runtime_reconcile_time_seconds_count", c)),
-    })),
+    row("pass rate (%)", (p) => (100 * p.outcome.ready) / p.outcome.expected, { rate: true }),
+    row("total (s)", (p) => p.durations.total, { runnerDependent: true }),
+    row("settled (s)", (p) => p.durations.settled, { runnerDependent: true }),
+    row("p50 (s)", (p) => p.durations.p50, { runnerDependent: true }),
+    row("p90 (s)", (p) => p.durations.p90, { runnerDependent: true }),
+    row("peak working set (MiB)", (p) => p.cost.peakWorkingSetBytes / MiB),
+    row("peak RSS (MiB)", (p) => p.cost.peakRSSBytes / MiB),
+    row("registry requests", (p) => p.cost.registryRequests),
+    ...activeRegistryRequests(phases).map((request) =>
+      row(`registry ${request}`, (p) => {
+        const requests = registryRequests(p);
+        return requests ? (requests.get(request) ?? 0) : undefined;
+      }),
+    ),
+    ...activeControllers(phases).flatMap((c) => [
+      row(`${c}: reconciles`, (p) => counter(p, "controller_runtime_reconcile_time_seconds_count", c)),
+      row(`${c}: reconcile time (s)`, (p) => counter(p, "controller_runtime_reconcile_time_seconds_sum", c), {
+        runnerDependent: true,
+      }),
+      row(
+        `${c}: error rate (%)`,
+        (p) => {
+          const reconciles = counter(p, "controller_runtime_reconcile_time_seconds_count", c);
+          return reconciles ? (100 * counter(p, "controller_runtime_reconcile_errors_total", c)) / reconciles : 0;
+        },
+        { rate: true },
+      ),
+    ]),
   ];
 }
 
@@ -207,7 +249,7 @@ function delta(base, pr, rate) {
 }
 
 /**
- * The values of a row. A missing drift block or a failed registry scrape (null) is no value, not 0.
+ * The values of a row. A missing phase or a failed registry scrape (null) is no value, not 0.
  *
  * @param {any[]} results
  * @param {Row} row
@@ -228,7 +270,7 @@ function valuesOf(results, row) {
 export function renderTable(base, pr, baseLabel) {
   const lines = [`| Metric | ${baseLabel} | PR | Δ |`, "|---|---:|---:|---:|"];
   const all = [...base, ...pr];
-  for (const row of [...rows(activeControllers(all)), ...driftRows(all)]) {
+  for (const row of phaseNames(all).flatMap((name) => phaseRows(name, all))) {
     const a = median(valuesOf(base, row));
     const b = median(valuesOf(pr, row));
     lines.push(`| ${row.label}${row.runnerDependent ? " \\*" : ""} | ${format(a)} | ${format(b)} | ${delta(a, b, row.rate)} |`);

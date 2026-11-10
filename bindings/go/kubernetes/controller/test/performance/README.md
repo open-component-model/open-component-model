@@ -49,22 +49,25 @@ The benchmark is a standalone Go program, run with `go run`. It builds and measu
 | File                     | Role                                                                      |
 |--------------------------|---------------------------------------------------------------------------|
 | `main.go`                | Flags and the matrix loop: object counts x repeats                        |
-| `workload.go`            | The component versions to publish                                         |
+| `workload.go`            | The workload: component names, versions and the manifests they deploy     |
 | `objects.go`             | The controller objects, Repositories to Deployers, and their RBAC         |
 | `publish.go`, `image.go` | Push component versions and a small image pool to the registry            |
 | `signing.go`             | Per-run RSA key, signatures, and the controller's verification config     |
 | `cluster.go`             | Kubernetes client, controller restart, metric scrapes, cleanup            |
-| `tracker.go`             | A watch that records when each target object first becomes ready          |
+| `phases.go`              | The phases: what each one prepares, changes and watches until it is done  |
+| `tracker.go`             | A watch that records when the object of each pipeline is first done       |
 | `sampler.go`             | Polls gauges, CPU and memory every `--sample-interval`                    |
 | `metrics.go`             | Prometheus parsing, counter deltas, gauge values                          |
-| `run.go`                 | One run from start to finish: the rollout, then the drift                 |
-| `measure.go`             | One measured window: scrapes, sampling, waiting, counter deltas           |
+| `run.go`                 | One run from start to finish: setup, the phases in order, cleanup         |
+| `measure.go`             | One phase: prepare, then the window from its change to drained queues     |
 | `result.go`              | `result.json` and `summary.md`                                            |
 | `hacks/`                 | Cluster and registry setup, Helm values                                   |
 
-One run restarts the controller, publishes fresh component names, scrapes the metrics, creates the objects,
-waits until they are ready and the controller queues are drained, and scrapes again. It then measures the drift phase
-the same way. The run then deletes its namespace and waits until it is gone.
+One run restarts the controller and creates its namespace. It then measures its phases in order, each one the same
+way: prepare (not measured), scrape the metrics, make the change, wait until the object of every pipeline shows it and
+the controller queues are drained, and scrape again. A phase that times out, does not drain or loses the controller
+ends the run: the next phase would not start from a known state. The run then deletes its namespace and waits until it
+is gone.
 
 ## Environment
 
@@ -90,18 +93,25 @@ descriptor lists `--resources` OCI images (default 100) from a small pool pushed
 deployed manifest through a `--depth` long reference path (default 5). The objects share the Repositories, each a
 different `subPath` of the one registry, so the controller holds that many repository cache entries.
 
-The rollout is measured until every NamespacedDeployer is `Ready`. After the rollout, a drift phase waits until the
-controller queues drained, changes the `version` of every deployed ConfigMap, and measures until each Deployer has
-reverted its own and the queues drained again. This is a Deployer reading its component version and resource again for
-an object it already deployed, which happens in production for every event of a deployed object. The phase has its own
-measurement window, in the `drift` block of `result.json` and the `drift` row of `summary.md`, so the rollout numbers
-stay as they were. It is skipped when the rollout timed out, did not drain or lost the controller.
+## Phases
+
+A run measures these phases in order, each in a window of its own:
+
+| Phase     | Prepare (not measured)                          | Change                                                | Done when, per pipeline              | Models                                                                                           |
+|-----------|-------------------------------------------------|-------------------------------------------------------|--------------------------------------|--------------------------------------------------------------------------------------------------|
+| `rollout` | push the image pool, publish the component versions | create all objects                                | the NamespacedDeployer is `Ready`    | the first install, with cold caches                                                              |
+| `drift`   |                                                 | set `data.version: drifted` on every deployed ConfigMap | the ConfigMap is at `1.0.0` again  | any update of a deployed object, status churn included, enqueues its Deployer: warm caches, the same digest |
+
+The drift phase is a Deployer reading its component version and resource again for an object it already deployed.
+
+The tracker of a phase ignores the objects that existed before its change. A drifted ConfigMap is done at the version it
+had before the change, so only seeing it there again after the change counts.
 
 All objects live in one namespace. Before it applies, a Deployer checks the objects of the applied kinds in its namespace
 for ApplySet conflicts ([ocm-project#1412](https://github.com/open-component-model/ocm-project/issues/1412)), and with
 many Deployers in one namespace that check dominates time and memory and hides the cost of reading the resource. The
 registry requests are unaffected by it, so they are the signal to judge a change to how the Deployer reads its resource
-by, in the rollout and in the drift phase. Time and CPU of such a change are reported but not judged.
+by, in every phase. Time and CPU of such a change are reported but not judged.
 
 To find which knob a regression comes from, rerun with that knob turned down: `--depth=0` puts the manifest into the
 root, `--versions=1` skips choosing between versions, `--repositories=1` shares one Repository, `--sign=false` drops
@@ -134,20 +144,24 @@ controller needs to reconcile them is bound by that limit, not by the controller
 
 Each invocation writes `test/performance/results/<timestamp>/`, which is git-ignored:
 
-- `summary.md`: one row per run. Image (short digest) and Signed show at a glance whether two runs are comparable.
-  The Notes column flags runs that timed out, did not drain or lost the controller; the benchmark exits non-zero when
-  any run is flagged.
-- `<run>/result.json`: the full result. It records environment (image digest, controller args and
-  resources, Kubernetes version), durations (total, settled, first ready, p50/p90/p99, publish, create),
-  outcome (ready, failed, pending, failure reasons), usage, counter deltas and sampled gauge peaks.
-- `<run>/controller-{start,end}.prom`, `<run>/registry-{start,end}.prom`: raw scrapes.
-- `<run>/samples.json`: gauges, cumulative CPU seconds and memory over time, `at` in seconds since the
-  measurement started.
-- `<run>/drift-*`: the same raw scrapes and samples for the drift phase.
+- `summary.md`: one row per phase of every run. Image (short digest) and Signed show at a glance whether two runs are
+  comparable. The Notes column flags phases that timed out, did not drain or lost the controller, each note led by
+  its phase; the benchmark exits non-zero when any run is flagged.
+- `<run>/result.json`: the full result, rewritten after every phase. It records the workload knobs, the environment
+  (image digest, controller args and resources, Kubernetes version) and `phases`, one entry per measured phase in
+  execution order:
+  - `outcome`: expected, ready, failed, pending, failure reasons, whether it timed out, did not drain or lost the
+    controller. When a phase times out, `notReady` counts the Components, Resources and NamespacedDeployers that were
+    not `Ready`, by kind and reason.
+  - `durations`: prepare, change, total, settled, first ready, p50/p90/p99.
+  - `cost`: registry requests, CPU, memory, counter deltas and sampled gauge peaks.
+- `<run>/<phase>/controller-{start,end}.prom`, `<run>/<phase>/registry-{start,end}.prom`: raw scrapes.
+- `<run>/<phase>/samples.json`: gauges, cumulative CPU seconds and memory over time, `at` in seconds since the
+  phase's measurement started.
 
-All durations count from the moment object creation starts, not from each object's own creation; in the drift phase,
-from the moment the first ConfigMap is changed. `p50` and
-`p90` therefore include the time the benchmark needed to create the objects that came before.
+All durations but `prepare` count from the moment the phase's change starts, not from each object's own change: the
+first object created, the first ConfigMap drifted. `p50` and `p90` therefore include the time the benchmark needed to
+change the objects that came before.
 
 Metric sources:
 
@@ -156,7 +170,7 @@ Metric sources:
 | CPU seconds        | delta of the controller's `process_cpu_seconds_total`, up to the settled time                                                                                                          |
 | Avg cores          | CPU seconds divided by the settled time                                                                                                                                                |
 | Peak cores         | highest rate of `process_cpu_seconds_total` between two consecutive samples. It is an average over one `--sample-interval`, so shorter bursts read lower.                              |
-| Settled            | first of 3 consecutive samples with every `workqueue_depth` and `controller_runtime_active_workers` at zero, after all objects are ready. Counters and usage cover the run up to here. |
+| Settled            | first of 3 consecutive samples with every `workqueue_depth` and `controller_runtime_active_workers` at zero, after all objects are done. Counters and cost cover the phase up to here. |
 | Peak RSS           | max of the controller's `process_resident_memory_bytes`, sampled every `--sample-interval`                                                                                             |
 | Peak working set   | max of kubelet `container_memory_working_set_bytes`. cAdvisor refreshes it on its own housekeeping interval, not per scrape, so it lags on short runs.                                 |
 | OCI requests       | delta of the registry's `registry_http_requests_total`, split by handler and method                                                                                                    |

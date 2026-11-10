@@ -23,26 +23,18 @@ type result struct {
 	RunID        string      `json:"runID"`
 	StartedAt    time.Time   `json:"startedAt"`
 	Environment  environment `json:"environment"`
-	// window is the measured rollout, inlined at the top level.
-	window
-	// Drift is the window of the drift phase: every deployed ConfigMap changed,
-	// until every Deployer reverted its own. It is nil when the rollout did not finish.
-	Drift *window `json:"drift,omitempty"`
+	// Phases are the measured phases in execution order. A phase that did not
+	// complete is the last one: the phases after it are not measured.
+	Phases []phaseResult `json:"phases"`
 }
 
-// window holds the numbers of one measured phase of a run.
-type window struct {
-	Durations durations `json:"durations"`
+// phaseResult holds the numbers of one measured phase of a run.
+type phaseResult struct {
+	Name      string    `json:"name"`
 	Outcome   outcome   `json:"outcome"`
-	Usage     usage     `json:"usage"`
-	// ControllerCounters are end-minus-start deltas over the measurement window.
-	ControllerCounters map[string]float64 `json:"controllerCounters"`
-	// ControllerGaugePeaks are the maxima of the sampled gauges.
-	ControllerGaugePeaks map[string]float64 `json:"controllerGaugePeaks"`
-	RegistryCounters     map[string]float64 `json:"registryCounters"`
-	// ControllerRestarted invalidates the counter deltas: a restart resets them.
-	ControllerRestarted bool     `json:"controllerRestarted"`
-	Errors              []string `json:"errors,omitempty"`
+	Durations durations `json:"durations"`
+	Cost      cost      `json:"cost"`
+	Errors    []string  `json:"errors,omitempty"`
 }
 
 type environment struct {
@@ -55,13 +47,12 @@ type environment struct {
 	KubernetesVersion   string                      `json:"kubernetesVersion"`
 }
 
-// durations are in seconds, measured from the moment the window's change starts:
-// object creation, or the patches of the drift.
+// durations are in seconds. All but Prepare are measured from the moment the phase's change starts.
 type durations struct {
-	// Publish is only set for the rollout.
-	Publish float64 `json:"publish,omitempty"`
-	// Create is how long applying the change took.
-	Create     float64 `json:"create"`
+	// Prepare is how long the phase took before its window, publishing its component versions for example.
+	Prepare float64 `json:"prepare"`
+	// Change is how long applying the change took.
+	Change     float64 `json:"change"`
 	Total      float64 `json:"total"`
 	FirstReady float64 `json:"firstReady"`
 	P50        float64 `json:"p50"`
@@ -80,43 +71,61 @@ type outcome struct {
 	FailureReasons map[string]int `json:"failureReasons,omitempty"`
 	// Unsettled is set when the controller queues did not drain within the timeout.
 	Unsettled bool `json:"unsettled"`
+	// ControllerRestarted invalidates the counter deltas: a restart resets them.
+	ControllerRestarted bool `json:"controllerRestarted"`
+	// NotReady counts the run's controller objects that were not Ready when the phase
+	// timed out, keyed by kind and reason.
+	NotReady map[string]int `json:"notReady,omitempty"`
 }
 
-type usage struct {
-	CPUSeconds          float64 `json:"cpuSeconds"`
-	AvgCores            float64 `json:"avgCores"`
-	PeakCores           float64 `json:"peakCores"`
-	PeakWorkingSetBytes float64 `json:"peakWorkingSetBytes"`
-	PeakRSSBytes        float64 `json:"peakRSSBytes"`
+// complete reports whether every pipeline was done, the queues drained and the
+// controller kept running. Only then does the next phase start from a known state.
+func (o outcome) complete() bool {
+	return !o.TimedOut && !o.Unsettled && !o.ControllerRestarted
+}
+
+// cost is what the controller and the registry spent in the window of a phase.
+type cost struct {
 	// RegistryRequests is nil when the registry metrics could not be read.
-	RegistryRequests *float64 `json:"registryRequests"`
+	RegistryRequests    *float64 `json:"registryRequests"`
+	CPUSeconds          float64  `json:"cpuSeconds"`
+	AvgCores            float64  `json:"avgCores"`
+	PeakCores           float64  `json:"peakCores"`
+	PeakWorkingSetBytes float64  `json:"peakWorkingSetBytes"`
+	PeakRSSBytes        float64  `json:"peakRSSBytes"`
+	// ControllerCounters are end-minus-start deltas over the window.
+	ControllerCounters map[string]float64 `json:"controllerCounters"`
+	// ControllerGaugePeaks are the maxima of the sampled gauges.
+	ControllerGaugePeaks map[string]float64 `json:"controllerGaugePeaks"`
+	RegistryCounters     map[string]float64 `json:"registryCounters"`
 }
 
-// notes lists what makes a run unusable as a benchmark number, its drift phase included.
+// notes lists what makes a run unusable as a benchmark number, each note led by its phase.
 func (r *result) notes() []string {
-	notes := r.window.notes()
-	if r.Drift != nil {
-		for _, n := range r.Drift.notes() {
-			notes = append(notes, "drift "+n)
-		}
+	var notes []string
+	for _, p := range r.Phases {
+		notes = append(notes, p.notes()...)
 	}
 	return notes
 }
 
-// notes lists what makes a window unusable as a benchmark number.
-func (w *window) notes() []string {
+// notes lists what makes a phase unusable as a benchmark number.
+func (p *phaseResult) notes() []string {
 	var notes []string
-	if w.Outcome.TimedOut {
+	if p.Outcome.TimedOut {
 		notes = append(notes, "timed out")
 	}
-	if w.Outcome.Unsettled {
+	if p.Outcome.Unsettled {
 		notes = append(notes, "queues not drained")
 	}
-	if w.ControllerRestarted {
+	if p.Outcome.ControllerRestarted {
 		notes = append(notes, "controller restarted")
 	}
-	if len(w.Errors) > 0 {
+	if len(p.Errors) > 0 {
 		notes = append(notes, "metric errors")
+	}
+	for i, n := range notes {
+		notes[i] = p.Name + " " + n
 	}
 	return notes
 }
@@ -138,34 +147,33 @@ func writeJSON(path string, v any) error {
 	return os.WriteFile(path, append(data, '\n'), 0o600)
 }
 
-// writeSummary renders one table row per run, for a quick read of an
-// invocation. result.json files remain the source of truth.
+// writeSummary renders one table row per phase of every run, for a quick read of
+// an invocation. result.json files remain the source of truth.
 func writeSummary(dir string, results []*result) error {
 	var b strings.Builder
 	b.WriteString("| Phase | Objects | Repeat | Image | Signed | Ready | Failed | Pending | Total (s) | Settled (s) | p50 (s) | p90 (s) | CPU (s) | Avg cores | Peak cores | Peak WS (MiB) | Registry reqs | Notes |\n")
 	b.WriteString("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")
 	for _, r := range results {
-		writeSummaryRow(&b, r, "rollout", &r.window)
-		if r.Drift != nil {
-			writeSummaryRow(&b, r, "drift", r.Drift)
+		for i := range r.Phases {
+			writeSummaryRow(&b, r, &r.Phases[i])
 		}
 	}
 	return os.WriteFile(filepath.Join(dir, "summary.md"), []byte(b.String()), 0o600)
 }
 
-func writeSummaryRow(b *strings.Builder, r *result, name string, w *window) {
+func writeSummaryRow(b *strings.Builder, r *result, p *phaseResult) {
 	requests := "n/a"
-	if w.Usage.RegistryRequests != nil {
-		requests = fmt.Sprintf("%.0f", *w.Usage.RegistryRequests)
+	if p.Cost.RegistryRequests != nil {
+		requests = fmt.Sprintf("%.0f", *p.Cost.RegistryRequests)
 	}
 	signed := "no"
 	if r.Signed {
 		signed = "yes"
 	}
 	fmt.Fprintf(b, "| %s | %d | %d | %s | %s | %d | %d | %d | %.1f | %.1f | %.1f | %.1f | %.1f | %.2f | %.2f | %.0f | %s | %s |\n",
-		name, r.Objects, r.Repeat, shortImageID(r.Environment.ControllerImageID), signed, w.Outcome.Ready, w.Outcome.Failed, w.Outcome.Pending,
-		w.Durations.Total, w.Durations.Settled, w.Durations.P50, w.Durations.P90, w.Usage.CPUSeconds, w.Usage.AvgCores, w.Usage.PeakCores,
-		w.Usage.PeakWorkingSetBytes/(1<<20), requests, strings.Join(w.notes(), ", "))
+		p.Name, r.Objects, r.Repeat, shortImageID(r.Environment.ControllerImageID), signed, p.Outcome.Ready, p.Outcome.Failed, p.Outcome.Pending,
+		p.Durations.Total, p.Durations.Settled, p.Durations.P50, p.Durations.P90, p.Cost.CPUSeconds, p.Cost.AvgCores, p.Cost.PeakCores,
+		p.Cost.PeakWorkingSetBytes/(1<<20), requests, strings.Join(p.notes(), ", "))
 }
 
 // shortImageID keeps the first 12 hex digits of the digest, as docker does.

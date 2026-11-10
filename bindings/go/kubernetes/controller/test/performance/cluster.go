@@ -183,6 +183,24 @@ func (c *cluster) deleteNamespace(ctx context.Context, name string, timeout time
 	})
 }
 
+// restartedSince reports whether the controller pod was replaced or restarted since before.
+func (c *cluster) restartedSince(ctx context.Context, before *corev1.Pod) bool {
+	now, err := c.controllerPod(ctx)
+	if err != nil || now.Name != before.Name {
+		return true
+	}
+	return restartCount(now) != restartCount(before)
+}
+
+func restartCount(pod *corev1.Pod) int32 {
+	for _, cs := range pod.Status.ContainerStatuses {
+		if cs.Name == managerContainer {
+			return cs.RestartCount
+		}
+	}
+	return 0
+}
+
 func (c *cluster) serverVersion() string {
 	v, err := c.clientset.Discovery().ServerVersion()
 	if err != nil {
