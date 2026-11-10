@@ -102,3 +102,31 @@ func TestOpen(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, file.Close())
 }
+
+// TestRootFileSystem_BaseReplacedBySymlink covers the confinement RootFileSystem
+// promises: operations reopen base by name, so a base swapped for a symlink must
+// be rejected instead of writing into the symlink target.
+func TestRootFileSystem_BaseReplacedBySymlink(t *testing.T) {
+	r := require.New(t)
+	parent := t.TempDir()
+	base := filepath.Join(parent, "ctf")
+	outside := filepath.Join(parent, "outside")
+	r.NoError(os.Mkdir(base, 0o755))
+	r.NoError(os.Mkdir(outside, 0o755))
+
+	fsys, err := filesystem.NewFS(base, os.O_RDWR)
+	r.NoError(err)
+
+	r.NoError(os.Rename(base, base+".moved"))
+	if err := os.Symlink(outside, base); err != nil {
+		t.Skipf("cannot create symlinks here: %v", err)
+	}
+
+	_, err = fsys.OpenFile("payload", os.O_CREATE|os.O_RDWR, 0o644)
+	r.ErrorIs(err, filesystem.ErrBaseReplaced)
+	r.ErrorIs(fsys.MkdirAll("blobs", 0o755), filesystem.ErrBaseReplaced)
+
+	entries, err := os.ReadDir(outside)
+	r.NoError(err)
+	r.Empty(entries, "writes escaped into %s", outside)
+}

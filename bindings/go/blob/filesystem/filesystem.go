@@ -1,6 +1,7 @@
 package filesystem
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -97,7 +98,18 @@ func NewFS(base string, flag int) (*RootFileSystem, error) {
 	if fi != nil && !fi.IsDir() {
 		return nil, fmt.Errorf("path is not a directory: %s", base)
 	}
-	return &RootFileSystem{base: base, flag: flag}, nil
+	// Opening the root here keeps NewFS failing early on an unusable base, and
+	// records the identity every later operation is checked against.
+	root, err := os.OpenRoot(base)
+	if err != nil {
+		return nil, fmt.Errorf("unable to open root on base: %w", err)
+	}
+	defer func() { _ = root.Close() }()
+	info, err := root.Stat(".")
+	if err != nil {
+		return nil, fmt.Errorf("unable to stat root on base: %w", err)
+	}
+	return &RootFileSystem{base: base, baseInfo: info, flag: flag}, nil
 }
 
 // RootFileSystem confines all operations to the directory tree below base.
@@ -105,9 +117,16 @@ func NewFS(base string, flag int) (*RootFileSystem, error) {
 // long-lived root would hold a handle on base, which on Windows prevents
 // deleting or renaming the directory for as long as the filesystem is in use.
 // Files opened through it stay valid after the root is closed.
+//
+// Reopening by name would otherwise follow base wherever it points at the time,
+// so every operation verifies that base is still the directory NewFS was given:
+// replacing it with a symlink makes the operation fail instead of writing into
+// the symlink target.
 type RootFileSystem struct {
 	// base is the absolute path of the directory tree.
 	base string
+	// baseInfo identifies the directory base referred to in NewFS.
+	baseInfo os.FileInfo
 	// flagMu is a mutex to protect the flag read / write access
 	flagMu sync.RWMutex
 	// flag is the bitmask applied to limit fs operations with e.g. os.O_RDONLY
@@ -117,14 +136,25 @@ type RootFileSystem struct {
 
 var _ fs.ReadLinkFS = (*RootFileSystem)(nil)
 
+// ErrBaseReplaced is returned once the directory a RootFileSystem was opened on
+// is no longer the directory its base path refers to.
+var ErrBaseReplaced = errors.New("base directory was replaced")
+
 // inRoot runs op against a root opened on base for the duration of the call.
 func inRoot[T any](s *RootFileSystem, op func(root *os.Root) (T, error)) (T, error) {
+	var zero T
 	root, err := os.OpenRoot(s.base)
 	if err != nil {
-		var zero T
 		return zero, err
 	}
 	defer func() { _ = root.Close() }()
+	info, err := root.Stat(".")
+	if err != nil {
+		return zero, err
+	}
+	if !os.SameFile(info, s.baseInfo) {
+		return zero, fmt.Errorf("%w: %s", ErrBaseReplaced, s.base)
+	}
 	return op(root)
 }
 
