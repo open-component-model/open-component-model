@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -116,7 +116,7 @@ func ReadOCILayout(ctx context.Context, b blob.ReadOnlyBlob) (_ *CloseableReadOn
 		_ = idxFile.Close()
 	}()
 	idx := ociImageSpecV1.Index{}
-	if err := json.NewDecoder(idxFile).Decode(&idx); err != nil {
+	if err := json.UnmarshalRead(idxFile, &idx); err != nil {
 		return nil, fmt.Errorf("failed to decode index file: %w", err)
 	}
 

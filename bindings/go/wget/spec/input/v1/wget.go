@@ -49,7 +49,7 @@ type Wget struct {
 	Body []byte `json:"body,omitempty"`
 
 	// NoRedirect disables following HTTP redirects when set to true.
-	NoRedirect bool `json:"noRedirect,omitempty"`
+	NoRedirect bool `json:"noRedirect,omitzero"`
 }
 
 func (t *Wget) String() string {

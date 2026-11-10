@@ -1,7 +1,7 @@
 package runtime
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -29,7 +29,7 @@ func TestRaw_UnmarshalJSON_InvalidJSON(t *testing.T) {
 	err := json.Unmarshal([]byte(input), &raw)
 
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "unexpected end of JSON input")
+	require.Contains(t, err.Error(), "unexpected EOF")
 }
 
 func TestRaw_MarshalJSON(t *testing.T) {

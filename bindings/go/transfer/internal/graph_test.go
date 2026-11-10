@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -1280,7 +1280,7 @@ func TestBuildGraphDefinition_KeepsReferenceDigests(t *testing.T) {
 
 	v2desc, err := descriptor.ConvertToV2(runtime.NewScheme(), parent)
 	r.NoError(err)
-	want, err := json.Marshal(v2desc.Component.References)
+	want, err := json.Marshal(v2desc.Component.References, runtime.JSONOptions)
 	r.NoError(err)
 
 	var envID string
@@ -1288,7 +1288,7 @@ func TestBuildGraphDefinition_KeepsReferenceDigests(t *testing.T) {
 		component := data.(map[string]any)["component"].(map[string]any)
 		if component["name"] == "ocm.software/parent" {
 			envID = id
-			got, err := json.Marshal(component["componentReferences"])
+			got, err := json.Marshal(component["componentReferences"], runtime.JSONOptions)
 			r.NoError(err)
 			r.JSONEq(string(want), string(got), "the transferred references must be the source references, digests unchanged")
 		}

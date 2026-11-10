@@ -1,7 +1,7 @@
 package discovery
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 var discoveryGVK = schema.GroupVersionKind{
@@ -62,7 +63,7 @@ var descriptor = map[string]any{
 func toJSONs(descriptors ...map[string]any) []apiextensionsv1.JSON {
 	result := make([]apiextensionsv1.JSON, 0, len(descriptors))
 	for _, descriptor := range descriptors {
-		raw, err := json.Marshal(descriptor)
+		raw, err := json.Marshal(descriptor, runtime.JSONOptions)
 		Expect(err).NotTo(HaveOccurred())
 		result = append(result, apiextensionsv1.JSON{Raw: raw})
 	}
@@ -72,7 +73,7 @@ func toJSONs(descriptors ...map[string]any) []apiextensionsv1.JSON {
 func extractedRecord(values map[string]any) v1alpha1.ExtractedRecord {
 	record := make(v1alpha1.ExtractedRecord, len(values))
 	for name, value := range values {
-		raw, err := json.Marshal(value)
+		raw, err := json.Marshal(value, runtime.JSONOptions)
 		Expect(err).NotTo(HaveOccurred())
 		record[name] = apiextensionsv1.JSON{Raw: raw}
 	}
@@ -189,7 +190,7 @@ var _ = Describe("Discovery API", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(discovery), after)).To(Succeed())
 			Expect(after.Status.Components).To(HaveLen(1))
 
-			raw, err := json.Marshal(descriptor)
+			raw, err := json.Marshal(descriptor, runtime.JSONOptions)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(after.Status.Components[0].Raw).To(MatchJSON(raw))
 		})
@@ -215,9 +216,9 @@ var _ = Describe("Discovery API", func() {
 			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(discovery), after)).To(Succeed())
 			Expect(after.Status.Extracted).To(HaveLen(2))
 			Expect(after.Status.Extracted[1]).To(BeEmpty())
-			raw, err := json.Marshal(after.Status.Extracted[0])
+			raw, err := json.Marshal(after.Status.Extracted[0], runtime.JSONOptions)
 			Expect(err).NotTo(HaveOccurred())
-			expected, err := json.Marshal(values)
+			expected, err := json.Marshal(values, runtime.JSONOptions)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(raw).To(MatchJSON(expected))
 		})

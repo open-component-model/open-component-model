@@ -1,7 +1,7 @@
 package main
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"strings"
 
@@ -20,7 +20,7 @@ func (w workload) repository(i int) (*v1alpha1.Repository, error) {
 	if subPath := w.subPath(i); subPath != "" {
 		fields["subPath"] = subPath
 	}
-	spec, err := json.Marshal(fields)
+	spec, err := json.Marshal(fields, ocmruntime.JSONOptions)
 	if err != nil {
 		return nil, err
 	}

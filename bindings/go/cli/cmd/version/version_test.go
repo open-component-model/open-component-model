@@ -2,7 +2,8 @@ package version
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"strings"
 	"testing"
 
@@ -35,7 +36,7 @@ func TestVersion_DefaultIsHumanReadableAndIdentifiesV2(t *testing.T) {
 	r.Contains(out, "Open Component Model "+Generation)
 	r.Contains(out, "1.2.3")
 	// It must not be raw JSON.
-	r.False(json.Valid([]byte(strings.TrimSpace(out))), "default output should not be JSON")
+	r.False(jsontext.Value(strings.TrimSpace(out)).IsValid(), "default output should not be JSON")
 }
 
 func TestVersion_TextSplitsCommitAndDate(t *testing.T) {

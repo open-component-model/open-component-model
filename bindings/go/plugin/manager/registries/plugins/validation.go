@@ -2,7 +2,8 @@ package plugins
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 
@@ -33,7 +34,7 @@ func ValidatePlugin(typ runtime.Typed, jsonSchema []byte) (bool, error) {
 	}
 
 	// need to marshal the interface into a JSON format.
-	content, err := json.Marshal(typ)
+	content, err := json.Marshal(typ, runtime.JSONOptions)
 	if err != nil {
 		return false, fmt.Errorf("failed to marshal type: %w", err)
 	}
@@ -49,10 +50,10 @@ func ValidatePlugin(typ runtime.Typed, jsonSchema []byte) (bool, error) {
 
 	// finally, validate map[string]any against the loaded schema
 	if err := sch.Validate(unmarshalledType); err != nil {
-		var typRaw bytes.Buffer
-		err = errors.Join(err, json.Indent(&typRaw, content, "", "  "))
-		var schemaRaw bytes.Buffer
-		err = errors.Join(err, json.Indent(&schemaRaw, jsonSchema, "", "  "))
+		typRaw := jsontext.Value(content).Clone()
+		err = errors.Join(err, typRaw.Indent(jsontext.WithIndent("  ")))
+		schemaRaw := jsontext.Value(jsonSchema).Clone()
+		err = errors.Join(err, schemaRaw.Indent(jsontext.WithIndent("  ")))
 		return false, fmt.Errorf("failed to validate schema for\n%s\n---SCHEMA---\n%s\n: %w", typRaw.String(), schemaRaw.String(), err)
 	}
 

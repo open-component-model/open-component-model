@@ -2,7 +2,7 @@ package componentlister
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 
@@ -37,7 +37,7 @@ func ListComponentsHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 			return
 		}
 
-		if err := json.NewEncoder(writer).Encode(componentNames); err != nil {
+		if err := json.MarshalWrite(writer, componentNames, runtime.JSONOptions); err != nil {
 			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
 			return
 		}
@@ -56,7 +56,7 @@ func GetIdentityHandlerFunc[T runtime.Typed](f func(ctx context.Context, typ *v1
 			return
 		}
 
-		if err := json.NewEncoder(writer).Encode(response); err != nil {
+		if err := json.MarshalWrite(writer, response, runtime.JSONOptions); err != nil {
 			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
 			return
 		}

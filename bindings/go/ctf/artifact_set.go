@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +17,7 @@ import (
 	ociimagespec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // ArtifactSetFormat is the format of an ArtifactSet.
@@ -231,7 +232,7 @@ func ConvertToOCIImageLayout(ctx context.Context, as *ArtifactSet, writer io.Wri
 	}()
 
 	layout := ociimagespec.ImageLayout{Version: ociimagespec.ImageLayoutVersion}
-	layoutRaw, err := json.Marshal(layout)
+	layoutRaw, err := json.Marshal(layout, runtime.JSONOptions)
 	if err != nil {
 		return fmt.Errorf("unable to marshal layout: %w", err)
 	}
@@ -261,7 +262,7 @@ func ConvertToOCIImageLayout(ctx context.Context, as *ArtifactSet, writer io.Wri
 		}
 		annotations[ociimagespec.AnnotationRefName] = name
 	}
-	idxJson, err := json.Marshal(idx)
+	idxJson, err := json.Marshal(idx, runtime.JSONOptions)
 	if err != nil {
 		return fmt.Errorf("unable to marshal index.json: %w", err)
 	}
@@ -499,7 +500,7 @@ func decodeIndexFromFS(fs fs.FS, name string) (*ociimagespec.Index, error) {
 		return nil, fmt.Errorf("unable to open %s: %w", name, err)
 	}
 	defer rawidx.Close()
-	if err := json.NewDecoder(rawidx).Decode(&idx); err != nil {
+	if err := json.UnmarshalRead(rawidx, &idx); err != nil {
 		return nil, fmt.Errorf("unable to decode %s: %w", name, err)
 	}
 	return &idx, err

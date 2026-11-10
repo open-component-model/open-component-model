@@ -4,7 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -22,6 +22,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // NewOCILayoutWriter creates a new [oras.Target] that writes an OCI image layout in tar format.
@@ -151,7 +152,7 @@ func (s *OCILayoutWriter) Close() (closeErr error) {
 	var metaBuf bytes.Buffer
 	tw := tar.NewWriter(&metaBuf)
 
-	indexJSON, err := json.Marshal(s.index)
+	indexJSON, err := json.Marshal(s.index, runtime.JSONOptions)
 	if err != nil {
 		return fmt.Errorf("failed to marshal index: %w", err)
 	}
@@ -168,7 +169,7 @@ func (s *OCILayoutWriter) Close() (closeErr error) {
 	layout := ociImageSpecV1.ImageLayout{
 		Version: ociImageSpecV1.ImageLayoutVersion,
 	}
-	layoutJSON, err := json.Marshal(layout)
+	layoutJSON, err := json.Marshal(layout, runtime.JSONOptions)
 	if err != nil {
 		return fmt.Errorf("failed to marshal OCI layout file: %w", err)
 	}

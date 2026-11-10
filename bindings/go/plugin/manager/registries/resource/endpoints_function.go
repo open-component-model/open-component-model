@@ -1,7 +1,7 @@
 package resource
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 
@@ -28,7 +28,7 @@ func handleError(w http.ResponseWriter, err error, status int, message string) {
 
 // handleJSONResponse encodes the response as JSON and writes it to the http.ResponseWriter
 func handleJSONResponse(w http.ResponseWriter, response interface{}) {
-	if err := json.NewEncoder(w).Encode(response); err != nil {
+	if err := json.MarshalWrite(w, response, runtime.JSONOptions); err != nil {
 		handleError(w, err, http.StatusInternalServerError, "failed to encode response")
 		return
 	}
@@ -38,7 +38,7 @@ func handleJSONResponse(w http.ResponseWriter, response interface{}) {
 func handleGetIdentity(plugin v1.ReadWriteResourcePluginContract) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var request v1.GetIdentityRequest[runtime.Typed]
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		if err := json.UnmarshalRead(r.Body, &request); err != nil {
 			handleError(w, err, http.StatusBadRequest, "failed to unmarshal request")
 			return
 		}
@@ -57,7 +57,7 @@ func handleGetIdentity(plugin v1.ReadWriteResourcePluginContract) http.HandlerFu
 func handleGetGlobalResource(plugin v1.ReadWriteResourcePluginContract) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var request v1.GetGlobalResourceRequest
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		if err := json.UnmarshalRead(r.Body, &request); err != nil {
 			handleError(w, err, http.StatusBadRequest, "failed to unmarshal request")
 			return
 		}
@@ -81,7 +81,7 @@ func handleGetGlobalResource(plugin v1.ReadWriteResourcePluginContract) http.Han
 func handleAddGlobalResource(plugin v1.ReadWriteResourcePluginContract) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var request v1.AddGlobalResourceRequest
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		if err := json.UnmarshalRead(r.Body, &request); err != nil {
 			handleError(w, err, http.StatusBadRequest, "failed to unmarshal request")
 			return
 		}

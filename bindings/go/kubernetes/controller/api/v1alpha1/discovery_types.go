@@ -1,12 +1,15 @@
 package v1alpha1
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const KindDiscovery = "Discovery"
@@ -85,22 +88,23 @@ type DiscoverySpec struct {
 // +kubebuilder:pruning:PreserveUnknownFields
 type ExtractedRecord map[string]apiextensionsv1.JSON
 
-// MarshalJSON and UnmarshalJSON forward to the default map (de)serialization
-// and are semantically identical to the built-in behavior of a named map type.
-// They are NOT dead code: controller-gen treats a type implementing
-// json.Marshaler as opaque and honors the Type=object +
+// MarshalJSONTo and UnmarshalJSONFrom forward to the default map
+// (de)serialization and are semantically identical to the built-in behavior of
+// a named map type.
+// They are NOT dead code: controller-gen treats a type implementing a custom
+// JSON marshaler as opaque and honors the Type=object +
 // PreserveUnknownFields markers verbatim. Without them, controller-gen
 // introspects the underlying map[string]JSON and emits an additionalProperties
 // schema on status.extracted, which turns the status subschema non-structural
 // and breaks the status-level CEL rule (self.extracted becomes undefined at CRD
 // install). Keep both methods so the generated CRD stays structural.
-func (in ExtractedRecord) MarshalJSON() ([]byte, error) {
-	return json.Marshal(map[string]apiextensionsv1.JSON(in))
+func (in ExtractedRecord) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return json.MarshalEncode(enc, map[string]apiextensionsv1.JSON(in), runtime.JSONOptions)
 }
 
-func (in *ExtractedRecord) UnmarshalJSON(data []byte) error {
+func (in *ExtractedRecord) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	var record map[string]apiextensionsv1.JSON
-	if err := json.Unmarshal(data, &record); err != nil {
+	if err := json.UnmarshalDecode(dec, &record); err != nil {
 		return err
 	}
 	*in = record

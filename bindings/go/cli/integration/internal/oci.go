@@ -2,7 +2,7 @@ package internal
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net"
 	"regexp"
@@ -18,6 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func CreateSingleLayerOCIImageLayoutTar(t *testing.T, data []byte, ref ...string) *bytes.Buffer {
@@ -34,7 +35,7 @@ func CreateSingleLayerOCIImageLayoutTar(t *testing.T, data []byte, ref ...string
 
 	r.NoError(w.Push(t.Context(), desc, bytes.NewReader(data)))
 
-	configRaw, err := json.Marshal(map[string]string{})
+	configRaw, err := json.Marshal(map[string]string{}, runtime.JSONOptions)
 	r.NoError(err)
 	configDesc := ociImageSpecV1.Descriptor{
 		Digest:    digest.FromBytes(configRaw),
@@ -51,7 +52,7 @@ func CreateSingleLayerOCIImageLayoutTar(t *testing.T, data []byte, ref ...string
 			desc,
 		},
 	}
-	manifestRaw, err := json.Marshal(manifest)
+	manifestRaw, err := json.Marshal(manifest, runtime.JSONOptions)
 	r.NoError(err)
 
 	manifestDesc := ociImageSpecV1.Descriptor{

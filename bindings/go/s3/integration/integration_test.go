@@ -3,7 +3,7 @@ package integration_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net"
 	"testing"
@@ -173,7 +173,7 @@ func Test_Integration_S3(t *testing.T) {
 					"type": tt.typ, tt.bucketField: bucket, tt.keyField: key,
 					"region": "us-east-1", "mediaType": "text/plain",
 					"endpoint": endpoint, "usePathStyle": true,
-				})
+				}, runtime.JSONOptions)
 				r.NoError(err)
 				for _, wire := range []runtime.Typed{&runtime.Raw{}, &runtime.Unstructured{}} {
 					r.NoError(json.Unmarshal(data, wire))
@@ -201,7 +201,7 @@ func Test_Integration_S3(t *testing.T) {
 					r.Equal(bucket, normalized.BucketName)
 					r.Equal(key, normalized.ObjectKey)
 					r.Equal(version, normalized.Version)
-					encoded, err := json.Marshal(pinned.Access)
+					encoded, err := json.Marshal(pinned.Access, runtime.JSONOptions)
 					r.NoError(err)
 					var fields map[string]any
 					r.NoError(json.Unmarshal(encoded, &fields))

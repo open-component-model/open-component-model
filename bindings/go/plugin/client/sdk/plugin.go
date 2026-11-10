@@ -67,7 +67,7 @@ func NewPlugin(ctx context.Context, logger *slog.Logger, conf types.Config, outp
 func (p *Plugin) startIdleChecker(ctx context.Context) {
 	interval := time.Hour
 	if p.Config.IdleTimeout != nil {
-		interval = *p.Config.IdleTimeout
+		interval = time.Duration(*p.Config.IdleTimeout)
 	}
 
 	timer := time.NewTimer(interval)

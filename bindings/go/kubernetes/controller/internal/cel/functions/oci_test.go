@@ -1,7 +1,7 @@
 package functions_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"testing"
 
@@ -191,7 +191,7 @@ func assertCelMap(t *testing.T, val ref.Val, expects map[string]string) {
 // simulating how access specs arrive from component descriptors.
 func typedToMap(t *testing.T, typed any) map[string]any {
 	t.Helper()
-	data, err := json.Marshal(typed)
+	data, err := json.Marshal(typed, runtime.JSONOptions)
 	require.NoError(t, err)
 	var m map[string]any
 	require.NoError(t, json.Unmarshal(data, &m))

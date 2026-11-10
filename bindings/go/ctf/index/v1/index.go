@@ -1,12 +1,14 @@
 package v1
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
 	"slices"
 	"sync"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const (
@@ -71,10 +73,7 @@ type ArtifactMetadata struct {
 func DecodeIndex(data io.Reader) (Index, error) {
 	var d index
 
-	decoder := json.NewDecoder(data)
-	decoder.DisallowUnknownFields()
-
-	if err := decoder.Decode(&d); err != nil {
+	if err := json.UnmarshalRead(data, &d, json.RejectUnknownMembers(true)); err != nil {
 		return nil, err
 	}
 
@@ -87,7 +86,7 @@ func DecodeIndex(data io.Reader) (Index, error) {
 
 // Encode serializes the Index to a byte slice.
 func Encode(d Index) ([]byte, error) {
-	return json.Marshal(d)
+	return json.Marshal(d, runtime.JSONOptions)
 }
 
 // NewIndex creates a new Index instance defaulted to SchemaVersion.

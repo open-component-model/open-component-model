@@ -5,7 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -814,7 +814,7 @@ func TestRepository_DownloadUploadResource(t *testing.T) {
 					r.NoError(manifestRaw.Close(), "Failed to close manifest reader")
 				})
 				var manifest ociImageSpecV1.Manifest
-				r.NoError(json.NewDecoder(manifestRaw).Decode(&manifest), "Failed to unmarshal manifest")
+				r.NoError(json.UnmarshalRead(manifestRaw, &manifest), "Failed to unmarshal manifest")
 
 				r.Equal(manifest.ArtifactType, artifactMediaType)
 
@@ -997,7 +997,7 @@ func TestRepository_DownloadUploadSource(t *testing.T) {
 					r.NoError(manifestRaw.Close(), "Failed to close manifest reader")
 				})
 				var manifest ociImageSpecV1.Manifest
-				r.NoError(json.NewDecoder(manifestRaw).Decode(&manifest), "Failed to unmarshal manifest")
+				r.NoError(json.UnmarshalRead(manifestRaw, &manifest), "Failed to unmarshal manifest")
 
 				r.Equal(manifest.ArtifactType, artifactMediaType)
 
@@ -3137,7 +3137,8 @@ func buildTestIndexStream(t *testing.T) (*memory.Store, ociImageSpecV1.Descripto
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		MediaType: ociImageSpecV1.MediaTypeImageIndex,
 		Manifests: []ociImageSpecV1.Descriptor{amd64, arm64},
-	})
+	}, runtime.JSONOptions)
+
 	r.NoError(err)
 	root := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageIndex, body)
 	r.NoError(store.Push(ctx, root, bytes.NewReader(body)))
@@ -3448,13 +3449,14 @@ func TestRepository_UploadDigestControls(t *testing.T) {
 func pushDigestUploadRoot(t *testing.T, store content.Pusher, algorithm digest.Algorithm, marker string) ociImageSpecV1.Descriptor {
 	t.Helper()
 	r := require.New(t)
-	configData, err := json.Marshal(map[string]string{"marker": marker})
+	configData, err := json.Marshal(map[string]string{"marker": marker}, runtime.JSONOptions)
 	r.NoError(err)
 	config := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageConfig, configData)
 	manifest, err := json.Marshal(ociImageSpecV1.Manifest{
 		Versioned: specs.Versioned{SchemaVersion: 2}, MediaType: ociImageSpecV1.MediaTypeImageManifest,
 		Config: config, Layers: []ociImageSpecV1.Descriptor{},
-	})
+	}, runtime.JSONOptions)
+
 	r.NoError(err)
 	root := ociImageSpecV1.Descriptor{MediaType: ociImageSpecV1.MediaTypeImageManifest, Digest: algorithm.FromBytes(manifest), Size: int64(len(manifest))}
 	r.NoError(store.Push(t.Context(), config, bytes.NewReader(configData)))
@@ -3660,7 +3662,8 @@ func buildLayoutWithOwnershipReferrer(t *testing.T, tag, component, version stri
 			annotations.OwnershipComponentVersion: version,
 			annotations.ArtifactAnnotationKey:     ownershipArtifactAnnotation,
 		},
-	})
+	}, runtime.JSONOptions)
+
 	r.NoError(err)
 	referrer = ociImageSpecV1.Descriptor{
 		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
@@ -3723,7 +3726,7 @@ func TestRepository_AddLocalResource_CopiesOwnershipReferrer(t *testing.T) {
 	r.NoError(err)
 	defer func() { r.NoError(rc.Close()) }()
 	var copied ociImageSpecV1.Manifest
-	r.NoError(json.NewDecoder(rc).Decode(&copied))
+	r.NoError(json.UnmarshalRead(rc, &copied))
 	r.Equal(component, copied.Annotations[annotations.OwnershipComponentName], "copied referrer must retain its component name")
 	r.Equal(version, copied.Annotations[annotations.OwnershipComponentVersion], "copied referrer must retain its component version")
 	r.JSONEq(ownershipArtifactAnnotation, copied.Annotations[annotations.ArtifactAnnotationKey], "copied referrer must retain its software.ocm.artifact annotation")
@@ -3770,7 +3773,8 @@ func TestRepository_DownloadResourceStream_DigestPinnedWithReferrer(t *testing.T
 		Config:       empty,
 		Layers:       []ociImageSpecV1.Descriptor{empty},
 		Subject:      &main,
-	})
+	}, runtime.JSONOptions)
+
 	r.NoError(err)
 	referrer := ociImageSpecV1.Descriptor{
 		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
@@ -3838,7 +3842,8 @@ func TestRepository_DownloadResourceStream_MultiArchByDigest(t *testing.T) {
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		MediaType: ociImageSpecV1.MediaTypeImageIndex,
 		Manifests: children,
-	})
+	}, runtime.JSONOptions)
+
 	r.NoError(err)
 	idx := ociImageSpecV1.Descriptor{
 		MediaType: ociImageSpecV1.MediaTypeImageIndex,
@@ -3905,7 +3910,8 @@ func TestRepository_DownloadResourceStream_ReferrerIsTheRequestedArtifact(t *tes
 		Config:       empty,
 		Layers:       []ociImageSpecV1.Descriptor{empty},
 		Subject:      &subject,
-	})
+	}, runtime.JSONOptions)
+
 	r.NoError(err)
 	referrer := ociImageSpecV1.Descriptor{
 		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
@@ -3993,7 +3999,7 @@ func TestRepository_UploadResource_CopiesOwnershipReferrer(t *testing.T) {
 	r.NoError(err)
 	defer func() { r.NoError(rc.Close()) }()
 	var copied ociImageSpecV1.Manifest
-	r.NoError(json.NewDecoder(rc).Decode(&copied))
+	r.NoError(json.UnmarshalRead(rc, &copied))
 	r.Equal(component, copied.Annotations[annotations.OwnershipComponentName], "copied referrer must retain its component name")
 	r.Equal(version, copied.Annotations[annotations.OwnershipComponentVersion], "copied referrer must retain its component version")
 	r.JSONEq(ownershipArtifactAnnotation, copied.Annotations[annotations.ArtifactAnnotationKey], "copied referrer must retain its software.ocm.artifact annotation")
@@ -4292,7 +4298,8 @@ func TestRepository_AddOwnershipByReference_PushesBlobBeforeManifest(t *testing.
 		MediaType: ociImageSpecV1.MediaTypeImageManifest,
 		Config:    configDesc,
 		Layers:    []ociImageSpecV1.Descriptor{layerDesc},
-	})
+	}, runtime.JSONOptions)
+
 	r.NoError(err)
 	manifestDesc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, manifestRaw)
 	r.NoError(imgStore.Push(ctx, manifestDesc, bytes.NewReader(manifestRaw)))

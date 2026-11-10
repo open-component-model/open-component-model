@@ -2,11 +2,13 @@ package versioncheck
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestCheck_NewerVersionAvailable(t *testing.T) {
@@ -219,7 +221,7 @@ func TestCheck_UsesCachedResult(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		callCount++
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode([]githubRelease{})
+		_ = json.MarshalWrite(w, []githubRelease{}, runtime.JSONOptions)
 	}))
 	t.Cleanup(srv.Close)
 
@@ -332,7 +334,7 @@ func newTestServer(t *testing.T, releases []githubRelease) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(releases)
+		_ = json.MarshalWrite(w, releases, runtime.JSONOptions)
 	}))
 	t.Cleanup(srv.Close)
 	return srv

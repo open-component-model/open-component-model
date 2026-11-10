@@ -23,7 +23,7 @@ type HTTPStreaming struct {
 	Type   runtime.Type         `json:"type"`
 	ID     string               `json:"id"`
 	Spec   *HTTPStreamingSpec   `json:"spec"`
-	Output *HTTPStreamingOutput `json:"output,omitempty"`
+	Output *HTTPStreamingOutput `json:"output,omitzero"`
 }
 
 // HTTPStreamingSpec is the input specification for the HTTPStreaming transformation.

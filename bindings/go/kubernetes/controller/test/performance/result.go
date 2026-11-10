@@ -1,7 +1,8 @@
 package main
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"math"
 	"os"
@@ -10,6 +11,8 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
 type result struct {
@@ -140,7 +143,7 @@ func percentile(sorted []time.Duration, p float64) time.Duration {
 }
 
 func writeJSON(path string, v any) error {
-	data, err := json.MarshalIndent(v, "", "  ")
+	data, err := json.Marshal(v, ocmruntime.JSONOptions, jsontext.WithIndent("  "))
 	if err != nil {
 		return err
 	}

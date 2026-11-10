@@ -61,7 +61,7 @@ func TestDecodeStrict(t *testing.T) {
 				Type: strictDecodeCredentialsType,
 				Data: []byte(`{"type":"StrictDecodeCredentials/v1","properties":{"username":"alice"}}`),
 			},
-			errContains: `unknown field "properties"`,
+			errContains: `unknown object member name "properties"`,
 		},
 		{
 			name: "wrong field type is rejected",
@@ -69,7 +69,7 @@ func TestDecodeStrict(t *testing.T) {
 				Type: strictDecodeCredentialsType,
 				Data: []byte(`{"type":"StrictDecodeCredentials/v1","username":42}`),
 			},
-			errContains: "cannot unmarshal number into Go struct field",
+			errContains: `cannot unmarshal JSON number into Go string within "/username"`,
 		},
 	}
 

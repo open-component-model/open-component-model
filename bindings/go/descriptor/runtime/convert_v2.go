@@ -2,7 +2,8 @@ package runtime
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"maps"
 	"strings"
@@ -102,7 +103,7 @@ func ConvertFromV2Provider(provider string) (Provider, error) {
 		return Provider{}, nil
 	}
 	if strings.HasPrefix(strings.TrimSpace(provider), "{") {
-		if !json.Valid([]byte(provider)) {
+		if !jsontext.Value(provider).IsValid() {
 			return Provider{}, fmt.Errorf("invalid JSON format")
 		}
 		type providerStruct struct {
@@ -340,7 +341,7 @@ func ConvertToV2Provider(provider Provider) (string, error) {
 	providerJSON, err := json.Marshal(&providerStruct{
 		Name:   provider.Name,
 		Labels: labels,
-	})
+	}, runtime.JSONOptions)
 	if err != nil {
 		return "", fmt.Errorf("could not marshal provider to JSON: %w", err)
 	}

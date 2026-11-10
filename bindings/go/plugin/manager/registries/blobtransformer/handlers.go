@@ -2,7 +2,7 @@ package blobtransformer
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"log/slog"
 	"net/http"
 
@@ -32,7 +32,7 @@ func TransformBlobHandlerFunc[T runtime.Typed](f func(ctx context.Context, reque
 			return
 		}
 
-		if err := json.NewEncoder(writer).Encode(response); err != nil {
+		if err := json.MarshalWrite(writer, response, runtime.JSONOptions); err != nil {
 			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
 			return
 		}
@@ -51,7 +51,7 @@ func GetIdentityHandlerFunc[T runtime.Typed](f func(ctx context.Context, typ *v1
 			return
 		}
 
-		if err := json.NewEncoder(writer).Encode(response); err != nil {
+		if err := json.MarshalWrite(writer, response, runtime.JSONOptions); err != nil {
 			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
 			return
 		}

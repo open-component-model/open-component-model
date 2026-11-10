@@ -1,7 +1,7 @@
 package runtime_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -107,9 +107,11 @@ func TestRuntimeDescriptorMarshaling(t *testing.T) {
 			},
 		},
 	}
-	data, err := json.Marshal(d)
+	data, err := json.Marshal(d, runtime.JSONOptions)
 	require.ErrorContains(t, err, "marshalling of runtime descriptor is not supported")
-	require.Nil(t, data)
+	// encoding/json/v2 returns the (empty) buffer written so far on error,
+	// where v1 returned a nil slice.
+	require.Empty(t, data)
 }
 
 func TestRuntimeDescriptorUnmarshaling(t *testing.T) {

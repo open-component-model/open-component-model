@@ -1,7 +1,7 @@
 package annotations
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 
@@ -53,7 +53,7 @@ func (a ArtifactOCIAnnotation) AddToDescriptor(descriptor *ociImageSpecV1.Descri
 		}
 	}
 	annotations = append(annotations, a)
-	annotation, err := json.Marshal(annotations)
+	annotation, err := json.Marshal(annotations, runtime.JSONOptions)
 	if err != nil {
 		return fmt.Errorf("could not marshal artifact annotations: %w", err)
 	}
