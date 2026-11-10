@@ -12,7 +12,7 @@ The `ocm` command-line interface for the Open Component Model: create, sign, ver
 curl -sfL https://ocm.software/install-cli.sh | bash
 ```
 
-Installs the binary to `~/.local/bin`. Set `OCM_VERSION` to pin a version (`MAJOR.MINOR` or `MAJOR.MINOR.PATCH`) and `OCM_BIN_DIR` to choose the target directory. Windows binaries are available from the [GitHub releases page](https://github.com/open-component-model/open-component-model/releases). See the full guide: [Install the OCM CLI](https://ocm.software/docs/getting-started/install-the-ocm-cli/).
+Installs the binary to `~/.local/bin` (override with `OCM_BIN_DIR`); make sure that directory is on your `PATH`, or run the binary by its full path. Set `OCM_VERSION` to choose a version: `MAJOR.MINOR` installs the latest patch of that series, `MAJOR.MINOR.PATCH` an exact release. Windows binaries are available from the [GitHub releases page](https://github.com/open-component-model/open-component-model/releases). See the full guide: [Install the OCM CLI](https://ocm.software/docs/getting-started/install-the-ocm-cli/).
 
 ### Container image
 
@@ -41,10 +41,10 @@ task bindings/go/cli:install      # optional: copies to /usr/local/bin (sudo, as
 ocm version
 
 # Inspect a public component version
-ocm get cv ghcr.io/open-component-model//ocm.software/cli:<version> -o yaml
+ocm get cv ghcr.io/open-component-model//ocm.software/cli:0.17.0 -o yaml
 
 # Download a resource for a specific platform
-ocm download resource ghcr.io/open-component-model//ocm.software/cli:<version> --identity os=linux,architecture=amd64
+ocm download resource ghcr.io/open-component-model//ocm.software/cli:0.17.0 --identity name=cli,os=linux,architecture=amd64
 ```
 
 ## Commands
@@ -67,7 +67,7 @@ Full reference: [docs/reference/ocm.md](docs/reference/ocm.md), also published a
 
 ## Configuration
 
-The global `--config` flag loads a `.ocmconfig` or `ocm/config` file. When it is not set, the CLI looks one up via the `OCM_CONFIG` environment variable, the XDG/home config directories, the current working directory, and the executable's directory, in that order (see the full lookup order in [docs/reference/ocm.md](docs/reference/ocm.md)). Control logging with `--loglevel debug` and `--logformat json`.
+The global `--config` flag loads one or more `.ocmconfig` or `ocm/config` files. When it is not set, the CLI searches the `OCM_CONFIG` environment variable, the XDG/home config directories, the current working directory, and the executable's directory, in that order, and merges every file it finds; later files take precedence (see the full lookup order in [docs/reference/ocm.md](docs/reference/ocm.md)). Control logging with `--loglevel debug` and `--logformat json`.
 
 ## Shell Completion
 
