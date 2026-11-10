@@ -13,6 +13,7 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -233,9 +234,8 @@ func (h *Handler) verifyPEMSignature(
 		return fmt.Errorf("certificate verification failed: %w", err)
 	}
 
-	// Optional issuer constraint: the signature's Issuer field must match the
-	// X.509 Issuer of the leaf certificate (i.e. the DN of the CA that directly
-	// signed the leaf).
+	// Optional issuer constraint: the signature's Issuer field must identify the
+	// leaf certificate, either by its Subject or by its X.509 Issuer.
 	if err := verifyIssuerForLeafCert(signed, leaf); err != nil {
 		return fmt.Errorf("issuer verification based on leaf certificate failed: %w", err)
 	}
@@ -404,8 +404,11 @@ func verifyChainWithOptionalAnchor(
 }
 
 // verifyIssuerForLeafCert checks that the Issuer field declared in the signature
-// matches the X.509 Issuer of the leaf certificate, i.e. the DN of the CA that
-// directly signed the leaf. The check is skipped when the Issuer field is empty.
+// identifies the leaf certificate. It accepts the leaf's Subject, which the OCM
+// specification designates as the issuer description and which OCM v1 writes
+// when signing with a certificate, as well as the leaf's X.509 Issuer, the DN of
+// the CA that directly signed the leaf. The check is skipped when the Issuer
+// field is empty.
 func verifyIssuerForLeafCert(signed descruntime.Signature, leaf *x509.Certificate) error {
 	iss := strings.TrimSpace(signed.Signature.Issuer)
 	if iss == "" {
@@ -417,12 +420,14 @@ func verifyIssuerForLeafCert(signed descruntime.Signature, leaf *x509.Certificat
 		return fmt.Errorf("parsing issuer %q failed: %w", iss, err)
 	}
 
-	leafIssuerDN := leaf.Issuer
-
-	if err := rfc2253.Equal(want, leafIssuerDN); err != nil {
-		return fmt.Errorf("issuer mismatch between %q and %q: %w", want.String(), leafIssuerDN.String(), err)
+	for _, candidate := range []pkix.Name{leaf.Subject, leaf.Issuer} {
+		if rfc2253.Equal(want, candidate) == nil {
+			return nil
+		}
 	}
-	return nil
+
+	return fmt.Errorf("issuer mismatch: %q matches neither the subject %q nor the issuer %q of the signing certificate",
+		want.String(), leaf.Subject.String(), leaf.Issuer.String())
 }
 
 // baseIdentity builds a typed RSA credential consumer identity.
