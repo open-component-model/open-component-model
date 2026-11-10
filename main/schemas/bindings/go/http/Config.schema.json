@@ -25,6 +25,10 @@
       "type": "boolean",
       "description": "InsecureSkipVerify disables verification of the server's TLS certificate\nchain and host name. Setting this to true makes connections vulnerable to\nactive MITM attacks; use only for development and local registry testing.\nA warning is logged at transport build time and on every new host connection.\n\nNil means \"unset\" (TLS verification stays enabled at the top level). When\nTLSConfig is embedded in HostConfig, nil additionally means \"inherit from\nthe global Config\"; an explicit false on a host re-enables verification\neven when the global config sets true. See HostConfig for per-host merge\nsemantics."
     },
+    "plainHTTP": {
+      "type": "boolean",
+      "description": "PlainHTTP makes OCI registry clients use cleartext HTTP, also for https://\nreferences. Credentials go unencrypted: set it per host, never for a\npublic registry. Helm charts follow it too: an oci:// chart uses the\nsetting for its registry host, and a classic http:// repository URL is\naccepted only when its host is plainHTTP.\n\nNil means HTTPS at the top level and \"inherit\" in a HostConfig; an\nexplicit false on a host wins over a global true.\n\nThis field alone decides the connection. A scheme prefix on a reference\nor base URL is deprecated and only checked against it: http:// on a host\nthat is not plainHTTP is an error, https:// on a plainHTTP host warns\nabout the downgrade. Set this field to true and drop the prefix."
+    },
     "responseHeaderTimeout": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
       "description": "ResponseHeaderTimeout specifies the amount of time to wait for\na server's response headers after fully writing the request\n(including its body, if any). This time does not include the\ntime to read the response body."
@@ -94,6 +98,10 @@
           "type": "boolean",
           "description": "InsecureSkipVerify disables verification of the server's TLS certificate\nchain and host name. Setting this to true makes connections vulnerable to\nactive MITM attacks; use only for development and local registry testing.\nA warning is logged at transport build time and on every new host connection.\n\nNil means \"unset\" (TLS verification stays enabled at the top level). When\nTLSConfig is embedded in HostConfig, nil additionally means \"inherit from\nthe global Config\"; an explicit false on a host re-enables verification\neven when the global config sets true. See HostConfig for per-host merge\nsemantics."
         },
+        "plainHTTP": {
+          "type": "boolean",
+          "description": "PlainHTTP makes OCI registry clients use cleartext HTTP, also for https://\nreferences. Credentials go unencrypted: set it per host, never for a\npublic registry. Helm charts follow it too: an oci:// chart uses the\nsetting for its registry host, and a classic http:// repository URL is\naccepted only when its host is plainHTTP.\n\nNil means HTTPS at the top level and \"inherit\" in a HostConfig; an\nexplicit false on a host wins over a global true.\n\nThis field alone decides the connection. A scheme prefix on a reference\nor base URL is deprecated and only checked against it: http:// on a host\nthat is not plainHTTP is an error, https:// on a plainHTTP host warns\nabout the downgrade. Set this field to true and drop the prefix."
+        },
         "responseHeaderTimeout": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
           "description": "ResponseHeaderTimeout specifies the amount of time to wait for\na server's response headers after fully writing the request\n(including its body, if any). This time does not include the\ntime to read the response body."
@@ -139,6 +147,10 @@
         "disableHTTP2": {
           "type": "boolean",
           "description": "DisableHTTP2 restricts the client to HTTP/1.1. By default HTTP/2 is\nnegotiated via TLS ALPN, which multiplexes every concurrent request to a\nhost over one TCP connection: a single connection loss or GOAWAY then\naffects all in-flight transfers at once. With HTTP/1.1 each concurrent\nrequest uses its own connection, at the cost of more TLS handshakes."
+        },
+        "plainHTTP": {
+          "type": "boolean",
+          "description": "PlainHTTP makes OCI registry clients use cleartext HTTP, also for https://\nreferences. Credentials go unencrypted: set it per host, never for a\npublic registry. Helm charts follow it too: an oci:// chart uses the\nsetting for its registry host, and a classic http:// repository URL is\naccepted only when its host is plainHTTP.\n\nNil means HTTPS at the top level and \"inherit\" in a HostConfig; an\nexplicit false on a host wins over a global true.\n\nThis field alone decides the connection. A scheme prefix on a reference\nor base URL is deprecated and only checked against it: http:// on a host\nthat is not plainHTTP is an error, https:// on a plainHTTP host warns\nabout the downgrade. Set this field to true and drop the prefix."
         }
       },
       "additionalProperties": false
