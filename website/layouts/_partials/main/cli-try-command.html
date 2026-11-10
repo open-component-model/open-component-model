@@ -8,9 +8,8 @@
   {{- /* The unpinned install picks the newest stable release. Without a constraint
          --latest would also consider prereleases. */ -}}
   {{- $flags = "--latest --constraint '>0.0.0' -o widetree" -}}
-{{- else if .Site.Version.IsDefault -}}
-  {{- $flags = "--latest -o widetree" -}}
 {{- else if findRE `^\d+\.\d+$` $version -}}
+  {{- /* Pinned docs version: constrain to the series install-cli.sh installs for it. */ -}}
   {{- $parts := split $version "." -}}
   {{- $major := int (index $parts 0) -}}
   {{- $minor := int (index $parts 1) -}}

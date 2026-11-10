@@ -32,7 +32,7 @@
   </div>
 
   {{- with partial "main/cli-try-command.html" . }}
-  {{- $installCmd := printf "curl -sfL https://ocm.software/install-cli.sh | %sbash" (partial "main/site-version.html" (dict "page" $ "format" "env")) }}
+  {{- $installCmd := printf "curl -sfL https://ocm.software/install-cli.sh | %sbash\nexport PATH=\"$HOME/.local/bin:$PATH\"" (partial "main/site-version.html" (dict "page" $ "format" "env")) }}
   <div class="container">
     <section class="lp-section" aria-labelledby="quickstart-title">
       <h2 id="quickstart-title" class="section-title section-title--left">Try It Out</h2>
