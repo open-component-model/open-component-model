@@ -7,6 +7,7 @@ import (
 )
 
 var WgetCredentialsVersionedType = runtime.NewVersionedType(WgetCredentialsType, Version)
+var HTTPCredentialsVersionedType = runtime.NewVersionedType(HTTPCredentialsType, Version)
 
 // MustRegisterCredentialType registers the wget credential type under its
 // preferred HTTP-first name (HTTPCredentials/v1) and its deprecated legacy
@@ -14,7 +15,7 @@ var WgetCredentialsVersionedType = runtime.NewVersionedType(WgetCredentialsType,
 // remain accepted for backward compatibility, in the given scheme.
 func MustRegisterCredentialType(scheme *runtime.Scheme) {
 	scheme.MustRegisterWithAlias(&WgetCredentials{},
-		runtime.NewVersionedType(HTTPCredentialsType, Version),
+		HTTPCredentialsVersionedType,
 		WgetCredentialsVersionedType,
 		runtime.NewUnversionedType(WgetCredentialsType),
 	)

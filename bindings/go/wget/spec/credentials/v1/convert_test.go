@@ -119,11 +119,11 @@ func TestConvertToWgetCredentials(t *testing.T) {
 		{
 			name: "Raw with HTTPCredentials/v1 alias type maps to WgetCredentials",
 			input: &runtime.Raw{
-				Type: runtime.NewVersionedType(HTTPCredentialsType, Version),
+				Type: HTTPCredentialsVersionedType,
 				Data: []byte(`{"type":"HTTPCredentials/v1","username":"user","password":"pass"}`),
 			},
 			want: &WgetCredentials{
-				Type:     runtime.NewVersionedType(HTTPCredentialsType, Version),
+				Type:     HTTPCredentialsVersionedType,
 				Username: "user",
 				Password: "pass",
 			},
