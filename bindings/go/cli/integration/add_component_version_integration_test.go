@@ -691,6 +691,13 @@ generated: "2024-01-01T00:00:00.000000000Z"
 	r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
 
 	ctfDir := filepath.Join(tempDir, "ctf")
+	// The chart server runs without TLS, and an http:// URL alone no longer selects plain HTTP.
+	cfgPath := filepath.Join(tempDir, "ocmconfig.yaml")
+	r.NoError(os.WriteFile(cfgPath, []byte(`type: generic.config.ocm.software/v1
+configurations:
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true
+`), os.ModePerm))
 
 	addCMD := cmd.New()
 	addCMD.SetArgs([]string{
@@ -698,6 +705,7 @@ generated: "2024-01-01T00:00:00.000000000Z"
 		"component-version",
 		"--repository", fmt.Sprintf("ctf::%s", ctfDir),
 		"--constructor", constructorPath,
+		"--config", cfgPath,
 	})
 	r.NoError(addCMD.ExecuteContext(ctx), "add cv with helm access should succeed and trigger digest processor")
 
