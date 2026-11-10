@@ -62,7 +62,8 @@ jobs:
 ```
 
 On the `main` docs the example installs the latest stable release; versioned docs pin `version` to that release.
-Set `cache: false` to always download the binary.
+Set `cache: false` to skip the `actions/cache` restore and save — a binary already in the runner's tool
+cache is still reused when its digest matches the release asset.
 The action outputs the installed `version`, the binary `path`, and `cache-hit`.
 See the [action's README](https://github.com/open-component-model/ocm-setup-action#readme) for all inputs and outputs.
 
@@ -288,6 +289,9 @@ OCM CLI (Open Component Model v2)
 ```
 
 The same command in a workflow step (`- run: ocm version`) prints this into the job log.
+
+Releases before `0.17.0` print a lowercase JSON object instead, for example
+`{"major":"0","minor":"16","patch":"0","gitVersion":"0.16.0",…}`. That is still the v2 CLI.
 
 {{< callout title="If the output looks different" icon="outline/info-circle" >}}
 If the output is a JSON object with **capitalised** field names (`Major`, `Minor`, `Patch`) instead of the
