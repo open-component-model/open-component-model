@@ -1,7 +1,6 @@
 package v1alpha1
 
 import (
-	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
 
@@ -88,9 +87,8 @@ type DiscoverySpec struct {
 // +kubebuilder:pruning:PreserveUnknownFields
 type ExtractedRecord map[string]apiextensionsv1.JSON
 
-// MarshalJSONTo and UnmarshalJSONFrom forward to the default map
-// (de)serialization and are semantically identical to the built-in behavior of
-// a named map type.
+// MarshalJSON and UnmarshalJSON forward to the default map (de)serialization
+// and are semantically identical to the built-in behavior of a named map type.
 // They are NOT dead code: controller-gen treats a type implementing a custom
 // JSON marshaler as opaque and honors the Type=object +
 // PreserveUnknownFields markers verbatim. Without them, controller-gen
@@ -98,13 +96,17 @@ type ExtractedRecord map[string]apiextensionsv1.JSON
 // schema on status.extracted, which turns the status subschema non-structural
 // and breaks the status-level CEL rule (self.extracted becomes undefined at CRD
 // install). Keep both methods so the generated CRD stays structural.
-func (in ExtractedRecord) MarshalJSONTo(enc *jsontext.Encoder) error {
-	return json.MarshalEncode(enc, map[string]apiextensionsv1.JSON(in), runtime.JSONOptions)
+//
+// controller-gen matches these by method name, so they stay on the
+// encoding/json v1 signature instead of MarshalJSONTo/UnmarshalJSONFrom.
+// encoding/json/v2 honors them all the same.
+func (in ExtractedRecord) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]apiextensionsv1.JSON(in), runtime.JSONOptions)
 }
 
-func (in *ExtractedRecord) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+func (in *ExtractedRecord) UnmarshalJSON(data []byte) error {
 	var record map[string]apiextensionsv1.JSON
-	if err := json.UnmarshalDecode(dec, &record); err != nil {
+	if err := json.Unmarshal(data, &record); err != nil {
 		return err
 	}
 	*in = record

@@ -374,12 +374,6 @@ spec:
                   by spec.extract. It is only set when spec.extract is set. A selected but
                   empty result is an empty list; an uncomputed result is absent.
                 items:
-                  additionalProperties:
-                    x-kubernetes-preserve-unknown-fields: true
-                  description: |-
-                    ExtractedRecord is one free-form extraction result. It is an opaque CRD
-                    object for CEL while exposing each projected field as arbitrary JSON to Go
-                    clients.
                   type: object
                   x-kubernetes-preserve-unknown-fields: true
                 type: array
