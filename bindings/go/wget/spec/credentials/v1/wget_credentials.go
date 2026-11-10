@@ -6,8 +6,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-var WgetCredentialsVersionedType = runtime.NewVersionedType(WgetCredentialsType, Version)
-var HTTPCredentialsVersionedType = runtime.NewVersionedType(HTTPCredentialsType, Version)
+var (
+	WgetCredentialsVersionedType = runtime.NewVersionedType(WgetCredentialsType, Version)
+	HTTPCredentialsVersionedType = runtime.NewVersionedType(HTTPCredentialsType, Version)
+)
 
 // MustRegisterCredentialType registers the wget credential type under its
 // preferred HTTP-first name (HTTPCredentials/v1) and its deprecated legacy
