@@ -218,8 +218,8 @@ That writes a single file you can inspect or unpack with `tar -tf ./ocm-cli.tar`
 ## Authenticate against a protected server
 
 The release asset above is public. When accessing the URL requires authentication (an artifact repository, or a private
-GitHub asset), [configure credentials]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) of type `HTTPCredentials/v1` instead of putting them in the specification. OCM matches them to the request
-by a consumer identity of type `HTTP/v1` derived from the URL.
+GitHub asset), [configure credentials]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) of type `HTTPCredentials/v1` instead of putting them in the specification. OCM derives a `Wget` lookup identity
+from the URL, and a consumer entry of type `HTTP/v1` matches it after canonicalization.
 Another silent cause: an entry that sets only certificateAuthority without certificate. In OCM v2, certificateAuthority is only evaluated alongside a client certificate. It is not applied for server-side certificate verification on its own.
 
 Write the credentials to `.ocmconfig`:
@@ -397,8 +397,8 @@ OCM v2 does **not** guess the media type from the file extension in the URL. OCM
 ## Authentication {#authentication}
 
 Credentials are resolved through OCM's normal [credential system]({{< relref "docs/concepts/credential-system.md" >}}). Never add authentication to a URL directly. OCM
-builds a [consumer identity]({{< relref "docs/reference/configuration/credential-consumer-identities.md#wget" >}}) of type `HTTP/v1` from
-the URL and uses the matching consumer entry's credentials for the request. Because the input type and the access type
+builds a [consumer identity]({{< relref "docs/reference/configuration/credential-consumer-identities.md#wget" >}}) of type `Wget` from
+the URL (an `HTTP/v1` entry matches it after canonicalization) and uses the matching consumer entry's credentials for the request. Because the input type and the access type
 build that identity the same way, one entry will work for both, building the component version, and downloading the resource.
 For how identities are matched and resolved, see [Understand Credential Resolution]({{< relref "docs/concepts/credential-resolution.md" >}}).
 

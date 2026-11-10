@@ -37,7 +37,7 @@ OCM ships with the following built-in credential types:
 | [`GitHTTPSCredentials/v1`](#githttpscredentialsv1)         | `Git/v1` consumers                    | Git over HTTPS with a password or access token                  |
 | [`GitBearerCredentials/v1`](#gitbearercredentialsv1)       | `Git/v1` consumers                    | Advanced: Git servers requiring Bearer authentication           |
 | [`GitSSHCredentials/v1`](#gitsshcredentialsv1)             | `Git/v1` consumers                    | Git over SSH with a key or SSH agent                            |
-| [`RSACredentials/v1`](#rsacredentialsv1)                   | `RSA/v1` consumers                    | RSA signing and verification key material                       |
+| [`RSACredentials/v1`](#rsacredentialsv1)                   | `RSA/v1alpha1` consumers              | RSA signing and verification key material                       |
 | [`GPGCredentials/v1alpha1`](#gpgcredentialsv1alpha1)       | `GPG/v1alpha1` consumers              | GPG signing and verification key material                       |
 | [`OIDCIdentityToken/v1alpha1`](#oidcidentitytokenv1alpha1) | `SigstoreSigner/v1alpha1` consumers   | OIDC token for Sigstore keyless signing via Fulcio              |
 | [`TrustedRoot/v1alpha1`](#trustedrootv1alpha1)             | `SigstoreVerifier/v1alpha1` consumers | Sigstore trust material for private infrastructure verification |
