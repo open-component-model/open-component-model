@@ -99,7 +99,9 @@ func (r *Resolver) GetComponentVersion(ctx context.Context, opts *Options, verif
 	})
 	duration := time.Since(start)
 	state := verificationState(verify.Verifications, verify.Digest)
-	ResolutionDurationHistogram.WithLabelValues(state).Observe(duration.Seconds())
+	ResolutionDurationHistogram.
+		WithLabelValues(state, resultLabel(err)).
+		Observe(duration.Seconds())
 	// Per-version timing lives here because component and version are unbounded as metric labels.
 	log.FromContext(ctx).V(1).Info("resolved component version", "component", component, "version", version,
 		"verificationState", state, "duration", duration, "error", err)
