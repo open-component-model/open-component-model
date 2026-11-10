@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 
 	git "github.com/go-git/go-git/v6"
 	"github.com/go-git/go-git/v6/config"
@@ -513,25 +514,53 @@ func fetchRepository(ctx context.Context, dir, url, commit string, clientOptions
 // peelCommit, including tag-to-tag targets.
 func resolveRef(repo *git.Repository, name string) (plumbing.Hash, plumbing.ReferenceName, error) {
 	if name != "HEAD" && (strings.HasPrefix(name, "refs/heads/") || !strings.HasPrefix(name, "refs/")) {
-		ref, err := repo.Reference(plumbing.ReferenceName("refs/remotes/origin/"+strings.TrimPrefix(name, "refs/heads/")), true)
+		candidate := plumbing.ReferenceName("refs/remotes/origin/" + strings.TrimPrefix(name, "refs/heads/"))
+		ref, err := repo.Reference(candidate, true)
 		if err == nil {
 			return ref.Hash(), sourceRefName(ref.Name()), nil
 		}
+		if !refAbsent(err) {
+			return plumbing.ZeroHash, "", fmt.Errorf("cannot read %s: %w", candidate, err)
+		}
 	}
 
-	var firstErr error
+	var notFound bool
+	var invalidErr error
 	for _, rule := range plumbing.RefRevParseRules {
+		candidate := plumbing.ReferenceName(fmt.Sprintf(rule, name))
 		// Resolving follows symbolic refs, so the name of HEAD is the branch it points to.
-		ref, err := repo.Reference(plumbing.ReferenceName(fmt.Sprintf(rule, name)), true)
-		if err == nil {
+		ref, err := repo.Reference(candidate, true)
+		switch {
+		case err == nil:
 			return ref.Hash(), sourceRefName(ref.Name()), nil
-		}
-		if firstErr == nil {
-			firstErr = err
+		case !refAbsent(err):
+			// The candidate may exist; a later, lower-precedence hit could select a
+			// different commit than the one name denotes.
+			return plumbing.ZeroHash, "", fmt.Errorf("cannot read %s: %w", candidate, err)
+		case errors.Is(err, plumbing.ErrInvalidReferenceName):
+			// The storage cannot hold a ref by this name, such as the bare "main" of the
+			// "%s" rule, so the candidate is absent.
+			if invalidErr == nil {
+				invalidErr = err
+			}
+		default:
+			notFound = true
 		}
 	}
+	if notFound {
+		return plumbing.ZeroHash, "", fmt.Errorf("%w: %q", plumbing.ErrReferenceNotFound, name)
+	}
+	return plumbing.ZeroHash, "", invalidErr
+}
 
-	return plumbing.ZeroHash, "", firstErr
+// refAbsent reports whether a lookup error only says the ref does not exist. On disk, a
+// name below the path of another ref, such as refs/remotes/origin/release/v1 next to the
+// branch release, fails with ENOTDIR. Git never stores a ref below another ref, so that
+// name is absent too.
+func refAbsent(err error) bool {
+	return errors.Is(err, plumbing.ErrReferenceNotFound) ||
+		errors.Is(err, plumbing.ErrInvalidReferenceName) ||
+		errors.Is(err, syscall.ENOTDIR)
 }
 
 // sourceRefName maps the remote-tracking name a fetched branch is stored under back to
