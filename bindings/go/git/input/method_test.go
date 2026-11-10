@@ -7,15 +7,9 @@ import (
 	"errors"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/go-git/go-git/v6"
-	"github.com/go-git/go-git/v6/config"
-	"github.com/go-git/go-git/v6/plumbing"
-	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -25,6 +19,7 @@ import (
 	inputspec "ocm.software/open-component-model/bindings/go/git/spec/input"
 	inputv1 "ocm.software/open-component-model/bindings/go/git/spec/input/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
 func TestProcessResourceSnapshots(t *testing.T) {
@@ -194,35 +189,11 @@ func TestInvalidResource(t *testing.T) {
 
 func newRepository(t *testing.T) (path, firstCommit string) {
 	t.Helper()
-	r := require.New(t)
-	work := t.TempDir()
-	repo, err := git.PlainInit(work, false)
-	r.NoError(err)
-	// go-git reads the global Git config; a host commit.gpgSign must not sign fixtures.
-	cfg, err := repo.Config()
-	r.NoError(err)
-	cfg.Commit.GpgSign = config.OptBoolFalse
-	r.NoError(repo.SetConfig(cfg))
-	r.NoError(repo.Storer.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, "refs/heads/main")))
-	tree, err := repo.Worktree()
-	r.NoError(err)
-	for _, content := range []string{"first\n", "second\n"} {
-		r.NoError(os.WriteFile(filepath.Join(work, "README.md"), []byte(content), 0o600))
-		_, err := tree.Add("README.md")
-		r.NoError(err)
-		hash, err := tree.Commit(content, &git.CommitOptions{Author: &object.Signature{
-			Name: "OCM fixture", Email: "fixture@example.invalid", When: time.Unix(1700000000, 0).UTC(),
-		}})
-		r.NoError(err)
-		if firstCommit == "" {
-			firstCommit = hash.String()
-			r.NoError(repo.Storer.SetReference(plumbing.NewHashReference("refs/heads/previous", hash)))
-			_, err = repo.CreateTag("v1", hash, nil)
-			r.NoError(err)
-		}
-	}
-	path = filepath.Join(t.TempDir(), "fixture.git")
-	_, err = git.PlainClone(path, &git.CloneOptions{URL: work, Bare: true})
-	r.NoError(err)
-	return path, firstCommit
+	path, first := testgit.Repository(t, testgit.Options{
+		DefaultBranch: "main",
+		Bare:          true,
+		Branches:      []string{"previous"},
+		Tags:          []string{"v1"},
+	})
+	return path, first.String()
 }

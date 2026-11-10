@@ -9,6 +9,7 @@ import {
   GENERATED_TABLE_END,
   GENERATED_TABLE_START,
   generatePackagesReadme,
+  parseDepguardRules,
 } from "./dependency-list.js";
 
 const GOLANGCI_YML = `
@@ -124,4 +125,43 @@ test("generatePackagesReadme fails when the markers are missing", () => {
     () => generatePackagesReadme(config, readme),
     /does not contain the generated packages table markers/
   );
+});
+
+test("parseDepguardRules excludes test-only helper bindings from allows", () => {
+  const dir = mkdtempSync(join(tmpdir(), "dependency-list-"));
+  const config = join(dir, "golangci.yml");
+  writeFileSync(
+    config,
+    `
+linters:
+  settings:
+    depguard:
+      rules:
+        beta:
+          list-mode: lax
+          files: ["**/bindings/go/beta/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/beta"
+            - "ocm.software/open-component-model/bindings/go/testutils"
+        testutils-test-only:
+          list-mode: lax
+          files: ["$all", "!$test", "!**/bindings/go/testutils/**"]
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/testutils"
+        # A scoped rule whose files match the testutils tree would otherwise make
+        # testutils a binding key; the parser must still skip it.
+        testutils:
+          list-mode: lax
+          files: ["**/bindings/go/testutils/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/testutils"
+`
+  );
+  const deps = parseDepguardRules(config);
+  // testutils is a test-only helper: it is granted to beta's tests but must not
+  // appear as a production dependency edge, and it is never a binding key even
+  // when a rule scopes its own tree.
+  assert.deepStrictEqual(deps.get("beta"), []);
+  assert.strictEqual(deps.has("testutils"), false);
+  assert.strictEqual(deps.has("testutils-test-only"), false);
 });
