@@ -48,6 +48,8 @@ binary's SHA-256 digest and its [GitHub attestation](#verify-binary-authenticity
 and adds `ocm` to the `PATH` of subsequent steps:
 
 ```yaml
+on: push
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -59,10 +61,16 @@ jobs:
 {{< site-version "action-with" >}}      - run: ocm version
 ```
 
-On the `main` docs the example installs the latest stable release; versioned docs pin `version` to that release. Set `cache: false` to always download the binary, and
-`verify-attestation: false` on self-hosted runners without the [GitHub CLI](https://cli.github.com/).
+On the `main` docs the example installs the latest stable release; versioned docs pin `version` to that release.
+Set `cache: false` to always download the binary.
 The action outputs the installed `version`, the binary `path`, and `cache-hit`.
 See the [action's README](https://github.com/open-component-model/ocm-setup-action#readme) for all inputs and outputs.
+
+{{< callout context="caution" title="Do not install unverified binaries" icon="outline/alert-triangle" >}}
+`verify-attestation: false` installs the CLI without checking its provenance — only set it on self-hosted
+runners that lack the [GitHub CLI](https://cli.github.com/), and verify the binary by another means as
+described in [Verify Binary Authenticity](#verify-binary-authenticity).
+{{< /callout >}}
 
 {{< /tab >}}
 {{< tab "OCM Component" >}}
@@ -275,11 +283,15 @@ ocm version
 Expected output:
 
 ```text
-{"major":"0","minor":"1","patch":"0","gitVersion":"0.1.0","goVersion":"go1.26.0","compiler":"gc","platform":"darwin/arm64"}
+OCM CLI (Open Component Model v2)
+  Version:  {{< site-version "semver" >}}
 ```
 
+The same command in a workflow step (`- run: ocm version`) prints this into the job log.
+
 {{< callout title="If the output looks different" icon="outline/info-circle" >}}
-If the field names are **capitalised** (`Major`, `Minor`, `Patch`), you are running the legacy v1
+If the output is a JSON object with **capitalised** field names (`Major`, `Minor`, `Patch`) instead of the
+`OCM CLI (Open Component Model v2)` header, you are running the legacy v1
 CLI, not v2. A previous v1 installation is shadowing the new binary. Run `which ocm` (Linux/macOS)
 or `where.exe ocm` (Windows) to see which binary is active — then either move `~/.local/bin` earlier
 in your PATH or remove the v1 binary. Common v1 install locations are `/opt/homebrew/bin`
