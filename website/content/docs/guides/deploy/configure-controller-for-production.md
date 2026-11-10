@@ -165,12 +165,25 @@ Leader election is on by default. On how to fine-tune leader election and high-a
 [Kubernetes - Leader Election docs](https://kubernetes.io/docs/concepts/architecture/leases/#leader-election).
 
 The chart defaults to a single replica, so there is no standby. Set `manager.replicas` to at least `2` and keep leader
-election enabled:
+election enabled. `manager.affinity` is empty by default, so both replicas can land on the same node. Spread them
+across nodes so a single node failure doesn't take out the standby too:
 
 ```yaml
 manager:
   replicas: 2
+  affinity:
+    podAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                control-plane: controller-manager
+                app.kubernetes.io/instance: <release name>
 ```
+
+The rule is preferred, not required, so both replicas still schedule on a single-node cluster.
 
 Controller specific behavior is as follows:
 
