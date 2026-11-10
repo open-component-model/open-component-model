@@ -14,6 +14,7 @@
 @import "pages"; // Page-specific overrides
 @import "version-warning"; // Version warning banner
 @import "landing-ord"; // Landing page & footer
+@import "cli-try-demo"; // Landing page "Try It Out" animated terminal
 @import "changelog"; // Changelog version list
 @import "../components/schema-renderer"; // Schema renderer (Preact)
 @import "../components/slides"; // Slide deck viewer

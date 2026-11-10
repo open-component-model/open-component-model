@@ -1,0 +1,350 @@
+/* ============================================================
+   "Try It Out" animated terminal (landing page)
+   The terminal stays dark in both light and dark site themes,
+   like a real shell window. Markup: layouts/home.html.
+   ============================================================ */
+
+/* Section heading: the flashy title + inline subtext, sitting tight above the
+   terminal. This is the first heading on the page, so it is styled a little
+   larger and less formal than the other landing section titles. */
+.lp-home .lp-section--try {
+    gap: 16px;
+}
+
+.lp-home .cli-demo-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 14px;
+}
+
+.lp-home .cli-demo-title {
+    margin: 0;
+    color: var(--lp-c-text-1);
+    font-family: "Inter Variable", "Inter", system-ui, sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+}
+
+.lp-home .cli-demo-subtitle {
+    margin: 0;
+    color: var(--lp-c-text-2);
+    font-size: 15px;
+}
+
+.lp-home .cli-demo {
+    --cli-term-bg: #0f1013;
+    --cli-term-border: #262a31;
+    --cli-term-line: #22262d;
+    --cli-text: #d7dae0;
+    --cli-muted: #8a9099;
+
+    overflow: hidden;
+    background: var(--cli-term-bg);
+    border: 1px solid var(--cli-term-border);
+    border-radius: var(--ocm-card-border-radius, 14px);
+    box-shadow: 0 30px 80px -42px rgba(0, 0, 0, 0.9);
+    font-family: var(--bs-font-monospace, ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace);
+}
+
+/* --- title bar --- */
+.lp-home .cli-demo__bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: linear-gradient(180deg, #1c1f25, #171a1f);
+    border-bottom: 1px solid var(--cli-term-border);
+}
+
+.lp-home .cli-demo__dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+
+    &--r { background: #ff5f57; }
+    &--y { background: #febc2e; }
+    &--g { background: #28c840; }
+}
+
+.lp-home .cli-demo__title {
+    flex: 1;
+    margin-left: 8px;
+    color: var(--cli-muted);
+    font-size: 13px;
+}
+
+.lp-home .cli-demo__replay {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 11px;
+    color: var(--cli-muted);
+    font-family: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    background: transparent;
+    border: 1px solid #333842;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: color 0.18s, border-color 0.18s;
+
+    &:hover {
+        color: #fff;
+        border-color: var(--brand-cyan);
+    }
+
+    svg {
+        width: 13px;
+        height: 13px;
+    }
+}
+
+/* --- terminal body --- */
+.lp-home .cli-demo__term {
+    height: 430px;
+    padding: 18px 20px 20px;
+    overflow-y: auto;
+    color: var(--cli-text);
+    font-size: 13.5px;
+    line-height: 1.62;
+    scrollbar-width: thin;
+    scrollbar-color: #3a3f48 transparent;
+
+    &::-webkit-scrollbar { width: 8px; }
+    &::-webkit-scrollbar-thumb { background: #3a3f48; border-radius: 8px; }
+}
+
+.lp-home .cli-demo__line {
+    white-space: pre-wrap;
+    word-break: break-word;
+
+    &--cmd { color: #eceef2; }
+    &--in { animation: cli-demo-fade 0.26s ease both; }
+}
+
+.lp-home .cli-demo__prompt {
+    color: var(--brand-cyan);
+    font-weight: 700;
+    user-select: none;
+}
+
+@keyframes cli-demo-fade {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: none; }
+}
+
+.lp-home .cli-demo__cursor {
+    display: inline-block;
+    width: 8px;
+    height: 1.05em;
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    background: var(--brand-cyan);
+    border-radius: 1px;
+    animation: cli-demo-blink 1s steps(1) infinite;
+}
+
+@keyframes cli-demo-blink {
+    50% { opacity: 0; }
+}
+
+/* output colours */
+.lp-home .cli-demo--green { color: #4ade80; }
+.lp-home .cli-demo--cyan { color: #5ad1f4; }
+.lp-home .cli-demo--blue { color: #6ea8ff; }
+.lp-home .cli-demo--violet { color: #c792ea; }
+.lp-home .cli-demo--dim { color: #6c727c; }
+.lp-home .cli-demo--bold { font-weight: 700; }
+.lp-home .cli-demo__bar { color: #4ade80; letter-spacing: -1px; }
+.lp-home .cli-demo__bar-todo { color: #333842; }
+
+/* --- integrated copyable command rows --- */
+.lp-home .cli-demo__steps {
+    border-top: 1px solid var(--cli-term-border);
+}
+
+/* The terminal panel is UI chrome, not markdown content: strip the theme's
+   global inline-code background/padding so the commands sit flat in the row. */
+.lp-home .cli-demo code {
+    margin-block: 0;
+    padding: 0;
+    background: none;
+}
+
+.lp-home .cli-demo__step {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 18px;
+    border-left: 2px solid transparent;
+    transition: background 0.25s, border-color 0.25s;
+
+    & + & {
+        border-top: 1px solid var(--cli-term-line);
+    }
+
+    &.is-active {
+        background: rgba(76, 201, 240, 0.07);
+        border-left-color: var(--brand-cyan);
+    }
+}
+
+.lp-home .cli-demo__n {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    color: var(--cli-muted);
+    font-size: 13px;
+    font-weight: 700;
+    border: 1.5px solid #333842;
+    transition: color 0.25s, border-color 0.25s, background 0.25s;
+}
+
+.lp-home .cli-demo__step.is-active .cli-demo__n {
+    color: var(--brand-cyan);
+    border-color: var(--brand-cyan);
+    background: rgba(76, 201, 240, 0.1);
+}
+
+.lp-home .cli-demo__body {
+    flex: 1;
+    min-width: 0;
+}
+
+.lp-home .cli-demo__what {
+    display: block;
+    margin-bottom: 6px;
+    color: #d7dae0;
+    font-family: var(--bs-font-sans-serif);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.lp-home .cli-demo__hint {
+    color: #7e848d;
+    font-weight: 400;
+
+    code {
+        color: #9aa0a9;
+        font-size: 12px;
+    }
+}
+
+.lp-home .cli-demo__cmd {
+    display: block;
+    color: #aeb6ff;
+    font-size: 12.5px;
+    white-space: pre;
+    overflow-x: auto;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar { display: none; }
+
+    &::before {
+        content: "$ ";
+        color: var(--brand-cyan);
+        font-weight: 700;
+    }
+}
+
+.lp-home .cli-demo__more {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    color: var(--cli-muted);
+    font-family: var(--bs-font-sans-serif);
+    font-size: 13px;
+    text-decoration: none;
+    transition: color 0.18s;
+
+    &:hover {
+        color: var(--brand-cyan);
+
+        .cli-demo__arrow { transform: translateX(3px); }
+    }
+}
+
+.lp-home .cli-demo__links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+
+    a {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 8px 13px;
+        color: #d7dae0;
+        font-family: var(--bs-font-sans-serif);
+        font-size: 13px;
+        font-weight: 600;
+        text-decoration: none;
+        background: #17181c;
+        border: 1px solid #333842;
+        border-radius: 9px;
+        transition: color 0.18s, border-color 0.18s;
+
+        &:hover {
+            color: #fff;
+            border-color: var(--brand-cyan);
+
+            .cli-demo__arrow { transform: translateX(3px); }
+        }
+    }
+}
+
+.lp-home .cli-demo__arrow {
+    color: var(--brand-cyan);
+    transition: transform 0.2s;
+}
+
+.lp-home .cli-demo__copy {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 12px;
+    color: var(--cli-muted);
+    font-family: var(--bs-font-sans-serif);
+    font-size: 13px;
+    font-weight: 600;
+    background: #17181c;
+    border: 1px solid #333842;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: color 0.18s, border-color 0.18s;
+
+    &:hover {
+        color: #fff;
+        border-color: var(--brand-cyan);
+    }
+
+    &.is-copied {
+        color: #4ade80;
+        border-color: #4ade80;
+    }
+
+    svg {
+        width: 15px;
+        height: 15px;
+    }
+}
+
+@media (max-width: 575px) {
+    .lp-home .cli-demo__step {
+        flex-wrap: wrap;
+    }
+
+    .lp-home .cli-demo__copy {
+        width: 100%;
+        justify-content: center;
+    }
+}

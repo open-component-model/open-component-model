@@ -13,10 +13,6 @@
         {{ with .Params.subheadline1 }}<p class="subheadline">{{ . }}</p>{{ end }}
         {{ with .Params.subheadline2 }}<p class="subheadline">{{ . }}</p>{{ end }}
       </div>
-      <div class="hero-actions">
-        <a class="hero-button hero-button--brand" href='{{ relref . "docs/getting-started/" }}'>Get Started</a>
-        <a class="hero-button hero-button--alt" href='{{ relref . "docs/overview/" }}'>Overview</a>
-      </div>
     </div>
     <div class="image">
       <div class="image-container">
@@ -32,21 +28,70 @@
   </div>
 
   {{- with partial "main/cli-try-command.html" . }}
-  {{- $installCmd := printf "curl -sfL https://ocm.software/install-cli.sh | %sbash\nexport PATH=\"$HOME/.local/bin:$PATH\"" (partial "main/site-version.html" (dict "page" $ "format" "env")) }}
+  {{- $installCurl := printf "curl -sfL https://ocm.software/install-cli.sh | %sbash" (partial "main/site-version.html" (dict "page" $ "format" "env")) }}
+  {{- $pathExport := "export PATH=\"$HOME/.local/bin:$PATH\"" }}
+  {{- $installFull := printf "%s\n%s" $installCurl $pathExport }}
+  {{- $version := partial "main/site-version.html" (dict "page" $ "format" "semver") }}
   <div class="container">
-    <section class="lp-section" aria-labelledby="quickstart-title">
-      <h2 id="quickstart-title" class="section-title section-title--left">Try It Out</h2>
-      <ol class="quickstart-steps">
-        <li class="quickstart-step">
-          <span class="quickstart-step-title">Install the CLI (Linux, macOS)</span>
-          {{ printf "```shell\n%s\n```" $installCmd | $.RenderString (dict "display" "block") }}
-          <a class="quickstart-more" href='{{ relref $ "docs/getting-started/ocm-cli-installation.md" }}'>View more installation options</a>
-        </li>
-        <li class="quickstart-step">
-          <span class="quickstart-step-title">Inspect the public CLI component</span>
-          {{ printf "```shell\n%s\n```" . | $.RenderString (dict "display" "block") }}
-        </li>
-      </ol>
+    <section class="lp-section lp-section--try" aria-labelledby="quickstart-title">
+      <div class="cli-demo-head">
+        <h2 id="quickstart-title" class="cli-demo-title">Try it out</h2>
+        <p class="cli-demo-subtitle">Watch what each command does, then copy it and run it yourself.</p>
+      </div>
+      <div class="cli-demo"
+           data-cli-demo
+           data-version="{{ $version }}"
+           data-install="{{ $installCurl }}"
+           data-path="{{ $pathExport }}"
+           data-inspect="{{ . }}">
+        <div class="cli-demo__bar">
+          <span class="cli-demo__dot cli-demo__dot--r"></span>
+          <span class="cli-demo__dot cli-demo__dot--y"></span>
+          <span class="cli-demo__dot cli-demo__dot--g"></span>
+          <span class="cli-demo__title">~ — ocm</span>
+          <button type="button" class="cli-demo__replay" data-cli-replay aria-label="Replay the demo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Replay
+          </button>
+        </div>
+        <div class="cli-demo__term" data-cli-term aria-hidden="true"></div>
+
+        <div class="cli-demo__steps">
+          <div class="cli-demo__step" data-step="1">
+            <span class="cli-demo__n">1</span>
+            <div class="cli-demo__body">
+              <span class="cli-demo__what">Install the CLI <span class="cli-demo__hint">downloads the binary, verifies its attestation and adds <code>ocm</code> to <code>~/.local/bin</code></span></span>
+              <code class="cli-demo__cmd">{{ $installFull }}</code>
+              <a class="cli-demo__more" href='{{ relref $ "docs/getting-started/ocm-cli-installation.md" }}'>View more installation options <span class="cli-demo__arrow" aria-hidden="true">&rarr;</span></a>
+            </div>
+            <button type="button" class="cli-demo__copy" data-copy="{{ $installFull }}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              Copy
+            </button>
+          </div>
+          <div class="cli-demo__step" data-step="2">
+            <span class="cli-demo__n">2</span>
+            <div class="cli-demo__body">
+              <span class="cli-demo__what">Inspect the public CLI component <span class="cli-demo__hint">lists the version and its resources: the <code>cli</code> executable per platform and the container image</span></span>
+              <code class="cli-demo__cmd">{{ . }}</code>
+            </div>
+            <button type="button" class="cli-demo__copy" data-copy="{{ . }}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+              Copy
+            </button>
+          </div>
+          <div class="cli-demo__step" data-step="3">
+            <span class="cli-demo__n">3</span>
+            <div class="cli-demo__body">
+              <span class="cli-demo__what">Get deeper into it <span class="cli-demo__hint">follow the docs from first steps to end-to-end workflows</span></span>
+              <div class="cli-demo__links">
+                <a href='{{ "docs/getting-started/" | relLangURL }}'>Getting started <span class="cli-demo__arrow" aria-hidden="true">&rarr;</span></a>
+                <a href='{{ "docs/tutorials/" | relLangURL }}'>Tutorials <span class="cli-demo__arrow" aria-hidden="true">&rarr;</span></a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
   </div>
   {{- end }}
@@ -120,4 +165,15 @@
   </div>
 
 </div>
+
+{{- $cliDemo := resources.Get "js/cli-try-demo.js" -}}
+{{- if $cliDemo -}}
+  {{- $opts := dict
+    "minify" (not hugo.IsDevelopment)
+    "sourceMap" (cond hugo.IsDevelopment "inline" "none")
+    "target" "es2020"
+  -}}
+  {{- $built := $cliDemo | js.Build $opts -}}
+  <script type="module" src="{{ $built.RelPermalink }}"></script>
+{{- end }}
 {{ end }}
