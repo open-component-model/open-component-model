@@ -64,10 +64,7 @@ spec:
                     resource:
                       name: helm-resource
                 additionalStatusFields:
-                  registry: resource.access.toOCI().registry
-                  repository: resource.access.toOCI().repository
-                  digest: resource.access.toOCI().digest
-                  tag: resource.access.toOCI().tag
+                  oci: resource.access.toOCI()
             patches:
               - type: FromCompositeFieldPath
                 fromFieldPath: spec.prefix
@@ -78,16 +75,16 @@ spec:
                       type: Format
                       fmt: "%s-resource-chart"
               - type: ToCompositeFieldPath
-                fromFieldPath: status.additional.registry
+                fromFieldPath: status.additional.oci.registry
                 toFieldPath: status.ociRegistry
               - type: ToCompositeFieldPath
-                fromFieldPath: status.additional.repository
+                fromFieldPath: status.additional.oci.repository
                 toFieldPath: status.ociRepository
               - type: ToCompositeFieldPath
-                fromFieldPath: status.additional.digest
+                fromFieldPath: status.additional.oci.digest
                 toFieldPath: status.ociDigest
               - type: ToCompositeFieldPath
-                fromFieldPath: status.additional.tag
+                fromFieldPath: status.additional.oci.tag
                 toFieldPath: status.ociTag
           # FluxCD delivery via HelmRelease
           - name: ocirepository
