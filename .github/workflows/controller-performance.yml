@@ -25,10 +25,7 @@ env:
   GO_MODULE_ROOT: "bindings/go"
   CONTROLLER_DIR: "bindings/go/kubernetes/controller"
   # This is the configuration that is executed by the `/perf` command and the nightly run.
-  # --scenarios=complex is a no-op since the benchmark has one workload, but the base side of /perf runs the
-  # benchmark of the merge base, which runs every scenario without it. Drop it once no open pull request is based
-  # on a commit before that change.
-  STANDARD_SUITE: "--scenarios=complex --objects=1000 --repeats=3"
+  STANDARD_SUITE: "--objects=1000 --repeats=3"
 
 jobs:
   parse:

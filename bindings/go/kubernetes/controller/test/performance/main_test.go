@@ -41,13 +41,7 @@ func TestParseFlags(t *testing.T) {
 				r.Equal(time.Minute, o.timeout)
 			},
 		},
-		{
-			// /perf runs main's workflow for both sides; until that workflow drops it, it passes --scenarios=complex.
-			name: "the standard suite of main parses",
-			args: strings.Fields("--scenarios=complex --objects=1000 --repeats=3"),
-			want: func(r *require.Assertions, o options) { r.Equal([]int{1000}, o.sizes) },
-		},
-		{name: "only complex is left", args: []string{"--scenarios=cold"}, wantErr: `only the complex workload exists, got "cold"`},
+		{name: "scenarios are gone", args: []string{"--scenarios=complex"}, wantErr: "flag provided but not defined: -scenarios"},
 		{name: "invalid size", args: []string{"--objects=100,0"}, wantErr: `invalid object count "0"`},
 		{name: "invalid repeats", args: []string{"--repeats=0"}, wantErr: "repeats must be at least 1"},
 		{name: "depth 0 is allowed", args: []string{"--depth=0"}, want: func(r *require.Assertions, o options) { r.Zero(o.depth) }},

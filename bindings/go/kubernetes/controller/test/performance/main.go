@@ -112,14 +112,11 @@ func benchmark() error {
 
 func parseFlags(args []string) (options, error) {
 	var opts options
-	var sizes, scenarios string
+	var sizes string
 
 	fs := flag.NewFlagSet("performance", flag.ContinueOnError)
 	fs.StringVar(&opts.kubeContext, "context", "kind-ocm-perf",
 		"Kubeconfig context. Defaults to the benchmark cluster so a run never lands on a real cluster by accident.")
-	// The /perf workflow of main drives both sides and passes --scenarios=complex until
-	// it carries this benchmark. Remove the flag together with it from STANDARD_SUITE.
-	fs.StringVar(&scenarios, "scenarios", "complex", "Deprecated: the benchmark has only the complex workload.")
 	fs.IntVar(&opts.versions, "versions", defaultVersions, "Versions of every root component, selected by constraint.")
 	fs.IntVar(&opts.depth, "depth", defaultDepth, "Length of the reference chain; 0 puts the manifest into the root component.")
 	fs.IntVar(&opts.repositories, "repositories", defaultRepositories, "Maximum number of Repositories, each on its own registry sub-path.")
@@ -145,9 +142,6 @@ func parseFlags(args []string) (options, error) {
 		return opts, err
 	}
 
-	if scenarios != "complex" {
-		return opts, fmt.Errorf("only the complex workload exists, got %q", scenarios)
-	}
 	var err error
 	if opts.sizes, err = parseSizes(sizes); err != nil {
 		return opts, err
