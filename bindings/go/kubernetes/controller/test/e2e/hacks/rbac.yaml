@@ -122,6 +122,8 @@ rules:
     verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
   - apiGroups: ["argoproj.io"]
     resources: ["applications", "applications/status"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+---
 # Aggregation-mode RBAC for the kro controller.
 # kro runs with rbac.mode=aggregation (see setup.sh install_kro), which ships kro with only
 # enough access to manage ResourceGraphDefinitions and CustomResourceDefinitions. This
