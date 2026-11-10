@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -24,13 +23,11 @@ import (
 
 type options struct {
 	kubeContext         string
-	scenarios           []scenario
 	sizes               []int
 	repeats             int
 	versions            int
 	depth               int
 	resources           int
-	fanout              int
 	repositories        int
 	sign                bool
 	registryURL         string
@@ -88,17 +85,15 @@ func run() error {
 
 	r := &runner{c: c, opts: opts, outDir: outDir}
 	var results []*result
-	for _, s := range opts.scenarios {
-		for _, n := range opts.sizes {
-			for rep := 1; rep <= opts.repeats; rep++ {
-				res, err := r.runOnce(ctx, s, n, rep)
-				if err != nil {
-					return fmt.Errorf("%s with %d objects, repeat %d: %w", s, n, rep, err)
-				}
-				results = append(results, res)
-				if err := writeSummary(outDir, results); err != nil {
-					return err
-				}
+	for _, n := range opts.sizes {
+		for rep := 1; rep <= opts.repeats; rep++ {
+			res, err := r.runOnce(ctx, n, rep)
+			if err != nil {
+				return fmt.Errorf("%d objects, repeat %d: %w", n, rep, err)
+			}
+			results = append(results, res)
+			if err := writeSummary(outDir, results); err != nil {
+				return err
 			}
 		}
 	}
@@ -117,20 +112,18 @@ func run() error {
 
 func parseFlags(args []string) (options, error) {
 	var opts options
-	var scenarios, sizes string
+	var sizes string
 
 	fs := flag.NewFlagSet("performance", flag.ContinueOnError)
 	fs.StringVar(&opts.kubeContext, "context", "kind-ocm-perf",
 		"Kubeconfig context. Defaults to the benchmark cluster so a run never lands on a real cluster by accident.")
-	fs.StringVar(&scenarios, "scenarios", joinScenarios(allScenarios), "Comma-separated scenarios. See README.md for what each one creates.")
-	fs.IntVar(&opts.versions, "versions", defaultVersions, "Versions of every root component in the complex scenario, selected by constraint.")
-	fs.IntVar(&opts.depth, "depth", defaultDepth, "Length of the reference chain in the complex scenario; 0 puts the manifest into the root component.")
-	fs.IntVar(&opts.repositories, "repositories", defaultRepositories, "Maximum number of Repositories in the complex scenario, each on its own registry sub-path.")
-	fs.BoolVar(&opts.sign, "sign", true, "Sign the complex scenario's component versions and have the controller verify them.")
-	fs.IntVar(&opts.resources, "resources", defaultResources, "Resources per root component in the complex and fanout scenarios.")
-	fs.IntVar(&opts.fanout, "fanout", defaultFanout, "Resource objects per Component in the fanout scenario.")
+	fs.IntVar(&opts.versions, "versions", defaultVersions, "Versions of every root component, selected by constraint.")
+	fs.IntVar(&opts.depth, "depth", defaultDepth, "Length of the reference chain; 0 puts the manifest into the root component.")
+	fs.IntVar(&opts.repositories, "repositories", defaultRepositories, "Maximum number of Repositories, each on its own registry sub-path.")
+	fs.BoolVar(&opts.sign, "sign", true, "Sign the component versions and have the controller verify them.")
+	fs.IntVar(&opts.resources, "resources", defaultResources, "Image resources per root component.")
 	fs.StringVar(&sizes, "objects", "100,500,1000", "Comma-separated object counts per run.")
-	fs.IntVar(&opts.repeats, "repeats", 3, "Repetitions of every scenario and object count.")
+	fs.IntVar(&opts.repeats, "repeats", 3, "Repetitions of every object count.")
 	fs.StringVar(&opts.registryURL, "registry", "http://localhost:5555", "Registry URL the benchmark pushes component versions to.")
 	fs.StringVar(&opts.clusterRegistryURL, "cluster-registry", "http://ocm-perf-registry:5000",
 		"The same registry as seen from inside the cluster; used in the Repository spec.")
@@ -149,35 +142,20 @@ func parseFlags(args []string) (options, error) {
 	}
 
 	var err error
-	if opts.scenarios, err = parseScenarios(scenarios); err != nil {
-		return opts, err
-	}
 	if opts.sizes, err = parseSizes(sizes); err != nil {
 		return opts, err
 	}
 	if opts.repeats < 1 {
 		return opts, fmt.Errorf("repeats must be at least 1, got %d", opts.repeats)
 	}
-	if opts.versions < 1 || opts.resources < 1 || opts.fanout < 1 || opts.repositories < 1 {
-		return opts, fmt.Errorf("versions, resources, fanout and repositories must be at least 1, got %d, %d, %d and %d",
-			opts.versions, opts.resources, opts.fanout, opts.repositories)
+	if opts.versions < 1 || opts.resources < 1 || opts.repositories < 1 {
+		return opts, fmt.Errorf("versions, resources and repositories must be at least 1, got %d, %d and %d",
+			opts.versions, opts.resources, opts.repositories)
 	}
 	if opts.depth < 0 {
 		return opts, fmt.Errorf("depth must not be negative, got %d", opts.depth)
 	}
 	return opts, nil
-}
-
-func parseScenarios(s string) ([]scenario, error) {
-	var out []scenario
-	for part := range strings.SplitSeq(s, ",") {
-		sc := scenario(strings.TrimSpace(part))
-		if !slices.Contains(allScenarios, sc) {
-			return nil, fmt.Errorf("unknown scenario %q, want one of %s", sc, joinScenarios(allScenarios))
-		}
-		out = append(out, sc)
-	}
-	return out, nil
 }
 
 func parseSizes(s string) ([]int, error) {
@@ -190,12 +168,4 @@ func parseSizes(s string) ([]int, error) {
 		out = append(out, n)
 	}
 	return out, nil
-}
-
-func joinScenarios(ss []scenario) string {
-	parts := make([]string, len(ss))
-	for i, s := range ss {
-		parts[i] = string(s)
-	}
-	return strings.Join(parts, ",")
 }

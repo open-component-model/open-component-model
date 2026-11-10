@@ -2,10 +2,8 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"slices"
 	"strconv"
@@ -170,36 +168,19 @@ func (c *cluster) createNamespace(ctx context.Context, name, runID string) error
 	return c.client.Create(ctx, ns)
 }
 
-// deleteNamespace starts the deletion of a namespace; [cluster.waitGone] waits for it.
-func (c *cluster) deleteNamespace(ctx context.Context, name string) error {
+// deleteNamespace deletes a namespace and waits until it is gone.
+func (c *cluster) deleteNamespace(ctx context.Context, name string, timeout time.Duration) error {
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name}}
 	if err := c.client.Delete(ctx, ns); err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
-	return nil
-}
-
-// waitGone waits until no object of kind is left with the run label of runID.
-// A failed list is retried: only the timeout ends the wait.
-func (c *cluster) waitGone(ctx context.Context, kind client.Object, runID string, timeout time.Duration) error {
-	gvk, err := c.client.GroupVersionKindFor(kind)
-	if err != nil {
-		return err
-	}
-	list := &metav1.PartialObjectMetadataList{}
-	list.SetGroupVersionKind(gvk.GroupVersion().WithKind(gvk.Kind + "List"))
-	var listErr error
-	err = wait.PollUntilContextTimeout(ctx, 2*pollInterval, timeout, true, func(ctx context.Context) (bool, error) {
-		if listErr = c.client.List(ctx, list, client.MatchingLabels{runLabel: runID}, client.Limit(1)); listErr != nil {
-			slog.Warn("listing objects to delete", "kind", gvk.Kind, "run", runID, "error", listErr)
-			return false, nil
+	return wait.PollUntilContextTimeout(ctx, 2*pollInterval, timeout, true, func(ctx context.Context) (bool, error) {
+		err := c.client.Get(ctx, client.ObjectKeyFromObject(ns), ns)
+		if apierrors.IsNotFound(err) {
+			return true, nil
 		}
-		return len(list.Items) == 0, nil
+		return false, err
 	})
-	if err != nil {
-		return fmt.Errorf("waiting for every %s of run %s to be deleted: %w", gvk.Kind, runID, errors.Join(err, listErr))
-	}
-	return nil
 }
 
 func (c *cluster) serverVersion() string {

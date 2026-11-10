@@ -24,7 +24,7 @@ func (w workload) repository(i int) (*v1alpha1.Repository, error) {
 		return nil, err
 	}
 	return &v1alpha1.Repository{
-		ObjectMeta: w.meta(w.namespaceOf(i), w.repositoryName(i)),
+		ObjectMeta: w.meta(w.repositoryName(i)),
 		Spec: v1alpha1.RepositorySpec{
 			RepositorySpec: &apiextensionsv1.JSON{Raw: spec},
 			Interval:       metav1.Duration{Duration: reconcileInterval},
@@ -33,20 +33,16 @@ func (w workload) repository(i int) (*v1alpha1.Repository, error) {
 }
 
 func (w workload) component(i int) *v1alpha1.Component {
-	semver := initialVersion
-	if w.usesConstraint() {
-		semver = versionConstraint
-	}
 	c := &v1alpha1.Component{
-		ObjectMeta: w.meta(w.namespaceOf(i), fmt.Sprintf("c-%04d", i)),
+		ObjectMeta: w.meta(fmt.Sprintf("c-%04d", i)),
 		Spec: v1alpha1.ComponentSpec{
 			RepositoryRef: corev1.LocalObjectReference{Name: w.repositoryName(i)},
 			Component:     w.componentName(i),
-			Semver:        semver,
+			Semver:        versionConstraint,
 			Interval:      metav1.Duration{Duration: reconcileInterval},
 		},
 	}
-	if w.signed() {
+	if w.sign {
 		// Propagated, so the Resource and Deployer verify the root as well.
 		c.Spec.OCMConfig = []v1alpha1.OCMConfiguration{{
 			NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
@@ -66,20 +62,18 @@ func (w workload) signingSecret() (*corev1.Secret, error) {
 		return nil, err
 	}
 	return &corev1.Secret{
-		ObjectMeta: w.meta(w.namespace, signingSecretName),
+		ObjectMeta: w.meta(signingSecretName),
 		StringData: map[string]string{v1alpha1.OCMConfigKey: cfg},
 	}, nil
 }
 
 func (w workload) resource(i int) *v1alpha1.Resource {
 	ref := v1alpha1.ResourceReference{Resource: ocmruntime.Identity{"name": resourceName}}
-	if w.hasReferenceChain() {
-		for range w.depth {
-			ref.ReferencePath = append(ref.ReferencePath, ocmruntime.Identity{"name": referenceName})
-		}
+	for range w.depth {
+		ref.ReferencePath = append(ref.ReferencePath, ocmruntime.Identity{"name": referenceName})
 	}
 	return &v1alpha1.Resource{
-		ObjectMeta: w.meta(w.namespaceOf(i), fmt.Sprintf("r-%04d", i)),
+		ObjectMeta: w.meta(fmt.Sprintf("r-%04d", i)),
 		Spec: v1alpha1.ResourceSpec{
 			ComponentRef: corev1.LocalObjectReference{Name: fmt.Sprintf("c-%04d", i)},
 			Resource:     v1alpha1.ResourceID{ByReference: ref},
@@ -87,23 +81,9 @@ func (w workload) resource(i int) *v1alpha1.Resource {
 	}
 }
 
-// fanoutResource is the j-th Resource of object i. It wraps around when
-// there are more Resources than descriptor entries.
-func (w workload) fanoutResource(i, j int) *v1alpha1.Resource {
-	return &v1alpha1.Resource{
-		ObjectMeta: w.meta(w.namespaceOf(i), fmt.Sprintf("r-%04d-%03d", i, j)),
-		Spec: v1alpha1.ResourceSpec{
-			ComponentRef: corev1.LocalObjectReference{Name: fmt.Sprintf("c-%04d", i)},
-			Resource: v1alpha1.ResourceID{ByReference: v1alpha1.ResourceReference{
-				Resource: ocmruntime.Identity{"name": imageResourceName(j % w.resources)},
-			}},
-		},
-	}
-}
-
 func (w workload) deployer(i int) *v1alpha1.NamespacedDeployer {
 	return &v1alpha1.NamespacedDeployer{
-		ObjectMeta: w.meta(w.namespaceOf(i), fmt.Sprintf("d-%04d", i)),
+		ObjectMeta: w.meta(fmt.Sprintf("d-%04d", i)),
 		Spec: v1alpha1.NamespacedDeployerSpec{
 			ResourceRef:        corev1.LocalObjectReference{Name: fmt.Sprintf("r-%04d", i)},
 			ServiceAccountName: deployerAccount,
@@ -111,12 +91,12 @@ func (w workload) deployer(i int) *v1alpha1.NamespacedDeployer {
 	}
 }
 
-// deployerRBAC is the service account the NamespacedDeployers of object i's namespace apply the ConfigMaps as.
-func (w workload) deployerRBAC(i int) []client.Object {
+// deployerRBAC is the service account the NamespacedDeployers apply the ConfigMaps as.
+func (w workload) deployerRBAC() []client.Object {
 	return []client.Object{
-		&corev1.ServiceAccount{ObjectMeta: w.meta(w.namespaceOf(i), deployerAccount)},
+		&corev1.ServiceAccount{ObjectMeta: w.meta(deployerAccount)},
 		&rbacv1.Role{
-			ObjectMeta: w.meta(w.namespaceOf(i), deployerAccount),
+			ObjectMeta: w.meta(deployerAccount),
 			Rules: []rbacv1.PolicyRule{{
 				APIGroups: []string{""},
 				Resources: []string{"configmaps"},
@@ -124,34 +104,25 @@ func (w workload) deployerRBAC(i int) []client.Object {
 			}},
 		},
 		&rbacv1.RoleBinding{
-			ObjectMeta: w.meta(w.namespaceOf(i), deployerAccount),
+			ObjectMeta: w.meta(deployerAccount),
 			RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: deployerAccount},
-			Subjects:   []rbacv1.Subject{{Kind: rbacv1.ServiceAccountKind, Name: deployerAccount, Namespace: w.namespaceOf(i)}},
+			Subjects:   []rbacv1.Subject{{Kind: rbacv1.ServiceAccountKind, Name: deployerAccount, Namespace: w.namespace}},
 		},
 	}
 }
 
 // objectsToCreate returns everything the run applies, the signing Secret, deployer RBAC and Repositories first.
 func (w workload) objectsToCreate() ([]client.Object, error) {
-	// Tenants get the deployer RBAC and the Repository in each namespace.
-	perNamespace, repositories := 1, w.repositories()
-	if w.tenants() {
-		perNamespace, repositories = w.objects, w.objects
-	}
-	objs := make([]client.Object, 0, 1+3*perNamespace+repositories+(2+w.resourcesPerComponent())*w.objects)
-	if w.signed() {
+	objs := make([]client.Object, 0, 1+3+w.repositories()+3*w.objects)
+	if w.sign {
 		secret, err := w.signingSecret()
 		if err != nil {
 			return nil, err
 		}
 		objs = append(objs, secret)
 	}
-	if w.hasDeployers() {
-		for i := range perNamespace {
-			objs = append(objs, w.deployerRBAC(i)...)
-		}
-	}
-	for i := range repositories {
+	objs = append(objs, w.deployerRBAC()...)
+	for i := range w.repositories() {
 		repo, err := w.repository(i)
 		if err != nil {
 			return nil, err
@@ -159,22 +130,11 @@ func (w workload) objectsToCreate() ([]client.Object, error) {
 		objs = append(objs, repo)
 	}
 	for i := range w.objects {
-		objs = append(objs, w.component(i))
-		switch {
-		case w.scenario == scenarioFanout:
-			for j := range w.fanout {
-				objs = append(objs, w.fanoutResource(i, j))
-			}
-		case w.hasResources():
-			objs = append(objs, w.resource(i))
-		}
-		if w.hasDeployers() {
-			objs = append(objs, w.deployer(i))
-		}
+		objs = append(objs, w.component(i), w.resource(i), w.deployer(i))
 	}
 	return objs, nil
 }
 
-func (w workload) meta(namespace, name string) metav1.ObjectMeta {
-	return metav1.ObjectMeta{Name: name, Namespace: namespace, Labels: map[string]string{runLabel: w.runID}}
+func (w workload) meta(name string) metav1.ObjectMeta {
+	return metav1.ObjectMeta{Name: name, Namespace: w.namespace, Labels: map[string]string{runLabel: w.runID}}
 }

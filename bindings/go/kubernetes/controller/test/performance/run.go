@@ -4,12 +4,10 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"reflect"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -51,28 +49,23 @@ type scrapes struct {
 	registryErr error
 }
 
-func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (*result, error) {
-	runID := fmt.Sprintf("%s-%d-r%d-%s", s, objects, repeat, randomSuffix())
-	w := newWorkload(s, objects, runID, r.opts.clusterRegistryURL)
-	w.versions, w.depth, w.resources, w.fanout = r.opts.versions, r.opts.depth, r.opts.resources, r.opts.fanout
+func (r *runner) runOnce(ctx context.Context, objects, repeat int) (*result, error) {
+	runID := fmt.Sprintf("n%d-r%d-%s", objects, repeat, randomSuffix())
+	w := newWorkload(objects, runID, r.opts.clusterRegistryURL)
+	w.versions, w.depth, w.resources = r.opts.versions, r.opts.depth, r.opts.resources
 	w.repositoryCount, w.sign = r.opts.repositories, r.opts.sign
 	dir := filepath.Join(r.outDir, runID)
 	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, err
 	}
 	log := slog.With("run", runID)
-	res := &result{Scenario: s, Objects: objects, Repeat: repeat, RunID: runID, StartedAt: time.Now().UTC()}
-	switch s {
-	case scenarioComplex:
-		res.Versions, res.Depth, res.Resources = w.versions, &w.depth, w.resources
-		res.Repositories, res.Signed = w.repositories(), w.signed()
-	case scenarioFanout:
-		res.Resources, res.Fanout = w.resources, w.fanout
-	default:
+	res := &result{
+		Objects: objects, Repeat: repeat, RunID: runID, StartedAt: time.Now().UTC(),
+		Versions: w.versions, Depth: w.depth, Resources: w.resources, Repositories: w.repositories(), Signed: w.sign,
 	}
 
 	var sgn *signer
-	if w.signed() {
+	if w.sign {
 		var err error
 		if sgn, err = newSigner(); err != nil {
 			return nil, err
@@ -103,38 +96,28 @@ func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (
 	}
 	published := time.Since(publishStart).Seconds()
 
-	// Registered first, so the namespaces created before a failed creation are deleted too.
+	if err := r.c.createNamespace(ctx, w.namespace, runID); err != nil {
+		return nil, fmt.Errorf("creating namespace: %w", err)
+	}
 	if !r.opts.keepNamespaces {
 		defer func() {
-			log.Info("cleaning up", "namespaces", len(w.namespaces()))
-			cleanupStart := time.Now()
-			if err := r.cleanup(context.WithoutCancel(ctx), log, w); err != nil {
-				log.Error("cleaning up", "error", err)
+			log.Info("cleaning up")
+			start := time.Now()
+			if err := r.c.deleteNamespace(context.WithoutCancel(ctx), w.namespace, r.opts.timeout); err != nil {
+				log.Error("deleting namespace", "error", err)
 			}
-			log.Info("cleaned up", "duration", time.Since(cleanupStart))
+			log.Info("cleaned up", "duration", time.Since(start))
 		}()
-	}
-	if err := r.forEachNamespace(ctx, w, func(ctx context.Context, namespace string) error {
-		return r.c.createNamespace(ctx, namespace, runID)
-	}); err != nil {
-		return nil, fmt.Errorf("creating namespaces: %w", err)
 	}
 
 	objs, err := w.objectsToCreate()
 	if err != nil {
 		return nil, err
 	}
-	trigger := func(ctx context.Context) error { return r.create(ctx, objs) }
-	if s == scenarioUpdate {
-		log.Info("preparing pipelines at initial version")
-		if err := r.prepareUpdate(ctx, w, objs); err != nil {
-			return nil, err
-		}
-		trigger = func(ctx context.Context) error { return r.updateComponents(ctx, w) }
-	}
-
-	gvk, state := w.target()
-	rollout, err := r.measure(ctx, pod, w, phase{name: "rollout", gvk: gvk, state: state, expected: w.targets(), trigger: trigger})
+	rollout, err := r.measure(ctx, pod, w, phase{
+		name: "rollout", gvk: deployerGVK, state: readyState, expected: w.objects,
+		trigger: func(ctx context.Context) error { return r.create(ctx, objs) },
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +134,7 @@ func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (
 	if err := writeJSON(filepath.Join(dir, "result.json"), res); err != nil {
 		return nil, err
 	}
-	log.Info("run finished", "ready", res.Outcome.Ready, "expected", w.targets(), "total", res.Durations.Total)
+	log.Info("run finished", "ready", res.Outcome.Ready, "expected", w.objects, "total", res.Durations.Total)
 	return res, nil
 }
 
@@ -159,14 +142,11 @@ func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (
 // changed, until each Deployer has reverted its own. It needs a finished rollout
 // with drained queues: a Deployer only watches an object once it applied it.
 func (r *runner) drift(ctx context.Context, log *slog.Logger, pod *corev1.Pod, w workload, rollout *measurement, res *result, dir string) error {
-	keys := w.driftedConfigMaps()
-	if len(keys) == 0 {
-		return nil
-	}
 	if !rollout.complete() {
 		log.Warn("skipping the drift phase, the rollout did not finish")
 		return nil
 	}
+	keys := w.configMaps()
 	m, err := r.measure(ctx, pod, w, phase{
 		name:     "drift",
 		gvk:      configMapGVK,
@@ -179,25 +159,6 @@ func (r *runner) drift(ctx context.Context, log *slog.Logger, pod *corev1.Pod, w
 	}
 	res.Drift = &m.window
 	return m.writeRaw(dir, "drift-")
-}
-
-// prepareUpdate brings every pipeline to initialVersion before the update is
-// measured, so the measurement only covers the version change.
-func (r *runner) prepareUpdate(ctx context.Context, w workload, objs []client.Object) error {
-	tr, err := startTracker(ctx, r.c, w, configMapGVK, configMapVersionState(initialVersion), w.objects)
-	if err != nil {
-		return err
-	}
-	defer tr.stop()
-	tr.markStart()
-	if err := r.create(ctx, objs); err != nil {
-		return err
-	}
-	if !tr.wait(ctx, r.opts.timeout) {
-		sum := tr.summary()
-		return fmt.Errorf("update preparation: %d of %d pipelines reached %s", sum.ready, w.objects, initialVersion)
-	}
-	return nil
 }
 
 // create applies the Repositories, the signing Secret and the deployer RBAC first, then
@@ -241,77 +202,6 @@ func (r *runner) driftConfigMaps(ctx context.Context, keys []client.ObjectKey) e
 			cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: key.Name, Namespace: key.Namespace}}
 			if err := r.c.client.Patch(ctx, cm, patch); err != nil {
 				return fmt.Errorf("drifting %s: %w", key, err)
-			}
-			return nil
-		})
-	}
-	return g.Wait()
-}
-
-// cleanup deletes a run the way a user would: the Deployers first, while their service
-// account can still prune what they deployed, then the rest of the pipelines, then the
-// namespaces. Deleting the namespaces right away deletes all of it at once; the Deployers
-// then fail on their half-deleted RBAC and every kind waits for the next with backoff.
-// A stage that fails or times out does not stop the next: the namespaces are always deleted.
-func (r *runner) cleanup(ctx context.Context, log *slog.Logger, w workload) error {
-	stages := [][]client.Object{
-		{&v1alpha1.NamespacedDeployer{}},
-		{&v1alpha1.Resource{}, &v1alpha1.Component{}, &v1alpha1.Repository{}},
-	}
-	var errs []error
-	for _, kinds := range stages {
-		start := time.Now()
-		for _, kind := range kinds {
-			if err := r.forEachNamespace(ctx, w, func(ctx context.Context, namespace string) error {
-				return r.c.client.DeleteAllOf(ctx, kind, client.InNamespace(namespace), client.MatchingLabels{runLabel: w.runID})
-			}); err != nil {
-				errs = append(errs, fmt.Errorf("deleting %T: %w", kind, err))
-			}
-		}
-		for _, kind := range kinds {
-			if err := r.c.waitGone(ctx, kind, w.runID, r.opts.timeout); err != nil {
-				errs = append(errs, err)
-			}
-		}
-		log.Info("deleted pipeline objects", "kinds", kindNames(kinds), "duration", time.Since(start))
-	}
-	// Waiting once for all of them, so finalizer work from one run does not overlap the next.
-	if err := r.forEachNamespace(ctx, w, func(ctx context.Context, namespace string) error {
-		return r.c.deleteNamespace(ctx, namespace)
-	}); err != nil {
-		errs = append(errs, fmt.Errorf("deleting namespaces: %w", err))
-	}
-	return errors.Join(append(errs, r.c.waitGone(ctx, &corev1.Namespace{}, w.runID, r.opts.timeout))...)
-}
-
-func kindNames(objs []client.Object) []string {
-	names := make([]string, len(objs))
-	for i, obj := range objs {
-		names[i] = reflect.TypeOf(obj).Elem().Name()
-	}
-	return names
-}
-
-// forEachNamespace calls f for every namespace of w. A failure does not cancel the
-// other calls: cleanup has to reach every namespace.
-func (r *runner) forEachNamespace(ctx context.Context, w workload, f func(context.Context, string) error) error {
-	var g errgroup.Group
-	g.SetLimit(createWorkers)
-	for _, namespace := range w.namespaces() {
-		g.Go(func() error { return f(ctx, namespace) })
-	}
-	return g.Wait()
-}
-
-func (r *runner) updateComponents(ctx context.Context, w workload) error {
-	patch := client.RawPatch(types.MergePatchType, fmt.Appendf(nil, `{"spec":{"semver":%q}}`, updatedVersion))
-	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(createWorkers)
-	for i := range w.objects {
-		g.Go(func() error {
-			c := w.component(i)
-			if err := r.c.client.Patch(ctx, c, patch); err != nil {
-				return fmt.Errorf("updating %s: %w", c.Name, err)
 			}
 			return nil
 		})

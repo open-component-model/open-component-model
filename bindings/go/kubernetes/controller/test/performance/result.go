@@ -13,25 +13,20 @@ import (
 )
 
 type result struct {
-	Scenario scenario `json:"scenario"`
-	Objects  int      `json:"objects"`
-	Repeat   int      `json:"repeat"`
-	// Versions, Depth, Resources, Fanout, Repositories and Signed are set for the scenarios they shape.
-	// Depth is a pointer because 0 is a valid chain length.
-	Versions     int         `json:"versions,omitempty"`
-	Depth        *int        `json:"depth,omitempty"`
-	Resources    int         `json:"resources,omitempty"`
-	Fanout       int         `json:"fanout,omitempty"`
-	Repositories int         `json:"repositories,omitempty"`
-	Signed       bool        `json:"signed,omitempty"`
+	Objects      int         `json:"objects"`
+	Repeat       int         `json:"repeat"`
+	Versions     int         `json:"versions"`
+	Depth        int         `json:"depth"`
+	Resources    int         `json:"resources"`
+	Repositories int         `json:"repositories"`
+	Signed       bool        `json:"signed"`
 	RunID        string      `json:"runID"`
 	StartedAt    time.Time   `json:"startedAt"`
 	Environment  environment `json:"environment"`
 	// window is the measured rollout, inlined at the top level.
 	window
-	// Drift is the window of the drift phase of scenarioComplex: every deployed
-	// ConfigMap changed, until every Deployer reverted its own. It is nil for the
-	// other scenarios and when the rollout did not finish.
+	// Drift is the window of the drift phase: every deployed ConfigMap changed,
+	// until every Deployer reverted its own. It is nil when the rollout did not finish.
 	Drift *window `json:"drift,omitempty"`
 }
 
@@ -61,7 +56,7 @@ type environment struct {
 }
 
 // durations are in seconds, measured from the moment the window's change starts:
-// object creation, or the patches of an update or a drift.
+// object creation, or the patches of the drift.
 type durations struct {
 	// Publish is only set for the rollout.
 	Publish float64 `json:"publish,omitempty"`
@@ -147,12 +142,12 @@ func writeJSON(path string, v any) error {
 // invocation. result.json files remain the source of truth.
 func writeSummary(dir string, results []*result) error {
 	var b strings.Builder
-	b.WriteString("| Scenario | Objects | Repeat | Image | Signed | Ready | Failed | Pending | Total (s) | Settled (s) | p50 (s) | p90 (s) | CPU (s) | Avg cores | Peak cores | Peak WS (MiB) | Registry reqs | Notes |\n")
+	b.WriteString("| Phase | Objects | Repeat | Image | Signed | Ready | Failed | Pending | Total (s) | Settled (s) | p50 (s) | p90 (s) | CPU (s) | Avg cores | Peak cores | Peak WS (MiB) | Registry reqs | Notes |\n")
 	b.WriteString("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")
 	for _, r := range results {
-		writeSummaryRow(&b, r, string(r.Scenario), &r.window)
+		writeSummaryRow(&b, r, "rollout", &r.window)
 		if r.Drift != nil {
-			writeSummaryRow(&b, r, string(r.Scenario)+" (drift)", r.Drift)
+			writeSummaryRow(&b, r, "drift", r.Drift)
 		}
 	}
 	return os.WriteFile(filepath.Join(dir, "summary.md"), []byte(b.String()), 0o600)

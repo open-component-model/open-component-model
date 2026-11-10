@@ -47,9 +47,9 @@ func startTracker(ctx context.Context, c *cluster, w workload, gvk schema.GroupV
 		}
 	}()
 
-	// Cluster-wide, because tenants span one namespace each; the run label keeps it to this run.
 	informers, err := cache.New(c.cfg, cache.Options{
 		Scheme:               c.scheme,
+		DefaultNamespaces:    map[string]cache.Config{w.namespace: {}},
 		DefaultLabelSelector: labels.SelectorFromSet(labels.Set{runLabel: w.runID}),
 	})
 	if err != nil {

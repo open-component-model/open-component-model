@@ -14,69 +14,26 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 )
 
-func TestWorkloadComponentVersions(t *testing.T) {
-	tests := []struct {
-		scenario      scenario
-		wantVersions  int
-		wantUniqueCVs int
-	}{
-		{scenario: scenarioCold, wantVersions: 5, wantUniqueCVs: 5},
-		{scenario: scenarioShared, wantVersions: 1, wantUniqueCVs: 1},
-		{scenario: scenarioUpdate, wantVersions: 10, wantUniqueCVs: 5},
-		{scenario: scenarioComplex, wantVersions: 5 * (defaultVersions + defaultDepth), wantUniqueCVs: 5 * (defaultDepth + 1)},
-		{scenario: scenarioFanout, wantVersions: 5, wantUniqueCVs: 5},
-	}
-	for _, tt := range tests {
-		t.Run(string(tt.scenario), func(t *testing.T) {
-			r := require.New(t)
-			w := newWorkload(tt.scenario, 5, "run", "http://registry:5000")
-
-			cvs, err := w.componentVersions()
-			r.NoError(err)
-			r.Len(cvs, tt.wantVersions)
-
-			names := map[string]bool{}
-			for _, cv := range cvs {
-				names[cv.Name] = true
-			}
-			r.Len(names, tt.wantUniqueCVs)
-		})
-	}
-}
-
 func TestWorkloadObjectsToCreate(t *testing.T) {
-	tests := []struct {
-		scenario scenario
-		want     int
-	}{
-		{scenario: scenarioCold, want: 1 + 3},
-		{scenario: scenarioShared, want: 3 * (3 + 1 + 3)},
-		{scenario: scenarioUpdate, want: 3 + 1 + 3*3},
-		{scenario: scenarioComplex, want: 1 + 3 + 3 + 3*3},
-		{scenario: scenarioFanout, want: 1 + 3*(1+defaultFanout)},
-	}
-	for _, tt := range tests {
-		t.Run(string(tt.scenario), func(t *testing.T) {
-			r := require.New(t)
-			w := newWorkload(tt.scenario, 3, "run", "http://registry:5000")
+	r := require.New(t)
+	w := newWorkload(3, "run", "http://registry:5000")
 
-			objs, err := w.objectsToCreate()
-			r.NoError(err)
-			r.Len(objs, tt.want)
-			for _, o := range objs {
-				r.Equal("run", o.GetLabels()[runLabel])
-				r.Contains(w.namespaces(), o.GetNamespace(), "namespace deletion must clean up every object")
-				if d, ok := o.(*v1alpha1.NamespacedDeployer); ok {
-					r.Equal(deployerAccount, d.Spec.ServiceAccountName)
-				}
-			}
-		})
+	objs, err := w.objectsToCreate()
+	r.NoError(err)
+	// The signing Secret, the deployer RBAC, one Repository per object (fewer than the cap), and a pipeline each.
+	r.Len(objs, 1+3+3+3*3)
+	for _, o := range objs {
+		r.Equal("run", o.GetLabels()[runLabel])
+		r.Equal(w.namespace, o.GetNamespace(), "namespace deletion must clean up every object")
+		if d, ok := o.(*v1alpha1.NamespacedDeployer); ok {
+			r.Equal(deployerAccount, d.Spec.ServiceAccountName)
+		}
 	}
 }
 
 func TestWorkloadComplex(t *testing.T) {
 	r := require.New(t)
-	w := newWorkload(scenarioComplex, defaultRepositories+2, "run", "http://registry:5000")
+	w := newWorkload(defaultRepositories+2, "run", "http://registry:5000")
 	w.depth, w.resources, w.versions = 2, 7, 3
 
 	cvs, err := w.componentVersions()
@@ -129,47 +86,9 @@ func TestWorkloadComplex(t *testing.T) {
 	r.Equal(res.Spec.Resource.ByReference.Resource["name"], cv.Resources[0].Name)
 }
 
-func TestWorkloadFanout(t *testing.T) {
-	r := require.New(t)
-	w := newWorkload(scenarioFanout, 2, "run", "http://registry:5000")
-	w.resources, w.fanout = 3, 5
-
-	cvs, err := w.componentVersions()
-	r.NoError(err)
-	r.Len(cvs, 2)
-	r.Len(cvs[1].Resources, 3)
-	r.Equal(10, w.targets())
-	gvk, _ := w.target()
-	r.Equal(resourceGVK, gvk)
-
-	objs, err := w.objectsToCreate()
-	r.NoError(err)
-	names := map[string]bool{}
-	selected := map[string]int{}
-	for _, o := range objs {
-		res, ok := o.(*v1alpha1.Resource)
-		if !ok {
-			switch o.(type) {
-			case *v1alpha1.Repository, *v1alpha1.Component:
-			default:
-				r.Failf("unexpected object", "the fanout scenario creates no %T", o)
-			}
-			continue
-		}
-		names[res.Name] = true
-		if res.Spec.ComponentRef.Name == w.component(1).Name {
-			r.Empty(res.Spec.Resource.ByReference.ReferencePath)
-			selected[res.Spec.Resource.ByReference.Resource["name"]]++
-		}
-	}
-	r.Len(names, 10, "every Resource needs its own name")
-	// Five Resources over three descriptor entries wrap around onto the first two.
-	r.Equal(map[string]int{cvs[1].Resources[0].Name: 2, cvs[1].Resources[1].Name: 2, cvs[1].Resources[2].Name: 1}, selected)
-}
-
 func TestWorkloadComplexWithoutChain(t *testing.T) {
 	r := require.New(t)
-	w := newWorkload(scenarioComplex, 2, "run", "http://registry:5000")
+	w := newWorkload(2, "run", "http://registry:5000")
 	w.depth, w.resources, w.versions = 0, 3, 4
 
 	cvs, err := w.componentVersions()
@@ -188,7 +107,7 @@ func TestWorkloadComplexWithoutChain(t *testing.T) {
 
 func TestWorkloadUnsigned(t *testing.T) {
 	r := require.New(t)
-	w := newWorkload(scenarioComplex, 2, "run", "http://registry:5000")
+	w := newWorkload(2, "run", "http://registry:5000")
 	w.sign = false
 
 	objs, err := w.objectsToCreate()
@@ -200,37 +119,10 @@ func TestWorkloadUnsigned(t *testing.T) {
 		}
 	}
 
-	// Signing only shapes the complex scenario.
-	r.False(newWorkload(scenarioCold, 2, "run", "").signed())
-
-	single, err := newWorkload(scenarioCold, 2, "run", "http://registry:5000").repository(0)
+	w.repositoryCount = 1
+	single, err := w.repository(0)
 	r.NoError(err)
 	r.NotContains(string(single.Spec.RepositorySpec.Raw), "subPath")
-}
-
-func TestWorkloadSharedComponentName(t *testing.T) {
-	r := require.New(t)
-	w := newWorkload(scenarioShared, 3, "run", "http://registry:5000")
-	r.Equal(w.component(0).Spec.Component, w.component(2).Spec.Component)
-
-	w = newWorkload(scenarioCold, 3, "run", "http://registry:5000")
-	r.NotEqual(w.component(0).Spec.Component, w.component(2).Spec.Component)
-}
-
-func TestWorkloadManifest(t *testing.T) {
-	r := require.New(t)
-	w := newWorkload(scenarioUpdate, 3, "run", "http://registry:5000")
-
-	raw, err := w.manifest(2, updatedVersion)
-	r.NoError(err)
-
-	var u unstructured.Unstructured
-	r.NoError(yaml.Unmarshal(raw, &u.Object))
-	r.Equal("ConfigMap", u.GetKind())
-	r.Equal("cm-0002", u.GetName())
-	r.Equal(w.namespace, u.GetNamespace())
-	r.True(configMapVersionState(updatedVersion)(&u).ready)
-	r.False(configMapVersionState(initialVersion)(&u).ready)
 }
 
 func TestReadyState(t *testing.T) {
@@ -322,11 +214,11 @@ func TestTrackerSummary(t *testing.T) {
 	r.True(tr.wait(t.Context(), time.Second))
 }
 
-func TestWorkloadDriftedConfigMaps(t *testing.T) {
+func TestWorkloadConfigMaps(t *testing.T) {
 	for _, depth := range []int{0, defaultDepth} {
 		t.Run(fmt.Sprintf("depth %d", depth), func(t *testing.T) {
 			r := require.New(t)
-			w := newWorkload(scenarioComplex, 3, "run", "http://registry:5000")
+			w := newWorkload(3, "run", "http://registry:5000")
 			w.depth = depth
 
 			cvs, err := w.componentVersions()
@@ -343,57 +235,13 @@ func TestWorkloadDriftedConfigMaps(t *testing.T) {
 				}
 			}
 
-			drifted := w.driftedConfigMaps()
-			r.Len(drifted, 3)
-			for _, key := range drifted {
+			keys := w.configMaps()
+			r.Len(keys, 3)
+			r.Len(deployed, 3)
+			for _, key := range keys {
 				r.True(deployed[key], "%s is not deployed by any Deployer", key)
 			}
 		})
-	}
-	for _, s := range allScenarios {
-		if s != scenarioComplex {
-			require.Empty(t, newWorkload(s, 3, "run", "http://registry:5000").driftedConfigMaps(), s)
-		}
-	}
-}
-
-func TestWorkloadSharedTenants(t *testing.T) {
-	r := require.New(t)
-	w := newWorkload(scenarioShared, 3, "run", "http://registry:5000")
-
-	cvs, err := w.componentVersions()
-	r.NoError(err)
-	r.Len(cvs, 1, "every Deployer reads the same resource")
-	var cm corev1.ConfigMap
-	r.NoError(yaml.Unmarshal(cvs[0].Resources[0].Blob, &cm))
-	r.Empty(cm.Namespace, "one digest for all tenants, so each Deployer defaults the namespace")
-
-	gvk, _ := w.target()
-	r.Equal(deployerGVK, gvk)
-	r.Equal(3, w.targets())
-	r.Len(w.namespaces(), 3)
-
-	objs, err := w.objectsToCreate()
-	r.NoError(err)
-	byKind := map[string]map[string]int{}
-	for _, o := range objs {
-		kind := fmt.Sprintf("%T", o)
-		if byKind[kind] == nil {
-			byKind[kind] = map[string]int{}
-		}
-		byKind[kind][o.GetNamespace()]++
-		if d, ok := o.(*v1alpha1.NamespacedDeployer); ok {
-			r.Equal(deployerAccount, d.Spec.ServiceAccountName)
-		}
-		if c, ok := o.(*v1alpha1.Component); ok {
-			r.Equal(w.componentName(0), c.Spec.Component)
-		}
-	}
-	for _, kind := range []string{"*v1alpha1.Repository", "*v1alpha1.Component", "*v1alpha1.Resource", "*v1alpha1.NamespacedDeployer", "*v1.ServiceAccount", "*v1.Role", "*v1.RoleBinding"} {
-		r.Len(byKind[kind], 3, "one %s per tenant namespace", kind)
-		for _, ns := range w.namespaces() {
-			r.Equal(1, byKind[kind][ns], "%s in %s", kind, ns)
-		}
 	}
 }
 
@@ -410,17 +258,4 @@ func TestRevertedState(t *testing.T) {
 	r.False(state(cm("a", driftedVersion)).ready, "changed, not reverted")
 	r.True(state(cm("a", initialVersion)).ready, "changed and reverted")
 	r.False(state(cm("b", initialVersion)).ready, "another ConfigMap was not changed")
-}
-
-func TestTrackerKeysByNamespace(t *testing.T) {
-	r := require.New(t)
-	tr := &tracker{expected: 2, state: readyState, readyAt: map[string]time.Time{}, last: map[string]objectState{}, done: make(chan struct{})}
-	tr.markStart()
-	for _, ns := range []string{"t0", "t1"} {
-		tr.observe(&unstructured.Unstructured{Object: map[string]any{
-			"metadata": map[string]any{"name": "d-0000", "namespace": ns},
-			"status":   map[string]any{"conditions": []any{map[string]any{"type": "Ready", "status": "True"}}},
-		}})
-	}
-	r.True(tr.wait(t.Context(), time.Second), "objects of the same name in different namespaces are different objects")
 }

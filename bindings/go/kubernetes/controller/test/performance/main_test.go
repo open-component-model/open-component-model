@@ -22,8 +22,6 @@ func TestParseFlags(t *testing.T) {
 		{
 			name: "defaults run the full matrix",
 			want: func(r *require.Assertions, o options) {
-				r.Equal([]scenario{"cold", "shared", "update", "complex", "fanout"}, o.scenarios,
-					"CI and --scenarios name these; drift is a phase of complex")
 				r.Equal([]int{100, 500, 1000}, o.sizes)
 				r.Equal(3, o.repeats)
 				r.Equal("kind-ocm-perf", o.kubeContext)
@@ -31,28 +29,26 @@ func TestParseFlags(t *testing.T) {
 				r.Equal(defaultVersions, o.versions)
 				r.Equal(defaultDepth, o.depth)
 				r.Equal(defaultResources, o.resources)
-				r.Equal(defaultFanout, o.fanout)
 				r.Equal(defaultRepositories, o.repositories)
 				r.True(o.sign)
 			},
 		},
 		{
 			name: "subset",
-			args: []string{"--scenarios=cold, update", "--objects=10", "--repeats=1", "--timeout=1m"},
+			args: []string{"--objects=10, 20", "--repeats=1", "--timeout=1m"},
 			want: func(r *require.Assertions, o options) {
-				r.Equal([]scenario{scenarioCold, scenarioUpdate}, o.scenarios)
-				r.Equal([]int{10}, o.sizes)
+				r.Equal([]int{10, 20}, o.sizes)
 				r.Equal(1, o.repeats)
 				r.Equal(time.Minute, o.timeout)
 			},
 		},
-		{name: "unknown scenario", args: []string{"--scenarios=warm"}, wantErr: `unknown scenario "warm"`},
+		{name: "scenarios are gone", args: []string{"--scenarios=complex"}, wantErr: "flag provided but not defined: -scenarios"},
 		{name: "invalid size", args: []string{"--objects=100,0"}, wantErr: `invalid object count "0"`},
 		{name: "invalid repeats", args: []string{"--repeats=0"}, wantErr: "repeats must be at least 1"},
 		{name: "depth 0 is allowed", args: []string{"--depth=0"}, want: func(r *require.Assertions, o options) { r.Zero(o.depth) }},
 		{name: "invalid depth", args: []string{"--depth=-1"}, wantErr: "depth must not be negative"},
-		{name: "invalid fanout", args: []string{"--fanout=0"}, wantErr: "versions, resources, fanout and repositories must be at least 1"},
-		{name: "invalid repositories", args: []string{"--repositories=0"}, wantErr: "versions, resources, fanout and repositories must be at least 1"},
+		{name: "invalid resources", args: []string{"--resources=0"}, wantErr: "versions, resources and repositories must be at least 1"},
+		{name: "invalid repositories", args: []string{"--repositories=0"}, wantErr: "versions, resources and repositories must be at least 1"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -85,10 +81,10 @@ func TestWriteSummary(t *testing.T) {
 	requests := 42.0
 	results := []*result{
 		{
-			Scenario: scenarioComplex, Signed: true,
+			Signed:      true,
 			Environment: environment{ControllerImageID: "docker.io/library/import-2026-10-26@sha256:18bb5d7f6bba0123456789"},
 		},
-		{Scenario: scenarioCold, window: window{Outcome: outcome{TimedOut: true}, ControllerRestarted: true}},
+		{window: window{Outcome: outcome{TimedOut: true}, ControllerRestarted: true}},
 	}
 	results[0].Usage.RegistryRequests = &requests
 	driftRequests := 7.0
@@ -100,18 +96,19 @@ func TestWriteSummary(t *testing.T) {
 	r.NoError(err)
 	rows := strings.Split(strings.TrimSpace(string(raw)), "\n")
 	r.Len(rows, 5)
-	r.Contains(rows[2], "| complex | 0 | 0 | 18bb5d7f6bba | yes |")
+	r.Contains(rows[0], "| Phase |")
+	r.Contains(rows[2], "| rollout | 0 | 0 | 18bb5d7f6bba | yes |")
 	r.Contains(rows[2], "| 42 |  |")
-	r.Contains(rows[3], "| complex (drift) | 0 | 0 | 18bb5d7f6bba | yes | 3 |")
+	r.Contains(rows[3], "| drift | 0 | 0 | 18bb5d7f6bba | yes | 3 |")
 	r.Contains(rows[3], "| 7 | metric errors |")
-	r.Contains(rows[4], "| cold | 0 | 0 | n/a | no |")
+	r.Contains(rows[4], "| rollout | 0 | 0 | n/a | no |")
 	r.Contains(rows[4], "| n/a | timed out, controller restarted |")
 }
 
 func TestResultJSON(t *testing.T) {
 	r := require.New(t)
 	requests := 5.0
-	res := &result{Scenario: scenarioComplex, window: window{
+	res := &result{window: window{
 		Durations:          durations{Total: 10},
 		ControllerCounters: map[string]float64{"a": 1},
 	}}
@@ -122,7 +119,11 @@ func TestResultJSON(t *testing.T) {
 	r.NoError(json.Unmarshal(raw, &got))
 	r.Contains(got, "durations", "the rollout window stays at the top level")
 	r.Contains(got, "controllerCounters")
-	r.NotContains(got, "drift", "only complex runs have a drift phase")
+	r.NotContains(got, "drift", "a run whose rollout did not finish has no drift phase")
+	r.NotContains(got, "scenario")
+	for _, key := range []string{"versions", "depth", "resources", "repositories", "signed"} {
+		r.Contains(got, key, "the workload knobs are always written, 0 and false included")
+	}
 
 	res.Drift = &window{
 		Durations:          durations{Total: 2},
@@ -193,6 +194,6 @@ func TestSettledAt(t *testing.T) {
 
 func TestResultNotesIncludeDrift(t *testing.T) {
 	r := require.New(t)
-	res := &result{Scenario: scenarioComplex, Drift: &window{Outcome: outcome{TimedOut: true}}}
+	res := &result{Drift: &window{Outcome: outcome{TimedOut: true}}}
 	r.Equal([]string{"drift timed out"}, res.notes(), "a failed drift phase makes the run unusable")
 }
