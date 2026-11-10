@@ -134,6 +134,13 @@ test("a base in the old shape is read as its rollout", () => {
   assert.match(table, /^\| Update: registry requests \| n\/a \| 20000 \| n\/a \|$/m);
 });
 
+test("old results of other scenarios are not read as the rollout", () => {
+  const other = { ...oldResult(10), scenario: "cold" };
+  const table = renderTable([{ ...oldResult(100), scenario: "complex" }, other, other], [result(rollout(100, 0))], "main");
+
+  assert.match(table, /^\| Rollout: total \(s\) \\\* \| 100 \| 100 \| 0% \|$/m);
+});
+
 test("a side without a phase renders n/a", () => {
   const table = renderTable([result(rollout(100, 0))], [result(rollout(100, 0), deployerPhase("drift", 4000))], "main");
 

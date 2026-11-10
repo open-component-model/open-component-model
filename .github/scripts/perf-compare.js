@@ -34,7 +34,8 @@ export function median(values) {
  * The phases of a result, in execution order.
  *
  * Results of a base branch that predates phases carry the rollout at the top level and
- * the drift in a block of its own; they are read as their rollout alone.
+ * the drift in a block of its own; they are read as their rollout alone. Results of its
+ * other scenarios measure other workloads and have no phase to compare.
  * Remove the fallback once main writes phases.
  *
  * @param {any} result
@@ -43,6 +44,9 @@ export function median(values) {
 function phasesOf(result) {
   if (result.phases) {
     return result.phases;
+  }
+  if (result.scenario && result.scenario !== "complex") {
+    return [];
   }
   return [
     {

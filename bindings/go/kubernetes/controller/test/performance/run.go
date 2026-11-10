@@ -38,7 +38,9 @@ type run struct {
 	*runner
 	w workload
 	// pub is one per run: the image digests pushed for the rollout are needed again by later phases.
-	pub  *publisher
+	pub *publisher
+	// tmp is where the publisher stages component versions, removed by close.
+	tmp  string
 	pod  *corev1.Pod
 	objs []client.Object
 	log  *slog.Logger
@@ -99,16 +101,15 @@ func (r *runner) newRun(ctx context.Context, objects, repeat int) (_ *run, err e
 		}
 		ru.w.publicKeyPEM = sgn.publicKeyPEM
 	}
-	tmp, err := os.MkdirTemp("", "ocm-perf-")
-	if err != nil {
+	if ru.tmp, err = os.MkdirTemp("", "ocm-perf-"); err != nil {
 		return nil, err
 	}
 	defer func() {
 		if err != nil {
-			_ = os.RemoveAll(tmp)
+			ru.close()
 		}
 	}()
-	if ru.pub, err = newPublisher(r.opts.registryURL, tmp, sgn); err != nil {
+	if ru.pub, err = newPublisher(r.opts.registryURL, ru.tmp, sgn); err != nil {
 		return nil, err
 	}
 
@@ -129,7 +130,7 @@ func (r *runner) newRun(ctx context.Context, objects, repeat int) (_ *run, err e
 
 // close removes what the run kept on the local disk.
 func (r *run) close() {
-	_ = os.RemoveAll(r.pub.tempDir)
+	_ = os.RemoveAll(r.tmp)
 }
 
 func (r *run) result(repeat int) *result {

@@ -20,11 +20,11 @@ func (r *run) measure(ctx context.Context, p phase) (*measurement, error) {
 		return nil, err
 	}
 
-	watch, err := startTracker(ctx, r.c, r.w, p.watch, p.until, r.w.objects)
+	tr, err := startTracker(ctx, r.c, r.w, p.watch, p.until, r.w.objects)
 	if err != nil {
 		return nil, err
 	}
-	defer watch.stop()
+	defer tr.stop()
 	meter, err := startMeter(ctx, r.c, r.pod, r.opts.sampleInterval)
 	if err != nil {
 		return nil, err
@@ -32,20 +32,20 @@ func (r *run) measure(ctx context.Context, p phase) (*measurement, error) {
 	defer meter.stop()
 
 	r.log.Info("measuring", "phase", p.name, "watch", p.watch.Kind, "objects", r.w.objects)
-	start := watch.markStart()
+	start := tr.markStart()
 	if err := p.change(ctx); err != nil {
 		return nil, err
 	}
 	change := time.Since(start)
 
-	done := watch.wait(ctx, r.opts.timeout)
+	done := tr.wait(ctx, r.opts.timeout)
 	elapsed, drained := r.windowEnd(ctx, meter, start, done)
 	c, data, errs, err := meter.finish(ctx, elapsed)
 	if err != nil {
 		return nil, err
 	}
 
-	sum := watch.summary()
+	sum := tr.summary()
 	out := newOutcome(sum, r.w.objects, done, drained, r.c.restartedSince(ctx, r.pod))
 	if out.TimedOut {
 		if out.NotReady, err = r.notReady(ctx); err != nil {

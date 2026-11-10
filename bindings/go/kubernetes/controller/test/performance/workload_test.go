@@ -126,7 +126,7 @@ func TestWorkloadObjectsToCreate(t *testing.T) {
 	}
 }
 
-func TestWorkloadComplex(t *testing.T) {
+func TestWorkloadReferenceChain(t *testing.T) {
 	r := require.New(t)
 	w := newWorkload(defaultRepositories+2, "run", "http://registry:5000")
 	w.depth, w.resources, w.versions = 2, 7, 3
@@ -181,7 +181,7 @@ func TestWorkloadComplex(t *testing.T) {
 	r.Equal(res.Spec.Resource.ByReference.Resource["name"], cv.Resources[0].Name)
 }
 
-func TestWorkloadComplexWithoutChain(t *testing.T) {
+func TestWorkloadWithoutChain(t *testing.T) {
 	r := require.New(t)
 	w := newWorkload(2, "run", "http://registry:5000")
 	w.depth, w.resources, w.versions = 0, 3, 4

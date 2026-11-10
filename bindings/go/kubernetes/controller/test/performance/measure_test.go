@@ -32,7 +32,7 @@ func TestNewOutcomeAndDurations(t *testing.T) {
 		{
 			name: "timed out",
 			sum: trackerSummary{
-				ready: 2, failed: 1, pending: 1, latencies: latencies[:2],
+				ready: 1, failed: 1, pending: 1, latencies: latencies[:1],
 				failureReasons: map[string]int{"Broken": 1},
 			},
 			wantTotal: 12, wantSettled: 0,
@@ -40,6 +40,7 @@ func TestNewOutcomeAndDurations(t *testing.T) {
 				r.True(o.TimedOut)
 				r.False(o.Unsettled, "the queues are only waited for once every pipeline is done")
 				r.Equal(1, o.Pending)
+				r.Equal(o.Expected-o.Ready-o.Failed, o.Pending, "the tracker counts the unseen as pending")
 				r.Equal(map[string]int{"Broken": 1}, o.FailureReasons)
 			},
 		},
@@ -74,6 +75,7 @@ func TestNewOutcomeAndDurations(t *testing.T) {
 			r.InDelta(tt.wantSettled, d.Settled, 0)
 			r.InDelta(2, d.FirstReady, 0)
 			r.InDelta(percentile(tt.sum.latencies, 50).Seconds(), d.P50, 0)
+			r.InDelta(percentile(tt.sum.latencies, 90).Seconds(), d.P90, 0)
 			r.InDelta(percentile(tt.sum.latencies, 99).Seconds(), d.P99, 0)
 		})
 	}

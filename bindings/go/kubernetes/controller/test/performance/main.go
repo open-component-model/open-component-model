@@ -112,11 +112,14 @@ func benchmark() error {
 
 func parseFlags(args []string) (options, error) {
 	var opts options
-	var sizes string
+	var sizes, scenarios string
 
 	fs := flag.NewFlagSet("performance", flag.ContinueOnError)
 	fs.StringVar(&opts.kubeContext, "context", "kind-ocm-perf",
 		"Kubeconfig context. Defaults to the benchmark cluster so a run never lands on a real cluster by accident.")
+	// The /perf workflow of main drives both sides and passes --scenarios=complex until
+	// it carries this benchmark. Remove the flag together with it from STANDARD_SUITE.
+	fs.StringVar(&scenarios, "scenarios", "complex", "Deprecated: the benchmark has only the complex workload.")
 	fs.IntVar(&opts.versions, "versions", defaultVersions, "Versions of every root component, selected by constraint.")
 	fs.IntVar(&opts.depth, "depth", defaultDepth, "Length of the reference chain; 0 puts the manifest into the root component.")
 	fs.IntVar(&opts.repositories, "repositories", defaultRepositories, "Maximum number of Repositories, each on its own registry sub-path.")
@@ -132,7 +135,8 @@ func parseFlags(args []string) (options, error) {
 	fs.StringVar(&opts.controllerSelector, "controller-selector", "app.kubernetes.io/name=ocm-k8s-toolkit",
 		"Label selector matching the controller pod.")
 	fs.IntVar(&opts.metricsPort, "metrics-port", 8080, "Port of the controller metrics endpoint.")
-	fs.DurationVar(&opts.timeout, "timeout", 20*time.Minute, "Maximum time one run waits for its objects.")
+	fs.DurationVar(&opts.timeout, "timeout", 20*time.Minute,
+		"Maximum time one phase waits for its objects, and again for the controller queues to drain.")
 	fs.DurationVar(&opts.sampleInterval, "sample-interval", 2*time.Second, "Interval between gauge and memory samples.")
 	fs.StringVar(&opts.outDir, "out", "test/performance/results", "Directory for results; each invocation adds a timestamped subdirectory.")
 	fs.BoolVar(&opts.restartController, "restart-controller", true, "Restart the controller before each run so caches start empty.")
@@ -141,6 +145,9 @@ func parseFlags(args []string) (options, error) {
 		return opts, err
 	}
 
+	if scenarios != "complex" {
+		return opts, fmt.Errorf("only the complex workload exists, got %q", scenarios)
+	}
 	var err error
 	if opts.sizes, err = parseSizes(sizes); err != nil {
 		return opts, err
