@@ -156,11 +156,21 @@ and care less about reconciliation time, lower the concurrency settings.
 
 `qps` and `burst` defaults were used during testing the above, and they were enough to drain 4000 pipelines. However, if
 you experience troubles with requeuing time and handling time of the objects, increase these numbers as you see fit.
+Before you do, compare `workqueue_queue_duration_seconds` with `controller_runtime_reconcile_time_seconds` and check the
+logs for registry or API server throttling. If those are saturated, higher limits only add retries and make it worse.
 
 ## Enable high availability
 
 Leader election is on by default. On how to fine-tune leader election and high-availability, we recommend reading the
 [Kubernetes - Leader Election docs](https://kubernetes.io/docs/concepts/architecture/leases/#leader-election).
+
+The chart defaults to a single replica, so there is no standby. Set `manager.replicas` to at least `2` and keep leader
+election enabled:
+
+```yaml
+manager:
+  replicas: 2
+```
 
 Controller specific behavior is as follows:
 
@@ -205,13 +215,16 @@ metadata:
     control-plane: controller-manager
 spec:
   selector:
-    app.kubernetes.io/name: ocm-k8s-toolkit
+    app.kubernetes.io/instance: <release name>
     control-plane: controller-manager
   ports:
     - name: https
       port: 8443
       targetPort: 8443
 ```
+
+The `ServiceMonitor` selects the `Service` by its `app.kubernetes.io/name` label. If you set `nameOverride`, use that
+value instead of `ocm-k8s-toolkit`.
 
 Useful metrics to watch:
 
@@ -246,7 +259,7 @@ the controller is actually using, then watch keep an eye on the metrics as you s
 1. Check the resources and the `GOMEMLIMIT` environment variable:
 
    ```bash
-   kubectl -n <release namespace> get deploy -l app.kubernetes.io/name=ocm-k8s-toolkit,app.kubernetes.io/instance=<release name> \
+   kubectl -n <release namespace> get deploy -l control-plane=controller-manager,app.kubernetes.io/instance=<release name> \
      -o jsonpath='{.items[0].spec.template.spec.containers[0].resources}{"\n"}{.items[0].spec.template.spec.containers[0].env}{"\n"}'
    ```
 
@@ -271,7 +284,7 @@ the controller is actually using, then watch keep an eye on the metrics as you s
    [Metrics Server](https://github.com/kubernetes-sigs/metrics-server) in the cluster:
 
    ```bash
-   kubectl -n <release namespace> top pod -l app.kubernetes.io/name=ocm-k8s-toolkit,app.kubernetes.io/instance=<release name>
+   kubectl -n <release namespace> top pod -l control-plane=controller-manager,app.kubernetes.io/instance=<release name>
    ```
 
 5. Check that `workqueue_depth` drains. Repeat this a few times and compare the values on the leader:
