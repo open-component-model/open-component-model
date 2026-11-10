@@ -1,0 +1,55 @@
+name: Trivy checks
+
+# Unit tests of OCM's own Trivy checks (.github/trivy-checks, used by
+# image-scan.yml on the controller chart and the image build files): every
+# <check>_test.rego evaluates its check against inputs shaped like Trivy's
+# parsed Dockerfiles and manifests.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/trivy-checks/**'
+      - '.github/workflows/trivy-checks.yml'
+      - '.env'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/trivy-checks/**'
+      - '.github/workflows/trivy-checks.yml'
+      - '.env'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -euo pipefail {0}
+
+jobs:
+  test:
+    name: Test OCM Trivy checks
+    runs-on: ubuntu-26.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            .github/trivy-checks
+            .env
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      - name: Load .env
+        run: grep -E '^OPA_IMAGE=' .env >> "$GITHUB_ENV"
+
+      # result.new is a Trivy builtin that plain OPA lacks: it is declared in the
+      # capabilities so the checks compile, and the tests replace it with `with`.
+      - name: Format and test
+        run: |
+          opa() { docker run --rm -v "$PWD:/work:ro" -w /work "$OPA_IMAGE" "$@"; }
+          opa capabilities --current | jq '.builtins += [{name: "result.new",
+            decl: {type: "function", args: [{type: "string"}, {type: "any"}], result: {type: "any"}}}]' > capabilities.json
+          opa fmt --fail --list .github/trivy-checks
+          opa test --capabilities capabilities.json --verbose .github/trivy-checks

@@ -14,6 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/cmd/internal/test"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	versioningv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/versioning/v1alpha1/spec"
+	ocicachev1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/cache/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -71,6 +72,55 @@ func TestGetEffectiveConfig_OmitsVersioningWhenAbsent(t *testing.T) {
 	for _, entry := range eff.Configurations {
 		_, ok := entry.(*versioningv1alpha1.Config)
 		r.False(ok, "versioning config must be absent without configured schemes")
+	}
+}
+
+func TestGetEffectiveConfig_OCICache(t *testing.T) {
+	tests := []struct {
+		name    string
+		entries []string
+		expect  *ocicachev1alpha1.Config
+	}{
+		{
+			name:   "omitted when not configured",
+			expect: nil,
+		},
+		{
+			name: "included when configured",
+			entries: []string{
+				`{"type":"oci.cache.config.ocm.software","remotePolicy":"Always"}`,
+			},
+			expect: &ocicachev1alpha1.Config{
+				Type:         runtime.NewVersionedType(ocicachev1alpha1.ConfigType, ocicachev1alpha1.Version),
+				RemotePolicy: ocicachev1alpha1.RemotePolicyAlways,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+
+			cfg := &genericv1.Config{
+				Type:           runtime.NewVersionedType(genericv1.ConfigType, genericv1.ConfigTypeV1),
+				Configurations: []*runtime.Raw{},
+			}
+			for _, entry := range tt.entries {
+				raw := &runtime.Raw{}
+				r.NoError(raw.UnmarshalJSON([]byte(entry)))
+				cfg.Configurations = append(cfg.Configurations, raw)
+			}
+
+			eff, err := config.GetEffectiveConfig(cfg)
+			r.NoError(err)
+
+			var found *ocicachev1alpha1.Config
+			for _, entry := range eff.Configurations {
+				if c, ok := entry.(*ocicachev1alpha1.Config); ok {
+					found = c
+				}
+			}
+			r.Equal(tt.expect, found)
+		})
 	}
 }
 

@@ -22,6 +22,7 @@ import (
 	ocicredentials "ocm.software/open-component-model/bindings/go/oci/credentials"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
+	ocicachev1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/cache/v1alpha1"
 	ociidentityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
@@ -67,14 +68,16 @@ func WithBlobCache(bc *ocicache.BlobCache) PluginOption {
 
 // NewBlobCache creates the blob cache to pass to [WithBlobCache]. There is no reference cache:
 // it never serves tag lookups from cache, and those are what the controller resolves.
-func NewBlobCache(tempDir string) (*ocicache.BlobCache, error) {
+// A nil cfg uses the cache defaults.
+func NewBlobCache(tempDir string, cfg *ocicachev1alpha1.Config) (*ocicache.BlobCache, error) {
 	if tempDir == "" {
 		tempDir = os.TempDir()
 	}
-	return ocicache.NewBlobCache(ocicache.Options{
-		Dir:          filepath.Join(tempDir, "ocm-oci-cas"),
-		RemotePolicy: ocicache.RemotePolicyIfNotPresent,
-	})
+	opts := ocicache.Options{Dir: filepath.Join(tempDir, "ocm-oci-cas")}
+	if cfg != nil {
+		opts.RemotePolicy = ocicache.RemotePolicy(cfg.RemotePolicy)
+	}
+	return ocicache.NewBlobCache(opts)
 }
 
 // NewPluginManager build a per-request plugin manager.
