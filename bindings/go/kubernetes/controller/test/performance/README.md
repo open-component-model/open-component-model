@@ -21,7 +21,7 @@ task test/performance/fresh            # teardown, setup and run in one go
 
 The flow mirrors the e2e tasks (`test/e2e/setup/local`, `test/e2e`, `test/e2e/setup/teardown`, `test/e2e/fresh`).
 
-`go run ./test/performance --help` lists every flag.
+`go run ./test/performance --help` lists every flag; see [Options](#options) for what they change.
 
 ### In CI
 
@@ -94,32 +94,6 @@ descriptor lists `--resources` OCI images (default 100) from a small pool pushed
 deployed manifest through a `--depth` long reference path (default 5). The objects share the Repositories, each a
 different `subPath` of the one registry, so the controller holds that many repository cache entries.
 
-## Phases
-
-A run measures these phases in order, each in a window of its own:
-
-| Phase     | Prepare (not measured)                     | Change                                                  | Done when, per pipeline           | Models                                                                                                      |
-|-----------|--------------------------------------------|---------------------------------------------------------|-----------------------------------|-------------------------------------------------------------------------------------------------------------|
-| `rollout` | push the image pool, publish release `1.0` | create all objects                                      | the NamespacedDeployer is `Ready` | the first install, with cold caches                                                                         |
-| `drift`   |                                            | set `data.version: drifted` on every deployed ConfigMap | the ConfigMap is at `1.0.0` again | any update of a deployed object, status churn included, enqueues its Deployer: warm caches, the same digest |
-| `update`  | publish release `1.1`                      | set `spec.semver` of every Component to `>=1.1.0`       | the ConfigMap is at `1.1.0`       | a release rolling out: a new digest down the whole reference chain                                          |
-
-The drift phase is a Deployer reading its component version and resource again for an object it already deployed. The
-update has to change the Components: publishing alone triggers nothing before their next poll, 30 minutes away.
-
-A release is one published generation of every pipeline's component versions. Each phase publishes its own release in
-its own prepare: a release published earlier would add versions the rollout's constraint selects and lists.
-
-| Release | Root versions                    | Chain, leaf and deployed `data.version` | Constraint |
-|---------|----------------------------------|-----------------------------------------|------------|
-| `1.0`   | `1.0.0` … `1.0.<--versions - 1>` | `1.0.0`                                 | `>=1.0.0`  |
-| `1.1`   | `1.1.0` … `1.1.<--versions - 1>` | `1.1.0`                                 | `>=1.1.0`  |
-
-Both carry the same image resources per root. References pin versions, so every component version of the update is new.
-
-The tracker of a phase ignores the objects that existed before its change. A drifted ConfigMap is done at the version it
-had before the change, so only seeing it there again after the change counts.
-
 All objects live in one namespace. Before it applies, a Deployer checks the objects of the applied kinds in its namespace
 for ApplySet conflicts ([ocm-project#1412](https://github.com/open-component-model/ocm-project/issues/1412)), and with
 many Deployers in one namespace that check dominates time and memory and hides the cost of reading the resource. The
@@ -152,6 +126,57 @@ applies a directory. A watch records when each object first becomes ready.
 
 The benchmark's own client is limited to 200 requests per second. A run that creates objects for longer than the
 controller needs to reconcile them is bound by that limit, not by the controller.
+
+## Phases
+
+A run measures these phases in order, each in a window of its own:
+
+| Phase     | Prepare (not measured)                     | Change                                                  | Done when, per pipeline           | Models                                                                                                      |
+|-----------|--------------------------------------------|---------------------------------------------------------|-----------------------------------|-------------------------------------------------------------------------------------------------------------|
+| `rollout` | push the image pool, publish release `1.0` | create all objects                                      | the NamespacedDeployer is `Ready` | the first install, with cold caches                                                                         |
+| `drift`   |                                            | set `data.version: drifted` on every deployed ConfigMap | the ConfigMap is at `1.0.0` again | any update of a deployed object, status churn included, enqueues its Deployer: warm caches, the same digest |
+| `update`  | publish release `1.1`                      | set `spec.semver` of every Component to `>=1.1.0`       | the ConfigMap is at `1.1.0`       | a release rolling out: a new digest down the whole reference chain                                          |
+
+The drift phase is a Deployer reading its component version and resource again for an object it already deployed. The
+update has to change the Components: publishing alone triggers nothing before their next poll, 30 minutes away.
+
+A release is one published generation of every pipeline's component versions. Each phase publishes its own release in
+its own prepare: a release published earlier would add versions the rollout's constraint selects and lists.
+
+| Release | Root versions                    | Chain, leaf and deployed `data.version` | Constraint |
+|---------|----------------------------------|-----------------------------------------|------------|
+| `1.0`   | `1.0.0` … `1.0.<--versions - 1>` | `1.0.0`                                 | `>=1.0.0`  |
+| `1.1`   | `1.1.0` … `1.1.<--versions - 1>` | `1.1.0`                                 | `>=1.1.0`  |
+
+Both carry the same image resources per root. References pin versions, so every component version of the update is new.
+
+The tracker of a phase ignores the objects that existed before its change. A drifted ConfigMap is done at the version it
+had before the change, so only seeing it there again after the change counts.
+
+## Options
+
+An invocation runs every `--objects` count `--repeats` times, each run on a fresh namespace and, by default, a restarted
+controller.
+
+| Option                 | Default                    | What it changes                                                                                                                                          |
+|------------------------|----------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `--objects`            | `100,500,1000`             | Pipelines per run, one run per count. A pipeline is a Component, a Resource and a NamespacedDeployer.                                                    |
+| `--repeats`            | `3`                        | Runs per count. `/perf` compares the medians.                                                                                                            |
+| `--versions`           | `5`                        | Root versions per release. The Components select the newest by constraint, so they list and compare all of them.                                         |
+| `--depth`              | `5`                        | Reference chain from the root to the component that holds the manifest. Every level is one more component version the Resource and the Deployer resolve. |
+| `--resources`          | `100`                      | OCI image resources per root descriptor. Nothing deploys them; they make the descriptor large.                                                           |
+| `--repositories`       | `10`                       | Repositories the pipelines share round-robin, each on its own registry sub-path and in its own repository cache entry. Capped at `--objects`.            |
+| `--sign`               | `true`                     | Signs every component version; the controller verifies the root signature and every reference digest below it.                                           |
+| `--timeout`            | `20m`                      | Per phase: the wait for its objects, and again for the queues to drain. Also bounds the controller restart and the namespace deletion.                   |
+| `--sample-interval`    | `2s`                       | Resolution of the sampled peaks and of the settled time, which takes 3 idle samples in a row.                                                            |
+| `--restart-controller` | `true`                     | Empty caches for every run. Turn it off to keep a port-forward to the pod, for [profiling](#profiling).                                                  |
+| `--keep-namespaces`    | `false`                    | Keeps every run's namespace for inspection; they pile up.                                                                                                |
+| `--out`                | `test/performance/results` | Where each invocation writes its timestamped results directory.                                                                                          |
+
+The remaining flags locate the cluster, the registry and the controller: `--context` (defaults to `kind-ocm-perf`, so a
+run never lands on a real cluster by accident), `--registry`, `--cluster-registry`, `--registry-metrics`,
+`--controller-namespace`, `--controller-selector` and `--metrics-port`. Their defaults match the setup of
+`task test/performance/setup/local`.
 
 ## Results
 

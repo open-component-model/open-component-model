@@ -21,26 +21,37 @@ import (
 	ctrllog "sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+// options configure one invocation: every object count in sizes, repeats times each.
+// The --help text of each flag says what it changes in the measurement.
 type options struct {
-	kubeContext         string
-	sizes               []int
-	repeats             int
-	versions            int
-	depth               int
-	resources           int
-	repositories        int
-	sign                bool
+	// kubeContext defaults to the benchmark's Kind cluster, so a run never lands on a real cluster by accident.
+	kubeContext string
+
+	// The invocation matrix: one run per object count and repeat.
+	sizes   []int
+	repeats int
+
+	// The workload knobs: the shape of every pipeline's component versions, see workload.
+	versions     int
+	depth        int
+	resources    int
+	repositories int
+	sign         bool
+
+	// Where the registry and the controller are, from the host and from inside the cluster.
 	registryURL         string
 	clusterRegistryURL  string
 	registryMetricsURL  string
 	controllerNamespace string
 	controllerSelector  string
 	metricsPort         int
-	timeout             time.Duration
-	sampleInterval      time.Duration
-	outDir              string
-	restartController   bool
-	keepNamespaces      bool
+
+	// How a run is measured and left behind.
+	timeout           time.Duration
+	sampleInterval    time.Duration
+	outDir            string
+	restartController bool
+	keepNamespaces    bool
 }
 
 func main() {
@@ -117,27 +128,41 @@ func parseFlags(args []string) (options, error) {
 	fs := flag.NewFlagSet("performance", flag.ContinueOnError)
 	fs.StringVar(&opts.kubeContext, "context", "kind-ocm-perf",
 		"Kubeconfig context. Defaults to the benchmark cluster so a run never lands on a real cluster by accident.")
-	fs.IntVar(&opts.versions, "versions", defaultVersions, "Versions of every root component, selected by constraint.")
-	fs.IntVar(&opts.depth, "depth", defaultDepth, "Length of the reference chain; 0 puts the manifest into the root component.")
-	fs.IntVar(&opts.repositories, "repositories", defaultRepositories, "Maximum number of Repositories, each on its own registry sub-path.")
-	fs.BoolVar(&opts.sign, "sign", true, "Sign the component versions and have the controller verify them.")
-	fs.IntVar(&opts.resources, "resources", defaultResources, "Image resources per root component.")
-	fs.StringVar(&sizes, "objects", "100,500,1000", "Comma-separated object counts per run.")
-	fs.IntVar(&opts.repeats, "repeats", 3, "Repetitions of every object count.")
+
+	fs.StringVar(&sizes, "objects", "100,500,1000",
+		"Comma-separated object counts, one run each. An object is one pipeline: a Component, a Resource and a NamespacedDeployer.")
+	fs.IntVar(&opts.repeats, "repeats", 3, "Runs of every object count. /perf compares the medians of the repeats.")
+
+	fs.IntVar(&opts.versions, "versions", defaultVersions,
+		"Versions of every root component per release. The Components select the newest by constraint, so they list and compare all of them; 1 leaves nothing to choose.")
+	fs.IntVar(&opts.depth, "depth", defaultDepth,
+		"Length of the reference chain from the root component to the one holding the manifest. Every level is one more component version the Resource and the Deployer resolve; 0 puts the manifest into the root.")
+	fs.IntVar(&opts.resources, "resources", defaultResources,
+		"OCI image resources in every root descriptor. Nothing deploys them; they make every root descriptor large.")
+	fs.IntVar(&opts.repositories, "repositories", defaultRepositories,
+		"Maximum number of Repositories, each on its own registry sub-path, shared round-robin by the pipelines. The controller holds a repository cache entry for each.")
+	fs.BoolVar(&opts.sign, "sign", true,
+		"Sign every component version and have the controller verify the root signature and every reference digest below it.")
+
 	fs.StringVar(&opts.registryURL, "registry", "http://localhost:5555", "Registry URL the benchmark pushes component versions to.")
 	fs.StringVar(&opts.clusterRegistryURL, "cluster-registry", "http://ocm-perf-registry:5000",
 		"The same registry as seen from inside the cluster; used in the Repository spec.")
-	fs.StringVar(&opts.registryMetricsURL, "registry-metrics", "http://localhost:5556/metrics", "Registry Prometheus endpoint.")
+	fs.StringVar(&opts.registryMetricsURL, "registry-metrics", "http://localhost:5556/metrics",
+		"Registry Prometheus endpoint, scraped for the registry requests of every phase.")
 	fs.StringVar(&opts.controllerNamespace, "controller-namespace", "ocm-k8s-toolkit-system", "Namespace of the controller deployment.")
 	fs.StringVar(&opts.controllerSelector, "controller-selector", "app.kubernetes.io/name=ocm-k8s-toolkit",
 		"Label selector matching the controller pod.")
 	fs.IntVar(&opts.metricsPort, "metrics-port", 8080, "Port of the controller metrics endpoint.")
+
 	fs.DurationVar(&opts.timeout, "timeout", 20*time.Minute,
-		"Maximum time one phase waits for its objects, and again for the controller queues to drain.")
-	fs.DurationVar(&opts.sampleInterval, "sample-interval", 2*time.Second, "Interval between gauge and memory samples.")
+		"Maximum time one phase waits for its objects, and again for the controller queues to drain. Also bounds the controller restart and the namespace deletion.")
+	fs.DurationVar(&opts.sampleInterval, "sample-interval", 2*time.Second,
+		"Interval between gauge and memory samples. It is the resolution of the settled time, which takes 3 idle samples in a row, and of the peaks.")
 	fs.StringVar(&opts.outDir, "out", "test/performance/results", "Directory for results; each invocation adds a timestamped subdirectory.")
-	fs.BoolVar(&opts.restartController, "restart-controller", true, "Restart the controller before each run so caches start empty.")
-	fs.BoolVar(&opts.keepNamespaces, "keep-namespaces", false, "Keep run namespaces for inspection instead of deleting them.")
+	fs.BoolVar(&opts.restartController, "restart-controller", true,
+		"Restart the controller before each run so caches start empty. Turn it off to keep a port-forward to the pod, e.g. for profiling.")
+	fs.BoolVar(&opts.keepNamespaces, "keep-namespaces", false,
+		"Keep run namespaces for inspection instead of deleting them. They pile up, one per run.")
 	if err := fs.Parse(args); err != nil {
 		return opts, err
 	}
