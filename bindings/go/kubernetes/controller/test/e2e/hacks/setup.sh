@@ -254,7 +254,7 @@ install_crossplane() {
   # function-patch-and-transform
   if ! kubectl get functions.pkg.crossplane.io crossplane-contrib-function-patch-and-transform >/dev/null 2>&1; then
     kubectl apply -f - <<EOF || return 1
-apiVersion: pkg.crossplane.io/v1beta1
+apiVersion: pkg.crossplane.io/v1
 kind: Function
 metadata:
   name: crossplane-contrib-function-patch-and-transform

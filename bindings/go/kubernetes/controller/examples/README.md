@@ -16,14 +16,14 @@ See the [installation notes in the root README](../README.md#installation) for d
 
 | Example | Deployer(s) | What it demonstrates |
 |---|---|---|
-| [`helm-simple`](#helm-simple) | FluxCD + ArgoCD | Minimal Helm chart deploy from an OCI artifact |
-| [`helm-nested`](#helm-nested) | FluxCD + ArgoCD | Helm chart buried in a nested OCM component reference |
-| [`helm-nested-signed`](#helm-nested-signed) | FluxCD + ArgoCD | Nested component with signature verification |
-| [`helm-signing`](#helm-signing) | FluxCD + ArgoCD | Deploying a signed Helm chart with key verification |
-| [`helm-simple-nested-status`](#helm-simple-nested-status) | FluxCD + ArgoCD | Exposing nested resource status fields through `additionalStatusFields` |
-| [`helm-configuration-localization`](#helm-configuration-localization) | FluxCD + ArgoCD | Image localization + Helm value injection |
-| [`kustomize-simple`](#kustomize-simple) | FluxCD + ArgoCD | Kustomize overlay from a Git-sourced OCM resource |
-| [`kustomize-configuration-localization`](#kustomize-configuration-localization) | FluxCD + ArgoCD | Image localization via Kustomize JSON patches |
+| [`helm-simple`](#helm-simple) | FluxCD + ArgoCD + Crossplane | Minimal Helm chart deploy from an OCI artifact |
+| [`helm-nested`](#helm-nested) | FluxCD + ArgoCD + Crossplane | Helm chart buried in a nested OCM component reference |
+| [`helm-nested-signed`](#helm-nested-signed) | FluxCD + ArgoCD + Crossplane | Nested component with signature verification |
+| [`helm-signing`](#helm-signing) | FluxCD + ArgoCD + Crossplane | Deploying a signed Helm chart with key verification |
+| [`helm-simple-nested-status`](#helm-simple-nested-status) | FluxCD + ArgoCD + Crossplane | Exposing nested resource status fields through `additionalStatusFields` |
+| [`helm-configuration-localization`](#helm-configuration-localization) | FluxCD + ArgoCD + Crossplane | Image localization + Helm value injection |
+| [`kustomize-simple`](#kustomize-simple) | FluxCD + ArgoCD + Crossplane | Kustomize overlay from a Git-sourced OCM resource |
+| [`kustomize-configuration-localization`](#kustomize-configuration-localization) | FluxCD + ArgoCD + Crossplane | Image localization via Kustomize JSON patches |
 | [`k8s-manifest-simple`](#k8s-manifest-simple) | `NamespacedDeployer` | Applying a plain Kubernetes manifest from an OCM resource |
 | [`k8s-manifest-cross-namespace`](#k8s-manifest-cross-namespace) | `NamespacedDeployer` | Applying into a second namespace that granted the deployer's service account |
 | [`applyset-pruning`](#applyset-pruning) | `NamespacedDeployer` | Pruning orphaned resources with ApplySet |
@@ -74,7 +74,7 @@ the same permissions from `test/e2e/hacks/rbac.yaml`.
 
 ## helm-simple
 
-**Deployers:** FluxCD (`OCIRepository` + `HelmRelease`) and ArgoCD (`Application`)
+**Deployers:** FluxCD (`OCIRepository` + `HelmRelease`), ArgoCD (`Application`), and Crossplane (`crossplane-composition.yaml`)
 
 The baseline example. A single Helm chart resource is resolved from an OCM component and deployed via both
 FluxCD and ArgoCD. This is the best starting point for understanding how the toolkit's resource pipeline works.
@@ -92,7 +92,7 @@ task test/e2e -- --focus=helm-simple
 
 ## helm-nested
 
-**Deployers:** FluxCD + ArgoCD
+**Deployers:** FluxCD + ArgoCD + Crossplane
 
 Demonstrates how to reference a Helm chart that lives inside a _nested_ OCM component reference (i.e., an OCM
 component version that itself references another component). The `Resource` spec uses `referencePath` to
@@ -111,7 +111,7 @@ resource:
 
 ## helm-nested-signed
 
-**Deployers:** FluxCD + ArgoCD
+**Deployers:** FluxCD + ArgoCD + Crossplane
 
 Like `helm-nested`, but the OCM component version is signed. The `Resource` controller verifies the signature
 using the public key provided in `ocm.software.pub` before exposing the OCI artifact coordinates.
@@ -120,7 +120,7 @@ using the public key provided in `ocm.software.pub` before exposing the OCI arti
 
 ## helm-signing
 
-**Deployers:** FluxCD + ArgoCD
+**Deployers:** FluxCD + ArgoCD + Crossplane
 
 Demonstrates signature verification for a top-level (non-nested) OCM resource. The private key is used during
 `task test/e2e` to sign the component version during the test setup phase; the controller verifies it at runtime.
@@ -129,7 +129,7 @@ Demonstrates signature verification for a top-level (non-nested) OCM resource. T
 
 ## helm-simple-nested-status
 
-**Deployers:** FluxCD + ArgoCD
+**Deployers:** FluxCD + ArgoCD + Crossplane
 
 Shows how to surface additional fields from an OCM resource's access information using `additionalStatusFields`.
 Useful when the RGD needs to pass registry coordinates (registry, repository, digest, tag) to downstream
@@ -139,7 +139,7 @@ deployer resources via kro's `${...}` CEL expressions.
 
 ## helm-configuration-localization
 
-**Deployers:** FluxCD + ArgoCD
+**Deployers:** FluxCD + ArgoCD + Crossplane
 
 The most comprehensive Helm example. Demonstrates two capabilities together:
 
@@ -159,7 +159,7 @@ task test/e2e -- --focus=helm-configuration-localization
 
 ## kustomize-simple
 
-**Deployers:** FluxCD (`GitRepository` + `Kustomization`) and ArgoCD (`Application` with `source.path`)
+**Deployers:** FluxCD (`GitRepository` + `Kustomization`), ArgoCD (`Application` with `source.path`), and Crossplane (`crossplane-composition.yaml`)
 
 Deploys a Kustomize overlay sourced from a Git repository referenced through an OCM resource. The commit SHA is
 taken from `resource.status.resource.access.commit` and pinned in both the FluxCD `GitRepository` ref and the
@@ -169,7 +169,7 @@ ArgoCD `Application.spec.source.targetRevision`.
 
 ## kustomize-configuration-localization
 
-**Deployers:** FluxCD + ArgoCD
+**Deployers:** FluxCD + ArgoCD + Crossplane
 
 Like `kustomize-simple`, but adds image localization and configuration via JSON Patch operations:
 
