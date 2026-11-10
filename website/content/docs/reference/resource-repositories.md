@@ -33,7 +33,7 @@ Handles OCI artifacts stored in OCI-compliant registries.
 ### Credential Resolution
 
 The credential consumer identity is derived from the `imageReference` field in the access specification. The registry
-hostname is extracted from the image reference to construct an identity of type `OCIRegistry/v1`.
+hostname is extracted from the image reference to construct an identity of type `OCIRegistry`.
 
 **Example:** For a resource with access `imageReference: ghcr.io/acme/myapp:1.0.0`, the resolved identity is:
 

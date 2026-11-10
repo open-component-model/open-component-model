@@ -25,8 +25,8 @@ flowchart TB
     subgraph consumer ["Consumer"]
         direction LR
         subgraph identities ["Identities"]
-            id1["Identity 1<br>type: OCIRegistry/v1<br>hostname: ghcr.io<br>path: my-org"]
-            id2["Identity 2<br>type: OCIRegistry/v1<br>hostname: ghcr.io<br>path: my-org/my-repo"]
+            id1["Identity 1<br>type: OCIRegistry<br>hostname: ghcr.io<br>path: my-org"]
+            id2["Identity 2<br>type: OCIRegistry<br>hostname: ghcr.io<br>path: my-org/my-repo"]
         end
         subgraph credentials ["Credentials"]
             cred["type: OCICredentials/v1<br>username / password"]

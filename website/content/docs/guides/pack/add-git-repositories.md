@@ -207,7 +207,7 @@ same archive, and therefore the same digest.
 
 *Optional. Skip this step for public repositories.*
 
-OCM finds credentials through a consumer identity of type `Git/v1`, derived from the repository URL. Create a
+OCM finds credentials through a consumer identity of type `Git`, derived from the repository URL. Create a
 `.ocmconfig` file. Pick the tab that matches your repository URL:
 
 {{< tabs "git-credentials" >}}
@@ -220,7 +220,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: Git/v1
+          type: Git
           hostname: gitlab.com
           scheme: https
           path: example-group/*
@@ -244,7 +244,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: Git/v1
+          type: Git
           hostname: git.example.com
           scheme: ssh
           port: "22"
@@ -275,7 +275,7 @@ all attributes.
 - The `Git/v1` access type references a commit; the `Git/v1` input type embeds it.
 - A resource with only a `ref` is pinned to a commit and gets a digest when you build the component version.
 - The archive is deterministic, so access and input give the same digest for the same commit.
-- Credentials match a `Git/v1` consumer identity derived from the repository URL.
+- Credentials match a `Git` consumer identity derived from the repository URL.
 
 ## Check your understanding
 

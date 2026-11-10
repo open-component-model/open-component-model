@@ -35,7 +35,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: OCIRegistry/v1
+          type: OCIRegistry
           hostname: ghcr.io
           pathprefix: open-component-model
         credentials:
@@ -62,7 +62,7 @@ every path below it; `path` is a glob pattern, so append `/**` to cover every pa
 ```yaml
     consumers:
       - identity:
-          type: OCIRegistry/v1
+          type: OCIRegistry
           hostname: ghcr.io
           path: open-component-model/**  # was: pathprefix: open-component-model
 ```
@@ -94,7 +94,7 @@ The new OCM still accepts the singular `identity` field, so this step is optiona
 ```yaml
     consumers:
       - identities: # was: identity (now a list)
-          - type: OCIRegistry/v1
+          - type: OCIRegistry
             hostname: ghcr.io
             path: open-component-model/**
 ```
@@ -146,7 +146,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identities:
-          - type: OCIRegistry/v1
+          - type: OCIRegistry
             hostname: ghcr.io
             path: open-component-model/**
         credentials:

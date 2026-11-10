@@ -376,7 +376,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identities:
-          - type: OCIRegistry/v1
+          - type: OCIRegistry
             hostname: artifactory.corp
         credentials:
           - type: Credentials/v1

@@ -70,15 +70,15 @@ Quick reference:
 
 | Configured identity | Request | Result | Why |
 | --- | --- | --- | --- |
-| `type: OCIRegistry/v1`<br>`hostname: ghcr.io`<br>`path: my-org/my-repo` | `ghcr.io/my-org/my-repo` | ✅ | Exact path match |
-| `type: OCIRegistry/v1`<br>`hostname: ghcr.io`<br>`path: my-org/*` | `ghcr.io/my-org/my-repo` | ✅ | `*` matches `my-repo` |
-| `type: OCIRegistry/v1`<br>`hostname: ghcr.io` | `ghcr.io/my-org/my-repo` | ✅ | No path — accepts any |
-| `type: OCIRegistry/v1`<br>`hostname: ghcr.io`<br>`path: my-org` | `ghcr.io/my-org/my-repo` | ❌ | `my-org` ≠ `my-org/my-repo` |
-| `type: OCIRegistry/v1`<br>`hostname: ghcr.io`<br>`path: my-org/*` | `ghcr.io/other-org/foo` | ❌ | `other-org` ≠ `my-org` |
-| `type: OCIRegistry/v1`<br>`hostname: ghcr.io`<br>`path: my-org/**` | `ghcr.io/my-org/team/repo` | ✅ | `**` matches `team/repo` |
-| `type: OCIRegistry/v1`<br>`hostname: ghcr.io`<br>`scheme: https` | `https://ghcr.io:443/repo` | ✅ | Port defaults to `443` |
-| `type: OCIRegistry/v1`<br>`hostname: ghcr.io`<br>`scheme: http` | `https://ghcr.io/repo` | ❌ | `http` ≠ `https` |
-| `type: OCIRegistry/v1`<br>`hostname: ghcr.io`<br>`port: 5000` | `https://ghcr.io:443/repo` | ❌ | `5000` ≠ `443` |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/my-repo` | `ghcr.io/my-org/my-repo` | ✅ | Exact path match |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/*` | `ghcr.io/my-org/my-repo` | ✅ | `*` matches `my-repo` |
+| `type: OCIRegistry`<br>`hostname: ghcr.io` | `ghcr.io/my-org/my-repo` | ✅ | No path — accepts any |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org` | `ghcr.io/my-org/my-repo` | ❌ | `my-org` ≠ `my-org/my-repo` |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/*` | `ghcr.io/other-org/foo` | ❌ | `other-org` ≠ `my-org` |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`path: my-org/**` | `ghcr.io/my-org/team/repo` | ✅ | `**` matches `team/repo` |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`scheme: https` | `https://ghcr.io:443/repo` | ✅ | Port defaults to `443` |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`scheme: http` | `https://ghcr.io/repo` | ❌ | `http` ≠ `https` |
+| `type: OCIRegistry`<br>`hostname: ghcr.io`<br>`port: 5000` | `https://ghcr.io:443/repo` | ❌ | `5000` ≠ `443` |
 
 {{< callout context="note" >}}
 `*` matches exactly one path segment. It does **not** match across `/` separators. Use `my-org/*/*` to match two-level paths like `my-org/team/repo`, or `my-org/**` to match any depth below `my-org`.
@@ -94,7 +94,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identities:
-          - type: OCIRegistry/v1
+          - type: OCIRegistry
             hostname: ghcr.io
         credentials:
           - type: Credentials/v1
@@ -122,7 +122,7 @@ configurations:
     consumers:
       # Consumer A: exact path
       - identities:
-          - type: OCIRegistry/v1
+          - type: OCIRegistry
             hostname: ghcr.io
             path: my-org/production
         credentials:
@@ -132,7 +132,7 @@ configurations:
               password: ghp_prod
       # Consumer B: glob path
       - identities:
-          - type: OCIRegistry/v1
+          - type: OCIRegistry
             hostname: ghcr.io
             path: my-org/*
         credentials:
@@ -142,7 +142,7 @@ configurations:
               password: ghp_org
       # Consumer C: hostname only (catch-all)
       - identities:
-          - type: OCIRegistry/v1
+          - type: OCIRegistry
             hostname: ghcr.io
         credentials:
           - type: Credentials/v1
@@ -175,7 +175,7 @@ configurations:
     consumers:
       # Consumer A: two-level wildcard for any org/repo
       - identities:
-          - type: OCIRegistry/v1
+          - type: OCIRegistry
             hostname: ghcr.io
             path: "*/*"
         credentials:
@@ -185,7 +185,7 @@ configurations:
               password: ghp_org_token
       # Consumer B: single-level wildcard (more specific)
       - identities:
-          - type: OCIRegistry/v1
+          - type: OCIRegistry
             hostname: ghcr.io
             path: "my-org/*"
         credentials:
@@ -224,7 +224,7 @@ configurations:
     consumers:
       # HTTPS-only entry
       - identities:
-          - type: OCIRegistry/v1
+          - type: OCIRegistry
             hostname: ghcr.io
             scheme: https
         credentials:
@@ -234,7 +234,7 @@ configurations:
               password: ghp_secure
       # Custom port registry (no scheme)
       - identities:
-          - type: OCIRegistry/v1
+          - type: OCIRegistry
             hostname: myregistry.local
             port: "5000"
         credentials:
@@ -266,7 +266,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identities:
-          - type: OCIRegistry/v1
+          - type: OCIRegistry
             hostname: registry.example.com
             scheme: oci
         credentials:
@@ -301,7 +301,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identities:
-          - type: OCIRegistry/v1
+          - type: OCIRegistry
             hostname: ghcr.io
             scheme: https
             path: my-org/*

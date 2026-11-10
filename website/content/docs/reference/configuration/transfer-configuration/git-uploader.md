@@ -123,5 +123,5 @@ Push one resource to a tag named after the component version:
   ref: '${"refs/tags/v" + component.version}'
 ```
 
-Credentials for the target are resolved for the `Git/v1` consumer identity of the
+Credentials for the target are resolved for the `Git` consumer identity of the
 target repository URL, as for downloads.
