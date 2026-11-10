@@ -103,11 +103,7 @@ func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (
 	}
 	published := time.Since(publishStart).Seconds()
 
-	if err := r.forEachNamespace(ctx, w, func(ctx context.Context, namespace string) error {
-		return r.c.createNamespace(ctx, namespace, runID)
-	}); err != nil {
-		return nil, fmt.Errorf("creating namespaces: %w", err)
-	}
+	// Registered first, so the namespaces created before a failed creation are deleted too.
 	if !r.opts.keepNamespaces {
 		defer func() {
 			log.Info("cleaning up", "namespaces", len(w.namespaces()))
@@ -117,6 +113,11 @@ func (r *runner) runOnce(ctx context.Context, s scenario, objects, repeat int) (
 			}
 			log.Info("cleaned up", "duration", time.Since(cleanupStart))
 		}()
+	}
+	if err := r.forEachNamespace(ctx, w, func(ctx context.Context, namespace string) error {
+		return r.c.createNamespace(ctx, namespace, runID)
+	}); err != nil {
+		return nil, fmt.Errorf("creating namespaces: %w", err)
 	}
 
 	objs, err := w.objectsToCreate()
@@ -291,8 +292,10 @@ func kindNames(objs []client.Object) []string {
 	return names
 }
 
+// forEachNamespace calls f for every namespace of w. A failure does not cancel the
+// other calls: cleanup has to reach every namespace.
 func (r *runner) forEachNamespace(ctx context.Context, w workload, f func(context.Context, string) error) error {
-	g, ctx := errgroup.WithContext(ctx)
+	var g errgroup.Group
 	g.SetLimit(createWorkers)
 	for _, namespace := range w.namespaces() {
 		g.Go(func() error { return f(ctx, namespace) })

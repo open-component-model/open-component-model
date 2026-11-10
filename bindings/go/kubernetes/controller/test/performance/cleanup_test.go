@@ -76,3 +76,40 @@ func TestWaitGoneRetriesFailedLists(t *testing.T) {
 	r.NoError(cl.waitGone(t.Context(), &corev1.Namespace{}, "run", 5*time.Second))
 	r.True(failed)
 }
+
+func TestCleanupDeletesEveryNamespaceDespiteAFailure(t *testing.T) {
+	r := require.New(t)
+	scheme := runtime.NewScheme()
+	r.NoError(clientgoscheme.AddToScheme(scheme))
+	r.NoError(v1alpha1.AddToScheme(scheme))
+
+	w := newWorkload(scenarioShared, 2, "run", "http://registry:5000")
+	failing, other := w.namespaceOf(0), w.namespaceOf(1)
+	var objs []client.Object
+	for _, name := range w.namespaces() {
+		objs = append(objs, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name, Labels: map[string]string{runLabel: w.runID}}})
+	}
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).WithInterceptorFuncs(interceptor.Funcs{
+		Delete: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.DeleteOption) error {
+			if _, ok := obj.(*corev1.Namespace); ok {
+				switch obj.GetName() {
+				case failing:
+					return apierrors.NewServiceUnavailable("etcd leader changed")
+				case other:
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-time.After(200 * time.Millisecond):
+					}
+				}
+			}
+			return c.Delete(ctx, obj, opts...)
+		},
+	}).Build()
+
+	run := &runner{c: &cluster{client: c, scheme: scheme}, opts: options{timeout: 300 * time.Millisecond}}
+	r.Error(run.cleanup(t.Context(), slog.Default(), w))
+
+	err := c.Get(t.Context(), client.ObjectKey{Name: other}, &corev1.Namespace{})
+	r.True(apierrors.IsNotFound(err), "namespace %s was not deleted: %v", other, err)
+}
