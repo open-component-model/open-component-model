@@ -188,4 +188,4 @@ header cross-origin.
 - [Guides: Working with HTTP Resources]({{< relref "docs/guides/pack/add-http-resources.md" >}}) - task-oriented walkthrough of the wget input and access types
 - [Reference: Input and Access Types]({{< relref "input-and-access-types.md" >}}#wgetv1-input) - field reference for the `Wget/v1` input and access types
 - [Reference: HTTP Client Configuration]({{< relref "http-client.md" >}}) - the transport-level `http.config.ocm.software/v1alpha1` configuration
-- [Reference: Credential Consumer Identities: HTTP]({{< relref "credential-consumer-identities.md" >}}#wget) - identity attributes and matching rules for `HTTP` consumers
+- [Reference: Credential Consumer Identities: HTTP]({{< relref "credential-consumer-identities.md" >}}#wget) - identity attributes and matching rules for `HTTP/v1` consumers

@@ -104,8 +104,8 @@ The two servers differ in how they treat a file already stored at the upload pat
 
 ### Credentials
 
-Both uploaders resolve credentials for the `HelmChartRepository` identity of the
-repository's Helm API, falling back to the `HTTP` identity of the server. An `HTTP`
+Both uploaders resolve credentials for the `HelmChartRepository/v1` identity of the
+repository's Helm API, falling back to the `HTTP/v1` identity of the server. An `HTTP`
 consumer configured with the bare host name (no path) covers every repository on the
 server. See [Credential Resolution]({{< relref "docs/concepts/credential-resolution.md" >}})
 for how OCM matches a request to a consumer.

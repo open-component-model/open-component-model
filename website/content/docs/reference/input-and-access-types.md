@@ -266,7 +266,7 @@ resources:
 
 {{< callout context="note" >}}
 The specification carries no credentials, and no field of it can carry them. Configure authentication in the
-[credential system]({{< relref "credential-consumer-identities.md" >}}#s3). It resolves an `S3` consumer
+[credential system]({{< relref "credential-consumer-identities.md" >}}#s3). It resolves an `S3/v1` consumer
 entry from `.ocmconfig`. If no entry matches, the AWS default credential chain applies: environment variables, the
 shared AWS config, and IAM instance or task roles. An in-cluster build therefore needs no key material in the OCM
 configuration. For unsigned public-object downloads, set `anonymous: true` in
@@ -326,7 +326,7 @@ resources:
 Do not put credentials in `repository`, such as `https://user:token@host/...`. The URL is in your
 `component-constructor.yaml`, which is normally checked into version control. Configure authentication through the
 [credential system]({{< relref "credential-consumer-identities.md" >}}#git) instead. The input type and the access type
-use the same `Git` consumer identity, so one consumer entry covers both.
+use the same `Git/v1` consumer identity, so one consumer entry covers both.
 {{< /callout >}}
 
 OCM streams the archive to a file under the `tempFolder` of the `filesystem.config.ocm.software/v1alpha1`
@@ -723,7 +723,7 @@ resources:
 The specification carries no credentials, and no field of it can carry them. A URL-based access type has places to
 hide userinfo or a presigned query string; this type has none, so OCM writes no secret into the component descriptor.
 Configure authentication in the
-[credential system]({{< relref "credential-consumer-identities.md" >}}#s3). It resolves an `S3` consumer
+[credential system]({{< relref "credential-consumer-identities.md" >}}#s3). It resolves an `S3/v1` consumer
 entry from `.ocmconfig`. If no entry matches, the AWS default credential chain applies: environment variables, the
 shared AWS config, and IAM instance or task roles. For unsigned public-object downloads, set `anonymous: true` in
 [`S3Credentials/v1`]({{< relref "credential-types.md#s3credentialsv1" >}}), not in the access specification.

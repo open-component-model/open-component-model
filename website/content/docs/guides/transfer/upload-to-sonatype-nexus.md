@@ -56,8 +56,8 @@ consumer command for each supported repository format.
 
 ## Configure credentials
 
-The uploader resolves credentials for the `HelmChartRepository` identity of
-`<url>/repository/<repository>`, falling back to its `HTTP` identity. An `HTTP`
+The uploader resolves credentials for the `HelmChartRepository/v1` identity of
+`<url>/repository/<repository>`, falling back to its `HTTP/v1` identity. An `HTTP`
 consumer without a path covers every repository on the server:
 
 ```yaml
@@ -66,7 +66,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: HTTP
+          type: HTTP/v1
           hostname: nexus.example.com
           scheme: https
         credentials:
@@ -105,7 +105,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: HTTP
+          type: HTTP/v1
           hostname: nexus.example.com
           scheme: https
         credentials:
@@ -187,7 +187,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: HTTP
+          type: HTTP/v1
           hostname: nexus.example.com
           scheme: https
         credentials:
@@ -280,7 +280,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: HTTP
+          type: HTTP/v1
           hostname: nexus.example.com
           scheme: https
         credentials:
@@ -350,7 +350,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: HTTP
+          type: HTTP/v1
           hostname: nexus.example.com
           scheme: https
         credentials:

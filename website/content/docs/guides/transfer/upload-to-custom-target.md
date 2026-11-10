@@ -151,14 +151,14 @@ digest to the base64 value RFC 9530 expects — see the
 ### Configure target credentials
 
 If your upload endpoint requires authentication, add credentials for the target host.
-The uploader resolves credentials for the target URL using the `HTTP` consumer
+The uploader resolves credentials for the target URL using the `HTTP/v1` consumer
 identity, independently of the source resource:
 
 ```yaml
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: HTTP
+          type: HTTP/v1
           hostname: mytarget.example.com
         credentials:
           - type: Credentials/v1
@@ -264,7 +264,7 @@ field fails the transfer deliberately rather than producing a partial URL.
 
 **Cause:** No credentials matched the target host.
 
-**Fix:** Add a `credentials.config.ocm.software` consumer with `type: HTTP` and the
+**Fix:** Add a `credentials.config.ocm.software` consumer with `type: HTTP/v1` and the
 target `hostname`, as in Step 2.
 
 ### Problem: The transfer succeeds but nothing is uploaded

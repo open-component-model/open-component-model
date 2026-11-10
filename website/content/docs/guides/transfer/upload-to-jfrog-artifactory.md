@@ -56,9 +56,9 @@ consumer command for each supported repository type.
 
 ## Configure credentials
 
-The uploader resolves credentials for the `HelmChartRepository` identity of
-`<url>/artifactory/api/helm/<repository>`, falling back to the `HTTP` identity of
-`<url>/artifactory/<repository>`. An `HTTP` consumer without a path covers every
+The uploader resolves credentials for the `HelmChartRepository/v1` identity of
+`<url>/artifactory/api/helm/<repository>`, falling back to the `HTTP/v1` identity of
+`<url>/artifactory/<repository>`. An `HTTP/v1` consumer without a path covers every
 repository on the server:
 
 ```yaml
@@ -67,7 +67,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: HTTP
+          type: HTTP/v1
           hostname: myorg.jfrog.io
           scheme: https
         credentials:
@@ -108,7 +108,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: HTTP
+          type: HTTP/v1
           hostname: myorg.jfrog.io
           scheme: https
         credentials:
@@ -193,7 +193,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: HTTP
+          type: HTTP/v1
           hostname: myorg.jfrog.io
           scheme: https
         credentials:
@@ -265,7 +265,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: HTTP
+          type: HTTP/v1
           hostname: myorg.jfrog.io
           scheme: https
         credentials:
@@ -343,7 +343,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: HTTP
+          type: HTTP/v1
           hostname: myorg.jfrog.io
           scheme: https
         credentials:

@@ -84,7 +84,7 @@ We're interested in the `chart` resource, which is a Helm chart stored as OCI ar
       - baseUrl: ghcr.io
         componentNameMapping: urlPath
         subPath: open-component-model
-        type: OCIRegistry
+        type: OCIRegistry/v1
     resources:
       - access:
           imageReference: ghcr.io/stefanprodan/podinfo:6.8.0

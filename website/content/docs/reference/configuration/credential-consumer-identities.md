@@ -117,7 +117,7 @@ For detailed matching examples and edge cases, see [Tutorial: Understand Credent
 
 ```yaml
 - identity:
-    type: OCIRegistry
+    type: OCIRegistry/v1
     hostname: ghcr.io
   credentials:
     - type: OCICredentials/v1
@@ -129,7 +129,7 @@ For detailed matching examples and edge cases, see [Tutorial: Understand Credent
 
 ```yaml
 - identity:
-    type: OCIRegistry
+    type: OCIRegistry/v1
     hostname: ghcr.io
     path: my-org/*
   credentials:
@@ -142,7 +142,7 @@ For detailed matching examples and edge cases, see [Tutorial: Understand Credent
 
 ```yaml
 - identity:
-    type: OCIRegistry
+    type: OCIRegistry/v1
     hostname: registry.internal
     scheme: https
     port: "8443"
@@ -182,7 +182,7 @@ identity is derived from the Helm repository URL using the same URL-based attrib
 
 ```yaml
 - identity:
-    type: HelmChartRepository
+    type: HelmChartRepository/v1
     hostname: charts.example.com
     path: stable
   credentials:
@@ -195,7 +195,7 @@ identity is derived from the Helm repository URL using the same URL-based attrib
 
 ```yaml
 - identity:
-    type: HelmChartRepository
+    type: HelmChartRepository/v1
     hostname: registry.example.com
     scheme: oci
   credentials:
@@ -214,13 +214,13 @@ Used when OCM fetches a resource over plain HTTP or HTTPS through the
 [`Wget/v1` access type]({{< relref "input-and-access-types.md#wgetv1-access" >}}) and the
 [`Wget/v1` input type]({{< relref "input-and-access-types.md#wgetv1-input" >}}). The identity is derived from the resource
 `url`; the access type and the input type derive it identically, so a single consumer entry covers both.
-Prefer the `HTTP` type name; `HTTP/v1`, `Wget/v1`, `Wget`, and the lowercase `http`/`http/v1` spellings are accepted as aliases (see the caution below).
+Prefer the `HTTP/v1` type name; `HTTP`, `Wget/v1`, `Wget`, and the lowercase `http`/`http/v1` spellings are accepted as aliases (see the caution below).
 
 ### Identity Attributes
 
 | Attribute  | Required | Description                                                                                                                            |
 |------------|----------|----------------------------------------------------------------------------------------------------------------------------------------|
-| `type`     | Yes      | `HTTP` (recommended); also accepts `HTTP/v1`, `http`, `http/v1`, `Wget`, and `Wget/v1`                                                 |
+| `type`     | Yes      | `HTTP/v1` (recommended); also accepts `HTTP`, `http`, `http/v1`, `Wget`, and `Wget/v1`                                                 |
 | `hostname` | Yes      | Server hostname (e.g. `downloads.example.com`)                                                                                         |
 | `path`     | No       | URL path without the leading `/`. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname. |
 | `scheme`   | No       | URL scheme (`https`, `http`). If omitted, matches any scheme. If set, must match exactly.                                              |
@@ -235,7 +235,7 @@ Prefer the `HTTP` type name; `HTTP/v1`, `Wget/v1`, `Wget`, and the lowercase `ht
 | `scheme`   | `https`                    |
 | `path`     | `myapp/1.0.0/myapp.tar.gz` |
 
-The derived `type` is the canonical `Wget`. A consumer entry written as `HTTP` (or any other accepted alias) still matches it.
+The derived `type` is the canonical `Wget`. A consumer entry written as `HTTP/v1` (or any other accepted alias) still matches it.
 
 The URL carries no explicit port, so no `port` attribute is derived. Default ports stay implicit in the identity and
 are applied by the URL matcher instead, so this identity matches a consumer entry with `port: "443"` as well as one
@@ -266,8 +266,8 @@ The same three chained checks as [`OCIRegistry`](#ociregistry) apply: path glob,
 default-port handling), then exact equality on the remaining attributes.
 
 {{< callout context="caution" >}}
-Consumer entries are canonicalized to the unversioned spelling before matching. Prefer `type: HTTP`; the aliases
-`HTTP/v1`, `http`, `http/v1`, `Wget`, and `Wget/v1` (the latter two are the legacy name of the
+Consumer entries are canonicalized to the unversioned spelling before matching. Prefer `type: HTTP/v1`; the aliases
+`HTTP`, `http`, `http/v1`, `Wget`, and `Wget/v1` (the latter two are the legacy name of the
 [access type]({{< relref "input-and-access-types.md#wgetv1-access" >}})) are also accepted. The lowercase `wget`
 spelling used by OCM v1 never matches. A non-matching entry fails silently: no credentials are resolved and the
 request goes out unauthenticated, so the symptom is a `401` from the server rather than a configuration error.
@@ -279,7 +279,7 @@ request goes out unauthenticated, so the symptom is a `401` from the server rath
 
 ```yaml
 - identity:
-    type: HTTP
+    type: HTTP/v1
     hostname: downloads.example.com
   credentials:
     - type: HTTPCredentials/v1
@@ -291,7 +291,7 @@ request goes out unauthenticated, so the symptom is a `401` from the server rath
 
 ```yaml
 - identity:
-    type: HTTP
+    type: HTTP/v1
     hostname: api.example.com
     scheme: https
     path: artifacts/*
@@ -304,7 +304,7 @@ request goes out unauthenticated, so the symptom is a `401` from the server rath
 
 ```yaml
 - identity:
-    type: HTTP
+    type: HTTP/v1
     hostname: artifacts.internal
     scheme: https
     port: "8443"
@@ -417,7 +417,7 @@ Two results of this are specific to S3:
   bucket, use `**` (`acme-artifacts/**`), or omit `path` and scope the entry another way.
 
 {{< callout context="caution" >}}
-Write the identity type as `type: S3`. OCM matches the type as an exact string, and the type is **unversioned**.
+Write the identity type as `type: S3/v1`. OCM matches the type as an exact string, and the type is **unversioned**.
 `S3/v2` (the name of the
 [access and input type]({{< relref "input-and-access-types.md#s3v2-access" >}})) does not match.
 
@@ -432,7 +432,7 @@ identity configuration error.
 
 ```yaml
 - identity:
-    type: S3
+    type: S3/v1
     path: public-bucket/path/to/object
   credentials:
     - type: S3Credentials/v1
@@ -443,7 +443,7 @@ identity configuration error.
 
 ```yaml
 - identity:
-    type: S3
+    type: S3/v1
   credentials:
     - type: S3Credentials/v1
       accessKeyId: <access-key-id>
@@ -454,7 +454,7 @@ identity configuration error.
 
 ```yaml
 - identity:
-    type: S3
+    type: S3/v1
     path: acme-artifacts/datasets/reference/1.0.0/reference.parquet
   credentials:
     - type: S3Credentials/v1
@@ -467,7 +467,7 @@ identity configuration error.
 
 ```yaml
 - identity:
-    type: S3
+    type: S3/v1
     scheme: https
     hostname: minio.internal
     port: "9000"
@@ -490,7 +490,7 @@ The identity type is `S3` in OCM v1 and in OCM v2, but three other things change
 ```yaml
 # OCM v1
 - identity:
-    type: S3
+    type: S3/v1
     pathprefix: acme-artifacts/datasets
   credentials:
     - type: Credentials
@@ -502,7 +502,7 @@ The identity type is `S3` in OCM v1 and in OCM v2, but three other things change
 ```yaml
 # OCM v2
 - identity:
-    type: S3
+    type: S3/v1
     path: acme-artifacts/datasets/**
   credentials:
     - type: S3Credentials/v1
@@ -842,7 +842,7 @@ configurations:
     consumers:
       # OCI registry — hostname catch-all
       - identity:
-          type: OCIRegistry
+          type: OCIRegistry/v1
           hostname: ghcr.io
         credentials:
           - type: OCICredentials/v1

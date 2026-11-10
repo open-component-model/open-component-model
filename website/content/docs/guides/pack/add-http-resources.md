@@ -219,7 +219,7 @@ That writes a single file you can inspect or unpack with `tar -tf ./ocm-cli.tar`
 
 The release asset above is public. When accessing the URL requires authentication (an artifact repository, or a private
 GitHub asset), [configure credentials]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) of type `HTTPCredentials/v1` instead of putting them in the specification. OCM matches them to the request
-by a consumer identity of type `HTTP` derived from the URL.
+by a consumer identity of type `HTTP/v1` derived from the URL.
 Another silent cause: an entry that sets only certificateAuthority without certificate. In OCM v2, certificateAuthority is only evaluated alongside a client certificate. It is not applied for server-side certificate verification on its own.
 
 Write the credentials to `.ocmconfig`:
@@ -231,7 +231,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: HTTP
+          type: HTTP/v1
           hostname: downloads.example.com
           scheme: https
         credentials:
@@ -397,7 +397,7 @@ OCM v2 does **not** guess the media type from the file extension in the URL. OCM
 ## Authentication {#authentication}
 
 Credentials are resolved through OCM's normal [credential system]({{< relref "docs/concepts/credential-system.md" >}}). Never add authentication to a URL directly. OCM
-builds a [consumer identity]({{< relref "docs/reference/configuration/credential-consumer-identities.md#wget" >}}) of type `HTTP` from
+builds a [consumer identity]({{< relref "docs/reference/configuration/credential-consumer-identities.md#wget" >}}) of type `HTTP/v1` from
 the URL and uses the matching consumer entry's credentials for the request. Because the input type and the access type
 build that identity the same way, one entry will work for both, building the component version, and downloading the resource.
 For how identities are matched and resolved, see [Understand Credential Resolution]({{< relref "docs/concepts/credential-resolution.md" >}}).
@@ -507,7 +507,7 @@ Identity matching has been updated.
 
 | Field             | OCM v1                             | OCM v2             | What to do                                                                               |
 |-------------------|------------------------------------|--------------------|------------------------------------------------------------------------------------------|
-| Consumer identity | `type: wget`                       | `type: HTTP`       | Rename the type (`Wget` also works).                                                     |
+| Consumer identity | `type: wget`                       | `type: HTTP/v1`    | Rename the type (`Wget` also works).                                                     |
 | Identity path     | `pathprefix`, longest-prefix match | `path`, glob match | Rename the attribute. `*` matches one path segment, `**` any depth; omit `path` for all. |
 
 Further matching changes:
@@ -548,7 +548,7 @@ needs an explicit `mediaType`.
 
 ### `401 Unauthorized` right after migrating from OCM v1
 
-**Why:** Two identity attributes were renamed. `type: wget` MUST become `type: HTTP` (the legacy `Wget` spelling also
+**Why:** Two identity attributes were renamed. `type: wget` MUST become `type: HTTP/v1` (the legacy `Wget` spelling also
 works), and `pathprefix` is replaced by `path`. OCM v2 still converts `pathprefix` into `path` patterns.
 
 **Fix:** Rename the type and replace `pathprefix` with `path`. Omitting `path` matches every path on the host. See
@@ -590,7 +590,7 @@ isn't, the content changed.
 - [Reference: Resource Repositories]({{< relref "docs/reference/resource-repositories.md" >}}) - Capabilities,
   credential resolution, and digest processing of the Wget resource repository
 - [Reference: Credential Consumer Identities]({{< relref "docs/reference/configuration/credential-consumer-identities.md#wget" >}}) -
-  Identity attributes and matching rules for `HTTP` consumers
+  Identity attributes and matching rules for `HTTP/v1` consumers
 - [Reference: Credential Types]({{< relref "docs/reference/configuration/credential-types.md#wgetcredentialsv1" >}}) - Full field
   reference for `WgetCredentials/v1`
 - [Reference: HTTP Client Configuration]({{< relref "docs/reference/configuration/http-client.md" >}}) - Timeouts,
