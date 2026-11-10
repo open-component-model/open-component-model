@@ -107,3 +107,22 @@ test("a failed registry scrape is no value, not 0", () => {
   assert.match(table, /^\| Drift: registry requests \| 100 \| n\/a \| n\/a \|$/m);
   assert.match(table, /^\| Registry requests \| 44000 \| n\/a \| n\/a \|$/m);
 });
+
+test("registry requests group by handler and method whatever the other labels", () => {
+  const extra = complexResult(100, 100);
+  extra.drift.registryCounters = {
+    'registry_http_requests_total{code="200",handler="manifest",method="head",zone="a"}': 60,
+    'registry_http_requests_total{code="200",handler="manifest",method="head",zone="b"}': 40,
+  };
+  const table = renderTable([extra], [extra], "main");
+
+  assert.match(table, /^\| Drift: registry manifest head \| 100 \| 100 \| 0% \|$/m);
+});
+
+test("a failed registry scrape is no value in the handler rows", () => {
+  const failed = complexResult(100, 0);
+  delete failed.drift.registryCounters;
+  const table = renderTable([failed, complexResult(100, 100)], [failed], "main");
+
+  assert.match(table, /^\| Drift: registry manifest head \| 100 \| n\/a \| n\/a \|$/m);
+});

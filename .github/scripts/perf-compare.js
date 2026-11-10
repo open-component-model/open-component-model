@@ -59,20 +59,25 @@ function activeControllers(results) {
   return [...names].sort();
 }
 
-const registryRequest = /^registry_http_requests_total\{.*handler="(.+)",method="(.+)"\}$/;
-
 /**
- * Registry requests by handler and method, summed over status codes.
+ * Registry requests by handler and method, summed over every other label.
  *
  * @param {any} window - A result or its drift block.
- * @returns {Map<string, number>} keyed by "handler method".
+ * @returns {Map<string, number> | undefined} keyed by "handler method"; undefined when the registry scrape failed.
  */
 function registryRequests(window) {
+  if (!window.registryCounters) {
+    return undefined;
+  }
   const sums = new Map();
-  for (const [key, value] of Object.entries(window.registryCounters ?? {})) {
-    const match = key.match(registryRequest);
-    if (match) {
-      const name = `${match[1]} ${match[2]}`;
+  for (const [key, value] of Object.entries(window.registryCounters)) {
+    if (!key.startsWith("registry_http_requests_total{")) {
+      continue;
+    }
+    const handler = key.match(/[{,]handler="([^"]*)"/);
+    const method = key.match(/[{,]method="([^"]*)"/);
+    if (handler && method) {
+      const name = `${handler[1]} ${method[1]}`;
       sums.set(name, (sums.get(name) ?? 0) + value);
     }
   }
@@ -88,7 +93,7 @@ function registryRequests(window) {
 function activeRegistryRequests(windows) {
   const names = new Set();
   for (const window of windows) {
-    for (const [name, value] of registryRequests(window)) {
+    for (const [name, value] of registryRequests(window) ?? []) {
       if (value > 0) {
         names.add(name);
       }
@@ -159,7 +164,10 @@ function driftRows(results) {
     { label: "Drift: registry requests", value: ofDrift((d) => d.usage.registryRequests) },
     ...activeRegistryRequests(drifts).map((name) => ({
       label: `Drift: registry ${name}`,
-      value: ofDrift((d) => registryRequests(d).get(name) ?? 0),
+      value: (/** @type {any} */ r) => {
+        const requests = r.drift && registryRequests(r.drift);
+        return requests ? (requests.get(name) ?? 0) : undefined;
+      },
     })),
     ...activeControllers(drifts).map((c) => ({
       label: `Drift: ${c}: reconciles`,
