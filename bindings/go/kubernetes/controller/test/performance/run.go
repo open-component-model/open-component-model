@@ -28,57 +28,60 @@ var pipelineGVKs = []schema.GroupVersionKind{
 
 // runner runs the benchmark invocation: every object count, every repeat.
 type runner struct {
-	c      *cluster
-	opts   options
-	outDir string
+	cluster *cluster
+	opts    options
+	outDir  string
 }
 
 // run is one benchmark run: one workload, measured phase by phase.
 type run struct {
 	*runner
-	w workload
-	// pub is one per run: the image digests pushed for the rollout are needed again by later phases.
-	pub *publisher
-	// tmp is where the publisher stages component versions, removed by close.
-	tmp  string
-	pod  *corev1.Pod
-	objs []client.Object
-	log  *slog.Logger
-	dir  string
+	workload workload
+	// publisher is one per run: the image digests pushed for the rollout are needed again by later phases.
+	publisher *publisher
+	// tempDir is where the publisher stages component versions, removed by close.
+	tempDir string
+	// controllerPod is the pod measured; a different one later means the controller restarted.
+	controllerPod *corev1.Pod
+	// objectsToCreate are the run's objects, created by the rollout.
+	objectsToCreate []client.Object
+	log             *slog.Logger
+	// resultDir holds result.json and a directory of raw data per phase.
+	resultDir string
 }
 
 // runOnce sets up a run, measures its phases in order until one does not complete, and cleans up.
 func (r *runner) runOnce(ctx context.Context, objects, repeat int) (*result, error) {
-	ru, err := r.newRun(ctx, objects, repeat)
+	benchRun, err := r.newRun(ctx, objects, repeat)
 	if err != nil {
 		return nil, err
 	}
-	defer ru.close()
-	res := ru.result(repeat)
+	defer benchRun.close()
+	res := benchRun.result(repeat)
 
-	if err := r.c.createNamespace(ctx, ru.w.namespace, ru.w.runID); err != nil {
+	if err := r.cluster.createNamespace(ctx, benchRun.workload.namespace, benchRun.workload.runID); err != nil {
 		return nil, fmt.Errorf("creating namespace: %w", err)
 	}
 	if !r.opts.keepNamespaces {
-		defer ru.cleanup(context.WithoutCancel(ctx))
+		defer benchRun.cleanup(context.WithoutCancel(ctx))
 	}
 
-	for _, p := range ru.phases() {
-		m, err := ru.measure(ctx, p)
+	for _, p := range benchRun.phases() {
+		measured, err := benchRun.measure(ctx, p)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", p.name, err)
 		}
-		res.Phases = append(res.Phases, m.phaseResult)
+		res.Phases = append(res.Phases, measured.phaseResult)
 		// Written after every phase, so a later failure keeps what was measured.
-		if err := errors.Join(m.raw.write(filepath.Join(ru.dir, p.name)), writeJSON(filepath.Join(ru.dir, "result.json"), res)); err != nil {
+		if err := errors.Join(measured.raw.write(filepath.Join(benchRun.resultDir, p.name)), writeJSON(filepath.Join(benchRun.resultDir, "result.json"), res)); err != nil {
 			return nil, err
 		}
-		if !m.Outcome.complete() {
-			ru.log.Warn("skipping the remaining phases", "after", p.name)
+		if !measured.Outcome.complete() {
+			benchRun.log.Warn("skipping the remaining phases", "after", p.name)
 			break
 		}
 	}
-	ru.log.Info("run finished", "phases", len(res.Phases))
+	benchRun.log.Info("run finished", "phases", len(res.Phases))
 	return res, nil
 }
 
@@ -89,8 +92,8 @@ func (r *runner) newRun(ctx context.Context, objects, repeat int) (_ *run, err e
 	w := newWorkload(objects, runID, r.opts.clusterRegistryURL)
 	w.versions, w.depth, w.resources = r.opts.versions, r.opts.depth, r.opts.resources
 	w.repositoryCount, w.sign = r.opts.repositories, r.opts.sign
-	ru := &run{runner: r, w: w, log: slog.With("run", runID), dir: filepath.Join(r.outDir, runID)}
-	if err := os.MkdirAll(ru.dir, 0o750); err != nil {
+	benchRun := &run{runner: r, workload: w, log: slog.With("run", runID), resultDir: filepath.Join(r.outDir, runID)}
+	if err := os.MkdirAll(benchRun.resultDir, 0o750); err != nil {
 		return nil, err
 	}
 
@@ -99,44 +102,44 @@ func (r *runner) newRun(ctx context.Context, objects, repeat int) (_ *run, err e
 		if sgn, err = newSigner(); err != nil {
 			return nil, err
 		}
-		ru.w.publicKeyPEM = sgn.publicKeyPEM
+		benchRun.workload.publicKeyPEM = sgn.publicKeyPEM
 	}
-	if ru.tmp, err = os.MkdirTemp("", "ocm-perf-"); err != nil {
+	if benchRun.tempDir, err = os.MkdirTemp("", "ocm-perf-"); err != nil {
 		return nil, err
 	}
 	defer func() {
 		if err != nil {
-			ru.close()
+			benchRun.close()
 		}
 	}()
-	if ru.pub, err = newPublisher(r.opts.registryURL, ru.tmp, sgn); err != nil {
+	if benchRun.publisher, err = newPublisher(r.opts.registryURL, benchRun.tempDir, sgn); err != nil {
 		return nil, err
 	}
 
 	if r.opts.restartController {
-		ru.log.Info("restarting controller")
-		if err := r.c.restartController(ctx, r.opts.timeout); err != nil {
+		benchRun.log.Info("restarting controller")
+		if err := r.cluster.restartController(ctx, r.opts.timeout); err != nil {
 			return nil, fmt.Errorf("restarting controller: %w", err)
 		}
 	}
-	if ru.pod, err = r.c.controllerPod(ctx); err != nil {
+	if benchRun.controllerPod, err = r.cluster.controllerPod(ctx); err != nil {
 		return nil, err
 	}
-	if ru.objs, err = ru.w.objectsToCreate(); err != nil {
+	if benchRun.objectsToCreate, err = benchRun.workload.objectsToCreate(); err != nil {
 		return nil, err
 	}
-	return ru, nil
+	return benchRun, nil
 }
 
 // close removes what the run kept on the local disk.
 func (r *run) close() {
-	_ = os.RemoveAll(r.tmp)
+	_ = os.RemoveAll(r.tempDir)
 }
 
 func (r *run) result(repeat int) *result {
 	return &result{
-		Objects: r.w.objects, Repeat: repeat, RunID: r.w.runID, StartedAt: time.Now().UTC(),
-		Versions: r.w.versions, Depth: r.w.depth, Resources: r.w.resources, Repositories: r.w.repositories(), Signed: r.w.sign,
+		Objects: r.workload.objects, Repeat: repeat, RunID: r.workload.runID, StartedAt: time.Now().UTC(),
+		Versions: r.workload.versions, Depth: r.workload.depth, Resources: r.workload.resources, Repositories: r.workload.repositories(), Signed: r.workload.sign,
 		Environment: r.environment(),
 	}
 }
@@ -146,7 +149,7 @@ func (r *run) result(repeat int) *result {
 func (r *run) cleanup(ctx context.Context) {
 	r.log.Info("cleaning up")
 	start := time.Now()
-	if err := r.c.deleteNamespace(ctx, r.w.namespace, r.opts.timeout); err != nil {
+	if err := r.cluster.deleteNamespace(ctx, r.workload.namespace, r.opts.timeout); err != nil {
 		r.log.Error("deleting namespace", "error", err)
 	}
 	r.log.Info("cleaned up", "duration", time.Since(start))
@@ -159,7 +162,7 @@ func (r *run) notReady(ctx context.Context) (map[string]int, error) {
 	for _, gvk := range pipelineGVKs {
 		list := &unstructured.UnstructuredList{}
 		list.SetGroupVersionKind(gvk.GroupVersion().WithKind(gvk.Kind + "List"))
-		if err := r.c.client.List(ctx, list, client.InNamespace(r.w.namespace), client.MatchingLabels{runLabel: r.w.runID}); err != nil {
+		if err := r.cluster.client.List(ctx, list, client.InNamespace(r.workload.namespace), client.MatchingLabels{runLabel: r.workload.runID}); err != nil {
 			return counts, fmt.Errorf("listing %s: %w", gvk.Kind, err)
 		}
 		for i := range list.Items {
@@ -178,15 +181,15 @@ func (r *run) notReady(ctx context.Context) (map[string]int, error) {
 }
 
 func (r *run) environment() environment {
-	env := environment{Node: r.pod.Spec.NodeName, KubernetesVersion: r.c.serverVersion(), ControllerPod: r.pod.Name}
-	for _, c := range r.pod.Spec.Containers {
+	env := environment{Node: r.controllerPod.Spec.NodeName, KubernetesVersion: r.cluster.serverVersion(), ControllerPod: r.controllerPod.Name}
+	for _, c := range r.controllerPod.Spec.Containers {
 		if c.Name == managerContainer {
 			env.ControllerImage = c.Image
 			env.ControllerArgs = c.Args
 			env.ControllerResources = c.Resources
 		}
 	}
-	for _, cs := range r.pod.Status.ContainerStatuses {
+	for _, cs := range r.controllerPod.Status.ContainerStatuses {
 		if cs.Name == managerContainer {
 			env.ControllerImageID = cs.ImageID
 		}

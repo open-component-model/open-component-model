@@ -94,7 +94,7 @@ func benchmark() error {
 	}
 	slog.Info("writing results", "dir", outDir)
 
-	r := &runner{c: c, opts: opts, outDir: outDir}
+	r := &runner{cluster: c, opts: opts, outDir: outDir}
 	var results []*result
 	for _, n := range opts.sizes {
 		for rep := 1; rep <= opts.repeats; rep++ {

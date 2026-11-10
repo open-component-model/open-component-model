@@ -20,18 +20,18 @@ func (r *run) measure(ctx context.Context, p phase) (*measurement, error) {
 		return nil, err
 	}
 
-	tr, err := startTracker(ctx, r.c, r.w, p.watch, p.until, r.w.objects)
+	tr, err := startTracker(ctx, r.cluster, r.workload, p.watch, p.until, r.workload.objects)
 	if err != nil {
 		return nil, err
 	}
 	defer tr.stop()
-	meter, err := startMeter(ctx, r.c, r.pod, r.opts.sampleInterval)
+	meter, err := startMeter(ctx, r.cluster, r.controllerPod, r.opts.sampleInterval)
 	if err != nil {
 		return nil, err
 	}
 	defer meter.stop()
 
-	r.log.Info("measuring", "phase", p.name, "watch", p.watch.Kind, "objects", r.w.objects)
+	r.log.Info("measuring", "phase", p.name, "watch", p.watch.Kind, "objects", r.workload.objects)
 	start := tr.markStart()
 	if err := p.change(ctx); err != nil {
 		return nil, err
@@ -46,7 +46,7 @@ func (r *run) measure(ctx context.Context, p phase) (*measurement, error) {
 	}
 
 	sum := tr.summary()
-	out := newOutcome(sum, r.w.objects, done, drained, r.c.restartedSince(ctx, r.pod))
+	out := newOutcome(sum, r.workload.objects, done, drained, r.cluster.restartedSince(ctx, r.controllerPod))
 	if out.TimedOut {
 		if out.NotReady, err = r.notReady(ctx); err != nil {
 			errs = append(errs, err.Error())

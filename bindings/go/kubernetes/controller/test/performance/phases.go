@@ -45,7 +45,7 @@ func (r *run) rollout() phase {
 	return phase{
 		name: "rollout",
 		prepare: func(ctx context.Context) error {
-			if err := r.pub.publishImages(ctx, r.w.imagePool()); err != nil {
+			if err := r.publisher.publishImages(ctx, r.workload.imagePool()); err != nil {
 				return err
 			}
 			return r.publish(ctx, rolloutRelease)
@@ -86,19 +86,19 @@ func (r *run) update() phase {
 // publish pushes a release. Each phase publishes its own in its own prepare: a release
 // published earlier would change what the phases before it select and list.
 func (r *run) publish(ctx context.Context, rel release) error {
-	cvs, err := r.w.componentVersions(rel)
+	cvs, err := r.workload.componentVersions(rel)
 	if err != nil {
 		return err
 	}
 	r.log.Info("publishing component versions", "release", rel.version(), "count", len(cvs))
-	return r.pub.publish(ctx, cvs)
+	return r.publisher.publish(ctx, cvs)
 }
 
 // create applies the Repositories, the signing Secret and the deployer RBAC first, then
 // everything else in parallel, the way a GitOps tool would apply a directory.
 func (r *run) create(ctx context.Context) error {
 	var first, rest []client.Object
-	for _, obj := range r.objs {
+	for _, obj := range r.objectsToCreate {
 		switch obj.(type) {
 		case *v1alpha1.Repository, *corev1.Secret, *corev1.ServiceAccount, *rbacv1.Role, *rbacv1.RoleBinding:
 			first = append(first, obj)
@@ -108,7 +108,7 @@ func (r *run) create(ctx context.Context) error {
 	}
 	for _, batch := range [][]client.Object{first, rest} {
 		if err := forEach(ctx, batch, func(ctx context.Context, obj client.Object) error {
-			if err := r.c.client.Create(ctx, obj); err != nil {
+			if err := r.cluster.client.Create(ctx, obj); err != nil {
 				return fmt.Errorf("creating %s: %w", obj.GetName(), err)
 			}
 			return nil
@@ -121,9 +121,9 @@ func (r *run) create(ctx context.Context) error {
 
 func (r *run) driftConfigMaps(ctx context.Context) error {
 	patch := client.RawPatch(types.MergePatchType, fmt.Appendf(nil, `{"data":{"version":%q}}`, driftedVersion))
-	return forEach(ctx, r.w.configMaps(), func(ctx context.Context, key client.ObjectKey) error {
+	return forEach(ctx, r.workload.configMaps(), func(ctx context.Context, key client.ObjectKey) error {
 		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: key.Name, Namespace: key.Namespace}}
-		if err := r.c.client.Patch(ctx, cm, patch); err != nil {
+		if err := r.cluster.client.Patch(ctx, cm, patch); err != nil {
 			return fmt.Errorf("drifting %s: %w", key, err)
 		}
 		return nil
@@ -133,12 +133,12 @@ func (r *run) driftConfigMaps(ctx context.Context) error {
 // patchComponents sets the version constraint of every Component.
 func (r *run) patchComponents(ctx context.Context, semver string) error {
 	patch := client.RawPatch(types.MergePatchType, fmt.Appendf(nil, `{"spec":{"semver":%q}}`, semver))
-	components := make([]*v1alpha1.Component, r.w.objects)
+	components := make([]*v1alpha1.Component, r.workload.objects)
 	for i := range components {
-		components[i] = r.w.component(i)
+		components[i] = r.workload.component(i)
 	}
 	return forEach(ctx, components, func(ctx context.Context, c *v1alpha1.Component) error {
-		if err := r.c.client.Patch(ctx, c, patch); err != nil {
+		if err := r.cluster.client.Patch(ctx, c, patch); err != nil {
 			return fmt.Errorf("updating %s: %w", c.Name, err)
 		}
 		return nil
