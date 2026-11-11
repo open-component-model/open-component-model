@@ -84,13 +84,17 @@ flowchart TD
     Promote --> WebsiteDocs[create_website_update_pr<br/>open docs PR to main<br/>pin Hugo module imports to website/v0.X.Y]
     PubCompFinal --> End([Final release live])
     WebsiteDocs --> End
+    PubCompRC --> NotifyMailRC[notify_release_mail_rc<br/>dispatch release-mail-notification on main]
+    PubCompRC --> NotifyZulipRC[notify_release_rc<br/>dispatch release-zulip-notification on main]
+    PubCompFinal --> NotifyMailF[notify_release_mail<br/>dispatch release-mail-notification on main]
+    PubCompFinal --> NotifyZulipF[notify_release<br/>dispatch release-zulip-notification on main]
 
     classDef rc fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e
     classDef final fill:#dcfce7,stroke:#16a34a,color:#14532d
     classDef gate fill:#fef3c7,stroke:#d97706,color:#78350f
 
-    class Prepare,TagRC,Pipeline,ReleaseRC,PubCompRC,BuildCLI,BuildCtl,Conf,PubCLI,PubCtl rc
-    class Verify,Promote,PubCompFinal,WebsiteDocs final
+    class Prepare,TagRC,Pipeline,ReleaseRC,PubCompRC,BuildCLI,BuildCtl,Conf,PubCLI,PubCtl,NotifyMailRC,NotifyZulipRC rc
+    class Verify,Promote,PubCompFinal,WebsiteDocs,NotifyMailF,NotifyZulipF final
     class Gate gate
 ```
 
@@ -110,6 +114,26 @@ The website integrates into the same workflow run, after `promote_and_release_fi
 * When more than 10 minors would be live, the oldest is retired (entry removed from `hugo.yaml`, imports removed from `module.yaml`). Retirement logic lives in `website/scripts/register-docs-version.js`.
 
 There is no `website/v0.X.Y-rc.N` tag. The website has no RC artifacts to validate (it's a docs site, not a binary or image), so the RC variant would have no consumer.
+
+### Release notifications
+
+After each RC and each final release, the release workflow dispatches two independent notification jobs:
+
+- `notify_release_rc` / `notify_release` — post to the Zulip channel (unchanged).
+- `notify_release_mail_rc` / `notify_release_mail` — update the mailing-list RSS feed.
+
+The mailing-list job dispatches `release-mail-notification.yml` on `main` via `gh workflow run`. That workflow downloads all paginated GitHub releases, generates a deterministic `releases.xml` feed containing every canonical RC and final release since `2026-11-11T00:00:00Z`, and commits it to `gh-pages:releases.xml` using the OCMBot app token. `https://ocm.software/releases.xml` is then served by GitHub Pages. Groups.io polls that URL at :05 and :35 and creates one mailing-list post per newly discovered item; no email is sent directly by the workflow.
+
+**If a dispatch is missed** (branch without the backported hook, or a flaked run), refresh the feed manually:
+
+```bash
+gh workflow run release-mail-notification.yml \
+  --repo open-component-model/open-component-model --ref main
+```
+
+This is safe to rerun: if the feed bytes are unchanged, no commit is made and no new announcement is queued.
+
+**List configuration** is managed by the `ocm-announcements` list owner at `https://lists.neonephos.org/g/ocm-announcements` (Admin → Preferences → Integrations). The list owner contact is recorded in [ocm-project#1181](https://github.com/open-component-model/ocm-project/issues/1181). To pause announcements without reverting the feed, enable moderation on the feed integration in the Groups.io admin UI.
 
 ## OCM components produced
 

@@ -1,0 +1,74 @@
+name: "Release Mailing List Notification"
+
+# Publishes a canonical-release-only RSS feed to gh-pages:releases.xml.
+# Groups.io polls https://ocm.software/releases.xml and delivers one mailing-list
+# post per newly discovered item. This workflow sends no email directly.
+#
+# Standalone + re-triggerable: dispatched by release.yml after each RC and final
+# publication, and runnable by hand to recover a missed dispatch or to seed the
+# feed for the first time. Always dispatched on main so the logic runs from the
+# current revision.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-publish-site
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  publish_release_feed:
+    name: Publish Release Feed
+    runs-on: ubuntu-26.04-arm
+    environment:
+      name: automation
+      deployment: false
+
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Get OCMBot installation token
+        id: generate_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: website/package.json
+
+      - name: Generate release feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --paginate --slurp \
+            "repos/open-component-model/open-component-model/releases?per_page=100" \
+            > "$RUNNER_TEMP/ocm-releases.json"
+          node website/scripts/generate-release-feed.js \
+            --input "$RUNNER_TEMP/ocm-releases.json" \
+            --output "$RUNNER_TEMP/releases.xml" \
+            --since 2026-11-11T00:00:00Z
+
+      - name: Publish feed to gh-pages
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        with:
+          github-token: ${{ steps.generate_token.outputs.token }}
+          script: |
+            const { publishReleaseFeed } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/release-feed-publication.js`);
+            await publishReleaseFeed({ github, context, core }, process.env.RUNNER_TEMP + "/releases.xml");

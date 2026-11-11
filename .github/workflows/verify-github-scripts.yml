@@ -6,12 +6,16 @@ on:
       - main
     paths:
       - '.github/workflows/verify-github-scripts.yml'
+      - '.github/workflows/release-mail-notification.yml'
+      - '.github/workflows/website-publish-site.yaml'
       - '.github/scripts/**'
   pull_request:
     branches:
       - main
     paths:
       - '.github/workflows/verify-github-scripts.yml'
+      - '.github/workflows/release-mail-notification.yml'
+      - '.github/workflows/website-publish-site.yaml'
       - '.github/scripts/**'
 
 permissions:

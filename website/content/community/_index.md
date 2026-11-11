@@ -37,9 +37,12 @@ If you aren't already a member in the Kubernetes Slack workspace, please request
 
 Join [neonephos-ocm-support](https://linuxfoundation.zulipchat.com/#narrow/channel/532975-neonephos-ocm-support) on the Linux Foundation Zulip instance for technical discussions. Zulip is open to everyone and does not require prior membership. Its threaded conversation model makes it well-suited for longer design discussions and contributor questions.
 
-### RSS Feed
+### RSS Feeds
 
-Stay up to date with the latest OCM blog posts and announcements by subscribing to our [RSS feed](https://ocm.software/blog/index.xml).
+Stay up to date by subscribing to one of the available feeds:
+
+- **Release announcements** — every RC and final release, announced via the [ocm-announcements mailing list](https://lists.neonephos.org/g/ocm-announcements): subscribe there to receive email. You can also subscribe directly to the [release RSS feed](https://ocm.software/releases.xml) in any feed reader.
+- **Blog posts** — follow the latest articles and posts: [blog RSS feed](https://ocm.software/blog/index.xml).
 
 ## Community Calendar
 
