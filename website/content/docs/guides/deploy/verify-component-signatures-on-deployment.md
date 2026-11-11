@@ -303,13 +303,18 @@ The component version does not satisfy OCM's digest consistency rules:
 Configured signatures are always verified; a missing or invalid signature still fails the
 `Component`, `Resource`, or `Deployer`. A separate, stricter rule applies to the resource a
 `Resource` selects: under the default `verificationPolicy: Always` the selected resource must
-record a usable digest, otherwise the `Resource` and any dependent `Deployer` stay NotReady with
-`has no digest to verify`. Set `verificationPolicy: Never` to skip that resource-digest check
-(configured component signatures are still verified).
+record a usable digest. The failure message distinguishes two cases:
 
-**Fix:** Rebuild the component version so the selected resource records a complete digest, re-sign
-it, and publish it. The `ocm sign cv` command warns when a component version is not safely
-digestible.
+- `has no digest to verify`: the digest is missing, empty, or excluded from verification.
+  Rebuild the component version with a usable recorded digest for the selected resource.
+- `has an invalid digest`: the digest is partial, malformed, or uses an unsupported hash
+  algorithm. Correct the digest fields and value, using SHA-256 or SHA-512.
+
+After correcting the descriptor, re-sign it as applicable and publish it. The `ocm sign cv`
+command warns when a component version is not safely digestible.
+
+To explicitly skip the resource-digest check, set `verificationPolicy: Never`; configured
+component signatures are still verified.
 
 ### Symptom: "failed to get Secret" or "secret does not contain supported keys"
 
