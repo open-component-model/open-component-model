@@ -20,9 +20,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/signing"
 )
 
-// ErrNotSafelyDigestible is a sentinel error reported when a component version cannot be safely digested.
-var ErrNotSafelyDigestible = errors.New("not safely digestible")
-
 // resolveOptions contains everything required to fetch and verify a single component version.
 type resolveOptions struct {
 	component  string
@@ -58,15 +55,19 @@ func getComponentVersion(ctx context.Context, opts resolveOptions) (*descriptor.
 	case opts.digest != nil:
 		return compareDigest(ctx, desc, opts.digest)
 	case len(opts.verifications) > 0:
-		// If verifications are requested, we need to verify that the component version is safely digestible.
-		// TODO(Skarlso): This contradicts a bit with our config now. Wondering if we should still leave this be.
-		// Weak digest hashes fail IsSafelyDigestible only with GODEBUG=fips140=only; otherwise they are logged.
-		if err := signing.ValidateDigestHashAlgorithms(&desc.Component); err != nil && !signing.DigestHashAlgorithmsEnforced() {
+		// Requested signatures are always verified. Digest completeness is advisory: an incomplete
+		// descriptor is logged, never a reason to skip signature verification. A weak digest hash is
+		// only a hard failure under GODEBUG=fips140=only, matching the CLI's VerifyComponentVersion gate.
+		if err := signing.ValidateDigestHashAlgorithms(&desc.Component); err != nil {
+			if signing.DigestHashAlgorithmsEnforced() {
+				return nil, fmt.Errorf("refusing to verify component version with GODEBUG=fips140=only: %w", err)
+			}
 			logger.Info("component version uses a weak digest hash algorithm (GODEBUG=fips140=only rejects it)",
 				"component", opts.component, "version", opts.version, "error", err.Error())
 		}
 		if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
-			return desc, fmt.Errorf("%w: %w", ErrNotSafelyDigestible, err)
+			slog.New(logr.ToSlogHandler(logger)).WarnContext(ctx, "component version is not considered safely digestible",
+				"component", opts.component, "version", opts.version, "error", err.Error())
 		}
 
 		if opts.signingRegistry == nil {

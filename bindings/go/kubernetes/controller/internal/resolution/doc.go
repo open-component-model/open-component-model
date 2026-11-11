@@ -44,10 +44,8 @@
 //
 // # Error Handling
 //
-// Controllers must handle one sentinel error from GetComponentVersion:
-//
-//   - [ErrNotSafelyDigestible]: the component was resolved but cannot be digested.
-//     The descriptor is still returned alongside the error.
-//
-// All other errors indicate resolution failure (network, verification mismatch, etc.).
+// GetComponentVersion verifies requested signatures unconditionally. A component version that is not
+// safely digestible (incomplete resource/reference digests) is logged, never a reason to skip
+// signature verification. Any non-nil error indicates resolution or verification failure (network,
+// missing/invalid signature, digest mismatch, etc.); the returned descriptor must not be consumed.
 package resolution

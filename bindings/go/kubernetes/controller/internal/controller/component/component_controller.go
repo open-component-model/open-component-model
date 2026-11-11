@@ -25,7 +25,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha3"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
@@ -311,16 +310,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	desc, err := r.Resolver.GetComponentVersion(ctx, resolveOpts,
 		resolution.Verification{Verifications: verifications},
 		component.Spec.Component, version)
-	switch {
-	case errors.Is(err, resolution.ErrNotSafelyDigestible):
-		// Ignore error, but log event
-		event.New(r.EventRecorder, component, nil, v1alpha1.EventSeverityError, "%s", err.Error())
-	default:
-		if err != nil {
-			status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, component, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
-			return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
-		}
+		return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
 	}
 
 	// The status digest only detects changes (replication re-transfers on a new

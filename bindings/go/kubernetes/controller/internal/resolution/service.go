@@ -73,8 +73,10 @@ func (r *Resolver) RepositoryResolver(ctx context.Context, opts *Options) (resol
 	return resolved.resolver, nil
 }
 
-// GetComponentVersion fetches a component version and verifies it as requested.
-// A component version that is not safely digestible is returned together with an ErrNotSafelyDigestible error.
+// GetComponentVersion fetches a component version and verifies it as requested. Requested signatures are
+// always verified; an incomplete (not safely digestible) descriptor is logged, not a reason to skip
+// verification. A non-nil error means resolution or verification failed and the descriptor must not be
+// consumed.
 func (r *Resolver) GetComponentVersion(ctx context.Context, opts *Options, verify Verification, component, version string) (*descriptor.Descriptor, error) {
 	resolved, err := r.provider(ctx, opts)
 	if err != nil {

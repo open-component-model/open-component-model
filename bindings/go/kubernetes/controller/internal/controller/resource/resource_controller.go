@@ -25,7 +25,6 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
@@ -313,16 +312,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		resolution.Verification{Verifications: verifications},
 		component.Status.Component.Component,
 		component.Status.Component.Version)
-	switch {
-	case errors.Is(err, resolution.ErrNotSafelyDigestible):
-		// Ignore error, but log event
-		event.New(r.EventRecorder, resource, nil, v1alpha1.EventSeverityError, "%s", err.Error())
-	default:
-		if err != nil {
-			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetComponentVersionFailedReason, err.Error())
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetComponentVersionFailedReason, err.Error())
 
-			return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
-		}
+		return ctrl.Result{}, fmt.Errorf("failed to get component version: %w", err)
 	}
 
 	startRetrievingResource := time.Now()
@@ -334,16 +327,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		resource.Spec.Resource.ByReference.ReferencePath,
 		resolveOpts,
 	)
-	switch {
-	case errors.Is(err, resolution.ErrNotSafelyDigestible):
-		// Ignore error, but log event
-		event.New(r.EventRecorder, resource, nil, v1alpha1.EventSeverityError, "%s", err.Error())
-	default:
-		if err != nil {
-			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
 
-			return ctrl.Result{}, fmt.Errorf("failed to resolve reference path: %w", err)
-		}
+		return ctrl.Result{}, fmt.Errorf("failed to resolve reference path: %w", err)
 	}
 
 	resourceIdentity := resource.Spec.Resource.ByReference.Resource
@@ -366,6 +353,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	if resource.Spec.VerificationPolicy != v1alpha1.VerificationPolicyNever {
 		logger.V(1).Info("verifying resource")
+
+		if err = ocm.RequireResourceDigest(matchedResource); err != nil {
+			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
+
+			return ctrl.Result{}, fmt.Errorf("failed to verify resource: %w", err)
+		}
 
 		if ocm.IsLocalResource(matchedResource) {
 			// Local resources are checked against the digest their repository stores them

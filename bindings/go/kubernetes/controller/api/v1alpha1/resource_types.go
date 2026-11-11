@@ -13,13 +13,16 @@ const KindResource = "Resource"
 type VerificationPolicy string
 
 const (
-	// VerificationPolicyAlways verifies the resource digest. Content is checked against what it is
-	// addressed by where possible (an OCI manifest, the digest a local blob is stored under, a Helm
-	// repository index, a checksum a wget server advertises) and downloaded otherwise, e.g. for
-	// git, gitHub and s3 accesses on every reconcile. A resource whose access type no digest
-	// processor supports fails.
+	// VerificationPolicyAlways verifies the resource digest and requires the selected resource to
+	// record a usable digest. Content is checked against what it is addressed by where possible (an
+	// OCI manifest, the digest a local blob is stored under, a Helm repository index, a checksum a
+	// wget server advertises) and downloaded otherwise, e.g. for git, gitHub and s3 accesses on every
+	// reconcile. A resource with a missing or excluded ("NO-DIGEST"/"EXCLUDE-FROM-SIGNATURE") digest,
+	// or whose access type no digest processor supports, fails; the controller never manufactures a
+	// missing digest.
 	VerificationPolicyAlways VerificationPolicy = "Always"
-	// VerificationPolicyNever skips resource digest verification unconditionally.
+	// VerificationPolicyNever skips resource digest verification unconditionally. It does not skip
+	// configured component signature verification.
 	VerificationPolicyNever VerificationPolicy = "Never"
 )
 
@@ -39,9 +42,11 @@ type ResourceSpec struct {
 	OCMConfig []OCMConfiguration `json:"ocmConfig,omitempty"`
 
 	// VerificationPolicy controls when resource digest verification is performed.
-	// Always (default): verify the resource digest, downloading the content only if it cannot be
-	// checked against what it is addressed by; a resource that cannot be verified fails.
-	// Never: skip verification unconditionally.
+	// Always (default): require and verify the selected resource digest, downloading the content only
+	// if it cannot be checked against what it is addressed by; a resource with a missing, excluded, or
+	// unsupported digest fails. The controller does not generate a missing digest.
+	// Never: skip resource digest verification unconditionally; configured component signatures are
+	// still verified.
 	// +kubebuilder:validation:Enum:="Always";"Never"
 	// +kubebuilder:default:="Always"
 	// +optional

@@ -16,6 +16,7 @@ import (
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/repository/integrity"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -88,6 +89,22 @@ func VerifyResource(ctx context.Context, pm *manager.PluginManager, resource *de
 	return digestResource, nil
 }
 
+// RequireResourceDigest enforces the Resource "Always" policy: the selected resource must record a
+// usable digest to verify against. Callers guarantee a non-nil resource. It never mutates res.Digest
+// or manufactures a missing digest; parsing only classifies the recorded digest. An absent, empty, or
+// excluded digest ("NO-DIGEST"/"EXCLUDE-FROM-SIGNATURE") has no verification target; a malformed or
+// partial digest is invalid.
+func RequireResourceDigest(res *descriptor.Resource) error {
+	parsed, err := integrity.ParseDigest(res.Digest)
+	if err != nil {
+		return fmt.Errorf("resource %q has an invalid digest: %w", res.Name, err)
+	}
+	if parsed == "" {
+		return fmt.Errorf("resource %q has no digest to verify, set verificationPolicy Never to skip verification", res.Name)
+	}
+	return nil
+}
+
 // ResolveReferencePath walks a reference path from a parent component version to a final component version.
 // It returns the final descriptor and repository spec.
 // Each referenced component version is integrity-checked against the digest of its reference, if one is set.
@@ -105,7 +122,6 @@ func ResolveReferencePath(
 	}
 
 	currentDesc := parentDesc
-	var errsNotSafelyDigestible error
 	for i, refIdentity := range referencePath {
 		logger.V(1).Info("resolving reference", "step", i+1, "identity", refIdentity)
 
@@ -119,18 +135,14 @@ func ResolveReferencePath(
 			resolution.Verification{Digest: extractDigest(matchedRef)},
 			matchedRef.Component, matchedRef.Version)
 		if err != nil {
-			if !errors.Is(err, resolution.ErrNotSafelyDigestible) {
-				return nil, nil, fmt.Errorf("failed to get referenced component version %s:%s: %w",
-					matchedRef.Component, matchedRef.Version, err)
-			}
-
-			errsNotSafelyDigestible = errors.Join(errsNotSafelyDigestible, err)
+			return nil, nil, fmt.Errorf("failed to get referenced component version %s:%s: %w",
+				matchedRef.Component, matchedRef.Version, err)
 		}
 
 		currentDesc = refDesc
 	}
 
-	return currentDesc, opts.RepositorySpec, errsNotSafelyDigestible
+	return currentDesc, opts.RepositorySpec, nil
 }
 
 func findMatchingReference(desc *descriptor.Descriptor, identity runtime.Identity) *descriptor.Reference {

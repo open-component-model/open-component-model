@@ -168,6 +168,11 @@ func Test_Integration_ResourceVerification(t *testing.T) {
 			Type:     "blob",
 			Relation: descruntime.ExternalRelation,
 			Access:   rawAccess(t, map[string]any{"type": "unknownAccess/v1"}),
+			Digest: &descruntime.Digest{
+				HashAlgorithm:          "SHA-256",
+				NormalisationAlgorithm: descruntime.GenericBlobDigestV1,
+				Value:                  godigest.FromString("content").Encoded(),
+			},
 		},
 		wantMessages: []string{"cannot be verified"},
 	})

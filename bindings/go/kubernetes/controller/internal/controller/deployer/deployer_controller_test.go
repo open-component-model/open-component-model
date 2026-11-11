@@ -215,11 +215,7 @@ stringData:
 						Type:    "plainText",
 						Version: resourceVersion,
 						Access:  apiextensionsv1.JSON{Raw: []byte(`{"type":"localBlob/v1"}`)},
-						Digest: &v2.Digest{
-							HashAlgorithm:          "SHA-256",
-							NormalisationAlgorithm: "genericBlobDigest/v1",
-							Value:                  "test-digest-value",
-						},
+						Digest:  descruntime.ConvertToV2Digest(newRes.Digest),
 					},
 				},
 			)
@@ -261,6 +257,44 @@ stringData:
 			}, gotSec)).To(Succeed())
 			// stringData is converted by API server into data (base64); compare the decoded value.
 			Expect(string(gotSec.Data["password"])).To(Equal("s3cr3t"))
+
+			By("removing the recorded digest from the freshly resolvable descriptor while upstream stays Ready")
+			undigested := *newRes
+			undigested.Digest = nil
+			descNoDigest := &descruntime.Descriptor{
+				Meta: descruntime.Meta{Version: "v2"},
+				Component: descruntime.Component{
+					ComponentMeta: descruntime.ComponentMeta{ObjectMeta: descruntime.ObjectMeta{Name: componentName, Version: componentVersion}},
+					Provider:      descruntime.Provider{Name: "ocm.software"},
+					Resources:     []descruntime.Resource{undigested},
+				},
+			}
+			Expect(repo.AddComponentVersion(ctx, descNoDigest)).To(Succeed())
+
+			By("triggering the Deployer through a Resource status change")
+			oldResource := resourceObj.DeepCopy()
+			resourceObj.Status.Additional = &apiextensionsv1.JSON{Raw: []byte(`{"probe":"digest-removed"}`)}
+			Expect(k8sClient.Status().Patch(ctx, resourceObj, client.MergeFrom(oldResource))).To(Succeed())
+
+			test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, deployerObj, v1alpha1.GetOCMResourceFailedReason, "has no digest to verify")
+
+			By("verifying the previously applied ConfigMap and Secret are retained")
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace.GetName(), Name: "sample-cm"}, gotCM)).To(Succeed())
+			Expect(gotCM.Data).To(Equal(map[string]string{"hello": "world"}))
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace.GetName(), Name: "sample-secret"}, gotSec)).To(Succeed())
+			Expect(gotSec.Data).To(Equal(map[string][]byte{"password": []byte("s3cr3t")}))
+
+			By("restoring the recorded digest and triggering again")
+			Expect(repo.AddComponentVersion(ctx, desc)).To(Succeed())
+			oldResource = resourceObj.DeepCopy()
+			resourceObj.Status.Additional = &apiextensionsv1.JSON{Raw: []byte(`{"probe":"digest-restored"}`)}
+			Expect(k8sClient.Status().Patch(ctx, resourceObj, client.MergeFrom(oldResource))).To(Succeed())
+
+			test.WaitForReadyObject(ctx, k8sClient, deployerObj, map[string]any{})
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace.GetName(), Name: "sample-cm"}, gotCM)).To(Succeed())
+			Expect(gotCM.Data).To(Equal(map[string]string{"hello": "world"}))
+			Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace.GetName(), Name: "sample-secret"}, gotSec)).To(Succeed())
+			Expect(gotSec.Data).To(Equal(map[string][]byte{"password": []byte("s3cr3t")}))
 		})
 
 		It("reconciles a deployer when resource has no digest", func(ctx SpecContext) {
@@ -385,6 +419,11 @@ stringData:
 					},
 				},
 			)
+
+			By("opting the Resource out of digest verification so the no-digest cache path is exercised")
+			oldResourceSpec := resourceObj.DeepCopy()
+			resourceObj.Spec.VerificationPolicy = v1alpha1.VerificationPolicyNever
+			Expect(k8sClient.Patch(ctx, resourceObj, client.MergeFrom(oldResourceSpec))).To(Succeed())
 
 			By("creating a Deployer that references the Resource")
 			deployerObj := &v1alpha1.Deployer{
@@ -865,8 +904,16 @@ data:
 							Version: componentVersion,
 						},
 					},
-					Provider:  descruntime.Provider{Name: "ocm.software"},
-					Resources: []descruntime.Resource{*newRes},
+					Provider: descruntime.Provider{Name: "ocm.software"},
+					Resources: []descruntime.Resource{*newRes, {
+						ElementMeta: descruntime.ElementMeta{ObjectMeta: descruntime.ObjectMeta{Name: "data", Version: resourceVersion}},
+						Type:        "blob",
+						Relation:    descruntime.ExternalRelation,
+						Access: &runtime.Raw{
+							Type: runtime.NewUnversionedType("wget/v1"),
+							Data: []byte(`{"type":"wget/v1","url":"https://example.invalid/data"}`),
+						},
+					}},
 				},
 			}
 
@@ -934,11 +981,7 @@ data:
 						Type:    "plainText",
 						Version: resourceVersion,
 						Access:  apiextensionsv1.JSON{Raw: []byte(`{"type":"localBlob/v1"}`)},
-						Digest: &v2.Digest{
-							HashAlgorithm:          "SHA-256",
-							NormalisationAlgorithm: "genericBlobDigest/v1",
-							Value:                  "verified-cache-test-digest",
-						},
+						Digest:  descruntime.ConvertToV2Digest(newRes.Digest),
 					},
 					EffectiveOCMConfig: []v1alpha1.OCMConfiguration{test.SecretOCMConfiguration(configSecret)},
 				},
@@ -1305,6 +1348,15 @@ data:
 							},
 						},
 					},
+					Resources: []descruntime.Resource{{
+						ElementMeta: descruntime.ElementMeta{ObjectMeta: descruntime.ObjectMeta{Name: "data", Version: componentVersion}},
+						Type:        "blob",
+						Relation:    descruntime.ExternalRelation,
+						Access: &runtime.Raw{
+							Type: runtime.NewUnversionedType("wget/v1"),
+							Data: []byte(`{"type":"wget/v1","url":"https://example.invalid/data"}`),
+						},
+					}},
 					Provider: descruntime.Provider{Name: "ocm.software"},
 				},
 			}
@@ -1436,7 +1488,7 @@ data:
 			Expect(k8sClient.Create(ctx, deployerObj)).To(Succeed())
 
 			By("expecting the Deployer to NOT become ready due to signature verification failure")
-			test.WaitForNotReadyObject(ctx, k8sClient, deployerObj, v1alpha1.GetComponentVersionFailedReason)
+			test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, deployerObj, v1alpha1.GetComponentVersionFailedReason, "signature verification failed")
 
 			By("verifying the ConfigMap was NOT deployed")
 			gotCM := &corev1.ConfigMap{}

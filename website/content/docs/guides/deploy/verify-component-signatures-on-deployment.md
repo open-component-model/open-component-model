@@ -291,22 +291,25 @@ ocm get cv ghcr.io/<your-namespace>//github.com/acme.org/parent-component:1.0.0 
 Look at the `componentReferences:` section and their `digest` fields. To resolve, rebuild the
 parent component version with correct reference digests, re-sign it, and then publish it.
 
-### Symptom: "not safely digestible" event
+### Symptom: "not safely digestible" warning
 
-The `Component` becomes Ready, but a Kubernetes event with severity error is emitted containing
-"not safely digestible".
-
-**Cause:** The component version does not satisfy OCM's digest consistency rules:
+The component version does not satisfy OCM's digest consistency rules:
 
 - Component references must have complete digests (hash algorithm, normalisation algorithm, value)
 - Resources with access must have complete digests
 - Resources without access must not carry a digest
 
-Without consistent digests, signature verification is skipped because the normalised form cannot
-be reliably computed.
+**Behaviour:** Incomplete digests are logged as a warning but never skip signature verification.
+Configured signatures are always verified; a missing or invalid signature still fails the
+`Component`, `Resource`, or `Deployer`. A separate, stricter rule applies to the resource a
+`Resource` selects: under the default `verificationPolicy: Always` the selected resource must
+record a usable digest, otherwise the `Resource` and any dependent `Deployer` stay NotReady with
+`has no digest to verify`. Set `verificationPolicy: Never` to skip that resource-digest check
+(configured component signatures are still verified).
 
-**Fix:** Rebuild the component version with consistent digests, re-sign it, and then publish it.
-The `ocm sign cv` command warns when a component version is not safely digestible.
+**Fix:** Rebuild the component version so the selected resource records a complete digest, re-sign
+it, and publish it. The `ocm sign cv` command warns when a component version is not safely
+digestible.
 
 ### Symptom: "failed to get Secret" or "secret does not contain supported keys"
 

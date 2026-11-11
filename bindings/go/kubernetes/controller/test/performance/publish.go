@@ -270,8 +270,8 @@ func (p *publisher) push(ctx context.Context, repo *oci.Repository, cv component
 
 // sign signs desc and records its digest for the component versions that reference it.
 func (p *publisher) sign(ctx context.Context, desc *descriptor.Descriptor) error {
-	// The controller accepts a descriptor that is not safely digestible without verifying it,
-	// so a missing digest here would turn the signed run into an unsigned one without a trace.
+	// Keep benchmark fixtures complete so referenced components and selected resources can
+	// be integrity-checked; requested signatures are verified even for incomplete descriptors.
 	if err := signing.IsSafelyDigestible(&desc.Component); err != nil {
 		return fmt.Errorf("%s:%s: %w", desc.Component.Name, desc.Component.Version, err)
 	}

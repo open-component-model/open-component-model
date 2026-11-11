@@ -180,9 +180,11 @@ spec:
                 default: Always
                 description: |-
                   VerificationPolicy controls when resource digest verification is performed.
-                  Always (default): verify the resource digest, downloading the content only if it cannot be
-                  checked against what it is addressed by; a resource that cannot be verified fails.
-                  Never: skip verification unconditionally.
+                  Always (default): require and verify the selected resource digest, downloading the content only
+                  if it cannot be checked against what it is addressed by; a resource with a missing, excluded, or
+                  unsupported digest fails. The controller does not generate a missing digest.
+                  Never: skip resource digest verification unconditionally; configured component signatures are
+                  still verified.
                 enum:
                 - Always
                 - Never

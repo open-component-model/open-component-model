@@ -71,7 +71,8 @@ var _ = Describe("Resource Controller", func() {
 			GithubRepoURL string
 			GitRepository string
 			// VerificationPolicy is Never where verifying would download a whole repository
-			// archive (git, GitHub); verification is tested in verification_test.go.
+			// archive (git, GitHub) or where the row only asserts access metadata (helm),
+			// not integrity; digest verification is tested in verification_test.go.
 			VerificationPolicy v1alpha1.VerificationPolicy
 		}
 
@@ -224,6 +225,11 @@ var _ = Describe("Resource Controller", func() {
 									Type:     "ociArtifact",
 									Relation: descruntime.ExternalRelation,
 									Access:   rawAccess,
+									Digest: &descruntime.Digest{
+										HashAlgorithm:          "SHA-256",
+										NormalisationAlgorithm: descruntime.OCIArtifactDigestV1,
+										Value:                  "7a91508d9177f43552b60cfc0182d7c30a84e95bed03854855b3ab29b6a85db2",
+									},
 								},
 							},
 							Provider: descruntime.Provider{Name: "ocm.software"},
@@ -278,7 +284,8 @@ var _ = Describe("Resource Controller", func() {
 				}, ctfPath
 			},
 				&testCase{
-					HELMChart: "podinfo:6.9.1",
+					HELMChart:          "podinfo:6.9.1",
+					VerificationPolicy: v1alpha1.VerificationPolicyNever,
 				},
 			),
 			Entry("GitHub access", func() ([]*descruntime.Descriptor, string) {
@@ -401,6 +408,11 @@ var _ = Describe("Resource Controller", func() {
 									Type:     "ociArtifact",
 									Relation: descruntime.ExternalRelation,
 									Access:   rawAccess,
+									Digest: &descruntime.Digest{
+										HashAlgorithm:          "SHA-256",
+										NormalisationAlgorithm: descruntime.OCIArtifactDigestV1,
+										Value:                  "7a91508d9177f43552b60cfc0182d7c30a84e95bed03854855b3ab29b6a85db2",
+									},
 								},
 							},
 							Provider: descruntime.Provider{Name: "ocm.software"},
@@ -451,6 +463,11 @@ var _ = Describe("Resource Controller", func() {
 										Version: "v1",
 									},
 									ImageReference: "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
+								},
+								Digest: &descruntime.Digest{
+									HashAlgorithm:          "SHA-256",
+									NormalisationAlgorithm: descruntime.OCIArtifactDigestV1,
+									Value:                  "7a91508d9177f43552b60cfc0182d7c30a84e95bed03854855b3ab29b6a85db2",
 								},
 							},
 						},
@@ -1803,6 +1820,11 @@ var _ = Describe("Resource Controller", func() {
 									},
 									ImageReference: "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
 								},
+								Digest: &descruntime.Digest{
+									HashAlgorithm:          "SHA-256",
+									NormalisationAlgorithm: descruntime.OCIArtifactDigestV1,
+									Value:                  "7a91508d9177f43552b60cfc0182d7c30a84e95bed03854855b3ab29b6a85db2",
+								},
 							},
 						},
 						Provider: descruntime.Provider{Name: "ocm.software"},
@@ -1950,6 +1972,11 @@ consumers:
 										Version: "v1",
 									},
 									ImageReference: "ghcr.io/open-component-model/ocm/ocm.software/ocmcli/ocmcli-image:0.24.0",
+								},
+								Digest: &descruntime.Digest{
+									HashAlgorithm:          "SHA-256",
+									NormalisationAlgorithm: descruntime.OCIArtifactDigestV1,
+									Value:                  "7a91508d9177f43552b60cfc0182d7c30a84e95bed03854855b3ab29b6a85db2",
 								},
 							},
 						},
