@@ -697,6 +697,15 @@ html[data-bs-theme="light"] .neonephos-logo--light {
         &:focus-within .ocm-marquee-track {
             animation-play-state: paused;
         }
+
+        // Keyboard navigation: allow the browser to scroll a focused logo into view.
+        // The track moves via transform, not container scroll, so a focused item can
+        // otherwise sit outside the clipped region even though the animation paused.
+        &:focus-within {
+            overflow-x: auto;
+            mask-image: none;
+            -webkit-mask-image: none;
+        }
     }
 }
 

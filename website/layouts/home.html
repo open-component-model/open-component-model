@@ -109,10 +109,10 @@
         </a>
         {{ end }}
         {{ range $i, $e := .Params.adopters }}
-        <a href="{{ .url }}" target="_blank" rel="noopener noreferrer" class="ocm-marquee-item" aria-hidden="true" tabindex="-1">
+        <span class="ocm-marquee-item" aria-hidden="true">
           <img class="logo-light" src="{{ .logo_light | relURL }}" alt="" />
           <img class="logo-dark"  src="{{ .logo_dark  | relURL }}" alt="" />
-        </a>
+        </span>
         {{ end }}
       </div>
     </div>

@@ -71,6 +71,9 @@ ever need to make to an SVG; everything else stays as downloaded.
 
 1. **Get the logo.** Download the official SVG (preferred) or PNG from the
    adopter's press/brand page or their GitHub org's artwork repository.
+   Record the exact source URL of the page or asset, not a label like
+   "Wikimedia Commons" or a repository name; it goes into the provenance
+   record in step 5.
 
 2. **Normalise the viewBox (SVG only).** Open the file in a text editor and
    find the root `<svg viewBox="x y w h">`. Load the file in Inkscape (or a
@@ -98,11 +101,17 @@ ever need to make to an SVG; everything else stays as downloaded.
    One file for both themes: point `logo_light` and `logo_dark` at the same
    file. Two variants: point each at its own file. No size or spacing keys
    exist; the CSS handles sizing (uniform height, width by aspect ratio) and
-   spacing (fixed gap) automatically.
+   spacing (fixed gap) automatically. The template always renders both
+   `logo_light` and `logo_dark`, so never leave `logo_dark` unset: for a
+   single-asset logo use the same path in both fields.
 
-5. **Record provenance.** Append a section `### <Organisation>` at the bottom
-   of this file with: File, Source URL, Fetched (date), Licence, Trademark
-   owner. If the file needed a viewBox normalisation, note it there.
+5. **Record provenance and update the owner table.** Append a section
+   `### <Organisation>` at the bottom of this file with: File, Source URL
+   (exact, resolvable), Fetched (date), Licence, Trademark owner (mandatory),
+   Permission state. If the file needed a viewBox normalisation, note it
+   there. Also add a row for the new mark in the
+   [trademark attribution](#trademark-attribution) table at the top; the
+   page footer links there, so the table must list every displayed mark.
 
 6. **Verify.** Run `npm run dev` and open <http://localhost:1313/main/>. Toggle
    light/dark theme and confirm the logo appears at the same height as the
@@ -127,7 +136,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Fetched:** 2026-10-26
 - **Licence:** Editorial use (no explicit licence; file is the site's own header logo)
 - **Trademark owner:** EverBright GmbH (per Impressum on everbright-it.de)
-- **Permission:** granted (explicit) — confirmed 2026-10-28
+- **Permission:** granted (explicit) — written confirmation on file, dated 2026-10-28; reference kept by the maintainer team.
 
 ### Gardener
 
@@ -143,7 +152,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 ### IronCore
 
 - **File:** `ironcore-light.svg` / `ironcore-dark.svg` (icon + label lockup built from `ironcore-color.svg`)
-- **Source:** GitHub `ironcore-dev/ironcore` repo (`docs/assets/`)
+- **Source:** <https://github.com/ironcore-dev/ironcore/tree/main/docs/assets>
 - **Fetched:** 2026-10-26
 - **Licence:** NeoNephos trademark usage guidelines
 - **Trademark owner:** NeoNephos Foundation
@@ -187,7 +196,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 ### Platform Mesh
 
 - **File:** `platform-mesh-color.svg` / `platform-mesh-dark.svg`
-- **Source:** GitHub `neonephos/artwork` repo
+- **Source:** <https://github.com/neonephos/artwork>
 - **Fetched:** 2026-10-26
 - **Licence:** NeoNephos trademark usage guidelines
 - **Trademark owner:** NeoNephos Foundation
@@ -214,7 +223,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 ### STACKIT
 
 - **File:** `stackit-light.svg` (petrol `#004e5a` on light) and `stackit-dark.svg` (white on dark)
-- **Source:** GitHub `stackitcloud/stackit-sdk-go` repo (`.github/images/`)
+- **Source:** <https://github.com/stackitcloud/stackit-sdk-go/tree/main/.github/images>
 - **Fetched:** 2026-10-26
 - **Licence:** Editorial use (official brand asset in project repo)
 - **Trademark owner:** STACKIT GmbH & Co. KG
@@ -227,7 +236,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 ### T-Systems
 
 - **File:** `t-systems-light.svg` (magenta `#e20074` on light) and `t-systems-dark.svg` (white on dark)
-- **Source:** Wikimedia Commons (`File:T-Systems Logo 2024.svg`)
+- **Source:** <https://commons.wikimedia.org/wiki/File:T-Systems_Logo_2024.svg>
 - **Fetched:** 2026-10-27
 - **Licence:** Public domain (PD-textlogo)
 - **Trademark owner:** T-Systems International GmbH
