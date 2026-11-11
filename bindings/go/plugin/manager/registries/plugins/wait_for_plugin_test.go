@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/plugin/internal/osutil"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
@@ -56,6 +57,9 @@ func TestWaitForPlugin(t *testing.T) {
 	})
 
 	t.Run("successful connection to Unix socket plugin", func(t *testing.T) {
+		if osutil.ConnectionType(t.Context()) != types.Socket {
+			t.Skip("unix domain sockets are not supported on this system")
+		}
 		// Unix socket paths are limited to ~104 bytes, which t.TempDir can exceed on macOS.
 		//nolint:usetesting // see above: t.TempDir can produce too-long Unix socket paths
 		tempDir, err := os.MkdirTemp("", "test-unix-socket")

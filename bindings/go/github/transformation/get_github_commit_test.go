@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/github/repository/resource"
@@ -102,7 +103,8 @@ func TestGetGitHubCommit_Transform(t *testing.T) {
 	require.NotNil(t, transformed.Output)
 
 	require.NotEmpty(t, transformed.Output.File.URI)
-	contentPath := strings.TrimPrefix(transformed.Output.File.URI, "file://")
+	contentPath, err := filesystem.FilePathFromURI(transformed.Output.File.URI)
+	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Remove(contentPath) })
 	assert.Equal(t, outDir, filepath.Dir(contentPath), "the archive must land in the spec's outputPath")
 
@@ -185,7 +187,7 @@ func TestGetGitHubCommit_Transform_ResolveCredentials(t *testing.T) {
 
 		var transformed v1alpha1.GetGitHubCommit
 		require.NoError(t, v1alpha1.Scheme.Convert(result, &transformed))
-		t.Cleanup(func() { _ = os.Remove(strings.TrimPrefix(transformed.Output.File.URI, "file://")) })
+		removeOutput(t, transformed.Output.File.URI)
 	})
 
 	t.Run("other resolver errors fail the transform", func(t *testing.T) {
@@ -231,7 +233,7 @@ func TestGetGitHubCommit_Transform_ResolveCredentials(t *testing.T) {
 
 		var transformed v1alpha1.GetGitHubCommit
 		require.NoError(t, v1alpha1.Scheme.Convert(result, &transformed))
-		t.Cleanup(func() { _ = os.Remove(strings.TrimPrefix(transformed.Output.File.URI, "file://")) })
+		removeOutput(t, transformed.Output.File.URI)
 	})
 }
 
@@ -245,4 +247,12 @@ func TestGetGitHubCommit_Transform_RequiresSpec(t *testing.T) { //nolint:dupl
 		Type: v1alpha1.GetGitHubCommitV1alpha1,
 	})
 	assert.ErrorContains(t, err, "spec is required for get github commit transformation")
+}
+
+// removeOutput removes the file behind the output URI once the test ends.
+func removeOutput(t *testing.T, uri string) {
+	t.Helper()
+	path, err := filesystem.FilePathFromURI(uri)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Remove(path) })
 }
