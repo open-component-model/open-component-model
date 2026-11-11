@@ -103,7 +103,7 @@ func Test_FileSystemCTF_MemFS(t *testing.T) {
 		v1.ArtifactIndexFileName: &fstest.MapFile{
 			Data: idxData,
 		},
-		filepath.Join(ctf.BlobsDirectoryName, f): &fstest.MapFile{
+		ctf.BlobsDirectoryName + "/" + f: &fstest.MapFile{
 			Data:    content,
 			Mode:    0o644,
 			ModTime: time.Now(),
