@@ -155,9 +155,19 @@ func TestReferencePaths(t *testing.T) {
 }
 
 func TestReferencePathsWithoutRoot(t *testing.T) {
-	r := require.New(t)
-	r.Nil(referencePaths(key("root", "1.0.0"), keyed(newDescriptor("other", "1.0.0"))))
-	r.Nil(referencePaths(ComponentKey{}, keyed(newDescriptor("other", "1.0.0"))))
+	tests := []struct {
+		name string
+		root ComponentKey
+	}{
+		{name: "root not in graph", root: key("root", "1.0.0")},
+		{name: "root unset", root: ComponentKey{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			r.Nil(referencePaths(tt.root, keyed(newDescriptor("other", "1.0.0"))))
+		})
+	}
 }
 
 func TestVersionlessIdentity(t *testing.T) {

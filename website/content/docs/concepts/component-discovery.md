@@ -141,16 +141,19 @@ once that version is gone. Raw mode and `expression` mode do not have these
 bindings.
 
 The detour through a `Resource` matters because Discovery publishes whatever the
-repository returns. If a nested component version is overwritten in the
-repository, a `Discovery` stays `Ready` and publishes the new content. A
-`Resource` built from the same record checks the root component version against
-the signatures you configure, every component version on the reference path
-against the digest its parent records for the reference, and the resource
-digest, so it fails with `digest mismatch` instead. These checks depend on the
-information being there: a reference without a recorded digest is not checked,
-the root is only checked when signature verification is configured, and a root
-that cannot be safely digested skips the signature check with a warning event.
-`ocm add cv` records reference digests.
+repository returns when it walks the graph. If a nested component version is
+overwritten in the repository, a `Discovery` that walks it afterwards stays
+`Ready` and publishes the new content. A `Resource` built from the same record
+checks the root component version against the signatures you configure, every
+component version on the reference path against the digest its parent records
+for the reference, and, unless its `spec.verificationPolicy` is `Never`, the
+resource digest, so when it reconciles it fails with `digest mismatch` instead.
+Neither watches the repository: both reconcile when the root `Component` reports
+a change or their own spec changes. The checks depend on the information being
+there: a reference without a recorded digest is not checked, the root is only
+checked when signature verification is configured, and a root that cannot be
+safely digested skips the signature check with a warning event. `ocm add cv`
+records reference digests.
 
 Take access data from the `Resource` status (`status.resource.access`), not from
 the `Discovery` status, and only once the `Resource` is `Ready` with
