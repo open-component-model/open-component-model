@@ -131,8 +131,9 @@ This branch is outside `website/**`, so pushing it cannot trigger the website pu
 **Review and merge the feed PR to publish it.** Hugo copies the committed static file
 to `/releases.xml` during the normal website deployment after merge. The feed workflow
 does not build Hugo, write to `gh-pages`, send email, or merge its own PR.
-Once configured, Groups.io polls [the release feed](https://ocm.software/releases.xml)
-at :05/:35 and posts newly discovered items to `ocm-announcements`.
+The feed URL, `https://ocm.software/releases.xml`, becomes available after the first
+feed PR is merged and deployed. Once configured, Groups.io polls it at :05/:35 and
+posts newly discovered items to `ocm-announcements`.
 Stable GUIDs and item contents are intended to prevent repeat announcements; verify
 actual duplicate handling on the test list before enabling production delivery.
 
