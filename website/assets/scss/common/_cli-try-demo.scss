@@ -1,7 +1,6 @@
 /* ============================================================
    "Try It Out" animated terminal (landing page)
-   The terminal stays dark in both light and dark site themes,
-   like a real shell window. Markup: layouts/home.html.
+   The terminal follows the site light/dark theme. Markup: layouts/home.html.
    ============================================================ */
 
 /* Section heading: the flashy title + inline subtext, sitting tight above the
@@ -35,14 +34,23 @@
 }
 
 .lp-home .cli-demo {
-    /* terminal stays dark in both themes, like a real shell */
-    --cli-term-bg: #0f1013;
-    --cli-term-border: #262a31;
-    --cli-term-line: #22262d;
-    --cli-text: #d7dae0;
-    --cli-muted: #8a9099;
-    /* command rows below adopt the site's card colours so the panel fits
-       both the light and dark site themes */
+    /* Terminal palette, light-theme defaults; dark overrides are below.
+       The command rows below the terminal use the site card colours. */
+    --cli-term-bg: #f6f7f9;
+    --cli-bar-bg: linear-gradient(180deg, #eef0f3, #e6e9ee);
+    --cli-term-border: var(--ocm-card-border);
+    --cli-term-line: #e6e8ec;
+    --cli-text: #39414a;
+    --cli-strong: #11161b;
+    --cli-muted: #7a828c;
+    --cli-green: #2b8a3e;
+    --cli-cyan: #0c7a94;
+    --cli-blue: #1c64b4;
+    --cli-violet: #6741d9;
+    --cli-dim: #868e96;
+    --cli-bar-fill: #37b24d;
+    --cli-bar-todo: #ced4da;
+    --cli-scroll: #c1c7cf;
     --cli-cmd-color: var(--brand-blue-mid);
 
     overflow: hidden;
@@ -54,6 +62,21 @@
 }
 
 [data-bs-theme="dark"] .lp-home .cli-demo {
+    --cli-term-bg: #0f1013;
+    --cli-bar-bg: linear-gradient(180deg, #1c1f25, #171a1f);
+    --cli-term-border: #262a31;
+    --cli-term-line: #22262d;
+    --cli-text: #d7dae0;
+    --cli-strong: #eceef2;
+    --cli-muted: #8a9099;
+    --cli-green: #4ade80;
+    --cli-cyan: #5ad1f4;
+    --cli-blue: #6ea8ff;
+    --cli-violet: #c792ea;
+    --cli-dim: #6c727c;
+    --cli-bar-fill: #4ade80;
+    --cli-bar-todo: #333842;
+    --cli-scroll: #3a3f48;
     --cli-cmd-color: #aeb6ff;
 }
 
@@ -63,7 +86,7 @@
     align-items: center;
     gap: 8px;
     padding: 12px 16px;
-    background: linear-gradient(180deg, #1c1f25, #171a1f);
+    background: var(--cli-bar-bg);
     border-bottom: 1px solid var(--cli-term-border);
 }
 
@@ -94,13 +117,13 @@
     font-size: 12.5px;
     font-weight: 600;
     background: transparent;
-    border: 1px solid #333842;
+    border: 1px solid var(--cli-term-border);
     border-radius: 8px;
     cursor: pointer;
     transition: color 0.18s, border-color 0.18s;
 
     &:hover {
-        color: #fff;
+        color: var(--cli-strong);
         border-color: var(--brand-cyan);
     }
 
@@ -120,22 +143,22 @@
     font-size: 13.5px;
     line-height: 1.62;
     scrollbar-width: thin;
-    scrollbar-color: #3a3f48 transparent;
+    scrollbar-color: var(--cli-scroll) transparent;
 
     &::-webkit-scrollbar { width: 8px; }
-    &::-webkit-scrollbar-thumb { background: #3a3f48; border-radius: 8px; }
+    &::-webkit-scrollbar-thumb { background: var(--cli-scroll); border-radius: 8px; }
 }
 
 .lp-home .cli-demo__line {
     white-space: pre-wrap;
     word-break: break-word;
 
-    &--cmd { color: #eceef2; }
+    &--cmd { color: var(--cli-strong); }
     &--in { animation: cli-demo-fade 0.26s ease both; }
 }
 
 .lp-home .cli-demo__prompt {
-    color: var(--brand-cyan);
+    color: var(--cli-cyan);
     font-weight: 700;
     user-select: none;
 }
@@ -151,7 +174,7 @@
     height: 1.05em;
     margin-left: 2px;
     vertical-align: text-bottom;
-    background: var(--brand-cyan);
+    background: var(--cli-cyan);
     border-radius: 1px;
     animation: cli-demo-blink 1s steps(1) infinite;
 }
@@ -160,15 +183,15 @@
     50% { opacity: 0; }
 }
 
-/* output colours */
-.lp-home .cli-demo--green { color: #4ade80; }
-.lp-home .cli-demo--cyan { color: #5ad1f4; }
-.lp-home .cli-demo--blue { color: #6ea8ff; }
-.lp-home .cli-demo--violet { color: #c792ea; }
-.lp-home .cli-demo--dim { color: #6c727c; }
+/* output colours (theme-aware via the vars above) */
+.lp-home .cli-demo--green { color: var(--cli-green); }
+.lp-home .cli-demo--cyan { color: var(--cli-cyan); }
+.lp-home .cli-demo--blue { color: var(--cli-blue); }
+.lp-home .cli-demo--violet { color: var(--cli-violet); }
+.lp-home .cli-demo--dim { color: var(--cli-dim); }
 .lp-home .cli-demo--bold { font-weight: 700; }
-.lp-home .cli-demo__bar { color: #4ade80; letter-spacing: -1px; }
-.lp-home .cli-demo__bar-todo { color: #333842; }
+.lp-home .cli-demo__bar { color: var(--cli-bar-fill); letter-spacing: -1px; }
+.lp-home .cli-demo__bar-todo { color: var(--cli-bar-todo); }
 
 /* --- integrated copyable command rows --- */
 .lp-home .cli-demo__steps {
@@ -258,7 +281,7 @@
 
     &::before {
         content: "$ ";
-        color: var(--brand-cyan);
+        color: var(--cli-cmd-color);
         font-weight: 700;
     }
 }
