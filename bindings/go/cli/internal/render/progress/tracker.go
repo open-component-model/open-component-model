@@ -93,6 +93,33 @@ func WithConcurrency[T any](runners int) OperationOption[T] {
 	}
 }
 
+// forceNonInteractiveKey marks a context so that trackers created from it never
+// use interactive terminal rendering, even when the output is a TTY.
+type forceNonInteractiveKey struct{}
+
+// WithForceNonInteractive returns a context that makes [NewTracker] skip the
+// interactive terminal visualizer and always use the slog-based fallback. The
+// CLI sets this when the user requests a specific log format, so structured log
+// output is never replaced by the animated progress UI.
+func WithForceNonInteractive(ctx context.Context) context.Context {
+	return context.WithValue(ctx, forceNonInteractiveKey{}, true)
+}
+
+func forceNonInteractive(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	forced, _ := ctx.Value(forceNonInteractiveKey{}).(bool)
+	return forced
+}
+
+// useTerminalVisualizer reports whether the interactive terminal visualizer
+// should be used: a factory must be present, out must be a TTY, and the context
+// must not force non-interactive rendering via [WithForceNonInteractive].
+func useTerminalVisualizer(ctx context.Context, hasFactory, isTTY bool) bool {
+	return hasFactory && isTTY && !forceNonInteractive(ctx)
+}
+
 // Tracker manages progress rendering for CLI operations.
 //
 // In terminal mode, it uses the injected factory and redirects slog to a buffer
@@ -109,14 +136,16 @@ type Tracker[T any] struct {
 // NewTracker creates a tracker for the given output writer.
 // The factory creates terminal visualizers; in non-terminal mode it is ignored.
 // If factory is nil, the tracker always uses [SlogVisualizer].
-func NewTracker[T any](_ context.Context, out io.Writer, factory ...VisualizerFactory[T]) *Tracker[T] {
+// A context carrying [WithForceNonInteractive] also disables the terminal
+// visualizer, regardless of whether out is a TTY.
+func NewTracker[T any](ctx context.Context, out io.Writer, factory ...VisualizerFactory[T]) *Tracker[T] {
 	var f VisualizerFactory[T]
 	if len(factory) > 0 {
 		f = factory[0]
 	}
 	return &Tracker[T]{
 		out:        out,
-		isTerminal: f != nil && isTerminal(out),
+		isTerminal: useTerminalVisualizer(ctx, f != nil, isTerminal(out)),
 		factory:    f,
 	}
 }
