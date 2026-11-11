@@ -1,0 +1,42 @@
+suite: conversion webhook notes
+templates:
+  - NOTES.txt
+release:
+  name: ocm-k8s-toolkit
+  namespace: ocm-k8s-toolkit-system
+tests:
+  - it: prints nothing by default
+    asserts:
+      - equalRaw:
+          value: ""
+
+  - it: prints nothing with webhook and cert-manager
+    set:
+      webhook.enable: true
+      certManager.enable: true
+    asserts:
+      - equalRaw:
+          value: ""
+
+  - it: warns when the webhook runs without cert-manager
+    set:
+      webhook.enable: true
+    asserts:
+      - matchRegexRaw:
+          pattern: "^WARNING: Conversion webhook is enabled without cert-manager"
+      # Must match the Service name and the first dnsName in webhook/certificate.yaml.
+      - matchRegexRaw:
+          pattern: "\n     ocm-k8s-toolkit-webhook-service\\.ocm-k8s-toolkit-system\\.svc\n"
+      # Must match the default cert volume secretName in manager/manager.yaml.
+      - matchRegexRaw:
+          pattern: "\n     ocm-k8s-toolkit-webhook-server-cert\n"
+
+  - it: names the user secret when webhook.certSecret is set
+    set:
+      webhook.enable: true
+      webhook.certSecret: my-webhook-cert
+    asserts:
+      - matchRegexRaw:
+          pattern: "\n     my-webhook-cert\n"
+      - notMatchRegexRaw:
+          pattern: "webhook-server-cert"
