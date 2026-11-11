@@ -60,10 +60,9 @@ jobs:
           SMOKE_DIR="$(mktemp -d)"
           export SMOKE_DIR
           trap 'rm -rf "$SMOKE_DIR"' EXIT
-          node scripts/generate-release-feed.js \
-            --input scripts/testdata/release-feed.json \
-            --output "$SMOKE_DIR/releases.xml" \
-            --since 2026-11-11T00:00:00Z
+          python3 scripts/update-release-feed.py \
+            --release scripts/testdata/release.json \
+            --feed "$SMOKE_DIR/releases.xml"
           python3 -c "
           import os, xml.etree.ElementTree as ET
           root = ET.parse(os.path.join(os.environ['SMOKE_DIR'], 'releases.xml')).getroot()
@@ -71,13 +70,13 @@ jobs:
           channel = root.find('channel')
           items = channel.findall('item')
           prefix = 'https://github.com/open-component-model/open-component-model/releases/tag/'
-          expected = [prefix + t for t in ('v0.22.2', 'v0.24.0', 'v0.24.0-rc.1')]
+          expected = [prefix + 'v0.24.0-rc.1']
           assert [i.findtext('guid') for i in items] == expected
           assert [i.findtext('link') for i in items] == expected
           assert all(i.find('guid').attrib['isPermaLink'] == 'true' for i in items)
           sl = channel.find('{http://www.w3.org/2005/Atom}link')
           assert sl.attrib['href'] == 'https://ocm.software/releases.xml'
-          print('Feed only: RC, final, maintenance; no side tags or duplicate GUIDs')
+          print('Feed contains only the passed release, with its canonical GUID')
           "
 
   build:

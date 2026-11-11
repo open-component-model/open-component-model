@@ -121,12 +121,20 @@ After each RC and final publication, `notify_release_rc` / `notify_release` anno
 Independently, `create_release_feed_pr_rc` / `create_release_feed_pr` dispatch
 `release-feed-pr.yml` on `main` to **open or update a PR**, not publish an announcement.
 
-The workflow reads all paginated GitHub releases and generates `website/static/releases.xml`
-with canonical RC and final releases published since `2026-11-11T00:00:00Z`.
-It uses the existing OCMBot token and signed `create-pull-request` action pattern,
-restricting the PR to that one file. Pending releases accumulate in one PR from
-`automation/release-feed`; repeated runs with unchanged data do not create duplicate PRs.
-This branch is outside `website/**`, so pushing it cannot trigger the website publisher.
+The workflow accepts a required `tag`, fetches that one published GitHub release,
+and adds it to `website/static/releases.xml` only if its canonical GUID is missing.
+There is no date cutoff or automatic history import: the first run creates one item.
+Later runs retain earlier entries, including entries already in an open feed PR.
+The updater uses Python 3's standard XML library; no third-party package is required.
+
+The existing OCMBot token and signed `create-pull-request` action restrict the PR to
+that one file. Pending releases accumulate in one PR from `automation/release-feed`;
+rerunning a tag preserves its existing announcement rather than editing or duplicating it.
+Entries on `main` take precedence over stale copies in the pending PR. The workflow
+captures the pending feed before checking out `main` to avoid losing an entry if the
+PR merges concurrently, and uses one shared queue so distinct tag dispatches are retained.
+If a run fails or GitHub's queue limit is exceeded, dispatch that tag again.
+The PR branch is outside `website/**`, preventing deployment before review.
 
 **Review and merge the feed PR to publish it.** Hugo copies the committed static file
 to `/releases.xml` during the normal website deployment after merge. The feed workflow
@@ -137,11 +145,12 @@ posts newly discovered items to `ocm-announcements`.
 Stable GUIDs and item contents are intended to prevent repeat announcements; verify
 actual duplicate handling on the test list before enabling production delivery.
 
-To recover a failed or missed run, or when a release branch lacks the new hooks:
+To recover a failed or missed run, or when a release branch lacks the new hooks,
+pass the specific published RC/final tag (replace the example):
 
 ```bash
 gh workflow run release-feed-pr.yml \
-  --repo open-component-model/open-component-model --ref main
+  --repo open-component-model/open-component-model --ref main -f tag=v0.24.0-rc.1
 ```
 
 Then review and merge the resulting PR and verify the website deployment. Backport
@@ -153,7 +162,7 @@ List owners manage the integration under Admin → Preferences → Integrations 
 [ocm-announcements](https://lists.neonephos.org/g/ocm-announcements).
 Before production activation, test RC/final delivery and duplicate handling on
 `OCM-test-release-notifications`, then use moderation to reject initial production
-catch-up items before enabling automatic delivery. Keep the cutoff fixed.
+catch-up items before enabling automatic delivery.
 Record the integration owner, activation time, and delivery evidence in
 [ocm-project#1181](https://github.com/open-component-model/ocm-project/issues/1181).
 To pause delivery, enable moderation on the integration; do not reset the feed history.

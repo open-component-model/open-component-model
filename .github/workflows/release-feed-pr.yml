@@ -4,13 +4,21 @@ name: Release Feed PR
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Canonical release tag to add (e.g. v0.24.0-rc.1)
+        required: true
+        type: string
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: release-feed-pr
   cancel-in-progress: false
+  # Each queued run owns a distinct release; do not replace a pending dispatch.
+  queue: max
 
 jobs:
   open_pr:
@@ -21,29 +29,57 @@ jobs:
       deployment: false
 
     steps:
+      - name: Validate tag format
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]] \
+            || { echo "::error::tag must be vX.Y.Z or vX.Y.Z-rc.N"; exit 1; }
+
+      # Capture pending entries before checking out main, so a concurrent PR merge
+      # cannot put them in neither the pending snapshot nor the checked-out main.
+      - name: Read pending release feed
+        id: pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          SHA=$(gh api --method GET "repos/$GH_REPO/pulls" \
+            -f state=open -f base=main \
+            -f head="$GITHUB_REPOSITORY_OWNER:automation/release-feed" \
+            --jq '.[0].head.sha // empty')
+          if [ -n "$SHA" ]; then
+            gh api --header 'Accept: application/vnd.github.raw+json' \
+              "repos/$GH_REPO/contents/website/static/releases.xml?ref=$SHA" \
+              > "$RUNNER_TEMP/pending-releases.xml"
+            echo "path=$RUNNER_TEMP/pending-releases.xml" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           persist-credentials: false
 
-      - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
-        with:
-          node-version-file: website/package.json
-
-      - name: Generate release feed
+      - name: Add release to feed
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+          PENDING_FEED: ${{ steps.pending.outputs.path }}
         run: |
           set -euo pipefail
-          gh api --paginate --slurp \
-            "repos/open-component-model/open-component-model/releases?per_page=100" \
-            > "$RUNNER_TEMP/ocm-releases.json"
-          node website/scripts/generate-release-feed.js \
-            --input "$RUNNER_TEMP/ocm-releases.json" \
-            --output website/static/releases.xml \
-            --since 2026-11-11T00:00:00Z
+          gh api "repos/$GH_REPO/releases/tags/$TAG" > "$RUNNER_TEMP/release.json"
+          pending_args=()
+          if [ -n "$PENDING_FEED" ]; then
+            pending_args=(--pending "$PENDING_FEED")
+          fi
+          python3 website/scripts/update-release-feed.py \
+            --release "$RUNNER_TEMP/release.json" \
+            --feed website/static/releases.xml \
+            "${pending_args[@]}"
 
       - name: Get OCMBot installation token
         id: generate_token
@@ -68,8 +104,9 @@ jobs:
           delete-branch: true
           sign-commits: true
           body: |
-            Updates the release feed with canonical RC and final releases published
-            since 2026-11-11T00:00:00Z. Subsequent releases update this same pending PR.
+            Adds the dispatched release `${{ inputs.tag }}` if it is missing,
+            retaining published entries and releases already in this pending PR.
+            No historical releases are imported automatically.
 
             Review and merge to publish https://ocm.software/releases.xml through
             the normal website deployment. Groups.io can then discover new items.

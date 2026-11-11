@@ -318,9 +318,10 @@ jobs:
       - name: Dispatch release-feed-pr on main
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.new_tag }}
         run: |
           set -euo pipefail
-          gh workflow run release-feed-pr.yml --repo "$GH_REPO" --ref main
+          gh workflow run release-feed-pr.yml --repo "$GH_REPO" --ref main -f tag="$TAG"
 
   # Summarizes the RC only after the components are published, so the release
   # manager sees the summary with the OCM component coordinates
@@ -788,6 +789,7 @@ jobs:
       - name: Dispatch release-feed-pr on main
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.promotion_tag }}
         run: |
           set -euo pipefail
-          gh workflow run release-feed-pr.yml --repo "$GH_REPO" --ref main
+          gh workflow run release-feed-pr.yml --repo "$GH_REPO" --ref main -f tag="$TAG"
