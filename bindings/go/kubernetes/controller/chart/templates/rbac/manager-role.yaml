@@ -9,7 +9,6 @@ rules:
     resources:
       - configmaps
       - secrets
-      - serviceaccounts
     verbs:
       - get
       - list
@@ -27,6 +26,15 @@ rules:
       - namespaces
     verbs:
       - get
+  - apiGroups:
+      - ""
+    resources:
+      - serviceaccounts
+    verbs:
+      - get
+      - impersonate
+      - list
+      - watch
   - apiGroups:
       - ""
     resources:

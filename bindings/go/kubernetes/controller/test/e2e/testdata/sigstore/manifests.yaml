@@ -13,6 +13,30 @@ stringData:
           certificateOIDCIssuer: https://token.actions.githubusercontent.com
           certificateIdentityRegexp: ^https://github\.com/open-component-model/open-component-model/\.github/workflows/publish-components\.yml@refs/heads/releases/v[0-9]+\.[0-9]+$
 ---
+# The Component reads its OCM config with the permissions of the default service account.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sigstore-ocm-config-reader
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["sigstore-ocmconfig"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sigstore-ocm-config-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sigstore-ocm-config-reader
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: default
+---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Repository
 metadata:

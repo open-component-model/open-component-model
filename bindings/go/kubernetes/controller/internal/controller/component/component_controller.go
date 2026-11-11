@@ -28,6 +28,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/serviceaccount"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/util"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/verification"
@@ -44,6 +45,8 @@ type Reconciler struct {
 
 	// Resolver provides repository resolution and verification for component reconciliation.
 	Resolver *resolution.Resolver
+
+	authorizer *serviceaccount.Authorizer
 }
 
 var _ ocm.Reconciler = (*Reconciler)(nil)
@@ -55,6 +58,8 @@ var (
 
 // SetupWithManager sets up the controller with the Manager. Manager bootstrap
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, concurrency int) error {
+	r.authorizer = serviceaccount.NewAuthorizer(mgr.GetAPIReader(), mgr.GetConfig())
+
 	// Create index for repository reference name from components to make sure to reconcile, when the base ocm-
 	// repository changes.
 	const fieldName = "spec.repositoryRef.name"
@@ -176,6 +181,7 @@ func (r *Reconciler) mapToDeletingComponent(ctx context.Context, obj client.Obje
 
 // +kubebuilder:rbac:groups="",resources=secrets;configmaps;serviceaccounts,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=serviceaccounts/token,verbs=create
+// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=impersonate
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 //nolint:funlen,cyclop // we do not want to cut the function at arbitrary points
@@ -243,11 +249,34 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	logger.Info("reconciling component")
+	access, err := r.authorizer.For(ctx, component.GetNamespace(), component.GetServiceAccountName())
+	if err != nil {
+		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.GetConfigurationFailedReason, err.Error())
+
+		return ctrl.Result{}, err
+	}
+
+	// Early warning that the SA does not have access to the referenced objects.
+	if err := access.AuthorizeConfigs(ctx, component.GetSpecifiedOCMConfig()); err != nil {
+		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.GetConfigurationFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to authorize ocm config: %w", err)
+	}
+
 	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), component, repo)
 	if err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.GetConfigurationFailedReason, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to get effective config: %w", err)
+	}
+
+	// Check the propagated config for objects that this objects might not have access to.
+	// We do this here so there is a proper early warning instead of the user having to just figure out
+	// what's wrong and why.
+	if err := access.AuthorizeConfigs(ctx, configs); err != nil {
+		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.GetConfigurationFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to authorize effective ocm config: %w", err)
 	}
 
 	// The deferred status patch persists it, even if a later step fails.
