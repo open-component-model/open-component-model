@@ -27,6 +27,7 @@ const (
 	referenceName       = "child"
 	runLabel            = "perf.ocm.software/run"
 	signingSecretName   = "perf-signing"
+	plainHTTPConfigName = "perf-plain-http"
 	deployerAccount     = "perf-deployer"
 	// The benchmark measures one burst of reconciles; a long interval keeps
 	// periodic requeues out of the measurement window.

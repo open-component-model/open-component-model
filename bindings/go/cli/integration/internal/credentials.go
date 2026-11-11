@@ -112,9 +112,13 @@ func CreateOCMConfigForRegistry(t *testing.T, opts []ConfigOpts) (string, error)
 	t.Helper()
 
 	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
+	// The test registries run without TLS, and an http:// prefix alone no
+	// longer selects plain HTTP: the HTTP configuration must say so.
 	cfg := `
 type: generic.config.ocm.software/v1
 configurations:
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true
 - type: credentials.config.ocm.software
   consumers:`
 

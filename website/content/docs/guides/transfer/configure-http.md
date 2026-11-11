@@ -301,6 +301,41 @@ certs. Reach for `insecureSkipVerify` only when you have no certificate to
 pin against (e.g. a bare `kind` cluster with no cert at all).
 {{< /callout >}}
 
+## Use plain HTTP for a local registry
+
+OCM talks HTTPS to every OCI registry. For a development or air-gapped registry
+without TLS, mark the host as plain HTTP:
+
+```yaml
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    hosts:
+      "registry.local:5000":
+        plainHTTP: true
+```
+
+{{< callout context="danger" >}}
+`plainHTTP: true` sends every OCI registry request to that host, including
+credentials, in cleartext. **Never enable it for a public registry or in
+production.** OCM logs a warning each time it opens a repository, pings a
+registry, or downloads a Helm chart on a plain HTTP host.
+{{< /callout >}}
+
+`plainHTTP` covers OCM's OCI repositories, `ociArtifact` access, and Helm
+chart downloads. A chart at an `oci://` URL follows the setting for its
+registry host. A classic Helm repository URL keeps its scheme as part of the
+address: an `http://` URL is accepted only when its host is `plainHTTP`, and an
+`https://` URL stays HTTPS.
+
+### Migrate from http:// prefixes
+
+A scheme prefix (`http://` or `https://`) on a repository base URL or a
+reference is deprecated and no longer selects the connection: only `plainHTTP`
+does. An `http://` prefix on a host that is not `plainHTTP` is an error. To
+replace the prefix, see
+[Migrate from http:// Prefixes]({{< relref "docs/changelog/migrate-from-http-prefixes.md" >}}).
+
 ## Override settings per host
 
 Override timeouts, retry policy, and TLS settings for specific registries
@@ -331,8 +366,8 @@ configurations:
 ```
 
 Each host entry accepts the same timeout fields as the global config, plus
-`retry` and `insecureSkipVerify`. Fields not specified in a host block
-inherit the global value.
+`retry`, `insecureSkipVerify`, `rootCAsPEM`, `rootCAsPEMFile`, `disableHTTP2`,
+and `plainHTTP`. Fields not specified in a host block inherit the global value.
 
 The host key is matched against `request.URL.Host` by exact string — first
 against `hostname:port`, then against the bare `hostname`. Use the bare

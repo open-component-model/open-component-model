@@ -77,7 +77,8 @@ configurations:
       properties:
         username: %q
         password: %q
-`, registry.Host, registry.Port, registry.User, password)
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`, registry.Host, registry.Port, registry.User, password)
 }
 
 func writeMinimalConstructor(t *testing.T, name, version string) string {
