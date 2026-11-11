@@ -165,6 +165,79 @@ func TestConstructWithResourceAccess(t *testing.T) {
 	assert.Len(t, mockRepo.addedVersions, 1)
 }
 
+// TestConstructPreservesResourceSourceRefs proves resource srcRefs from the constructor
+// spec reach the constructed component descriptor for every resource creation path.
+func TestConstructPreservesResourceSourceRefs(t *testing.T) {
+	tests := []struct {
+		name         string
+		resourceYAML string
+		inputMethods map[runtime.Type]ResourceInputMethod
+	}{
+		{
+			name: "access-based resource",
+			resourceYAML: `
+      - name: test-resource
+        version: v1.0.0
+        relation: external
+        type: blob
+        access:
+          type: LocalBlob
+          mediaType: application/octet-stream
+          localReference: test-ref
+        srcRefs:
+          - identitySelector:
+              name: src
+`,
+		},
+		{
+			name: "input-based resource",
+			resourceYAML: `
+      - name: test-resource
+        version: v1.0.0
+        relation: local
+        type: blob
+        input:
+          type: mock/v1
+        srcRefs:
+          - identitySelector:
+              name: src
+`,
+			inputMethods: map[runtime.Type]ResourceInputMethod{
+				runtime.NewVersionedType("mock", "v1"): &mockInputMethod{
+					processedBlob: &mockBlob{mediaType: "application/octet-stream", data: []byte("test")},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			constructor := setupTestComponent(t, tt.resourceYAML)
+
+			opts := Options{
+				TargetRepositoryProvider: &mockTargetRepositoryProvider{repo: newMockTargetRepository()},
+			}
+			if tt.inputMethods != nil {
+				opts.ResourceInputMethodProvider = &mockInputMethodProvider{methods: tt.inputMethods}
+			}
+
+			constructorInstance := NewDefaultConstructor(constructor, opts)
+			graph := constructorInstance.GetGraph()
+
+			err := constructorInstance.Construct(t.Context())
+			r.NoError(err)
+			descs := collectDescriptors(t, graph)
+			r.Len(descs, 1)
+
+			r.Len(descs[0].Component.Resources, 1)
+			r.Equal([]descriptor.SourceRef{
+				{IdentitySelector: map[string]string{"name": "src"}},
+			}, descs[0].Component.Resources[0].SourceRefs)
+		})
+	}
+}
+
 func TestConstructWithCredentialResolution(t *testing.T) {
 	// Create a mock input method that uses credentials
 	mockInput := &mockInputMethod{
