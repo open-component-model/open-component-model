@@ -5,6 +5,12 @@ on:
   push:
     branches:
     - main
+  workflow_dispatch:
+    inputs:
+      windows:
+        description: "Run the native windows legs (unit tests and GOOS=windows lint)"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -18,9 +24,10 @@ jobs:
     outputs:
       run_go: ${{ steps.compute.outputs.run_go }}
       run_lint: ${{ steps.compute.outputs.run_lint }}
-      # Native windows legs (unit tests and the GOOS=windows lint run) are limited to
-      # pushes to main: windows runners are billed at a premium, so windows-only
-      # breakage is caught at merge time rather than on every PR push.
+      # Native windows legs (unit tests and the GOOS=windows lint run) cost premium
+      # runner minutes, so they are not part of every PR push. They run on pushes to
+      # main, on a manual workflow_dispatch, and on any PR carrying the
+      # `ci/windows` label (see WINDOWS_LABEL below).
       run_windows: ${{ steps.compute.outputs.run_windows }}
       dependency_list_changed: ${{ steps.filter.outputs.dependency_list }}
       lint_changed: ${{ steps.filter.outputs.lint }}
@@ -31,6 +38,10 @@ jobs:
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
         id: filter
         with:
+          # A manual run has no event base to diff against; compare the dispatched
+          # ref with the default branch. Scope computation forces the Go legs on
+          # for dispatch anyway, so only the narrower filters depend on this.
+          base: ${{ github.event_name == 'workflow_dispatch' && github.event.repository.default_branch || '' }}
           filters: |
             go:
               - 'bindings/go/**'
@@ -58,24 +69,46 @@ jobs:
           GO_CHANGED: ${{ steps.filter.outputs.go }}
           SHOULD_LINT: ${{ steps.filter.outputs.lint }}
           CI_CHANGED: ${{ steps.filter.outputs.ci }}
+          WINDOWS_REQUESTED: ${{ inputs.windows }}
         with:
           script: |
+            // Label that puts the windows legs on a pull request. Add it, then re-run
+            // the CI run: the labels are read live from the API, not from the event
+            // payload, so a re-run of an existing run picks the label up without a push.
+            const WINDOWS_LABEL = 'ci/windows';
+
             const isPush = context.eventName === 'push';
+            const isDispatch = context.eventName === 'workflow_dispatch';
             const ciChanged = process.env.CI_CHANGED === 'true';
             const goChanged = process.env.GO_CHANGED === 'true';
             const shouldLint = process.env.SHOULD_LINT === 'true';
 
-            const runGo = isPush || ciChanged || goChanged;
+            let windowsLabeled = false;
+            if (context.payload.pull_request) {
+              const { data: labels } = await github.rest.issues.listLabelsOnIssue({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+              });
+              windowsLabeled = labels.some(l => l.name === WINDOWS_LABEL);
+            }
+
+            const runWindows = isPush || windowsLabeled ||
+              (isDispatch && process.env.WINDOWS_REQUESTED === 'true');
+            // The windows legs live inside the Go test and lint jobs, so asking for
+            // windows has to switch those on even when nothing under bindings/go moved.
+            const runGo = isPush || isDispatch || ciChanged || goChanged || runWindows;
             const runLint = runGo || shouldLint;
 
             core.setOutput('run_go', runGo);
             core.setOutput('run_lint', runLint);
-            core.setOutput('run_windows', isPush);
+            core.setOutput('run_windows', runWindows);
             await core.summary
               .addRaw('### CI Scope\n\n')
               .addRaw(`**build/test bindings/go:** ${runGo}\n\n`)
               .addRaw(`**lint all Go modules:** ${runLint}\n\n`)
-              .addRaw(`**native windows legs:** ${isPush}\n`)
+              .addRaw(`**native windows legs:** ${runWindows}`)
+              .addRaw(runWindows ? '\n' : ` (add the \`${WINDOWS_LABEL}\` label and re-run to enable)\n`)
               .write();
 
   golangci_lint_verify:
