@@ -31,7 +31,28 @@
   {{- $installCurl := printf "curl -sfL https://ocm.software/install-cli.sh | %sbash" (partial "main/site-version.html" (dict "page" $ "format" "env")) }}
   {{- $pathExport := "export PATH=\"$HOME/.local/bin:$PATH\"" }}
   {{- $installFull := printf "%s\n%s" $installCurl $pathExport }}
-  {{- $version := partial "main/site-version.html" (dict "page" $ "format" "semver") }}
+  {{- /* Version shown in the animated demo: the pinned version on a versioned
+         site, otherwise the latest released version (what "latest" installs on
+         the main site). Computed here rather than via site-version "semver"
+         because deploy previews set defaultContentVersion=main, which would
+         otherwise display "main.0". */ -}}
+  {{- $cur := $.Site.Version.Name }}
+  {{- $version := "" }}
+  {{- if findRE `^[0-9]+\.[0-9]+$` $cur }}
+    {{- $version = printf "%s.0" $cur }}
+  {{- else }}
+    {{- $latest := "" }}
+    {{- $latestNum := -1 }}
+    {{- range $.Site.Home.Rotate "version" }}
+      {{- $v := .Site.Version.Name }}
+      {{- if findRE `^[0-9]+\.[0-9]+$` $v }}
+        {{- $p := split $v "." }}
+        {{- $num := add (mul (int (index $p 0)) 1000) (int (index $p 1)) }}
+        {{- if gt $num $latestNum }}{{- $latestNum = $num }}{{- $latest = $v }}{{- end }}
+      {{- end }}
+    {{- end }}
+    {{- $version = printf "%s.0" $latest }}
+  {{- end }}
   <div class="container">
     <section class="lp-section lp-section--try" aria-labelledby="quickstart-title">
       <div class="cli-demo-head">
