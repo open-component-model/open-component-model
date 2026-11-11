@@ -278,7 +278,7 @@ kubectl apply -f component.yaml
 Wait for it to become ready:
 
 ```bash
-kubectl get component replication-component -o wide
+kubectl get component replication-component
 ```
 
 {{< /step >}}
@@ -333,7 +333,7 @@ and the target `Repository`'s configuration.
 ### Watch it run
 
 ```bash
-kubectl get replication replication-example -owide
+kubectl get replication replication-example
 ```
 
 The transfer proceeds in two stages:
@@ -407,8 +407,8 @@ The controller waits for both before transferring.
 **Fix:** Check both objects:
 
 ```bash
-kubectl get component replication-component -o wide
-kubectl get repository replication-target -o wide
+kubectl get component replication-component
+kubectl get repository replication-target
 ```
 
 ## Next Steps
