@@ -6,7 +6,7 @@ on:
       - main
     paths:
       - '.github/workflows/website-verify.yml'
-      - '.github/workflows/release-mail-notification.yml'
+      - '.github/workflows/release-feed-pr.yml'
       - '.github/workflows/release.yml'
       - 'website/**'
       # Schemas/references under bindings are mounted into the website build for the
@@ -18,7 +18,7 @@ on:
       - website/**
     paths:
       - '.github/workflows/website-verify.yml'
-      - '.github/workflows/release-mail-notification.yml'
+      - '.github/workflows/release-feed-pr.yml'
       - '.github/workflows/release.yml'
       - 'website/**'
       - 'bindings/go/**'
@@ -57,7 +57,9 @@ jobs:
         working-directory: website
         run: |
           set -euo pipefail
-          export SMOKE_DIR="$(mktemp -d)"
+          SMOKE_DIR="$(mktemp -d)"
+          export SMOKE_DIR
+          trap 'rm -rf "$SMOKE_DIR"' EXIT
           node scripts/generate-release-feed.js \
             --input scripts/testdata/release-feed.json \
             --output "$SMOKE_DIR/releases.xml" \

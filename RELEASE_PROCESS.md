@@ -84,9 +84,9 @@ flowchart TD
     Promote --> WebsiteDocs[create_website_update_pr<br/>open docs PR to main<br/>pin Hugo module imports to website/v0.X.Y]
     PubCompFinal --> End([Final release live])
     WebsiteDocs --> End
-    PubCompRC --> NotifyMailRC[notify_release_mail_rc<br/>dispatch release-mail-notification on main]
+    PubCompRC --> NotifyMailRC[create_release_feed_pr_rc<br/>dispatch release-feed-pr on main]
     PubCompRC --> NotifyZulipRC[notify_release_rc<br/>dispatch release-zulip-notification on main]
-    PubCompFinal --> NotifyMailF[notify_release_mail<br/>dispatch release-mail-notification on main]
+    PubCompFinal --> NotifyMailF[create_release_feed_pr<br/>dispatch release-feed-pr on main]
     PubCompFinal --> NotifyZulipF[notify_release<br/>dispatch release-zulip-notification on main]
 
     classDef rc fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e
@@ -117,23 +117,45 @@ There is no `website/v0.X.Y-rc.N` tag. The website has no RC artifacts to valida
 
 ### Release notifications
 
-After each RC and each final release, the release workflow dispatches two independent notification jobs:
+After each RC and final publication, `notify_release_rc` / `notify_release` announce to Zulip.
+Independently, `create_release_feed_pr_rc` / `create_release_feed_pr` dispatch
+`release-feed-pr.yml` on `main` to **open or update a PR**, not publish an announcement.
 
-- `notify_release_rc` / `notify_release` — post to the Zulip channel (unchanged).
-- `notify_release_mail_rc` / `notify_release_mail` — update the mailing-list RSS feed.
+The workflow reads all paginated GitHub releases and generates `website/static/releases.xml`
+with canonical RC and final releases published since `2026-11-11T00:00:00Z`.
+It uses the existing OCMBot token and signed `create-pull-request` action pattern,
+restricting the PR to that one file. Pending releases accumulate in one PR from
+`automation/release-feed`; repeated runs with unchanged data do not create duplicate PRs.
+This branch is outside `website/**`, so pushing it cannot trigger the website publisher.
 
-The mailing-list job dispatches `release-mail-notification.yml` on `main` via `gh workflow run`. That workflow downloads all paginated GitHub releases, generates a deterministic `releases.xml` feed containing every canonical RC and final release since `2026-11-11T00:00:00Z`, and commits it to `gh-pages:releases.xml` using the OCMBot app token. `https://ocm.software/releases.xml` is then served by GitHub Pages. Groups.io polls that URL at :05 and :35 and creates one mailing-list post per newly discovered item; no email is sent directly by the workflow.
+**Review and merge the feed PR to publish it.** Hugo copies the committed static file
+to `/releases.xml` during the normal website deployment after merge. The feed workflow
+does not build Hugo, write to `gh-pages`, send email, or merge its own PR.
+Once configured, Groups.io polls [the release feed](https://ocm.software/releases.xml)
+at :05/:35 and posts newly discovered items to `ocm-announcements`.
+Stable GUIDs and item contents are intended to prevent repeat announcements; verify
+actual duplicate handling on the test list before enabling production delivery.
 
-**If a dispatch is missed** (branch without the backported hook, or a flaked run), refresh the feed manually:
+To recover a failed or missed run, or when a release branch lacks the new hooks:
 
 ```bash
-gh workflow run release-mail-notification.yml \
+gh workflow run release-feed-pr.yml \
   --repo open-component-model/open-component-model --ref main
 ```
 
-This is safe to rerun: if the feed bytes are unchanged, no commit is made and no new announcement is queued.
+Then review and merge the resulting PR and verify the website deployment. Backport
+the two dispatch jobs to `releases/v0.20` through `releases/v0.24` after the main change
+merges; until then run the command after each RC/final publication. No release-branch
+coverage is implied by adding the standalone workflow to `main`.
 
-**List configuration** is managed by the `ocm-announcements` list owner at `https://lists.neonephos.org/g/ocm-announcements` (Admin → Preferences → Integrations). The list owner contact is recorded in [ocm-project#1181](https://github.com/open-component-model/ocm-project/issues/1181). To pause announcements without reverting the feed, enable moderation on the feed integration in the Groups.io admin UI.
+List owners manage the integration under Admin → Preferences → Integrations on
+[ocm-announcements](https://lists.neonephos.org/g/ocm-announcements).
+Before production activation, test RC/final delivery and duplicate handling on
+`OCM-test-release-notifications`, then use moderation to reject initial production
+catch-up items before enabling automatic delivery. Keep the cutoff fixed.
+Record the integration owner, activation time, and delivery evidence in
+[ocm-project#1181](https://github.com/open-component-model/ocm-project/issues/1181).
+To pause delivery, enable moderation on the integration; do not reset the feed history.
 
 ## OCM components produced
 

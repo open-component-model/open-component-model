@@ -307,26 +307,20 @@ jobs:
             -f tag="$TAG"
           echo "Dispatched release-zulip-notification for $TAG on main."
 
-  # Publishes the release feed to gh-pages and triggers a mailing-list post for
-  # this RC via Groups.io polling. Independent of the Zulip job: one does not
-  # need the other to succeed. Uses the same dispatch pattern as notify_release_rc.
-  notify_release_mail_rc:
-    name: Trigger RC mailing-list notification
+  create_release_feed_pr_rc:
+    name: Trigger RC release feed PR
     needs: [prepare, tag_rc, release_rc, publish_components_rc]
     if: ${{ github.event.inputs.dry_run == 'false' && needs.tag_rc.outputs.pushed == 'true' }}
     runs-on: ubuntu-26.04-arm
     permissions:
       actions: write
     steps:
-      - name: Dispatch release-mail-notification on main
+      - name: Dispatch release-feed-pr on main
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh workflow run release-mail-notification.yml \
-            --repo "$GH_REPO" \
-            --ref main
-          echo "Dispatched release-mail-notification on main."
+          gh workflow run release-feed-pr.yml --repo "$GH_REPO" --ref main
 
   # Summarizes the RC only after the components are published, so the release
   # manager sees the summary with the OCM component coordinates
@@ -783,22 +777,17 @@ jobs:
             -f tag="$TAG"
           echo "Dispatched release-zulip-notification for $TAG on main."
 
-  # Publishes the release feed to gh-pages and triggers a mailing-list post for
-  # this final release via Groups.io polling. Independent of the Zulip job.
-  notify_release_mail:
-    name: Trigger release mailing-list notification
+  create_release_feed_pr:
+    name: Trigger final release feed PR
     needs: [prepare, promote_and_release_final, publish_components_final]
     if: ${{ github.event.inputs.dry_run == 'false' }}
     runs-on: ubuntu-26.04-arm
     permissions:
       actions: write
     steps:
-      - name: Dispatch release-mail-notification on main
+      - name: Dispatch release-feed-pr on main
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh workflow run release-mail-notification.yml \
-            --repo "$GH_REPO" \
-            --ref main
-          echo "Dispatched release-mail-notification on main."
+          gh workflow run release-feed-pr.yml --repo "$GH_REPO" --ref main

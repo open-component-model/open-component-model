@@ -9,7 +9,6 @@ on:
     paths:
       - 'website/**'
       - '.github/workflows/website-publish-site.yaml'
-      - '.github/scripts/release-feed-publication.js'
       # Paths that are relevant for tracking changes on `main` version.
       # CRDs are generated from api/v1alpha1 at build time via controller-gen.
       - 'bindings/go/cli/docs/reference/**'
@@ -23,12 +22,6 @@ on:
       - 'bindings/go/rsa/spec/credentials/v1/schemas/**'
       - 'bindings/go/sigstore/spec/credentials/**'
       - 'bindings/go/kubernetes/controller/api/v1alpha1/**'
-
-
-concurrency:
-  group: website-publish-site
-  cancel-in-progress: false
-  queue: max
 
 permissions:
   contents: read
@@ -81,16 +74,6 @@ jobs:
         run: |
           npm ci
           npm run build
-
-      - name: Preserve published release feed
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        with:
-          github-token: ${{ github.token }}
-          script: |
-            const { preserveReleaseFeed } = await import(`${process.env.GITHUB_WORKSPACE}/.github/scripts/release-feed-publication.js`);
-            await preserveReleaseFeed({ github, context, core }, `${process.env.GITHUB_WORKSPACE}/website/public/releases.xml`);
 
       - name: Publish as GitHub Pages
         uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4

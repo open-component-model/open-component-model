@@ -1,0 +1,76 @@
+name: Release Feed PR
+
+# Dispatched after each RC and final release. Publication waits for the PR to merge.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-feed-pr
+  cancel-in-progress: false
+
+jobs:
+  open_pr:
+    name: Open release feed PR
+    runs-on: ubuntu-26.04-arm
+    environment:
+      name: automation
+      deployment: false
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: website/package.json
+
+      - name: Generate release feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --paginate --slurp \
+            "repos/open-component-model/open-component-model/releases?per_page=100" \
+            > "$RUNNER_TEMP/ocm-releases.json"
+          node website/scripts/generate-release-feed.js \
+            --input "$RUNNER_TEMP/ocm-releases.json" \
+            --output website/static/releases.xml \
+            --since 2026-11-11T00:00:00Z
+
+      - name: Get OCMBot installation token
+        id: generate_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          base: main
+          token: ${{ steps.generate_token.outputs.token }}
+          title: "chore(website): update release feed"
+          commit-message: "chore(website): update release feed"
+          add-paths: website/static/releases.xml
+          # Avoid website/**: pushes there deploy before the PR has been reviewed.
+          branch: automation/release-feed
+          delete-branch: true
+          sign-commits: true
+          body: |
+            Updates the release feed with canonical RC and final releases published
+            since 2026-11-11T00:00:00Z. Subsequent releases update this same pending PR.
+
+            Review and merge to publish https://ocm.software/releases.xml through
+            the normal website deployment. Groups.io can then discover new items.
+            This workflow does not publish the website or send email.

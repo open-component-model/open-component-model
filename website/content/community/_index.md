@@ -44,6 +44,8 @@ Stay up to date by subscribing to one of the available feeds:
 - **Release announcements** — every RC and final release, announced via the [ocm-announcements mailing list](https://lists.neonephos.org/g/ocm-announcements): subscribe there to receive email. You can also subscribe directly to the [release RSS feed](https://ocm.software/releases.xml) in any feed reader.
 - **Blog posts** — follow the latest articles and posts: [blog RSS feed](https://ocm.software/blog/index.xml).
 
+Release-feed updates are reviewed through pull requests and published with the website after merge.
+
 ## Community Calendar
 
 All OCM meetings are public and listed on the
