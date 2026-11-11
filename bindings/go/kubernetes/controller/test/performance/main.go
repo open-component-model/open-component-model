@@ -24,7 +24,7 @@ import (
 // options configure one invocation: every object count in sizes, repeats times each.
 // The --help text of each flag says what it changes in the measurement.
 type options struct {
-	// kubeContext defaults to the benchmark's Kind cluster, so a run never lands on a real cluster by accident.
+	// kubeContext defaults to the benchmark's Kind cluster rather than the kubeconfig's current context.
 	kubeContext string
 
 	// The invocation matrix: one run per object count and repeat.
@@ -127,7 +127,7 @@ func parseFlags(args []string) (options, error) {
 
 	fs := flag.NewFlagSet("performance", flag.ContinueOnError)
 	fs.StringVar(&opts.kubeContext, "context", "kind-ocm-perf",
-		"Kubeconfig context. Defaults to the benchmark cluster so a run never lands on a real cluster by accident.")
+		"Kubeconfig context. Defaults to the benchmark cluster, not the current context. A run restarts the controller and creates and deletes namespaces there, so check where the context points.")
 
 	fs.StringVar(&sizes, "objects", "100,500,1000",
 		"Comma-separated object counts, one run each. An object is one pipeline: a Component, a Resource and a NamespacedDeployer.")

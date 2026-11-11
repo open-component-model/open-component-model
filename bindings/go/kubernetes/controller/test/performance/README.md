@@ -174,10 +174,13 @@ controller.
 | `--keep-namespaces`    | `false`                    | Keeps every run's namespace for inspection; they pile up.                                                                                                |
 | `--out`                | `test/performance/results` | Where each invocation writes its timestamped results directory.                                                                                          |
 
-The remaining flags locate the cluster, the registry and the controller: `--context` (defaults to `kind-ocm-perf`, so a
-run never lands on a real cluster by accident), `--registry`, `--cluster-registry`, `--registry-metrics`,
-`--controller-namespace`, `--controller-selector` and `--metrics-port`. Their defaults match the setup of
-`task test/performance/setup/local`.
+The remaining flags locate the cluster, the registry and the controller: `--context`, `--registry`, `--cluster-registry`,
+`--registry-metrics`, `--controller-namespace`, `--controller-selector` and `--metrics-port`. Their defaults match the
+setup of `task test/performance/setup/local`.
+
+`--context` defaults to `kind-ocm-perf`, not the current context. The name alone does not prove the cluster is the
+benchmark's: a run restarts the controller pods and creates and deletes namespaces wherever the context points, so check it
+first.
 
 ## Results
 
