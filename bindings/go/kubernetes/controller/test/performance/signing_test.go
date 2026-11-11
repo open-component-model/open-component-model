@@ -18,14 +18,14 @@ import (
 func TestLevels(t *testing.T) {
 	r := require.New(t)
 	ref := func(name string) []reference {
-		return []reference{{Name: referenceName, Component: name, Version: initialVersion}}
+		return []reference{{Name: referenceName, Component: name, Version: "1.0.0"}}
 	}
 	cvs := []componentVersion{
 		{Name: "root", Version: "1.0.1", References: ref("mid")},
-		{Name: "root", Version: initialVersion, References: ref("mid")},
-		{Name: "mid", Version: initialVersion, References: ref("leaf")},
-		{Name: "leaf", Version: initialVersion},
-		{Name: "alone", Version: initialVersion},
+		{Name: "root", Version: "1.0.0", References: ref("mid")},
+		{Name: "mid", Version: "1.0.0", References: ref("leaf")},
+		{Name: "leaf", Version: "1.0.0"},
+		{Name: "alone", Version: "1.0.0"},
 	}
 
 	var names [][]string
@@ -54,7 +54,7 @@ func TestPublisherSign(t *testing.T) {
 			Meta: descriptor.Meta{Version: "v2"},
 			Component: descriptor.Component{
 				Provider:      descriptor.Provider{Name: "ocm.software"},
-				ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: name, Version: initialVersion}},
+				ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: name, Version: "1.0.0"}},
 			},
 		}
 	}
@@ -62,10 +62,10 @@ func TestPublisherSign(t *testing.T) {
 	r.NoError(p.sign(t.Context(), child))
 
 	parent := desc("parent")
-	dig, err := p.componentDigest("child", initialVersion)
+	dig, err := p.componentDigest("child", "1.0.0")
 	r.NoError(err)
 	parent.Component.References = []descriptor.Reference{{
-		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: referenceName, Version: initialVersion}},
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: referenceName, Version: "1.0.0"}},
 		Component:   "child",
 		Digest:      dig,
 	}}
@@ -95,9 +95,9 @@ func TestPublisherSignRefusesMissingDigest(t *testing.T) {
 		Meta: descriptor.Meta{Version: "v2"},
 		Component: descriptor.Component{
 			Provider:      descriptor.Provider{Name: "ocm.software"},
-			ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: "parent", Version: initialVersion}},
+			ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: "parent", Version: "1.0.0"}},
 			References: []descriptor.Reference{{
-				ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: referenceName, Version: initialVersion}},
+				ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: referenceName, Version: "1.0.0"}},
 				Component:   "child",
 			}},
 		},
@@ -105,7 +105,7 @@ func TestPublisherSignRefusesMissingDigest(t *testing.T) {
 	r.ErrorContains(p.sign(t.Context(), desc), "missing digest in componentReference")
 	r.Empty(desc.Signatures)
 
-	_, err = p.componentDigest("child", initialVersion)
+	_, err = p.componentDigest("child", "1.0.0")
 	r.ErrorContains(err, "was not published before its parent")
 }
 

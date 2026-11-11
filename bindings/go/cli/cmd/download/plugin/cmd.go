@@ -25,6 +25,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types/spec"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -217,7 +218,8 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 	}
 
 	// ocm.software/plugins/[my-plugin]
-	pluginFileName := path.Base(ref.Component)
+	// The plugin manager only discovers (and Windows only executes) plugins with the .exe extension there.
+	pluginFileName := types.ExecutableName(path.Base(ref.Component))
 	output = filepath.Join(output, pluginFileName)
 
 	if err := shared.SaveBlobToFile(data, output); err != nil {
