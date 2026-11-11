@@ -10,10 +10,7 @@ import (
 	authorizationv1 "k8s.io/api/authorization/v1"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	authorizationclientv1 "k8s.io/client-go/kubernetes/typed/authorization/v1"
-	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
@@ -37,23 +34,29 @@ func Username(namespace, name string) string {
 	return fmt.Sprintf("system:serviceaccount:%s:%s", namespace, name)
 }
 
+// Groups returns the groups the API server authenticates a service account of namespace with.
+func Groups(namespace string) []string {
+	return []string{"system:serviceaccounts", "system:serviceaccounts:" + namespace, "system:authenticated"}
+}
+
 // Authorizer creates Access checks for service accounts.
 type Authorizer struct {
 	// reader reads service accounts uncached to avoid a cluster-wide informer for them.
 	reader client.Reader
-	// config is the base config the impersonating clients are derived from.
-	config *rest.Config
+	// reviews creates the SubjectAccessReviews. Unlike a SelfSubjectAccessReview it names the subject, so the
+	// controller needs no impersonation grant.
+	reviews client.Writer
 }
 
-func NewAuthorizer(reader client.Reader, config *rest.Config) *Authorizer {
-	return &Authorizer{reader: reader, config: config}
+func NewAuthorizer(reader client.Reader, reviews client.Writer) *Authorizer {
+	return &Authorizer{reader: reader, reviews: reviews}
 }
 
 // Access checks what a single service account may read. It is meant to live for one reconciliation.
 type Access struct {
 	namespace      string
 	serviceAccount string
-	reviews        authorizationclientv1.SelfSubjectAccessReviewInterface
+	reviews        client.Writer
 	allowed        map[reference]bool
 }
 
@@ -70,17 +73,10 @@ func (a *Authorizer) For(ctx context.Context, namespace, name string) (*Access, 
 		return nil, fmt.Errorf("failed to get service account %s: %w", key, err)
 	}
 
-	cfg := rest.CopyConfig(a.config)
-	cfg.Impersonate = rest.ImpersonationConfig{UserName: Username(key.Namespace, key.Name)}
-	c, err := authorizationclientv1.NewForConfig(cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create client impersonating service account %s: %w", key, err)
-	}
-
 	return &Access{
 		namespace:      key.Namespace,
 		serviceAccount: key.Name,
-		reviews:        c.SelfSubjectAccessReviews(),
+		reviews:        a.reviews,
 		allowed:        make(map[reference]bool),
 	}, nil
 }
@@ -137,8 +133,10 @@ func (a *Access) authorize(ctx context.Context, ref reference) (bool, error) {
 		return allowed, nil
 	}
 
-	review, err := a.reviews.Create(ctx, &authorizationv1.SelfSubjectAccessReview{
-		Spec: authorizationv1.SelfSubjectAccessReviewSpec{
+	review := &authorizationv1.SubjectAccessReview{
+		Spec: authorizationv1.SubjectAccessReviewSpec{
+			User:   Username(a.namespace, a.serviceAccount),
+			Groups: Groups(a.namespace),
 			ResourceAttributes: &authorizationv1.ResourceAttributes{
 				Namespace: ref.namespace,
 				Verb:      "get",
@@ -147,8 +145,8 @@ func (a *Access) authorize(ctx context.Context, ref reference) (bool, error) {
 				Name:      ref.name,
 			},
 		},
-	}, metav1.CreateOptions{})
-	if err != nil {
+	}
+	if err := a.reviews.Create(ctx, review); err != nil {
 		return false, fmt.Errorf("failed to review access of service account %s/%s to %s %s/%s: %w",
 			a.namespace, a.serviceAccount, ref.resource, ref.namespace, ref.name, err)
 	}

@@ -58,7 +58,7 @@ var (
 
 // SetupWithManager sets up the controller with the Manager. Manager bootstrap
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, concurrency int) error {
-	r.authorizer = serviceaccount.NewAuthorizer(mgr.GetAPIReader(), mgr.GetConfig())
+	r.authorizer = serviceaccount.NewAuthorizer(mgr.GetAPIReader(), mgr.GetClient())
 
 	// Create index for repository reference name from components to make sure to reconcile, when the base ocm-
 	// repository changes.
@@ -181,7 +181,7 @@ func (r *Reconciler) mapToDeletingComponent(ctx context.Context, obj client.Obje
 
 // +kubebuilder:rbac:groups="",resources=secrets;configmaps;serviceaccounts,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=serviceaccounts/token,verbs=create
-// +kubebuilder:rbac:groups="",resources=serviceaccounts,verbs=impersonate
+// +kubebuilder:rbac:groups=authorization.k8s.io,resources=subjectaccessreviews,verbs=create
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 //nolint:funlen,cyclop // we do not want to cut the function at arbitrary points

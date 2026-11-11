@@ -9,6 +9,7 @@ rules:
     resources:
       - configmaps
       - secrets
+      - serviceaccounts
     verbs:
       - get
       - list
@@ -29,16 +30,13 @@ rules:
   - apiGroups:
       - ""
     resources:
-      - serviceaccounts
-    verbs:
-      - get
-      - impersonate
-      - list
-      - watch
-  - apiGroups:
-      - ""
-    resources:
       - serviceaccounts/token
+    verbs:
+      - create
+  - apiGroups:
+      - authorization.k8s.io
+    resources:
+      - subjectaccessreviews
     verbs:
       - create
   - apiGroups:
