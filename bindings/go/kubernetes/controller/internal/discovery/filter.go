@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // ComponentKey identifies a component by name and version.
@@ -44,21 +43,13 @@ type Filtered struct {
 	// EmptyStage names the selector stage that emptied the result, or is
 	// empty for an ordinary result. Its values are the Stage constants.
 	EmptyStage string
-	// ReferencePaths holds the shortest reference path from the graph root
-	// for every component reachable from it (see referencePaths). It is
-	// computed on the unfiltered graph, so a selector that drops an
-	// intermediate component never cuts a path. Nil when the graph has no
-	// root or no extraction expression references referencePath. Shared
-	// read-only.
-	ReferencePaths map[ComponentKey][]runtime.Identity
 
-	// resourceVersionNeeded holds, per surviving component, the result of
-	// versionNeeded over the component's unfiltered resources. A resource
-	// selector must not make a version look unnecessary: the Resource
-	// controller matches resourceIdentity against all resources of the
-	// component. Nil when no extraction expression references
-	// resourceIdentity.
-	resourceVersionNeeded map[ComponentKey]map[string]bool
+	// root and unfiltered are the graph root and every descriptor of the graph
+	// before any selector. The referencePath and resourceIdentity bindings are
+	// computed from them, so a selector never cuts a path or hides a resource
+	// that an identity must be told apart from. Shared read-only.
+	root       ComponentKey
+	unfiltered map[ComponentKey]*descriptor.Descriptor
 }
 
 // Filter applies the reference, component, and resource selector stages of q
@@ -84,11 +75,6 @@ func (q *Query) Filter(ctx context.Context, graph Graph) (*Filtered, error) {
 		if _, exists := byKey[key]; !exists {
 			byKey[key] = d
 		}
-	}
-
-	var paths map[ComponentKey][]runtime.Identity
-	if q.extract != nil && q.extract.usesReferencePath {
-		paths = referencePaths(graph.Root, byKey)
 	}
 
 	survivors, err := q.filterReferences(ctx, byKey)
@@ -124,28 +110,8 @@ func (q *Query) Filter(ctx context.Context, graph Graph) (*Filtered, error) {
 		return &Filtered{Descriptors: []*descriptor.Descriptor{}, EmptyStage: StageResource}, nil
 	}
 
-	var versionNeededByKey map[ComponentKey]map[string]bool
-	if q.extract != nil && q.extract.usesResourceIdentity {
-		versionNeededByKey = make(map[ComponentKey]map[string]bool, len(filtered))
-		for _, d := range filtered {
-			key := ComponentKey{Name: d.Component.Name, Version: d.Component.Version}
-			// byKey holds the unfiltered descriptor; d may be a copy whose
-			// resources the resource selector reduced.
-			all := byKey[key].Component.Resources
-			ids := make([]runtime.Identity, len(all))
-			for i := range all {
-				ids[i] = all[i].ToIdentity()
-			}
-			versionNeededByKey[key] = versionNeeded(ids)
-		}
-	}
-
 	// Lexicographic order by (component.name, component.version).
-	return &Filtered{
-		Descriptors:           sortByComponentKey(filtered),
-		ReferencePaths:        paths,
-		resourceVersionNeeded: versionNeededByKey,
-	}, nil
+	return &Filtered{Descriptors: sortByComponentKey(filtered), root: graph.Root, unfiltered: byKey}, nil
 }
 
 // filterReferences applies the reference selector stage. Without a selector all

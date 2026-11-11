@@ -41,9 +41,9 @@
 // resourceIdentity is the resource identity. Both drop the version attribute
 // where it is not needed to disambiguate (see versionNeeded), judged against
 // all references or resources of the component, not only those a selector
-// kept, because that is what the Resource controller matches against. Each is
-// only computed when an extraction expression references it, which Compile
-// reads from the checked CEL AST.
+// kept, because that is what the Resource controller matches against. Both are
+// bound lazily (see bindings), so they are only computed when an expression
+// reads them.
 //
 // A missing access (missing map key, missing attribute, out-of-range index) is
 // not an error: it is a selector nonmatch and an omitted extraction field. All

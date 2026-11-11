@@ -160,7 +160,7 @@ func TestReferencePathsWithoutRoot(t *testing.T) {
 	r.Nil(referencePaths(ComponentKey{}, keyed(newDescriptor("other", "1.0.0"))))
 }
 
-func TestVersionlessIdentities(t *testing.T) {
+func TestVersionlessIdentity(t *testing.T) {
 	r := require.New(t)
 	in := []runtime.Identity{
 		{"name": "a", "version": "1.0.0"},
@@ -169,13 +169,18 @@ func TestVersionlessIdentities(t *testing.T) {
 		{"name": "b", "version": "1.0.0", "arch": "arm64"},
 		nil,
 	}
+	needed := versionNeeded(in)
+	var out []runtime.Identity
+	for _, id := range in {
+		out = append(out, versionlessIdentity(id, needed))
+	}
 	r.Equal([]runtime.Identity{
 		{"name": "a"},
 		{"name": "b", "version": "1.0.0"},
 		{"name": "b", "version": "2.0.0"},
 		{"name": "b", "arch": "arm64"},
 		{},
-	}, versionlessIdentities(in))
+	}, out)
 	r.Equal(runtime.Identity{"name": "a", "version": "1.0.0"}, in[0], "the input must not be modified")
 }
 
@@ -239,21 +244,6 @@ func TestProjectByResourcesReferencePathAndResourceIdentity(t *testing.T) {
 	r.JSONEq(`{"name":"image","architecture":"amd64"}`, mustJSON(t, p.Extracted[0]["resource"]))
 	r.JSONEq(`{"name":"image","architecture":"arm64"}`, mustJSON(t, p.Extracted[1]["resource"]))
 	r.Equal("chart", p.Extracted[0]["leaf"], "typed bindings support list and map access")
-}
-
-func TestProjectResourceIdentityKeepsVersionToDisambiguate(t *testing.T) {
-	r := require.New(t)
-	v1 := newResource("chart")
-	v2 := newResource("chart")
-	v2.Version = "2.0.0"
-
-	p := projectGraph(t, specWithExtract(&v1alpha1.Extract{ByResources: map[string]string{
-		"resource": `resourceIdentity`,
-	}}), newDescriptor("root", "1.0.0", withResources(v1, v2)))
-
-	r.Len(p.Extracted, 2)
-	r.JSONEq(`{"name":"chart","version":"1.0.0"}`, mustJSON(t, p.Extracted[0]["resource"]))
-	r.JSONEq(`{"name":"chart","version":"2.0.0"}`, mustJSON(t, p.Extracted[1]["resource"]))
 }
 
 func TestProjectByComponentsReferencePath(t *testing.T) {
@@ -435,59 +425,30 @@ func TestProjectedRecordResolvesLikeResourceController(t *testing.T) {
 	}
 }
 
-// TestNameOnlyIdentityMissesExtraIdentity documents why resourceIdentity
-// exists: a name-only identity, as hand-written extract expressions tend to
-// produce, matches no resource that carries extra identity.
-func TestNameOnlyIdentityMissesExtraIdentity(t *testing.T) {
+// TestBindingsAreLazy pins that the bindings are only computed when an
+// expression reads them. An unreachable component has no reference path:
+// reading it is an extraction error, not reading it must not fail.
+func TestBindingsAreLazy(t *testing.T) {
 	r := require.New(t)
-	res := newResource("image", withResourceExtras(map[string]string{"architecture": "amd64"}))
-	r.False(runtime.Identity{"name": "image"}.Match(res.ToIdentity(), ocm.IdentityFuncIgnoreVersion()))
-}
-
-func TestCompileDetectsBindingUse(t *testing.T) {
-	tests := []struct {
-		name         string
-		extract      *v1alpha1.Extract
-		wantPath     bool
-		wantIdentity bool
-	}{
-		{name: "unused", extract: &v1alpha1.Extract{ByResources: map[string]string{"n": `resource.name`}}},
-		{name: "field of component named like the binding", extract: &v1alpha1.Extract{ByResources: map[string]string{"p": `component.referencePath`}}},
-		{name: "direct use", extract: &v1alpha1.Extract{ByResources: map[string]string{"p": `referencePath`, "r": `resourceIdentity`}}, wantPath: true, wantIdentity: true},
-		{name: "inside a function", extract: &v1alpha1.Extract{ByResources: map[string]string{"d": `size(referencePath)`}}, wantPath: true},
-		{name: "inside a macro", extract: &v1alpha1.Extract{ByResources: map[string]string{"h": `referencePath.map(h, h.name)`}}, wantPath: true},
-		{name: "inside a map literal", extract: &v1alpha1.Extract{ByResources: map[string]string{"r": `{"id": resourceIdentity}`}}, wantIdentity: true},
-		{name: "byComponents", extract: &v1alpha1.Extract{ByComponents: map[string]string{"p": `referencePath`}}, wantPath: true},
+	descriptors := []*descriptor.Descriptor{
+		newDescriptor("root", "1.0.0", withResources(newResource("cfg"))),
+		newDescriptor("unreachable", "1.0.0", withResources(newResource("image"))),
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := require.New(t)
-			q, err := Compile(t.Context(), specWithExtract(tt.extract))
-			r.NoError(err)
-			r.Equal(tt.wantPath, q.extract.usesReferencePath)
-			r.Equal(tt.wantIdentity, q.extract.usesResourceIdentity)
-		})
-	}
-}
+	graph := Graph{Root: ComponentKey{Name: "root", Version: "1.0.0"}, Descriptors: descriptors}
 
-func TestFilterComputesReferencePathsOnlyWhenUsed(t *testing.T) {
-	r := require.New(t)
-	descriptors := nestedGraph(newResource("image"))
-	graph := Graph{Root: ComponentKey{Name: "acme.org/root", Version: "1.0.0"}, Descriptors: descriptors}
+	unused, err := Compile(t.Context(), specWithExtract(&v1alpha1.Extract{ByResources: map[string]string{"n": `resource.name`}}))
+	r.NoError(err)
+	f, err := unused.Filter(t.Context(), graph)
+	r.NoError(err)
+	_, err = unused.Project(t.Context(), f)
+	r.NoError(err, "an unread binding must not be computed")
 
-	for _, tc := range []struct {
-		spec *v1alpha1.DiscoverySpec
-		want bool
-	}{
-		{spec: &v1alpha1.DiscoverySpec{}},
-		{spec: specWithExtract(&v1alpha1.Extract{ByResources: map[string]string{"r": `resourceIdentity`}})},
-		{spec: specWithExtract(&v1alpha1.Extract{Expression: `[{"n": size(components)}]`})},
-		{spec: specWithExtract(&v1alpha1.Extract{ByResources: map[string]string{"p": `referencePath`}}), want: true},
-	} {
-		q, err := Compile(t.Context(), tc.spec)
-		r.NoError(err)
-		f, err := q.Filter(t.Context(), graph)
-		r.NoError(err)
-		r.Equal(tc.want, f.ReferencePaths != nil, "spec %+v", tc.spec.Extract)
-	}
+	used, err := Compile(t.Context(), specWithExtract(&v1alpha1.Extract{ByResources: map[string]string{"p": `referencePath`}}))
+	r.NoError(err)
+	f, err = used.Filter(t.Context(), graph)
+	r.NoError(err)
+	_, err = used.Project(t.Context(), f)
+	var extractErr *ExtractError
+	r.ErrorAs(err, &extractErr)
+	r.ErrorContains(err, "not reachable from the root component")
 }
