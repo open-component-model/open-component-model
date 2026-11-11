@@ -15,6 +15,11 @@ task test/e2e/setup/local
 
 See the [installation notes in the root README](../README.md#installation) for details.
 
+The in-cluster registry serves plain HTTP. OCM talks plain HTTP to a host only when the HTTP client
+configuration says so, so every `Repository` in the examples references the `ocm-plain-http` ConfigMap
+(`test/e2e/hacks/ocm-plain-http.yaml`, applied by the setup above) through `spec.ocmConfig`. Drop that entry
+when you point an example at a TLS registry.
+
 ## Example overview
 
 | Example | Deployer(s) | What it demonstrates |

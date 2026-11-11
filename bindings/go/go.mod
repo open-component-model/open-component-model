@@ -25,7 +25,7 @@ require (
 	github.com/docker/cli v29.9.0+incompatible
 	github.com/gabriel-vasile/mimetype v1.4.15
 	github.com/go-git/go-billy/v6 v6.0.0-beta.1
-	github.com/go-git/go-git/v6 v6.0.0-alpha.5
+	github.com/go-git/go-git/v6 v6.0.0-beta.1
 	github.com/go-logr/logr v1.4.4
 	github.com/gobwas/glob v1.0.0
 	github.com/google/go-github/v92 v92.0.0

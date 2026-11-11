@@ -18,6 +18,10 @@ spec:
     baseUrl: http://image-registry:5000
     type: OCIRegistry
   interval: 10m
+  ocmConfig:
+    # Allows plain HTTP to the registry above (created by test/e2e/hacks/setup.sh).
+    - kind: ConfigMap
+      name: ocm-plain-http
 ---
 # Target repository: the password-protected registry the component is replicated into.
 apiVersion: delivery.ocm.software/v1alpha1
@@ -34,6 +38,8 @@ spec:
   ocmConfig:
     - kind: Secret
       name: replication-simple-credentials
+    - kind: ConfigMap
+      name: ocm-plain-http
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Component
@@ -58,3 +64,5 @@ spec:
   ocmConfig:
     - kind: Secret
       name: replication-simple-credentials
+    - kind: ConfigMap
+      name: ocm-plain-http
