@@ -146,11 +146,12 @@ var _ = Describe("controller", func() {
 						"compositeresourcedefinitions.apiextensions.crossplane.io/"+xrdName)).To(Succeed())
 
 					By("creating the Crossplane XR instance")
-					Expect(utils.DeployAndWaitForResource(
-						ctx, filepath.Join(examplesDir, example.Name(), CrossplaneInstance),
-						"condition=Ready=true",
-						timeout,
-					)).To(Succeed())
+					// Mirror the FluxCD/ArgoCD waits below: wait for the XR to be created
+					// before waiting on its Ready condition.
+					crossplaneInstance := filepath.Join(examplesDir, example.Name(), CrossplaneInstance)
+					Expect(utils.DeployResource(ctx, crossplaneInstance)).To(Succeed())
+					Expect(utils.WaitForResource(ctx, "create", timeout, "-f", crossplaneInstance)).To(Succeed())
+					Expect(utils.WaitForResource(ctx, "condition=Ready=true", timeout, "-f", crossplaneInstance)).To(Succeed())
 
 					By("validating the Crossplane FluxCD-managed deployment")
 					name = "deployment.apps/" + crossplaneName + "-podinfo"
