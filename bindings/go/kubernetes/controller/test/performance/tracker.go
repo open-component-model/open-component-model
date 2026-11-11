@@ -12,10 +12,11 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	toolscache "k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// tracker watches the target kind of a run and records when each object is
-// first seen ready. A watch instead of polling keeps the timing resolution
+// tracker watches the kind of a phase and records when each object is first
+// seen done. A watch instead of polling keeps the timing resolution
 // independent of object count.
 type tracker struct {
 	expected int
@@ -61,9 +62,9 @@ func startTracker(ctx context.Context, c *cluster, w workload, gvk schema.GroupV
 	if err != nil {
 		return nil, fmt.Errorf("getting informer for %s: %w", gvk.Kind, err)
 	}
-	if _, err := inf.AddEventHandler(toolscache.ResourceEventHandlerFuncs{
+	if _, err := inf.AddEventHandler(toolscache.ResourceEventHandlerDetailedFuncs{
 		AddFunc:    t.observe,
-		UpdateFunc: func(_, obj any) { t.observe(obj) },
+		UpdateFunc: func(_, obj any) { t.observe(obj, false) },
 	}); err != nil {
 		return nil, fmt.Errorf("adding event handler: %w", err)
 	}
@@ -83,23 +84,28 @@ func (t *tracker) markStart() time.Time {
 	return t.start
 }
 
-func (t *tracker) observe(obj any) {
+// observe records the state of an object. Objects of the informer's initial list
+// existed before the change and are ignored: a phase may watch for a state they
+// already have, such as the version a drift reverts to, which only counts once it
+// is seen again after the change.
+func (t *tracker) observe(obj any, initial bool) {
 	u, ok := obj.(*unstructured.Unstructured)
-	if !ok {
+	if !ok || initial {
 		return
 	}
+	key := client.ObjectKeyFromObject(u).String()
 	s := t.state(u)
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.last[u.GetName()] = s
+	t.last[key] = s
 	if !s.ready {
 		return
 	}
-	if _, seen := t.readyAt[u.GetName()]; seen {
+	if _, seen := t.readyAt[key]; seen {
 		return
 	}
-	t.readyAt[u.GetName()] = time.Now()
+	t.readyAt[key] = time.Now()
 	if len(t.readyAt) == t.expected {
 		close(t.done)
 	}
@@ -150,4 +156,12 @@ func (t *tracker) summary() trackerSummary {
 	// Objects never observed at all count as pending too.
 	s.pending = t.expected - s.ready - s.failed
 	return s
+}
+
+// objectState classifies a tracked object. failed means Ready=False at the
+// time of observation; the controller may still recover it.
+type objectState struct {
+	ready  bool
+	failed bool
+	reason string
 }
