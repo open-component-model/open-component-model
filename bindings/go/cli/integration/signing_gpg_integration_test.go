@@ -62,7 +62,8 @@ configurations:
     type: GPGSigningConfiguration/v1alpha1
   verifier:
     type: GPGSigningConfiguration/v1alpha1
-`, registry.Host, registry.Port, registry.User, registry.Password, privKeyPath, pubKeyPath)
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`, registry.Host, registry.Port, registry.User, registry.Password, privKeyPath, pubKeyPath)
 	cfgPath := filepath.Join(dir, "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
@@ -189,7 +190,8 @@ configurations:
 - type: signing.config.ocm.software/v1alpha1
   verifier:
     type: GPGSigningConfiguration/v1alpha1
-`, registry.Host, registry.Port, registry.User, registry.Password, otherPubKeyPath)
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`, registry.Host, registry.Port, registry.User, registry.Password, otherPubKeyPath)
 		wrongKeyCfgPath := filepath.Join(otherDir, "ocmconfig-wrongkey.yaml")
 		r.NoError(os.WriteFile(wrongKeyCfgPath, []byte(wrongKeyCfg), os.ModePerm))
 
