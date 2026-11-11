@@ -35,18 +35,26 @@
 }
 
 .lp-home .cli-demo {
+    /* terminal stays dark in both themes, like a real shell */
     --cli-term-bg: #0f1013;
     --cli-term-border: #262a31;
     --cli-term-line: #22262d;
     --cli-text: #d7dae0;
     --cli-muted: #8a9099;
+    /* command rows below adopt the site's card colours so the panel fits
+       both the light and dark site themes */
+    --cli-cmd-color: var(--brand-blue-mid);
 
     overflow: hidden;
-    background: var(--cli-term-bg);
-    border: 1px solid var(--cli-term-border);
-    border-radius: var(--ocm-card-border-radius, 14px);
-    box-shadow: 0 30px 80px -42px rgba(0, 0, 0, 0.9);
+    background: var(--ocm-card-bg);
+    border: 1px solid var(--ocm-card-border);
+    border-radius: var(--ocm-card-border-radius, 12px);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 14px 36px -24px rgba(0, 0, 0, 0.4);
     font-family: var(--bs-font-monospace, ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace);
+}
+
+[data-bs-theme="dark"] .lp-home .cli-demo {
+    --cli-cmd-color: #aeb6ff;
 }
 
 /* --- title bar --- */
@@ -105,6 +113,7 @@
 /* --- terminal body --- */
 .lp-home .cli-demo__term {
     height: 430px;
+    background: var(--cli-term-bg);
     padding: 18px 20px 20px;
     overflow-y: auto;
     color: var(--cli-text);
@@ -183,7 +192,7 @@
     transition: background 0.25s, border-color 0.25s;
 
     & + & {
-        border-top: 1px solid var(--cli-term-line);
+        border-top: 1px solid var(--ocm-card-border);
     }
 
     &.is-active {
@@ -200,10 +209,10 @@
     width: 26px;
     height: 26px;
     border-radius: 50%;
-    color: var(--cli-muted);
+    color: var(--lp-c-text-2);
     font-size: 13px;
     font-weight: 700;
-    border: 1.5px solid #333842;
+    border: 1.5px solid var(--ocm-card-border);
     transition: color 0.25s, border-color 0.25s, background 0.25s;
 }
 
@@ -221,25 +230,25 @@
 .lp-home .cli-demo__what {
     display: block;
     margin-bottom: 6px;
-    color: #d7dae0;
+    color: var(--lp-c-text-1);
     font-family: var(--bs-font-sans-serif);
     font-size: 14px;
     font-weight: 600;
 }
 
 .lp-home .cli-demo__hint {
-    color: #7e848d;
+    color: var(--lp-c-text-2);
     font-weight: 400;
 
     code {
-        color: #9aa0a9;
+        color: var(--lp-c-text-2);
         font-size: 12px;
     }
 }
 
 .lp-home .cli-demo__cmd {
     display: block;
-    color: #aeb6ff;
+    color: var(--cli-cmd-color);
     font-size: 12.5px;
     white-space: pre;
     overflow-x: auto;
@@ -259,7 +268,7 @@
     align-items: center;
     gap: 6px;
     margin-top: 8px;
-    color: var(--cli-muted);
+    color: var(--lp-c-text-2);
     font-family: var(--bs-font-sans-serif);
     font-size: 13px;
     text-decoration: none;
@@ -282,18 +291,17 @@
         align-items: center;
         gap: 7px;
         padding: 8px 13px;
-        color: #d7dae0;
+        color: var(--lp-c-text-1);
         font-family: var(--bs-font-sans-serif);
         font-size: 13px;
         font-weight: 600;
         text-decoration: none;
-        background: #17181c;
-        border: 1px solid #333842;
+        background: transparent;
+        border: 1px solid var(--ocm-card-border);
         border-radius: 9px;
         transition: color 0.18s, border-color 0.18s;
 
         &:hover {
-            color: #fff;
             border-color: var(--brand-cyan);
 
             .cli-demo__arrow { transform: translateX(3px); }
@@ -312,24 +320,24 @@
     align-items: center;
     gap: 7px;
     padding: 8px 12px;
-    color: var(--cli-muted);
+    color: var(--lp-c-text-2);
     font-family: var(--bs-font-sans-serif);
     font-size: 13px;
     font-weight: 600;
-    background: #17181c;
-    border: 1px solid #333842;
+    background: transparent;
+    border: 1px solid var(--ocm-card-border);
     border-radius: 9px;
     cursor: pointer;
     transition: color 0.18s, border-color 0.18s;
 
     &:hover {
-        color: #fff;
+        color: var(--lp-c-text-1);
         border-color: var(--brand-cyan);
     }
 
     &.is-copied {
-        color: #4ade80;
-        border-color: #4ade80;
+        color: #1a9e4b;
+        border-color: #1a9e4b;
     }
 
     svg {
