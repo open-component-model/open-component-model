@@ -46,13 +46,13 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          SHA=$(gh api --method GET "repos/$GH_REPO/pulls" \
+          OPEN_PR=$(gh api --method GET "repos/$GH_REPO/pulls" \
             -f state=open -f base=main \
             -f head="$GITHUB_REPOSITORY_OWNER:automation/release-feed" \
-            --jq '.[0].head.sha // empty')
-          if [ -n "$SHA" ]; then
+            --jq '.[0].number // empty')
+          if [ -n "$OPEN_PR" ]; then
             gh api --header 'Accept: application/vnd.github.raw+json' \
-              "repos/$GH_REPO/contents/website/static/releases.xml?ref=$SHA" \
+              "repos/$GH_REPO/contents/website/static/releases.xml?ref=automation/release-feed" \
               > "$RUNNER_TEMP/pending-releases.xml"
             echo "path=$RUNNER_TEMP/pending-releases.xml" >> "$GITHUB_OUTPUT"
           fi
@@ -62,6 +62,15 @@ jobs:
         with:
           ref: main
           persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .github/scripts/package.json
+
+      - name: Install workflow dependencies
+        working-directory: .github/scripts
+        run: npm ci
 
       - name: Add release to feed
         env:
@@ -76,7 +85,7 @@ jobs:
           if [ -n "$PENDING_FEED" ]; then
             pending_args=(--pending "$PENDING_FEED")
           fi
-          python3 website/scripts/update-release-feed.py \
+          node .github/scripts/update-release-feed.js \
             --release "$RUNNER_TEMP/release.json" \
             --feed website/static/releases.xml \
             "${pending_args[@]}"

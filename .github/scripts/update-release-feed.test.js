@@ -1,12 +1,13 @@
-const test = require("node:test");
-const assert = require("node:assert/strict");
-const { spawnSync } = require("node:child_process");
-const { mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync } = require("node:fs");
-const { join } = require("node:path");
-const { tmpdir } = require("node:os");
+import test from "node:test";
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { DOMParser, onWarningStopParsing } from "@xmldom/xmldom";
 
-const SCRIPT = join(__dirname, "update-release-feed.py");
-const RELEASE = JSON.parse(readFileSync(join(__dirname, "testdata/release.json"), "utf8"));
+const SCRIPT = join(import.meta.dirname, "update-release-feed.js");
+const RELEASE = JSON.parse(readFileSync(join(import.meta.dirname, "testdata/release.json"), "utf8"));
 const PREFIX = "https://github.com/open-component-model/open-component-model/releases/tag/";
 const FINAL = { ...RELEASE, tag_name: "v0.24.0", published_at: "2026-11-12T00:00:00Z", prerelease: false };
 
@@ -15,7 +16,7 @@ function setup(t) {
     t.after(() => rmSync(dir, { recursive: true, force: true }));
     const feed = join(dir, "releases.xml");
     const input = join(dir, "release.json");
-    const invoke = (...args) => spawnSync("python3", [SCRIPT, ...args], { encoding: "utf8" });
+    const invoke = (...args) => spawnSync(process.execPath, [SCRIPT, ...args], { encoding: "utf8" });
     return {
         dir, feed, input, invoke,
         run(release = RELEASE, pending) {
@@ -29,11 +30,16 @@ function setup(t) {
     };
 }
 
+function parseFeed(file) {
+    return new DOMParser({ onError: onWarningStopParsing }).parseFromString(readFileSync(file, "utf8"), "application/xml");
+}
+
 function guids(file) {
-    return [...readFileSync(file, "utf8").matchAll(/<guid[^>]*>([^<]+)<\/guid>/g)].map((match) => match[1]);
+    return Array.from(parseFeed(file).getElementsByTagName("guid")).map((element) => element.textContent);
 }
 
 function succeeded(result) {
+    assert.ifError(result.error);
     assert.equal(result.status, 0, result.stderr);
 }
 
@@ -42,6 +48,23 @@ test("first run adds only the passed release, including an old release", (t) => 
     const old = { ...RELEASE, tag_name: "v0.1.0", published_at: "2020-01-01T00:00:00Z" };
     succeeded(env.run(old));
     assert.deepEqual(guids(env.feed), [`${PREFIX}v0.1.0`]);
+});
+
+test("RSS exposes canonical item links and the Atom subscription URL", (t) => {
+    const env = setup(t);
+    succeeded(env.run());
+    const document = parseFeed(env.feed);
+    assert.equal(document.documentElement.tagName, "rss");
+    assert.equal(document.documentElement.getAttribute("version"), "2.0");
+    const item = document.getElementsByTagName("item")[0];
+    const guid = item.getElementsByTagName("guid")[0];
+    assert.equal(guid.textContent, `${PREFIX}${RELEASE.tag_name}`);
+    assert.equal(item.getElementsByTagName("link")[0].textContent, guid.textContent);
+    assert.equal(guid.getAttribute("isPermaLink"), "true");
+    const self = document.getElementsByTagNameNS("http://www.w3.org/2005/Atom", "link")[0];
+    assert.equal(self.getAttribute("href"), "https://ocm.software/releases.xml");
+    assert.equal(self.getAttribute("rel"), "self");
+    assert.equal(self.getAttribute("type"), "application/rss+xml");
 });
 
 test("adding a final retains its RC and orders by publication time", (t) => {
@@ -89,6 +112,9 @@ for (const [name, release] of [
     ["draft", { ...RELEASE, draft: true }],
     ["unpublished", { ...RELEASE, published_at: null }],
     ["invalid publication date", { ...RELEASE, published_at: "not-a-date" }],
+    ["invalid calendar date", { ...RELEASE, published_at: "2026-02-30T00:00:00Z" }],
+    ["invalid hour", { ...RELEASE, published_at: "2026-11-11T24:00:00Z" }],
+    ["tag with trailing newline", { ...RELEASE, tag_name: "v0.24.0\n" }],
     ["missing timezone", { ...RELEASE, published_at: "2026-11-11T00:00:00" }],
     ["multiple releases", [RELEASE, FINAL]]
 ]) {
@@ -122,6 +148,15 @@ test("missing pending feed fails without replacing the published feed", (t) => {
     const before = readFileSync(env.feed);
     assert.notEqual(env.run(FINAL, join(env.dir, "missing.xml")).status, 0);
     assert.deepEqual(readFileSync(env.feed), before);
+});
+
+test("malformed XML is rejected rather than repaired by the parser", (t) => {
+    const env = setup(t);
+    succeeded(env.run());
+    const malformed = readFileSync(env.feed, "utf8").replace('isPermaLink="true"', "isPermaLink=true");
+    writeFileSync(env.feed, malformed);
+    assert.notEqual(env.run(FINAL).status, 0);
+    assert.equal(readFileSync(env.feed, "utf8"), malformed);
 });
 
 test("invalid JSON and missing arguments do not create a feed", (t) => {

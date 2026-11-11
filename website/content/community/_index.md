@@ -41,10 +41,8 @@ Join [neonephos-ocm-support](https://linuxfoundation.zulipchat.com/#narrow/chann
 
 Follow OCM blog posts and release announcements:
 
-- **Release announcements** — join the [ocm-announcements mailing list](https://lists.neonephos.org/g/ocm-announcements). The release RSS feed will be available at `https://ocm.software/releases.xml` after the first generated feed PR is merged and deployed; mailing-list delivery also requires the list owner's integration setup.
+- **Release announcements** — join the [ocm-announcements mailing list](https://lists.neonephos.org/g/ocm-announcements). Release RSS endpoint: `https://ocm.software/releases.xml`.
 - **Blog posts** — follow the latest articles and posts: [blog RSS feed](https://ocm.software/blog/index.xml).
-
-Each release-feed update adds the selected release while retaining earlier entries. Updates are reviewed through pull requests and published with the website after merge.
 
 ## Community Calendar
 

@@ -12,7 +12,6 @@
     "clean": "npm run clean:build && npm run clean:lint && npm run clean:install",
     "create": "./node_modules/.bin/hugo new",
     "register-docs-version": "node scripts/register-docs-version.js",
-    "update:release-feed": "python3 scripts/update-release-feed.py",
     "dev:drafts": "HUGO_PARAMS_COMMITFULL=$(git log -1 --format=%H -- .) HUGO_PARAMS_COMMITSHORT=$(git log -1 --format=%h -- .) ./node_modules/.bin/hugo server --bind=0.0.0.0 --disableFastRender --baseURL=http://localhost --noHTTPCache --buildDrafts",
     "dev": "HUGO_PARAMS_COMMITFULL=$(git log -1 --format=%H -- .) HUGO_PARAMS_COMMITSHORT=$(git log -1 --format=%h -- .) ./node_modules/.bin/hugo server --bind=0.0.0.0 --disableFastRender --noHTTPCache",
     "hugo": "./node_modules/.bin/hugo",
@@ -29,7 +28,7 @@
     "preinfo": "npm version",
     "preview": "http-server --gzip --brotli --ext=html --cors",
     "postinstall": "node scripts/link-dart-sass.js",
-    "test": "node --test scripts/register-docs-version.test.js assets/js/schema/doc-text.test.ts scripts/update-release-feed.test.js"
+    "test": "node --test scripts/register-docs-version.test.js assets/js/schema/doc-text.test.ts"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.2.8",
