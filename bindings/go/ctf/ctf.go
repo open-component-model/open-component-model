@@ -169,7 +169,7 @@ func OpenCTF(ctx context.Context, opts OpenCTFOptions) (CTF, error) {
 			return OpenCTFFromOSPath(tmp, opts.Flag)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("unable to extract ctf archive: %w", err)
+			return nil, fmt.Errorf("unable to extract ctf archive: %w", errors.Join(err, os.RemoveAll(tmp)))
 		}
 		return ctf, nil
 	default:

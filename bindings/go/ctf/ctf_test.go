@@ -271,3 +271,28 @@ func Test_CTF_CustomTempFolder_TGZ(t *testing.T) {
 	r.Len(blobs, 1)
 	r.Contains(blobs, digest)
 }
+
+// Test_CTF_SaveBlob_BaseReplacedBySymlink covers the store-level consequence of
+// the RootFileSystem confinement: SaveBlob stages through a raw OS path, so a CTF
+// directory swapped for a symlink must fail instead of filling a foreign directory.
+func Test_CTF_SaveBlob_BaseReplacedBySymlink(t *testing.T) {
+	r := require.New(t)
+	parent := t.TempDir()
+	base := filepath.Join(parent, "ctf")
+	outside := filepath.Join(parent, "outside")
+	r.NoError(os.Mkdir(outside, 0o755))
+
+	archive, err := ctf.OpenCTFFromOSPath(base, ctf.O_CREATE|ctf.O_RDWR)
+	r.NoError(err)
+
+	r.NoError(os.Rename(base, base+".moved"))
+	if err := os.Symlink(outside, base); err != nil {
+		t.Skipf("cannot create symlinks here: %v", err)
+	}
+
+	r.Error(archive.SaveBlob(t.Context(), inmemory.New(strings.NewReader("blob"))))
+
+	entries, err := os.ReadDir(outside)
+	r.NoError(err)
+	r.Empty(entries, "blob escaped into %s", outside)
+}

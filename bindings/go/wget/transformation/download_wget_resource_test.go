@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -87,7 +88,8 @@ func TestDownloadWgetResource_Transform(t *testing.T) {
 		r.NotNil(out.Output)
 		r.NotNil(out.Output.Resource)
 
-		filePath := strings.TrimPrefix(out.Output.File.URI, "file://")
+		filePath, err := filesystem.FilePathFromURI(out.Output.File.URI)
+		r.NoError(err)
 		assert.FileExists(t, filePath)
 		t.Cleanup(func() { _ = os.RemoveAll(filePath) })
 
@@ -126,7 +128,8 @@ func TestDownloadWgetResource_Transform(t *testing.T) {
 		r.True(ok)
 		r.NotNil(out.Output)
 
-		filePath := strings.TrimPrefix(out.Output.File.URI, "file://")
+		filePath, err := filesystem.FilePathFromURI(out.Output.File.URI)
+		r.NoError(err)
 		assert.FileExists(t, filePath)
 		assert.True(t, strings.HasPrefix(filePath, outputDir))
 	})
