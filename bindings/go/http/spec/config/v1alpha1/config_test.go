@@ -862,6 +862,46 @@ configurations:
 	})
 }
 
+func TestConfig_ParseYAML_PlainHTTP(t *testing.T) {
+	t.Run("plainHTTP true at global scope", func(t *testing.T) {
+		r := require.New(t)
+		yaml := `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    plainHTTP: true
+`
+		var generic genericv1.Config
+		r.NoError(genericv1.Scheme.Decode(strings.NewReader(yaml), &generic))
+		r.Len(generic.Configurations, 1)
+
+		var cfg httpspec.Config
+		r.NoError(httpspec.Scheme.Convert(generic.Configurations[0], &cfg))
+		r.NotNil(cfg.PlainHTTP)
+		r.True(*cfg.PlainHTTP)
+	})
+
+	t.Run("plainHTTP per-host with a port in the key", func(t *testing.T) {
+		r := require.New(t)
+		yaml := `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    hosts:
+      "registry.local:5000":
+        plainHTTP: true
+`
+		var generic genericv1.Config
+		r.NoError(genericv1.Scheme.Decode(strings.NewReader(yaml), &generic))
+		var cfg httpspec.Config
+		r.NoError(httpspec.Scheme.Convert(generic.Configurations[0], &cfg))
+		r.Nil(cfg.PlainHTTP)
+		r.Contains(cfg.Hosts, "registry.local:5000")
+		r.NotNil(cfg.Hosts["registry.local:5000"].PlainHTTP)
+		r.True(*cfg.Hosts["registry.local:5000"].PlainHTTP)
+	})
+}
+
 func TestMerge_TLS(t *testing.T) {
 	tr := true
 	fa := false
@@ -1011,5 +1051,73 @@ func TestConfig_ResolveHost(t *testing.T) {
 		_ = cfg.ResolveHost("example.com:9000")
 		assert.Equal(t, 5, *cfg.Retry.MaxRetries)
 		assert.Equal(t, httpspec.Timeout(30*time.Second), *cfg.Timeout)
+	})
+}
+
+func TestMerge_PlainHTTP(t *testing.T) {
+	tr := true
+	fa := false
+
+	t.Run("later layer overrides earlier, nil keeps earlier", func(t *testing.T) {
+		r := require.New(t)
+		a := &httpspec.Config{ProtocolConfig: httpspec.ProtocolConfig{PlainHTTP: &tr}}
+		merged := httpspec.Merge(a, &httpspec.Config{})
+		r.NotNil(merged.PlainHTTP)
+		r.True(*merged.PlainHTTP)
+
+		merged = httpspec.Merge(a, &httpspec.Config{ProtocolConfig: httpspec.ProtocolConfig{PlainHTTP: &fa}})
+		r.NotNil(merged.PlainHTTP)
+		r.False(*merged.PlainHTTP)
+	})
+
+	t.Run("host entry overrides global in ResolveHost", func(t *testing.T) {
+		r := require.New(t)
+		cfg := &httpspec.Config{
+			ProtocolConfig: httpspec.ProtocolConfig{PlainHTTP: &tr},
+			Hosts: map[string]*httpspec.HostConfig{
+				"ghcr.io":        {ProtocolConfig: httpspec.ProtocolConfig{PlainHTTP: &fa}},
+				"localhost:5000": {},
+			},
+		}
+		r.False(*cfg.ResolveHost("ghcr.io").PlainHTTP, "host false wins over global true")
+		r.True(*cfg.ResolveHost("localhost:5000").PlainHTTP, "host entry without the field inherits the global value")
+		r.True(*cfg.ResolveHost("other.io").PlainHTTP)
+	})
+
+	t.Run("per-host true without global, bare hostname covers every port", func(t *testing.T) {
+		r := require.New(t)
+		cfg := &httpspec.Config{
+			Hosts: map[string]*httpspec.HostConfig{
+				"registry.local": {ProtocolConfig: httpspec.ProtocolConfig{PlainHTTP: &tr}},
+			},
+		}
+		r.True(*cfg.ResolveHost("registry.local:5000").PlainHTTP)
+		r.True(*cfg.ResolveHost("registry.local").PlainHTTP)
+		r.Nil(cfg.ResolveHost("ghcr.io").PlainHTTP)
+	})
+
+	t.Run("round-trips through JSON", func(t *testing.T) {
+		r := require.New(t)
+		var cfg httpspec.Config
+		r.NoError(json.Unmarshal([]byte(`{"type":"http.config.ocm.software/v1alpha1","plainHTTP":true,"hosts":{"ghcr.io":{"plainHTTP":false}}}`), &cfg))
+		r.True(*cfg.PlainHTTP)
+		r.False(*cfg.Hosts["ghcr.io"].PlainHTTP)
+
+		out, err := json.Marshal(&cfg)
+		r.NoError(err)
+		var again httpspec.Config
+		r.NoError(json.Unmarshal(out, &again))
+		r.True(*again.PlainHTTP)
+		// The explicit per-host false is what keeps HTTPS against the global
+		// true, so it must survive being written out.
+		r.NotNil(again.Hosts["ghcr.io"].PlainHTTP)
+		r.False(*again.Hosts["ghcr.io"].PlainHTTP)
+	})
+
+	t.Run("unset plainHTTP is left out of JSON", func(t *testing.T) {
+		r := require.New(t)
+		out, err := json.Marshal(&httpspec.Config{Hosts: map[string]*httpspec.HostConfig{"ghcr.io": {}}})
+		r.NoError(err)
+		r.NotContains(string(out), "plainHTTP")
 	})
 }

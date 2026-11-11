@@ -106,8 +106,9 @@ func Test_Integration_TransferRelativeOCIReference(t *testing.T) {
 		r.NoError(err)
 
 		b := transfer.NewDefaultBuilder(
-			provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir())),
-			ociresource.NewResourceRepository(nil), credResolver,
+			provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig())),
+			ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig())), credResolver,
+			transfer.WithHTTPConfig(plainHTTPConfig()),
 		)
 		graph, err := b.BuildAndCheck(tgd)
 		r.NoError(err)
@@ -170,8 +171,9 @@ func Test_Integration_TransferRelativeOCIReference(t *testing.T) {
 		r.NoError(err)
 
 		b := transfer.NewDefaultBuilder(
-			provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir())),
-			ociresource.NewResourceRepository(nil), credResolver,
+			provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig())),
+			ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig())), credResolver,
+			transfer.WithHTTPConfig(plainHTTPConfig()),
 		)
 		graph, err := b.BuildAndCheck(tgd)
 		r.NoError(err)

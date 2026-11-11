@@ -101,7 +101,10 @@ add component-version --repository localhost:5000/my-repo --constructor componen
 Specifying repository types explicitly:
 
 add component-version --repository ctf::./local/archive --constructor component-constructor.yaml
-add component-version --repository oci::http://localhost:8080/my-repo --constructor component-constructor.yaml
+add component-version --repository oci::localhost:8080/my-repo --constructor component-constructor.yaml
+
+A registry without TLS needs plainHTTP in the HTTP client configuration; an http:// prefix on the
+repository is deprecated and fails without it (see https://ocm.software/docs/changelog/migrate-from-http-prefixes/).
 
 Using environment variables in "component-constructor" files:
 
