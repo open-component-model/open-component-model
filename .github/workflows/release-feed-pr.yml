@@ -12,7 +12,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
 
 concurrency:
   group: release-feed-pr
@@ -24,6 +23,9 @@ jobs:
   open_pr:
     name: Open release feed PR
     runs-on: ubuntu-26.04-arm
+    permissions:
+      contents: read
+      pull-requests: read
     environment:
       name: automation
       deployment: false
