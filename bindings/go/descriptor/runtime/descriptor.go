@@ -23,6 +23,10 @@ const (
 	GenericBlobDigestV1 = "genericBlobDigest/v1"
 	// OCIArtifactDigestV1 normalises a resource to the manifest (or index) digest of its OCI artifact.
 	OCIArtifactDigestV1 = "ociArtifactDigest/v1"
+	// OCIArtefactDigestV1 is the spelling OCM v1 writes for OCIArtifactDigestV1. Descriptors
+	// carrying it are signed with it, so it is accepted wherever OCIArtifactDigestV1 is and
+	// never rewritten.
+	OCIArtefactDigestV1 = "ociArtefactDigest/v1"
 )
 
 // These constants describe identity attributes predefined by the

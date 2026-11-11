@@ -17,7 +17,7 @@ const (
 	// ArtifactDigestV1 is the normalisation of a digest over the manifest or index of an OCI artifact.
 	ArtifactDigestV1 = descriptor.OCIArtifactDigestV1
 	// LegacyArtifactDigestV1 is the spelling OCM v1 also registers for ArtifactDigestV1.
-	LegacyArtifactDigestV1 = "ociArtefactDigest/v1"
+	LegacyArtifactDigestV1 = descriptor.OCIArtefactDigestV1
 )
 
 var (

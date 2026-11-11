@@ -340,6 +340,19 @@ func TestVerify_OCIArtifactDigest(t *testing.T) {
 		r.Equal(root, verifier.root)
 		r.Equal(blob.SizeUnknown, verifier.size, "a base that does not know its size passes SizeUnknown")
 	})
+
+	t.Run("reads OCM v1's spelling through the verifier", func(t *testing.T) {
+		r := require.New(t)
+		verifier := &fakeArtifactVerifier{accepts: true}
+		got, err := Verify(t.Context(), withNormalisation(root, descriptor.OCIArtefactDigestV1),
+			&sourceBlob{content: content}, WithArtifactVerifier(verifier))
+		r.NoError(err)
+
+		data, err := readAll(t, got)
+		r.NoError(err)
+		r.Equal(content, data)
+		r.Equal(root, verifier.root)
+	})
 }
 
 func TestVerifyOCIArtifact(t *testing.T) {
@@ -352,6 +365,14 @@ func TestVerifyOCIArtifact(t *testing.T) {
 	}{
 		{name: "matching root", expected: withNormalisation(root, descriptor.OCIArtifactDigestV1)},
 		{name: "matching root labelled as generic blob", expected: generic(root)},
+		{name: "matching root in OCM v1's spelling", expected: withNormalisation(root, descriptor.OCIArtefactDigestV1)},
+		{
+			// An unlabelled digest is the digest of a blob's bytes, which a caller that
+			// resolved a manifest cannot produce, so the root cannot stand in for it.
+			name:     "matching root without a normalisation",
+			expected: &descriptor.Digest{HashAlgorithm: "SHA-256", Value: root.Encoded()},
+			wantErr:  "unsupported normalisation algorithm",
+		},
 		{
 			name:     "matching root with the OCI hash spelling",
 			expected: &descriptor.Digest{HashAlgorithm: "sha256", NormalisationAlgorithm: descriptor.OCIArtifactDigestV1, Value: root.Encoded()},
