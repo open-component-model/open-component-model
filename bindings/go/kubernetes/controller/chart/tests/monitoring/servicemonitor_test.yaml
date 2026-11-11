@@ -25,7 +25,8 @@ tests:
       prometheus.enable: true
     template: monitoring/servicemonitor.yaml
     asserts:
-      - failedTemplate: {}
+      - failedTemplate:
+          errorPattern: requires manager.metricsServer.bindAddress
 
   - it: renders a metrics Service that targets the named container port
     set:
@@ -183,7 +184,8 @@ tests:
       manager.metricsServer: null
     template: monitoring/servicemonitor.yaml
     asserts:
-      - failedTemplate: {}
+      - failedTemplate:
+          errorPattern: requires manager.metricsServer.bindAddress
 
   - it: normalises a leading-zero port in the Service
     set:

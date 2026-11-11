@@ -100,6 +100,10 @@ tasks:
   test/e2e:
     desc: "Run end-to-end tests against a running cluster, 4 specs in parallel. Pass Ginkgo CLI flags via `--`, e.g. `task test/e2e -- --focus=helm-simple`; `-- --procs=1` runs serially. Omit to run all scenarios."
     dotenv: [ '{{.TASKFILE_DIR}}/test/e2e/hacks/.env' ]
+    preconditions:
+      # test/e2e/hacks/values.yaml enables the chart's ServiceMonitor; without the CRD the helm install fails.
+      - sh: kubectl get crd servicemonitors.monitoring.coreos.com
+        msg: "The ServiceMonitor CRD is missing; the cluster predates it. Recreate it with 'task test/e2e/setup/teardown test/e2e/setup/local'."
     cmds:
       - task: helm/install
         vars:

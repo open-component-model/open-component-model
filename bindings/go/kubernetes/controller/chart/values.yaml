@@ -99,14 +99,12 @@ manager:
     enabled: true
   ## Health and metrics endpoints
   healthProbe:
-    # -- Address the health probe endpoint binds to, as host:port with a numeric port
+    # -- Address the health probe endpoint binds to, as host:port with a numeric port. The liveness and readiness probes use its port
     bindAddress: ":8081"
   ## Liveness probe configuration
   livenessProbe:
     # -- Path for the liveness probe
     path: /healthz
-    # -- Port for the liveness probe
-    port: 8081
     # -- Initial delay before starting liveness probes
     initialDelaySeconds: 15
     # -- Period between liveness probes
@@ -115,8 +113,6 @@ manager:
   readinessProbe:
     # -- Path for the readiness probe
     path: /readyz
-    # -- Port for the readiness probe
-    port: 8081
     # -- Initial delay before starting readiness probes
     initialDelaySeconds: 5
     # -- Period between readiness probes

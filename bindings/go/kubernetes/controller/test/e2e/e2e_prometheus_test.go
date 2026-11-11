@@ -17,6 +17,8 @@ const prometheusReleaseSelector = "app.kubernetes.io/instance=ocm-k8s-toolkit,ap
 var _ = Describe("Prometheus metrics E2E", Ordered, func() {
 	// Names resolved in BeforeAll by release labels and (for the Service) by metrics port
 	// name, never by string concatenation; the chart's resourceName helper may truncate names.
+	// sm is only looked up: finding exactly one proves the API server accepted the chart's
+	// ServiceMonitor; its fields are covered by chart/tests/monitoring.
 	var svc, sm string
 
 	AfterEach(func(ctx SpecContext) {
@@ -27,7 +29,7 @@ var _ = Describe("Prometheus metrics E2E", Ordered, func() {
 		out, err := utils.Run(exec.CommandContext(ctx, "kubectl", "get",
 			"service,endpointslices,servicemonitor",
 			"-n", namespace,
-			"-l", "app.kubernetes.io/instance=ocm-k8s-toolkit",
+			"-l", prometheusReleaseSelector,
 			"-o", "wide",
 		))
 		GinkgoLogr.Info("[DIAG] metrics wiring", "output", string(out), "error", err)
@@ -60,23 +62,8 @@ var _ = Describe("Prometheus metrics E2E", Ordered, func() {
 	})
 
 	It("routes the metrics Service to the controller pod", func(ctx SpecContext) {
-		res := "service/" + svc + " -n " + namespace
-
-		By("verifying the Service port name is metrics")
-		portName, err := utils.GetResourceField(ctx, res, "{.spec.ports[0].name}")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(portName).To(Equal("metrics"))
-
-		By("verifying the Service port number is 8443")
-		port, err := utils.GetResourceField(ctx, res, "{.spec.ports[0].port}")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(port).To(Equal("8443"))
-
-		By("verifying the Service targetPort is metrics (by name)")
-		targetPort, err := utils.GetResourceField(ctx, res, "{.spec.ports[0].targetPort}")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(targetPort).To(Equal("metrics"))
-
+		// The Service and ServiceMonitor fields are covered by chart/tests/monitoring; only a
+		// live cluster shows that the selector and the named targetPort resolve to the pod.
 		By("waiting for a ready EndpointSlice address on the metrics port (pod selector and port-name match)")
 		Eventually(func() string {
 			// EndpointSlice, not v1 Endpoints: reading Endpoints prints a deprecation warning on
@@ -106,44 +93,5 @@ var _ = Describe("Prometheus metrics E2E", Ordered, func() {
 			// controller starts; their presence proves the proxy reached the manager's metrics endpoint.
 			g.Expect(string(out)).To(ContainSubstring("controller_runtime_reconcile_total"))
 		}, timeout).Should(Succeed())
-	})
-
-	It("points the ServiceMonitor at the metrics Service", func(ctx SpecContext) {
-		res := "servicemonitor/" + sm + " -n " + namespace
-
-		By("verifying the ServiceMonitor endpoint port is metrics")
-		smPort, err := utils.GetResourceField(ctx, res, "{.spec.endpoints[0].port}")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(smPort).To(Equal("metrics"))
-
-		By("verifying the ServiceMonitor endpoint path is /metrics")
-		smPath, err := utils.GetResourceField(ctx, res, "{.spec.endpoints[0].path}")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(smPath).To(Equal("/metrics"))
-
-		By("verifying the ServiceMonitor has no scheme (secure=false)")
-		smScheme, err := utils.GetResourceField(ctx, res, "{.spec.endpoints[0].scheme}")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(smScheme).To(BeEmpty())
-
-		By("verifying the ServiceMonitor selector matches the Service labels")
-		svcRes := "service/" + svc + " -n " + namespace
-		for _, key := range []string{
-			`app\.kubernetes\.io/name`,
-			`app\.kubernetes\.io/instance`,
-			`control-plane`,
-		} {
-			smVal, err := utils.GetResourceField(ctx, res,
-				"{.spec.selector.matchLabels."+key+"}")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(smVal).NotTo(BeEmpty(),
-				fmt.Sprintf("ServiceMonitor matchLabels[%s] must be set", key))
-
-			svcVal, err := utils.GetResourceField(ctx, svcRes,
-				"{.metadata.labels."+key+"}")
-			Expect(err).NotTo(HaveOccurred())
-			Expect(smVal).To(Equal(svcVal),
-				fmt.Sprintf("ServiceMonitor matchLabels[%s] must match Service label", key))
-		}
 	})
 })

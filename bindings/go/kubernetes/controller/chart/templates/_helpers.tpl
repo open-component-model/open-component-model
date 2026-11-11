@@ -44,13 +44,15 @@ Dynamically calculates safe truncation to ensure total name length <= 63 chars.
 {{/*
 Port of a manager listen address (dict "addr" value "key" "values.path"), or empty
 when the address is "" or "0", which the manager treats as disabled. Fails the
-render for anything net.Listen would reject or that has no numeric port. atoi reads
-the digits as decimal like the manager does; int would read ":08081" as octal.
+render unless the address is host:port with a decimal port in 1-65535; a bracketed
+IPv6 host may carry a zone ("[fe80::1%eth0]:8443"). It checks the shape only, not
+that the host resolves. atoi reads the digits as decimal like the manager does; int
+would read ":08081" as octal.
 */}}
 {{- define "ocm-k8s-toolkit.portFromAddress" -}}
 {{- $addr := .addr | toString }}
 {{- if and $addr (ne $addr "0") }}
-{{- if not (mustRegexMatch `^(\[[0-9A-Fa-f:.]+\]|[^:\[\]]*):[0-9]+$` $addr) }}
+{{- if not (mustRegexMatch `^(\[[0-9A-Fa-f:.]+(%[^\]]+)?\]|[^:\[\]]*):[0-9]+$` $addr) }}
 {{- fail (printf "%s %q must be host:port, for example \":8443\", or \"0\" to disable" .key $addr) }}
 {{- end }}
 {{- $port := regexFind "[0-9]+$" $addr | atoi }}
@@ -64,8 +66,7 @@ the digits as decimal like the manager does; int would read ":08081" as octal.
 {{/*
 Port the manager serves metrics on, parsed from manager.metricsServer.bindAddress.
 Empty when metrics are disabled ("0", the manager default). dig keeps a helm
-upgrade --reuse-values from a release without the key working. Validates address
-shape and a numeric decimal port; does not validate every address net.Listen accepts.
+upgrade --reuse-values from a release without the key working.
 */}}
 {{- define "ocm-k8s-toolkit.metricsPort" -}}
 {{- include "ocm-k8s-toolkit.portFromAddress" (dict "addr" (dig "metricsServer" "bindAddress" "0" .Values.manager) "key" "manager.metricsServer.bindAddress") }}
@@ -81,6 +82,31 @@ probes and the NetworkPolicy ingress rule need it.
 {{- fail "manager.healthProbe.bindAddress must not be \"0\"; the liveness and readiness probes need the health endpoint" }}
 {{- end }}
 {{- $port }}
+{{- end }}
+
+{{/*
+Fails the render when two manager listeners share a port: the second one cannot bind
+and the manager exits at startup. Called from manager/manager.yaml, which always
+renders, so the address checks in healthProbePort and metricsPort run on every
+install. 9443 is the webhook server port, see manager/manager.yaml.
+*/}}
+{{- define "ocm-k8s-toolkit.validatePorts" -}}
+{{- $listeners := list (list "manager.healthProbe.bindAddress" (include "ocm-k8s-toolkit.healthProbePort" .)) }}
+{{- with include "ocm-k8s-toolkit.metricsPort" . }}
+{{- $listeners = append $listeners (list "manager.metricsServer.bindAddress" .) }}
+{{- end }}
+{{- if .Values.webhook.enable }}
+{{- $listeners = append $listeners (list "the webhook server" "9443") }}
+{{- end }}
+{{- $seen := dict }}
+{{- range $listeners }}
+{{- $name := index . 0 }}
+{{- $port := index . 1 }}
+{{- with get $seen $port }}
+{{- fail (printf "%s port %s collides with %s; each manager listener needs its own port" $name $port .) }}
+{{- end }}
+{{- $_ := set $seen $port $name }}
+{{- end }}
 {{- end }}
 
 {{/*

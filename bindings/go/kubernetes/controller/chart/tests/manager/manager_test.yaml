@@ -145,17 +145,23 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --health-probe-bind-address=:8081
 
-  - it: passes a custom health probe address
+  - it: passes a custom health probe address and points the probes at its port
     set:
       manager.healthProbe.bindAddress: ":9999"
     asserts:
       - contains:
           path: spec.template.spec.containers[0].args
           content: --health-probe-bind-address=:9999
+      - equal:
+          path: spec.template.spec.containers[0].livenessProbe.httpGet.port
+          value: 9999
+      - equal:
+          path: spec.template.spec.containers[0].readinessProbe.httpGet.port
+          value: 9999
 
   - it: renders the probes from values and points them at the health probe port
-    # The probe port must match the port in manager.healthProbe.bindAddress (":8081"),
-    # otherwise kubelet restarts a healthy manager.
+    # The probe port comes from manager.healthProbe.bindAddress (":8081"); a mismatch
+    # would make kubelet restart a healthy manager.
     asserts:
       - equal:
           path: spec.template.spec.containers[0].livenessProbe
@@ -178,12 +184,10 @@ tests:
     set:
       manager.livenessProbe:
         path: /live
-        port: 9000
         initialDelaySeconds: 1
         periodSeconds: 2
       manager.readinessProbe:
         path: /ready
-        port: 9001
         initialDelaySeconds: 3
         periodSeconds: 4
     asserts:
@@ -192,7 +196,7 @@ tests:
           value:
             httpGet:
               path: /live
-              port: 9000
+              port: 8081
             initialDelaySeconds: 1
             periodSeconds: 2
       - equal:
@@ -200,7 +204,7 @@ tests:
           value:
             httpGet:
               path: /ready
-              port: 9001
+              port: 8081
             initialDelaySeconds: 3
             periodSeconds: 4
 
@@ -722,31 +726,78 @@ tests:
     set:
       manager.metricsServer.bindAddress: "8443"
     asserts:
-      - failedTemplate: {}
+      - failedTemplate:
+          errorPattern: manager.metricsServer.bindAddress "8443" must be host:port
 
   - it: rejects metrics address with a non-numeric port
     set:
       manager.metricsServer.bindAddress: "localhost:http"
     asserts:
-      - failedTemplate: {}
+      - failedTemplate:
+          errorPattern: manager.metricsServer.bindAddress "localhost:http" must be host:port
 
   - it: rejects metrics port zero
     set:
       manager.metricsServer.bindAddress: ":0"
     asserts:
-      - failedTemplate: {}
+      - failedTemplate:
+          errorPattern: has port 0 outside 1-65535
 
   - it: rejects metrics port above 65535
     set:
       manager.metricsServer.bindAddress: ":65536"
     asserts:
-      - failedTemplate: {}
+      - failedTemplate:
+          errorPattern: has port 65536 outside 1-65535
 
   - it: rejects a bracketed address missing the outer port separator
     set:
       manager.metricsServer.bindAddress: "::1:8443"
     asserts:
-      - failedTemplate: {}
+      - failedTemplate:
+          errorPattern: manager.metricsServer.bindAddress "::1:8443" must be host:port
+
+  - it: accepts a bracketed IPv6 address with a zone
+    # net.Listen accepts "[fe80::1%eth0]:8443"; the chart must not reject it.
+    set:
+      manager.metricsServer.bindAddress: "[fe80::1%eth0]:8443"
+    asserts:
+      - equal:
+          path: spec.template.spec.containers[0].ports[0].containerPort
+          value: 8443
+
+  - it: rejects a health probe address with a non-numeric port without a NetworkPolicy
+    # The Deployment validates the address on every install, not only when the
+    # NetworkPolicy that also reads it is rendered.
+    set:
+      manager.healthProbe.bindAddress: ":http"
+    asserts:
+      - failedTemplate:
+          errorPattern: manager.healthProbe.bindAddress ":http" must be host:port
+
+  - it: rejects a disabled health probe address
+    # The liveness and readiness probes need the health endpoint.
+    set:
+      manager.healthProbe.bindAddress: "0"
+    asserts:
+      - failedTemplate:
+          errorPattern: manager.healthProbe.bindAddress must not be "0"
+
+  - it: rejects a metrics port that collides with the health probe port
+    # The manager cannot bind both listeners and exits at startup.
+    set:
+      manager.metricsServer.bindAddress: ":8081"
+    asserts:
+      - failedTemplate:
+          errorPattern: manager.metricsServer.bindAddress port 8081 collides with manager.healthProbe.bindAddress
+
+  - it: rejects a metrics port that collides with the webhook server port
+    set:
+      manager.metricsServer.bindAddress: ":9443"
+      webhook.enable: true
+    asserts:
+      - failedTemplate:
+          errorPattern: the webhook server port 9443 collides with manager.metricsServer.bindAddress
 
   - it: normalises a leading-zero metrics port to decimal
     # ":01024" must produce container port 1024, not 532 (octal) or an error.

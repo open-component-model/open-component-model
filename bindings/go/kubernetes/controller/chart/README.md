@@ -75,7 +75,7 @@ Kubernetes: `>=1.26.0-0`
 | manager.deployer.enabled | bool | `true` | Run the controller for the cluster-scoped Deployer. It applies with the permissions of the controller itself. Deprecated: Use NamespacedDeployer instead. |
 | manager.env | list | `[]` | Environment variables for the controller |
 | manager.extraArgs | list | `[]` | Extra arguments to pass to the controller |
-| manager.healthProbe.bindAddress | string | `":8081"` | Address the health probe endpoint binds to, as host:port with a numeric port |
+| manager.healthProbe.bindAddress | string | `":8081"` | Address the health probe endpoint binds to, as host:port with a numeric port. The liveness and readiness probes use its port |
 | manager.image.pullPolicy | string | `"IfNotPresent"` | Image pull policy |
 | manager.image.repository | string | `"ghcr.io/open-component-model/kubernetes/controller"` | Controller image repository |
 | manager.image.tag | string | `"latest"` | Controller image tag |
@@ -84,7 +84,6 @@ Kubernetes: `>=1.26.0-0`
 | manager.livenessProbe.initialDelaySeconds | int | `15` | Initial delay before starting liveness probes |
 | manager.livenessProbe.path | string | `"/healthz"` | Path for the liveness probe |
 | manager.livenessProbe.periodSeconds | int | `20` | Period between liveness probes |
-| manager.livenessProbe.port | int | `8081` | Port for the liveness probe |
 | manager.logging.development | bool | `false` | Enable development mode (console encoder, debug level, warn stacktrace) |
 | manager.logging.encoder | string | `"json"` | Log encoding: 'json' or 'console' |
 | manager.logging.level | string | `"info"` | Zap log level: 'debug', 'info', 'error', 'panic' or integer > 0 |
@@ -115,7 +114,6 @@ Kubernetes: `>=1.26.0-0`
 | manager.readinessProbe.initialDelaySeconds | int | `5` | Initial delay before starting readiness probes |
 | manager.readinessProbe.path | string | `"/readyz"` | Path for the readiness probe |
 | manager.readinessProbe.periodSeconds | int | `10` | Period between readiness probes |
-| manager.readinessProbe.port | int | `8081` | Port for the readiness probe |
 | manager.replicas | int | `1` | Number of controller manager replicas |
 | manager.resources | object | `{"limits":{"cpu":"500m","memory":"512Mi"},"requests":{"cpu":"100m","memory":"256Mi"}}` | Resource limits and requests |
 | manager.securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true}` | Container-level security context |

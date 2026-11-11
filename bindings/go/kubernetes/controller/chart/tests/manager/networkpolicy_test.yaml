@@ -196,11 +196,3 @@ tests:
               protocol: TCP
             - port: 1024
               protocol: TCP
-
-  - it: fails when health probe address is disabled with "0"
-    # The liveness and readiness probes need the health endpoint; "0" must not be accepted.
-    set:
-      manager.networkPolicy.enabled: true
-      manager.healthProbe.bindAddress: "0"
-    asserts:
-      - failedTemplate: {}
