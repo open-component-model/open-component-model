@@ -322,6 +322,7 @@ jobs:
         run: |
           set -euo pipefail
           gh workflow run release-feed-pr.yml --repo "$GH_REPO" --ref main -f tag="$TAG"
+          echo "Dispatched release-feed-pr for $TAG on main."
 
   # Summarizes the RC only after the components are published, so the release
   # manager sees the summary with the OCM component coordinates
@@ -793,3 +794,4 @@ jobs:
         run: |
           set -euo pipefail
           gh workflow run release-feed-pr.yml --repo "$GH_REPO" --ref main -f tag="$TAG"
+          echo "Dispatched release-feed-pr for $TAG on main."
