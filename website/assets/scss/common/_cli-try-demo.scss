@@ -338,13 +338,53 @@
     }
 }
 
-@media (max-width: 575px) {
+@media (max-width: 600px) {
+    .lp-home .lp-section--try {
+        gap: 12px;
+    }
+
+    .lp-home .cli-demo-title {
+        font-size: 23px;
+    }
+
+    .lp-home .cli-demo-subtitle {
+        font-size: 14px;
+    }
+
+    .lp-home .cli-demo__bar {
+        padding: 10px 12px;
+    }
+
+    .lp-home .cli-demo__term {
+        height: 320px;
+        padding: 14px 14px 16px;
+        font-size: 12px;
+        line-height: 1.55;
+    }
+
     .lp-home .cli-demo__step {
         flex-wrap: wrap;
+        gap: 10px 12px;
+        padding: 14px;
+    }
+
+    /* On a phone the command wraps across lines instead of scrolling sideways. */
+    .lp-home .cli-demo__cmd {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
     }
 
     .lp-home .cli-demo__copy {
         width: 100%;
+        justify-content: center;
+    }
+
+    .lp-home .cli-demo__links {
+        width: 100%;
+    }
+
+    .lp-home .cli-demo__links a {
+        flex: 1 1 auto;
         justify-content: center;
     }
 }
