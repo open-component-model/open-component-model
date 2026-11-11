@@ -89,6 +89,11 @@ func (in *ProtocolConfig) DeepCopyInto(out *ProtocolConfig) {
 		*out = new(bool)
 		**out = **in
 	}
+	if in.PlainHTTP != nil {
+		in, out := &in.PlainHTTP, &out.PlainHTTP
+		*out = new(bool)
+		**out = **in
+	}
 	return
 }
 

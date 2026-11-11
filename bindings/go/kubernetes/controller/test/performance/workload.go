@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -53,6 +54,7 @@ const (
 	referenceName       = "child"
 	runLabel            = "perf.ocm.software/run"
 	signingSecretName   = "perf-signing"
+	plainHTTPConfigName = "perf-plain-http"
 	deployerAccount     = "perf-deployer"
 	// The benchmark measures one burst of reconciles; a long interval keeps
 	// periodic requeues out of the measurement window.
@@ -374,8 +376,32 @@ func (w workload) repository(i int) (*v1alpha1.Repository, error) {
 		Spec: v1alpha1.RepositorySpec{
 			RepositorySpec: &apiextensionsv1.JSON{Raw: spec},
 			Interval:       metav1.Duration{Duration: reconcileInterval},
+			// Propagated, so Components without their own config inherit it.
+			OCMConfig: []v1alpha1.OCMConfiguration{plainHTTPConfigRef()},
 		},
 	}, nil
+}
+
+func plainHTTPConfigRef() v1alpha1.OCMConfiguration {
+	return v1alpha1.OCMConfiguration{
+		NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
+			APIVersion: "v1", Kind: "ConfigMap", Name: plainHTTPConfigName,
+		},
+		Policy: v1alpha1.ConfigurationPolicyPropagate,
+	}
+}
+
+// plainHTTPConfig holds the HTTP client configuration that lets the controller talk plain HTTP to the
+// benchmark registry. OCM rejects an http:// baseUrl unless plainHTTP is set there.
+// It carries no run label: the ConfigMap tracker selects by that label and must see only the deployed
+// ConfigMaps. The run namespace still cleans it up.
+func (w workload) plainHTTPConfig() *corev1.ConfigMap {
+	cfg := fmt.Sprintf("type: generic.config.ocm.software/v1\nconfigurations:\n  - type: http.config.ocm.software/v1alpha1\n    plainHTTP: %t\n",
+		strings.HasPrefix(w.registryURL, "http://"))
+	return &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: plainHTTPConfigName, Namespace: w.namespace},
+		Data:       map[string]string{v1alpha1.OCMConfigKey: cfg},
+	}
 }
 
 func (w workload) component(i int) *v1alpha1.Component {
@@ -393,13 +419,14 @@ func (w workload) component(i int) *v1alpha1.Component {
 		},
 	}
 	if w.signed() {
-		// Propagated, so the Resource and Deployer verify the root as well.
+		// Propagated, so the Resource and Deployer verify the root as well. An own config
+		// replaces the Repository's, so the plain HTTP config is listed again.
 		c.Spec.OCMConfig = []v1alpha1.OCMConfiguration{{
 			NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{
 				APIVersion: "v1", Kind: "Secret", Name: signingSecretName,
 			},
 			Policy: v1alpha1.ConfigurationPolicyPropagate,
-		}}
+		}, plainHTTPConfigRef()}
 	}
 	return c
 }
@@ -477,9 +504,11 @@ func (w workload) deployerRBAC() []client.Object {
 	}
 }
 
-// objectsToCreate returns everything the run applies, the signing Secret, deployer RBAC and Repositories first.
+// objectsToCreate returns everything the run applies, the plain HTTP ConfigMap, the signing Secret,
+// deployer RBAC and Repositories first.
 func (w workload) objectsToCreate() ([]client.Object, error) {
-	objs := make([]client.Object, 0, 4+w.repositories()+(2+w.resourcesPerComponent())*w.objects)
+	objs := make([]client.Object, 0, 5+w.repositories()+(2+w.resourcesPerComponent())*w.objects)
+	objs = append(objs, w.plainHTTPConfig())
 	if w.signed() {
 		secret, err := w.signingSecret()
 		if err != nil {
