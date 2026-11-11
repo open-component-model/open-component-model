@@ -102,12 +102,16 @@ func prepareOCMwithCredentials(ctx SpecContext, testName string, testdata string
 	_, err := utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred())
 
+	plainHTTPConfig, err := utils.PlainHTTPConfig(tmpDir)
+	Expect(err).NotTo(HaveOccurred())
+
 	ctfRef := "ctf::" + ctfDir + "//ocm.software/ocm-k8s-toolkit/" + testName
 	cmd = exec.CommandContext(ctx, ocm,
 		"transfer", "cv",
 		ctfRef,
 		privateRegistry,
 		"--config", ocmConfig,
+		"--config", plainHTTPConfig,
 	)
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred())

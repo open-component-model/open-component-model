@@ -139,7 +139,7 @@ func startProxiedRegistry(t *testing.T, ctx context.Context) (string, *registryC
 // providers emulates a second process run.
 func cachingProvider(cacheDir string, policy cache.RemotePolicy) *provider.CachingComponentVersionRepositoryProvider {
 	return provider.NewComponentVersionRepositoryProvider(
-		provider.WithTempDir(cacheDir),
+		provider.WithTempDir(cacheDir), provider.WithHTTPConfig(plainHTTPConfig()),
 		provider.WithBlobCacheOptions(&cache.Options{RemotePolicy: policy}),
 		provider.WithReferenceCacheOptions(&cache.Options{RemotePolicy: policy}),
 	)
@@ -189,13 +189,13 @@ func Test_Integration_OCICache_ReReadAvoidsRegistry(t *testing.T) {
 
 	// Seed the registry through an uncached provider so the cached providers
 	// below start cold.
-	seedProv := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
+	seedProv := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig()))
 	seedRepo := repoFor(t, ctx, seedProv, baseURL)
 	r.NoError(seedRepo.AddComponentVersion(ctx, cacheTestDescriptor(component, version, "original")))
 
 	t.Run("baseline: without the cache a re-read hits the registry again", func(t *testing.T) {
 		r := require.New(t)
-		prov := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
+		prov := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig()))
 		repo := repoFor(t, ctx, prov, baseURL)
 
 		calls.reset()
@@ -289,7 +289,7 @@ func Test_Integration_OCICache_RemotePolicyAlways(t *testing.T) {
 
 	const component, version = "ocm.software/cache-test-always", "v1.0.0"
 
-	seedProv := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
+	seedProv := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig()))
 	seedRepo := repoFor(t, ctx, seedProv, baseURL)
 	r.NoError(seedRepo.AddComponentVersion(ctx, cacheTestDescriptor(component, version, "original")))
 

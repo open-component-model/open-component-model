@@ -1,0 +1,19 @@
+# OCM HTTP client configuration for the e2e suite: every registry it uses serves plain HTTP.
+# OCM talks plain HTTP only when the HTTP client configuration says so; an http:// prefix on
+# the Repository baseUrl alone is rejected. Every e2e Repository CR references this ConfigMap
+# via spec.ocmConfig. ghcr.io stays on HTTPS: the examples pull public images from it, and it
+# refuses cleartext requests.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ocm-plain-http
+  namespace: default
+data:
+  .ocmconfig: |
+    type: generic.config.ocm.software/v1
+    configurations:
+      - type: http.config.ocm.software/v1alpha1
+        plainHTTP: true
+        hosts:
+          ghcr.io:
+            plainHTTP: false

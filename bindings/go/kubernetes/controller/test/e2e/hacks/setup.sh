@@ -39,6 +39,13 @@ if [ ! -f "${rbac}" ]; then
   exit 1
 fi
 
+# OCM HTTP client configuration that allows plain HTTP to the in-cluster registries.
+plain_http="${script_dir}/ocm-plain-http.yaml"
+if [ ! -f "${plain_http}" ]; then
+  echo "Plain HTTP config file not found: ${plain_http}"
+  exit 1
+fi
+
 # Create registry container unless it already exists
 ## Required to store the controller image and have a registry to transfer OCM component versions to test localization.
 reg_name='ocm-e2e-image-registry'
@@ -129,6 +136,7 @@ run_step() {
 install_registries() {
   kubectl apply -f "${image_registries}" || return 1
   kubectl apply -f "${rbac}" || return 1
+  kubectl apply -f "${plain_http}" || return 1
   # Wait on the Deployments: a pod label selector matches nothing until the ReplicaSet has created the pods.
   kubectl wait -n default deployment protected-registry1 protected-registry2 --for=condition=Available --timeout=5m || return 1
 }
