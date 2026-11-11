@@ -3,23 +3,19 @@ name: "Controller: Performance Benchmark"
 on:
   workflow_dispatch:
     inputs:
-      scenarios:
-        description: "Comma-separated scenarios (cold, shared, update, complex, fanout). Empty runs all."
-        type: string
-        required: false
       objects:
         description: "Comma-separated object counts per run. Empty uses 100,500,1000."
         type: string
         required: false
       repeats:
-        description: "Repetitions of every scenario and object count. Empty uses 3. Higher count means better averages."
+        description: "Repetitions of every object count. Empty uses 3. Higher count means better averages."
         type: string
         required: false
   # A "/perf" comment on a pull request benchmarks its head commit against its merge base with the base branch.
   issue_comment:
     types: [created]
   schedule:
-    # Nightly: the standard suite, ~30 minutes, the same one /perf runs. Sundays run the full suite instead.
+    # Nightly: the standard suite, the same one /perf runs: three 1000-object runs of 8 to 13 minutes each. Sundays run every object count instead.
     - cron: "0 2 * * *"
 
 permissions:
@@ -29,7 +25,7 @@ env:
   GO_MODULE_ROOT: "bindings/go"
   CONTROLLER_DIR: "bindings/go/kubernetes/controller"
   # This is the configuration that is executed by the `/perf` command and the nightly run.
-  STANDARD_SUITE: "--scenarios=complex --objects=1000 --repeats=3"
+  STANDARD_SUITE: "--objects=1000 --repeats=3"
 
 jobs:
   parse:
@@ -130,17 +126,15 @@ jobs:
         timeout-minutes: 290
         env:
           EVENT: ${{ github.event_name }}
-          SCENARIOS: ${{ inputs.scenarios }}
           OBJECTS: ${{ inputs.objects }}
           REPEATS: ${{ inputs.repeats }}
         run: |
           args=()
           if [ "${EVENT}" = "workflow_dispatch" ]; then
-            [ -n "${SCENARIOS}" ] && args+=("--scenarios=${SCENARIOS}")
             [ -n "${OBJECTS}" ] && args+=("--objects=${OBJECTS}")
             [ -n "${REPEATS}" ] && args+=("--repeats=${REPEATS}")
           elif [ "${EVENT}" != "schedule" ] || [ "$(date -u +%u)" != 7 ]; then
-            # Everything but the Sunday full suite.
+            # Everything but the Sunday run of every object count.
             read -r -a args <<< "${STANDARD_SUITE}"
           fi
           task ${{ env.CONTROLLER_DIR }}:test/performance -- "${args[@]}"
