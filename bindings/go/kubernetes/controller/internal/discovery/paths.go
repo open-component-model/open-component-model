@@ -76,27 +76,53 @@ func referencePaths(root ComponentKey, byKey map[ComponentKey]*descriptor.Descri
 //
 // The input is not modified.
 func versionlessIdentities(ids []runtime.Identity) []runtime.Identity {
-	stripped := make([]runtime.Identity, len(ids))
-	counts := make(map[string]int, len(ids))
-	for i, id := range ids {
-		s := id.Clone()
-		if s == nil {
-			s = runtime.Identity{}
-		}
-		delete(s, descriptor.IdentityAttributeVersion)
-		stripped[i] = s
-		counts[s.String()]++
-	}
-
+	needed := versionNeeded(ids)
 	out := make([]runtime.Identity, len(ids))
-	for i, s := range stripped {
-		if counts[s.String()] > 1 {
-			out[i] = ids[i].Clone()
-			continue
-		}
-		out[i] = s
+	for i, id := range ids {
+		out[i] = versionlessIdentity(id, needed)
 	}
 	return out
+}
+
+// versionNeeded returns the versionless forms (runtime.Identity.String) that
+// occur more than once in ids. An element whose versionless identity is in the
+// result needs its version to be told apart from the others. ids must be all
+// elements the Resource controller matches against, not a filtered subset, or
+// an element can lose a version it needs.
+func versionNeeded(ids []runtime.Identity) map[string]bool {
+	counts := make(map[string]int, len(ids))
+	for _, id := range ids {
+		counts[withoutVersion(id).String()]++
+	}
+	needed := map[string]bool{}
+	for s, n := range counts {
+		if n > 1 {
+			needed[s] = true
+		}
+	}
+	return needed
+}
+
+// versionlessIdentity returns id without its version attribute, unless needed
+// (see versionNeeded) says the version is required to tell it apart.
+func versionlessIdentity(id runtime.Identity, needed map[string]bool) runtime.Identity {
+	stripped := withoutVersion(id)
+	if needed[stripped.String()] {
+		if id == nil {
+			return runtime.Identity{}
+		}
+		return id.Clone()
+	}
+	return stripped
+}
+
+func withoutVersion(id runtime.Identity) runtime.Identity {
+	s := id.Clone()
+	if s == nil {
+		s = runtime.Identity{}
+	}
+	delete(s, descriptor.IdentityAttributeVersion)
+	return s
 }
 
 // lessPath orders equally long paths by their element String() values.

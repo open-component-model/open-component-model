@@ -318,9 +318,31 @@ func TestProjectedRecordResolvesLikeResourceController(t *testing.T) {
 		return res
 	}
 
+	versionGraph := func() []*descriptor.Descriptor {
+		return []*descriptor.Descriptor{
+			newDescriptor("root", "1.0.0", withReferences(
+				newReference("lib", "libfips", "1.0.0", withRefExtras(map[string]string{"flavor": "fips"})),
+				newReference("lib", "lib", "2.0.0"),
+				newReference("lib", "lib", "1.0.0"),
+				newReference("tool", "tool", "1.0.0"),
+			), withResources(newResource("cfg"))),
+			newDescriptor("lib", "1.0.0", withResources(newResource("image"))),
+			newDescriptor("lib", "2.0.0", withResources(versioned("chart", "2.0.0"), versioned("chart", "1.0.0"))),
+			newDescriptor("libfips", "1.0.0", withResources(newResource("image"))),
+			newDescriptor("tool", "1.0.0",
+				withReferences(newReference("dep", "lib", "1.0.0")),
+				withResources(newResource("bin"))),
+		}
+	}
+
 	tests := []struct {
 		name        string
 		descriptors []*descriptor.Descriptor
+		// selector is an optional resource selector. The Resource controller
+		// always matches against all resources of a component, so a selected
+		// subset must not make a needed version look unnecessary.
+		selector    *v1alpha1.Selector
+		wantRecords int // 0 means one record per resource
 	}{
 		{
 			name: "resources that differ only in extra identity",
@@ -332,21 +354,22 @@ func TestProjectedRecordResolvesLikeResourceController(t *testing.T) {
 		{
 			// The references are ordered so that matching on name alone, or
 			// on name and extra identity alone, would pick the wrong one.
-			name: "references and resources that differ only in version",
+			name:        "references and resources that differ only in version",
+			descriptors: versionGraph(),
+		},
+		{
+			name: "resource selector keeps the later of two versions",
 			descriptors: []*descriptor.Descriptor{
-				newDescriptor("root", "1.0.0", withReferences(
-					newReference("lib", "libfips", "1.0.0", withRefExtras(map[string]string{"flavor": "fips"})),
-					newReference("lib", "lib", "2.0.0"),
-					newReference("lib", "lib", "1.0.0"),
-					newReference("tool", "tool", "1.0.0"),
-				), withResources(newResource("cfg"))),
-				newDescriptor("lib", "1.0.0", withResources(newResource("image"))),
-				newDescriptor("lib", "2.0.0", withResources(versioned("chart", "2.0.0"), versioned("chart", "1.0.0"))),
-				newDescriptor("libfips", "1.0.0", withResources(newResource("image"))),
-				newDescriptor("tool", "1.0.0",
-					withReferences(newReference("dep", "lib", "1.0.0")),
-					withResources(newResource("bin"))),
+				newDescriptor("root", "1.0.0", withResources(versioned("chart", "1.0.0"), versioned("chart", "2.0.0"))),
 			},
+			selector:    &v1alpha1.Selector{MatchIdentity: map[string]string{"name": "chart", "version": "2.0.0"}},
+			wantRecords: 1,
+		},
+		{
+			name:        "resource selector keeps one version in a nested component",
+			descriptors: versionGraph(),
+			selector:    &v1alpha1.Selector{MatchIdentity: map[string]string{"name": "chart", "version": "1.0.0"}},
+			wantRecords: 1,
 		},
 	}
 
@@ -354,18 +377,23 @@ func TestProjectedRecordResolvesLikeResourceController(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
 			byKey := keyed(tt.descriptors...)
-			total := 0
-			for _, d := range tt.descriptors {
-				total += len(d.Component.Resources)
+			want := tt.wantRecords
+			if want == 0 {
+				for _, d := range tt.descriptors {
+					want += len(d.Component.Resources)
+				}
 			}
 
-			p := projectGraph(t, specWithExtract(&v1alpha1.Extract{ByResources: map[string]string{
-				"referencePath": `referencePath`,
-				"resource":      `resourceIdentity`,
-				"component":     `component.name + ":" + component.version`,
-				"full":          `resource`,
-			}}), tt.descriptors...)
-			r.Len(p.Extracted, total)
+			p := projectGraph(t, &v1alpha1.DiscoverySpec{
+				ResourceSelector: tt.selector,
+				Extract: &v1alpha1.Extract{ByResources: map[string]string{
+					"referencePath": `referencePath`,
+					"resource":      `resourceIdentity`,
+					"component":     `component.name + ":" + component.version`,
+					"full":          `resource`,
+				}},
+			}, tt.descriptors...)
+			r.Len(p.Extracted, want)
 
 			for _, record := range p.Extracted {
 				var ref v1alpha1.ResourceReference

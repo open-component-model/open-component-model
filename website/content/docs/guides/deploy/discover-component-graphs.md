@@ -174,7 +174,8 @@ kubectl get discovery flux-images -o jsonpath='{.status.extracted}' | jq
 {{< callout context="caution" >}}
 Discovery verifies neither signatures nor digests, so `imageRef` here is
 unverified. To consume the discovered resources safely, including those of
-nested components, create `Resource` objects from the records, see
+nested components, also extract the `referencePath` and `resourceIdentity`
+bindings and create `Resource` objects from the records, see
 [Addressing a resource with a Resource object]({{< relref "docs/concepts/component-discovery.md#addressing-a-resource-with-a-resource-object" >}}).
 {{< /callout >}}
 

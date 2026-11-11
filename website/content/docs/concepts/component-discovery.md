@@ -132,7 +132,8 @@ what Discovery does not. Both go verbatim into its `spec.resource.byReference`:
   `extraIdentity`. Pass it instead of building an identity from
   `resource.name`, which does not match a resource with extra identity.
 
-Both carry `version` only where name and extra identity are not unique, in line
+Both carry `version` only where name and extra identity are not unique among all
+references or resources of the component, whatever the selectors keep, in line
 with the [identity rules]({{< relref "docs/concepts/component-identity.md" >}}),
 so they keep matching when the root component moves to a new version. Raw mode
 and `expression` mode do not have these bindings.
@@ -140,11 +141,16 @@ and `expression` mode do not have these bindings.
 The detour through a `Resource` matters because Discovery publishes whatever the
 repository returns. If a nested component version is overwritten in the
 repository, a `Discovery` stays `Ready` and publishes the new content. A
-`Resource` built from the same record fails with `digest mismatch` instead: it
-checks the root component version against the signatures you configure, every
-component version on the reference path against the digest its parent records,
-and the resource digest. Take access data from the `Resource` status
-(`status.resource.access`) once it is `Ready`, not from the `Discovery` status.
+`Resource` built from the same record checks the root component version against
+the signatures you configure, every component version on the reference path
+against the digest its parent records for the reference, and the resource
+digest, so it fails with `digest mismatch` instead. These checks depend on the
+information being there: a reference without a recorded digest is not checked,
+the root is only checked when signature verification is configured, and a root
+that cannot be safely digested skips the signature check with a warning event.
+`ocm add cv` records reference digests. Take access data from the `Resource`
+status (`status.resource.access`) once it is `Ready`, not from the `Discovery`
+status.
 
 A record extracted with `referencePath: referencePath` and
 `resource: resourceIdentity`, such as
@@ -188,10 +194,10 @@ narrowly also keeps the `Discovery` status small: every extracted
 objects depends on who consumes the result:
 
 - **`kubectl`** - For a few resources or a one-off, write the manifests, or
-  generate them from `status.extracted`, for example with `jq`, and apply them.
-  Generate and apply again when the `Discovery` result changes. With a common
-  label, `kubectl apply --prune -l <label> --prune-allowlist=delivery.ocm.software/v1alpha1/Resource`
-  deletes the `Resource` objects of records that are gone.
+  generate them from `status.extracted`, and apply them. When the `Discovery`
+  result changes, apply them again and delete the `Resource` objects whose
+  record is gone, for example by giving them a common label and applying with
+  `kubectl apply --prune`.
 - **kro** - A `ResourceGraphDefinition` with a collection (`forEach` over
   `status.extracted`) keeps one `Resource` per record and deletes the `Resource`
   objects of records that disappear. kro needs permission to manage

@@ -190,11 +190,13 @@ func (q *Query) projectPerResource(ctx context.Context, descriptors []*runtime.U
 				return nil, fmt.Errorf("failed to project resources of descriptor %s: %d v2 resources but %d runtime resources",
 					d.Component.String(), len(list), len(d.Component.Resources))
 			}
-			ids := make([]runtime.Identity, len(d.Component.Resources))
+			// Whether a version is needed was decided in Filter over all
+			// resources of the component, not only the selected ones.
+			needed := filtered.resourceVersionNeeded[ComponentKey{Name: d.Component.Name, Version: d.Component.Version}]
+			identities = make([]runtime.Identity, len(d.Component.Resources))
 			for j := range d.Component.Resources {
-				ids[j] = d.Component.Resources[j].ToIdentity()
+				identities[j] = versionlessIdentity(d.Component.Resources[j].ToIdentity(), needed)
 			}
-			identities = versionlessIdentities(ids)
 		}
 		path, hasPath := referencePathOf(filtered, d)
 

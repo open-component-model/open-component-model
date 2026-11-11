@@ -51,6 +51,14 @@ type Filtered struct {
 	// root or no extraction expression references referencePath. Shared
 	// read-only.
 	ReferencePaths map[ComponentKey][]runtime.Identity
+
+	// resourceVersionNeeded holds, per surviving component, the result of
+	// versionNeeded over the component's unfiltered resources. A resource
+	// selector must not make a version look unnecessary: the Resource
+	// controller matches resourceIdentity against all resources of the
+	// component. Nil when no extraction expression references
+	// resourceIdentity.
+	resourceVersionNeeded map[ComponentKey]map[string]bool
 }
 
 // Filter applies the reference, component, and resource selector stages of q
@@ -116,8 +124,28 @@ func (q *Query) Filter(ctx context.Context, graph Graph) (*Filtered, error) {
 		return &Filtered{Descriptors: []*descriptor.Descriptor{}, EmptyStage: StageResource}, nil
 	}
 
+	var versionNeededByKey map[ComponentKey]map[string]bool
+	if q.extract != nil && q.extract.usesResourceIdentity {
+		versionNeededByKey = make(map[ComponentKey]map[string]bool, len(filtered))
+		for _, d := range filtered {
+			key := ComponentKey{Name: d.Component.Name, Version: d.Component.Version}
+			// byKey holds the unfiltered descriptor; d may be a copy whose
+			// resources the resource selector reduced.
+			all := byKey[key].Component.Resources
+			ids := make([]runtime.Identity, len(all))
+			for i := range all {
+				ids[i] = all[i].ToIdentity()
+			}
+			versionNeededByKey[key] = versionNeeded(ids)
+		}
+	}
+
 	// Lexicographic order by (component.name, component.version).
-	return &Filtered{Descriptors: sortByComponentKey(filtered), ReferencePaths: paths}, nil
+	return &Filtered{
+		Descriptors:           sortByComponentKey(filtered),
+		ReferencePaths:        paths,
+		resourceVersionNeeded: versionNeededByKey,
+	}, nil
 }
 
 // filterReferences applies the reference selector stage. Without a selector all

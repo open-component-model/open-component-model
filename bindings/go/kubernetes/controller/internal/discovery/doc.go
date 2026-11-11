@@ -39,7 +39,9 @@
 // what Discovery does not. referencePath is the shortest component reference
 // path from the root, computed on the unfiltered graph (see referencePaths);
 // resourceIdentity is the resource identity. Both drop the version attribute
-// where it is not needed to disambiguate (see versionlessIdentities). Each is
+// where it is not needed to disambiguate (see versionNeeded), judged against
+// all references or resources of the component, not only those a selector
+// kept, because that is what the Resource controller matches against. Each is
 // only computed when an extraction expression references it, which Compile
 // reads from the checked CEL AST.
 //
