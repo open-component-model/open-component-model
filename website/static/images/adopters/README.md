@@ -12,20 +12,25 @@ the organisation uses the Open Component Model. Display on this site does not
 grant any right to reuse those marks. If you want to use any of these marks,
 contact the respective owner.
 
-| Mark             | Owner                                |
-|------------------|--------------------------------------|
-| BWI              | BWI GmbH                             |
-| EverBright       | EverBright GmbH                      |
-| Gardener         | NeoNephos Foundation                 |
-| IronCore         | NeoNephos Foundation                 |
-| Konfidence       | SAP SE / Konfidence project          |
-| Kyma             | SAP SE / Kyma project                |
-| OpenControlPlane | NeoNephos Foundation                 |
-| Platform Mesh    | NeoNephos Foundation                 |
-| SAP              | SAP SE                               |
-| SAP NS2          | SAP National Security Services, Inc. |
-| STACKIT          | STACKIT GmbH & Co. KG                |
-| T-Systems        | T-Systems International GmbH         |
+| Mark             | Owner                                | Displayed                |
+|------------------|--------------------------------------|--------------------------|
+| BWI              | BWI GmbH                             | no — permission pending  |
+| EverBright       | EverBright GmbH                      | yes                      |
+| Gardener         | NeoNephos Foundation                 | yes                      |
+| IronCore         | NeoNephos Foundation                 | yes                      |
+| Konfidence       | SAP SE / Konfidence project          | yes                      |
+| Kyma             | SAP SE / Kyma project                | yes                      |
+| OpenControlPlane | NeoNephos Foundation                 | yes                      |
+| Platform Mesh    | NeoNephos Foundation                 | yes                      |
+| SAP              | SAP SE                               | yes                      |
+| SAP NS2          | SAP National Security Services, Inc. | yes                      |
+| STACKIT          | STACKIT GmbH & Co. KG                | no — permission pending  |
+| T-Systems        | T-Systems International GmbH         | no — permission pending  |
+
+A mark with `Displayed: no` means the logo file is still in this directory but
+its `adopters:` entry in `website/content/_index.md` is commented out, so it
+does not render on the site. Once the owner confirms in writing, flip the
+entry to active and update the table.
 
 If you own a mark shown here and want it corrected or removed, open an issue at
 <https://github.com/open-component-model/open-component-model/issues>.
@@ -113,7 +118,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Fetched:** 2026-10-26
 - **Licence:** Public domain (PD-textlogo)
 - **Trademark owner:** BWI GmbH
-- **Permission:** requested (pending)
+- **Permission:** requested (pending) — entry commented out in `_index.md`; not rendered
 
 ### EverBright
 
@@ -213,7 +218,7 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Fetched:** 2026-10-26
 - **Licence:** Editorial use (official brand asset in project repo)
 - **Trademark owner:** STACKIT GmbH & Co. KG
-- **Permission:** requested (pending)
+- **Permission:** requested (pending) — entry commented out in `_index.md`; not rendered
 - **Notes:** Dark variant derived from the official light SVG by replacing the
   fill colour with white. viewBox cropped from
   `0 0 1612.0708246 546.8535461` to `111 0 1385 546.8535461` on both files to
@@ -226,4 +231,4 @@ ever need to make to an SVG; everything else stays as downloaded.
 - **Fetched:** 2026-10-27
 - **Licence:** Public domain (PD-textlogo)
 - **Trademark owner:** T-Systems International GmbH
-- **Permission:** requested (pending)
+- **Permission:** requested (pending) — entry commented out in `_index.md`; not rendered

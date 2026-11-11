@@ -52,11 +52,16 @@ benefits:
     description: "We champion open innovation — in OCM and across the community."
     link: "benefits.md#committed-to-open-source"
 
+# Adopters with `Permission: granted (explicit)` or `granted (implicit)` per
+# `website/static/images/adopters/README.md`. A commented-out entry means the
+# trademark owner's written OK is still pending; the logo file stays in
+# `static/images/adopters/` but is not rendered. Uncomment once consent is on
+# file.
 adopters:
-  - name: "BWI"
-    logo_light: "images/adopters/bwi-color.svg"
-    logo_dark:  "images/adopters/bwi-color.svg"
-    url: "https://www.bwi.de"
+  # - name: "BWI"                # Permission: requested (pending)
+  #   logo_light: "images/adopters/bwi-color.svg"
+  #   logo_dark:  "images/adopters/bwi-color.svg"
+  #   url: "https://www.bwi.de"
   - name: "EverBright"
     logo_light: "images/adopters/everbright-light.svg"
     logo_dark:  "images/adopters/everbright-dark.svg"
@@ -93,12 +98,12 @@ adopters:
     logo_light: "images/adopters/sap-ns2.png"
     logo_dark:  "images/adopters/sap-ns2.png"
     url: "https://sapns2.com"
-  - name: "STACKIT"
-    logo_light: "images/adopters/stackit-light.svg"
-    logo_dark:  "images/adopters/stackit-dark.svg"
-    url: "https://stackit.de"
-  - name: "T-Systems"
-    logo_light: "images/adopters/t-systems-light.svg"
-    logo_dark:  "images/adopters/t-systems-dark.svg"
-    url: "https://www.t-systems.com"
+  # - name: "STACKIT"            # Permission: requested (pending)
+  #   logo_light: "images/adopters/stackit-light.svg"
+  #   logo_dark:  "images/adopters/stackit-dark.svg"
+  #   url: "https://stackit.de"
+  # - name: "T-Systems"          # Permission: requested (pending)
+  #   logo_light: "images/adopters/t-systems-light.svg"
+  #   logo_dark:  "images/adopters/t-systems-dark.svg"
+  #   url: "https://www.t-systems.com"
 ---
