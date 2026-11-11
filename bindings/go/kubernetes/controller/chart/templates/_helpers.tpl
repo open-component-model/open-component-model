@@ -24,14 +24,6 @@ The name, by default, is ocm-k8s-toolkit. It can be overwritten by nameOverride 
 {{- end }}
 
 {{/*
-Namespace for generated references.
-Always uses the Helm release namespace.
-*/}}
-{{- define "ocm-k8s-toolkit.namespaceName" -}}
-{{- .Release.Namespace }}
-{{- end }}
-
-{{/*
 Resource name with proper truncation for Kubernetes 63-character limit.
 Takes a dict with:
   - .suffix: Resource name suffix (e.g., "metrics", "webhook")
@@ -70,11 +62,13 @@ the digits as decimal like the manager does; int would read ":08081" as octal.
 {{- end }}
 
 {{/*
-Port the manager serves metrics on, empty when metrics are disabled. Every
-template that depends on metrics being on must use this, so they agree.
+Port the manager serves metrics on, parsed from manager.metricsServer.bindAddress.
+Empty when metrics are disabled ("0", the manager default). dig keeps a helm
+upgrade --reuse-values from a release without the key working. Validates address
+shape and a numeric decimal port; does not validate every address net.Listen accepts.
 */}}
 {{- define "ocm-k8s-toolkit.metricsPort" -}}
-{{- include "ocm-k8s-toolkit.portFromAddress" (dict "addr" .Values.manager.metricsServer.bindAddress "key" "manager.metricsServer.bindAddress") }}
+{{- include "ocm-k8s-toolkit.portFromAddress" (dict "addr" (dig "metricsServer" "bindAddress" "0" .Values.manager) "key" "manager.metricsServer.bindAddress") }}
 {{- end }}
 
 {{/*
@@ -82,7 +76,7 @@ Port the manager serves health probes on. Never empty: the liveness and readines
 probes and the NetworkPolicy ingress rule need it.
 */}}
 {{- define "ocm-k8s-toolkit.healthProbePort" -}}
-{{- $port := include "ocm-k8s-toolkit.portFromAddress" (dict "addr" (.Values.manager.healthProbe.bindAddress | default ":8081") "key" "manager.healthProbe.bindAddress") }}
+{{- $port := include "ocm-k8s-toolkit.portFromAddress" (dict "addr" (dig "healthProbe" "bindAddress" ":8081" .Values.manager | default ":8081") "key" "manager.healthProbe.bindAddress") }}
 {{- if not $port }}
 {{- fail "manager.healthProbe.bindAddress must not be \"0\"; the liveness and readiness probes need the health endpoint" }}
 {{- end }}

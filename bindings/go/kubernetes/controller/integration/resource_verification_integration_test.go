@@ -93,6 +93,7 @@ func Test_Integration_ResourceVerification(t *testing.T) {
 			map[string]any{
 				"type":       "http.config.ocm.software/v1alpha1",
 				"rootCAsPEM": trustedCAs,
+				"plainHTTP":  true,
 			},
 			map[string]any{
 				"type": "credentials.config.ocm.software",

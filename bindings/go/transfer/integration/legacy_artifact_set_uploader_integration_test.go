@@ -143,9 +143,10 @@ func transferLegacyArtifactSetCTFToOCI(t *testing.T, legacyMediaType, manifestTy
 
 	credentials := newCredResolver(t, registryCreds{registryAddr, user, password})
 	builder := transfer.NewDefaultBuilder(
-		provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir())),
-		ociresource.NewResourceRepository(nil),
+		provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig())),
+		ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig())),
 		credentials,
+		transfer.WithHTTPConfig(plainHTTPConfig()),
 	)
 	graph, err := builder.BuildAndCheck(definition)
 	r.NoError(err)
@@ -267,9 +268,10 @@ func Test_Integration_TransferDockerArtifactSetLocalBlob_OCIToOCI(t *testing.T) 
 		registryCreds{targetAddr, targetUser, targetPwd},
 	)
 	builder := transfer.NewDefaultBuilder(
-		provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir())),
-		ociresource.NewResourceRepository(nil),
+		provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig())),
+		ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig())),
 		credentials,
+		transfer.WithHTTPConfig(plainHTTPConfig()),
 	)
 	graph, err := builder.BuildAndCheck(definition)
 	r.NoError(err)
@@ -380,9 +382,10 @@ func Test_Integration_TransferDockerArtifactSetLocalBlob_CTFToCTF(t *testing.T) 
 	r.True(localBlobToLocalBlob, "docker artifact-set local blob must be transferred as a local blob")
 
 	builder := transfer.NewDefaultBuilder(
-		provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir())),
-		ociresource.NewResourceRepository(nil),
+		provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig())),
+		ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig())),
 		nil,
+		transfer.WithHTTPConfig(plainHTTPConfig()),
 	)
 	graph, err := builder.BuildAndCheck(definition)
 	r.NoError(err)

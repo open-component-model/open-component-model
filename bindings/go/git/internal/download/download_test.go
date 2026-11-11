@@ -19,6 +19,8 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/filemode"
 	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/go-git/go-git/v6/plumbing/transport"
+	"github.com/go-git/go-git/v6/storage"
+	"github.com/go-git/go-git/v6/storage/memory"
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
@@ -39,6 +41,11 @@ func TestDownloadRevisions(t *testing.T) {
 			r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/feature", fixture.Second)))
 			r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/tags/feature", fixture.First)))
 			r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/releases/stable", fixture.First)))
+			// Refs whose names run below the path of another ref, which git allows across namespaces.
+			r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/release", fixture.Second)))
+			r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/tags/release/v1", fixture.First)))
+			r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/tags/x", fixture.Second)))
+			r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/remotes/x/y", fixture.First)))
 			inner, err := fixture.Git.Reference("refs/tags/annotated", true)
 			r.NoError(err)
 			tag := storeObject(t, fixture.Git, &object.Tag{
@@ -57,14 +64,19 @@ func TestDownloadRevisions(t *testing.T) {
 				// branch to point to it stays HEAD.
 				wantRef          string
 				missingHeadError string
+				// missingHeadCause is the sentinel the missing-HEAD error must wrap, when
+				// resolveRef is the one that reports it.
+				missingHeadCause error
 			}{
 				{name: "default HEAD", ref: "HEAD", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: "cannot fetch git repository: transport failed; check repository access and server trust: reference not found"},
-				{name: "short main branch", ref: "main", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: `cannot resolve git ref: reference name escapes the reference storage: "main" is not under refs/ nor a valid pseudo-ref`},
-				{name: "qualified main branch", ref: "refs/heads/main", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: "cannot resolve git ref: reference not found"},
+				{name: "short main branch", ref: "main", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: `cannot resolve git ref: reference not found: "main"`, missingHeadCause: plumbing.ErrReferenceNotFound},
+				{name: "qualified main branch", ref: "refs/heads/main", want: fixture.Second, wantRef: "refs/heads/main", missingHeadError: `cannot resolve git ref: reference not found: "refs/heads/main"`, missingHeadCause: plumbing.ErrReferenceNotFound},
 				{name: "branch wins over same-named tag", ref: "feature", want: fixture.Second, wantRef: "refs/heads/feature"},
 				{name: "remote tracking branch", ref: "refs/remotes/origin/feature", want: fixture.Second, wantRef: "refs/heads/feature"},
 				{name: "qualified tag wins over same-named branch", ref: "refs/tags/feature", want: fixture.First, wantRef: "refs/tags/feature"},
 				{name: "custom ref namespace", ref: "refs/releases/stable", want: fixture.First, wantRef: "refs/releases/stable"},
+				{name: "short tag below a branch name", ref: "release/v1", want: fixture.First, wantRef: "refs/tags/release/v1"},
+				{name: "short remote ref below a tag name", ref: "x/y", want: fixture.First, wantRef: "refs/remotes/x/y"},
 				{name: "short lightweight tag", ref: "v1", want: fixture.First, wantRef: "refs/tags/v1"},
 				{name: "short annotated tag", ref: "annotated", want: fixture.First, wantRef: "refs/tags/annotated"},
 				{name: "short nested tag", ref: "nested", want: fixture.First, wantRef: "refs/tags/nested"},
@@ -82,6 +94,9 @@ func TestDownloadRevisions(t *testing.T) {
 					pinned, pinErr := Pin(t.Context(), spec, nil, Options{AllowLocal: true})
 					if head == "missing HEAD" && tc.missingHeadError != "" {
 						r.ErrorContains(err, tc.missingHeadError)
+						if tc.missingHeadCause != nil {
+							r.ErrorIs(err, tc.missingHeadCause)
+						}
 						r.Nil(result)
 						r.Error(pinErr, "a ref the fetch cannot resolve is not pinned")
 						return
@@ -283,7 +298,7 @@ func TestDownloadFailureCleanup(t *testing.T) {
 		wantError         string
 		wantCause         error
 	}{
-		{name: "missing ref", ref: "absent", wantError: `cannot resolve git ref: reference name escapes the reference storage: "absent" is not under refs/ nor a valid pseudo-ref`},
+		{name: "missing ref", ref: "absent", wantError: "cannot resolve git ref", wantCause: plumbing.ErrReferenceNotFound},
 		{name: "missing commit", commit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", wantError: "cannot fetch git repository"},
 		{name: "already canceled", ref: "main", cancel: true, wantError: "cannot fetch git repository: context canceled", wantCause: context.Canceled},
 	} {
@@ -306,6 +321,92 @@ func TestDownloadFailureCleanup(t *testing.T) {
 			files, err := os.ReadDir(dir)
 			r.NoError(err)
 			r.Empty(files)
+		})
+	}
+}
+
+// errAtRef makes a repository's reference storage fail with a sentinel error for one
+// exact reference name while behaving normally for every other name.
+type errAtRef struct {
+	storage.Storer
+	name plumbing.ReferenceName
+	err  error
+}
+
+func (s errAtRef) Reference(name plumbing.ReferenceName) (*plumbing.Reference, error) {
+	if name == s.name {
+		return nil, s.err
+	}
+	return s.Storer.Reference(name)
+}
+
+func TestResolveRefUnreadableCandidate(t *testing.T) {
+	hash := plumbing.NewHash("1111111111111111111111111111111111111111")
+	readErr := errors.New("disk on fire")
+	for _, tc := range []struct {
+		name, ref  string
+		unreadable plumbing.ReferenceName
+		existing   []plumbing.ReferenceName
+		wantErr    error
+		wantRef    plumbing.ReferenceName
+	}{
+		// A fetched branch is looked up before any tag, so an unreadable tag does not matter.
+		{name: "unreadable tag behind a fetched branch", ref: "main", unreadable: "refs/tags/main", existing: []plumbing.ReferenceName{"refs/heads/main", "refs/remotes/origin/main"}, wantRef: "refs/heads/main"},
+		// A fetched branch outranks a tag; if it cannot be read, the tag must not win.
+		{name: "unreadable fetched branch before existing tag", ref: "main", unreadable: "refs/remotes/origin/main", existing: []plumbing.ReferenceName{"refs/heads/main", "refs/tags/main"}, wantErr: readErr},
+		{name: "unreadable candidate after not-found ones", ref: "main", unreadable: "refs/heads/main", wantErr: readErr},
+		{name: "unreadable candidate after the hit", ref: "main", unreadable: "refs/remotes/main", existing: []plumbing.ReferenceName{"refs/heads/main"}, wantRef: "refs/heads/main"},
+		{name: "all candidates absent", ref: "main", wantErr: plumbing.ErrReferenceNotFound},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			base := memory.NewStorage()
+			for _, n := range tc.existing {
+				r.NoError(base.SetReference(plumbing.NewHashReference(n, hash)))
+			}
+			repo, err := git.Init(errAtRef{Storer: base, name: tc.unreadable, err: readErr})
+			r.NoError(err)
+
+			_, got, err := resolveRef(repo, tc.ref)
+			if tc.wantErr != nil {
+				r.ErrorIs(err, tc.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.Equal(tc.wantRef, got)
+		})
+	}
+}
+
+func TestResolveRefBelowRefFile(t *testing.T) {
+	r := require.New(t)
+	hash := plumbing.NewHash("1111111111111111111111111111111111111111")
+	repo, err := git.PlainInit(t.TempDir(), true)
+	r.NoError(err)
+	for _, n := range []plumbing.ReferenceName{"refs/heads/release", "refs/remotes/origin/release", "refs/tags/release/v1"} {
+		r.NoError(repo.Storer.SetReference(plumbing.NewHashReference(n, hash)))
+	}
+
+	_, got, err := resolveRef(repo, "release/v1")
+	r.NoError(err)
+	r.Equal(plumbing.ReferenceName("refs/tags/release/v1"), got)
+
+	_, _, err = resolveRef(repo, "release/missing")
+	r.ErrorIs(err, plumbing.ErrReferenceNotFound)
+	r.ErrorContains(err, `"release/missing"`)
+}
+
+// On disk, a name that leaves the reference storage is invalid under every rule.
+func TestResolveRefInvalidName(t *testing.T) {
+	r := require.New(t)
+	repo, err := git.PlainInit(t.TempDir(), true)
+	r.NoError(err)
+	for _, name := range []string{"../x", "x/"} {
+		t.Run(name, func(t *testing.T) {
+			r := require.New(t)
+			_, _, err := resolveRef(repo, name)
+			r.ErrorIs(err, plumbing.ErrInvalidReferenceName)
+			r.NotErrorIs(err, plumbing.ErrReferenceNotFound)
 		})
 	}
 }

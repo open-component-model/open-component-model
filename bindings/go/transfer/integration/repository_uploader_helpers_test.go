@@ -97,8 +97,8 @@ func transferOnce(t *testing.T, ctfRepo repository.ComponentVersionRepository, s
 		},
 	)
 	r.NoError(err)
-	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-	graph, err := transfer.NewDefaultBuilder(repoProvider, resourceRepo, creds).BuildAndCheck(tgd)
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig()))
+	graph, err := transfer.NewDefaultBuilder(repoProvider, resourceRepo, creds, transfer.WithHTTPConfig(plainHTTPConfig())).BuildAndCheck(tgd)
 	r.NoError(err)
 	r.NoError(graph.Process(t.Context()))
 }

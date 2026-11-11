@@ -1,0 +1,6 @@
+# HTTP client configuration for the CLI calls against the in-cluster registry, which serves
+# plain HTTP. OCM talks plain HTTP only when this configuration says so.
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    plainHTTP: true

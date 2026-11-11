@@ -123,7 +123,7 @@ Kubernetes: `>=1.26.0-0`
 | prometheus.enable | bool | `false` | Render a metrics Service and a Prometheus ServiceMonitor (requires prometheus-operator and manager.metricsServer.bindAddress) |
 | rbacHelpers.aggregateToDefaultRoles | bool | `true` | Install ClusterRoles that aggregate OCM resource permissions into the built-in `admin`, `edit` and `view` cluster roles |
 | rbacHelpers.enable | bool | `false` | Install convenience admin/editor/viewer roles for CRDs |
-| webhook.certSecret | string | `""` | Secret name for webhook TLS certificates (when not using cert-manager, create this secret manually) |
+| webhook.certSecret | string | `""` | Secret name for the webhook TLS certificate. With cert-manager the Certificate writes into it; without cert-manager, create it manually. Empty uses the chart default name. |
 | webhook.enable | bool | `false` | Enable conversion webhook for CRD version conversion |
 
 ## Development
@@ -169,6 +169,7 @@ task helm/validate
 
 This checks:
 - Chart linting passes
+- The [helm-unittest](https://github.com/helm-unittest/helm-unittest) suites in `tests/` pass (`task helm/unittest` runs them alone)
 - Templates render successfully
 - CRDs, manager-role, schema, and docs are up to date
 
