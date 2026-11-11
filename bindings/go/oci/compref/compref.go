@@ -397,8 +397,8 @@ func guessType(repository string) (string, error) {
 			return runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(), nil
 		}
 	}
-	// Also check "./"
-	if strings.HasPrefix(repository, "."+string(filepath.Separator)) {
+	// Also check "./"; "/" is a valid separator on Windows too.
+	if strings.HasPrefix(repository, "./") || strings.HasPrefix(repository, "."+string(filepath.Separator)) {
 		return runtime.NewVersionedType(ctfv1.Type, ctfv1.Version).String(), nil
 	}
 
