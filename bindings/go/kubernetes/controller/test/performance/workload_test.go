@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -18,9 +19,10 @@ func TestWorkloadReleases(t *testing.T) {
 		rel          release
 		version      string
 		rootVersions []string
+		constraint   string
 	}{
-		{rel: rolloutRelease, version: "1.0.0", rootVersions: []string{"1.0.0", "1.0.1", "1.0.2"}},
-		{rel: updateRelease, version: "1.1.0", rootVersions: []string{"1.1.0", "1.1.1", "1.1.2"}},
+		{rel: rolloutRelease, version: "1.0.0", rootVersions: []string{"1.0.0", "1.0.1", "1.0.2"}, constraint: ">=1.0.0 <1.1.0"},
+		{rel: updateRelease, version: "1.1.0", rootVersions: []string{"1.1.0", "1.1.1", "1.1.2"}, constraint: ">=1.1.0 <1.2.0"},
 	}
 	for _, depth := range []int{0, defaultDepth} {
 		for _, tt := range tests {
@@ -28,7 +30,7 @@ func TestWorkloadReleases(t *testing.T) {
 				r := require.New(t)
 				w := newWorkload(4, "run", "http://registry:5000")
 				w.depth, w.versions, w.resources = depth, 3, 7
-				r.Equal(">="+tt.version, tt.rel.constraint())
+				r.Equal(tt.constraint, tt.rel.constraint())
 
 				cvs, err := w.componentVersions(tt.rel)
 				r.NoError(err)
@@ -83,7 +85,26 @@ func TestWorkloadReleasesAreDisjoint(t *testing.T) {
 	}
 	for _, cv := range update {
 		r.False(published[cv.Name+":"+cv.Version], "%s:%s is in both releases", cv.Name, cv.Version)
-		r.True(strings.HasPrefix(cv.Version, "1.1."), "the rollout constraint >=1.0.0 must not select a version before the update")
+	}
+}
+
+// A Component that polls while the update is prepared must not move to the update release before the update changes it.
+func TestWorkloadConstraintsStayInTheirRelease(t *testing.T) {
+	r := require.New(t)
+	w := newWorkload(1, "run", "http://registry:5000")
+	for _, rel := range []release{rolloutRelease, updateRelease} {
+		c, err := semver.NewConstraint(rel.constraint())
+		r.NoError(err)
+		for _, other := range []release{rolloutRelease, updateRelease} {
+			cvs, err := w.componentVersions(other)
+			r.NoError(err)
+			for _, cv := range cvs {
+				if cv.Name != w.componentName(0) {
+					continue
+				}
+				r.Equal(rel == other, c.Check(semver.MustParse(cv.Version)), "%s selects %s", rel.constraint(), cv.Version)
+			}
+		}
 	}
 }
 
@@ -152,7 +173,7 @@ func TestWorkloadReferenceChain(t *testing.T) {
 	// The last object wraps around onto the second Repository.
 	i := defaultRepositories + 1
 	r.Equal(w.repositoryName(1), w.component(i).Spec.RepositoryRef.Name)
-	r.Equal(">=1.0.0", w.component(i).Spec.Semver, "the rollout selects its release by constraint")
+	r.Equal(">=1.0.0 <1.1.0", w.component(i).Spec.Semver, "the rollout selects its release by constraint")
 	r.Equal(signingSecretName, w.component(i).Spec.OCMConfig[0].Name)
 	r.Equal(v1alpha1.ConfigurationPolicyPropagate, w.component(i).Spec.OCMConfig[0].Policy,
 		"the Resource and Deployer inherit the verification config")

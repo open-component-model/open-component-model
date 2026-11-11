@@ -54,8 +54,9 @@ func (r release) version() string { return r.rootVersion(0) }
 func (r release) rootVersion(patch int) string { return fmt.Sprintf("1.%d.%d", r, patch) }
 
 // constraint selects the newest root version of the release. Unlike an exact version,
-// a constraint makes the controller list versions.
-func (r release) constraint() string { return ">=" + r.version() }
+// a constraint makes the controller list versions. It stops below the next release, so
+// a Component that polls while the next release is published stays where it is.
+func (r release) constraint() string { return fmt.Sprintf(">=%s <%s", r.version(), (r + 1).version()) }
 
 // workload describes the objects and component versions of one run: a signed pipeline per
 // object over a few Repositories, with large descriptors, several versions and a reference

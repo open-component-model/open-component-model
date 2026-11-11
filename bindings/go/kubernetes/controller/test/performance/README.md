@@ -131,22 +131,23 @@ controller needs to reconcile them is bound by that limit, not by the controller
 
 A run measures these phases in order, each in a window of its own:
 
-| Phase     | Prepare (not measured)                     | Change                                                  | Done when, per pipeline           | Models                                                                                                      |
-|-----------|--------------------------------------------|---------------------------------------------------------|-----------------------------------|-------------------------------------------------------------------------------------------------------------|
-| `rollout` | push the image pool, publish release `1.0` | create all objects                                      | the NamespacedDeployer is `Ready` | the first install, with cold caches                                                                         |
-| `drift`   |                                            | set `data.version: drifted` on every deployed ConfigMap | the ConfigMap is at `1.0.0` again | any update of a deployed object, status churn included, enqueues its Deployer: warm caches, the same digest |
-| `update`  | publish release `1.1`                      | set `spec.semver` of every Component to `>=1.1.0`       | the ConfigMap is at `1.1.0`       | a release rolling out: a new digest down the whole reference chain                                          |
+| Phase     | Prepare (not measured)                     | Change                                                    | Done when, per pipeline           | Models                                                                                                      |
+|-----------|--------------------------------------------|-----------------------------------------------------------|-----------------------------------|-------------------------------------------------------------------------------------------------------------|
+| `rollout` | push the image pool, publish release `1.0` | create all objects                                        | the NamespacedDeployer is `Ready` | the first install, with cold caches                                                                         |
+| `drift`   |                                            | set `data.version: drifted` on every deployed ConfigMap   | the ConfigMap is at `1.0.0` again | any update of a deployed object, status churn included, enqueues its Deployer: warm caches, the same digest |
+| `update`  | publish release `1.1`                      | set `spec.semver` of every Component to `>=1.1.0 <1.2.0` | the ConfigMap is at `1.1.0`       | a release rolling out: a new digest down the whole reference chain                                          |
 
 The drift phase is a Deployer reading its component version and resource again for an object it already deployed. The
 update has to change the Components: publishing alone triggers nothing before their next poll, 30 minutes away.
 
 A release is one published generation of every pipeline's component versions. Each phase publishes its own release in
-its own prepare: a release published earlier would add versions the rollout's constraint selects and lists.
+its own prepare: a release published earlier would add versions the rollout's Components list. Each constraint stops
+below the next release, so a Component that polls while the update is prepared stays on its release.
 
-| Release | Root versions                    | Chain, leaf and deployed `data.version` | Constraint |
-|---------|----------------------------------|-----------------------------------------|------------|
-| `1.0`   | `1.0.0` … `1.0.<--versions - 1>` | `1.0.0`                                 | `>=1.0.0`  |
-| `1.1`   | `1.1.0` … `1.1.<--versions - 1>` | `1.1.0`                                 | `>=1.1.0`  |
+| Release | Root versions                    | Chain, leaf and deployed `data.version` | Constraint        |
+|---------|----------------------------------|-----------------------------------------|-------------------|
+| `1.0`   | `1.0.0` … `1.0.<--versions - 1>` | `1.0.0`                                 | `>=1.0.0 <1.1.0`  |
+| `1.1`   | `1.1.0` … `1.1.<--versions - 1>` | `1.1.0`                                 | `>=1.1.0 <1.2.0`  |
 
 Both carry the same image resources per root. References pin versions, so every component version of the update is new.
 
