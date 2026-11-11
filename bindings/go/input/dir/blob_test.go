@@ -6,7 +6,9 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"testing"
 	"time"
@@ -66,7 +68,6 @@ func TestGetV1DirBlob_Symlinks(t *testing.T) {
 
 func TestGetV1DirBlob_Reproducibility(t *testing.T) {
 	ctx := t.Context()
-	r := require.New(t)
 
 	tests := []struct {
 		name         string
@@ -93,6 +94,7 @@ func TestGetV1DirBlob_Reproducibility(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
 			// Prepare a file system folder.
 			tempDir := t.TempDir()
 			dirAbs := filepath.Join(tempDir, tt.baseDir)
@@ -305,9 +307,9 @@ func TestGetV1DirBlob_Standard_Cases(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	r := require.New(t)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
 			// Create directory structure to test with.
 			tempDir := t.TempDir()
 			dirAbs := filepath.Join(tempDir, tt.testDirBase)
@@ -399,7 +401,7 @@ func TestGetV1DirBlob_Standard_Cases(t *testing.T) {
 			for _, tf := range tt.testFiles {
 				fileName := tf.relPath
 				if tt.preserveDir {
-					fileName = filepath.Join(tt.testDirBase, fileName)
+					fileName = path.Join(tt.testDirBase, fileName)
 				}
 
 				untarredData, err := extractFileFromTar(data, fileName)
@@ -448,7 +450,7 @@ func TestGetV1DirBlob_NonExistentPath(t *testing.T) {
 	dirBlob, err := dir.GetV1DirBlob(ctx, dirSpec, tempDir)
 	r.Nil(dirBlob)
 	r.Error(err)
-	r.Contains(err.Error(), "no such file or directory")
+	r.ErrorIs(err, fs.ErrNotExist)
 
 	// Another case: the input directory does not exist, but its parent folder does.
 	// Create v1.Dir spec with a non-existent path, but the parent directory exists.
