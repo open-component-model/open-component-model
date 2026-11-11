@@ -167,3 +167,56 @@ test("invalid JSON and missing arguments do not create a feed", (t) => {
     assert.notEqual(env.invoke("--feed", env.feed).status, 0);
     assert.equal(existsSync(env.feed), false);
 });
+
+function encoded(file) {
+    return Array.from(parseFeed(file).getElementsByTagName("content:encoded")).map((element) => element.textContent);
+}
+
+test("release notes render to sanitized content:encoded HTML", (t) => {
+    const env = setup(t);
+    const body = "## Changes\n\n- *(cli)* did a thing (#123)\n- plain item\n";
+    succeeded(env.run({ ...RELEASE, body }));
+    const [html] = encoded(env.feed);
+    assert.match(html, /<h2>Changes<\/h2>/);
+    assert.match(html, /<li><em>\(cli\)<\/em> did a thing \(#123\)<\/li>/);
+    // The plain-text description one-liner is retained as a fallback.
+    const description = parseFeed(env.feed).getElementsByTagName("description");
+    assert.ok(Array.from(description).some((d) => /is available\. Release notes and downloads:/.test(d.textContent)));
+});
+
+test("hostile markup in release notes is stripped from the rendered HTML", (t) => {
+    const env = setup(t);
+    const body = "Safe [link](https://ocm.software).\n\n<script>alert(1)</script>\n\n<img src=x onerror=alert(2)>\n\n[evil](javascript:alert(3))";
+    succeeded(env.run({ ...RELEASE, body }));
+    const [html] = encoded(env.feed);
+    assert.doesNotMatch(html, /<script/i);
+    assert.doesNotMatch(html, /onerror/i);
+    assert.doesNotMatch(html, /javascript:/i);
+    assert.doesNotMatch(html, /<img/i);
+    assert.match(html, /<a href="https:\/\/ocm\.software">link<\/a>/);
+});
+
+test("a literal CDATA terminator in notes stays escaped and parseable", (t) => {
+    const env = setup(t);
+    succeeded(env.run({ ...RELEASE, body: "before ]]> after" }));
+    // marked HTML-escapes '>' so the raw ]]> never reaches the CDATA; the feed
+    // stays valid XML and the text round-trips through the parser.
+    const [html] = encoded(env.feed);
+    assert.match(html, /before \]\]&gt; after/);
+});
+
+test("a release with notes reruns byte-identically", (t) => {
+    const env = setup(t);
+    const body = "## Changes\n\n- *(cli)* did a thing (#123)\n";
+    succeeded(env.run({ ...RELEASE, body }));
+    const before = readFileSync(env.feed);
+    succeeded(env.run({ ...RELEASE, body }));
+    assert.deepEqual(readFileSync(env.feed), before);
+});
+
+test("a non-string release body is rejected without creating a feed", (t) => {
+    const env = setup(t);
+    writeFileSync(env.input, JSON.stringify({ ...RELEASE, body: { not: "a string" } }));
+    assert.notEqual(env.invoke("--release", env.input, "--feed", env.feed).status, 0);
+    assert.equal(existsSync(env.feed), false);
+});

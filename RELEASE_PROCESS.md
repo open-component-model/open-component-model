@@ -126,6 +126,9 @@ and adds it to `website/static/releases.xml` only if its canonical GUID is missi
 There is no date cutoff or automatic history import: the first run creates one item.
 Later runs retain earlier entries, including entries already in an open feed PR.
 The JavaScript updater lives in `.github/scripts/update-release-feed.js` alongside the other workflow helpers.
+Each item carries a plain-text `description` link plus the release notes rendered to sanitized
+HTML in `content:encoded`, so subscribers receive the changelog inline. The notes are captured
+once, when the entry is first added, and are not rewritten if the GitHub release is edited later.
 
 The existing OCMBot token and signed `create-pull-request` action restrict the PR to
 that one file. Pending releases accumulate in one PR from `automation/release-feed`;

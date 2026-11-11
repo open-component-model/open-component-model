@@ -3,10 +3,13 @@ import { readFile, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
 import { DOMParser, XMLSerializer, onWarningStopParsing } from "@xmldom/xmldom";
+import { marked } from "marked";
+import sanitizeHtml from "sanitize-html";
 
 const RELEASES_URL = "https://github.com/open-component-model/open-component-model/releases";
 const TAG_URL = `${RELEASES_URL}/tag/`;
 const FEED_URL = "https://ocm.software/releases.xml";
+const CONTENT_NS = "http://purl.org/rss/1.0/modules/content/";
 const CANONICAL_TAG = /^v[0-9]+\.[0-9]+\.[0-9]+(?:-rc\.[0-9]+)?$/;
 
 function isCanonicalTag(tag) {
@@ -42,7 +45,7 @@ function publicationDate(value) {
 
 function newFeed() {
     return parseXml(`<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="${CONTENT_NS}">
   <channel>
     <title>OCM Releases</title>
     <link>${RELEASES_URL}</link>
@@ -53,7 +56,20 @@ function newFeed() {
 </rss>`);
 }
 
-function releaseItem(document, tag, published) {
+// git-cliff release notes are Markdown. Render to HTML for rich email, then
+// sanitize: commit subjects are untrusted free text, so strip any tags/attrs
+// outside this allowlist (no script, style, img, event handlers, or js: hrefs).
+function renderBody(body) {
+    const html = sanitizeHtml(marked.parse(body, { async: false, gfm: true }), {
+        allowedTags: ["h1", "h2", "h3", "h4", "h5", "h6", "p", "ul", "ol", "li", "a", "code", "pre", "strong", "em", "blockquote", "br", "hr"],
+        allowedAttributes: { a: ["href"] },
+        allowedSchemes: ["http", "https"],
+        disallowedTagsMode: "discard"
+    }).trim();
+    return html;
+}
+
+function releaseItem(document, tag, published, body) {
     const url = `${TAG_URL}${tag}`;
     const item = document.createElement("item");
     for (const [name, value] of [
@@ -70,6 +86,14 @@ function releaseItem(document, tag, published) {
             element.setAttribute("isPermaLink", "true");
         }
         item.appendChild(element);
+    }
+    const html = renderBody(body);
+    if (html) {
+        item.appendChild(document.createTextNode("\n      "));
+        const encoded = document.createElement("content:encoded");
+        // Keep the HTML inside CDATA; split any literal ]]> so it cannot close early.
+        encoded.appendChild(document.createCDATASection(html.replace(/]]>/g, "]]]]><![CDATA[>")));
+        item.appendChild(encoded);
     }
     item.appendChild(document.createTextNode("\n    "));
     return item;
@@ -110,6 +134,9 @@ async function updateReleaseFeed(release, feedPath, pendingPath) {
     if (release.draft !== false || typeof release.published_at !== "string") {
         throw new Error("The release must be published, not a draft");
     }
+    if (release.body != null && typeof release.body !== "string") {
+        throw new Error("Release body must be a string when present");
+    }
     const published = publicationDate(release.published_at);
     let original;
     try {
@@ -134,7 +161,7 @@ async function updateReleaseFeed(release, feedPath, pendingPath) {
     }
     const guid = `${TAG_URL}${release.tag_name}`;
     if (!items.has(guid)) {
-        items.set(guid, { guid, publishedMs: published.getTime(), element: releaseItem(document, release.tag_name, published) });
+        items.set(guid, { guid, publishedMs: published.getTime(), element: releaseItem(document, release.tag_name, published, release.body ?? "") });
         changed = true;
     }
     if (!changed) {
