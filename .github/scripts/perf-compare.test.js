@@ -62,22 +62,13 @@ function result(...phases) {
 }
 
 /**
- * A result of a base branch that predates phases: the rollout at the top level, the drift in a block.
+ * A result of a base branch that predates phases: the rollout at the top level.
  *
  * @param {number} total
  */
 function oldResult(total) {
   const { outcome, durations, cost } = rollout(total, 0);
-  const { controllerCounters, registryCounters, ...usage } = cost;
-  return {
-    outcome,
-    durations,
-    usage,
-    controllerCounters,
-    registryCounters,
-    controllerRestarted: false,
-    drift: { ...deployerPhase("drift", 8000), name: undefined },
-  };
+  return { outcome, durations, usage: cost };
 }
 
 test("median of odd and even counts", () => {
@@ -122,23 +113,12 @@ test("every phase gets the same rows, in execution order", () => {
   assert.doesNotMatch(table, /Drift: registry blob get/, "requests a phase never made get no row there");
 });
 
-test("a base in the old shape is read as its rollout", () => {
-  const pr = result(rollout(90, 0), deployerPhase("drift", 4000), deployerPhase("update", 20000));
+test("a base without phases has no value in any phase", () => {
+  const pr = result(rollout(90, 0), deployerPhase("drift", 4000));
   const table = renderTable([oldResult(100)], [pr], "main");
 
-  assert.match(table, /^\| Rollout: total \(s\) \\\* \| 100 \| 90 \| -10\.0% \|$/m);
-  assert.match(table, /^\| Rollout: registry requests \| 44000 \| 44000 \| 0% \|$/m);
-  assert.match(table, /^\| Rollout: component: reconciles \| 2000 \| 2000 \| 0% \|$/m);
-  assert.match(table, /^\| Rollout: registry blob get \| 13000 \| 13000 \| 0% \|$/m);
-  assert.match(table, /^\| Drift: registry requests \| n\/a \| 4000 \| n\/a \|$/m, "the old drift block is ignored");
-  assert.match(table, /^\| Update: registry requests \| n\/a \| 20000 \| n\/a \|$/m);
-});
-
-test("old results of other scenarios are not read as the rollout", () => {
-  const other = { ...oldResult(10), scenario: "cold" };
-  const table = renderTable([{ ...oldResult(100), scenario: "complex" }, other, other], [result(rollout(100, 0))], "main");
-
-  assert.match(table, /^\| Rollout: total \(s\) \\\* \| 100 \| 100 \| 0% \|$/m);
+  assert.match(table, /^\| Rollout: total \(s\) \\\* \| n\/a \| 90 \| n\/a \|$/m);
+  assert.match(table, /^\| Drift: registry requests \| n\/a \| 4000 \| n\/a \|$/m);
 });
 
 test("a side without a phase renders n/a", () => {

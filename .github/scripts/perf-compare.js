@@ -31,36 +31,14 @@ export function median(values) {
 }
 
 /**
- * The phases of a result, in execution order.
- *
- * Results of a base branch that predates phases carry the rollout at the top level and
- * the drift in a block of its own; they are read as their rollout alone. Results of its
- * other scenarios measure other workloads and have no phase to compare.
- * Remove the fallback once main writes phases.
+ * The phases of a result, in execution order. A base that predates phases has none:
+ * its pull request has to merge the base branch first.
  *
  * @param {any} result
  * @returns {any[]}
  */
 function phasesOf(result) {
-  if (result.phases) {
-    return result.phases;
-  }
-  if (result.scenario && result.scenario !== "complex") {
-    return [];
-  }
-  return [
-    {
-      name: "rollout",
-      outcome: { ...result.outcome, controllerRestarted: result.controllerRestarted },
-      durations: result.durations,
-      cost: {
-        ...result.usage,
-        controllerCounters: result.controllerCounters,
-        controllerGaugePeaks: result.controllerGaugePeaks,
-        registryCounters: result.registryCounters,
-      },
-    },
-  ];
+  return result.phases ?? [];
 }
 
 /**
