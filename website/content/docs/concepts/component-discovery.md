@@ -134,9 +134,11 @@ what Discovery does not. Both go verbatim into its `spec.resource.byReference`:
 
 Both carry `version` only where name and extra identity are not unique among all
 references or resources of the component, whatever the selectors keep, in line
-with the [identity rules]({{< relref "docs/concepts/component-identity.md" >}}),
-so they keep matching when the root component moves to a new version. Raw mode
-and `expression` mode do not have these bindings.
+with the [identity rules]({{< relref "docs/concepts/component-identity.md" >}}).
+An identity without `version` keeps matching when the root component moves to a
+new version; one that keeps its `version` is pinned to it and stops resolving
+once that version is gone. Raw mode and `expression` mode do not have these
+bindings.
 
 The detour through a `Resource` matters because Discovery publishes whatever the
 repository returns. If a nested component version is overwritten in the
@@ -148,9 +150,18 @@ digest, so it fails with `digest mismatch` instead. These checks depend on the
 information being there: a reference without a recorded digest is not checked,
 the root is only checked when signature verification is configured, and a root
 that cannot be safely digested skips the signature check with a warning event.
-`ocm add cv` records reference digests. Take access data from the `Resource`
-status (`status.resource.access`) once it is `Ready`, not from the `Discovery`
-status.
+`ocm add cv` records reference digests.
+
+Take access data from the `Resource` status (`status.resource.access`), not from
+the `Discovery` status, and only once the `Resource` is `Ready` with
+`status.observedGeneration` equal to `metadata.generation`; until then the
+status can still describe the previous spec. `status.component` shows the
+component version the resource was taken from. The verification holds at the
+time of the reconcile: an access that addresses content by digest, such as a
+digest-pinned OCI image reference, always yields the verified content, but
+others, such as an HTTP URL, a git reference, or an S3 object, can return
+different content later. Verify content fetched through those against
+`status.resource.digest`.
 
 A record extracted with `referencePath: referencePath` and
 `resource: resourceIdentity`, such as
@@ -196,8 +207,11 @@ objects depends on who consumes the result:
 - **`kubectl`** - For a few resources or a one-off, write the manifests, or
   generate them from `status.extracted`, and apply them. When the `Discovery`
   result changes, apply them again and delete the `Resource` objects whose
-  record is gone, for example by giving them a common label and applying with
-  `kubectl apply --prune`.
+  record is gone, for example by giving them a dedicated label and applying with
+  `kubectl apply --prune`, selecting that label and setting `--prune-allowlist`
+  to the `Resource` type. The default allowlist covers only built-in types, so
+  without it the `Resource` objects are not pruned, while built-in objects that
+  carry the same label are.
 - **kro** - A `ResourceGraphDefinition` with a collection (`forEach` over
   `status.extracted`) keeps one `Resource` per record and deletes the `Resource`
   objects of records that disappear. kro needs permission to manage
@@ -206,8 +220,8 @@ objects depends on who consumes the result:
   size limit, 1000 by default.
 - **Your own controller** - A controller that reads the `Discovery` status, for
   example to derive configuration from the discovered versions and accesses,
-  creates a `Resource` for every access it hands on, waits for `Ready=True`, and
-  takes the access from the `Resource` status.
+  creates a `Resource` for every access it hands on, waits until it is `Ready`
+  for its current generation, and takes the access from the `Resource` status.
 
 ### Absent, null, and missing
 

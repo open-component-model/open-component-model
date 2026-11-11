@@ -1,7 +1,9 @@
 package discovery
 
 import (
+	"maps"
 	"slices"
+	"strconv"
 	"strings"
 
 	"cel.dev/cel-go/common/types"
@@ -71,15 +73,15 @@ func referencePaths(root ComponentKey, byKey map[ComponentKey]*descriptor.Descri
 	return paths
 }
 
-// versionNeeded returns the versionless forms (runtime.Identity.String) that
-// occur more than once in ids. An element whose versionless identity is in the
+// versionNeeded returns the versionless forms (see identityKey) that occur
+// more than once in ids. An element whose versionless identity is in the
 // result needs its version to be told apart from the others. ids must be all
 // elements the Resource controller matches against, not a filtered subset, or
 // an element can lose a version it needs.
 func versionNeeded(ids []runtime.Identity) map[string]bool {
 	counts := make(map[string]int, len(ids))
 	for _, id := range ids {
-		counts[withoutVersion(id).String()]++
+		counts[identityKey(withoutVersion(id))]++
 	}
 	needed := map[string]bool{}
 	for s, n := range counts {
@@ -98,13 +100,28 @@ func versionNeeded(ids []runtime.Identity) map[string]bool {
 // component moves to a new version.
 func versionlessIdentity(id runtime.Identity, needed map[string]bool) runtime.Identity {
 	stripped := withoutVersion(id)
-	if needed[stripped.String()] {
+	if needed[identityKey(stripped)] {
 		if id == nil {
 			return runtime.Identity{}
 		}
 		return id.Clone()
 	}
 	return stripped
+}
+
+// identityKey encodes id so that two identities share a key exactly when they
+// are equal. runtime.Identity.String joins key=value pairs with commas, so
+// values containing "," or "=" can make different identities collide.
+func identityKey(id runtime.Identity) string {
+	var b strings.Builder
+	for _, k := range slices.Sorted(maps.Keys(id)) {
+		// Quoting escapes the separators, so the encoding is unambiguous.
+		b.WriteString(strconv.Quote(k))
+		b.WriteByte('=')
+		b.WriteString(strconv.Quote(id[k]))
+		b.WriteByte(',')
+	}
+	return b.String()
 }
 
 func withoutVersion(id runtime.Identity) runtime.Identity {

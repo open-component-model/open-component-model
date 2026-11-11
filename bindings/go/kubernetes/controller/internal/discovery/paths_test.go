@@ -182,6 +182,18 @@ func TestVersionlessIdentity(t *testing.T) {
 		{},
 	}, out)
 	r.Equal(runtime.Identity{"name": "a", "version": "1.0.0"}, in[0], "the input must not be modified")
+
+	// These differ, but runtime.Identity.String renders both as
+	// "aa=x,bb=y,name=image". They must not count as duplicates.
+	colliding := []runtime.Identity{
+		{"name": "image", "aa": "x,bb=y", "version": "1.0.0"},
+		{"name": "image", "aa": "x", "bb": "y", "version": "1.0.0"},
+	}
+	r.Equal(colliding[0].String(), colliding[1].String(), "precondition: String collides")
+	needed = versionNeeded(colliding)
+	for _, id := range colliding {
+		r.NotContains(versionlessIdentity(id, needed), "version", "unique identity %v must not keep its version", id)
+	}
 }
 
 // projectGraph compiles spec and runs Filter and Project over a graph rooted
