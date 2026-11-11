@@ -2,10 +2,7 @@ package digestprocessor
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"os"
-	"os/exec"
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/constructor"
@@ -16,8 +13,8 @@ import (
 )
 
 type constructedPlugin struct {
-	Plugin digestprocessorv1.ResourceDigestProcessorContract
-	cmd    *exec.Cmd
+	Plugin  digestprocessorv1.ResourceDigestProcessorContract
+	process plugins.Process
 }
 
 // NewDigestProcessorRegistry creates a new registry and initializes maps.
@@ -65,17 +62,16 @@ type RepositoryRegistry struct {
 	internalDigestProcessorPlugins map[runtime.Type]constructor.ResourceDigestProcessor
 }
 
-// Shutdown will loop through all _STARTED_ plugins and will send an Interrupt signal to them.
+// Shutdown shuts down all _STARTED_ plugins.
 func (r *RepositoryRegistry) Shutdown(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var errs error
+	processes := make([]plugins.Process, 0, len(r.constructedPlugins))
 	for _, p := range r.constructedPlugins {
-		if perr := p.cmd.Process.Signal(os.Interrupt); perr != nil && !errors.Is(perr, os.ErrProcessDone) {
-			errs = errors.Join(errs, perr)
-		}
+		processes = append(processes, p.process)
 	}
-	return errs
+
+	return plugins.ShutdownAll(ctx, processes)
 }
 
 // AddPlugin takes a plugin discovered by the manager and adds it to the stored plugin registry.
@@ -119,8 +115,8 @@ func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *mt
 
 	digestPlugin := NewDigestProcessorPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, r.capabilities[plugin.ID])
 	r.constructedPlugins[plugin.ID] = &constructedPlugin{
-		Plugin: digestPlugin,
-		cmd:    plugin.Cmd,
+		Plugin:  digestPlugin,
+		process: plugins.NewProcess(plugin, client, loc),
 	}
 
 	return digestPlugin, nil
