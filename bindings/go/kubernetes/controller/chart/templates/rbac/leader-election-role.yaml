@@ -9,6 +9,7 @@ metadata:
     name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "leader-election-role" "context" $) }}
     namespace: {{ .Release.Namespace }}
 rules:
+    {{- /* controller-runtime locks on leases only; cmd/main.go sets no LeaderElectionResourceLock override. */}}
     - apiGroups:
         - coordination.k8s.io
       resources:
