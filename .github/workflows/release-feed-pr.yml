@@ -48,13 +48,14 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          OPEN_PR=$(gh api --method GET "repos/$GH_REPO/pulls" \
+          # Read by commit: merging deletes the branch, but the commit stays reachable.
+          PENDING_SHA=$(gh api --method GET "repos/$GH_REPO/pulls" \
             -f state=open -f base=main \
             -f head="$GITHUB_REPOSITORY_OWNER:automation/release-feed" \
-            --jq '.[0].number // empty')
-          if [ -n "$OPEN_PR" ]; then
+            --jq '.[0].head.sha // empty')
+          if [ -n "$PENDING_SHA" ]; then
             gh api --header 'Accept: application/vnd.github.raw+json' \
-              "repos/$GH_REPO/contents/website/static/releases.xml?ref=automation/release-feed" \
+              "repos/$GH_REPO/contents/website/static/releases.xml?ref=$PENDING_SHA" \
               > "$RUNNER_TEMP/pending-releases.xml"
             echo "path=$RUNNER_TEMP/pending-releases.xml" >> "$GITHUB_OUTPUT"
           fi

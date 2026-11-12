@@ -61,12 +61,15 @@ function newFeed() {
 // outside this allowlist (no script, style, img, event handlers, or js: hrefs).
 function renderBody(body) {
     const html = sanitizeHtml(marked.parse(body, { async: false, gfm: true }), {
-        allowedTags: ["h1", "h2", "h3", "h4", "h5", "h6", "p", "ul", "ol", "li", "a", "code", "pre", "strong", "em", "blockquote", "br", "hr"],
+        allowedTags: ["h1", "h2", "h3", "h4", "h5", "h6", "p", "ul", "ol", "li", "a", "code", "pre", "strong", "em", "blockquote", "br", "hr",
+            "table", "thead", "tbody", "tr", "th", "td"],
         allowedAttributes: { a: ["href"] },
         allowedSchemes: ["http", "https"],
         disallowedTagsMode: "discard"
     }).trim();
-    return html;
+    // XML 1.0 forbids most control characters; one in a commit subject would make
+    // the feed unparseable for every later run and for subscribers.
+    return html.replace(/[^\t\n\r\u0020-\uD7FF\uE000-\uFFFD\u{10000}-\u{10FFFF}]/gu, "");
 }
 
 function releaseItem(document, tag, published, body) {
@@ -91,8 +94,8 @@ function releaseItem(document, tag, published, body) {
     if (html) {
         item.appendChild(document.createTextNode("\n      "));
         const encoded = document.createElement("content:encoded");
-        // Keep the HTML inside CDATA; split any literal ]]> so it cannot close early.
-        encoded.appendChild(document.createCDATASection(html.replace(/]]>/g, "]]]]><![CDATA[>")));
+        // sanitize-html escapes ">", so "]]>" cannot occur; xmldom throws if it ever did.
+        encoded.appendChild(document.createCDATASection(html));
         item.appendChild(encoded);
     }
     item.appendChild(document.createTextNode("\n    "));

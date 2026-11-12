@@ -220,3 +220,21 @@ test("a non-string release body is rejected without creating a feed", (t) => {
     assert.notEqual(env.invoke("--release", env.input, "--feed", env.feed).status, 0);
     assert.equal(existsSync(env.feed), false);
 });
+
+test("the changelog component table keeps its row and column structure", (t) => {
+    const env = setup(t);
+    const body = "Components in this release:\n\n| Component | Contents |\n|---|---|\n| `ocm.software/ocm:0.24.0` | Product wrapper |\n| `ocm.software/cli:0.24.0` | CLI binaries |\n";
+    succeeded(env.run({ ...RELEASE, body }));
+    const [html] = encoded(env.feed);
+    assert.match(html, /<table>\s*<thead>\s*<tr>\s*<th>Component<\/th>\s*<th>Contents<\/th>/);
+    assert.match(html, /<tr>\s*<td><code>ocm\.software\/cli:0\.24\.0<\/code><\/td>\s*<td>CLI binaries<\/td>\s*<\/tr>/);
+});
+
+test("control characters in notes are dropped so the feed stays well-formed", (t) => {
+    const env = setup(t);
+    succeeded(env.run({ ...RELEASE, body: "- fix \u0001 vertical\u000btab \u001b[0m (#1)\n" }));
+    const [html] = encoded(env.feed);
+    assert.ok(!["\u0001", "\u000b", "\u001b"].some((c) => html.includes(c)));
+    succeeded(env.run(FINAL));
+    assert.deepEqual(guids(env.feed), [`${PREFIX}v0.24.0`, `${PREFIX}v0.24.0-rc.1`]);
+});
