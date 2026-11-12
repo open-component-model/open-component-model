@@ -151,5 +151,8 @@ func applyCacheConfig(opts *cache.Options, cfg *ocicachev1alpha1.Config) *cache.
 	if cfg.MaxBlobSize != nil {
 		applied.MaxBlobSize = *cfg.MaxBlobSize
 	}
+	if cfg.MaxTotalSize != nil {
+		applied.MaxTotalSize = *cfg.MaxTotalSize
+	}
 	return &applied
 }

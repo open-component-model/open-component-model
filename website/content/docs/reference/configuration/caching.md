@@ -101,15 +101,21 @@ writable volume. If the cache directory cannot be created, the controller does n
 
 Each cache applies these limits:
 
-| Limit             | Default                                   | Field ([Configuration](#configuration)) | Applies to                       | Behaviour                                                            |
-|-------------------|-------------------------------------------|-----------------------------------------|----------------------------------|----------------------------------------------------------------------|
-| Maximum entries   | `100000` (blob), `10000` (each reference) | Not configurable                        | Blob cache, each reference cache | When the limit is reached, the least recently used entry is removed. |
-| Time to live      | `10m`                                     | `ttl`                                   | Blob cache, each reference cache | Entries older than this are removed.                                 |
-| Maximum blob size | `20 MiB`                                  | `maxBlobSize`                           | Blob cache                       | Larger blobs are downloaded as usual but not cached.                 |
+| Limit              | Default                                   | Field ([Configuration](#configuration))   | Applies to                       | Behaviour                                                                                   |
+|--------------------|-------------------------------------------|-------------------------------------------|----------------------------------|---------------------------------------------------------------------------------------------|
+| Maximum entries    | `100000` (blob), `10000` (each reference) | Not configurable                          | Blob cache, each reference cache | When the limit is reached, the least recently used entry is removed.                        |
+| Time to live       | `10m`                                     | `ttl`                                     | Blob cache, each reference cache | Entries older than this are removed.                                                        |
+| Maximum blob size  | `20 MiB`                                  | `maxBlobSize`                             | Blob cache                       | Larger blobs are downloaded as usual but not cached.                                        |
+| Maximum total size | No limit (CLI), `1 GiB` (controller)      | `maxTotalSize`                            | Blob cache                       | When the limit is exceeded, least recently used entries are removed until the cache fits.   |
 
 When the blob cache removes an entry, it also deletes the file. When a reference cache is loaded from disk,
-entries resolved longer than the time to live ago are not loaded. When the blob cache is loaded from disk, every valid file is
-loaded and gets a new time to live, because content addressed by digest cannot become stale.
+entries resolved longer than the time to live ago are not loaded. When the blob cache is loaded from disk, every valid
+file is loaded and gets a new time to live, because content addressed by digest cannot become stale. If the files
+exceed the maximum total size, the least recently written ones are removed.
+
+CLI runs in parallel that use the same cache directory lead to undefined behaviour, for example the maximum total
+size is not kept. Give each parallel run its own `--temp-folder`. The controller runs one process per pod and is the
+only user of its cache directory.
 
 ## Admission Rules
 
@@ -152,20 +158,23 @@ configurations:
     remotePolicy: Always
     ttl: 1h
     maxBlobSize: 52428800 # 50 MiB
+    maxTotalSize: 5368709120 # 5 GiB
 ```
 
 All fields are optional. An omitted field keeps its default.
 
-| Field          | Type                                               | Default             | Description                                                                                                 |
-|----------------|----------------------------------------------------|---------------------|-------------------------------------------------------------------------------------------------------------|
-| `remotePolicy` | `IfNotPresent` or `Always`                         | `IfNotPresent`      | [Remote policy](#remote-policy) of the blob cache and every reference cache.                                |
-| `ttl`          | duration string, for example `30s`, `10m`, `1h30m` | `10m`               | Time to live of the entries of the blob cache and every reference cache. Must be positive.                  |
-| `maxBlobSize`  | integer, bytes                                     | `20971520` (20 MiB) | The largest blob the blob cache stores. Larger blobs are fetched as usual but not cached. Must be positive. |
+| Field          | Type                                               | Default                                          | Description                                                                                                                                 |
+|----------------|----------------------------------------------------|--------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------|
+| `remotePolicy` | `IfNotPresent` or `Always`                         | `IfNotPresent`                                   | [Remote policy](#remote-policy) of the blob cache and every reference cache.                                                                |
+| `ttl`          | duration string, for example `30s`, `10m`, `1h30m` | `10m`                                            | Time to live of the entries of the blob cache and every reference cache. Must be positive.                                                  |
+| `maxBlobSize`  | integer, bytes                                     | `20971520` (20 MiB)                              | The largest blob the blob cache stores. Larger blobs are fetched as usual but not cached. Must be positive.                                 |
+| `maxTotalSize` | integer, bytes                                     | No limit (CLI), `1073741824` (1 GiB, controller) | The bytes the blob cache keeps on disk. When exceeded, the least recently used blobs are removed. `0` means no limit. Must not be negative. |
 
-An unknown `remotePolicy`, a `ttl` that is not a positive duration string (numbers are rejected), or a `maxBlobSize`
-that is not positive makes the CLI and the controller fail at startup, even if a later entry overrides it. To use a
-default, omit the field. If the configuration file contains more than one `oci.cache.config.ocm.software/v1alpha1`
-entry, the last value set for each field wins. `ocm get config` shows the merged entry.
+An unknown `remotePolicy`, a `ttl` that is not a positive duration string (numbers are rejected), a `maxBlobSize`
+that is not positive, or a negative `maxTotalSize` makes the CLI and the controller fail at startup, even if a later
+entry overrides it. To use a default, omit the field. If the configuration file contains more than one
+`oci.cache.config.ocm.software/v1alpha1` entry, the last value set for each field wins. `ocm get config` shows the
+merged entry.
 
 The schema below defines the full structure of the `oci.cache.config.ocm.software/v1alpha1` type as specified by
 [JSON Schema 2020-12](https://json-schema.org/draft/2020-12/schema).
@@ -201,7 +210,9 @@ once at startup. The chart sets a `checksum/ocm-config` annotation on the contro
 renders the chart. A `helm upgrade` that changes `manager.ocmConfig` therefore restarts the pods. Editing the `ConfigMap`
 directly, for example with `kubectl edit`, restarts nothing: the controller picks up the change only on its next restart.
 
-The controller uses only the blob cache, so `ttl` and `maxBlobSize` both apply to it.
+The controller uses only the blob cache, so `ttl`, `maxBlobSize` and `maxTotalSize` all apply to it. The cache lives
+in the pod's `tmp` volume and counts against its ephemeral storage: keep `maxTotalSize` below an ephemeral-storage
+limit set on the pod.
 `oci.cache.config.ocm.software` is the only type accepted here. Any other type, or an invalid field, results in a
 startup error.
 
