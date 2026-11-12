@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Duration",
+  "description": "Duration is a Go duration string such as 30s, 10m or 1h30m. Numbers are not accepted.",
+  "type": "string",
+  "examples": ["30s", "10m", "1h30m"]
+}
