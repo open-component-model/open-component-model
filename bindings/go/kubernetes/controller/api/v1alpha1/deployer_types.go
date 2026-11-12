@@ -129,8 +129,11 @@ func (in *Deployer) GetDeployerStatus() *DeployerStatus {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:deprecatedversion:warning="Deployer applies with the controller's cluster-wide permissions and is discouraged. Use the NamespacedDeployer, which applies with the permissions of a service account."
-// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,description="Indicates if the Deployer is Ready",priority=1
+// +kubebuilder:printcolumn:name="Resource Namespace",type=string,JSONPath=`.spec.resourceRef.namespace`,description="Namespace of the referenced Resource"
+// +kubebuilder:printcolumn:name="Resource Ref",type=string,JSONPath=`.spec.resourceRef.name`,description="Referenced Resource"
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`,description="Indicates if the Deployer is Ready"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Displays the Age of the Deployer"
+// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,description="Ready condition message"
 
 // Deployer is the Schema for the deployers API.
 // It applies with the controller's own permissions and is discouraged in favor of NamespacedDeployer.
