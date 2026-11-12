@@ -241,6 +241,19 @@ Reference digests are computed and added automatically by `ocm add cv`. The `ocm
 command checks that the component version is safely digestible and warns if any reference or
 resource digests are missing.
 
+{{< callout context="caution" title="A verified parent does not always authenticate its children" icon="outline/alert-triangle" >}}
+Configured signatures verify the parent component version. Children reached through component
+references are checked against their recorded reference digests, not their own signatures.
+
+If any selected reference has an absent or incomplete digest, that child is resolved without
+either check—even under `verificationPolicy: Always`. That policy verifies the selected resource
+against its own descriptor; it does not establish a complete trust chain.
+
+For end-to-end integrity, record complete, valid digests on every reference along the selected
+path and a usable digest on the selected resource. Re-sign affected parent descriptors after
+updating them.
+{{< /callout >}}
+
 ## Troubleshooting
 
 When verification fails, the `Component` resource's Ready condition is set to `False` with the
