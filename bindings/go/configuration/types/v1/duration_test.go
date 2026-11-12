@@ -2,6 +2,7 @@ package v1_test
 
 import (
 	"encoding/json"
+	"math"
 	"testing"
 	"time"
 
@@ -193,4 +194,33 @@ func TestDuration_UnmarshalJSON_NullKeepsValue(t *testing.T) {
 func TestDuration_UnmarshalJSON_InvalidStringNamesValue(t *testing.T) {
 	var d typesv1.Duration
 	require.ErrorContains(t, json.Unmarshal([]byte(`"soon"`), &d), `invalid duration "soon"`)
+}
+
+func TestDuration_UnmarshalJSON_IntegerNanoseconds(t *testing.T) {
+	tests := []struct {
+		name    string
+		in      string
+		want    time.Duration
+		wantErr bool
+	}{
+		{name: "max int64 is exact", in: `9223372036854775807`, want: time.Duration(math.MaxInt64)},
+		{name: "min int64 is exact", in: `-9223372036854775808`, want: time.Duration(math.MinInt64)},
+		{name: "precision beyond float64 is kept", in: `9007199254740993`, want: time.Duration(9007199254740993)},
+		{name: "overflow is rejected", in: `9223372036854775808`, wantErr: true},
+		{name: "fraction is rejected", in: `1.5`, wantErr: true},
+		{name: "exponent is rejected", in: `1e9`, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			var d typesv1.Duration
+			err := json.Unmarshal([]byte(tt.in), &d)
+			if tt.wantErr {
+				r.Error(err)
+				return
+			}
+			r.NoError(err)
+			r.Equal(tt.want, time.Duration(d))
+		})
+	}
 }
