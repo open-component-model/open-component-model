@@ -2,31 +2,23 @@
 //
 // It extends ORAS's parser with two extra features:
 // 1. References without registry components (e.g., "hello-world:v1")
-// 2. Preserves the tag even when digest is present (e.g., "hello-world:v1@sha256:abc")
+// 2. Bare digests without registry or repository (e.g., "sha256:abc")
 //
 // Used by Open Component Model's references and maintains compatibility with standard OCI registry formats.
 package looseref
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/opencontainers/go-digest"
-	"oras.land/oras-go/v2/errdef"
-	oras "oras.land/oras-go/v2/registry"
+	"github.com/oras-project/oras-go/v3/errdef"
+	"github.com/oras-project/oras-go/v3/registry/remote/properties"
 )
-
-// tagRegexp checks the tag name.
-// The docker and OCI spec have the same regular expression.
-//
-// Reference: https://github.com/opencontainers/distribution-spec/blob/v1.1.0/spec.md#pulling-manifests
-var tagRegexp = regexp.MustCompile(`^[\w][\w.-]{0,127}$`)
 
 type LooseReference struct {
 	Scheme string
-	oras.Reference
-	Tag string
+	properties.Reference
 }
 
 // String implements `fmt.Stringer` and returns the reference string.
@@ -67,20 +59,12 @@ func (r LooseReference) String() string {
 	}
 
 	// Add digest if present
-	if hasDigestAlgorithmPrefix(r.Reference.Reference) {
+	if r.Digest != "" {
 		result.WriteString("@")
-		result.WriteString(r.Reference.Reference)
+		result.WriteString(r.Digest)
 	}
 
 	return result.String()
-}
-
-// ValidateTag validates the tag.
-func (r LooseReference) ValidateTag() error {
-	if !tagRegexp.MatchString(r.Tag) {
-		return fmt.Errorf("%w: invalid tag %q", errdef.ErrInvalidReference, r.Reference)
-	}
-	return nil
 }
 
 func (r LooseReference) RegistryWithScheme() string {
@@ -88,20 +72,6 @@ func (r LooseReference) RegistryWithScheme() string {
 		return r.Scheme + "://" + r.Registry
 	}
 	return r.Registry
-}
-
-// ReferenceOrTag returns the appropriate reference string following precedence:
-//  1. Reference field if it's a valid digest
-//  2. Tag field if Reference is a valid tag
-//  3. Empty string otherwise
-func (r LooseReference) ReferenceOrTag() string {
-	switch {
-	case r.ValidateReferenceAsDigest() == nil:
-		return r.Reference.Reference
-	case r.ValidateReferenceAsTag() == nil:
-		return r.Tag
-	}
-	return ""
 }
 
 // hasDigestAlgorithmPrefix checks if the path starts with a known digest algorithm prefix.
@@ -133,8 +103,8 @@ func validateReference(ref LooseReference) error {
 		}
 	}
 
-	if ref.Reference.Reference != "" {
-		if err := ref.ValidateReference(); err != nil {
+	if ref.Digest != "" {
+		if err := ref.ValidateDigest(); err != nil {
 			return err
 		}
 	}
@@ -153,20 +123,19 @@ func validateReference(ref LooseReference) error {
 // as specified by https://pkg.go.dev/github.com/opencontainers/go-digest#readme-usage
 // if the string contains a digest.
 //
-// Compared to ORAS ParseReference, this function extends the valid forms to:
+// Compared to ORAS properties.NewReference, this function extends the valid forms to:
 //   - Registry is optional, and can contain a scheme prefix
-//   - Tag is preserved when digest is present
 //   - Bare digests are supported
+//   - Registry is not lower-cased
 //
 // The reference string can take on the following forms:
 //
 //	ORAS Valid Forms:
-//	<=== REPOSITORY ===> @ <=================== digest ===> |    - Valid Form A (digest preserved)
-//	<=== REPOSITORY ===> : <!!! TAG !!!> @ <=== digest ===> |    - Valid Form B (tag dropped, digest preserved)
+//	<=== REPOSITORY ===> @ <=================== digest ===> |    - Valid Form A (digest only)
+//	<=== REPOSITORY ===> : <=== TAG ====> @ <=== digest ===>|    - Valid Form B (tag and digest)
 //	<=== REPOSITORY ===> : <=== TAG ======================> |    - Valid Form C (tag only)
 //	<=== REPOSITORY ======================================> |    - Valid Form D (no tag or digest, repository only)
 //	OCM Valid Forms:
-//	<=== REPOSITORY ===> : <=== TAG ====> @ <=== digest ===>|    - OCM Valid Form (tag and digest preserved)
 //	<=================== digest ==========================> |    - OCM Valid Form (digest only)
 //
 // Note that compared to OCI, in OCM Loose References can contain scheme prefixes (e.g., "oci://").
@@ -194,12 +163,12 @@ func ParseReference(artifact string) (LooseReference, error) {
 		path = parts[1]
 	}
 
-	var repository, reference, tag string
+	var repository, dgst, tag string
 
 	if index := strings.Index(path, "@"); index != -1 {
 		// Case: Digest is present; Valid Form A or B
 		repository = path[:index]
-		reference = path[index+1:]
+		dgst = path[index+1:]
 
 		if jindex := strings.Index(repository, ":"); jindex != -1 {
 			if strings.LastIndex(repository, ":") != jindex {
@@ -214,13 +183,12 @@ func ParseReference(artifact string) (LooseReference, error) {
 			return LooseReference{}, errdef.ErrInvalidReference
 		}
 		// Case: Only tag is present; Valid Form C
-		// Special case: treat digest algorithm prefixes (e.g., "sha256:abc", "sha512:xyz") without registry as tag-only reference
+		// Special case: digest algorithm prefixes (e.g., "sha256:abc", "sha512:xyz") without registry are a bare digest
 		if len(parts) == 1 && hasDigestAlgorithmPrefix(path) {
-			reference = path
+			dgst = path
 		} else {
 			repository = path[:index]
 			tag = path[index+1:]
-			reference = tag
 		}
 	} else {
 		// Case: No tag or digest; Valid Form D or E
@@ -229,12 +197,12 @@ func ParseReference(artifact string) (LooseReference, error) {
 
 	ref := LooseReference{
 		Scheme: scheme,
-		Reference: oras.Reference{
+		Reference: properties.Reference{
 			Registry:   registry,
 			Repository: repository,
-			Reference:  reference,
+			Tag:        tag,
+			Digest:     dgst,
 		},
-		Tag: tag,
 	}
 
 	if err := validateReference(ref); err != nil {

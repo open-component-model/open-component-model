@@ -18,8 +18,8 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/errdef"
 	slogcontext "github.com/veqryn/slog-context"
-	"oras.land/oras-go/v2/errdef"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/ctf"
