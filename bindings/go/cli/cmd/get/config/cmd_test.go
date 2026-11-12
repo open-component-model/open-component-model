@@ -95,6 +95,19 @@ func TestGetEffectiveConfig_OCICache(t *testing.T) {
 				RemotePolicy: ocicachev1alpha1.RemotePolicyAlways,
 			},
 		},
+		{
+			name: "merged with ttl and maxBlobSize",
+			entries: []string{
+				`{"type":"oci.cache.config.ocm.software/v1alpha1","remotePolicy":"Always","ttl":"1h","maxBlobSize":1024}`,
+				`{"type":"oci.cache.config.ocm.software/v1alpha1","ttl":"30s"}`,
+			},
+			expect: &ocicachev1alpha1.Config{
+				Type:         runtime.NewVersionedType(ocicachev1alpha1.ConfigType, ocicachev1alpha1.Version),
+				RemotePolicy: ocicachev1alpha1.RemotePolicyAlways,
+				TTL:          ocicachev1alpha1.NewDuration(30 * time.Second),
+				MaxBlobSize:  new(int64(1024)),
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

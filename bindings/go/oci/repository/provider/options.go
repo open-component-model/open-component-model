@@ -1,6 +1,8 @@
 package provider
 
 import (
+	"time"
+
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 	ocicachev1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/cache/v1alpha1"
@@ -134,11 +136,20 @@ func WithReferenceCacheOptions(opts *cache.Options) Option {
 }
 
 // applyCacheConfig returns a copy of opts so options shared between providers are not mutated.
+// The reference cache ignores MaxBlobSize, so applying it to its options is harmless.
 func applyCacheConfig(opts *cache.Options, cfg *ocicachev1alpha1.Config) *cache.Options {
-	if opts == nil || cfg == nil || cfg.RemotePolicy == "" {
+	if opts == nil || cfg == nil {
 		return opts
 	}
 	applied := *opts
-	applied.RemotePolicy = cache.RemotePolicy(cfg.RemotePolicy)
+	if cfg.RemotePolicy != "" {
+		applied.RemotePolicy = cache.RemotePolicy(cfg.RemotePolicy)
+	}
+	if cfg.TTL != nil {
+		applied.TTL = time.Duration(*cfg.TTL)
+	}
+	if cfg.MaxBlobSize != nil {
+		applied.MaxBlobSize = *cfg.MaxBlobSize
+	}
 	return &applied
 }
