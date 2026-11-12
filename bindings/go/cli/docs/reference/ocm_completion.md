@@ -51,7 +51,7 @@ See each sub-command's help for details on how to use the generated script.
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
-                                              setting this flag disables the interactive progress display so logs are printed in the chosen format
+                                              json disables the interactive progress display so the JSON records are printed in full
                                            (must be one of [json text]) (default text)
       --loglevel enum                      sets the logging level
                                               debug: Show all logs including detailed debugging information
