@@ -16,10 +16,6 @@ archive, OCM's file system representation of an OCI registry.
 This page explains how a component version and its local blobs map to OCI artifacts, what you see in a registry after
 `ocm add cv` or `ocm transfer cv`, and why an embedded image can be pulled with `docker`, `oras`, or `crane`.
 
-{{< callout context="note" >}}
-Other storage technologies, such as object storage like S3, might be supported in the future.
-{{< /callout >}}
-
 {{< details "Terminology: OCM and OCI terms on this page" >}}
 
 OCM and OCI use some of the same words for different things. This page prefixes OCI terms with *OCI* wherever they
