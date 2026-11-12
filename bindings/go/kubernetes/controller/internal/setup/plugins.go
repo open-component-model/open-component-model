@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"time"
 
+	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+
 	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
@@ -83,13 +85,30 @@ const MaxBlobCacheSize = 1 << 30
 
 // NewBlobCache creates the blob cache to pass to [WithBlobCache]. The blob cache is on by default.
 // A nil cfg uses the cache defaults and [MaxBlobCacheSize]; the limits cfg sets replace them.
+//
+// Besides manifests and descriptors, the cache admits blobs of known size up to maxLayerSize,
+// so a Deployer that reads the same local resource again is served from disk. maxLayerSize is
+// the download limit of the Deployer; 0 means no limit, which caps layers at
+// [ocicache.DefaultMaxBlobSize]. A blob.maxBlobSize in cfg caps layers too. A miss buffers the
+// blob in memory, so the cap must stay small.
+//
 // A cfg that turns the blob cache off returns a nil cache, which [WithBlobCache] treats as no caching.
-func NewBlobCache(tempDir string, cfg *ocicachev1alpha1.Config) (*ocicache.BlobCache, error) {
+func NewBlobCache(tempDir string, cfg *ocicachev1alpha1.Config, maxLayerSize int64) (*ocicache.BlobCache, error) {
+	if maxLayerSize < 0 {
+		return nil, fmt.Errorf("max layer size must not be negative, got %d", maxLayerSize)
+	}
 	if !cfg.BlobEnabled(true) {
 		return nil, nil
 	}
+	if maxLayerSize == 0 {
+		maxLayerSize = ocicache.DefaultMaxBlobSize
+	}
 	opts := ocicache.Options{
-		Dir:          filepath.Join(tempDirOrDefault(tempDir), "ocm-oci-cas"),
+		Dir: filepath.Join(tempDirOrDefault(tempDir), "ocm-oci-cas"),
+		Accept: func(desc ociImageSpecV1.Descriptor) bool {
+			return ocicache.DefaultAccept(desc) || (desc.Size > 0 && desc.Size <= maxLayerSize)
+		},
+		MaxBlobSize:  max(ocicache.DefaultMaxBlobSize, maxLayerSize),
 		MaxTotalSize: MaxBlobCacheSize,
 	}
 	if cfg != nil {

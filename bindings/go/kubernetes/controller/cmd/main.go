@@ -289,7 +289,9 @@ func main() {
 	// Plugins use object config so they need to be request based.
 	pluginLogger := slog.New(logr.ToSlogHandler(setupLog))
 	// The caches own their directories on disk, so the per-request plugin managers share one instance.
-	blobCache, err := setup.NewBlobCache("", ociCacheConfig)
+	// The blob cache also caches local resources up to the deployer download limit, which the Deployer reads on
+	// every reconcile.
+	blobCache, err := setup.NewBlobCache("", ociCacheConfig, maxResourceSizeBytes)
 	if err != nil {
 		setupLog.Error(err, "failed to create OCI blob cache")
 		os.Exit(1)
