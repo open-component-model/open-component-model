@@ -19,7 +19,7 @@
 #    See https://kro.run/docs/advanced/access-control
 #
 # 4. The default service account of sovereign-product. The product Component
-#    reads its OCM config (acme-signing-key) with that account's permissions.
+#    reads its OCM config (acme-signing-key, ocm-plain-http) with that account's permissions.
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -177,6 +177,14 @@ rules:
       - secrets
     resourceNames:
       - acme-signing-key
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    resourceNames:
+      - ocm-plain-http
     verbs:
       - get
 ---
