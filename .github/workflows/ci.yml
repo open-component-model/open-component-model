@@ -319,6 +319,20 @@ jobs:
         with:
           go-version-file: '${{ github.workspace }}/bindings/go/go.mod'
           cache-dependency-path: '${{ github.workspace }}/bindings/go/go.sum'
+      # setup-go caches the module download; the compile cache is separate and is the bulk
+      # of this job's time, because the test binaries and the CLI are built instrumented with
+      # -coverpkg=./... (the whole module). Restore it across runs to skip that rebuild.
+      # GOCACHE is resolved at runtime so the path is correct on both the Linux and Windows
+      # matrix legs.
+      - name: Resolve Go build cache dir
+        run: echo "GOCACHE=$(go env GOCACHE)" >> "$GITHUB_ENV"
+      - name: Cache Go build
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ${{ env.GOCACHE }}
+          key: ${{ runner.os }}-${{ runner.arch }}-gobuild-unit-${{ hashFiles('bindings/go/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-gobuild-unit-
       - name: Build and smoke test CLI
         env:
           GOOS: ${{ matrix.goos }}
