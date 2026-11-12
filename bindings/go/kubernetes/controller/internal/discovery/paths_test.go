@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -142,6 +143,30 @@ func TestReferencePaths(t *testing.T) {
 			want: map[ComponentKey][]runtime.Identity{
 				root:              {},
 				key("a", "1.0.0"): {{"name": "a"}},
+			},
+		},
+		{
+			// The target is reachable via left (final hop "z") and via right
+			// (final hop "a"). Both reach it in two hops. The winner is the
+			// path whose complete element sequence is smallest: the left
+			// prefix "a" beats the right prefix "b", so the target's path is
+			// [a, z] even though its final hop "z" is larger than "a". An
+			// implementation ordering only final hops would wrongly pick [b, a].
+			name: "earlier prefix wins despite larger final hop",
+			descriptors: []*descriptor.Descriptor{
+				newDescriptor("root", "1.0.0", withReferences(
+					newReference("a", "left", "1.0.0"),
+					newReference("b", "right", "1.0.0"),
+				)),
+				newDescriptor("left", "1.0.0", withReferences(newReference("z", "target", "1.0.0"))),
+				newDescriptor("right", "1.0.0", withReferences(newReference("a", "target", "1.0.0"))),
+				newDescriptor("target", "1.0.0"),
+			},
+			want: map[ComponentKey][]runtime.Identity{
+				root:                   {},
+				key("left", "1.0.0"):   {{"name": "a"}},
+				key("right", "1.0.0"):  {{"name": "b"}},
+				key("target", "1.0.0"): {{"name": "a"}, {"name": "z"}},
 			},
 		},
 	}
@@ -473,4 +498,110 @@ func TestBindingsAreLazy(t *testing.T) {
 	var extractErr *ExtractError
 	r.ErrorAs(err, &extractErr)
 	r.ErrorContains(err, "not reachable from the root component")
+}
+
+// collidingReferenceGraph builds a diamond whose two first-hop reference
+// elements render to the same runtime.Identity.String() ("aa=x,bb=y,name=image")
+// yet are different identities: left carries the single extra attribute
+// {"aa":"x,bb=y"}, right carries {"aa":"x","bb":"y"}. Both reach a common
+// target, left via reference "z" and right via reference "a". Because the two
+// prefixes serialise equally, the smallest complete element sequence is the one
+// ending in "a" (the right branch), so the target's path must be
+// [{aa=x,bb=y,name=image},{name=a}] regardless of reference order. The target
+// also references a tail component, which must inherit that chosen prefix.
+// Descriptors are returned root-first, all at version 1.0.0.
+func collidingReferenceGraph() []*descriptor.Descriptor {
+	return []*descriptor.Descriptor{
+		newDescriptor("example.org/root", "1.0.0", withReferences(
+			newReference("image", "example.org/left", "1.0.0", withRefExtras(map[string]string{"aa": "x,bb=y"})),
+			newReference("image", "example.org/right", "1.0.0", withRefExtras(map[string]string{"aa": "x", "bb": "y"})),
+		)),
+		newDescriptor("example.org/left", "1.0.0", withReferences(newReference("z", "example.org/target", "1.0.0"))),
+		newDescriptor("example.org/right", "1.0.0", withReferences(newReference("a", "example.org/target", "1.0.0"))),
+		newDescriptor("example.org/target", "1.0.0",
+			withResources(newResource("payload")),
+			withReferences(newReference("tail", "example.org/tail", "1.0.0"))),
+		newDescriptor("example.org/tail", "1.0.0"),
+	}
+}
+
+func TestReferencePathsCollidingIdentityStrings(t *testing.T) {
+	// Precondition: the two first-hop versionless elements really do collide on
+	// String() yet are unequal maps. If this ever stops holding the fixture no
+	// longer exercises the collision and the test is meaningless.
+	left := withoutVersion(collidingReferenceGraph()[0].Component.References[0].ToIdentity())
+	right := withoutVersion(collidingReferenceGraph()[0].Component.References[1].ToIdentity())
+	require.Equal(t, left.String(), right.String(), "precondition: the first-hop elements must collide on String()")
+	require.NotEqual(t, left, right, "precondition: the first-hop elements must be different identities")
+
+	// The right branch ("a") wins over the left branch ("z") because the
+	// serialised prefixes tie and "a" < "z".
+	chosenFirstHop := runtime.Identity{"aa": "x", "bb": "y", "name": "image"}
+
+	tests := []struct {
+		name    string
+		nested  bool
+		reverse bool
+	}{
+		{name: "root collision, original order"},
+		{name: "root collision, reversed order", reverse: true},
+		{name: "collision below an extra root, original order", nested: true},
+		{name: "collision below an extra root, reversed order", nested: true, reverse: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			descriptors := collidingReferenceGraph()
+			if tt.reverse {
+				slices.Reverse(descriptors[0].Component.References)
+			}
+
+			var prefix []runtime.Identity
+			rootKey := key("example.org/root", "1.0.0")
+			if tt.nested {
+				outer := newDescriptor("example.org/outer", "1.0.0",
+					withReferences(newReference("entry", "example.org/root", "1.0.0")))
+				descriptors = append([]*descriptor.Descriptor{outer}, descriptors...)
+				rootKey = key("example.org/outer", "1.0.0")
+				prefix = []runtime.Identity{{"name": "entry"}}
+			}
+
+			paths := referencePaths(rootKey, keyed(descriptors...))
+
+			wantTarget := append(append([]runtime.Identity{}, prefix...), chosenFirstHop, runtime.Identity{"name": "a"})
+			r.Equal(wantTarget, paths[key("example.org/target", "1.0.0")], "target takes the smallest complete path")
+
+			wantTail := append(append([]runtime.Identity{}, wantTarget...), runtime.Identity{"name": "tail"})
+			r.Equal(wantTail, paths[key("example.org/tail", "1.0.0")], "tail inherits the chosen prefix")
+		})
+	}
+}
+
+func TestProjectByResourcesCollidingIdentityStrings(t *testing.T) {
+	tests := []struct {
+		name    string
+		reverse bool
+	}{
+		{name: "original order"},
+		{name: "reversed order", reverse: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			descriptors := collidingReferenceGraph()
+			if tt.reverse {
+				slices.Reverse(descriptors[0].Component.References)
+			}
+			p := projectGraph(t, &v1alpha1.DiscoverySpec{
+				Extract: &v1alpha1.Extract{ByResources: map[string]string{
+					"referencePath": `referencePath`,
+					"resource":      `resourceIdentity`,
+				}},
+			}, descriptors...)
+			r.JSONEq(
+				`[{"referencePath":[{"aa":"x","bb":"y","name":"image"},{"name":"a"}],"resource":{"name":"payload"}}]`,
+				mustJSON(t, p.Extracted))
+		})
+	}
 }
