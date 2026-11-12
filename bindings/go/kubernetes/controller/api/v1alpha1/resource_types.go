@@ -94,8 +94,12 @@ type ResourceStatus struct {
 // Resource is the Schema for the resources API.
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,description="Indicates if the Resource is Ready",priority=1
+// +kubebuilder:printcolumn:name="Component Ref",type=string,JSONPath=`.spec.componentRef.name`,description="Referenced Component"
+// +kubebuilder:printcolumn:name="Resource",type=string,JSONPath=`.status.resource.name`,description="Name of the OCM resource"
+// +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.status.resource.version`,description="Version of the OCM resource"
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`,description="Indicates if the Resource is Ready"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Displays the Age of the Resource"
+// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,description="Ready condition message"
 type Resource struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

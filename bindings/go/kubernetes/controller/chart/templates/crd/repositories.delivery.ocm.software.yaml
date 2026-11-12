@@ -33,15 +33,22 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Indicates if the Resource is Ready
-      jsonPath: .status.conditions[?(@.type=="Ready")].message
-      name: Ready
-      priority: 1
+    - description: Type of the OCM repository
+      jsonPath: .spec.repositorySpec.type
+      name: Type
       type: string
-    - description: Displays the Age of the Resource
+    - description: Indicates if the Repository is Ready
+      jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - description: Displays the Age of the Repository
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
+    - description: Ready condition message
+      jsonPath: .status.conditions[?(@.type=="Ready")].message
+      name: Status
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:
