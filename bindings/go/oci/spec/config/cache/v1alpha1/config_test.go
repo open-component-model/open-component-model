@@ -1,8 +1,10 @@
 package v1alpha1_test
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -130,4 +132,86 @@ configurations:
 		r.NoError(err)
 		r.Nil(cfg)
 	})
+}
+
+func TestLookupConfig_TTLAndMaxBlobSize(t *testing.T) {
+	tests := []struct {
+		name            string
+		entries         []string
+		wantTTL         *time.Duration
+		wantMaxBlobSize *int64
+		wantErr         string
+	}{
+		{
+			name:    "leaves both unset when omitted",
+			entries: []string{"remotePolicy: Always"},
+		},
+		{
+			name:            "parses both",
+			entries:         []string{"ttl: 1h30m\nmaxBlobSize: 1024"},
+			wantTTL:         new(90 * time.Minute),
+			wantMaxBlobSize: new(int64(1024)),
+		},
+		{
+			name:            "last set value wins per field",
+			entries:         []string{"ttl: 1m\nmaxBlobSize: 100", "ttl: 2m", "remotePolicy: Always"},
+			wantTTL:         new(2 * time.Minute),
+			wantMaxBlobSize: new(int64(100)),
+		},
+		{name: "rejects a malformed ttl", entries: []string{"ttl: soon"}, wantErr: `invalid duration "soon"`},
+		{name: "rejects a numeric ttl", entries: []string{"ttl: 1000000000"}, wantErr: "duration must be a string"},
+		{name: "rejects a zero ttl", entries: []string{"ttl: 0s"}, wantErr: "invalid ttl 0s, must be positive"},
+		{name: "rejects a negative ttl", entries: []string{"ttl: -5m"}, wantErr: "invalid ttl -5m0s, must be positive"},
+		{name: "rejects a zero maxBlobSize", entries: []string{"maxBlobSize: 0"}, wantErr: "invalid maxBlobSize 0, must be positive"},
+		{name: "rejects a negative maxBlobSize", entries: []string{"maxBlobSize: -1"}, wantErr: "invalid maxBlobSize -1, must be positive"},
+		{name: "rejects a non-numeric maxBlobSize", entries: []string{"maxBlobSize: big"}, wantErr: "failed to decode oci cache config"},
+		{
+			name:    "rejects an invalid value that a later entry overrides",
+			entries: []string{"ttl: 0s", "ttl: 1m"},
+			wantErr: "invalid ttl 0s, must be positive",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+
+			yaml := "type: generic.config.ocm.software/v1\nconfigurations:\n"
+			for _, entry := range tt.entries {
+				yaml += "  - type: oci.cache.config.ocm.software/v1alpha1\n"
+				for _, line := range strings.Split(entry, "\n") {
+					yaml += "    " + line + "\n"
+				}
+			}
+			var generic genericv1.Config
+			r.NoError(genericv1.Scheme.Decode(strings.NewReader(yaml), &generic))
+
+			cfg, err := cachespec.LookupConfig(&generic)
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.NotNil(cfg)
+			if tt.wantTTL == nil {
+				r.Nil(cfg.TTL)
+			} else {
+				r.NotNil(cfg.TTL)
+				r.Equal(*tt.wantTTL, time.Duration(*cfg.TTL))
+			}
+			r.Equal(tt.wantMaxBlobSize, cfg.MaxBlobSize)
+		})
+	}
+}
+
+func TestDuration_JSON(t *testing.T) {
+	r := require.New(t)
+
+	data, err := json.Marshal(cachespec.NewDuration(90 * time.Minute))
+	r.NoError(err)
+	r.JSONEq(`"1h30m0s"`, string(data))
+
+	var decoded cachespec.Duration
+	r.NoError(json.Unmarshal(data, &decoded))
+	r.Equal(90*time.Minute, time.Duration(decoded))
 }

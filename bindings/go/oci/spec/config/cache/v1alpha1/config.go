@@ -1,7 +1,10 @@
 package v1alpha1
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
+	"time"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -34,6 +37,36 @@ const (
 	RemotePolicyAlways RemotePolicy = "Always"
 )
 
+// Duration is a [time.Duration] serialized as a Go duration string such as
+// 30s, 10m or 1h30m. Numbers are rejected on input.
+//
+// +ocm:jsonschema-gen=true
+// +ocm:jsonschema-gen:schema-from=schemas/Duration.schema.json
+type Duration time.Duration
+
+// NewDuration returns a pointer to d as a [Duration].
+func NewDuration(d time.Duration) *Duration {
+	v := Duration(d)
+	return &v
+}
+
+func (d Duration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(time.Duration(d).String())
+}
+
+func (d *Duration) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return fmt.Errorf("duration must be a string like 30s, 10m or 1h30m: %w", err)
+	}
+	parsed, err := time.ParseDuration(s)
+	if err != nil {
+		return fmt.Errorf("invalid duration %q: %w", s, err)
+	}
+	*d = Duration(parsed)
+	return nil
+}
+
 // Config configures the OCI caches.
 //
 // +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
@@ -48,17 +81,35 @@ type Config struct {
 	// RemotePolicy controls when the caches contact the registry on a cache hit:
 	// IfNotPresent (default) or Always. See [RemotePolicy].
 	RemotePolicy RemotePolicy `json:"remotePolicy,omitempty"`
+
+	// TTL is the maximum age of an entry in the blob and the reference cache,
+	// as a positive duration string such as 30s, 10m or 1h30m. Defaults to 10m.
+	TTL *Duration `json:"ttl,omitempty"`
+
+	// MaxBlobSize is the largest blob in bytes the blob cache stores. Larger blobs
+	// are fetched as usual but not cached. Must be positive. Defaults to 20971520 (20 MiB).
+	// The reference cache ignores it.
+	// +ocm:jsonschema-gen:minimum=1
+	MaxBlobSize *int64 `json:"maxBlobSize,omitempty"`
 }
 
-// Validate rejects a RemotePolicy that is neither empty nor a known policy.
+// Validate rejects a RemotePolicy that is neither empty nor a known policy,
+// and a TTL or MaxBlobSize that is set but not positive.
 func (c *Config) Validate() error {
+	var errs []error
 	switch c.RemotePolicy {
 	case "", RemotePolicyIfNotPresent, RemotePolicyAlways:
-		return nil
 	default:
-		return fmt.Errorf("unknown remotePolicy %q, must be %q or %q",
-			c.RemotePolicy, RemotePolicyIfNotPresent, RemotePolicyAlways)
+		errs = append(errs, fmt.Errorf("unknown remotePolicy %q, must be %q or %q",
+			c.RemotePolicy, RemotePolicyIfNotPresent, RemotePolicyAlways))
 	}
+	if c.TTL != nil && *c.TTL <= 0 {
+		errs = append(errs, fmt.Errorf("invalid ttl %s, must be positive", time.Duration(*c.TTL)))
+	}
+	if c.MaxBlobSize != nil && *c.MaxBlobSize <= 0 {
+		errs = append(errs, fmt.Errorf("invalid maxBlobSize %d, must be positive", *c.MaxBlobSize))
+	}
+	return errors.Join(errs...)
 }
 
 // LookupConfig validates every OCI cache configuration in cfg and merges them.
@@ -93,7 +144,7 @@ func LookupConfig(cfg *genericv1.Config) (*Config, error) {
 	return Merge(cfgs...), nil
 }
 
-// Merge merges the provided configs into a single config. The last non-empty value wins.
+// Merge merges the provided configs into a single config. The last set value of each field wins.
 func Merge(configs ...*Config) *Config {
 	merged := new(Config)
 	_, _ = Scheme.DefaultType(merged)
@@ -104,6 +155,12 @@ func Merge(configs ...*Config) *Config {
 		}
 		if c.RemotePolicy != "" {
 			merged.RemotePolicy = c.RemotePolicy
+		}
+		if c.TTL != nil {
+			merged.TTL = new(*c.TTL)
+		}
+		if c.MaxBlobSize != nil {
+			merged.MaxBlobSize = new(*c.MaxBlobSize)
 		}
 	}
 

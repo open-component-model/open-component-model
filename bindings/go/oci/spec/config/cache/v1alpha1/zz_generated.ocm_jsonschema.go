@@ -12,12 +12,20 @@ import (
 //go:embed schemas/Config.schema.json
 var schemaConfig []byte
 
+//go:embed schemas/Duration.schema.json
+var schemaDuration []byte
+
 //go:embed schemas/RemotePolicy.schema.json
 var schemaRemotePolicy []byte
 
 // JSONSchema returns the JSON Schema for Config.
 func (Config) JSONSchema() []byte {
 	return schemaConfig
+}
+
+// JSONSchema returns the JSON Schema for Duration.
+func (Duration) JSONSchema() []byte {
+	return schemaDuration
 }
 
 // JSONSchema returns the JSON Schema for RemotePolicy.
