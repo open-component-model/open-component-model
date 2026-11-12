@@ -31,7 +31,6 @@ const (
 // in the certificate, and the envelope type) is stored; the bundle itself lives
 // in bundle.b64 and the trust material in trusted_root.json.
 type meta struct {
-	Name                   string `json:"name"`
 	HashAlgorithm          string `json:"hashAlgorithm"`
 	NormalisationAlgorithm string `json:"normalisationAlgorithm"`
 	DigestValue            string `json:"digestValue"`

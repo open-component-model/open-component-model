@@ -62,7 +62,6 @@ func TestRecordFixtures(t *testing.T) {
 	r.NoError(os.WriteFile(trustedRootFile, trustedRootBytes, 0o644))
 
 	m := meta{
-		Name:                   "replay",
 		HashAlgorithm:          digest.HashAlgorithm,
 		NormalisationAlgorithm: digest.NormalisationAlgorithm,
 		DigestValue:            digest.Value,

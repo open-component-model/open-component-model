@@ -258,6 +258,8 @@ tasks:
         export PATH="{{.SIGSTORE_BIN_DIR}}:$PATH"
         . {{.SIGSTORE_ENV_FILE}}
         RECORD_FIXTURES=1 go test -count=1 -run TestRecordFixtures -timeout 180s ./replay/...
+      # Confirm the freshly recorded fixtures actually verify offline.
+      - task: test/verify
 
   scaffolding:teardown:
     desc: "Delete kind cluster and clean up"
