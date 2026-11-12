@@ -2,9 +2,15 @@ package applyset
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"regexp"
+	goruntime "runtime"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -17,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
@@ -1308,4 +1315,154 @@ func TestPrune_TerminatingObjectIsPendingWithoutDelete(t *testing.T) {
 	r.NoError(err)
 	r.True(result.HasPruned(), "a terminating object keeps the prune pending")
 	r.Zero(deletes)
+}
+
+// TestApply_ConflictDetection_DoesNotTransferObjectContents covers the controller being OOM-killed when many
+// deployers share a namespace (ocm-project#1412). Conflict detection reads only the labels, namespace and name of
+// every ApplySet member of the applied kinds, so the list must not carry the members' contents.
+func TestApply_ConflictDetection_DoesNotTransferObjectContents(t *testing.T) {
+	r := require.New(t)
+
+	const (
+		members     = 50
+		payloadSize = 64 << 10
+	)
+
+	parent := newTestParent(schema.GroupVersionKind{Group: "delivery.ocm.software", Version: "v1alpha1", Kind: "TestKind"})
+
+	// Objects of another deployer's ApplySet, as every deployer labels what it applies.
+	payload := strings.Repeat("x", payloadSize)
+	stored := make([]corev1.ConfigMap, 0, members)
+	for i := range members {
+		stored = append(stored, corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("other-%d", i),
+				Namespace: "default",
+				Labels:    map[string]string{ApplysetPartOfLabel: "applyset-other-v1"},
+			},
+			Data: map[string]string{"payload": payload},
+		})
+	}
+
+	var (
+		mu         sync.Mutex
+		listAccept []string
+		listBytes  int
+	)
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		var (
+			body []byte
+			err  error
+		)
+		switch request.Method {
+		case http.MethodGet:
+			accept := request.Header.Get("Accept")
+			body, err = configMapListResponse(accept, stored)
+			mu.Lock()
+			listAccept = append(listAccept, accept)
+			listBytes += len(body)
+			mu.Unlock()
+		case http.MethodPatch:
+			body, err = json.Marshal(&corev1.ConfigMap{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"},
+				ObjectMeta: metav1.ObjectMeta{Name: "cm1", Namespace: "default", ResourceVersion: "1"},
+			})
+		default:
+			http.Error(writer, "unexpected request "+request.Method+" "+request.URL.Path, http.StatusNotImplemented)
+
+			return
+		}
+		if err != nil {
+			http.Error(writer, err.Error(), http.StatusInternalServerError)
+
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write(body)
+	}))
+	t.Cleanup(server.Close)
+
+	scheme := runtime.NewScheme()
+	r.NoError(corev1.AddToScheme(scheme))
+	apiClient, err := client.New(&rest.Config{Host: server.URL}, client.Options{Scheme: scheme, Mapper: newTestRESTMapper()})
+	r.NoError(err)
+
+	applier := New(Config{
+		Client:          apiClient,
+		RESTMapper:      newTestRESTMapper(),
+		Log:             logr.Discard(),
+		ParentNamespace: "default",
+	}, parent)
+
+	var before, after goruntime.MemStats
+	goruntime.ReadMemStats(&before)
+	result, err := applier.Apply(t.Context(), []Resource{{ID: "cm1", Object: newConfigMap("cm1", "default")}}, ApplyMode{})
+	goruntime.ReadMemStats(&after)
+	r.NoError(err)
+	r.Len(result.Applied, 1)
+	r.NoError(result.Applied[0].Error)
+
+	t.Logf("conflict detection read %d bytes, Apply allocated %d bytes for %d members of %d bytes each",
+		listBytes, after.TotalAlloc-before.TotalAlloc, members, payloadSize)
+
+	r.Len(listAccept, 1)
+	r.Contains(listAccept[0], "as=PartialObjectMetadataList", "conflict detection must request metadata only")
+	r.Less(listBytes, payloadSize, "conflict detection must not read the members' contents")
+}
+
+// configMapListResponse answers a LIST with metadata only when the client asks for it, as the API server does.
+func configMapListResponse(accept string, items []corev1.ConfigMap) ([]byte, error) {
+	if !strings.Contains(accept, "as=PartialObjectMetadataList") {
+		return json.Marshal(&corev1.ConfigMapList{
+			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMapList"},
+			Items:    items,
+		})
+	}
+
+	list := &metav1.PartialObjectMetadataList{
+		TypeMeta: metav1.TypeMeta{APIVersion: "meta.k8s.io/v1", Kind: "PartialObjectMetadataList"},
+		Items:    make([]metav1.PartialObjectMetadata, 0, len(items)),
+	}
+	for _, item := range items {
+		list.Items = append(list.Items, metav1.PartialObjectMetadata{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "meta.k8s.io/v1", Kind: "PartialObjectMetadata"},
+			ObjectMeta: item.ObjectMeta,
+		})
+	}
+
+	return json.Marshal(list)
+}
+
+// TestApply_ConflictDetection_UsesReader covers conflict detection reading the members through Config.Reader, which
+// the controller points at a reader that does not cache the applied kinds.
+func TestApply_ConflictDetection_UsesReader(t *testing.T) {
+	r := require.New(t)
+
+	parentGVK := schema.GroupVersionKind{Group: "delivery.ocm.software", Version: "v1alpha1", Kind: "TestKind"}
+	parent := newTestParent(parentGVK)
+	owner := &testParent{
+		ObjectMeta: metav1.ObjectMeta{Name: "other-instance", Namespace: "default", UID: types.UID("other-parent-uid")},
+		gvk:        parentGVK,
+	}
+
+	existing := newConfigMap("cm1", "default")
+	existing.SetLabels(map[string]string{ApplysetPartOfLabel: ID(owner)})
+	existing.SetUID(types.UID("existing-uid"))
+
+	applier := New(Config{
+		Client:          newFakeClient(),
+		Reader:          newFakeClient(existing),
+		RESTMapper:      newTestRESTMapper(),
+		Log:             logr.Discard(),
+		ParentNamespace: "default",
+	}, parent)
+
+	result, err := applier.Apply(t.Context(), []Resource{{ID: "cm1", Object: newConfigMap("cm1", "default")}}, ApplyMode{})
+	r.NoError(err)
+	r.Len(result.Applied, 1)
+
+	var conflictErr *ApplySetConflictError
+	r.ErrorAs(result.Applied[0].Error, &conflictErr)
+	r.Equal(ID(owner), conflictErr.CurrentApplySetID)
 }
