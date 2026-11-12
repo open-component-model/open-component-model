@@ -33,7 +33,8 @@ const (
 // environment: toOCI() exactly as the controller offers it (OCI image accesses), toGit()
 // (Git origins, see gitOrigin), the string extensions (split, join, ...) used to compose
 // image references, isArtifactSetMediaType(), isOCIManifest(), and
-// <access>.isType() for uploader match expressions.
+// <access>.isType() for uploader match expressions, and
+// <resource>.withSourceDigest() for the target descriptor (see buildDescriptorSpec).
 func EnvOptions() []cel.EnvOption {
 	return []cel.EnvOption{
 		ocifunctions.ToOCI(),
@@ -42,6 +43,7 @@ func EnvOptions() []cel.EnvOption {
 		isArtifactSetMediaTypeFunction(),
 		isOCIManifestFunction(),
 		isTypeFunction(),
+		withSourceDigestFunction(),
 	}
 }
 

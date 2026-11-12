@@ -31,6 +31,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/verified"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	ocmdigest "ocm.software/open-component-model/bindings/go/digest"
 )
 
 // ErrUnverifiable reports a digest that the content cannot be checked against.
@@ -193,7 +194,7 @@ func VerifyContent(ctx context.Context, expected *descriptor.Digest, content blo
 // artifact and verify its graph themselves.
 //
 // genericBlobDigest/v1 is accepted as well, because it historically labelled the root
-// digests of OCI artifacts.
+// digests of OCI artifacts, and so is OCM v1's ociArtefactDigest/v1.
 func VerifyOCIArtifact(ctx context.Context, expected *descriptor.Digest, root digest.Digest, opts ...Option) error {
 	want, err := ParseDigest(expected)
 	if err != nil {
@@ -216,10 +217,12 @@ func VerifyOCIArtifact(ctx context.Context, expected *descriptor.Digest, root di
 	return nil
 }
 
-// isArtifactNormalisation reports whether normalisation may label the root digest of an OCI artifact.
+// isArtifactNormalisation reports whether normalisation may label the root digest of an OCI
+// artifact. An unlabelled digest is not one: it describes the bytes of a blob, which a caller
+// that resolved an artifact cannot produce.
 func isArtifactNormalisation(normalisation string) bool {
 	switch normalisation {
-	case "", descriptor.GenericBlobDigestV1, descriptor.OCIArtifactDigestV1:
+	case descriptor.GenericBlobDigestV1, descriptor.OCIArtifactDigestV1, descriptor.OCIArtefactDigestV1:
 		return true
 	default:
 		return false
@@ -249,7 +252,7 @@ func classify(expected *descriptor.Digest) (kind, digest.Digest, error) {
 	switch n := expected.NormalisationAlgorithm; n {
 	case "", descriptor.GenericBlobDigestV1:
 		return kindBlob, want, nil
-	case descriptor.OCIArtifactDigestV1:
+	case descriptor.OCIArtifactDigestV1, descriptor.OCIArtefactDigestV1:
 		return kindArtifact, want, nil
 	default:
 		return kindNone, "", unsupportedNormalisation(n)
@@ -281,7 +284,7 @@ func newArtifactBlob(ctx context.Context, content blob.ReadOnlyBlob, root digest
 }
 
 func logUnverified(ctx context.Context, expected *descriptor.Digest, attrs []slog.Attr) {
-	if expected != nil && isExcluded(expected) {
+	if expected != nil && ocmdigest.IsExcluded(expected) {
 		if expected.Value != "" && !strings.EqualFold(expected.Value, descriptor.NoDigest) {
 			attrs = append(slices.Clone(attrs),
 				slog.String("hashAlgorithm", expected.HashAlgorithm),

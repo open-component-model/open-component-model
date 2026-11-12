@@ -339,7 +339,7 @@ func TestTransform(t *testing.T) {
 			name:       "helm chart OCI artifact uploads its chart layer",
 			content:    chartLayout,
 			mediaType:  layout.MediaTypeOCIImageLayoutTarGzipV1,
-			resource:   ociImageSource(invalidDigest),
+			resource:   ociImageSource(""),
 			wantAccess: access{helmChart: "mychart:0.1.0"},
 			wantDigest: chartDigest,
 			check: func(r *require.Assertions, u uploadRun) {
@@ -352,13 +352,20 @@ func TestTransform(t *testing.T) {
 			repoType:   "generic",
 			content:    chartLayout,
 			mediaType:  layout.MediaTypeOCIImageLayoutTarGzipV1,
-			resource:   ociImageSource(invalidDigest),
+			resource:   ociImageSource(""),
 			wantAccess: access{url: "/artifactory/helm-local/" + file, mediaType: layout.MediaTypeOCIImageLayoutTarGzipV1},
 			wantDigest: sha256Hex(chartLayout),
 			check: func(r *require.Assertions, u uploadRun) {
 				r.Equal(chartLayout, u.bodyPUTs()[0].Body)
 				r.Equal(layout.MediaTypeOCIImageLayoutTarGzipV1, u.bodyPUTs()[0].ContentType)
 			},
+		},
+		{
+			name:      "OCI artifact with a recorded digest is not uploaded",
+			content:   chartLayout,
+			mediaType: layout.MediaTypeOCIImageLayoutTarGzipV1,
+			resource:  ociImageSource(invalidDigest),
+			wantErr:   "recorded genericBlobDigest/v1 digest cannot be kept",
 		},
 		{
 			name:         "generic stores the content and publishes a Wget access",
@@ -561,11 +568,14 @@ func localBlobAccess() *runtime.Raw {
 	return &runtime.Raw{Type: runtime.NewVersionedType("LocalBlob", "v1"), Data: []byte(`{"type":"LocalBlob/v1","localReference":"sha256:abc","mediaType":"application/vnd.cncf.helm.chart.content.v1.tar+gzip"}`)}
 }
 
-// ociImageSource makes the resource a remote OCI image with a genericBlobDigest/v1 digest value,
-// which does not describe the downloaded OCI layout.
+// ociImageSource makes the resource a remote OCI image. A non-empty digestValue is recorded as a
+// genericBlobDigest/v1 digest, which does not describe the uploaded content.
 func ociImageSource(digestValue string) func(*descriptorv2.Resource) {
 	return func(res *descriptorv2.Resource) {
 		res.Access = &runtime.Raw{Type: runtime.NewVersionedType("OCIImage", "v1"), Data: []byte(`{"type":"OCIImage/v1","imageReference":"registry.example.com/charts/mychart:0.1.0"}`)}
-		res.Digest = &descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: digestValue}
+		res.Digest = nil
+		if digestValue != "" {
+			res.Digest = &descriptorv2.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: digestValue}
+		}
 	}
 }

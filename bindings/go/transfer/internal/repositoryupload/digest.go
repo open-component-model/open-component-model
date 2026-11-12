@@ -7,6 +7,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	ocmdigest "ocm.software/open-component-model/bindings/go/digest"
 )
 
 // genericBlobDigestV1 is the normalisation algorithm of a digest of plain bytes.
@@ -15,12 +16,16 @@ const genericBlobDigestV1 = "genericBlobDigest/v1"
 // hashAlgorithms maps the OCM hash algorithms of source digests to digest algorithms.
 var hashAlgorithms = map[string]digest.Algorithm{"SHA-256": digest.SHA256, "SHA-512": digest.SHA512}
 
-// expectedDigest returns the digest the uploaded content must have: the source digest, if it
-// describes the uploaded bytes. It is empty when there is no source digest or the content was
-// taken from an OCI artifact, whose digest describes a different byte representation.
+// expectedDigest returns the digest the uploaded content must have: the source digest. It is
+// empty when there is no source digest or the resource is excluded from the signature. Content
+// taken from an OCI artifact is stored in another byte representation, so its recorded digest
+// cannot be kept and the upload fails.
 func expectedDigest(src *descriptor.Digest, fromOCI bool) (digest.Digest, error) {
-	if src == nil || fromOCI {
+	if src == nil || ocmdigest.IsExcluded(src) {
 		return "", nil
+	}
+	if fromOCI {
+		return "", fmt.Errorf("the upload stores the OCI artifact in another format, so its recorded %s digest cannot be kept", src.NormalisationAlgorithm)
 	}
 	alg, ok := hashAlgorithms[src.HashAlgorithm]
 	if !ok {
@@ -57,9 +62,10 @@ func knownDigest(src *descriptor.Digest, content blob.ReadOnlyBlob, fromOCI bool
 }
 
 // uploadedDigest is the digest of the published resource: the source digest if it describes the
-// uploaded content, else the digest of the uploaded bytes.
+// uploaded content or excludes the resource from the signature, else the digest of the uploaded
+// bytes.
 func uploadedDigest(src *descriptor.Digest, expected, uploaded digest.Digest) *descriptor.Digest {
-	if expected != "" {
+	if expected != "" || ocmdigest.IsExcluded(src) {
 		return src.DeepCopy()
 	}
 	var hashAlgorithm string

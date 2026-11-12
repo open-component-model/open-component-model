@@ -77,6 +77,10 @@ func (f ArtifactSetFormat) String() string {
 // with ArtifactSetFormatOCM.
 const ArtifactSetDescriptorFileName = "artifact-descriptor.json"
 
+// ArtifactSetMainAnnotation is the index annotation holding the digest of the main artifact of
+// an ArtifactSet.
+const ArtifactSetMainAnnotation = "software.ocm/main"
+
 // SynthesizedBlobFormatSuffix is the suffix for the synthesized blob format.
 // This is the format to distinguish between artifact sets and regular manifests.
 const SynthesizedBlobFormatSuffix = "+tar+gzip"
@@ -363,6 +367,16 @@ func (a *ArtifactSet) ListBlobs(ctx context.Context) (digests []string, err erro
 
 func (a *ArtifactSet) GetBlob(ctx context.Context, digest string) (blob.ReadOnlyBlob, error) {
 	return newArtifactBlob(a.fs, digest, a.idx.Format)
+}
+
+// Fetch returns the content of the blob desc describes, so the artifacts in the set can be read
+// with functions that take an OCI content fetcher.
+func (a *ArtifactSet) Fetch(ctx context.Context, desc ociimagespec.Descriptor) (io.ReadCloser, error) {
+	b, err := a.GetBlob(ctx, desc.Digest.String())
+	if err != nil {
+		return nil, err
+	}
+	return b.ReadCloser()
 }
 
 func (a *ArtifactSet) Close() error {

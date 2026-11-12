@@ -30,7 +30,7 @@ import (
 const (
 	// annotationMainArtifact is set by legacy artifact sets on their index to the
 	// digest of the artifact they hold.
-	annotationMainArtifact = "software.ocm/main"
+	annotationMainArtifact = ctf.ArtifactSetMainAnnotation
 	// jsonTokenKeep is how much of a string or number token, and of a whitespace
 	// run, reaches the decoder, which buffers each token whole. Every token whose
 	// value verification compares (digests, media types, sizes, the few annotation
