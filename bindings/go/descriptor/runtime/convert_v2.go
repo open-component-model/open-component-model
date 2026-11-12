@@ -338,13 +338,14 @@ func ConvertToV2Provider(provider Provider) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not convert provider labels: %w", err)
 	}
-	// EscapeForHTML restores what encoding/json v1 wrote here: this string is stored in
-	// the v2 descriptor, so without it a provider label holding <, > or & changes bytes
-	// on a read/write cycle that modifies nothing.
+	// EscapeForHTML and EscapeForJS restore what encoding/json v1 escaped here: <, > and &
+	// plus the line terminators U+2028 and U+2029. This string is stored in the v2
+	// descriptor, so without them a provider label holding one of those characters changes
+	// bytes on a read/write cycle that modifies nothing.
 	providerJSON, err := json.Marshal(&providerStruct{
 		Name:   provider.Name,
 		Labels: labels,
-	}, runtime.JSONOptions, jsontext.EscapeForHTML(true))
+	}, runtime.JSONOptions, jsontext.EscapeForHTML(true), jsontext.EscapeForJS(true))
 	if err != nil {
 		return "", fmt.Errorf("could not marshal provider to JSON: %w", err)
 	}

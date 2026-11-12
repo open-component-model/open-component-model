@@ -565,6 +565,15 @@ func TestConvertToV2Provider(t *testing.T) {
 			},
 			want: `{"name":"test-provider","labels":[{"name":"test","value":"a\u003cb\u003ec\u0026d"}]}`,
 		},
+		{
+			// v1 also escaped the line terminators U+2028 and U+2029.
+			name: "provider label with JS line terminators",
+			provider: descriptorRuntime.Provider{
+				Name:   "test-provider",
+				Labels: []descriptorRuntime.Label{{Name: "test", Value: []byte("\"line1\u2028line2\u2029line3\"")}},
+			},
+			want: `{"name":"test-provider","labels":[{"name":"test","value":"line1\u2028line2\u2029line3"}]}`,
+		},
 	}
 
 	for _, tt := range tests {
