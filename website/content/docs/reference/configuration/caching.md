@@ -1,6 +1,6 @@
 ---
 title: "Caching"
-description: "Reference for the OCI caches used by the OCM CLI and controller: cache location, temporary folder, limits, admission rules, and remote policy."
+description: "Reference for the OCI caches used by the OCM CLI and controller: cache location, temporary folder, limits, admission rules, remote policy, and the oci.cache.config.ocm.software configuration type."
 icon: "🗄️"
 weight: 1
 toc: true
@@ -12,9 +12,9 @@ This page is the technical reference for the on-disk caches OCM uses when it rea
 registries.
 
 {{< callout context="note" title="What you can configure" >}}
-The CLI and the controller enable caching by default, and the limits are fixed. You can set **where** the cache
-lives, through the temporary folder described in [Cache Location](#cache-location), and the
-[remote policy](#remote-policy).
+The CLI and the controller enable caching by default. You can set **where** the cache lives, through the temporary
+folder described in [Cache Location](#cache-location). With the [`oci.cache.config.ocm.software`](#configuration)
+configuration type you can set the [remote policy](#remote-policy), the time to live, and the maximum blob size.
 {{< /callout >}}
 
 ## Caches
@@ -101,14 +101,14 @@ writable volume. If the cache directory cannot be created, the controller does n
 
 Each cache applies these limits:
 
-| Limit             | Value                                     | Applies to                       | Behaviour                                                            |
-|-------------------|-------------------------------------------|----------------------------------|----------------------------------------------------------------------|
-| Maximum entries   | `100000` (blob), `10000` (each reference) | Blob cache, each reference cache | When the limit is reached, the least recently used entry is removed. |
-| Time to live      | `10m`                                     | Blob cache, each reference cache | Entries older than this are removed.                                 |
-| Maximum blob size | `20 MiB`                                  | Blob cache                       | Larger blobs are downloaded as usual but not cached.                 |
+| Limit             | Default                                   | Field ([Configuration](#configuration)) | Applies to                       | Behaviour                                                            |
+|-------------------|-------------------------------------------|-----------------------------------------|----------------------------------|----------------------------------------------------------------------|
+| Maximum entries   | `100000` (blob), `10000` (each reference) | Not configurable                        | Blob cache, each reference cache | When the limit is reached, the least recently used entry is removed. |
+| Time to live      | `10m`                                     | `ttl`                                   | Blob cache, each reference cache | Entries older than this are removed.                                 |
+| Maximum blob size | `20 MiB`                                  | `maxBlobSize`                           | Blob cache                       | Larger blobs are downloaded as usual but not cached.                 |
 
 When the blob cache removes an entry, it also deletes the file. When a reference cache is loaded from disk,
-entries resolved more than `10m` ago are not loaded. When the blob cache is loaded from disk, every valid file is
+entries resolved longer than the time to live ago are not loaded. When the blob cache is loaded from disk, every valid file is
 loaded and gets a new time to live, because content addressed by digest cannot become stale.
 
 ## Admission Rules
@@ -141,21 +141,31 @@ With `Always`, OCM asks the registry to authorize every access, but does not dow
 A tag that has been moved to a new digest is never served from the cache under either policy, because tags are always
 resolved against the registry.
 
-### Remote Policy in the CLI
+## Configuration
 
-Set the policy with the `oci.cache.config.ocm.software/v1alpha1` configuration type. It applies to the blob cache and
-every reference cache.
+The `oci.cache.config.ocm.software/v1alpha1` configuration type sets the remote policy and the limits of the caches.
 
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
   - type: oci.cache.config.ocm.software/v1alpha1
     remotePolicy: Always
+    ttl: 1h
+    maxBlobSize: 52428800 # 50 MiB
 ```
 
-`remotePolicy` defaults to `IfNotPresent`. Any value other than `IfNotPresent` or `Always` makes the CLI fail, even
-if a later entry overrides it. If the configuration file contains more than one
-`oci.cache.config.ocm.software/v1alpha1` entry, the last `remotePolicy` that is set wins.
+All fields are optional. An omitted field keeps its default.
+
+| Field          | Type                                               | Default             | Description                                                                                                 |
+|----------------|----------------------------------------------------|---------------------|-------------------------------------------------------------------------------------------------------------|
+| `remotePolicy` | `IfNotPresent` or `Always`                         | `IfNotPresent`      | [Remote policy](#remote-policy) of the blob cache and every reference cache.                                |
+| `ttl`          | duration string, for example `30s`, `10m`, `1h30m` | `10m`               | Time to live of the entries of the blob cache and every reference cache. Must be positive.                  |
+| `maxBlobSize`  | integer, bytes                                     | `20971520` (20 MiB) | The largest blob the blob cache stores. Larger blobs are fetched as usual but not cached. Must be positive. |
+
+An unknown `remotePolicy`, a `ttl` that is not a positive duration string (numbers are rejected), or a `maxBlobSize`
+that is not positive makes the CLI and the controller fail at startup, even if a later entry overrides it. To use a
+default, omit the field. If the configuration file contains more than one `oci.cache.config.ocm.software/v1alpha1`
+entry, the last value set for each field wins. `ocm get config` shows the merged entry.
 
 The schema below defines the full structure of the `oci.cache.config.ocm.software/v1alpha1` type as specified by
 [JSON Schema 2020-12](https://json-schema.org/draft/2020-12/schema).
@@ -166,11 +176,15 @@ The schema below defines the full structure of the `oci.cache.config.ocm.softwar
 
 ---
 
-### Remote Policy in the Controller
+### Configuration in the CLI
+
+Add the configuration type to the OCM configuration file. It applies to the blob cache and every reference cache.
+
+### Configuration in the Controller
 
 The controller does not accept `oci.cache.config.ocm.software` in `spec.ocmConfig` for individual objects. One blob
-cache serves every namespace so a single object should not be able to configure it. Instead, set the policy for the whole
-controller with the `manager.ocmConfig` Helm value like this:
+cache serves every namespace so a single object should not be able to configure it. Instead, configure the cache for
+the whole controller with the `manager.ocmConfig` Helm value like this:
 
 ```yaml
 manager:
@@ -178,6 +192,7 @@ manager:
     configurations:
       - type: oci.cache.config.ocm.software/v1alpha1
         remotePolicy: Always
+        ttl: 1h
 ```
 
 The chart stores this configuration in a `ConfigMap`, mounts it into the controller, and passes it with the
@@ -186,8 +201,9 @@ once at startup. The chart sets a `checksum/ocm-config` annotation on the contro
 renders the chart. A `helm upgrade` that changes `manager.ocmConfig` therefore restarts the pods. Editing the `ConfigMap`
 directly, for example with `kubectl edit`, restarts nothing: the controller picks up the change only on its next restart.
 
-`oci.cache.config.ocm.software` is the only type accepted here. Any other type, or an invalid `remotePolicy`, results in
-a startup error.
+The controller uses only the blob cache, so `ttl` and `maxBlobSize` both apply to it.
+`oci.cache.config.ocm.software` is the only type accepted here. Any other type, or an invalid field, results in a
+startup error.
 
 {{< callout context="caution" title="IfNotPresent shares cached content across namespaces" icon="outline/alert-triangle" >}}
 The blob cache key is the digest, not the credentials. With `IfNotPresent`, a blob that one namespace fetched with its
