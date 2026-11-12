@@ -804,9 +804,11 @@ import (
 
 | Area | Framework | Assertion Style |
 |------|-----------|----------------|
-| `bindings/go/` | testify | `require.New(t)` |
-| `bindings/go/cli/` | testify + `test.OCM()` helper | `require.New(t)` |
+| `bindings/go/` | testify | `require` for fail-fast/errors, `assert` in goroutines & `Eventually`/`CollectT` |
+| `bindings/go/cli/` | testify + `test.OCM()` helper | `require` for fail-fast/errors, `assert` where `FailNow` is unsafe |
 | `bindings/go/kubernetes/controller/` | Ginkgo v2 + Gomega | `Expect().To()` |
+
+`testifylint` (enabled in `golangci.yml`) is the source of truth for the `require`/`assert` split: `require-error` moves error checks in the main test goroutine to `require`, while `go-require` keeps `assert` in child goroutines and `Eventually`/`CollectT` callbacks, where `require`'s `FailNow` does not work. Follow the linter; do not convert `assert` to `require` wholesale.
 
 ### Ginkgo (Controller)
 
