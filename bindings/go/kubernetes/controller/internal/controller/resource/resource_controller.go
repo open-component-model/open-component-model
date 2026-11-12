@@ -129,7 +129,9 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 
 				// Get list of resources that reference the component
 				list := &v1alpha1.ResourceList{}
-				if err := r.List(ctx, list, client.MatchingFields{fieldName: component.GetName()}); err != nil {
+				if err := r.List(ctx, list,
+					client.InNamespace(component.GetNamespace()),
+					client.MatchingFields{fieldName: component.GetName()}); err != nil {
 					return []reconcile.Request{}
 				}
 

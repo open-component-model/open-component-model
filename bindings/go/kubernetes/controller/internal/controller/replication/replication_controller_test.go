@@ -22,6 +22,7 @@ import (
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
@@ -344,5 +345,43 @@ var _ = Describe("Replication Controller", func() {
 				g.Expect(controllerutil.ContainsFinalizer(replication, v1alpha1.ReplicationFinalizer)).To(BeFalse())
 			}, 2*time.Second, interval).Should(Succeed())
 		})
+	})
+
+	It("maps refs only to same-namespace replications", func(ctx SpecContext) {
+		namespace := test.NamespaceForTest(ctx)
+		other := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace.GetName() + "-other"}}
+		Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
+		Expect(k8sClient.Create(ctx, other)).To(Succeed())
+
+		for _, ns := range []string{namespace.GetName(), other.GetName()} {
+			replication := &v1alpha1.Replication{
+				ObjectMeta: metav1.ObjectMeta{Name: "referencing-replication", Namespace: ns},
+				Spec: v1alpha1.ReplicationSpec{
+					ComponentRef:        corev1.LocalObjectReference{Name: "shared-component"},
+					TargetRepositoryRef: corev1.LocalObjectReference{Name: "shared-repository"},
+					Suspend:             true,
+				},
+			}
+			Expect(k8sClient.Create(ctx, replication)).To(Succeed())
+			DeferCleanup(func(ctx SpecContext) { test.DeleteObject(ctx, k8sClient, replication) })
+
+			// An unscoped List would pass while the other namespace is not cached yet.
+			Eventually(func(g Gomega) {
+				g.Expect(k8sManager.GetClient().Get(ctx, client.ObjectKeyFromObject(replication), &v1alpha1.Replication{})).To(Succeed())
+			}).WithTimeout(test.DefaultKubernetesOperationTimeout).WithContext(ctx).Should(Succeed())
+		}
+
+		r := &Reconciler{BaseReconciler: &ocm.BaseReconciler{Client: k8sManager.GetClient()}}
+		mappings := map[string]client.Object{
+			componentRefIndex:  &v1alpha1.Component{ObjectMeta: metav1.ObjectMeta{Name: "shared-component", Namespace: namespace.GetName()}},
+			targetRepoRefIndex: &v1alpha1.Repository{ObjectMeta: metav1.ObjectMeta{Name: "shared-repository", Namespace: namespace.GetName()}},
+		}
+		for index, referenced := range mappings {
+			var got []string
+			for _, req := range r.replicationsForIndex(index)(ctx, referenced) {
+				got = append(got, req.Namespace+"/"+req.Name)
+			}
+			Expect(got).To(ConsistOf(namespace.GetName()+"/referencing-replication"), "index %s", index)
+		}
 	})
 })
