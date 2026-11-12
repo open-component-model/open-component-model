@@ -15,10 +15,10 @@
     enabled: true,
   },
   'updateNotScheduled': true, // Update branches that have already been created
-  'minimumReleaseAge': '28 days',
+  'minimumReleaseAge': '5 days',
   // config:best-practices this is usually disabled by default.
   // https://github.com/google/docsy/blob/9f8acf7a4547cb1c5d1b88b3db588793bfd6eb25/renovate.json5#L7
-  // Also, disabling this means that transitive dependencies that aren't 28 days old at least,
+  // Also, disabling this means that transitive dependencies that aren't 5 days old at least,
   // will not get in. Because lock file maintenance doesn't care about that when it's refreshing the lock file.
   lockFileMaintenance: {
     enabled: false,
@@ -139,6 +139,7 @@
       // bumped here. See the depType 'golang' rule at the end of packageRules.
       // Docker image digests for `golang` are handled by 'Digest pins' above.
       matchDatasources: ["golang-version"],
+      minimumReleaseAge: '0 days', // Go toolchain releases are gated upstream; no stability delay.
       rangeStrategy: "bump",
       groupName: "Golang versions",
       groupSlug: "golang-versions",
@@ -206,7 +207,7 @@
         'ghcr.io/open-component-model/cosign',
       ],
       versioning: 'regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)[-+]ocm\\.(?<build>\\d+)$',
-      // Our own fork; releases are gated by its CI. The global 28-day age would
+      // Our own fork; releases are gated by its CI. The global 5-day age would
       // hold every release back, so the run its release workflow dispatches
       // would find nothing.
       minimumReleaseAge: '0 days',
@@ -360,7 +361,7 @@
     },
     {
       matchDatasources: ['npm'],
-      minimumReleaseAge: '28 days',
+      minimumReleaseAge: '5 days',
     },
     {
       // Renovate has no release timestamp for these types and
