@@ -403,20 +403,29 @@ func TestGetStore(t *testing.T) {
 	}
 }
 
-// oras lower-cases the registry it passes to the credential function, while the
-// identity keeps the case of the base URL; host names must match regardless.
-func TestCredentialFunc_HostCaseInsensitive(t *testing.T) {
-	for _, host := range []string{"registry.example.com", "REGISTRY.EXAMPLE.COM", "Registry.Example.Com"} {
-		t.Run(host, func(t *testing.T) {
+// oras passes the credential function a canonical registry name (lower-cased,
+// docker.io for registry-1.docker.io) while the identity keeps the host as written
+// in the base URL; every spelling of the same registry must still match.
+func TestCredentialFunc_HostSpellings(t *testing.T) {
+	for _, tc := range []struct {
+		name, identityHost, requestHost string
+	}{
+		{"lower-case", "registry.example.com", "registry.example.com"},
+		{"upper-case", "REGISTRY.EXAMPLE.COM", "REGISTRY.EXAMPLE.COM"},
+		{"mixed-case", "Registry.Example.Com", "Registry.Example.Com"},
+		{"docker hub endpoint", "registry-1.docker.io", "registry-1.docker.io"},
+		{"docker hub name", "docker.io", "registry-1.docker.io"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			client := &auth.Client{
 				Cache: auth.NewCache(),
 				CredentialFunc: CredentialFunc(
-					&identityv1.OCIRegistryIdentity{Hostname: host},
+					&identityv1.OCIRegistryIdentity{Hostname: tc.identityHost},
 					&credentialsv1.OCICredentials{Username: "user", Password: "pass"},
 				),
 			}
-			r.True(sendsBasicAuth(t, client, host), "request went out unauthenticated")
+			r.True(sendsBasicAuth(t, client, tc.requestHost), "request went out unauthenticated")
 		})
 	}
 }

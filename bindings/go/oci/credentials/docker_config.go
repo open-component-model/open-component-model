@@ -63,7 +63,8 @@ func CredentialFunc(identity *identityv1.OCIRegistryIdentity, credentials *v1.OC
 	hasPort := identity != nil && identity.Port != ""
 
 	return func(ctx context.Context, resource properties.Resource) (remotecredentials.Credential, error) {
-		// Registry is the canonical registry name: lower-cased, and docker.io rather than registry-1.docker.io.
+		// Registry is the canonical registry name: lower-cased, and docker.io rather than
+		// registry-1.docker.io. Host() maps the latter back.
 		hostport := resource.Registry
 		actualHost, actualPort, err := net.SplitHostPort(hostport)
 		if err != nil {
@@ -76,7 +77,10 @@ func CredentialFunc(identity *identityv1.OCIRegistryIdentity, credentials *v1.OC
 			actualHost = hostport
 		}
 		// Host names are case-insensitive, but the identity keeps the case written in the base URL.
-		hostMismatch := hasHost && !strings.EqualFold(identity.Hostname, actualHost)
+		// Docker Hub identities may use either docker.io or the registry-1.docker.io endpoint.
+		hostMismatch := hasHost &&
+			!strings.EqualFold(identity.Hostname, actualHost) &&
+			!strings.EqualFold(identity.Hostname, resource.Host())
 		portMismatch := hasPort && identity.Port != actualPort
 		if hostMismatch || portMismatch {
 			return remotecredentials.EmptyCredential, nil
