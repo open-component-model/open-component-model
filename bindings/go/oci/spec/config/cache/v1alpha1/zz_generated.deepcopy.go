@@ -13,6 +13,11 @@ import (
 func (in *Config) DeepCopyInto(out *Config) {
 	*out = *in
 	out.Type = in.Type
+	if in.Enabled != nil {
+		in, out := &in.Enabled, &out.Enabled
+		*out = new(bool)
+		**out = **in
+	}
 	if in.TTL != nil {
 		in, out := &in.TTL, &out.TTL
 		*out = new(Duration)

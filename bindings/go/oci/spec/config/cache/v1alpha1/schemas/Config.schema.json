@@ -6,6 +6,10 @@
   "type": "object",
   "description": "Config configures the OCI caches.",
   "properties": {
+    "enabled": {
+      "type": "boolean",
+      "description": "Enabled turns the OCI caches on or off. false disables the blob and the reference\ncache: every read goes to the registry and no cache directory is created.\nDefaults to true."
+    },
     "maxBlobSize": {
       "type": "integer",
       "description": "MaxBlobSize is the largest blob in bytes the blob cache stores. Larger blobs\nare fetched as usual but not cached. Must be positive. Defaults to 20971520 (20 MiB).\nThe reference cache ignores it.",

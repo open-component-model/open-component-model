@@ -294,6 +294,9 @@ func main() {
 		setupLog.Error(err, "failed to create OCI blob cache")
 		os.Exit(1)
 	}
+	if blobCache == nil {
+		setupLog.Info("OCI caching is disabled by configuration")
+	}
 	newPluginManager := func(ctx context.Context, cfg *genericv1.Config) (*manager.PluginManager, error) {
 		return setup.NewPluginManager(ctx, cfg, pluginLogger, setup.WithBlobCache(blobCache))
 	}

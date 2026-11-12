@@ -240,6 +240,36 @@ func TestLookupConfig_MaxTotalSize(t *testing.T) {
 	}
 }
 
+func TestLookupConfig_Enabled(t *testing.T) {
+	tests := []struct {
+		name    string
+		entries []string
+		want    *bool
+	}{
+		{name: "leaves it unset when omitted", entries: []string{"remotePolicy: Always"}},
+		{name: "parses false", entries: []string{"enabled: false"}, want: new(false)},
+		{name: "last set value wins", entries: []string{"enabled: false", "enabled: true", "ttl: 1m"}, want: new(true)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+
+			yaml := "type: generic.config.ocm.software/v1\nconfigurations:\n"
+			for _, entry := range tt.entries {
+				yaml += "  - type: oci.cache.config.ocm.software/v1alpha1\n    " + entry + "\n"
+			}
+			var generic genericv1.Config
+			r.NoError(genericv1.Scheme.Decode(strings.NewReader(yaml), &generic))
+
+			cfg, err := cachespec.LookupConfig(&generic)
+			r.NoError(err)
+			r.Equal(tt.want, cfg.Enabled)
+			r.Equal(tt.want == nil || *tt.want, cfg.IsEnabled())
+		})
+	}
+}
+
 func TestDuration_JSON(t *testing.T) {
 	r := require.New(t)
 

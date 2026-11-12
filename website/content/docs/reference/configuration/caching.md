@@ -149,7 +149,8 @@ resolved against the registry.
 
 ## Configuration
 
-The `oci.cache.config.ocm.software/v1alpha1` configuration type sets the remote policy and the limits of the caches.
+The `oci.cache.config.ocm.software/v1alpha1` configuration type turns the caches on or off and sets their remote
+policy and limits.
 
 ```yaml
 type: generic.config.ocm.software/v1
@@ -165,6 +166,7 @@ All fields are optional. An omitted field keeps its default.
 
 | Field          | Type                                               | Default                                          | Description                                                                                                                                 |
 |----------------|----------------------------------------------------|--------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------|
+| `enabled`      | boolean                                            | `true`                                           | `false` turns off the blob cache and every reference cache: every read goes to the registry and no cache directory is created.              |
 | `remotePolicy` | `IfNotPresent` or `Always`                         | `IfNotPresent`                                   | [Remote policy](#remote-policy) of the blob cache and every reference cache.                                                                |
 | `ttl`          | duration string, for example `30s`, `10m`, `1h30m` | `10m`                                            | Time to live of the entries of the blob cache and every reference cache. Must be positive.                                                  |
 | `maxBlobSize`  | integer, bytes                                     | `20971520` (20 MiB)                              | The largest blob the blob cache stores. Larger blobs are fetched as usual but not cached. Must be positive.                                 |

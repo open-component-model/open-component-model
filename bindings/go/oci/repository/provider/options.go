@@ -137,9 +137,13 @@ func WithReferenceCacheOptions(opts *cache.Options) Option {
 
 // applyCacheConfig returns a copy of opts so options shared between providers are not mutated.
 // The reference cache ignores MaxBlobSize, so applying it to its options is harmless.
+// A cfg that disables the caches returns nil, which disables the cache.
 func applyCacheConfig(opts *cache.Options, cfg *ocicachev1alpha1.Config) *cache.Options {
 	if opts == nil || cfg == nil {
 		return opts
+	}
+	if !cfg.IsEnabled() {
+		return nil
 	}
 	applied := *opts
 	if cfg.RemotePolicy != "" {
