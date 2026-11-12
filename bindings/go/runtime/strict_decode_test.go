@@ -69,7 +69,10 @@ func TestDecodeStrict(t *testing.T) {
 				Type: strictDecodeCredentialsType,
 				Data: []byte(`{"type":"StrictDecodeCredentials/v1","username":42}`),
 			},
-			errContains: `cannot unmarshal JSON number into Go string within "/username"`,
+			// encoding/json/v2 deliberately randomizes the modal verb of its
+			// semantic errors once per process ("cannot" / "unable to", see
+			// errorModalVerb in errors.go), so match only the stable part.
+			errContains: `unmarshal JSON number into Go string within "/username"`,
 		},
 	}
 
