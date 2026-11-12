@@ -10,8 +10,8 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2"
-	"oras.land/oras-go/v2/registry/remote"
+	"github.com/oras-project/oras-go/v3"
+	"github.com/oras-project/oras-go/v3/registry/remote"
 )
 
 // pushImage pushes a minimal but valid single-layer image and returns its
@@ -22,8 +22,8 @@ func pushImage(ctx context.Context, client remote.Client, host string, plainHTTP
 	if err != nil {
 		return "", err
 	}
-	repo.PlainHTTP = plainHTTP
-	repo.Client = client
+	repo.Registry.PlainHTTP = plainHTTP
+	repo.Registry.Client = client
 
 	layer, diffID, err := imageLayer(repository)
 	if err != nil {

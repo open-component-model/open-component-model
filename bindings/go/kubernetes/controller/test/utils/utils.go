@@ -18,8 +18,8 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2"
-	ocistore "oras.land/oras-go/v2/content/oci"
+	"github.com/oras-project/oras-go/v3"
+	ocistore "github.com/oras-project/oras-go/v3/content/oci"
 	"sigs.k8s.io/yaml"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"

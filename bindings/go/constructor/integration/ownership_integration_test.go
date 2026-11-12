@@ -12,9 +12,9 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/content"
+	orasregistry "github.com/oras-project/oras-go/v3/registry"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2/content"
-	orasregistry "oras.land/oras-go/v2/registry"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
