@@ -25,16 +25,6 @@ var (
 	imageRegistry string
 	// timeout for waiting for kuberentes resources
 	timeout string
-	// crossplaneTimeout is a longer wait budget for the Crossplane XR path.
-	// Crossplane v2 beta realtime compositions open a per-XR watch circuit
-	// breaker under the churn of our composed FluxCD/ArgoCD resources; while it
-	// is open the XR only reconciles at the core --poll-interval, so the
-	// multi-hop status propagation these compositions rely on (OCM Resource
-	// status -> XR status -> Flux source spec) is legitimately slower than the
-	// other flows. It gets its own budget instead of the shared RESOURCE_TIMEOUT
-	// so a loaded CI runner does not trip the shorter cutoff. Overridable via
-	// CROSSPLANE_RESOURCE_TIMEOUT.
-	crossplaneTimeout string
 	// controllerPodName is required to access the logs after the e2e tests
 	controllerPodName string
 	// examplesDir defaults to the repository-tracked examples directory,
@@ -81,11 +71,6 @@ var _ = BeforeSuite(func(ctx SpecContext) {
 	timeout = os.Getenv("RESOURCE_TIMEOUT")
 	if timeout == "" {
 		timeout = "10m"
-	}
-
-	crossplaneTimeout = os.Getenv("CROSSPLANE_RESOURCE_TIMEOUT")
-	if crossplaneTimeout == "" {
-		crossplaneTimeout = "5m"
 	}
 
 	imageRegistry = os.Getenv("IMAGE_REGISTRY")
