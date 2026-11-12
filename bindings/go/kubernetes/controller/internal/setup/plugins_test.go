@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
+	ocicache "ocm.software/open-component-model/bindings/go/oci/cache"
 	ocicachev1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/cache/v1alpha1"
 	ocidescriptor "ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
 )
@@ -45,6 +46,17 @@ func pushDescriptor(t *testing.T, repo memoryRepository, size int) ociImageSpecV
 	return desc
 }
 
+func fetchAll(t *testing.T, bc *ocicache.BlobCache, repo memoryRepository, descs ...ociImageSpecV1.Descriptor) {
+	t.Helper()
+	for _, desc := range descs {
+		rc, err := bc.Fetch(t.Context(), repo, desc)
+		require.NoError(t, err)
+		_, err = io.ReadAll(rc)
+		require.NoError(t, err)
+		require.NoError(t, rc.Close())
+	}
+}
+
 func TestNewBlobCache(t *testing.T) {
 	t.Run("maxBlobSize caps the blobs the cache stores", func(t *testing.T) {
 		r := require.New(t)
@@ -64,6 +76,31 @@ func TestNewBlobCache(t *testing.T) {
 		}
 		r.True(bc.Has(small.Digest))
 		r.False(bc.Has(large.Digest), "a blob above maxBlobSize must not be cached")
+	})
+
+	t.Run("maxTotalSize evicts the least recently used blob", func(t *testing.T) {
+		r := require.New(t)
+		repo := memoryRepository{memory.New()}
+		first, second := pushDescriptor(t, repo, 16), pushDescriptor(t, repo, 17)
+
+		bc, err := setup.NewBlobCache(t.TempDir(), &ocicachev1alpha1.Config{MaxTotalSize: new(int64(17))})
+		r.NoError(err)
+
+		fetchAll(t, bc, repo, first, second)
+		r.False(bc.Has(first.Digest), "the older blob must be evicted to fit maxTotalSize")
+		r.True(bc.Has(second.Digest))
+	})
+
+	t.Run("maxTotalSize 0 lifts the default limit", func(t *testing.T) {
+		r := require.New(t)
+		repo := memoryRepository{memory.New()}
+		desc := pushDescriptor(t, repo, 16)
+
+		bc, err := setup.NewBlobCache(t.TempDir(), &ocicachev1alpha1.Config{MaxTotalSize: new(int64(0))})
+		r.NoError(err)
+
+		fetchAll(t, bc, repo, desc)
+		r.True(bc.Has(desc.Digest))
 	})
 
 	t.Run("ttl expires cached blobs", func(t *testing.T) {

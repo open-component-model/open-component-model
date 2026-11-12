@@ -23,6 +23,11 @@ func (in *Config) DeepCopyInto(out *Config) {
 		*out = new(int64)
 		**out = **in
 	}
+	if in.MaxTotalSize != nil {
+		in, out := &in.MaxTotalSize, &out.MaxTotalSize
+		*out = new(int64)
+		**out = **in
+	}
 	return
 }
 

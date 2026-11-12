@@ -91,10 +91,17 @@ type Config struct {
 	// The reference cache ignores it.
 	// +ocm:jsonschema-gen:minimum=1
 	MaxBlobSize *int64 `json:"maxBlobSize,omitempty"`
+
+	// MaxTotalSize bounds the bytes the blob cache keeps on disk. When it is exceeded, the
+	// least recently used blobs are removed. 0 means no limit. Must not be negative.
+	// Defaults to no limit in the CLI and to 1073741824 (1 GiB) in the controller.
+	// The reference cache ignores it.
+	// +ocm:jsonschema-gen:minimum=0
+	MaxTotalSize *int64 `json:"maxTotalSize,omitempty"`
 }
 
 // Validate rejects a RemotePolicy that is neither empty nor a known policy,
-// and a TTL or MaxBlobSize that is set but not positive.
+// a TTL or MaxBlobSize that is set but not positive, and a negative MaxTotalSize.
 func (c *Config) Validate() error {
 	var errs []error
 	switch c.RemotePolicy {
@@ -108,6 +115,9 @@ func (c *Config) Validate() error {
 	}
 	if c.MaxBlobSize != nil && *c.MaxBlobSize <= 0 {
 		errs = append(errs, fmt.Errorf("invalid maxBlobSize %d, must be positive", *c.MaxBlobSize))
+	}
+	if c.MaxTotalSize != nil && *c.MaxTotalSize < 0 {
+		errs = append(errs, fmt.Errorf("invalid maxTotalSize %d, must not be negative", *c.MaxTotalSize))
 	}
 	return errors.Join(errs...)
 }
@@ -161,6 +171,9 @@ func Merge(configs ...*Config) *Config {
 		}
 		if c.MaxBlobSize != nil {
 			merged.MaxBlobSize = c.MaxBlobSize
+		}
+		if c.MaxTotalSize != nil {
+			merged.MaxTotalSize = c.MaxTotalSize
 		}
 	}
 

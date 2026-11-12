@@ -204,6 +204,42 @@ func TestLookupConfig_TTLAndMaxBlobSize(t *testing.T) {
 	}
 }
 
+func TestLookupConfig_MaxTotalSize(t *testing.T) {
+	tests := []struct {
+		name    string
+		entries []string
+		want    *int64
+		wantErr string
+	}{
+		{name: "leaves it unset when omitted", entries: []string{"remotePolicy: Always"}},
+		{name: "parses it", entries: []string{"maxTotalSize: 1073741824"}, want: new(int64(1 << 30))},
+		{name: "accepts zero as no limit", entries: []string{"maxTotalSize: 0"}, want: new(int64(0))},
+		{name: "last set value wins", entries: []string{"maxTotalSize: 100", "maxTotalSize: 0", "ttl: 1m"}, want: new(int64(0))},
+		{name: "rejects a negative value", entries: []string{"maxTotalSize: -1"}, wantErr: "invalid maxTotalSize -1, must not be negative"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+
+			yaml := "type: generic.config.ocm.software/v1\nconfigurations:\n"
+			for _, entry := range tt.entries {
+				yaml += "  - type: oci.cache.config.ocm.software/v1alpha1\n    " + entry + "\n"
+			}
+			var generic genericv1.Config
+			r.NoError(genericv1.Scheme.Decode(strings.NewReader(yaml), &generic))
+
+			cfg, err := cachespec.LookupConfig(&generic)
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.Equal(tt.want, cfg.MaxTotalSize)
+		})
+	}
+}
+
 func TestDuration_JSON(t *testing.T) {
 	r := require.New(t)
 

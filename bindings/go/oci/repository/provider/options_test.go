@@ -16,6 +16,7 @@ func TestWithOCICacheConfig(t *testing.T) {
 		RemotePolicy: ocicachev1alpha1.RemotePolicyAlways,
 		TTL:          ocicachev1alpha1.NewDuration(time.Hour),
 		MaxBlobSize:  new(int64(1024)),
+		MaxTotalSize: new(int64(4096)),
 	}
 
 	tests := []struct {
@@ -33,8 +34,8 @@ func TestWithOCICacheConfig(t *testing.T) {
 		{
 			name:     "all fields applied to both caches",
 			opts:     []Option{WithBlobCacheOptions(&cache.Options{}), WithReferenceCacheOptions(&cache.Options{}), WithOCICacheConfig(all)},
-			wantBlob: &cache.Options{RemotePolicy: cache.RemotePolicyAlways, TTL: time.Hour, MaxBlobSize: 1024},
-			wantRef:  &cache.Options{RemotePolicy: cache.RemotePolicyAlways, TTL: time.Hour, MaxBlobSize: 1024},
+			wantBlob: &cache.Options{RemotePolicy: cache.RemotePolicyAlways, TTL: time.Hour, MaxBlobSize: 1024, MaxTotalSize: 4096},
+			wantRef:  &cache.Options{RemotePolicy: cache.RemotePolicyAlways, TTL: time.Hour, MaxBlobSize: 1024, MaxTotalSize: 4096},
 		},
 		{
 			name: "unset fields keep the options",
