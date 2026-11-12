@@ -90,6 +90,34 @@ func TestTracker_NonTerminal_NoSlogRedirect(t *testing.T) {
 	assert.Equal(t, originalLogger, slog.Default())
 }
 
+func TestForceNonInteractive_Helper(t *testing.T) {
+	var nilCtx context.Context
+	assert.False(t, forceNonInteractive(context.Background()))
+	assert.False(t, forceNonInteractive(nilCtx))
+	assert.True(t, forceNonInteractive(WithForceNonInteractive(context.Background())))
+}
+
+func TestUseTerminalVisualizer(t *testing.T) {
+	forced := WithForceNonInteractive(context.Background())
+	tests := []struct {
+		name       string
+		ctx        context.Context
+		hasFactory bool
+		isTTY      bool
+		want       bool
+	}{
+		{"tty with factory", context.Background(), true, true, true},
+		{"no factory", context.Background(), false, true, false},
+		{"not a tty", context.Background(), true, false, false},
+		{"forced non-interactive overrides tty", forced, true, true, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, useTerminalVisualizer(tt.ctx, tt.hasFactory, tt.isTTY))
+		})
+	}
+}
+
 func TestTracker_StopIsIdempotent(t *testing.T) {
 	originalLogger := slog.Default()
 	defer slog.SetDefault(originalLogger)
