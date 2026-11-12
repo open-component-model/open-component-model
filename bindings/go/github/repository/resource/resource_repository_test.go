@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	blobpkg "ocm.software/open-component-model/bindings/go/blob"
+	typesv1 "ocm.software/open-component-model/bindings/go/configuration/types/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -254,8 +255,8 @@ func TestResourceRepository_WithHTTPConfig_IsAppliedToRequests(t *testing.T) {
 		return &httpv1alpha1.Config{
 			Retry: &httpv1alpha1.RetryConfig{
 				MaxRetries: &n,
-				MinWait:    httpv1alpha1.NewTimeout(time.Millisecond),
-				MaxWait:    httpv1alpha1.NewTimeout(2 * time.Millisecond),
+				MinWait:    typesv1.NewDuration(time.Millisecond),
+				MaxWait:    typesv1.NewDuration(2 * time.Millisecond),
 			},
 		}
 	}

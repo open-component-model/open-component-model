@@ -6,6 +6,7 @@
 package v1alpha1
 
 import (
+	v1 "ocm.software/open-component-model/bindings/go/configuration/types/v1"
 	runtime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -117,12 +118,12 @@ func (in *RetryConfig) DeepCopyInto(out *RetryConfig) {
 	}
 	if in.MinWait != nil {
 		in, out := &in.MinWait, &out.MinWait
-		*out = new(Timeout)
+		*out = new(v1.Duration)
 		**out = **in
 	}
 	if in.MaxWait != nil {
 		in, out := &in.MaxWait, &out.MaxWait
-		*out = new(Timeout)
+		*out = new(v1.Duration)
 		**out = **in
 	}
 	return
@@ -164,32 +165,32 @@ func (in *TimeoutConfig) DeepCopyInto(out *TimeoutConfig) {
 	*out = *in
 	if in.Timeout != nil {
 		in, out := &in.Timeout, &out.Timeout
-		*out = new(Timeout)
+		*out = new(v1.Duration)
 		**out = **in
 	}
 	if in.TCPDialTimeout != nil {
 		in, out := &in.TCPDialTimeout, &out.TCPDialTimeout
-		*out = new(Timeout)
+		*out = new(v1.Duration)
 		**out = **in
 	}
 	if in.TCPKeepAlive != nil {
 		in, out := &in.TCPKeepAlive, &out.TCPKeepAlive
-		*out = new(Timeout)
+		*out = new(v1.Duration)
 		**out = **in
 	}
 	if in.TLSHandshakeTimeout != nil {
 		in, out := &in.TLSHandshakeTimeout, &out.TLSHandshakeTimeout
-		*out = new(Timeout)
+		*out = new(v1.Duration)
 		**out = **in
 	}
 	if in.ResponseHeaderTimeout != nil {
 		in, out := &in.ResponseHeaderTimeout, &out.ResponseHeaderTimeout
-		*out = new(Timeout)
+		*out = new(v1.Duration)
 		**out = **in
 	}
 	if in.IdleConnTimeout != nil {
 		in, out := &in.IdleConnTimeout, &out.IdleConnTimeout
-		*out = new(Timeout)
+		*out = new(v1.Duration)
 		**out = **in
 	}
 	return
