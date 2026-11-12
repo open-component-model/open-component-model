@@ -62,7 +62,7 @@ func (t *OCIImageLayer) Validate() error {
 	if ref.Tag != "" {
 		return fmt.Errorf("reference %q must not contain a tag: a layer is addressed by its digest", t.Reference)
 	}
-	if dig, err := ref.Digest(); err == nil && dig != t.Digest {
+	if dig, err := ref.GetDigest(); err == nil && dig != t.Digest {
 		return fmt.Errorf("digest field value %q does not match digest contained in reference %q", t.Digest, t.Reference)
 	}
 
