@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
@@ -76,6 +77,12 @@ func NewBlobCache(tempDir string, cfg *ocicachev1alpha1.Config) (*ocicache.BlobC
 	opts := ocicache.Options{Dir: filepath.Join(tempDir, "ocm-oci-cas")}
 	if cfg != nil {
 		opts.RemotePolicy = ocicache.RemotePolicy(cfg.RemotePolicy)
+		if cfg.TTL != nil {
+			opts.TTL = time.Duration(*cfg.TTL)
+		}
+		if cfg.MaxBlobSize != nil {
+			opts.MaxBlobSize = *cfg.MaxBlobSize
+		}
 	}
 	return ocicache.NewBlobCache(opts)
 }
