@@ -10,6 +10,7 @@ import (
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/golang-lru/v2/expirable"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -83,7 +84,12 @@ func (r *Resolver) GetComponentVersion(ctx context.Context, opts *Options, verif
 		return nil, err
 	}
 
-	repo, err := resolved.resolver.GetComponentVersionRepositoryForComponent(ctx, component, version)
+	// Resolving the spec first gives the metric the repository that is actually used, at no extra cost for path matchers.
+	spec, err := resolved.resolver.GetRepositorySpecificationForComponent(ctx, component, version)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get repository specification for component %s:%s: %w", component, version, err)
+	}
+	repo, err := resolved.resolver.GetComponentVersionRepositoryForSpecification(ctx, spec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get repository for component %s:%s: %w", component, version, err)
 	}
@@ -98,9 +104,14 @@ func (r *Resolver) GetComponentVersion(ctx context.Context, opts *Options, verif
 		digest:          verify.Digest,
 		signingRegistry: opts.PluginManager.SigningRegistry,
 	})
+	duration := time.Since(start)
+	state := verificationState(verify.Verifications, verify.Digest)
 	ResolutionDurationHistogram.
-		WithLabelValues(component, version, verificationState(verify.Verifications, verify.Digest)).
-		Observe(time.Since(start).Seconds())
+		WithLabelValues(state, repositoryLabel(spec), resultLabel(err)).
+		Observe(duration.Seconds())
+	// Per-version timing lives here because component and version are unbounded as metric labels.
+	log.FromContext(ctx).V(1).Info("resolved component version", "component", component, "version", version,
+		"verificationState", state, "duration", duration, "error", err)
 
 	return desc, err
 }

@@ -11,10 +11,10 @@ import (
 	. "ocm.software/open-component-model/bindings/go/oci/internal/lister"
 
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/content"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	slogcontext "github.com/veqryn/slog-context"
-	"oras.land/oras-go/v2/content"
 )
 
 // mockReferrerStore implements content.ReadOnlyStorage and registry.ReferrerLister

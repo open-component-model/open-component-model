@@ -16,15 +16,15 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/registry/remote/properties"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2/registry"
 )
 
 // fakeReadOnly is a minimal in-memory [ReadOnlyRepository] used to
 // drive Fetch tests without pulling in a full registry.
 type fakeReadOnly struct {
-	ref     registry.Reference
+	ref     properties.Reference
 	mu      sync.Mutex
 	blobs   map[digest.Digest][]byte
 	media   map[digest.Digest]string
@@ -38,15 +38,19 @@ func newFakeReadOnly() *fakeReadOnly {
 
 func newFakeRepository(host, repository string) *fakeReadOnly {
 	return &fakeReadOnly{
-		ref:   registry.Reference{Registry: host, Repository: repository},
+		ref:   properties.Reference{Registry: host, Repository: repository},
 		blobs: map[digest.Digest][]byte{},
 		media: map[digest.Digest]string{},
 	}
 }
 
-func (s *fakeReadOnly) ParseReference(reference string) (registry.Reference, error) {
+func (s *fakeReadOnly) ParseReference(reference string) (properties.Reference, error) {
 	ref := s.ref
-	ref.Reference = reference
+	if _, err := digest.Parse(reference); err == nil {
+		ref.Digest = reference
+	} else {
+		ref.Tag = reference
+	}
 	return ref, nil
 }
 
