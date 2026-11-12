@@ -25,6 +25,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/handler"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
 	oidcv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/oidcidentitytoken/v1alpha1"
+	trustedrootv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot/v1alpha1"
 )
 
 // sigstoreEnv holds the environment configuration for the sigstore integration
@@ -210,4 +211,28 @@ func Test_Integration_AmbientSIGSTORE_ID_TOKEN(t *testing.T) {
 
 	r := require.New(t)
 	r.NoError(h.Verify(t.Context(), signed, verifyConfig(), nil))
+}
+
+// Test_Integration_PrivateInfrastructure stays on the live lane: PrivateInfrastructure
+// adds --insecure-ignore-tlog, which makes cosign verify the short-lived leaf certificate
+// against the current time rather than the bundle's signed timestamp, so it only passes
+// against a freshly signed bundle (a recorded one expires minutes later).
+func Test_Integration_PrivateInfrastructure(t *testing.T) {
+	h := newHandler(t)
+	digest := uniqueDigest(t, "private-infrastructure")
+	sigInfo := signDigest(t, h, digest)
+	signed := descruntime.Signature{
+		Name:      "private-infrastructure-test",
+		Digest:    digest,
+		Signature: sigInfo,
+	}
+
+	cfg := verifyConfig(func(c *v1alpha1.VerifyConfig) {
+		c.PrivateInfrastructure = true
+	})
+
+	r := require.New(t)
+	r.NoError(h.Verify(t.Context(), signed, cfg, &trustedrootv1.TrustedRoot{
+		TrustedRootJSONFile: stack.TrustedRootPath,
+	}))
 }

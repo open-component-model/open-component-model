@@ -184,6 +184,17 @@ func Test_Replay_TamperedBundle(t *testing.T) {
 		garbage := base64.StdEncoding.EncodeToString([]byte(`{"not":"a valid bundle"}`))
 		r.Error(h.Verify(t.Context(), tamperedSignature("tamper-corrupt-bundle", garbage), verifyCfg, tr))
 	})
+
+	t.Run("stripped timestamp verification data rejected", func(t *testing.T) {
+		r := require.New(t)
+		// The recorded bundle is a Rekor v2 entry, so verification relies on the signed
+		// (RFC3161) timestamp for its clock; removing it must fail.
+		tampered := mutateBundle(t, func(mm map[string]any) {
+			vm := mm["verificationMaterial"].(map[string]any)
+			delete(vm, "timestampVerificationData")
+		})
+		r.Error(h.Verify(t.Context(), tamperedSignature("tamper-strip-tsa", tampered), verifyCfg, tr))
+	})
 }
 
 func Test_Replay_VerifyWithExplicitTrustedRoot(t *testing.T) {
@@ -213,13 +224,4 @@ func Test_Replay_VerifyWithExplicitTrustedRoot(t *testing.T) {
 		r.Error(err)
 		r.ErrorContains(err, "issuer")
 	})
-}
-
-func Test_Replay_PrivateInfrastructure(t *testing.T) {
-	h := newHandler(t)
-	signed := recordedSignature(t, "private-infrastructure-test")
-	cfg := verifyConfig(t, func(c *v1alpha1.VerifyConfig) {
-		c.PrivateInfrastructure = true
-	})
-	require.New(t).NoError(h.Verify(t.Context(), signed, cfg, trustedRoot(t)))
 }
