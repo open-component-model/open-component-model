@@ -154,7 +154,11 @@ func (m Metadata) PruneScope() *PruneScope {
 
 // Config for creating an ApplySet.
 type Config struct {
-	Client          client.Client
+	Client client.Client
+	// Reader lists the ApplySet members for conflict detection. It must read live, not through a cache: the lists
+	// cover whichever kinds are applied, and a cache would need an informer per kind, which requires the watch
+	// permission and keeps every object of that kind in memory. Defaults to Client.
+	Reader          client.Reader
 	RESTMapper      meta.RESTMapper
 	Log             logr.Logger
 	ParentNamespace string // fallback namespace for namespaced resources without namespace set
@@ -175,8 +179,14 @@ func New(cfg Config, parent interface {
 },
 ) *ApplySet {
 	applySetID := ID(parent)
+	reader := cfg.Reader
+	if reader == nil {
+		reader = cfg.Client
+	}
+
 	return &ApplySet{
 		client:            cfg.Client,
+		reader:            reader,
 		restMapper:        cfg.RESTMapper,
 		log:               cfg.Log,
 		applySetID:        applySetID,
@@ -189,6 +199,7 @@ func New(cfg Config, parent interface {
 // ApplySet implements Interface for server-side apply with membership tracking.
 type ApplySet struct {
 	client            client.Client
+	reader            client.Reader
 	restMapper        meta.RESTMapper
 	log               logr.Logger
 	applySetID        string
@@ -465,7 +476,9 @@ func (a *ApplySet) detectConflicts(ctx context.Context, entries []applyEntry) (m
 	eg, egCtx := errgroup.WithContext(ctx)
 	for task := range tasks {
 		eg.Go(func() error {
-			list := &unstructured.UnstructuredList{}
+			// The list covers every ApplySet member of the kind, which is far more objects than this ApplySet applies
+			// when many parents share a namespace, and the check below reads nothing but their metadata.
+			list := &metav1.PartialObjectMetadataList{}
 			list.SetGroupVersionKind(task.gvk.GroupVersion().WithKind(task.gvk.Kind + "List"))
 
 			listOpts := []client.ListOption{
@@ -475,7 +488,7 @@ func (a *ApplySet) detectConflicts(ctx context.Context, entries []applyEntry) (m
 				listOpts = append(listOpts, client.InNamespace(task.namespace))
 			}
 
-			if err := a.client.List(egCtx, list, listOpts...); err != nil {
+			if err := a.reader.List(egCtx, list, listOpts...); err != nil {
 				if task.namespace != "" {
 					return fmt.Errorf("conflict detection list %v in %s: %w", task.gvk, task.namespace, err)
 				}
