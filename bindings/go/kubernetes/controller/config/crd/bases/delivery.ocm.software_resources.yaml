@@ -15,15 +15,30 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - description: Referenced Component
+      jsonPath: .spec.componentRef.name
+      name: Component Ref
+      type: string
+    - description: Name of the OCM resource
+      jsonPath: .status.resource.name
+      name: Resource
+      type: string
+    - description: Version of the OCM resource
+      jsonPath: .status.resource.version
+      name: Version
+      type: string
     - description: Indicates if the Resource is Ready
-      jsonPath: .status.conditions[?(@.type=="Ready")].message
+      jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: Ready
-      priority: 1
       type: string
     - description: Displays the Age of the Resource
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
+    - description: Ready condition message
+      jsonPath: .status.conditions[?(@.type=="Ready")].message
+      name: Status
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:

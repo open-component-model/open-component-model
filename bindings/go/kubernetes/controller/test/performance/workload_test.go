@@ -1,85 +1,161 @@
 package main
 
 import (
+	"fmt"
+	"strings"
 	"testing"
-	"time"
 
+	"github.com/Masterminds/semver/v3"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 )
 
-func TestWorkloadComponentVersions(t *testing.T) {
+func TestWorkloadReleases(t *testing.T) {
 	tests := []struct {
-		scenario      scenario
-		wantVersions  int
-		wantUniqueCVs int
+		rel          release
+		version      string
+		rootVersions []string
+		constraint   string
 	}{
-		{scenario: scenarioCold, wantVersions: 5, wantUniqueCVs: 5},
-		{scenario: scenarioShared, wantVersions: 1, wantUniqueCVs: 1},
-		{scenario: scenarioUpdate, wantVersions: 10, wantUniqueCVs: 5},
-		{scenario: scenarioComplex, wantVersions: 5 * (defaultVersions + defaultDepth), wantUniqueCVs: 5 * (defaultDepth + 1)},
-		{scenario: scenarioFanout, wantVersions: 5, wantUniqueCVs: 5},
+		{rel: rolloutRelease, version: "1.0.0", rootVersions: []string{"1.0.0", "1.0.1", "1.0.2"}, constraint: ">=1.0.0 <1.1.0"},
+		{rel: updateRelease, version: "1.1.0", rootVersions: []string{"1.1.0", "1.1.1", "1.1.2"}, constraint: ">=1.1.0 <1.2.0"},
 	}
-	for _, tt := range tests {
-		t.Run(string(tt.scenario), func(t *testing.T) {
-			r := require.New(t)
-			w := newWorkload(tt.scenario, 5, "run", "http://registry:5000")
+	for _, depth := range []int{0, defaultDepth} {
+		for _, tt := range tests {
+			t.Run(fmt.Sprintf("%s depth %d", tt.version, depth), func(t *testing.T) {
+				r := require.New(t)
+				w := newWorkload(4, "run", "http://registry:5000")
+				w.depth, w.versions, w.resources = depth, 3, 7
+				r.Equal(tt.constraint, tt.rel.constraint())
 
-			cvs, err := w.componentVersions()
+				cvs, err := w.componentVersions(tt.rel)
+				r.NoError(err)
+				r.Len(cvs, 4*(3+depth))
+
+				byKey := map[string]componentVersion{}
+				for _, cv := range cvs {
+					byKey[cv.Name+":"+cv.Version] = cv
+				}
+				for i := range 4 {
+					var roots []string
+					for _, cv := range cvs {
+						if cv.Name == w.componentName(i) {
+							roots = append(roots, cv.Version)
+							r.Len(imageResources(cv), 7)
+						} else if strings.HasPrefix(cv.Name, w.componentName(i)+"/") {
+							r.Equal(tt.version, cv.Version, "the chain and the leaf are at the release version")
+						}
+					}
+					r.Equal(tt.rootVersions, roots)
+
+					// Follow the chain from the newest root to the manifest; every reference resolves inside the set.
+					cv := byKey[w.componentName(i)+":"+tt.rootVersions[2]]
+					for range depth {
+						r.Len(cv.References, 1)
+						next, ok := byKey[cv.References[0].Component+":"+cv.References[0].Version]
+						r.True(ok, "%s references %s:%s outside the release", cv.Name, cv.References[0].Component, cv.References[0].Version)
+						cv = next
+					}
+					var cm corev1.ConfigMap
+					r.NoError(yaml.Unmarshal(manifestOf(cv), &cm))
+					r.Equal(configMapName(i), cm.Name)
+					r.Equal(w.namespace, cm.Namespace)
+					r.Equal(tt.version, cm.Data["version"])
+				}
+			})
+		}
+	}
+}
+
+func TestWorkloadReleasesAreDisjoint(t *testing.T) {
+	r := require.New(t)
+	w := newWorkload(2, "run", "http://registry:5000")
+	rollout, err := w.componentVersions(rolloutRelease)
+	r.NoError(err)
+	update, err := w.componentVersions(updateRelease)
+	r.NoError(err)
+
+	published := map[string]bool{}
+	for _, cv := range rollout {
+		published[cv.Name+":"+cv.Version] = true
+	}
+	for _, cv := range update {
+		r.False(published[cv.Name+":"+cv.Version], "%s:%s is in both releases", cv.Name, cv.Version)
+	}
+}
+
+// A Component that polls while the update is prepared must not move to the update release before the update changes it.
+func TestWorkloadConstraintsStayInTheirRelease(t *testing.T) {
+	r := require.New(t)
+	w := newWorkload(1, "run", "http://registry:5000")
+	for _, rel := range []release{rolloutRelease, updateRelease} {
+		c, err := semver.NewConstraint(rel.constraint())
+		r.NoError(err)
+		for _, other := range []release{rolloutRelease, updateRelease} {
+			cvs, err := w.componentVersions(other)
 			r.NoError(err)
-			r.Len(cvs, tt.wantVersions)
-
-			names := map[string]bool{}
 			for _, cv := range cvs {
-				names[cv.Name] = true
+				if cv.Name != w.componentName(0) {
+					continue
+				}
+				r.Equal(rel == other, c.Check(semver.MustParse(cv.Version)), "%s selects %s", rel.constraint(), cv.Version)
 			}
-			r.Len(names, tt.wantUniqueCVs)
-		})
+		}
 	}
+}
+
+func imageResources(cv componentVersion) []resource {
+	var out []resource
+	for _, res := range cv.Resources {
+		if res.ImageReference != "" {
+			out = append(out, res)
+		}
+	}
+	return out
+}
+
+func manifestOf(cv componentVersion) []byte {
+	for _, res := range cv.Resources {
+		if res.Name == resourceName {
+			return res.Blob
+		}
+	}
+	return nil
 }
 
 func TestWorkloadObjectsToCreate(t *testing.T) {
-	tests := []struct {
-		scenario scenario
-		want     int
-	}{
-		{scenario: scenarioCold, want: 1 + 1 + 3},
-		{scenario: scenarioShared, want: 1 + 1 + 3},
-		{scenario: scenarioUpdate, want: 1 + 3 + 1 + 3*3},
-		{scenario: scenarioComplex, want: 1 + 1 + 3 + 3 + 3*3},
-		{scenario: scenarioFanout, want: 1 + 1 + 3*(1+defaultFanout)},
-	}
-	for _, tt := range tests {
-		t.Run(string(tt.scenario), func(t *testing.T) {
-			r := require.New(t)
-			w := newWorkload(tt.scenario, 3, "run", "http://registry:5000")
+	r := require.New(t)
+	w := newWorkload(3, "run", "http://registry:5000")
 
-			objs, err := w.objectsToCreate()
-			r.NoError(err)
-			r.Len(objs, tt.want)
-			for _, o := range objs {
-				if o.GetName() != plainHTTPConfigName {
-					r.Equal("run", o.GetLabels()[runLabel])
-				}
-				r.Equal(w.namespace, o.GetNamespace(), "namespace deletion must clean up every object")
-				if d, ok := o.(*v1alpha1.NamespacedDeployer); ok {
-					r.Equal(deployerAccount, d.Spec.ServiceAccountName)
-				}
-			}
-		})
+	objs, err := w.objectsToCreate()
+	r.NoError(err)
+	// The plain HTTP ConfigMap, the signing Secret, the deployer RBAC, one Repository per object (fewer than the cap),
+	// and a pipeline each.
+	r.Len(objs, 1+1+3+3+3*3)
+	for _, o := range objs {
+		if o.GetName() != plainHTTPConfigName {
+			r.Equal("run", o.GetLabels()[runLabel])
+		}
+		r.Equal(w.namespace, o.GetNamespace(), "namespace deletion must clean up every object")
+		if d, ok := o.(*v1alpha1.NamespacedDeployer); ok {
+			r.Equal(deployerAccount, d.Spec.ServiceAccountName)
+		}
+		if c, ok := o.(*v1alpha1.Component); ok {
+			r.Equal(rolloutRelease.constraint(), c.Spec.Semver, "the update phase changes the release, not the setup")
+		}
 	}
 }
 
-func TestWorkloadComplex(t *testing.T) {
+func TestWorkloadReferenceChain(t *testing.T) {
 	r := require.New(t)
-	w := newWorkload(scenarioComplex, defaultRepositories+2, "run", "http://registry:5000")
+	w := newWorkload(defaultRepositories+2, "run", "http://registry:5000")
 	w.depth, w.resources, w.versions = 2, 7, 3
 
-	cvs, err := w.componentVersions()
+	cvs, err := w.componentVersions(rolloutRelease)
 	r.NoError(err)
 	byName := map[string]componentVersion{}
 	for _, cv := range cvs {
@@ -101,7 +177,7 @@ func TestWorkloadComplex(t *testing.T) {
 	// The last object wraps around onto the second Repository.
 	i := defaultRepositories + 1
 	r.Equal(w.repositoryName(1), w.component(i).Spec.RepositoryRef.Name)
-	r.Equal(versionConstraint, w.component(i).Spec.Semver)
+	r.Equal(">=1.0.0 <1.1.0", w.component(i).Spec.Semver, "the rollout selects its release by constraint")
 	r.Equal(signingSecretName, w.component(i).Spec.OCMConfig[0].Name)
 	r.Equal(v1alpha1.ConfigurationPolicyPropagate, w.component(i).Spec.OCMConfig[0].Policy,
 		"the Resource and Deployer inherit the verification config")
@@ -132,50 +208,12 @@ func TestWorkloadComplex(t *testing.T) {
 	r.Equal(res.Spec.Resource.ByReference.Resource["name"], cv.Resources[0].Name)
 }
 
-func TestWorkloadFanout(t *testing.T) {
+func TestWorkloadWithoutChain(t *testing.T) {
 	r := require.New(t)
-	w := newWorkload(scenarioFanout, 2, "run", "http://registry:5000")
-	w.resources, w.fanout = 3, 5
-
-	cvs, err := w.componentVersions()
-	r.NoError(err)
-	r.Len(cvs, 2)
-	r.Len(cvs[1].Resources, 3)
-	r.Equal(10, w.targets())
-	gvk, _ := w.target()
-	r.Equal(resourceGVK, gvk)
-
-	objs, err := w.objectsToCreate()
-	r.NoError(err)
-	names := map[string]bool{}
-	selected := map[string]int{}
-	for _, o := range objs {
-		res, ok := o.(*v1alpha1.Resource)
-		if !ok {
-			switch o.(type) {
-			case *v1alpha1.Repository, *v1alpha1.Component, *corev1.ConfigMap:
-			default:
-				r.Failf("unexpected object", "the fanout scenario creates no %T", o)
-			}
-			continue
-		}
-		names[res.Name] = true
-		if res.Spec.ComponentRef.Name == w.component(1).Name {
-			r.Empty(res.Spec.Resource.ByReference.ReferencePath)
-			selected[res.Spec.Resource.ByReference.Resource["name"]]++
-		}
-	}
-	r.Len(names, 10, "every Resource needs its own name")
-	// Five Resources over three descriptor entries wrap around onto the first two.
-	r.Equal(map[string]int{cvs[1].Resources[0].Name: 2, cvs[1].Resources[1].Name: 2, cvs[1].Resources[2].Name: 1}, selected)
-}
-
-func TestWorkloadComplexWithoutChain(t *testing.T) {
-	r := require.New(t)
-	w := newWorkload(scenarioComplex, 2, "run", "http://registry:5000")
+	w := newWorkload(2, "run", "http://registry:5000")
 	w.depth, w.resources, w.versions = 0, 3, 4
 
-	cvs, err := w.componentVersions()
+	cvs, err := w.componentVersions(rolloutRelease)
 	r.NoError(err)
 	r.Len(cvs, 2*4, "only the root versions, no chain")
 	versions := map[string]bool{}
@@ -191,7 +229,7 @@ func TestWorkloadComplexWithoutChain(t *testing.T) {
 
 func TestWorkloadUnsigned(t *testing.T) {
 	r := require.New(t)
-	w := newWorkload(scenarioComplex, 2, "run", "http://registry:5000")
+	w := newWorkload(2, "run", "http://registry:5000")
 	w.sign = false
 
 	objs, err := w.objectsToCreate()
@@ -203,124 +241,39 @@ func TestWorkloadUnsigned(t *testing.T) {
 		}
 	}
 
-	// Signing only shapes the complex scenario.
-	r.False(newWorkload(scenarioCold, 2, "run", "").signed())
-
-	single, err := newWorkload(scenarioCold, 2, "run", "http://registry:5000").repository(0)
+	w.repositoryCount = 1
+	single, err := w.repository(0)
 	r.NoError(err)
 	r.NotContains(string(single.Spec.RepositorySpec.Raw), "subPath")
 }
 
-func TestWorkloadSharedComponentName(t *testing.T) {
-	r := require.New(t)
-	w := newWorkload(scenarioShared, 3, "run", "http://registry:5000")
-	r.Equal(w.component(0).Spec.Component, w.component(2).Spec.Component)
-
-	w = newWorkload(scenarioCold, 3, "run", "http://registry:5000")
-	r.NotEqual(w.component(0).Spec.Component, w.component(2).Spec.Component)
-}
-
-func TestWorkloadManifest(t *testing.T) {
-	r := require.New(t)
-	w := newWorkload(scenarioUpdate, 3, "run", "http://registry:5000")
-
-	raw, err := w.manifest(2, updatedVersion)
-	r.NoError(err)
-
-	var u unstructured.Unstructured
-	r.NoError(yaml.Unmarshal(raw, &u.Object))
-	r.Equal("ConfigMap", u.GetKind())
-	r.Equal("cm-0002", u.GetName())
-	r.Equal(w.namespace, u.GetNamespace())
-	r.True(configMapVersionState(updatedVersion)(&u).ready)
-	r.False(configMapVersionState(initialVersion)(&u).ready)
-}
-
-func TestReadyState(t *testing.T) {
-	tests := []struct {
-		name       string
-		generation int64
-		observed   int64
-		conditions []any
-		want       objectState
-	}{
-		{
-			name:       "ready and observed",
-			generation: 2, observed: 2,
-			conditions: []any{map[string]any{"type": "Ready", "status": "True", "reason": "Succeeded"}},
-			want:       objectState{ready: true, reason: "Succeeded"},
-		},
-		{
-			name:       "ready for an older generation",
-			generation: 3, observed: 2,
-			conditions: []any{map[string]any{"type": "Ready", "status": "True", "reason": "Succeeded"}},
-			want:       objectState{reason: "Succeeded"},
-		},
-		{
-			name:       "not ready",
-			generation: 1, observed: 1,
-			conditions: []any{map[string]any{"type": "Ready", "status": "False", "reason": "GetComponentVersionFailed"}},
-			want:       objectState{failed: true, reason: "GetComponentVersionFailed"},
-		},
-		{
-			name:       "no ready condition",
-			generation: 1, observed: 0,
-			conditions: []any{map[string]any{"type": "Other", "status": "True"}},
-			want:       objectState{},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+func TestWorkloadConfigMaps(t *testing.T) {
+	for _, depth := range []int{0, defaultDepth} {
+		t.Run(fmt.Sprintf("depth %d", depth), func(t *testing.T) {
 			r := require.New(t)
-			u := &unstructured.Unstructured{Object: map[string]any{
-				"metadata": map[string]any{"generation": tt.generation},
-				"status":   map[string]any{"observedGeneration": tt.observed, "conditions": tt.conditions},
-			}}
-			r.Equal(tt.want, readyState(u))
+			w := newWorkload(3, "run", "http://registry:5000")
+			w.depth = depth
+
+			cvs, err := w.componentVersions(rolloutRelease)
+			r.NoError(err)
+			deployed := map[client.ObjectKey]bool{}
+			for _, cv := range cvs {
+				for _, res := range cv.Resources {
+					if res.Blob == nil {
+						continue
+					}
+					var cm corev1.ConfigMap
+					r.NoError(yaml.Unmarshal(res.Blob, &cm))
+					deployed[client.ObjectKeyFromObject(&cm)] = true
+				}
+			}
+
+			keys := w.configMaps()
+			r.Len(keys, 3)
+			r.Len(deployed, 3)
+			for _, key := range keys {
+				r.True(deployed[key], "%s is not deployed by any Deployer", key)
+			}
 		})
 	}
-}
-
-func TestTrackerSummary(t *testing.T) {
-	r := require.New(t)
-	tr := &tracker{
-		expected: 4,
-		state:    readyState,
-		readyAt:  map[string]time.Time{},
-		last:     map[string]objectState{},
-		done:     make(chan struct{}),
-	}
-	tr.markStart()
-
-	obj := func(name, status, reason string) *unstructured.Unstructured {
-		return &unstructured.Unstructured{Object: map[string]any{
-			"metadata": map[string]any{"name": name},
-			"status": map[string]any{"conditions": []any{
-				map[string]any{"type": "Ready", "status": status, "reason": reason},
-			}},
-		}}
-	}
-	tr.observe(obj("a", "False", "Progressing"))
-	tr.observe(obj("a", "True", "Succeeded"))
-	tr.observe(obj("b", "True", "Succeeded"))
-	// Once ready, a later failure does not undo the recorded time.
-	tr.observe(obj("b", "False", "Broken"))
-	tr.observe(obj("c", "False", "GetComponentVersionFailed"))
-
-	sum := tr.summary()
-	r.Equal(2, sum.ready)
-	r.Equal(1, sum.failed)
-	r.Equal(1, sum.pending, "d was never observed")
-	r.Equal(map[string]int{"GetComponentVersionFailed": 1}, sum.failureReasons)
-	r.Len(sum.latencies, 2)
-	r.LessOrEqual(sum.latencies[0], sum.latencies[1])
-
-	select {
-	case <-tr.done:
-		r.Fail("tracker must not finish before all objects are ready")
-	default:
-	}
-	tr.observe(obj("c", "True", "Succeeded"))
-	tr.observe(obj("d", "True", "Succeeded"))
-	r.True(tr.wait(t.Context(), time.Second))
 }
