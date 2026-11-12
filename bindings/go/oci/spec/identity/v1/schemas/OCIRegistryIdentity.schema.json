@@ -20,7 +20,7 @@
     },
     "scheme": {
       "type": "string",
-      "description": "Scheme is the URL scheme used to connect to the registry (\"https\" or \"http\").\nWhen set to \"http\", the client connects without TLS (plain HTTP).\nOmit to match both schemes."
+      "description": "Scheme narrows credential matching to requests with this URL scheme (\"https\" or \"http\").\nIt does not choose how the client connects: plainHTTP in the HTTP client\nconfiguration decides that.\nOmit to match both schemes."
     },
     "type": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",

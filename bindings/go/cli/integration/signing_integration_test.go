@@ -67,7 +67,8 @@ configurations:
       properties:
         public_key_pem: %[5]q
         private_key_pem: %[6]q
-`, registry.Host, registry.Port, registry.User, registry.Password, pubPEM, privPEM)
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`, registry.Host, registry.Port, registry.User, registry.Password, pubPEM, privPEM)
 	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
@@ -197,7 +198,8 @@ configurations:
     type: RSASigningConfiguration/v1alpha1
     signatureAlgorithm: RSASSA-PSS
     signatureEncodingPolicy: PEM
-`, registry.Host, registry.Port, registry.User, registry.Password, leafKeyPath, chainPath)
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`, registry.Host, registry.Port, registry.User, registry.Password, leafKeyPath, chainPath)
 	signCfgPath := filepath.Join(dir, "sign.yaml")
 	r.NoError(os.WriteFile(signCfgPath, []byte(signCfg), os.ModePerm))
 
@@ -225,7 +227,8 @@ configurations:
     - type: Credentials/v1
       properties:
         public_key_pem_file: %[5]q
-`, registry.Host, registry.Port, registry.User, registry.Password, rootCAPath)
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`, registry.Host, registry.Port, registry.User, registry.Password, rootCAPath)
 	verifyCfgPath := filepath.Join(dir, "verify.yaml")
 	r.NoError(os.WriteFile(verifyCfgPath, []byte(verifyCfg), os.ModePerm))
 

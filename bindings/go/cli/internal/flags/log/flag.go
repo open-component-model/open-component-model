@@ -65,7 +65,8 @@ func RegisterLoggingFlags(flagset *pflag.FlagSet) {
 		FormatJSON,
 	}, `set the log output format that is used to print individual logs
    json: Output logs in JSON format, suitable for machine processing
-   text: Output logs in human-readable text format, suitable for console output`)
+   text: Output logs in human-readable text format, suitable for console output
+   setting this flag disables the interactive progress display so logs are printed in the chosen format`)
 
 	enum.Var(flagset, LevelFlagName, []string{
 		LevelInfo,

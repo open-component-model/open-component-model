@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -283,5 +284,9 @@ func TestFetch_DownloadErrorDoesNotLeakTheSignedArchiveLink(t *testing.T) {
 	assert.Contains(t, err.Error(), "octocat/Hello-World@"+commit,
 		"the commit coordinates must survive so the failure stays diagnosable")
 	assert.Contains(t, err.Error(), "token="+redactedToken, "the signed link's token must be visibly redacted, not silently dropped")
-	assert.ErrorContains(t, err, "connection refused", "the underlying cause must survive")
+	// The dial error's wording is OS specific ("connection refused" vs. "actively refused it").
+	var dialErr *net.OpError
+	require.ErrorAs(t, err, &dialErr, "the underlying cause must survive")
+	assert.Equal(t, "dial", dialErr.Op)
+	assert.ErrorContains(t, err, dialErr.Err.Error(), "the underlying cause must stay readable")
 }

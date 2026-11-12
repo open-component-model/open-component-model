@@ -33,15 +33,22 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - description: Indicates if the Discovery is Ready
-      jsonPath: .status.conditions[?(@.type=="Ready")].message
-      name: Ready
-      priority: 1
+    - description: Referenced Component
+      jsonPath: .spec.componentRef.name
+      name: Component Ref
       type: string
-    - description: Displays the Age of the Resource
+    - description: Indicates if the Discovery is Ready
+      jsonPath: .status.conditions[?(@.type=="Ready")].status
+      name: Ready
+      type: string
+    - description: Displays the Age of the Discovery
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
+    - description: Ready condition message
+      jsonPath: .status.conditions[?(@.type=="Ready")].message
+      name: Status
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:

@@ -20,7 +20,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
@@ -101,11 +103,14 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 }
 
 // replicationsForIndex returns a mapping function that enqueues every Replication
-// whose given field index matches the changed object's name.
+// in the changed object's namespace whose given field index matches its name.
+// Both references are LocalObjectReferences, so other namespaces cannot match.
 func (r *Reconciler) replicationsForIndex(index string) handler.MapFunc {
 	return func(ctx context.Context, obj client.Object) []reconcile.Request {
 		list := &v1alpha1.ReplicationList{}
-		if err := r.List(ctx, list, client.MatchingFields{index: obj.GetName()}); err != nil {
+		if err := r.List(ctx, list,
+			client.InNamespace(obj.GetNamespace()),
+			client.MatchingFields{index: obj.GetName()}); err != nil {
 			return nil
 		}
 
@@ -358,6 +363,21 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 	return ctrl.Result{}, nil
 }
 
+// transferOptions passes the HTTP configuration of cfg to the transfer. The transfer
+// builds its own OCI clients for artifacts it copies by value; without the configuration
+// they would ignore plainHTTP, timeouts and per-host settings. A nil cfg is valid.
+func transferOptions(cfg *configuration.Configuration) ([]transfer.Option, error) {
+	var generic *genericv1.Config
+	if cfg != nil {
+		generic = cfg.Config
+	}
+	httpCfg, err := httpv1alpha1.LookupConfig(generic)
+	if err != nil {
+		return nil, fmt.Errorf("failed to look up http configuration: %w", err)
+	}
+	return []transfer.Option{transfer.WithHTTPConfig(httpCfg)}, nil
+}
+
 func (r *Reconciler) transfer(ctx context.Context, logger logr.Logger, replication *v1alpha1.Replication, cfg *configuration.Configuration, pm *manager.PluginManager, tgd *transformv1alpha1.TransformationGraphDefinition, component *v1alpha1.Component, sourceDigest string) error {
 	var (
 		credGraph credentials.Resolver
@@ -375,12 +395,20 @@ func (r *Reconciler) transfer(ctx context.Context, logger logr.Logger, replicati
 		}
 	}
 
+	opts, err := transferOptions(cfg)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetConfigurationFailedReason, err.Error())
+
+		return err
+	}
+
 	events := make(chan graphRuntime.ProgressEvent)
 
 	transferGraph, err := transfer.NewDefaultBuilder(
 		pm.ComponentVersionRepositoryRegistry,
 		pm.ResourcePluginRegistry,
 		credGraph,
+		opts...,
 	).WithEvents(events).BuildAndCheck(tgd)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.ReplicationFailedReason, err.Error())

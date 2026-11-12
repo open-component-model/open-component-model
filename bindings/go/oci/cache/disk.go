@@ -85,6 +85,13 @@ func writeAtomic(dir string, dgst digest.Digest, maxSize int64, r io.Reader) (st
 	}
 	if err := os.Rename(tmpName, final); err != nil {
 		_ = os.Remove(tmpName)
+		// The destination is keyed by digest and only ever created by a rename of a
+		// complete temp file, so an existing destination already holds these bytes.
+		// Windows refuses to replace a file that is open or concurrently being
+		// replaced, which a racing populate or reader of the same digest triggers.
+		if fi, statErr := os.Stat(final); statErr == nil && fi.Size() == n {
+			return final, n, nil
+		}
 		return "", 0, fmt.Errorf("rename temp file: %w", err)
 	}
 	return final, n, nil

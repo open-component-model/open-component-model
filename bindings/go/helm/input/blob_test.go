@@ -18,6 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/helm/input"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	v1 "ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 )
@@ -242,6 +243,7 @@ func TestGetV1HelmBlob_OCICredentialsBasicAuthFallback(t *testing.T) {
 	b, chart, err := input.GetV1HelmBlob(t.Context(), spec, t.TempDir(),
 		input.WithCredentials(&helmcredsv1.HelmHTTPCredentials{Username: expectedUser}),
 		input.WithOCICredentials(&ocicredsv1.OCICredentials{AccessToken: accessToken}),
+		input.WithHTTPConfig(&httpv1alpha1.Config{ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: new(true)}}),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, b)

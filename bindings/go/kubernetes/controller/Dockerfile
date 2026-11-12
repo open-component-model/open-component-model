@@ -48,7 +48,7 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
 # bindings/go/sigstore/signing/handler/internal/.env (Renovate group "OCM cosign";
 # pin_sync_test.go there fails if they diverge). The sigstore signing handler in
 # bindings/go/sigstore shells out to this binary.
-FROM ghcr.io/open-component-model/cosign:v3.1.4-ocm.6@sha256:275824e5d82a53f28571406ad2bbe93484fd7f3d78e566eb04aefcc43cb0681c AS cosign
+FROM ghcr.io/open-component-model/cosign:v3.1.4-ocm.7@sha256:ae09d234cdb79246e8df25a2f30866abd67e9c94124fc45fe92140b57e7cb2ad AS cosign
 
 # Garden Linux FIPS image: source of the CA bundle for OCI/registry TLS, which
 # the final image copies by its path so nothing else from this image reaches
@@ -73,5 +73,9 @@ ENV HOME=/tmp
 USER 65532:65532
 WORKDIR /tmp
 WORKDIR /
+
+# scratch has nothing a health check could run; the chart defines Kubernetes
+# liveness and readiness probes, and Kubernetes ignores HEALTHCHECK.
+HEALTHCHECK NONE
 
 ENTRYPOINT ["/manager"]
