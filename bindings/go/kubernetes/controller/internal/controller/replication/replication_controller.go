@@ -103,11 +103,14 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 }
 
 // replicationsForIndex returns a mapping function that enqueues every Replication
-// whose given field index matches the changed object's name.
+// in the changed object's namespace whose given field index matches its name.
+// Both references are LocalObjectReferences, so other namespaces cannot match.
 func (r *Reconciler) replicationsForIndex(index string) handler.MapFunc {
 	return func(ctx context.Context, obj client.Object) []reconcile.Request {
 		list := &v1alpha1.ReplicationList{}
-		if err := r.List(ctx, list, client.MatchingFields{index: obj.GetName()}); err != nil {
+		if err := r.List(ctx, list,
+			client.InNamespace(obj.GetNamespace()),
+			client.MatchingFields{index: obj.GetName()}); err != nil {
 			return nil
 		}
 
