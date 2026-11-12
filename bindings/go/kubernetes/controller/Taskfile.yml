@@ -128,7 +128,7 @@ tasks:
       - 'docker rm -f ocm-perf-registry 2>/dev/null || true'
 
   test/performance:
-    desc: "Run the controller performance benchmark against the 'ocm-perf' cluster. Pass flags via `--`, e.g. `task test/performance -- --scenarios=cold --objects=100 --repeats=1`. Omit to run the full matrix."
+    desc: "Run the controller performance benchmark against the 'ocm-perf' cluster. Pass flags via `--`, e.g. `task test/performance -- --objects=100 --repeats=1`. Omit to run every object count."
     cmds:
       - task: helm/install
         vars:
@@ -137,7 +137,7 @@ tasks:
       - 'go run ./test/performance {{.CLI_ARGS}}'
 
   test/performance/fresh:
-    desc: "Teardown, setup, and run the performance benchmark from scratch. Pass flags via `--`, e.g. `task test/performance/fresh -- --scenarios=cold`."
+    desc: "Teardown, setup, and run the performance benchmark from scratch. Pass flags via `--`, e.g. `task test/performance/fresh -- --objects=100`."
     cmds:
       - task: test/performance/setup/teardown
       - task: test/performance/setup/local
