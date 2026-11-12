@@ -183,9 +183,9 @@ func Test_Integration_TransferOCIImageResource_LocalBlobUploader(t *testing.T) {
 
 	// 5. Build and execute the graph.
 	ctx := t.Context()
-	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-	resourceRepo := ociresource.NewResourceRepository(nil)
-	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig()))
+	resourceRepo := ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig()))
+	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver, transfer.WithHTTPConfig(plainHTTPConfig()))
 	graph, err := b.BuildAndCheck(tgd)
 	r.NoError(err)
 	r.NoError(graph.Process(ctx))
@@ -262,9 +262,9 @@ func Test_Integration_TransferOCIArtifact_OCIToOCI(t *testing.T) {
 		Type:    runtime.Type{Name: ocirepospec.Type, Version: "v1"},
 		BaseUrl: fmt.Sprintf("http://%s", sourceAddr),
 	}
-	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-	resourceRepo := ociresource.NewResourceRepository(nil)
-	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig()))
+	resourceRepo := ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig()))
+	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver, transfer.WithHTTPConfig(plainHTTPConfig()))
 
 	// Seed the source registry via the transfer builder itself.
 	sourceCTFPath := t.TempDir()
@@ -545,9 +545,9 @@ func Test_Integration_TransferDockerManifestLocalBlob_CTFToOCI(t *testing.T) {
 
 	// 5. Execute the transfer.
 	ctx := t.Context()
-	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-	resourceRepo := ociresource.NewResourceRepository(nil)
-	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig()))
+	resourceRepo := ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig()))
+	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver, transfer.WithHTTPConfig(plainHTTPConfig()))
 	graph, err := b.BuildAndCheck(tgd)
 	r.NoError(err)
 	r.NoError(graph.Process(ctx))
@@ -664,8 +664,9 @@ func Test_Integration_Transfer_PreservesNormalizedDigest(t *testing.T) {
 	})
 	r.NoError(err)
 	builder := transfer.NewDefaultBuilder(
-		provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir())),
-		ociresource.NewResourceRepository(nil), newCredResolver(t),
+		provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig())),
+		ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig())), newCredResolver(t),
+		transfer.WithHTTPConfig(plainHTTPConfig()),
 	)
 	graph, err := builder.BuildAndCheck(definition)
 	r.NoError(err)

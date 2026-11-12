@@ -111,7 +111,9 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 
 				// Get list of components that reference the repository
 				list := &v1alpha1.ComponentList{}
-				if err := r.List(ctx, list, client.MatchingFields{fieldName: repository.GetName()}); err != nil {
+				if err := r.List(ctx, list,
+					client.InNamespace(repository.GetNamespace()),
+					client.MatchingFields{fieldName: repository.GetName()}); err != nil {
 					return []reconcile.Request{}
 				}
 

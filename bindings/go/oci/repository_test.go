@@ -3024,7 +3024,7 @@ func TestRepositoryHealthCheck(t *testing.T) {
 
 	t.Run("URL resolver health check with invalid URL fails", func(t *testing.T) {
 		// Create a repository with URL resolver pointing to invalid URL
-		resolver, err := url.New(url.WithBaseURL("http://invalid.nonexistent.domain"))
+		resolver, err := url.New(url.WithBaseURL("http://invalid.nonexistent.domain"), url.WithPlainHTTP(true))
 		require.NoError(t, err)
 
 		repo := Repository(t,

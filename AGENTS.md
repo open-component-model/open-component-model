@@ -60,8 +60,8 @@ Read a package's `doc.go` (if present) and `README.md` before changing it.
 
 ## Testing
 
-- **`bindings/go/`**: testify only (`require`, `mock`), no Ginkgo. Table-driven with `t.Run()`; start each test with `r := require.New(t)`. Test data from `testdata/` via `os.ReadFile`/`os.Open` or `//go:embed`.
-- **`bindings/go/cli/`**: testify/require. Helper `test.OCM()` (`bindings/go/cli/cmd/internal/test/test.go`) runs CLI commands programmatically. Integration tests in `bindings/go/cli/integration/` — same `bindings/go` module (no separate go.mod), testcontainers.
+- **`bindings/go/`**: testify (`require`/`assert`, `mock`), no Ginkgo. Table-driven with `t.Run()`. Use `require` for fail-fast checks and for error assertions in the test goroutine; use `assert` where `FailNow` is unsafe (child goroutines, `Eventually`/`EventuallyWithT` and `CollectT` callbacks, HTTP handlers). `testifylint` (enabled in `golangci.yml`) enforces this split via `require-error` and `go-require`, so follow its findings instead of converting `assert` to `require` wholesale. Test data from `testdata/` via `os.ReadFile`/`os.Open` or `//go:embed`.
+- **`bindings/go/cli/`**: same testify split (`require` fail-fast, `assert` in goroutine/`Eventually` contexts). Helper `test.OCM()` (`bindings/go/cli/cmd/internal/test/test.go`) runs CLI commands programmatically. Integration tests in `bindings/go/cli/integration/` — same `bindings/go` module (no separate go.mod), testcontainers.
 - **Binding integration tests** live in per-area `bindings/go/<area>/integration/` packages (oci, http, wget, github, s3, transfer, constructor, sigstore) with `Test_Integration_*` test funcs. Run one area via `task bindings/go/<area>/integration:test/integration`, all via `task test/integration` (needs Docker / external systems); sigstore additionally spins up its cosign scaffolding.
 - **`bindings/go/kubernetes/controller/`**: Ginkgo v2 + Gomega (only area using Ginkgo). Filter with `-ginkgo.focus`, **not** `-run`. Suites self-provision envtest binaries via `internal/test/envtest.go` — no `KUBEBUILDER_ASSETS` setup.
 - Logging: `log/slog` via `slog-context` in libraries; `logr` via controller-runtime zap in the controller.
@@ -113,7 +113,10 @@ Coupled files — editing one without the other breaks CI or behavior:
 ## Dependencies & CI
 
 - Renovate manages updates. Manual add: `go get <module>@<version> && task tidy`.
-- CI selects work by path filter (`dorny/paths-filter`), not module discovery: unit + integration tests run when `bindings/go`, the shared task plumbing, or `ci.yml` changes; lint runs for the changed module, or all modules when `golangci.yml` / `.env` / `ci.yml` changes. Full suite on `main`. PR title must be a valid Conventional Commit. Multi-arch builds (linux/darwin, amd64/arm64) for CLI and controller.
+- CI selects work by path filter (`dorny/paths-filter`), not module discovery: unit + integration tests run when `bindings/go`, the shared task plumbing, or `ci.yml` changes; lint runs for the changed module, or all modules when `golangci.yml` / `.env` / `ci.yml` changes. Full suite on `main`. PR title must be a valid Conventional Commit. Multi-arch builds: CLI for linux/darwin/windows, controller for linux, each amd64/arm64.
+- Windows legs are gated on one output, `needs.changes.outputs.run_windows` (true on pushes to `main` only, never on PRs — windows runners are billed at a premium): the `run_unit_tests` matrix runs `task bindings/go:test` natively on `windows-latest`, and the `golangci_lint` matrix adds a `GOOS=windows` run so windows-only files behind build tags are type-checked. Both exclude `kubernetes/controller` (Linux-only image, envtest doesn't compile for windows); keep that filter identical in `ci.yml` and `bindings/go/Taskfile.yml`.
+- Write OS-neutral code and tests: `filepath` for OS paths, `path` for tar/fs.FS/embed names, `filesystem.URIFromFilePath`/`FilePathFromURI` for `file://` URIs (and `URLPathFromFilePath`/`FilePathFromURLPath` when you need only the path component, as `git/internal/endpoint` does for go-git's unescaped `file://` URLs), and close every file/blob before its directory is removed (Windows can't delete open files).
+- OS-specific files use the `_windows.go` / `_unix.go` suffixes, with an explicit `//go:build unix` on the unix side — not `_other.go` with `//go:build !windows`.
 
 ## Debugging
 

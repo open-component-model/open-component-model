@@ -8,6 +8,10 @@ spec:
     baseUrl: http://ocm-e2e-image-registry:5000
     type: OCIRegistry
   interval: 10m
+  ocmConfig:
+    # Allows plain HTTP to the registry above (created by test/e2e/hacks/setup.sh).
+    - kind: ConfigMap
+      name: ocm-plain-http
 ---
 # The Component reads its OCM config with the permissions of the default service account.
 apiVersion: rbac.authorization.k8s.io/v1
@@ -43,6 +47,8 @@ spec:
     - apiVersion: v1
       kind: Secret
       name: helm-nested-signed-ocmconfig
+    - kind: ConfigMap
+      name: ocm-plain-http
   repositoryRef:
     name: helm-nested-signed-repository
   semver: 1.0.0
