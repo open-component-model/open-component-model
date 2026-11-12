@@ -415,25 +415,31 @@ type sigstoreBundle struct {
 		Certificate struct {
 			RawBytes string `json:"rawBytes"`
 		} `json:"certificate"`
-		TimestampVerificationData *json.RawMessage `json:"timestampVerificationData,omitempty"`
 	} `json:"verificationMaterial"`
 }
 
-// bundleHasSignedTimestamp reports whether a Sigstore bundle JSON contains a
-// non-empty timestampVerificationData field. The field is written by a
-// Timestamp Authority (TSA) and carries an RFC3161 signed timestamp that can be
-// used instead of wall-clock time to validate the Fulcio leaf certificate.
-// A nil, absent, or "null" field means no signed timestamp is present.
+// bundleHasSignedTimestamp reports whether a Sigstore bundle JSON contains at
+// least one RFC3161 signed timestamp in its timestampVerificationData field.
+// The field is written by a Timestamp Authority (TSA) and carries an RFC3161
+// signed timestamp that can be used instead of wall-clock time to validate
+// the Fulcio leaf certificate.
+//
+// Returns false if the field is absent, null, an empty object, or its
+// rfc3161Timestamps array is empty — conditions under which cosign rejects
+// --use-signed-timestamps.
 func bundleHasSignedTimestamp(bundleJSON []byte) bool {
-	var bundle sigstoreBundle
+	var bundle struct {
+		VerificationMaterial struct {
+			TimestampVerificationData *struct {
+				RFC3161Timestamps []json.RawMessage `json:"rfc3161Timestamps"`
+			} `json:"timestampVerificationData"`
+		} `json:"verificationMaterial"`
+	}
 	if err := json.Unmarshal(bundleJSON, &bundle); err != nil {
 		return false
 	}
-	if bundle.VerificationMaterial.TimestampVerificationData == nil {
-		return false
-	}
-	// json.RawMessage "null" means the field was present but its value is JSON null.
-	return string(*bundle.VerificationMaterial.TimestampVerificationData) != "null"
+	tvd := bundle.VerificationMaterial.TimestampVerificationData
+	return tvd != nil && len(tvd.RFC3161Timestamps) > 0
 }
 
 // extractCertInfoFromBundleJSON extracts the OIDC issuer and signer identity from

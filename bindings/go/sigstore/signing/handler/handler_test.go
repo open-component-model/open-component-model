@@ -1432,3 +1432,58 @@ func TestWithOperationTimeout_DeadlineExceeded(t *testing.T) {
 	)
 	require.ErrorContains(t, err, "timed out")
 }
+
+// --- BundleHasSignedTimestamp Tests ---
+
+func TestBundleHasSignedTimestamp(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{
+			name:  "absent field returns false",
+			input: `{"verificationMaterial":{}}`,
+			want:  false,
+		},
+		{
+			name:  "null field returns false",
+			input: `{"verificationMaterial":{"timestampVerificationData":null}}`,
+			want:  false,
+		},
+		{
+			name:  "empty object returns false",
+			input: `{"verificationMaterial":{"timestampVerificationData":{}}}`,
+			want:  false,
+		},
+		{
+			name:  "empty rfc3161Timestamps array returns false",
+			input: `{"verificationMaterial":{"timestampVerificationData":{"rfc3161Timestamps":[]}}}`,
+			want:  false,
+		},
+		{
+			name:  "one rfc3161 entry returns true",
+			input: `{"verificationMaterial":{"timestampVerificationData":{"rfc3161Timestamps":[{"signedTimestamp":"dGVzdA=="}]}}}`,
+			want:  true,
+		},
+		{
+			name:  "invalid JSON returns false",
+			input: `not json`,
+			want:  false,
+		},
+		{
+			name:  "empty string returns false",
+			input: ``,
+			want:  false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, bundleHasSignedTimestamp([]byte(tc.input)))
+		})
+	}
+}
