@@ -1,6 +1,6 @@
 [build.environment]
   # renovate: datasource=node-version depName=node
-  NODE_VERSION = "26.5.0"
+  NODE_VERSION = "26.13.0"
   # renovate: datasource=npm depName=npm
   NPM_VERSION = "12.2.0"
   # renovate: datasource=golang-version depName=go
