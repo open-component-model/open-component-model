@@ -51,10 +51,13 @@ func digestProcessorHandlerFunc[REQ, RES any](f func(ctx context.Context, resour
 			return
 		}
 
-		if err := json.MarshalWrite(writer, resp, runtime.JSONOptions); err != nil {
+		data, err := plugins.MarshalJSON(resp)
+		if err != nil {
 			plugins.NewError(fmt.Errorf("failed to encode response: %w", err), http.StatusInternalServerError).Write(writer)
 			return
 		}
+		writer.Header().Set("Content-Type", "application/json")
+		writer.Write(data) //nolint:errcheck // the status is committed; a failed write leaves the client with a short body it will reject
 	}
 }
 
@@ -77,9 +80,12 @@ func identityProcessorHandlerFunc[REQ, RES any](f func(ctx context.Context, typ 
 			return
 		}
 
-		if err := json.MarshalWrite(writer, resp, runtime.JSONOptions); err != nil {
+		data, err := plugins.MarshalJSON(resp)
+		if err != nil {
 			plugins.NewError(fmt.Errorf("failed to encode response: %w", err), http.StatusInternalServerError).Write(writer)
 			return
 		}
+		writer.Header().Set("Content-Type", "application/json")
+		writer.Write(data) //nolint:errcheck // the status is committed; a failed write leaves the client with a short body it will reject
 	}
 }

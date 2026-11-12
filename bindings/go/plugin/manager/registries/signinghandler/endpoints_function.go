@@ -30,10 +30,13 @@ func handleError(w http.ResponseWriter, err error, status int, message string) {
 
 // handleJSONResponse encodes the response as JSON and writes it to the http.ResponseWriter
 func handleJSONResponse(w http.ResponseWriter, response interface{}) {
-	if err := json.MarshalWrite(w, response, runtime.JSONOptions); err != nil {
+	data, err := plugins.MarshalJSON(response)
+	if err != nil {
 		handleError(w, err, http.StatusInternalServerError, "failed to encode response")
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data) //nolint:errcheck // the status is committed; a failed write leaves the client with a short body it will reject
 }
 
 // credentialsFromHeader extracts credentials from the Authorization header if present

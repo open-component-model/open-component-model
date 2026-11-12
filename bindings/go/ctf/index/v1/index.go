@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
@@ -70,10 +71,17 @@ type ArtifactMetadata struct {
 }
 
 // DecodeIndex reads an Index from the provided reader.
+//
+// Unknown members are rejected, as they always were. Everything else decodes with the
+// leniency of encoding/json v1, which wrote and read every artifact-index.json so far:
+// member names match case-insensitively, a duplicate member takes its last value, and
+// data after the index value is ignored. Tightening any of these would make an archive
+// that opens today unopenable.
 func DecodeIndex(data io.Reader) (Index, error) {
 	var d index
 
-	if err := json.UnmarshalRead(data, &d, json.RejectUnknownMembers(true)); err != nil {
+	dec := jsontext.NewDecoder(data, jsontext.AllowDuplicateNames(true))
+	if err := json.UnmarshalDecode(dec, &d, json.RejectUnknownMembers(true), runtime.JSONDecodeOptions); err != nil {
 		return nil, err
 	}
 

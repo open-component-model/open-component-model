@@ -26,12 +26,11 @@ func handleError(w http.ResponseWriter, err error, status int, message string) {
 	http.Error(w, fmt.Sprintf("%s: %v", message, err), status)
 }
 
-// handleJSONResponse encodes the response as JSON and writes it to the http.ResponseWriter
+// handleJSONResponse encodes the response as JSON and writes it to the http.ResponseWriter.
+// Encoding happens into a buffer, so a half way failure stays an error-only 500 instead of
+// a 200 with a truncated body; see [plugins.WriteJSON].
 func handleJSONResponse(w http.ResponseWriter, response interface{}) {
-	if err := json.MarshalWrite(w, response, runtime.JSONOptions); err != nil {
-		handleError(w, err, http.StatusInternalServerError, "failed to encode response")
-		return
-	}
+	plugins.WriteJSON(w, response)
 }
 
 // handleGetIdentity handles the GetIdentity endpoint

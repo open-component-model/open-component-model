@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"os"
 
-	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
+	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -51,9 +51,12 @@ func inputProcessorHandlerFunc[REQ, RES any](f func(ctx context.Context, r *REQ,
 			return
 		}
 
-		if err := json.MarshalWrite(writer, resp, runtime.JSONOptions); err != nil {
+		data, err := plugins.MarshalJSON(resp)
+		if err != nil {
 			plugins.NewError(fmt.Errorf("failed to encode response: %w", err), http.StatusInternalServerError).Write(writer)
 			return
 		}
+		writer.Header().Set("Content-Type", "application/json")
+		writer.Write(data) //nolint:errcheck // the status is committed; a failed write leaves the client with a short body it will reject
 	}
 }

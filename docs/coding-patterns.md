@@ -359,12 +359,26 @@ err := json.MarshalWrite(w, obj, runtime.JSONOptions)
 `runtime.JSONOptions` pins the three v2 defaults the OCM wire format depends on:
 `Deterministic` (v2 marshals maps in random order), `FormatNilSliceAsNull` and
 `FormatNilMapAsNull` (v2 encodes nil as `[]`/`{}`). Descriptors are content-addressed and
-signed, so the produced bytes are part of the contract. Unmarshaling takes no module-wide
-options; pass `json.RejectUnknownMembers(true)` where strictness is wanted.
+signed, so the produced bytes are part of the contract. A test walks the module and fails
+if a v2 marshal call omits them (`runtime/json_test.go`), because no golden file would
+catch it.
 
 Everything else uses v2 defaults, which are stricter than v1: member names match
 case-sensitively, duplicate members are rejected, invalid UTF-8 is rejected and `<`, `>`, `&`
-are not escaped.
+are not escaped. The one place where v1's escaping is part of stored bytes
+(`ConvertToV2Provider`) opts back in with `jsontext.EscapeForHTML(true)`.
+
+### Decoding user-authored documents
+
+```go
+err := json.Unmarshal(raw.Data, into, runtime.JSONDecodeOptions)
+```
+
+`.ocmconfig`, CRs and constructor files are read as YAML through `sigs.k8s.io/yaml`, i.e.
+`encoding/json` v1, so a non-canonical member spelling (`DockerConfigFile`) reaches a nested
+`Raw` verbatim. `runtime.JSONDecodeOptions` matches names case-insensitively there, so the
+member is not dropped without a word. Where unknown members must be an error, use
+`runtime.DecodeStrict`; `json.RejectUnknownMembers(true)` is the raw primitive.
 
 ### Streaming
 
@@ -380,6 +394,11 @@ line-oriented output (NDJSON, CLI) use `jsontext.NewEncoder(w)` plus
 `json.MarshalEncode(enc, v, runtime.JSONOptions)`, which writes one newline per value.
 Token-level work (skipping, peeking, large documents) uses `jsontext.Decoder`;
 `oci/tar/layout_verifier.go` is the worked example.
+
+Not into an `http.ResponseWriter`, though: the first chunk commits the 200, so a failure
+half way through the value ships a truncated body with the error text appended to it.
+Plugin handlers write responses through `plugins.WriteJSON`, which marshals into a buffer
+and keeps a failed response an error-only 500.
 
 ### Custom marshalers
 

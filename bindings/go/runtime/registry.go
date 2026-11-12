@@ -458,7 +458,7 @@ func (r *Scheme) convertFromRaw(from *Raw, into Typed, fromType Type) error {
 	}
 
 	// Raw → Typed: unmarshal the Raw.Data into the target.
-	if err := json.Unmarshal(from.Data, into); err != nil {
+	if err := json.Unmarshal(from.Data, into, JSONDecodeOptions); err != nil {
 		return fmt.Errorf("failed to unmarshal from raw: %w", err)
 	}
 	return nil
@@ -485,7 +485,7 @@ func (r *Scheme) convertFromUnstructured(from *Unstructured, into Typed, fromTyp
 	if err != nil {
 		return fmt.Errorf("failed to marshal from unstructured: %w", err)
 	}
-	if err := json.Unmarshal(data, into); err != nil {
+	if err := json.Unmarshal(data, into, JSONDecodeOptions); err != nil {
 		return fmt.Errorf("failed to unmarshal from unstructured: %w", err)
 	}
 	return nil

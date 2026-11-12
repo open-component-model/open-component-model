@@ -555,6 +555,16 @@ func TestConvertToV2Provider(t *testing.T) {
 			},
 			want: `{"name":"test-provider","labels":[{"name":"test","value":"value"}]}`,
 		},
+		{
+			// v1 escaped <, > and &; a descriptor holding one of them must not change
+			// bytes on a read/write cycle that modifies nothing.
+			name: "provider label with HTML characters",
+			provider: descriptorRuntime.Provider{
+				Name:   "test-provider",
+				Labels: []descriptorRuntime.Label{{Name: "test", Value: []byte(`"a<b>c&d"`)}},
+			},
+			want: `{"name":"test-provider","labels":[{"name":"test","value":"a\u003cb\u003ec\u0026d"}]}`,
+		},
 	}
 
 	for _, tt := range tests {

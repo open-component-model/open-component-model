@@ -116,6 +116,49 @@ func TestDecodeIndex_SchemaVersionMismatch(t *testing.T) {
 	}
 }
 
+// TestDecodeIndex_LegacyLeniency locks the decoding leniency encoding/json v1 had: an
+// artifact-index.json that opens with the released CLI must keep opening. Unknown members
+// stay fatal, as they always were.
+func TestDecodeIndex_LegacyLeniency(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+	}{
+		{
+			name: "member names match case-insensitively",
+			data: `{"schemaVersion":1,"artifacts":[{"Repository":"repo1","Tag":"v1","Digest":"sha256:abc"}]}`,
+		},
+		{
+			name: "a duplicate member takes its last value",
+			data: `{"schemaVersion":1,"artifacts":[{"repository":"other","repository":"repo1","tag":"v1","digest":"sha256:abc"}]}`,
+		},
+		{
+			name: "data after the index value is ignored",
+			data: `{"schemaVersion":1,"artifacts":[{"repository":"repo1","tag":"v1","digest":"sha256:abc"}]}` + "\n{}",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decoded, err := DecodeIndex(bytes.NewReader([]byte(tt.data)))
+			if err != nil {
+				t.Fatalf("decode failed: %v", err)
+			}
+			arts := decoded.GetArtifacts()
+			if len(arts) != 1 || arts[0].Repository != "repo1" {
+				t.Fatalf("decoded artifacts mismatch: %+v", arts)
+			}
+		})
+	}
+}
+
+func TestDecodeIndex_UnknownMemberIsFatal(t *testing.T) {
+	data := []byte(`{"schemaVersion":1,"artifacts":[],"unknown":true}`)
+	if _, err := DecodeIndex(bytes.NewReader(data)); err == nil {
+		t.Fatal("expected an error for an unknown member")
+	}
+}
+
 func TestAddArtifact_MultipleTagsSameDigest(t *testing.T) {
 	idx := NewIndex()
 	a1 := ArtifactMetadata{

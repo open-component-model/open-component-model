@@ -2,7 +2,6 @@ package credentialrepository
 
 import (
 	"context"
-	"encoding/json/v2"
 	"fmt"
 	"net/http"
 
@@ -28,10 +27,7 @@ func ConsumerIdentityForConfigHandlerFunc[T runtime.Typed](f func(ctx context.Co
 			return
 		}
 
-		if err := json.MarshalWrite(writer, identity, runtime.JSONOptions); err != nil {
-			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
-			return
-		}
+		plugins.WriteJSON(writer, identity)
 	}
 }
 
@@ -57,9 +53,6 @@ func ResolveHandlerFunc[T runtime.Typed](f func(ctx context.Context, cfg v1.Reso
 			return
 		}
 
-		if err := json.MarshalWrite(writer, resolvedCredentials, runtime.JSONOptions); err != nil {
-			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
-			return
-		}
+		plugins.WriteJSON(writer, resolvedCredentials)
 	}
 }

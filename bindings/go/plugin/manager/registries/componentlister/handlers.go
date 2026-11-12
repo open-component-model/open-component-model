@@ -2,11 +2,10 @@ package componentlister
 
 import (
 	"context"
-	"encoding/json/v2"
 	"fmt"
 	"net/http"
 
-	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"
+	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -37,10 +36,7 @@ func ListComponentsHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 			return
 		}
 
-		if err := json.MarshalWrite(writer, componentNames, runtime.JSONOptions); err != nil {
-			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
-			return
-		}
+		plugins.WriteJSON(writer, componentNames)
 	}
 }
 
@@ -56,9 +52,6 @@ func GetIdentityHandlerFunc[T runtime.Typed](f func(ctx context.Context, typ *v1
 			return
 		}
 
-		if err := json.MarshalWrite(writer, response, runtime.JSONOptions); err != nil {
-			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
-			return
-		}
+		plugins.WriteJSON(writer, response)
 	}
 }
