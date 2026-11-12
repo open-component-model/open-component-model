@@ -204,6 +204,53 @@ func fakeBundleJSONWithCertV2(t *testing.T, issuer string) []byte {
 	return data
 }
 
+// fakeBundleJSONWithTimestamp returns a fake Sigstore bundle that includes a
+// non-empty timestampVerificationData field, simulating a TSA-timestamped
+// bundle produced by a private-infrastructure Sigstore stack.
+func fakeBundleJSONWithTimestamp(t *testing.T) []byte {
+	t.Helper()
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	template := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "test"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		BasicConstraintsValid: true,
+		EmailAddresses:        []string{"signer@example.com"},
+		ExtraExtensions: []pkix.Extension{
+			{Id: sigstoreIssuerV1OID, Value: []byte("https://accounts.google.com")},
+		},
+	}
+
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	require.NoError(t, err)
+
+	certB64 := base64.StdEncoding.EncodeToString(certDER)
+	bundle := map[string]any{
+		"mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+		"verificationMaterial": map[string]any{
+			"certificate": map[string]string{"rawBytes": certB64},
+			"tlogEntries": []any{},
+			// Non-empty timestampVerificationData signals that a TSA signed timestamp is present.
+			"timestampVerificationData": map[string]any{
+				"rfc3161Timestamps": []any{
+					map[string]string{"signedTimestamp": base64.StdEncoding.EncodeToString([]byte("fake-tsa-timestamp"))},
+				},
+			},
+		},
+		"messageSignature": map[string]any{
+			"messageDigest": map[string]string{"algorithm": "SHA2_256", "digest": ""},
+			"signature":     "",
+		},
+	}
+	data, err := json.Marshal(bundle)
+	require.NoError(t, err)
+	return data
+}
+
 // hasArg checks whether the given flag appears in the args slice.
 func hasArg(args []string, flag string) bool {
 	return slices.Contains(args, flag)
@@ -608,6 +655,7 @@ func TestHandler_Verify(t *testing.T) {
 		creds      runtime.Typed
 		mockErr    error
 		wantErr    string
+		bundleJSON func(t *testing.T) []byte
 		assertArgs func(t *testing.T, args []string)
 		assertMock func(t *testing.T, mock *execRecorder)
 	}{
@@ -652,6 +700,43 @@ func TestHandler_Verify(t *testing.T) {
 				r := require.New(t)
 				r.True(hasArg(args, "--insecure-ignore-tlog"))
 				r.Equal("/path/to/private_trusted_root.json", argValue(args, "--trusted-root"))
+			},
+		},
+		{
+			// When PrivateInfrastructure=true and the bundle carries a signed timestamp
+			// (timestampVerificationData), cosign must receive --use-signed-timestamps so it
+			// validates the Fulcio leaf certificate against the bundle timestamp instead of
+			// wall-clock time. Without it, any aged keyless signature fails verification.
+			name: "private infrastructure with signed timestamp adds --use-signed-timestamps",
+			cfgSetup: func(cfg *v1alpha1.VerifyConfig) {
+				cfg.PrivateInfrastructure = true
+			},
+			creds:      &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/path/to/private_trusted_root.json"},
+			bundleJSON: fakeBundleJSONWithTimestamp,
+			assertMock: func(t *testing.T, mock *execRecorder) {
+				t.Helper()
+				r := require.New(t)
+				r.True(hasArg(mock.lastVerifyArgs, "--use-signed-timestamps"),
+					"expected --use-signed-timestamps in verify args: %v", mock.lastVerifyArgs)
+				r.True(hasArg(mock.lastVerifyArgs, "--insecure-ignore-tlog"),
+					"expected --insecure-ignore-tlog in verify args: %v", mock.lastVerifyArgs)
+			},
+		},
+		{
+			// When PrivateInfrastructure=true but the bundle has NO signed timestamp, we must
+			// NOT pass --use-signed-timestamps (cosign would fail if there is nothing to verify).
+			name: "private infrastructure without signed timestamp omits --use-signed-timestamps",
+			cfgSetup: func(cfg *v1alpha1.VerifyConfig) {
+				cfg.PrivateInfrastructure = true
+			},
+			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/path/to/private_trusted_root.json"},
+			// Default bundle (fakeBundleJSON) has no timestampVerificationData.
+			assertArgs: func(t *testing.T, args []string) {
+				t.Helper()
+				r := require.New(t)
+				r.False(hasArg(args, "--use-signed-timestamps"),
+					"--use-signed-timestamps must NOT be added when there is no signed timestamp")
+				r.True(hasArg(args, "--insecure-ignore-tlog"))
 			},
 		},
 		{
@@ -700,6 +785,9 @@ func TestHandler_Verify(t *testing.T) {
 			}
 
 			bundleJSON := fakeBundleJSON(t)
+			if tc.bundleJSON != nil {
+				bundleJSON = tc.bundleJSON(t)
+			}
 			signed := descruntime.Signature{
 				Name:   "test-sig",
 				Digest: testDigest(),

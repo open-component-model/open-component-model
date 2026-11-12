@@ -265,6 +265,17 @@ func (h *Handler) Verify(
 		// --insecure-ignore-tlog replaces --private-infrastructure, which cosign deprecated in
 		// v3.1.0 and removes in v4. It is a pure alias, available since cosign v2.0.
 		extraArgs = append(extraArgs, "--insecure-ignore-tlog")
+		// When the bundle carries an RFC3161 signed timestamp (timestampVerificationData),
+		// also pass --use-signed-timestamps. Without this flag cosign validates the
+		// short-lived Fulcio leaf certificate against wall-clock time (time.Now()), so any
+		// aged keyless signature whose certificate has since expired fails even though it
+		// was valid when it was created. With --use-signed-timestamps cosign instead
+		// validates the leaf cert against the time recorded in the bundle's signed timestamp.
+		// We only add the flag when the bundle actually contains a timestamp, because cosign
+		// rejects --use-signed-timestamps when the bundle has no timestamp to verify.
+		if bundleHasSignedTimestamp(bundleJSON) {
+			extraArgs = append(extraArgs, "--use-signed-timestamps")
+		}
 	}
 
 	slog.InfoContext(ctx, "sigstore verify: enforcing identity constraints",
@@ -404,7 +415,25 @@ type sigstoreBundle struct {
 		Certificate struct {
 			RawBytes string `json:"rawBytes"`
 		} `json:"certificate"`
+		TimestampVerificationData *json.RawMessage `json:"timestampVerificationData,omitempty"`
 	} `json:"verificationMaterial"`
+}
+
+// bundleHasSignedTimestamp reports whether a Sigstore bundle JSON contains a
+// non-empty timestampVerificationData field. The field is written by a
+// Timestamp Authority (TSA) and carries an RFC3161 signed timestamp that can be
+// used instead of wall-clock time to validate the Fulcio leaf certificate.
+// A nil, absent, or "null" field means no signed timestamp is present.
+func bundleHasSignedTimestamp(bundleJSON []byte) bool {
+	var bundle sigstoreBundle
+	if err := json.Unmarshal(bundleJSON, &bundle); err != nil {
+		return false
+	}
+	if bundle.VerificationMaterial.TimestampVerificationData == nil {
+		return false
+	}
+	// json.RawMessage "null" means the field was present but its value is JSON null.
+	return string(*bundle.VerificationMaterial.TimestampVerificationData) != "null"
 }
 
 // extractCertInfoFromBundleJSON extracts the OIDC issuer and signer identity from
