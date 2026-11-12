@@ -10,7 +10,8 @@ OCM has no storage format of its own. It is designed to store component versions
 storage technologies. Currently, the only supported technology is **[OCI](https://github.com/opencontainers/image-spec)**.
 
 Component versions live in **[OCI registries](https://github.com/opencontainers/distribution-spec/)**, or in a
-**Common Transport Format (CTF)** archive, OCM's file system representation of an OCI registry.
+**[Common Transport Format (CTF)]({{< relref "docs/concepts/transfer-concept.md#common-transport-format-ctf" >}})**
+archive, OCM's file system representation of an OCI registry.
 
 This page explains how a component version and its local blobs map to OCI artifacts, what you see in a registry after
 `ocm add cv` or `ocm transfer cv`, and why an embedded image can be pulled with `docker`, `oras`, or `crane`.
@@ -22,7 +23,8 @@ Other storage technologies, such as object storage like S3, might be supported i
 {{< details "Terminology: OCM and OCI terms on this page" >}}
 
 OCM and OCI use some of the same words for different things. This page prefixes OCI terms with *OCI* wherever they
-could be confused, and *descriptor* on its own always means the component descriptor.
+could be confused. Terms without a prefix are OCM terms, so *descriptor* on its own always means the component
+descriptor.
 
 | Term | Model | Meaning |
 | ---- | ----- | ------- |
@@ -30,12 +32,13 @@ could be confused, and *descriptor* on its own always means the component descri
 | Component descriptor | OCM | The document that describes a component version: its resources, references, and how to access them. Not an OCI descriptor. |
 | Local blob | OCM | A resource stored *by value*, next to the component descriptor. Stored as one OCI layer, or as a whole OCI artifact. |
 | OCM repository | OCM | Where component versions are stored: an OCI registry plus an optional path, or a CTF archive. Holds many components. |
-| OCI repository | OCI | One named repository inside a registry. OCM uses one per component, holding all of its versions. |
+| OCI repository | OCI | One named repository inside an OCI registry. OCM uses one per component, holding all of its versions. |
 | OCI descriptor | OCI | A reference to content by `mediaType`, `digest`, and `size`, as used in a manifest's `config` and `layers`. |
 | OCI manifest | OCI | One OCI config plus a list of OCI layers, for example one platform of an image. |
 | OCI index | OCI | A list of OCI manifests or further OCI indexes, for example a multi-platform image. The CTF's `artifact-index.json` is not one. |
 | OCI layer, OCI config | OCI | The content an OCI manifest references, each addressed by an OCI descriptor. |
 | OCI artifact | OCI | An OCI manifest or OCI index together with everything it references. |
+| OCI image | OCI | An OCI artifact that holds a container image: an OCI manifest for one platform, or an OCI index for several. |
 
 {{< /details >}}
 
@@ -45,8 +48,8 @@ could be confused, and *descriptor* on its own always means the component descri
   control, replication, and garbage collection. Storing component versions there means no extra storage backend.
 - **Content addressing:** OCI identifies every layer, manifest, and index by its digest. OCM uses those digests as the
   `localReference` of a local blob, so storage, deduplication, and integrity checks come for free.
-- **Native consumption:** Since OCM v2, OCI artifacts stored by value keep their OCI shape. Tools that know nothing
-  about OCM can consume them directly.
+- **Native consumption:** OCI artifacts stored by value keep their OCI shape. Tools that know nothing about OCM can
+  consume them directly.
 
 ## How It Works
 
@@ -242,8 +245,9 @@ How OCM stores a local blob depends on its content:
 | Plain file, directory archive, Git snapshot, … | One OCI layer, listed in the component descriptor's OCI manifest | the OCI layer | the content's media type, e.g. `text/plain` |
 | OCI artifact: an OCI image layout added with `File/v1`, a chart added with `Helm/v1`, or an image copied by value during transfer | Its full graph of OCI manifests and OCI indexes, unpacked into the OCI repository | the root OCI manifest or OCI index | `application/vnd.oci.image.index.v1+json` or `…manifest.v1+json` |
 
-An OCI artifact is not stored as the archive it was added from. OCM copies its OCI indexes, OCI manifests, OCI configs,
-and OCI layers into the OCI repository unchanged, so the image keeps its original digest.
+OCM does not store the file an OCI artifact was added from, such as an OCI image layout archive. It unpacks the file
+and stores every OCI index, OCI manifest, OCI config, and OCI layer in it as a separate blob in the OCI repository.
+Nothing is changed or re-created, so the image keeps its original digest.
 
 The component descriptor that results from this lists both local blobs like this:
 
@@ -263,7 +267,7 @@ resources:
       mediaType: application/vnd.oci.image.index.v1+json
 ```
 
-### Native Access to Embedded Images
+### Native Access to Embedded OCI Images
 
 Because `app-image` is a real OCI index in the component's OCI repository, its digest is a valid OCI reference:
 
@@ -276,8 +280,8 @@ Any OCI client can pull it, and a Kubernetes Pod can use it as `image:` directly
 
 ### Storage in a CTF Archive
 
-The CTF is not an OCI standard. OCM defines it so that component versions can travel without a registry, as a
-directory or a TAR archive, for example into an air-gapped environment. It is also not an OCI image layout: instead of
+OCM's Common Transport Format (CTF) is not an OCI standard. OCM defines it so that component versions can travel
+without an OCI registry, as a directory or a TAR archive, for example into an air-gapped environment. It is also not an OCI image layout: instead of
 `index.json` and `oci-layout`, it has its own `artifact-index.json` that maps OCI repositories and tags to digests, the
 way a registry does. Despite its name, `artifact-index.json` is not an OCI index. The blobs the CTF stores are the same
 OCI manifests, OCI indexes, OCI configs, and OCI layers as in a registry:
@@ -298,26 +302,6 @@ transport-archive/
 `artifact-index.json` lists every OCI manifest and OCI index with its OCI repository, and the tag for the component
 version itself. Because the content is identical, transferring a CTF to a registry copies the graph and keeps every
 digest, including `localReference` values and the digests signatures cover.
-
-## OCM v1 and OCM v2
-
-The graph above is the OCM v2 format. OCM v1 stored component versions differently, and the difference matters when
-you work with existing content.
-
-| | OCM v1 | OCM v2 |
-| - | ------ | ------ |
-| Component version | Always a single OCI manifest | An OCI manifest, or an OCI index once it embeds OCI artifacts |
-| Embedded OCI artifact | Packed into an **artifact set** — a `.tar.gz` of the image — stored as one opaque OCI layer | Unpacked into a native graph of OCI manifests and OCI indexes |
-| Local blob media type | `application/vnd.oci.image.manifest.v1+tar+gzip` (or `…index.v1+tar+gzip`) | `application/vnd.oci.image.manifest.v1+json` (or `…index.v1+json`) |
-| `localReference` | Digest of the archive | Digest of the image's root OCI manifest or OCI index |
-| Pull with `docker`/`oras`/`crane` or reference from a Pod | Not possible: the registry sees an archive, not an image | Possible by digest |
-
-OCM v2 still reads OCM v1 content. A v1 artifact set remains an OCI layer when it is copied by value, because unpacking
-it would change its `localReference` and the digests a signature covers. To make such an image pullable, upload it as
-a standalone OCI image with an OCI uploader during transfer.
-
-In the other direction, the OCM v1 CLI reads local blobs stored in the v2 format starting with v0.36.0. Older v1
-releases cannot access them.
 
 ## Key Properties
 
@@ -348,6 +332,26 @@ releases cannot access them.
 - You migrate from OCM v1 and need to know why older embedded images are not pullable.
 
 If you only add, transfer, and download component versions with OCM commands, OCM handles this layout for you.
+
+## OCM v1 and OCM v2
+
+This page describes the OCM v2 format. OCM v1 stored component versions differently. OCM v2 reads component versions
+that OCM v1 created, but when you work with such content, the differences matter.
+
+| | OCM v1 | OCM v2 |
+| - | ------ | ------ |
+| Component version | Always a single OCI manifest | An OCI manifest, or an OCI index once it embeds OCI artifacts |
+| Embedded OCI artifact | Packed into an **artifact set** — a `.tar.gz` of the image — stored as one opaque OCI layer | Unpacked into a native graph of OCI manifests and OCI indexes |
+| Local blob media type | `application/vnd.oci.image.manifest.v1+tar+gzip` (or `…index.v1+tar+gzip`) | `application/vnd.oci.image.manifest.v1+json` (or `…index.v1+json`) |
+| `localReference` | Digest of the archive | Digest of the image's root OCI manifest or OCI index |
+| Pull with `docker`/`oras`/`crane` or reference from a Pod | Not possible: the registry sees an archive, not an image | Possible by digest |
+
+A v1 artifact set remains an OCI layer when it is copied by value, because unpacking
+it would change its `localReference` and the digests a signature covers. To make such an image pullable, upload it as
+a standalone OCI image with an OCI uploader during transfer.
+
+In the other direction, the OCM v1 CLI reads local blobs stored in the v2 format starting with v0.36.0. Older v1
+releases cannot access them.
 
 ## Next Steps
 
