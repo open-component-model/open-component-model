@@ -157,10 +157,10 @@ func Merge(configs ...*Config) *Config {
 			merged.RemotePolicy = c.RemotePolicy
 		}
 		if c.TTL != nil {
-			merged.TTL = new(*c.TTL)
+			merged.TTL = c.TTL
 		}
 		if c.MaxBlobSize != nil {
-			merged.MaxBlobSize = new(*c.MaxBlobSize)
+			merged.MaxBlobSize = c.MaxBlobSize
 		}
 	}
 
