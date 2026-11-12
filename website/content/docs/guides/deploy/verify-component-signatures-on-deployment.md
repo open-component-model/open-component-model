@@ -361,10 +361,12 @@ Configured signatures are always verified; a missing or invalid signature still 
 `Resource` selects: under the default `verificationPolicy: Always` the selected resource must
 record a usable digest. The failure message distinguishes two cases:
 
-- `has no digest to verify`: the digest is missing, empty, or excluded from verification.
+- `has no digest to verify`: the digest is missing, excluded from verification, or has neither
+  `hashAlgorithm` nor `value`. This includes a digest containing only `normalisationAlgorithm`.
   Rebuild the component version with a usable recorded digest for the selected resource.
-- `has an invalid digest`: the digest is partial, malformed, or uses an unsupported hash
-  algorithm. Correct the digest fields and value, using SHA-256 or SHA-512.
+- `has an invalid digest`: exactly one of `hashAlgorithm` and `value` is missing, the value is
+  malformed, or the hash algorithm is unsupported. Correct the digest fields and value, using
+  SHA-256 or SHA-512.
 
 After correcting the descriptor, re-sign it as applicable and publish it. The `ocm sign cv`
 command warns when a component version is not safely digestible.
