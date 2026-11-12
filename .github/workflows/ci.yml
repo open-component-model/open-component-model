@@ -288,6 +288,33 @@ jobs:
           # so a flaky test that passed on retry is not annotated red.
           check_retries: true
 
+  sigstore_verify:
+    name: "Sigstore Verify (offline)"
+    needs: changes
+    runs-on: ubuntu-26.04-arm
+    if: ${{ needs.changes.outputs.run_go == 'true' }}
+    steps:
+      - name: Install Task
+        uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            bindings/go
+          persist-credentials: false
+      - name: Setup Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: '${{ github.workspace }}/bindings/go/go.mod'
+          cache-dependency-path: '${{ github.workspace }}/bindings/go/go.sum'
+      # The sigstore verification tests run offline against recorded fixtures and the pinned
+      # cosign, so they need no scaffolding cluster and run on every PR. The live sign path
+      # stays in the Integration Tests job.
+      - name: Run offline sigstore verification
+        run: task bindings/go/sigstore/integration:test/verify
+
   run_unit_tests:
     name: "Unit Tests (${{ matrix.goos }})"
     needs: changes
@@ -396,6 +423,7 @@ jobs:
       - generate
       - run_unit_tests
       - run_integration_tests
+      - sigstore_verify
       - golangci_lint
       - govulncheck
       - dependency_list_verify
