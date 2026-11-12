@@ -111,17 +111,24 @@ func TestIsTransientError_ClientTimeout(t *testing.T) {
 // TestIsTransientError_DialTimeout checks that a connect that hit
 // Dialer.Timeout stays transient although its error matches
 // context.DeadlineExceeded: a retry dials with a fresh budget.
+//
+// The dial deadline is forced to be already expired instead of racing a real
+// connect against a tiny Dialer.Timeout: on Windows a loopback ConnectEx can
+// complete before the deadline watcher cancels it, which hangs the request on
+// a listener that never answers. The error itself still comes from net, and
+// net/http does the *url.Error wrapping.
 func TestIsTransientError_DialTimeout(t *testing.T) {
 	r := require.New(t)
-	ln, err := (&net.ListenConfig{}).Listen(t.Context(), "tcp", "127.0.0.1:0")
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			expired, cancel := context.WithDeadline(ctx, time.Now().Add(-time.Second))
+			defer cancel()
+			return (&net.Dialer{}).DialContext(expired, network, addr)
+		},
+	}
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1:1", nil)
 	r.NoError(err)
-	t.Cleanup(func() { _ = ln.Close() })
-
-	dialer := &net.Dialer{Timeout: time.Nanosecond}
-	client := &http.Client{Transport: &http.Transport{DialContext: dialer.DialContext}}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+ln.Addr().String(), nil)
-	r.NoError(err)
-	resp, err := client.Do(req)
+	resp, err := (&http.Client{Transport: transport}).Do(req)
 	if resp != nil {
 		_ = resp.Body.Close()
 	}

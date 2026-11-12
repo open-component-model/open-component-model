@@ -3,6 +3,7 @@ package plugins
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -74,9 +75,12 @@ func (p Process) Shutdown(ctx context.Context) error {
 	case <-ctx.Done():
 	}
 
-	// The plugin is still running: it has to go now.
-	if err := p.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
-		return errors.Join(interruptErr, err)
+	// On Windows, killing an already exited process causes access denied instead of os.ErrProcessDone.
+	killErr := p.Kill()
+	select {
+	case <-exited:
+	case <-time.After(exitGracePeriod):
+		return errors.Join(interruptErr, killErr, fmt.Errorf("plugin %d did not exit after being killed", p.cmd.Process.Pid))
 	}
 	if interruptErr != nil {
 		slog.WarnContext(ctx, "plugin did not accept the shutdown request and was killed",
