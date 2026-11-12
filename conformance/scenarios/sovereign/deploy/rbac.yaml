@@ -1,4 +1,4 @@
-# RBAC for the sovereign scenario. Three identities need permissions
+# RBAC for the sovereign scenario. Four identities need permissions
 # beyond what their Helm charts ship:
 #
 # 1. The service account impersonated by the NamespacedDeployer needs
@@ -17,6 +17,9 @@
 #    needed: kro aggregates every ClusterRole labeled
 #    rbac.kro.run/aggregate-to-controller into its own.
 #    See https://kro.run/docs/advanced/access-control
+#
+# 4. The default service account of sovereign-product. The product Component
+#    reads its OCM config (acme-signing-key) with that account's permissions.
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -161,3 +164,32 @@ rules:
       - patch
       - update
       - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: sovereign-product-ocm-config-reader
+  namespace: sovereign-product
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    resourceNames:
+      - acme-signing-key
+    verbs:
+      - get
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: sovereign-product-ocm-config-reader
+  namespace: sovereign-product
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: sovereign-product-ocm-config-reader
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: sovereign-product
