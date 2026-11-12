@@ -142,7 +142,7 @@ var _ = Describe("controller", func() {
 					// fixed examples.ocm.software group. Deriving it here mirrors how the
 					// kro flow uses example.Name() and avoids reading the composition file.
 					xrdName := strings.ReplaceAll(example.Name(), "-", "") + "crossplanes.examples.ocm.software"
-					Expect(utils.WaitForResource(ctx, "condition=Established=true", timeout,
+					Expect(utils.WaitForResource(ctx, "condition=Established=true", crossplaneTimeout,
 						"compositeresourcedefinitions.apiextensions.crossplane.io/"+xrdName)).To(Succeed())
 
 					By("creating the Crossplane XR instance")
@@ -150,31 +150,31 @@ var _ = Describe("controller", func() {
 					// before waiting on its Ready condition.
 					crossplaneInstance := filepath.Join(examplesDir, example.Name(), CrossplaneInstance)
 					Expect(utils.DeployResource(ctx, crossplaneInstance)).To(Succeed())
-					Expect(utils.WaitForResource(ctx, "create", timeout, "-f", crossplaneInstance)).To(Succeed())
-					Expect(utils.WaitForResource(ctx, "condition=Ready=true", timeout, "-f", crossplaneInstance)).To(Succeed())
+					Expect(utils.WaitForResource(ctx, "create", crossplaneTimeout, "-f", crossplaneInstance)).To(Succeed())
+					Expect(utils.WaitForResource(ctx, "condition=Ready=true", crossplaneTimeout, "-f", crossplaneInstance)).To(Succeed())
 
 					By("validating the Crossplane FluxCD-managed deployment")
 					name = "deployment.apps/" + crossplaneName + "-podinfo"
-					Expect(utils.WaitForResource(ctx, "create", timeout, name)).To(Succeed())
-					Expect(utils.WaitForResource(ctx, "condition=Available", timeout, name)).To(Succeed())
+					Expect(utils.WaitForResource(ctx, "create", crossplaneTimeout, name)).To(Succeed())
+					Expect(utils.WaitForResource(ctx, "condition=Available", crossplaneTimeout, name)).To(Succeed())
 					Expect(utils.WaitForResource(
 						ctx, "condition=Ready=true",
-						timeout,
+						crossplaneTimeout,
 						"pod", "-l", "app.kubernetes.io/name="+crossplaneName+"-podinfo",
 					)).To(Succeed())
 
 					By("checking for Crossplane ArgoCD Application")
 					argoCDAppName := "applications.argoproj.io/" + crossplaneName
-					Expect(utils.WaitForResource(ctx, "create", timeout, argoCDAppName, "-n", "argocd")).To(Succeed())
-					Expect(utils.WaitForResource(ctx, "jsonpath={.status.sync.status}=Synced", timeout, argoCDAppName, "-n", "argocd")).To(Succeed())
+					Expect(utils.WaitForResource(ctx, "create", crossplaneTimeout, argoCDAppName, "-n", "argocd")).To(Succeed())
+					Expect(utils.WaitForResource(ctx, "jsonpath={.status.sync.status}=Synced", crossplaneTimeout, argoCDAppName, "-n", "argocd")).To(Succeed())
 
 					By("validating the Crossplane ArgoCD-managed deployment")
 					name = "deployment.apps/" + crossplaneName + "-podinfo"
-					Expect(utils.WaitForResource(ctx, "create", timeout, name, "-n", "default-argocd")).To(Succeed())
-					Expect(utils.WaitForResource(ctx, "condition=Available", timeout, name, "-n", "default-argocd")).To(Succeed())
+					Expect(utils.WaitForResource(ctx, "create", crossplaneTimeout, name, "-n", "default-argocd")).To(Succeed())
+					Expect(utils.WaitForResource(ctx, "condition=Available", crossplaneTimeout, name, "-n", "default-argocd")).To(Succeed())
 					Expect(utils.WaitForResource(
 						ctx, "condition=Ready=true",
-						timeout,
+						crossplaneTimeout,
 						"pod", "-l", "app.kubernetes.io/name="+crossplaneName+"-podinfo", "-n", "default-argocd",
 					)).To(Succeed())
 				}

@@ -254,9 +254,27 @@ install_crossplane() {
   else
     helm repo add crossplane-stable https://charts.crossplane.io/stable 2>/dev/null || true
     helm repo update crossplane-stable || return 1
+    # Crossplane v2 beta realtime compositions guard against reconcile hot loops
+    # with a per-XR watch circuit breaker (token bucket: --circuit-breaker-burst
+    # capacity, --circuit-breaker-refill-rate tokens/s). Our compositions compose
+    # a FluxCD Kustomization/HelmRelease plus an ArgoCD Application whose frequent
+    # status churn emits enough watch events to trip the default burst of 100;
+    # once open, Crossplane drops watch-triggered reconciles and the XR only
+    # requeues at --poll-interval. Because these compositions need several
+    # sequential XR reconciles to propagate status (OCM Resource status -> XR
+    # status -> Flux source spec), the default 1m poll made the git-backed
+    # kustomize-simple XR converge ~1 hop/min and time out on the loaded CI
+    # runner, while the OCI-backed helm examples happened to churn less and
+    # squeaked by. Widening the breaker keeps it closed for our example load so
+    # the XR reconciles in real time (observed ~17s vs ~124s), and the shorter
+    # poll interval bounds the fallback if it ever does open. Both are e2e-only
+    # tuning; the breaker still protects against genuine runaway loops at the
+    # higher threshold.
     helm upgrade --install crossplane crossplane-stable/crossplane \
       --namespace crossplane-system --create-namespace \
-      --version "${CROSSPLANE_VERSION}" --wait || return 1
+      --version "${CROSSPLANE_VERSION}" \
+      --set "args={--poll-interval=20s,--circuit-breaker-burst=1000,--circuit-breaker-refill-rate=10}" \
+      --wait || return 1
   fi
 
   # function-patch-and-transform
