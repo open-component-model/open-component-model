@@ -9,8 +9,8 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/registry/remote"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2/registry/remote"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/cli/cmd"
@@ -58,8 +58,8 @@ func Test_Integration_Transfer_OCIImageLayer(t *testing.T) {
 	layerDigest := digest.FromBytes(layer)
 	sourceRepo, err := remote.NewRepository(sourceRegistry.Reference("charts/demo"))
 	r.NoError(err)
-	sourceRepo.PlainHTTP = true
-	sourceRepo.Client = internal.CreateAuthClient(sourceRegistry.RegistryAddress, sourceRegistry.User, sourceRegistry.Password)
+	sourceRepo.Registry.PlainHTTP = true
+	sourceRepo.Registry.Client = internal.CreateAuthClient(sourceRegistry.RegistryAddress, sourceRegistry.User, sourceRegistry.Password)
 	r.NoError(sourceRepo.Blobs().Push(ctx, ociImageSpecV1.Descriptor{
 		MediaType: mediaType,
 		Digest:    layerDigest,
