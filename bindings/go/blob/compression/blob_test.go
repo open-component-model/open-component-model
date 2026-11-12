@@ -12,17 +12,14 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/compression"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/blobtest"
 )
 
 type testBlob struct {
 	data []byte
-	err  error
 }
 
 func (b *testBlob) ReadCloser() (io.ReadCloser, error) {
-	if b.err != nil {
-		return nil, b.err
-	}
 	return io.NopCloser(bytes.NewReader(b.data)), nil
 }
 
@@ -111,7 +108,7 @@ func TestCompressedBlob(t *testing.T) {
 	t.Run("error from base blob", func(t *testing.T) {
 		// Create a blob that returns an error
 		expectedErr := errors.New("test error")
-		baseBlob := &testBlob{err: expectedErr}
+		baseBlob := blobtest.Failing(expectedErr)
 
 		// Create compressed blob
 		compressedBlob := compression.Compress(baseBlob)

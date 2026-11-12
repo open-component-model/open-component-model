@@ -14,8 +14,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -23,6 +21,7 @@ import (
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
 	helmaccessv1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	helmidentityv1 "ocm.software/open-component-model/bindings/go/helm/spec/identity/v1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/nexustest"
 	ctfrepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
@@ -32,7 +31,6 @@ import (
 )
 
 const (
-	nexusImage          = "sonatype/nexus3:3.96.3"
 	nexusHelmRepository = "helm-hosted"
 	nexusNpmRepository  = "npm-hosted"
 )
@@ -168,7 +166,7 @@ func Test_Integration_NexusUploader(t *testing.T) {
 		r.Equal(map[string]string{"jar": base + "/1.0.0/demo-1.0.0.jar", "pom": base + "/1.0.0/demo-1.0.0.pom"}, wgetAccesses(r, targetPath, component, version))
 		r.Equal([]byte("jar"), nexusGet(t, base+"/1.0.0/demo-1.0.0.jar", adminPassword))
 		r.Eventually(func() bool {
-			status, body := nexusRequest(t, http.MethodGet, base+"/maven-metadata.xml", adminPassword, nil)
+			status, body := nexustest.Request(t, http.MethodGet, base+"/maven-metadata.xml", adminPassword, nil)
 			return status == http.StatusOK && strings.Contains(string(body), "<version>1.0.0</version>")
 		}, 15*time.Second, 500*time.Millisecond, "maven-metadata.xml lists the uploaded version")
 	})
@@ -189,7 +187,7 @@ func Test_Integration_NexusUploader(t *testing.T) {
 		r.Equal(map[string]string{"pkg": want}, wgetAccesses(r, targetPath, component, version))
 		r.Equal(tarball, nexusGet(t, want, adminPassword))
 		r.Eventually(func() bool {
-			status, body := nexusRequest(t, http.MethodGet, baseURL+"/repository/"+nexusNpmRepository+"/ocm-integration-demo", adminPassword, nil)
+			status, body := nexustest.Request(t, http.MethodGet, baseURL+"/repository/"+nexusNpmRepository+"/ocm-integration-demo", adminPassword, nil)
 			var metadata struct {
 				Versions map[string]json.RawMessage `json:"versions"`
 			}
@@ -227,87 +225,34 @@ func npmTarball(t *testing.T, packageJSON string) []byte {
 	return buf.Bytes()
 }
 
-// startNexus starts a Nexus Repository 3 container, accepts the Community Edition EULA and
-// creates Helm, raw and npm hosted repositories with redeploy disabled. It returns the base URL and the
-// admin password.
+// startNexus starts Nexus and creates Helm, raw and npm hosted repositories with redeploy
+// disabled. It returns the base URL and the admin password.
 func startNexus(t *testing.T) (baseURL, adminPassword string) {
 	t.Helper()
 	r := require.New(t)
-	ctx := t.Context()
 
-	container, err := testcontainers.Run(ctx, nexusImage,
-		testcontainers.WithExposedPorts("8081/tcp"),
-		testcontainers.WithEnv(map[string]string{
-			"INSTALL4J_ADD_VM_PARAMS": "-Xms1g -Xmx1g -XX:MaxDirectMemorySize=1g -Djava.util.prefs.userRoot=/nexus-data/javaprefs",
-		}),
-		// WithWaitStrategy caps the wait at a 60s deadline regardless of the strategy's
-		// own timeout; the Nexus JVM routinely needs longer under CI load, so set the
-		// deadline explicitly. Both the deadline and the strategy timeout must allow 5m.
-		testcontainers.WithWaitStrategyAndDeadline(5*time.Minute, wait.ForHTTP("/service/rest/v1/status/writable").WithPort("8081/tcp").WithStartupTimeout(5*time.Minute)),
-	)
-	r.NoError(err)
-	t.Cleanup(func() { r.NoError(testcontainers.TerminateContainer(container)) })
-	hostPort, err := container.PortEndpoint(ctx, "8081/tcp", "")
-	r.NoError(err)
-	baseURL = "http://" + hostPort
+	nexus := nexustest.Start(t)
+	baseURL, adminPassword = nexus.BaseURL, nexus.Password
 
-	rc, err := container.CopyFileFromContainer(ctx, "/nexus-data/admin.password")
-	r.NoError(err)
-	password, err := io.ReadAll(rc)
-	r.NoError(err)
-	r.NoError(rc.Close())
-	adminPassword = string(bytes.TrimSpace(password))
-
-	// Nexus Community Edition blocks uploads until the EULA is accepted.
-	eulaURL := baseURL + "/service/rest/v1/system/eula"
-	status, body := nexusRequest(t, http.MethodGet, eulaURL, adminPassword, nil)
-	if status != http.StatusNotFound {
-		r.Equal(http.StatusOK, status, string(body))
-		var eula map[string]any
-		r.NoError(json.Unmarshal(body, &eula))
-		eula["accepted"] = true
-		accepted, err := json.Marshal(eula)
-		r.NoError(err)
-		status, body = nexusRequest(t, http.MethodPost, eulaURL, adminPassword, accepted)
-		r.Equal(http.StatusNoContent, status, string(body))
-	}
-
-	status, body = nexusRequest(t, http.MethodPost, baseURL+"/service/rest/v1/repositories/helm/hosted", adminPassword,
+	status, body := nexustest.Request(t, http.MethodPost, baseURL+"/service/rest/v1/repositories/helm/hosted", adminPassword,
 		[]byte(`{"name":"`+nexusHelmRepository+`","online":true,"storage":{"blobStoreName":"default","strictContentTypeValidation":true,"writePolicy":"allow_once"}}`))
 	r.Equal(http.StatusCreated, status, string(body))
 
-	status, body = nexusRequest(t, http.MethodPost, baseURL+"/service/rest/v1/repositories/raw/hosted", adminPassword,
+	status, body = nexustest.Request(t, http.MethodPost, baseURL+"/service/rest/v1/repositories/raw/hosted", adminPassword,
 		[]byte(`{"name":"raw-hosted","online":true,"storage":{"blobStoreName":"default","strictContentTypeValidation":false,"writePolicy":"allow_once"}}`))
 	r.Equal(http.StatusCreated, status, string(body))
 
 	// maven-releases exists by default.
-	status, body = nexusRequest(t, http.MethodPost, baseURL+"/service/rest/v1/repositories/npm/hosted", adminPassword,
+	status, body = nexustest.Request(t, http.MethodPost, baseURL+"/service/rest/v1/repositories/npm/hosted", adminPassword,
 		[]byte(`{"name":"`+nexusNpmRepository+`","online":true,"storage":{"blobStoreName":"default","strictContentTypeValidation":true,"writePolicy":"allow_once"}}`))
 	r.Equal(http.StatusCreated, status, string(body))
 	return baseURL, adminPassword
 }
 
-// nexusRequest sends a request as the Nexus admin and returns status and body.
-func nexusRequest(t *testing.T, method, target, password string, body []byte) (int, []byte) {
-	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), method, target, bytes.NewReader(body))
-	require.NoError(t, err)
-	req.SetBasicAuth("admin", password)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	defer func() { _ = resp.Body.Close() }()
-	respBody, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	return resp.StatusCode, respBody
-}
-
 // nexusGet GETs target as the Nexus admin and requires 200.
 func nexusGet(t *testing.T, target, password string) []byte {
 	t.Helper()
-	status, body := nexusRequest(t, http.MethodGet, target, password, nil)
+	status, body := nexustest.Request(t, http.MethodGet, target, password, nil)
 	require.Equal(t, http.StatusOK, status, string(body))
 	return body
 }

@@ -13,6 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/algorithms"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/descriptortest"
 )
 
 const (
@@ -22,22 +23,9 @@ const (
 	v4alpha3 = "jsonNormalisation/v4alpha3"
 )
 
-// testDescriptor carries a versioned signing label, so v4alpha1 (drops
-// label.version) and v4alpha2 (keeps it) produce different bytes.
-func testDescriptor() *descruntime.Descriptor {
-	return &descruntime.Descriptor{
-		Component: descruntime.Component{
-			ComponentMeta: descruntime.ComponentMeta{
-				ObjectMeta: descruntime.ObjectMeta{
-					Name:    "ocm.software/test",
-					Version: "1.0.0",
-					Labels:  []descruntime.Label{{Name: "sig", Value: []byte(`"v"`), Signing: true, Version: "v1"}},
-				},
-			},
-			Provider: descruntime.Provider{Name: "ocm.software"},
-		},
-	}
-}
+// versionedSigningLabel makes v4alpha1 (drops label.version) and v4alpha2 (keeps it)
+// produce different bytes.
+var versionedSigningLabel = descruntime.Label{Name: "sig", Value: []byte(`"v"`), Signing: true, Version: "v1"}
 
 // TestRegistersVerifiableFamily asserts that importing algorithms alone (this
 // file imports no json/* package) registers every algorithm that must stay
@@ -112,7 +100,8 @@ func TestHash(t *testing.T) {
 
 func TestDigest(t *testing.T) {
 	r := require.New(t)
-	desc := testDescriptor()
+	desc := descriptortest.New("ocm.software/test", "1.0.0", descriptortest.WithMetaVersion(""),
+		descriptortest.WithLabels(versionedSigningLabel))
 
 	normalised, err := normalisation.Normalise(desc, v4alpha3)
 	r.NoError(err)
@@ -139,7 +128,8 @@ func TestDigest(t *testing.T) {
 }
 
 func TestVerify(t *testing.T) {
-	desc := testDescriptor()
+	desc := descriptortest.New("ocm.software/test", "1.0.0", descriptortest.WithMetaVersion(""),
+		descriptortest.WithLabels(versionedSigningLabel))
 	mustDigest := func(t *testing.T, norm, hash string) descruntime.Digest {
 		t.Helper()
 		d, err := algorithms.Digest(desc, norm, hash)

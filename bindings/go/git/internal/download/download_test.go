@@ -24,9 +24,9 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
-	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/git/internal/endpoint"
 	v1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/blobtest"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -169,13 +169,13 @@ func TestDownloadArchive(t *testing.T) {
 	mt, ok := b.MediaType()
 	r.True(ok)
 	r.Equal("application/x-tgz", mt)
-	data := readBlob(t, b)
+	data := blobtest.ReadAll(t, b)
 	r.Equal(streamed.Data, data, "the blob streams what Stream writes")
 	r.Equal(digest.FromBytes(data), streamed.Digest)
 
 	// The first read pins the commit, so a moved ref does not change later reads.
 	r.NoError(fixture.Git.Storer.SetReference(plumbing.NewHashReference("refs/heads/main", fixture.First)))
-	r.Equal(data, readBlob(t, b))
+	r.Equal(data, blobtest.ReadAll(t, b))
 
 	// Nothing of the archive is stored.
 	files, err := os.ReadDir(dir)
@@ -216,7 +216,7 @@ func TestBlobFromClone(t *testing.T) {
 		b := NewBlobFromClone(t.Context(), clone, access, nil, Options{AllowLocal: true, TempDir: dir})
 		// Without the source, only the clone can serve the read.
 		r.NoError(os.RemoveAll(fixture.Path))
-		r.Equal(want.Data, readBlob(t, b))
+		r.Equal(want.Data, blobtest.ReadAll(t, b))
 		files, err := os.ReadDir(dir)
 		r.NoError(err)
 		r.Empty(files, "closing the first reader removes the clone")
@@ -261,21 +261,6 @@ func download(ctx context.Context, access *v1.Git, creds runtime.Typed, opts Opt
 		return nil, err
 	}
 	return &downloaded{Result: result, Data: buf.Bytes()}, nil
-}
-
-func readBlob(t *testing.T, b blob.ReadOnlyBlob) []byte {
-	t.Helper()
-
-	r := require.New(t)
-
-	rc, err := b.ReadCloser()
-	r.NoError(err)
-
-	data, err := io.ReadAll(rc)
-	r.NoError(err)
-	r.NoError(rc.Close())
-
-	return data
 }
 
 func gunzipArchive(t *testing.T, data []byte) []byte {

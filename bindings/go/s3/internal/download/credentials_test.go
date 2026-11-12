@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/internal/testutil/s3test"
 	credv1 "ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1"
 )
 
@@ -65,8 +66,8 @@ func TestDownload_Credentials(t *testing.T) {
 						r.NoError(os.WriteFile(path, []byte(source.sharedCredentials), 0o600))
 						t.Setenv("AWS_SHARED_CREDENTIALS_FILE", path)
 					}
-					object := s3Object{body: []byte("public object"), errStatus: response.status, errCode: response.code}
-					srv := newFakeS3(t, object)
+					object := s3test.Object{Body: []byte("public object"), ErrStatus: response.status, ErrCode: response.code}
+					srv := s3test.StartFake(t, object)
 					var opts []Option
 					if source.credentials != nil {
 						opts = append(opts, WithCredentials(source.credentials))
@@ -77,14 +78,14 @@ func TestDownload_Credentials(t *testing.T) {
 					}, &written, opts...)
 					if response.code == "" {
 						r.NoError(err)
-						r.Equal(object.body, written.Bytes())
+						r.Equal(object.Body, written.Bytes())
 					} else {
 						r.ErrorContains(err, response.code)
 						r.Nil(out)
 					}
-					requests := srv.recorded()
+					requests := srv.Recorded()
 					r.Len(requests, 1, "S3 errors must not cause anonymous retries")
-					header := requests[0].header
+					header := requests[0].Header
 					if source.wantAccessKey == "" {
 						r.Empty(header.Get("Authorization"))
 						r.Empty(header.Get("X-Amz-Date"))
@@ -127,7 +128,7 @@ func TestDownload_CredentialErrorsDoNotBecomeAnonymous(t *testing.T) {
 				creds = tt.credentials.DeepCopy()
 				creds.Type = credv1.S3CredentialsVersionedType
 			}
-			srv := newFakeS3(t, s3Object{body: []byte("public")})
+			srv := s3test.StartFake(t, s3test.Object{Body: []byte("public")})
 			opts := []Option{WithCredentials(nil)}
 			if creds != nil {
 				opts = append(opts, WithCredentials(creds))
@@ -140,7 +141,7 @@ func TestDownload_CredentialErrorsDoNotBecomeAnonymous(t *testing.T) {
 				r.ErrorAs(err, &empty)
 			}
 			r.Nil(out)
-			r.Empty(srv.recorded())
+			r.Empty(srv.Recorded())
 		})
 	}
 }

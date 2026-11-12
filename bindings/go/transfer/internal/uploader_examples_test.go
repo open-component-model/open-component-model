@@ -12,6 +12,7 @@ import (
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/descriptortest"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
@@ -570,7 +571,8 @@ configurations:
 				}
 			}
 
-			desc := testDescriptor("ocm.software/demo", "1.0.0", resources, nil)
+			desc := descriptortest.New("ocm.software/demo", "1.0.0", testProvider,
+				descriptortest.WithResources(resources...))
 			resolver := testResolverFor("ocm.software/demo", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
 			roots := testTransferRoots("ocm.software/demo", "1.0.0", tc.target(t), resolver)
 

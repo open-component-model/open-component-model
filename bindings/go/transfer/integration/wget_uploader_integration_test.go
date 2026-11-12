@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -175,7 +176,7 @@ func Test_Integration_TransferWgetResource_UploaderStreamsToHTTPTarget(t *testin
 
 	// The transferred descriptor's resource must reference the target URL via a Wget access
 	// and carry the digest computed during the stream.
-	client := createAuthClient(registryAddr, user, password)
+	client := registrytest.AuthClient(registryAddr, user, password)
 	urlRes, err := urlresolver.New(
 		urlresolver.WithBaseURL(registryAddr),
 		urlresolver.WithPlainHTTP(true),

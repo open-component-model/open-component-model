@@ -10,6 +10,7 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ociresource "ocm.software/open-component-model/bindings/go/oci/repository/resource"
@@ -115,7 +116,7 @@ func Test_Integration_TransferOCIImageLayer(t *testing.T) {
 			urlRes, err := urlresolver.New(
 				urlresolver.WithBaseURL(targetAddr),
 				urlresolver.WithPlainHTTP(true),
-				urlresolver.WithBaseClient(createAuthClient(targetAddr, targetUser, targetPwd)),
+				urlresolver.WithBaseClient(registrytest.AuthClient(targetAddr, targetUser, targetPwd)),
 			)
 			r.NoError(err)
 			targetRepo, err := oci.NewRepository(oci.WithResolver(urlRes), oci.WithTempDir(t.TempDir()))

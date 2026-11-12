@@ -1,22 +1,17 @@
 package integration_test
 
 import (
-	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"testing"
 
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
-	awscreds "github.com/aws/aws-sdk-go-v2/credentials"
-	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/stretchr/testify/require"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/s3test"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -43,21 +38,15 @@ func Test_Integration_TransferS3Resource_LocalBlobUploader(t *testing.T) {
 	ctx := t.Context()
 
 	// 1. Serve the resource content from a RustFS bucket.
-	const s3AccessKey, s3SecretKey = "ocm-test", "ocm-test-secret"
-	container, err := testcontainers.Run(ctx, "rustfs/rustfs:1.0.0-rc.6",
-		testcontainers.WithExposedPorts("9000/tcp"),
-		testcontainers.WithEnv(map[string]string{"RUSTFS_ACCESS_KEY": s3AccessKey, "RUSTFS_SECRET_KEY": s3SecretKey}),
-		testcontainers.WithWaitStrategy(wait.ForHTTP("/health/ready").WithPort("9000/tcp")),
-	)
-	r.NoError(err)
-	t.Cleanup(func() { r.NoError(testcontainers.TerminateContainer(container)) })
-	hostPort, err := container.PortEndpoint(ctx, "9000/tcp", "")
-	r.NoError(err)
+	const s3AccessKey, s3SecretKey = s3test.AccessKey, s3test.SecretKey
+	hostPort := s3test.Start(t)
 	endpoint := "http://" + hostPort
 
 	const bucket, objectKey = "transfer-bucket", "path/to/artifact.txt"
 	resourceData := []byte("Hello from s3 integration test!")
-	putS3Object(t, ctx, endpoint, s3AccessKey, s3SecretKey, bucket, objectKey, resourceData)
+	s3Client := s3test.Client(t, endpoint)
+	s3test.CreateBucket(t, ctx, s3Client, bucket)
+	s3test.PutObject(t, ctx, s3Client, bucket, objectKey, resourceData)
 
 	// 2. Start the target OCI registry.
 	registryAddr, user, password := startRegistry(t)
@@ -153,7 +142,7 @@ func Test_Integration_TransferS3Resource_LocalBlobUploader(t *testing.T) {
 	r.NoError(graph.Process(ctx))
 
 	// 6. Verify the component arrived in the target registry with the resource stored as a localBlob.
-	client := createAuthClient(registryAddr, user, password)
+	client := registrytest.AuthClient(registryAddr, user, password)
 	urlRes, err := urlresolver.New(
 		urlresolver.WithBaseURL(registryAddr),
 		urlresolver.WithPlainHTTP(true),
@@ -195,24 +184,6 @@ func Test_Integration_TransferS3Resource_LocalBlobUploader(t *testing.T) {
 	content, err := io.ReadAll(reader)
 	r.NoError(err)
 	r.Equal(resourceData, content, "transferred blob content should match the object content")
-}
-
-// putS3Object creates bucket in the store at endpoint and stores content under key.
-func putS3Object(t *testing.T, ctx context.Context, endpoint, user, pass, bucket, key string, content []byte) {
-	t.Helper()
-	cfg, err := awsconfig.LoadDefaultConfig(ctx,
-		awsconfig.WithRegion("us-east-1"),
-		awsconfig.WithCredentialsProvider(awscreds.NewStaticCredentialsProvider(user, pass, "")),
-	)
-	require.NoError(t, err)
-	client := awss3.NewFromConfig(cfg, func(o *awss3.Options) {
-		o.BaseEndpoint = &endpoint
-		o.UsePathStyle = true
-	})
-	_, err = client.CreateBucket(ctx, &awss3.CreateBucketInput{Bucket: &bucket})
-	require.NoError(t, err)
-	_, err = client.PutObject(ctx, &awss3.PutObjectInput{Bucket: &bucket, Key: &key, Body: bytes.NewReader(content)})
-	require.NoError(t, err)
 }
 
 // newS3CredResolver resolves the bucket credentials for the s3 consumer identity in addition to

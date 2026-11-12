@@ -23,11 +23,22 @@ linters:
           allow:
             - "ocm.software/open-component-model/bindings/go/beta"
             - "ocm.software/open-component-model/bindings/go/alpha"
+            - "ocm.software/open-component-model/bindings/go/internal/testutil"
         alpha:
           list-mode: lax
           files: ["**/bindings/go/alpha/**"]
           allow:
             - "ocm.software/open-component-model/bindings/go/alpha"
+        internal-testutil:
+          list-mode: lax
+          files: ["**/bindings/go/internal/testutil/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/alpha"
+        internal-testutil-test-only:
+          list-mode: lax
+          files: ["$all", "!$test", "!**/bindings/go/internal/testutil/**"]
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/internal/testutil"
 `;
 
 const README = `# Bindings
@@ -83,6 +94,15 @@ test("extractPackageSummary strips a command prefix and joins wrapped lines", ()
     extractPackageSummary(docGo),
     "Provides the command line interface for working with the Open Component Model"
   );
+});
+
+test("parseDepguardRules leaves out internal packages and their allow entries", () => {
+  const { config } = setup();
+
+  const deps = parseDepguardRules(config);
+
+  assert.deepStrictEqual([...deps.keys()].sort(), ["alpha", "beta"]);
+  assert.deepStrictEqual(deps.get("beta"), ["alpha"]);
 });
 
 test("generatePackagesReadme replaces only the marked block and sorts packages", () => {

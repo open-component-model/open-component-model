@@ -19,6 +19,7 @@ import (
 	githubresource "ocm.software/open-component-model/bindings/go/github/repository/resource"
 	githubaccess "ocm.software/open-component-model/bindings/go/github/spec/access"
 	githubv1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
@@ -166,7 +167,7 @@ func Test_Integration_TransferGitHub_CTFToOCI(t *testing.T) {
 	r.NoError(graph.Process(ctx))
 
 	// 5. Verify the resource landed in the target as a localBlob.
-	client := createAuthClient(registryAddr, user, password)
+	client := registrytest.AuthClient(registryAddr, user, password)
 	urlRes, err := urlresolver.New(
 		urlresolver.WithBaseURL(registryAddr),
 		urlresolver.WithPlainHTTP(true),

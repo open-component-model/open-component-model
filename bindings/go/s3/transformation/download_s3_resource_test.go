@@ -2,9 +2,6 @@ package transformation_test
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/binary"
-	"hash/crc32"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -17,6 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/s3test"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/s3/repository"
 	s3access "ocm.software/open-component-model/bindings/go/s3/spec/access"
@@ -46,21 +44,6 @@ func (staticCredentials) Resolve(_ context.Context, _ runtime.Identity) (runtime
 		AccessKeyID:     "test-access-key",
 		SecretAccessKey: "test-secret-key",
 	}, nil
-}
-
-// newFakeS3 starts a server answering GetObject with body, so that the transformer is
-// exercised over the real AWS SDK rather than a stubbed client.
-func newFakeS3(t *testing.T, body []byte) *httptest.Server {
-	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		// Real S3 reports a checksum, and the SDK warns about every response carrying none.
-		sum := make([]byte, 4)
-		binary.BigEndian.PutUint32(sum, crc32.ChecksumIEEE(body))
-		w.Header().Set("X-Amz-Checksum-Crc32", base64.StdEncoding.EncodeToString(sum))
-		_, _ = w.Write(body)
-	}))
-	t.Cleanup(srv.Close)
-	return srv
 }
 
 func s3Resource(t *testing.T, endpoint string) *v2.Resource {
@@ -93,7 +76,7 @@ func TestDownloadS3Resource_Transform(t *testing.T) {
 	scheme := newTestScheme()
 	const content = "hello s3 transfer"
 
-	srv := newFakeS3(t, []byte(content))
+	srv := s3test.StartFake(t, s3test.Object{Body: []byte(content)})
 
 	t.Run("downloads resource to a file", func(t *testing.T) {
 		t.Parallel()

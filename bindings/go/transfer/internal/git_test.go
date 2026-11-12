@@ -10,6 +10,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	gitv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	gitv1alpha1 "ocm.software/open-component-model/bindings/go/git/transformation/spec/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/descriptortest"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
@@ -44,7 +45,7 @@ func TestProcessGit(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
 			res := gitResource("f58349914e3c775747dc1ee9af1bc83db4652266")
-			desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{res}, nil)
+			desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider, descriptortest.WithResources(res))
 			v2desc, err := descriptor.ConvertToV2(scheme, desc)
 			r.NoError(err)
 			resource := v2desc.Component.Resources[0]
@@ -83,7 +84,7 @@ func TestProcessGit_UnpinnedWarnsAndProceeds(t *testing.T) {
 			r := require.New(t)
 			logs := captureWarnLogs(t)
 			res := gitResource(tt.commit)
-			desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{res}, nil)
+			desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider, descriptortest.WithResources(res))
 			v2desc, err := descriptor.ConvertToV2(scheme, desc)
 			r.NoError(err)
 			resource := v2desc.Component.Resources[0]
@@ -117,7 +118,7 @@ func TestBuildGraphDefinition_GitResource_PinnedByURLFragment(t *testing.T) {
 	r := require.New(t)
 	res := gitResource("")
 	res.Access.(*gitv1.Git).Repository = "https://example.com/org/repo.git#commit=f58349914e3c775747dc1ee9af1bc83db4652266"
-	desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{res}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider, descriptortest.WithResources(res))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, withLocalBlobUploader(ociUploaders()...))
@@ -135,7 +136,7 @@ func TestGitOriginOf_URLFragment(t *testing.T) {
 func TestProcessGit_UnsupportedTargetDoesNotEmitNodes(t *testing.T) {
 	r := require.New(t)
 	res := gitResource("f58349914e3c775747dc1ee9af1bc83db4652266")
-	desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{res}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider, descriptortest.WithResources(res))
 	v2desc, err := descriptor.ConvertToV2(scheme, desc)
 	r.NoError(err)
 	tgd := &transformv1alpha1.TransformationGraphDefinition{}
@@ -158,7 +159,7 @@ func TestBuildGraphDefinition_GitResource(t *testing.T) {
 			r := require.New(t)
 			res := gitResource("f58349914e3c775747dc1ee9af1bc83db4652266")
 			res.Access.(*gitv1.Git).Type = accessType
-			desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{res}, nil)
+			desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider, descriptortest.WithResources(res))
 			resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
 			roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
 			tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, withLocalBlobUploader(ociUploaders()...))
@@ -176,7 +177,8 @@ func TestBuildGraphDefinition_GitResource(t *testing.T) {
 
 func TestBuildGraphDefinition_GitResource_WithoutUploaderKeepsUnpinnedByReference(t *testing.T) {
 	r := require.New(t)
-	desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{gitResource("")}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider,
+		descriptortest.WithResources(gitResource("")))
 	resolver := testResolverFor("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/source"), desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", testOCIRepo("ghcr.io/target"), resolver)
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, nil)

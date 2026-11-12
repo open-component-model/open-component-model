@@ -8,6 +8,7 @@ import (
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/descriptortest"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
@@ -17,7 +18,7 @@ import (
 func matchEnv(t *testing.T, resource descriptor.Resource) (*uploaderEnv, map[string]string) {
 	t.Helper()
 	r := require.New(t)
-	desc := testDescriptor("ocm.software/test", "1.0.0", []descriptor.Resource{resource}, nil)
+	desc := descriptortest.New("ocm.software/test", "1.0.0", testProvider, descriptortest.WithResources(resource))
 	v2desc, err := descriptor.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), desc)
 	r.NoError(err)
 	tgd := &transformv1alpha1.TransformationGraphDefinition{Environment: &runtime.Unstructured{Data: map[string]any{}}}

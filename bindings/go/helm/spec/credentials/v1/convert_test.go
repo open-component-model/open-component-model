@@ -7,15 +7,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	credv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/typedtest"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
-
-type fakeTyped struct{}
-
-func (f *fakeTyped) GetType() runtime.Type        { return runtime.NewUnversionedType("Unknown") }
-func (f *fakeTyped) SetType(_ runtime.Type)       {}
-func (f *fakeTyped) DeepCopyTyped() runtime.Typed { return &fakeTyped{} }
 
 func TestConvertToHelmHTTPCredentials(t *testing.T) {
 	tests := []struct {
@@ -96,7 +91,7 @@ func TestConvertToHelmHTTPCredentials(t *testing.T) {
 		},
 		{
 			name:    "unknown type returns error",
-			input:   &fakeTyped{},
+			input:   &typedtest.Unregistered{},
 			wantErr: true,
 		},
 	}
@@ -200,7 +195,7 @@ func TestConvertToOCICredentials(t *testing.T) {
 		},
 		{
 			name:    "unknown type returns error",
-			input:   &fakeTyped{},
+			input:   &typedtest.Unregistered{},
 			wantErr: true,
 		},
 	}

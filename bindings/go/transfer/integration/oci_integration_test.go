@@ -21,6 +21,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ociresource "ocm.software/open-component-model/bindings/go/oci/repository/resource"
@@ -191,7 +192,7 @@ func Test_Integration_TransferOCIImageResource_LocalBlobUploader(t *testing.T) {
 	r.NoError(graph.Process(ctx))
 
 	// 6. Verify the component arrived in the target registry with the resource.
-	client := createAuthClient(targetAddr, targetUser, targetPwd)
+	client := registrytest.AuthClient(targetAddr, targetUser, targetPwd)
 	urlRes, err := urlresolver.New(
 		urlresolver.WithBaseURL(targetAddr),
 		urlresolver.WithPlainHTTP(true),
@@ -320,7 +321,7 @@ func Test_Integration_TransferOCIArtifact_OCIToOCI(t *testing.T) {
 	}
 
 	// Build a live repo client for the source OCI registry so it can be used as FromRepository.
-	sourceClient := createAuthClient(sourceAddr, sourceUser, sourcePwd)
+	sourceClient := registrytest.AuthClient(sourceAddr, sourceUser, sourcePwd)
 	sourceURLRes, err := urlresolver.New(
 		urlresolver.WithBaseURL(sourceAddr),
 		urlresolver.WithPlainHTTP(true),
@@ -358,7 +359,7 @@ func Test_Integration_TransferOCIArtifact_OCIToOCI(t *testing.T) {
 	r.NoError(streamGraph.Process(t.Context()))
 
 	// 5. Verify the resource in the target has an OCI image reference (not a local blob).
-	client := createAuthClient(targetAddr, targetUser, targetPwd)
+	client := registrytest.AuthClient(targetAddr, targetUser, targetPwd)
 	urlRes, err := urlresolver.New(
 		urlresolver.WithBaseURL(targetAddr),
 		urlresolver.WithPlainHTTP(true),
@@ -553,7 +554,7 @@ func Test_Integration_TransferDockerManifestLocalBlob_CTFToOCI(t *testing.T) {
 	r.NoError(graph.Process(ctx))
 
 	// 6. Verify the component exists in the target and the resource has OCIImage access pointing to the target.
-	client := createAuthClient(targetAddr, targetUser, targetPwd)
+	client := registrytest.AuthClient(targetAddr, targetUser, targetPwd)
 	urlRes, err := urlresolver.New(
 		urlresolver.WithBaseURL(targetAddr),
 		urlresolver.WithPlainHTTP(true),

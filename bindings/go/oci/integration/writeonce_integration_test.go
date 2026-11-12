@@ -12,6 +12,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/internal/testutil/registrytest"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 )
@@ -40,7 +41,7 @@ func Test_Integration_WriteOnceNoReferrersAPI_Ownership(t *testing.T) {
 	resolver, err := urlresolver.New(
 		urlresolver.WithBaseURL(host),
 		urlresolver.WithPlainHTTP(true),
-		urlresolver.WithBaseClient(createAuthClient(host, "ignored", "ignored")),
+		urlresolver.WithBaseClient(registrytest.AuthClient(host, "ignored", "ignored")),
 	)
 	require.NoError(t, err)
 	repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithTempDir(t.TempDir()))

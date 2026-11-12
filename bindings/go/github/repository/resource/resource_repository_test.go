@@ -1,14 +1,10 @@
 package resource
 
 import (
-	"archive/tar"
 	"bytes"
-	"compress/gzip"
-	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
@@ -20,47 +16,10 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/blobtest"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/githubtest"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
-
-const testCommit = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
-
-// gzippedTar builds a gzipped tar archive containing a single file.
-func gzippedTar(t *testing.T, name, content string) []byte {
-	t.Helper()
-	var buf bytes.Buffer
-	gz := gzip.NewWriter(&buf)
-	tw := tar.NewWriter(gz)
-	require.NoError(t, tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: int64(len(content)), Typeflag: tar.TypeReg}))
-	_, err := tw.Write([]byte(content))
-	require.NoError(t, err)
-	require.NoError(t, tw.Close())
-	require.NoError(t, gz.Close())
-	return buf.Bytes()
-}
-
-// mockGitHub stands up an httptest server emulating the GitHub archive API and
-// returns its base URL and the exact archive bytes it serves. A resource whose
-// RepoURL points at "<server>/octocat/Hello-World" drives the real download
-// path (enterprise client -> /api/v3/... -> 302 -> archive) against it.
-func mockGitHub(t *testing.T) (baseURL string, payload []byte) {
-	t.Helper()
-	payload = gzippedTar(t, "octocat-Hello-World-"+testCommit+"/README", "hello world")
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case strings.HasSuffix(r.URL.Path, "/repos/octocat/Hello-World/commits/main"):
-			_, _ = w.Write([]byte(testCommit))
-		case strings.HasSuffix(r.URL.Path, "/repos/octocat/Hello-World/tarball/"+testCommit):
-			http.Redirect(w, r, "http://"+r.Host+"/codeload", http.StatusFound)
-		case r.URL.Path == "/codeload":
-			_, _ = w.Write(payload)
-		default:
-			http.Error(w, "unexpected path "+r.URL.Path, http.StatusNotFound)
-		}
-	}))
-	t.Cleanup(server.Close)
-	return server.URL, payload
-}
 
 func githubResource(repoURL, commit string) *descriptor.Resource {
 	return &descriptor.Resource{
@@ -75,24 +34,14 @@ func githubResource(repoURL, commit string) *descriptor.Resource {
 	}
 }
 
-func readBlob(t *testing.T, b blobpkg.ReadOnlyBlob) []byte {
-	t.Helper()
-	reader, err := b.ReadCloser()
-	require.NoError(t, err)
-	defer func() { require.NoError(t, reader.Close()) }()
-	data, err := io.ReadAll(reader)
-	require.NoError(t, err)
-	return data
-}
-
 func TestResourceRepository_DownloadResource(t *testing.T) {
 	t.Run("downloads the commit archive verbatim as a tgz blob", func(t *testing.T) {
-		baseURL, payload := mockGitHub(t)
+		srv := githubtest.Start(t)
 		downloaded, err := NewResourceRepository().DownloadResource(
-			t.Context(), githubResource(baseURL+"/octocat/Hello-World", testCommit), nil)
+			t.Context(), githubResource(srv.RepoURL, githubtest.Commit), nil)
 		require.NoError(t, err)
 
-		assert.Equal(t, payload, readBlob(t, downloaded), "blob must be the exact archive GitHub served")
+		assert.Equal(t, srv.Payload, blobtest.ReadAll(t, downloaded), "blob must be the exact archive GitHub served")
 
 		mt, ok := downloaded.(blobpkg.MediaTypeAware).MediaType()
 		require.True(t, ok)
@@ -111,20 +60,20 @@ func TestResourceRepository_DownloadResource(t *testing.T) {
 	})
 
 	t.Run("resolves a ref-only resource to the commit its ref points at", func(t *testing.T) {
-		baseURL, payload := mockGitHub(t)
+		srv := githubtest.Start(t)
 		res := &descriptor.Resource{
 			ElementMeta: descriptor.ElementMeta{
 				ObjectMeta: descriptor.ObjectMeta{Name: "source", Version: "1.0.0"},
 			},
 			Access: &v1.GitHub{
 				Type:    runtime.NewVersionedType(v1.LegacyType, v1.Version),
-				RepoURL: baseURL + "/octocat/Hello-World",
+				RepoURL: srv.RepoURL,
 				Ref:     "main",
 			},
 		}
 		downloaded, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
 		require.NoError(t, err)
-		assert.Equal(t, payload, readBlob(t, downloaded), "the archive of the resolved commit must be served")
+		assert.Equal(t, srv.Payload, blobtest.ReadAll(t, downloaded), "the archive of the resolved commit must be served")
 	})
 
 	t.Run("warns when the ref no longer points at the pinned commit and downloads the commit", func(t *testing.T) {
@@ -133,21 +82,8 @@ func TestResourceRepository_DownloadResource(t *testing.T) {
 		slog.SetDefault(slog.New(slog.NewTextHandler(&logBuf, nil)))
 		t.Cleanup(func() { slog.SetDefault(previous) })
 
-		payload := gzippedTar(t, "octocat-Hello-World-"+testCommit+"/README", "hello world")
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			switch {
-			case strings.HasSuffix(r.URL.Path, "/repos/octocat/Hello-World/commits/main"):
-				// The ref moved on past the pinned commit.
-				_, _ = w.Write([]byte("1111111111111111111111111111111111111111"))
-			case strings.HasSuffix(r.URL.Path, "/repos/octocat/Hello-World/tarball/"+testCommit):
-				http.Redirect(w, r, "http://"+r.Host+"/codeload", http.StatusFound)
-			case r.URL.Path == "/codeload":
-				_, _ = w.Write(payload)
-			default:
-				http.Error(w, "unexpected path "+r.URL.Path, http.StatusNotFound)
-			}
-		}))
-		t.Cleanup(server.Close)
+		// The ref moved on past the pinned commit.
+		srv := githubtest.Start(t, githubtest.WithCommit("1111111111111111111111111111111111111111"))
 
 		res := &descriptor.Resource{
 			ElementMeta: descriptor.ElementMeta{
@@ -155,14 +91,14 @@ func TestResourceRepository_DownloadResource(t *testing.T) {
 			},
 			Access: &v1.GitHub{
 				Type:    runtime.NewVersionedType(v1.LegacyType, v1.Version),
-				RepoURL: server.URL + "/octocat/Hello-World",
+				RepoURL: srv.RepoURL,
 				Ref:     "main",
-				Commit:  testCommit,
+				Commit:  githubtest.Commit,
 			},
 		}
 		downloaded, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
 		require.NoError(t, err, "ref drift must never fail the download")
-		assert.Equal(t, payload, readBlob(t, downloaded), "the pinned commit's archive must be served, not the ref's")
+		assert.Equal(t, srv.Payload, blobtest.ReadAll(t, downloaded), "the pinned commit's archive must be served, not the ref's")
 		assert.Contains(t, logBuf.String(), "no longer points at the pinned commit", "the drift must be logged as a warning")
 	})
 
@@ -220,18 +156,18 @@ func TestResourceRepository_DownloadResource_DigestVerification(t *testing.T) {
 	}
 
 	t.Run("accepts an archive matching the resource digest", func(t *testing.T) {
-		baseURL, payload := mockGitHub(t)
-		res := githubResource(baseURL+"/octocat/Hello-World", testCommit)
-		res.Digest = digestOf(payload)
+		srv := githubtest.Start(t)
+		res := githubResource(srv.RepoURL, githubtest.Commit)
+		res.Digest = digestOf(srv.Payload)
 
 		downloaded, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
 		require.NoError(t, err)
-		assert.Equal(t, payload, readBlob(t, downloaded))
+		assert.Equal(t, srv.Payload, blobtest.ReadAll(t, downloaded))
 	})
 
 	t.Run("rejects an archive that does not match the resource digest", func(t *testing.T) {
-		baseURL, _ := mockGitHub(t)
-		res := githubResource(baseURL+"/octocat/Hello-World", testCommit)
+		srv := githubtest.Start(t)
+		res := githubResource(srv.RepoURL, githubtest.Commit)
 		res.Digest = digestOf([]byte("an archive GitHub never served"))
 
 		_, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
@@ -239,13 +175,13 @@ func TestResourceRepository_DownloadResource_DigestVerification(t *testing.T) {
 	})
 
 	t.Run("serves an archive unverified when the resource carries no digest", func(t *testing.T) {
-		baseURL, payload := mockGitHub(t)
-		res := githubResource(baseURL+"/octocat/Hello-World", testCommit)
+		srv := githubtest.Start(t)
+		res := githubResource(srv.RepoURL, githubtest.Commit)
 		res.Digest = nil
 
 		downloaded, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
 		require.NoError(t, err)
-		assert.Equal(t, payload, readBlob(t, downloaded))
+		assert.Equal(t, srv.Payload, blobtest.ReadAll(t, downloaded))
 	})
 }
 
@@ -278,7 +214,7 @@ func TestResourceRepository_WithHTTPConfig_IsAppliedToRequests(t *testing.T) {
 
 			repo := NewResourceRepository(WithHTTPConfig(tc.config))
 			_, err := repo.DownloadResource(t.Context(),
-				githubResource(server.URL+"/octocat/Hello-World", testCommit), nil)
+				githubResource(server.URL+"/octocat/Hello-World", githubtest.Commit), nil)
 
 			require.Error(t, err, "a 500 from the archive link endpoint must fail the download")
 			assert.Equal(t, tc.attempts, requests, "the configured retry policy must govern the request count")
@@ -298,21 +234,21 @@ func (c *countingTransport) RoundTrip(req *http.Request) (*http.Response, error)
 }
 
 func TestResourceRepository_WithHTTPClient_IsUsedForRequests(t *testing.T) {
-	baseURL, payload := mockGitHub(t)
+	srv := githubtest.Start(t)
 	transport := &countingTransport{}
 
 	repo := NewResourceRepository(WithHTTPClient(&http.Client{Transport: transport}))
 	downloaded, err := repo.DownloadResource(t.Context(),
-		githubResource(baseURL+"/octocat/Hello-World", testCommit), nil)
+		githubResource(srv.RepoURL, githubtest.Commit), nil)
 	require.NoError(t, err)
 
-	assert.Equal(t, payload, readBlob(t, downloaded), "the download must work through the injected client")
+	assert.Equal(t, srv.Payload, blobtest.ReadAll(t, downloaded), "the download must work through the injected client")
 	assert.Positive(t, transport.requests, "the injected client must carry the requests")
 }
 
 func TestResourceRepository_GetResourceCredentialConsumerIdentity(t *testing.T) {
 	identity, err := NewResourceRepository().GetResourceCredentialConsumerIdentity(t.Context(),
-		githubResource("https://github.com/open-component-model/ocm", testCommit))
+		githubResource("https://github.com/open-component-model/ocm", githubtest.Commit))
 	require.NoError(t, err)
 
 	assert.Equal(t, "GitHubRepository", identity[runtime.IdentityAttributeType])

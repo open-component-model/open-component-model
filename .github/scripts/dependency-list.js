@@ -15,6 +15,9 @@ const BINDING_PREFIX = "ocm.software/open-component-model/bindings/go/";
 // "testutils-test-only" depguard rule keeps them out of non-test code; the
 // per-binding allow lists only grant their test files access.
 const TEST_ONLY_BINDINGS = new Set(["testutils"]);
+// Packages under bindings/go/internal are not public bindings: they are left out of the
+// layer table and the README packages table, and allow entries pointing at them are ignored.
+const INTERNAL_PREFIX = "internal/";
 export const GENERATED_TABLE_START = "<!-- GENERATED PACKAGES TABLE:START (run 'task tools:dependency-list/generate' to update) -->";
 export const GENERATED_TABLE_END = "<!-- GENERATED PACKAGES TABLE:END -->";
 // Matches the marker lines regardless of their annotation text.
@@ -23,6 +26,7 @@ const GENERATED_TABLE_BLOCK = /^<!-- GENERATED PACKAGES TABLE:START.*-->$[\s\S]*
 /**
  * Parse depguard rules from golangci.yml and return a dependency map.
  * Each key is a short binding name, value is a sorted array of its allowed sibling bindings.
+ * Rules for and allow entries of bindings/go/internal packages are skipped.
  *
  * @param {string} configPath
  * @returns {Map<string, string[]>}
@@ -47,10 +51,11 @@ export function parseDepguardRules(configPath) {
         // A test-only helper is never a production binding, even if it gains its own
         // depguard rule, so it must not become a key in the dependency graph.
         if (TEST_ONLY_BINDINGS.has(binding)) continue;
+        if (binding.startsWith(INTERNAL_PREFIX)) continue;
         const allows = (rule.allow ?? [])
             .filter((/** @type {string} */ a) => a.startsWith(BINDING_PREFIX))
             .map((/** @type {string} */ a) => a.slice(BINDING_PREFIX.length))
-            .filter((/** @type {string} */ a) => a !== binding)
+            .filter((/** @type {string} */ a) => a !== binding && !a.startsWith(INTERNAL_PREFIX))
             .filter((/** @type {string} */ a) => !TEST_ONLY_BINDINGS.has(a));
 
         deps.set(binding, allows.sort());

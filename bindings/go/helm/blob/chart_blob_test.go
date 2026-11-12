@@ -12,6 +12,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	helmblob "ocm.software/open-component-model/bindings/go/helm/blob"
+	"ocm.software/open-component-model/bindings/go/internal/testutil/blobtest"
 )
 
 const (
@@ -55,16 +56,6 @@ func createTarBlobFromTestdata(t *testing.T, files map[string]string) *inmemory.
 	}
 	require.NoError(t, tw.Close())
 	return inmemory.New(&buf)
-}
-
-func readBlob(t *testing.T, b interface{ ReadCloser() (io.ReadCloser, error) }) []byte {
-	t.Helper()
-	rc, err := b.ReadCloser()
-	require.NoError(t, err)
-	defer func() { _ = rc.Close() }()
-	data, err := io.ReadAll(rc)
-	require.NoError(t, err)
-	return data
 }
 
 func TestChartBlob_ExtractChartAndProv(t *testing.T) {
@@ -124,7 +115,7 @@ func TestChartBlob_ExtractChartAndProv(t *testing.T) {
 
 			chart, err := cb.ChartArchive()
 			require.NoError(t, err)
-			assert.Equal(t, expectedChart, readBlob(t, chart))
+			assert.Equal(t, expectedChart, blobtest.ReadAll(t, chart))
 
 			prov, err := cb.ProvFile()
 			require.NoError(t, err)
@@ -132,7 +123,7 @@ func TestChartBlob_ExtractChartAndProv(t *testing.T) {
 				require.NotNil(t, prov)
 				expectedProv, err := os.ReadFile(tt.provSrcPath)
 				require.NoError(t, err)
-				assert.Equal(t, expectedProv, readBlob(t, prov))
+				assert.Equal(t, expectedProv, blobtest.ReadAll(t, prov))
 			} else {
 				assert.Nil(t, prov)
 			}
@@ -182,7 +173,7 @@ func TestChartBlob_ExtractionIsLazy(t *testing.T) {
 	chart2, err := cb.ChartArchive()
 	require.NoError(t, err)
 
-	assert.Equal(t, readBlob(t, chart1), readBlob(t, chart2))
+	assert.Equal(t, blobtest.ReadAll(t, chart1), blobtest.ReadAll(t, chart2))
 }
 
 func TestChartBlob_ReadCloserReturnsTarContent(t *testing.T) {

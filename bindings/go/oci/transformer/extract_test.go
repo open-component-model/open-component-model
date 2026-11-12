@@ -128,20 +128,7 @@ func loadOCILayoutBlob(layoutPath string) (blob.ReadOnlyBlob, error) {
 		return nil, fmt.Errorf("failed to read OCI layout file: %w", err)
 	}
 
-	return &testBlob{data: layoutData}, nil
-}
-
-// testBlob is a simple implementation of blob.ReadOnlyBlob for testing.
-type testBlob struct {
-	data []byte
-}
-
-func (b *testBlob) ReadCloser() (io.ReadCloser, error) {
-	return io.NopCloser(bytes.NewReader(b.data)), nil
-}
-
-func (b *testBlob) Size() int64 {
-	return int64(len(b.data))
+	return inmemory.New(bytes.NewReader(layoutData)), nil
 }
 
 // validateTarContents validates that specific files are present in the tar.
