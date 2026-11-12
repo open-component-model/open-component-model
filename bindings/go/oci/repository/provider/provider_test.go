@@ -14,6 +14,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	typesv1 "ocm.software/open-component-model/bindings/go/configuration/types/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
@@ -175,7 +176,7 @@ func TestWithHTTPConfig_CustomConfigIsUsed(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	timeout := httpv1alpha1.NewTimeout(5 * time.Second)
+	timeout := typesv1.NewDuration(5 * time.Second)
 	cfg := &httpv1alpha1.Config{TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: timeout}}
 	cfg.PlainHTTP = new(true) // the httptest server has no TLS
 	host := strings.TrimPrefix(srv.URL, "http://")
@@ -225,7 +226,7 @@ func TestWithHTTPConfig_ShortTimeoutCausesError(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	timeout := httpv1alpha1.NewTimeout(10 * time.Millisecond)
+	timeout := typesv1.NewDuration(10 * time.Millisecond)
 	cfg := &httpv1alpha1.Config{TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: timeout}}
 	cfg.PlainHTTP = new(true) // the httptest server has no TLS
 	host := strings.TrimPrefix(srv.URL, "http://")
