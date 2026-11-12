@@ -241,6 +241,16 @@ jobs:
         with:
           go-version-file: '${{ github.workspace }}/bindings/go/go.mod'
           cache-dependency-path: '${{ github.workspace }}/bindings/go/go.sum'
+      # setup-go caches the module download; the compile cache is separate and is the bulk
+      # of this job's time, because every integration test binary is built instrumented with
+      # -coverpkg=./... (the whole module). Restoring it across runs avoids that rebuild.
+      - name: Cache Go build
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/.cache/go-build
+          key: ${{ runner.os }}-${{ runner.arch }}-gobuild-integration-${{ hashFiles('bindings/go/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-gobuild-integration-
       - name: Run Tests
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
