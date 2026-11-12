@@ -3,6 +3,7 @@ package setup_test
 import (
 	"bytes"
 	"io"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -118,4 +119,13 @@ func TestNewBlobCache(t *testing.T) {
 		r.Eventually(func() bool { return !bc.Has(desc.Digest) }, 5*time.Second, 10*time.Millisecond,
 			"a blob older than ttl must expire")
 	})
+}
+
+func TestNewBlobCache_Disabled(t *testing.T) {
+	r := require.New(t)
+	dir := t.TempDir()
+	bc, err := setup.NewBlobCache(dir, &ocicachev1alpha1.Config{Enabled: new(false)})
+	r.NoError(err)
+	r.Nil(bc)
+	r.NoDirExists(filepath.Join(dir, "ocm-oci-cas"))
 }

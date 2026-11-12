@@ -148,7 +148,7 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 	// closure can read its final field values. sync.OnceValue guarantees
 	// the constructor runs at most once across all callers.
 	prov.sharedBlobCache = sync.OnceValue(prov.newSharedBlobCache)
-	if options.BlobCache != nil {
+	if options.BlobCache != nil && options.CacheConfig.IsEnabled() {
 		prov.sharedBlobCache = func() *cache.BlobCache { return options.BlobCache }
 	}
 	return prov

@@ -78,6 +78,11 @@ type Config struct {
 	// +ocm:jsonschema-gen:enum:deprecated=oci.cache.config.ocm.software
 	Type runtime.Type `json:"type"`
 
+	// Enabled turns the OCI caches on or off. false disables the blob and the reference
+	// cache: every read goes to the registry and no cache directory is created.
+	// Defaults to true.
+	Enabled *bool `json:"enabled,omitempty"`
+
 	// RemotePolicy controls when the caches contact the registry on a cache hit:
 	// IfNotPresent (default) or Always. See [RemotePolicy].
 	RemotePolicy RemotePolicy `json:"remotePolicy,omitempty"`
@@ -98,6 +103,11 @@ type Config struct {
 	// The reference cache ignores it.
 	// +ocm:jsonschema-gen:minimum=0
 	MaxTotalSize *int64 `json:"maxTotalSize,omitempty"`
+}
+
+// IsEnabled reports whether the caches are on. A nil c or an unset Enabled means on.
+func (c *Config) IsEnabled() bool {
+	return c == nil || c.Enabled == nil || *c.Enabled
 }
 
 // Validate rejects a RemotePolicy that is neither empty nor a known policy,
@@ -162,6 +172,9 @@ func Merge(configs ...*Config) *Config {
 	for _, c := range configs {
 		if c == nil {
 			continue
+		}
+		if c.Enabled != nil {
+			merged.Enabled = c.Enabled
 		}
 		if c.RemotePolicy != "" {
 			merged.RemotePolicy = c.RemotePolicy

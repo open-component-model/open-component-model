@@ -53,6 +53,12 @@ func TestWithOCICacheConfig(t *testing.T) {
 			wantRef:  nil,
 		},
 		{
+			name:     "enabled false disables both caches",
+			opts:     []Option{WithBlobCacheOptions(&cache.Options{}), WithReferenceCacheOptions(&cache.Options{}), WithOCICacheConfig(&ocicachev1alpha1.Config{Enabled: new(false)})},
+			wantBlob: nil,
+			wantRef:  nil,
+		},
+		{
 			name:     "config does not enable disabled caches",
 			opts:     []Option{WithOCICacheConfig(always)},
 			wantBlob: nil,
@@ -67,6 +73,14 @@ func TestWithOCICacheConfig(t *testing.T) {
 			r.Equal(tc.wantRef, prov.referenceCacheOpts)
 		})
 	}
+
+	t.Run("enabled false drops a shared blob cache", func(t *testing.T) {
+		r := require.New(t)
+		bc, err := cache.NewBlobCache(cache.Options{Dir: t.TempDir()})
+		r.NoError(err)
+		prov := NewComponentVersionRepositoryProvider(WithBlobCache(bc), WithOCICacheConfig(&ocicachev1alpha1.Config{Enabled: new(false)}))
+		r.Nil(prov.sharedBlobCache())
+	})
 
 	t.Run("shared options are not mutated", func(t *testing.T) {
 		r := require.New(t)
