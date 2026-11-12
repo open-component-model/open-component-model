@@ -18,8 +18,8 @@
   'minimumReleaseAge': '5 days',
   // config:best-practices this is usually disabled by default.
   // https://github.com/google/docsy/blob/9f8acf7a4547cb1c5d1b88b3db588793bfd6eb25/renovate.json5#L7
-  // Also, disabling this means that transitive dependencies that aren't 5 days old at least,
-  // will not get in. Because lock file maintenance doesn't care about that when it's refreshing the lock file.
+  // Disabling lockfile maintenance does not guarantee transitive release ages:
+  // dependency updates and npm retries without --before can still bypass the cutoff.
   lockFileMaintenance: {
     enabled: false,
   },
