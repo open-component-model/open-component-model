@@ -22,8 +22,8 @@
 //
 // Both caches share an [Options] struct so a caller can configure
 // limits once and instantiate either or both. The blob-only fields
-// ([Options.MaxBlobSize] and [Options.Accept]) are ignored by
-// [ReferenceCache].
+// ([Options.MaxBlobSize], [Options.MaxTotalSize] and [Options.Accept])
+// are ignored by [ReferenceCache].
 //
 // Credential scoping:
 //
@@ -43,11 +43,12 @@
 //
 // Scope and intent:
 //
-//   - [BlobCache] is intentionally narrow: by default it only caches
-//     OCI/Docker manifests and OCM component-descriptor blobs
-//     (configurable via [Options.Accept]). Layer blobs and arbitrary
-//     octet streams are not cached so disk usage stays bounded by
-//     descriptor metadata size.
+//   - [BlobCache] is narrow by default: [DefaultAccept] only admits
+//     OCI/Docker manifests and OCM component-descriptor blobs, so disk
+//     usage stays bounded by descriptor metadata size. A caller may
+//     admit layers through [Options.Accept], with a size cap and
+//     [Options.MaxTotalSize] to bound the disk use. A miss is buffered
+//     in memory, so admitted blobs must stay small.
 //
 //   - [ReferenceCache] is unconditional within its namespace: every
 //     successful upstream resolve is recorded.
@@ -63,9 +64,9 @@
 //     path so a future run with the same Dir reuses the existing
 //     content. Neither cache provides a Close method; both reseed
 //     their LRUs from the on-disk state on construction.
-//   - Eviction (LRU overflow or TTL expiry) deletes the on-disk file
-//     for blobs and rewrites/removes the per-namespace snapshot for
-//     references.
+//   - Eviction (LRU overflow, [Options.MaxTotalSize] or TTL expiry)
+//     deletes the on-disk file for blobs and rewrites/removes the
+//     per-namespace snapshot for references.
 //   - All public methods are safe for concurrent use. Under
 //     [RemotePolicyIfNotPresent], concurrent
 //     [BlobCache.Fetch] calls for the same digest are collapsed via

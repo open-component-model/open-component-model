@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
@@ -46,9 +48,11 @@ type ReadOnlyRepository interface {
 	ParseReference(reference string) (properties.Reference, error)
 }
 
-// BlobCache is a digest-keyed, disk-backed LRU+TTL cache for small
-// immutable blobs (manifests and OCM component descriptors). All
-// methods are safe for concurrent use.
+// BlobCache is a digest-keyed, disk-backed LRU+TTL cache for immutable
+// blobs. By default it admits manifests, indexes and OCM component
+// descriptors; a caller can admit more, such as small layers, through
+// [Options.Accept], and bound the disk use with [Options.MaxTotalSize].
+// All methods are safe for concurrent use.
 //
 // On startup, [NewBlobCache] reseeds the LRU from any well-formed
 // digest-keyed files already present under [Options.Dir], so cached
@@ -63,6 +67,13 @@ type BlobCache struct {
 	logger *slog.Logger
 	lru    *expirable.LRU[digest.Digest, blobEntry]
 
+	// insertMu serializes inserts into lru, so an insert knows whether
+	// its digest is already present and total counts each entry once.
+	// onEvict runs under the lock of lru and must not take it.
+	insertMu sync.Mutex
+	// total is the sum of the sizes of the entries in lru.
+	total atomic.Int64
+
 	// served records which repository served which blob, as the qualified
 	// reference of the blob. It is only set under [RemotePolicyAlways] and bounds
 	// what a hit may be served to, see [BlobCache.fetchAlways]. It must not be
@@ -71,10 +82,10 @@ type BlobCache struct {
 	served *ReferenceCache
 
 	// sf collapses concurrent upstream fetches for the same digest into
-	// a single round-trip. Because cached blobs are small (manifests
-	// and descriptors, bounded by [Options.MaxBlobSize]), the shared
-	// result is buffered in memory and each waiter is served its own
-	// reader over those bytes.
+	// a single round-trip. The shared result is buffered in memory, so
+	// [Options.MaxBlobSize] and [Options.Accept] must keep admitted
+	// blobs small, and each waiter is served its own reader over those
+	// bytes.
 	sf singleflight.Group
 }
 
@@ -118,16 +129,18 @@ func NewBlobCache(opts Options) (*BlobCache, error) {
 	if err != nil {
 		return nil, fmt.Errorf("blobcache: scan existing entries: %w", err)
 	}
-	totalSize := int64(0)
+	// Oldest first, so the LRU and the trim below evict the least
+	// recently written entries.
 	for _, e := range existing {
-		c.lru.Add(e.digest, blobEntry{path: e.path, size: e.size})
-		totalSize += e.size
+		c.insert(e.digest, blobEntry{path: e.path, size: e.size})
 	}
+	c.trim()
 	if len(existing) > 0 {
 		c.logger.Debug("blobcache: seeded from disk",
 			slog.Int("count", len(existing)),
+			slog.Int("kept", c.lru.Len()),
 			slog.Duration("duration", time.Since(startScan)),
-			slog.Int64("size", totalSize))
+			slog.Int64("size", c.totalSize()))
 	}
 	return c, nil
 }
@@ -179,19 +192,20 @@ func (c *BlobCache) Get(dgst digest.Digest) (*os.File, bool, error) {
 // LRU. It is a no-op (returns false, nil) when:
 //
 //   - [Options.MaxBlobSize] > 0 and size exceeds it.
+//   - [Options.MaxTotalSize] > 0 and the blob exceeds it.
 //   - The blob copied does not match size (when size > 0). This guards
 //     against truncated reads from early-Close on the upstream reader.
 //
-// Concurrent calls for the same digest race on the final [os.Rename];
-// the last winner wins. Both yield byte-identical content (the digest
-// is the key) so the LRU bookkeeping is harmless. Callers that want
-// to avoid duplicate upstream fetches must dedupe at a higher layer
-// (see [BlobCache.Fetch], which uses singleflight for exactly this).
+// Concurrent calls for the same digest are serialized when the blob is
+// moved into place, so each entry is counted once against
+// [Options.MaxTotalSize]. Callers that want to avoid duplicate upstream
+// fetches must dedupe at a higher layer (see [BlobCache.Fetch], which
+// uses singleflight for exactly this).
 //
 // The boolean return value reports whether the blob was actually
 // inserted into the LRU (true) or skipped (false).
 func (c *BlobCache) populate(ctx context.Context, dgst digest.Digest, size int64, r io.Reader) (bool, error) {
-	if c.opts.MaxBlobSize > 0 && size > c.opts.MaxBlobSize {
+	if c.tooLarge(size) {
 		c.logger.DebugContext(ctx, "blobcache: skipping oversized blob",
 			slog.String("digest", dgst.String()),
 			slog.Int64("size", size),
@@ -202,21 +216,77 @@ func (c *BlobCache) populate(ctx context.Context, dgst digest.Digest, size int64
 		return false, nil
 	}
 
-	path, n, err := writeAtomic(c.opts.Dir, dgst, c.opts.MaxBlobSize, r)
+	tmp, path, n, err := writeTemp(c.opts.Dir, dgst, c.opts.MaxBlobSize, r)
 	if err != nil {
 		return false, err
 	}
-	if size > 0 && n != size {
-		if rerr := removeQuiet(path); rerr != nil {
-			c.logger.WarnContext(ctx, "blobcache: remove truncated entry failed",
+	if (size > 0 && n != size) || c.tooLarge(n) {
+		if rerr := removeQuiet(tmp); rerr != nil {
+			c.logger.WarnContext(ctx, "blobcache: remove rejected entry failed",
 				slog.String("digest", dgst.String()), slog.String("err", rerr.Error()))
+		}
+		if c.tooLarge(n) {
+			return false, nil
 		}
 		return false, fmt.Errorf("blobcache: short read: got %d, want %d", n, size)
 	}
-	c.lru.Add(dgst, blobEntry{path: path, size: n})
+	if err := c.commit(dgst, tmp, blobEntry{path: path, size: n}); err != nil {
+		return false, err
+	}
+	c.trim()
 	c.logger.DebugContext(ctx, "blobcache: populated",
 		slog.String("digest", dgst.String()), slog.Int64("size", n))
 	return true, nil
+}
+
+// tooLarge reports whether a blob of size can never be cached, per
+// [Options.MaxBlobSize] and [Options.MaxTotalSize].
+func (c *BlobCache) tooLarge(size int64) bool {
+	return (c.opts.MaxBlobSize > 0 && size > c.opts.MaxBlobSize) ||
+		(c.opts.MaxTotalSize > 0 && size > c.opts.MaxTotalSize)
+}
+
+// commit moves the temp file tmp into place as e and inserts it. An
+// entry already cached under dgst is evicted first, so its size is
+// subtracted before the new one is added.
+func (c *BlobCache) commit(dgst digest.Digest, tmp string, e blobEntry) error {
+	c.insertMu.Lock()
+	defer c.insertMu.Unlock()
+	// Remove runs onEvict, which deletes the old file before the rename.
+	c.lru.Remove(dgst)
+	if err := commitTemp(tmp, e.path, e.size); err != nil {
+		return err
+	}
+	c.insert(dgst, e)
+	return nil
+}
+
+// insert adds e to the LRU and its size to the total. dgst must not be
+// in the LRU: insert is called under insertMu after a Remove, or while
+// seeding, where every digest is read from disk once.
+func (c *BlobCache) insert(dgst digest.Digest, e blobEntry) {
+	// Added before the entry, so an eviction of it never takes the
+	// total below zero.
+	c.total.Add(e.size)
+	c.lru.Add(dgst, e)
+}
+
+// trim evicts least recently used entries until the cache fits
+// [Options.MaxTotalSize].
+func (c *BlobCache) trim() {
+	if c.opts.MaxTotalSize <= 0 {
+		return
+	}
+	for c.total.Load() > c.opts.MaxTotalSize {
+		if _, _, ok := c.lru.RemoveOldest(); !ok {
+			return
+		}
+	}
+}
+
+// totalSize returns the bytes of all cached entries.
+func (c *BlobCache) totalSize() int64 {
+	return c.total.Load()
 }
 
 // Fetch is the cache-aware Fetch primitive used by store
@@ -226,8 +296,8 @@ func (c *BlobCache) populate(ctx context.Context, dgst digest.Digest, size int64
 // verifying its digest, records it to disk, and serves the caller
 // from the in-memory copy.
 //
-// Fetch honors [Options.Accept] and [Options.MaxBlobSize]: if the
-// descriptor fails either filter (or c is nil), the call falls
+// Fetch honors [Options.Accept], [Options.MaxBlobSize] and
+// [Options.MaxTotalSize]: if the descriptor fails any filter (or c is nil), the call falls
 // straight through to upstream.Fetch and nothing is buffered. In the
 // oversize case a debug log is emitted so operators can see why the
 // cache did not engage.
@@ -242,11 +312,12 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream ReadOnlyRepository, targ
 	if c == nil || !c.Accept(target) {
 		return upstream.Fetch(ctx, target)
 	}
-	if c.MaxBlobSize() > 0 && target.Size > c.MaxBlobSize() {
+	if c.tooLarge(target.Size) {
 		c.logger.DebugContext(ctx, "blobcache: skipping oversized descriptor, falling through",
 			slog.String("digest", target.Digest.String()),
 			slog.Int64("size", target.Size),
-			slog.Int64("max", c.MaxBlobSize()))
+			slog.Int64("max", c.MaxBlobSize()),
+			slog.Int64("maxTotal", c.opts.MaxTotalSize))
 		return upstream.Fetch(ctx, target)
 	}
 
@@ -401,6 +472,7 @@ func (c *BlobCache) verifyRemoteAccess(ctx context.Context, upstream content.Rea
 // for the evicted entry. Errors are logged at WARN — eviction must
 // not block.
 func (c *BlobCache) onEvict(dgst digest.Digest, e blobEntry) {
+	c.total.Add(-e.size)
 	if err := removeQuiet(e.path); err != nil {
 		c.logger.Warn("blobcache: evict file remove failed",
 			slog.String("digest", dgst.String()),
