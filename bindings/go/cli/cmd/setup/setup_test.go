@@ -18,6 +18,7 @@ import (
 	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	typesv1 "ocm.software/open-component-model/bindings/go/configuration/types/v1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -627,12 +628,12 @@ configurations:
 		require.NotNil(t, httpCfg)
 
 		require.NotNil(t, httpCfg.Timeout)
-		assert.Equal(t, httpv1alpha1.Timeout(2*time.Minute), *httpCfg.Timeout)
+		assert.Equal(t, typesv1.Duration(2*time.Minute), *httpCfg.Timeout)
 		require.NotNil(t, httpCfg.TLSHandshakeTimeout)
-		assert.Equal(t, httpv1alpha1.Timeout(5*time.Second), *httpCfg.TLSHandshakeTimeout)
+		assert.Equal(t, typesv1.Duration(5*time.Second), *httpCfg.TLSHandshakeTimeout)
 		require.Contains(t, httpCfg.Hosts, "ghcr.io:443")
 		require.NotNil(t, httpCfg.Hosts["ghcr.io:443"].Timeout)
-		assert.Equal(t, httpv1alpha1.Timeout(5*time.Minute), *httpCfg.Hosts["ghcr.io:443"].Timeout)
+		assert.Equal(t, typesv1.Duration(5*time.Minute), *httpCfg.Hosts["ghcr.io:443"].Timeout)
 	})
 
 	t.Run("invalid HTTP config returns error from ResolveHTTPConfig", func(t *testing.T) {
