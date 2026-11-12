@@ -18,8 +18,9 @@
 #    rbac.kro.run/aggregate-to-controller into its own.
 #    See https://kro.run/docs/advanced/access-control
 #
-# 4. The default service account of sovereign-product. The product Component
-#    reads its OCM config (acme-signing-key, ocm-plain-http) with that account's permissions.
+# 4. The service accounts of sovereign-product. The OCM objects read their OCM
+#    config (acme-signing-key, ocm-plain-http) with the default service account,
+#    the NamespacedDeployers the propagated config with their own.
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -200,4 +201,7 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: default
+    namespace: sovereign-product
+  - kind: ServiceAccount
+    name: sovereign-product-deployer
     namespace: sovereign-product

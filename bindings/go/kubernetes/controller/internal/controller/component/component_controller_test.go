@@ -56,8 +56,8 @@ var _ = Describe("Component Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
-			createServiceAccount(ctx, namespace.GetName(), serviceaccount.DefaultName)
-			grantOCMConfigReads(ctx, namespace.GetName(), namespace.GetName(), serviceaccount.DefaultName)
+			test.CreateServiceAccount(ctx, k8sClient, namespace.GetName(), serviceaccount.DefaultName)
+			test.GrantOCMConfigReads(ctx, k8sClient, namespace.GetName(), namespace.GetName(), serviceaccount.DefaultName)
 		})
 
 		AfterEach(func(ctx SpecContext) {
@@ -1308,8 +1308,8 @@ var _ = Describe("Component Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
-			createServiceAccount(ctx, namespace.GetName(), serviceaccount.DefaultName)
-			grantOCMConfigReads(ctx, namespace.GetName(), namespace.GetName(), serviceaccount.DefaultName)
+			test.CreateServiceAccount(ctx, k8sClient, namespace.GetName(), serviceaccount.DefaultName)
+			test.GrantOCMConfigReads(ctx, k8sClient, namespace.GetName(), namespace.GetName(), serviceaccount.DefaultName)
 
 			configs, secrets = createTestConfigsAndSecrets(ctx, namespace.GetName())
 

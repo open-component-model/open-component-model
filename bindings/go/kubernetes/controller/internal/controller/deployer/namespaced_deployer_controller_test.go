@@ -29,6 +29,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/applyset"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/serviceaccount"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
@@ -445,8 +446,10 @@ metadata:
 		Expect(errors.IsNotFound(err)).To(BeTrue())
 	})
 
-	It("rejects ocm configuration from another namespace", func(ctx SpecContext) {
+	It("reads ocm configuration from another namespace only if its service account may", func(ctx SpecContext) {
 		createServiceAccount(ctx, namespace.GetName(), true)
+		other := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace.GetName() + "-config"}}
+		Expect(k8sClient.Create(ctx, other)).To(Succeed())
 		resourceObj := mockYAMLResource(ctx, namespace.GetName(), `apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -458,11 +461,48 @@ metadata:
 				APIVersion: corev1.SchemeGroupVersion.String(),
 				Kind:       "Secret",
 				Name:       "foreign-credentials",
-				Namespace:  metav1.NamespaceDefault,
+				Namespace:  other.GetName(),
 			},
 			Policy: v1alpha1.ConfigurationPolicyDoNotPropagate,
 		}})
-		test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, deployer, v1alpha1.GetConfigurationFailedReason, "outside of namespace")
+		test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, deployer, v1alpha1.GetConfigurationFailedReason,
+			`secrets "foreign-credentials" is forbidden`)
+
+		By("passing the review once the service account may get it")
+		test.GrantOCMConfigReads(ctx, k8sClient, other.GetName(), namespace.GetName(), namespacedDeployerSA)
+		test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, deployer, v1alpha1.GetConfigurationFailedReason,
+			`secrets "foreign-credentials" not found`)
+	})
+
+	It("does not watch deployed objects its service account may not watch", func(ctx SpecContext) {
+		createServiceAccount(ctx, namespace.GetName(), false)
+		role := &rbacv1.Role{
+			ObjectMeta: metav1.ObjectMeta{Name: namespacedDeployerSA, Namespace: namespace.GetName()},
+			Rules: []rbacv1.PolicyRule{{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"get", "list", "create", "update", "patch", "delete"},
+			}},
+		}
+		Expect(k8sClient.Create(ctx, role)).To(Succeed())
+		Expect(k8sClient.Create(ctx, &rbacv1.RoleBinding{
+			ObjectMeta: metav1.ObjectMeta{Name: namespacedDeployerSA, Namespace: namespace.GetName()},
+			RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: role.GetName()},
+			Subjects:   []rbacv1.Subject{{Kind: rbacv1.ServiceAccountKind, Name: namespacedDeployerSA, Namespace: namespace.GetName()}},
+		})).To(Succeed())
+		resourceObj := mockYAMLResource(ctx, namespace.GetName(), `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nd-unwatched-cm
+`)
+
+		deployer := createNamespacedDeployer(ctx, namespace.GetName(), resourceObj.GetName(), nil)
+		test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, deployer, v1alpha1.ResourceNotSynced, "may not watch it")
+
+		By("watching once the service account may")
+		role.Rules[0].Verbs = append(role.Rules[0].Verbs, "watch")
+		Expect(k8sClient.Update(ctx, role)).To(Succeed())
+		test.WaitForReadyObject(ctx, k8sClient, deployer, map[string]any{})
 	})
 
 	It("falls back to the default service account", func(ctx SpecContext) {
@@ -473,7 +513,7 @@ metadata:
 `)
 		// envtest runs no service account controller, so the default service account has to be created.
 		Expect(k8sClient.Create(ctx, &corev1.ServiceAccount{
-			ObjectMeta: metav1.ObjectMeta{Name: defaultServiceAccount, Namespace: namespace.GetName()},
+			ObjectMeta: metav1.ObjectMeta{Name: serviceaccount.DefaultName, Namespace: namespace.GetName()},
 		})).To(Succeed())
 
 		deployer := &v1alpha1.NamespacedDeployer{
@@ -488,12 +528,12 @@ metadata:
 		})
 
 		By("not applying with the controller's permissions")
-		test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, deployer, v1alpha1.ApplyFailed, "system:serviceaccount:"+namespace.GetName()+":"+defaultServiceAccount)
+		test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, deployer, v1alpha1.ApplyFailed, "system:serviceaccount:"+namespace.GetName()+":"+serviceaccount.DefaultName)
 		cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "nd-no-sa-cm", Namespace: namespace.GetName()}}
 		Expect(errors.IsNotFound(k8sClient.Get(ctx, client.ObjectKeyFromObject(cm), cm))).To(BeTrue())
 
 		By("applying once the default service account is granted")
-		grantConfigMaps(ctx, namespace.GetName(), namespace.GetName(), defaultServiceAccount)
+		grantConfigMaps(ctx, namespace.GetName(), namespace.GetName(), serviceaccount.DefaultName)
 		test.WaitForReadyObject(ctx, k8sClient, deployer, map[string]any{})
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(cm), cm)).To(Succeed())
 

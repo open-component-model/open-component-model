@@ -251,34 +251,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	logger.Info("reconciling component")
-	access, err := r.authorizer.For(ctx, component.GetNamespace(), component.GetServiceAccountName())
+	configs, err := r.authorizer.EffectiveConfig(ctx, r.GetClient(), component, repo)
 	if err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.GetConfigurationFailedReason, err.Error())
 
 		return ctrl.Result{}, err
-	}
-
-	// Early warning that the SA does not have access to the referenced objects.
-	if err := access.AuthorizeConfigs(ctx, component.GetSpecifiedOCMConfig()); err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.GetConfigurationFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to authorize ocm config: %w", err)
-	}
-
-	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), component, repo)
-	if err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.GetConfigurationFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to get effective config: %w", err)
-	}
-
-	// Check the propagated config for objects that this objects might not have access to.
-	// We do this here so there is a proper early warning instead of the user having to just figure out
-	// what's wrong and why.
-	if err := access.AuthorizeConfigs(ctx, configs); err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), component, v1alpha1.GetConfigurationFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to authorize effective ocm config: %w", err)
 	}
 
 	// The deferred status patch persists it, even if a later step fails.

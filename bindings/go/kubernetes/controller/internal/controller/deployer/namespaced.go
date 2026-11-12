@@ -11,6 +11,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/workqueue"
@@ -24,17 +25,13 @@ import (
 
 	deliveryv1alpha1 "ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/applyset"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/serviceaccount"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 )
 
-const (
-	// defaultServiceAccount exists in every namespace and has no permissions unless an operator grants them.
-	defaultServiceAccount = "default"
-
-	// namespacedDeployerAnnotation maps a deployed object back to its NamespacedDeployer ("namespace/name"), as
-	// cluster-scoped and cross-namespace objects cannot carry an owner reference to a namespaced owner.
-	namespacedDeployerAnnotation = "delivery.ocm.software/namespaced-deployer"
-)
+// namespacedDeployerAnnotation maps a deployed object back to its NamespacedDeployer ("namespace/name"), as
+// cluster-scoped and cross-namespace objects cannot carry an owner reference to a namespaced owner.
+const namespacedDeployerAnnotation = "delivery.ocm.software/namespaced-deployer"
 
 func (r *Reconciler) newObject() deliveryv1alpha1.DeployerObject {
 	if r.Namespaced {
@@ -85,11 +82,17 @@ func (r *Reconciler) ownerReferenceOptions() []controllerutil.OwnerReferenceOpti
 // serviceAccountName returns the service account a NamespacedDeployer impersonates. Without one in its spec it falls
 // back to the namespace's default service account, never to the controller's identity.
 func serviceAccountName(deployer deliveryv1alpha1.DeployerObject) string {
-	if name := deployer.GetServiceAccountName(); name != "" {
-		return name
+	return serviceaccount.Name(deployer.GetServiceAccountName())
+}
+
+// serviceAccountAccess returns the Access of the service account of a NamespacedDeployer. A Deployer has none and
+// reads its configuration with the controller's identity.
+func (r *Reconciler) serviceAccountAccess(ctx context.Context, deployer deliveryv1alpha1.DeployerObject) (*serviceaccount.Access, error) {
+	if !r.Namespaced {
+		return nil, nil
 	}
 
-	return defaultServiceAccount
+	return r.authorizer.For(ctx, deployer.GetNamespace(), deployer.GetServiceAccountName())
 }
 
 // applyClient returns the client used to apply and prune the deployed objects. A Deployer applies with the
@@ -104,7 +107,7 @@ func (r *Reconciler) applyClient(ctx context.Context, deployer deliveryv1alpha1.
 		return nil, fmt.Errorf("failed to get service account %s: %w", key, err)
 	}
 
-	username := fmt.Sprintf("system:serviceaccount:%s:%s", key.Namespace, key.Name)
+	username := serviceaccount.Username(key.Namespace, key.Name)
 	cfg := rest.CopyConfig(r.restConfig)
 	cfg.Impersonate = rest.ImpersonationConfig{UserName: username}
 	c, err := client.New(cfg, client.Options{Scheme: r.Scheme, Mapper: r.resourceRESTMapper})
@@ -352,17 +355,22 @@ type ignoreCreate struct{ handler.EventHandler }
 func (ignoreCreate) Create(context.Context, event.CreateEvent, workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 }
 
-// validateConfigNamespaces rejects configuration references outside the namespace of a NamespacedDeployer, so
-// tenants cannot read configuration and credentials of other namespaces through the controller.
-func (r *Reconciler) validateConfigNamespaces(deployer deliveryv1alpha1.DeployerObject, configs []deliveryv1alpha1.OCMConfiguration) error {
+// authorizeWatches returns a Forbidden error if the service account of a NamespacedDeployer may not list and watch
+// the deployed objects. The controller watches them for drift with its own identity, which must not see more than
+// the service account could.
+func (r *Reconciler) authorizeWatches(ctx context.Context, access *serviceaccount.Access, objs []*unstructured.Unstructured) error {
 	if !r.Namespaced {
 		return nil
 	}
 
-	for _, cfg := range configs {
-		if cfg.Namespace != "" && cfg.Namespace != deployer.GetNamespace() {
-			return fmt.Errorf("ocm configuration %s %s/%s is outside of namespace %s",
-				cfg.Kind, cfg.Namespace, cfg.Name, deployer.GetNamespace())
+	for _, obj := range objs {
+		gvk := obj.GroupVersionKind()
+		mapping, err := r.resourceRESTMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
+		if err != nil {
+			return fmt.Errorf("failed to map %s: %w", gvk, err)
+		}
+		if err := access.AuthorizeWatch(ctx, mapping.Resource.GroupResource(), obj.GetNamespace()); err != nil {
+			return err
 		}
 	}
 

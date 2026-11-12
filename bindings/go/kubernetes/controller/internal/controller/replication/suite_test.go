@@ -73,6 +73,7 @@ var _ = BeforeSuite(func() {
 		},
 	})
 	Expect(err).ToNot(HaveOccurred())
+	Expect(test.ProvisionDefaultServiceAccounts(k8sManager)).To(Succeed())
 
 	ctx, cancel := context.WithCancel(context.Background())
 

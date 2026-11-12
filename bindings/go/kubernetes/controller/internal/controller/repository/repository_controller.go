@@ -23,6 +23,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/serviceaccount"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/pkg/configuration"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -38,10 +39,14 @@ type Reconciler struct {
 	// Resolver provides repository resolution and health checking for repository validation.
 	// It ensures that repository access is efficient and properly configured during reconciliation operations.
 	Resolver *resolution.Resolver
+
+	authorizer *serviceaccount.Authorizer
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, concurrency int) error {
+	r.authorizer = serviceaccount.NewAuthorizer(mgr.GetAPIReader(), mgr.GetClient())
+
 	// This index is required to get all components that reference an OCM repository. This is required to make sure that
 	// when deleting the OCM repository, no component exists anymore that references that OCM repository.
 	if err := mgr.GetFieldIndexer().IndexField(ctx, &v1alpha1.Component{}, repositoryKey, func(rawObj client.Object) []string {
@@ -150,7 +155,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	logger.Info("reconciling OCM repository")
-	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), ocmRepo, nil)
+	configs, err := r.authorizer.EffectiveConfig(ctx, r.GetClient(), ocmRepo, nil)
 	if err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), ocmRepo, v1alpha1.GetConfigurationFailedReason, err.Error())
 

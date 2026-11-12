@@ -9,7 +9,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -73,8 +72,8 @@ var _ = Describe("Component service account", func() {
 
 	Context("without a service account", func() {
 		BeforeEach(func(ctx SpecContext) {
-			createServiceAccount(ctx, namespace, serviceaccount.DefaultName)
-			grantOCMConfigReads(ctx, namespace, namespace, serviceaccount.DefaultName)
+			test.CreateServiceAccount(ctx, k8sClient, namespace, serviceaccount.DefaultName)
+			test.GrantOCMConfigReads(ctx, k8sClient, namespace, namespace, serviceaccount.DefaultName)
 		})
 
 		It("authorizes a Secret in its own namespace as the default service account", func(ctx SpecContext) {
@@ -92,7 +91,7 @@ var _ = Describe("Component service account", func() {
 
 			test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, component, v1alpha1.GetConfigurationFailedReason, forbiddenForeign)
 
-			grantOCMConfigReads(ctx, other, namespace, serviceaccount.DefaultName)
+			test.GrantOCMConfigReads(ctx, k8sClient, other, namespace, serviceaccount.DefaultName)
 			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{"Status.Component.Version": Version1})
 		})
 
@@ -125,7 +124,7 @@ var _ = Describe("Component service account", func() {
 
 	Context("with a service account", func() {
 		It("denies a Secret in another namespace until it may get it", func(ctx SpecContext) {
-			createServiceAccount(ctx, namespace, reader)
+			test.CreateServiceAccount(ctx, k8sClient, namespace, reader)
 			component := newComponent(ctx, func(c *v1alpha1.Component) {
 				c.Spec.ServiceAccountName = reader
 				c.Spec.OCMConfig = []v1alpha1.OCMConfiguration{test.SecretOCMConfiguration(foreign)}
@@ -133,12 +132,12 @@ var _ = Describe("Component service account", func() {
 
 			test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, component, v1alpha1.GetConfigurationFailedReason, forbiddenForeign)
 
-			grantOCMConfigReads(ctx, other, namespace, reader)
+			test.GrantOCMConfigReads(ctx, k8sClient, other, namespace, reader)
 			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{"Status.Component.Version": Version1})
 		})
 
 		It("denies a Secret in its own namespace it may not get", func(ctx SpecContext) {
-			createServiceAccount(ctx, namespace, reader)
+			test.CreateServiceAccount(ctx, k8sClient, namespace, reader)
 			component := newComponent(ctx, func(c *v1alpha1.Component) {
 				c.Spec.ServiceAccountName = reader
 				c.Spec.OCMConfig = []v1alpha1.OCMConfiguration{test.SecretOCMConfiguration(local)}
@@ -183,37 +182,4 @@ configurations:
 	Expect(k8sClient.Create(ctx, secret)).To(Succeed())
 
 	return secret
-}
-
-func createServiceAccount(ctx context.Context, namespace, name string) {
-	GinkgoHelper()
-
-	sa := &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
-	Expect(k8sClient.Create(ctx, sa)).To(Succeed())
-}
-
-// grantOCMConfigReads lets the service account sa of saNamespace get the Secrets, ConfigMaps and OCM objects in
-// namespace.
-func grantOCMConfigReads(ctx context.Context, namespace, saNamespace, sa string) {
-	GinkgoHelper()
-
-	role := &rbacv1.Role{
-		ObjectMeta: metav1.ObjectMeta{Name: saNamespace + "-" + sa, Namespace: namespace},
-		Rules: []rbacv1.PolicyRule{
-			{APIGroups: []string{""}, Resources: []string{"secrets", "configmaps"}, Verbs: []string{"get"}},
-			{
-				APIGroups: []string{v1alpha1.GroupVersion.Group},
-				Resources: []string{"repositories", "components", "resources"},
-				Verbs:     []string{"get"},
-			},
-		},
-	}
-	Expect(k8sClient.Create(ctx, role)).To(Succeed())
-
-	binding := &rbacv1.RoleBinding{
-		ObjectMeta: metav1.ObjectMeta{Name: role.GetName(), Namespace: namespace},
-		RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: role.GetName()},
-		Subjects:   []rbacv1.Subject{{Kind: rbacv1.ServiceAccountKind, Name: sa, Namespace: saNamespace}},
-	}
-	Expect(k8sClient.Create(ctx, binding)).To(Succeed())
 }

@@ -32,6 +32,7 @@ func newComponentReconciler(fakeClient client.Client, scheme *runtime.Scheme) *R
 			// These tests never actually call manager, so a static one is good enough.
 			NewPluginManager: test.StaticPluginManager(manager.NewPluginManager(context.Background())),
 		},
+		authorizer: test.PermissiveAuthorizer(),
 	}
 }
 

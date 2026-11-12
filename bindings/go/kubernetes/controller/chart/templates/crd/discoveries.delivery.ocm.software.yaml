@@ -258,6 +258,12 @@ spec:
                       values. Non-string label values are matched via Expression only.
                     type: object
                 type: object
+              serviceAccountName:
+                description: |-
+                  ServiceAccountName is the name of the service account in the same namespace that must be allowed to get
+                  every Secret, ConfigMap and OCM object the effective OCM configuration references, including the configuration
+                  propagated from the Component. If empty, the default service account of the namespace is used.
+                type: string
               suspend:
                 description: |-
                   Suspend tells the controller to suspend the reconciliation of this

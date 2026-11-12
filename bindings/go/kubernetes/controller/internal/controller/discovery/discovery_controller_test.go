@@ -60,6 +60,7 @@ func newReconciler(t *testing.T, objs ...client.Object) (*Reconciler, client.Cli
 			EventRecorder:    record.NewFakeRecorder(100),
 			NewPluginManager: test.StaticPluginManager(nil),
 		},
+		authorizer: test.PermissiveAuthorizer(),
 	}
 	return r, fakeClient
 }
