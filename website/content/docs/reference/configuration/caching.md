@@ -1,6 +1,6 @@
 ---
 title: "Caching"
-description: "Reference for the OCI caches used by the OCM CLI and controller: cache location, temporary folder, limits, admission rules, remote policy, and the oci.cache.config.ocm.software configuration type."
+description: "Reference for the OCI caches of the OCM CLI and controller: cache location, limits, admission rules, remote policy, and their configuration."
 icon: "🗄️"
 weight: 1
 toc: true
