@@ -234,7 +234,7 @@ tasks:
         {{.CLI_ARGS}}
 
   test/integration:
-    desc: "Run only the sigstore integration tests against a scaffolding cluster."
+    desc: "Run only the sigstore integration (live sign) tests against a scaffolding cluster."
     # Convenience target for local development
     deps: [setup]
     set: [errexit]
@@ -242,7 +242,22 @@ tasks:
       - |
         export PATH="{{.SIGSTORE_BIN_DIR}}:$PATH"
         . {{.SIGSTORE_ENV_FILE}}
-        go test -count=1 -run "{{.INTEGRATION_TEST_IDENTIFIER}}" -timeout 180s ./...
+        go test -count=1 -run "{{.INTEGRATION_TEST_IDENTIFIER}}" -timeout 180s .
+
+  test/verify:
+    desc: "Run the offline sigstore verification replay tests (no cluster; pinned cosign + committed fixtures in replay/testdata)."
+    deps: [cosign:install]
+    cmds:
+      - export PATH="{{.SIGSTORE_BIN_DIR}}:$PATH"; go test -count=1 -timeout 120s ./replay/...
+
+  fixtures:record:
+    desc: "Re-record the offline replay fixtures (replay/testdata) by signing against the live scaffolding."
+    deps: [setup]
+    cmds:
+      - |
+        export PATH="{{.SIGSTORE_BIN_DIR}}:$PATH"
+        . {{.SIGSTORE_ENV_FILE}}
+        RECORD_FIXTURES=1 go test -count=1 -run TestRecordFixtures -timeout 180s ./replay/...
 
   scaffolding:teardown:
     desc: "Delete kind cluster and clean up"
