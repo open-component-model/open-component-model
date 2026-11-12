@@ -25,8 +25,10 @@ between runs of the CLI and restarts of the controller.
 
 | Cache           | Key                                     | Content                                         | Scope                                                    |
 |-----------------|-----------------------------------------|-------------------------------------------------|----------------------------------------------------------|
-| Blob cache      | Blob digest                             | Manifests, indexes, and component descriptors   | Shared by all registries and repositories in the process |
+| Blob cache      | Blob digest                             | Manifests, indexes, and component descriptors¹  | Shared by all registries and repositories in the process |
 | Reference cache | Registry, repository, and tag or digest | The descriptor that a tag or digest resolves to | Shared by all registries and repositories in the process |
+
+¹ In the controller also small blobs such as local resources, see [Admission Rules](#admission-rules).
 
 The blob cache stores content by digest, and a digest always identifies the same bytes. That makes it safe to share
 the blob cache between repositories and credentials. OCM checks every fetched blob against its digest before it
@@ -42,7 +44,9 @@ Credentials are not part of either key, so rotating short-lived tokens does not 
 The controller uses only the blob cache unless the [configuration](#configuration-in-the-controller) turns on the
 reference cache. One instance of each serves every namespace.
 
-Resource layers, such as the image layers of an OCI image resource, are **not** cached. Only the blobs listed in
+The CLI does **not** cache resource layers, such as the image layers of an OCI image resource. The controller caches
+the blobs it reads from component version repositories, such as local resources, up to the Deployer download limit.
+Resources of other access types, such as `ociImage` or `helm`, are not cached. Only the blobs listed in
 [Admission Rules](#admission-rules) are cached.
 
 ## Cache Location
@@ -105,12 +109,13 @@ writable volume. If the cache directory cannot be created, the controller does n
 
 Each cache applies these limits:
 
-| Limit              | Default                              | Field ([Configuration](#configuration)) | Applies to                  | Behaviour                                                                                                                                          |
-|--------------------|--------------------------------------|-----------------------------------------|-----------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
-| Maximum entries    | `100000` (blob), `10000` (reference) | `reference.maxEntries`                  | Blob cache, reference cache | When the limit is reached, the least recently used entry is removed. The reference cache counts the tags and digests of all repositories together. |
-| Time to live       | `10m`                                | `blob.ttl`, `reference.ttl`             | Blob cache, reference cache | Entries older than this are removed.                                                                                                               |
-| Maximum blob size  | `20 MiB`                             | `blob.maxBlobSize`                      | Blob cache                  | Larger blobs are downloaded as usual but not cached.                                                                                               |
-| Maximum total size | No limit (CLI), `1 GiB` (controller) | `blob.maxTotalSize`                     | Blob cache                  | When the limit is exceeded, least recently used entries are removed until the cache fits.                                                          |
+| Limit              | Default                                  | Field ([Configuration](#configuration))        | Applies to                   | Behaviour                                                                                                                                          |
+|--------------------|------------------------------------------|------------------------------------------------|------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
+| Maximum entries    | `100000` (blob), `10000` (reference)     | `reference.maxEntries`                         | Blob cache, reference cache  | When the limit is reached, the least recently used entry is removed. The reference cache counts the tags and digests of all repositories together. |
+| Time to live       | `10m`                                    | `blob.ttl`, `reference.ttl`                    | Blob cache, reference cache  | Entries older than this are removed.                                                                                                               |
+| Maximum blob size  | `20 MiB`                                 | `blob.maxBlobSize`                             | Blob cache                   | Larger blobs are downloaded as usual but not cached.                                                                                               |
+| Maximum layer size | Deployer download limit, default `2 MiB` | Not configurable, capped by `blob.maxBlobSize` | Blob cache of the controller | Larger blobs, other than manifests and descriptors, are downloaded as usual but not cached.                                                        |
+| Maximum total size | No limit (CLI), `1 GiB` (controller)     | `blob.maxTotalSize`                            | Blob cache                   | When the limit is exceeded, least recently used entries are removed until the cache fits.                                                          |
 
 When the blob cache removes an entry, it also deletes the file. When the reference cache is loaded from disk,
 entries resolved longer than the time to live ago are not loaded. When the blob cache is loaded from disk, every valid
@@ -129,6 +134,11 @@ The blob cache stores a blob only if its media type is one of:
 - the OCM component config media type;
 - an OCM component descriptor media type (any media type that starts with
   `application/vnd.ocm.software.component-descriptor`, which includes legacy v1 and `+tar` variants).
+
+The blob cache of the controller also stores any other blob whose size the manifest declares and that is no larger
+than the Deployer download limit, set with the controller flag `--deployer-download-max-resource-size` (default
+`2 MiB`). If that limit is `0` (no limit), such blobs are cached up to `20 MiB`. A cache miss holds the blob in
+memory, so the limit also bounds the memory a download uses.
 
 All other blobs are downloaded from the registry every time.
 
