@@ -1,8 +1,11 @@
 package credentials
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/oras-project/oras-go/v3/registry/remote/auth"
 	remotecredentials "github.com/oras-project/oras-go/v3/registry/remote/credentials"
 	"github.com/oras-project/oras-go/v3/registry/remote/properties"
 	"github.com/stretchr/testify/assert"
@@ -398,4 +401,48 @@ func TestGetStore(t *testing.T) {
 			assert.NotNil(t, store)
 		})
 	}
+}
+
+// oras lower-cases the registry it passes to the credential function, while the
+// identity keeps the case of the base URL; host names must match regardless.
+func TestCredentialFunc_HostCaseInsensitive(t *testing.T) {
+	for _, host := range []string{"registry.example.com", "REGISTRY.EXAMPLE.COM", "Registry.Example.Com"} {
+		t.Run(host, func(t *testing.T) {
+			r := require.New(t)
+			client := &auth.Client{
+				Cache: auth.NewCache(),
+				CredentialFunc: CredentialFunc(
+					&identityv1.OCIRegistryIdentity{Hostname: host},
+					&credentialsv1.OCICredentials{Username: "user", Password: "pass"},
+				),
+			}
+			r.True(sendsBasicAuth(t, client, host), "request went out unauthenticated")
+		})
+	}
+}
+
+// sendsBasicAuth sends one request addressed to host through client and
+// reports whether the registry received a basic credential.
+func sendsBasicAuth(t *testing.T, client *auth.Client, host string) bool {
+	t.Helper()
+	var saw bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if _, _, ok := req.BasicAuth(); ok {
+			saw = true
+			return
+		}
+		w.Header().Set("WWW-Authenticate", `Basic realm="test"`)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(srv.Close)
+	client.Client = srv.Client()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/v2/some/repo/manifests/latest", nil)
+	require.NoError(t, err)
+	// oras derives the credential lookup from the request host, not the dialled address.
+	req.Host = host
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	return saw
 }

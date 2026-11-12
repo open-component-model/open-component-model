@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/oras-project/oras-go/v3/registry/remote/auth"
 	remotecredentials "github.com/oras-project/oras-go/v3/registry/remote/credentials"
@@ -270,7 +271,7 @@ func createRepository(
 		urlresolver.WithBaseClient(&auth.Client{
 			Client:         httpClient,
 			Header:         header,
-			CredentialFunc: remotecredentials.StaticCredentialFunc(url.Host, ocicredentials.MapCredentials(credentials)),
+			CredentialFunc: credentialFunc(url.Host, credentials),
 			// Keep the distribution spec token flow for basic credentials instead of
 			// attempting OAuth2 first, which not all registries implement.
 			TokenFetcher: auth.NewCompositeTokenFetcher(httpClient, header, "", true),
@@ -362,4 +363,11 @@ func (p *ResourceRepository) UploadResourceStream(ctx context.Context, resource 
 // credential repository configuration types (DockerConfig) instead of payload types.
 func (p *ResourceRepository) GetCredentialTypeScheme() *runtime.Scheme {
 	return ocicreds.CredentialTypeScheme
+}
+
+// credentialFunc returns credentials for requests to host. oras matches on the
+// canonical, lower-cased registry name while host keeps the case written in the
+// base URL, so it is lower-cased here as host names are case-insensitive.
+func credentialFunc(host string, credentials *ocicredsv1.OCICredentials) remotecredentials.CredentialFunc {
+	return remotecredentials.StaticCredentialFunc(strings.ToLower(host), ocicredentials.MapCredentials(credentials))
 }
