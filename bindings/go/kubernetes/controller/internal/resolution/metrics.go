@@ -1,8 +1,6 @@
 package resolution
 
 import (
-	"errors"
-
 	"github.com/prometheus/client_golang/prometheus"
 	kmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 
@@ -79,9 +77,9 @@ func repositoryLabel(spec runtime.Typed) string {
 	}
 }
 
-// resultLabel treats a component version that is not safely digestible as resolved, because it is returned.
+// resultLabel maps a nil error to a resolved result and any error to a failure.
 func resultLabel(err error) string {
-	if err == nil || errors.Is(err, ErrNotSafelyDigestible) {
+	if err == nil {
 		return "success"
 	}
 
