@@ -181,3 +181,18 @@ tests:
             - ports:
                 - port: 5000
                   protocol: TCP
+
+  - it: normalises leading-zero ports in both health and metrics ingress rules
+    # ":08081" must become 8081 and ":01024" must become 1024, not octal values.
+    set:
+      manager.networkPolicy.enabled: true
+      manager.healthProbe.bindAddress: ":08081"
+      manager.metricsServer.bindAddress: ":01024"
+    asserts:
+      - equal:
+          path: spec.ingress[0].ports
+          value:
+            - port: 8081
+              protocol: TCP
+            - port: 1024
+              protocol: TCP

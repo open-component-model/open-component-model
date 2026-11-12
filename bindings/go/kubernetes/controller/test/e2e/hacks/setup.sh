@@ -19,6 +19,10 @@ for cmd in "${cmds[@]}"; do
   fi
 done
 
+## Check required versions before anything is started (see bindings/go/kubernetes/controller/.env)
+: "${KIND_NODE_IMAGE_VERSION:?KIND_NODE_IMAGE_VERSION must be set, see bindings/go/kubernetes/controller/.env}"
+prometheus_operator_version="${PROMETHEUS_OPERATOR_VERSION:?PROMETHEUS_OPERATOR_VERSION must be set, see bindings/go/kubernetes/controller/.env}"
+
 ## Check that there is not a kind cluster already running
 if kind get clusters | grep -q "^ocm-e2e$"; then
   echo "Kind cluster 'ocm-e2e' is already running. Please delete it before running this script."
@@ -223,11 +227,18 @@ install_kro() {
     --set rbac.mode=aggregation --wait || return 1
 }
 
+# Only the CRD: the chart's ServiceMonitor (prometheus.enable in values.yaml) must apply; nothing scrapes it.
+install_servicemonitor_crd() {
+  kubectl apply --server-side -f "https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/${prometheus_operator_version}/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml" || return 1
+  kubectl wait --for=condition=Established crd/servicemonitors.monitoring.coreos.com --timeout=60s
+}
+
 pids=()
 run_step "image-registries"   install_registries & pids+=($!)
 run_step "flux"               install_flux       & pids+=($!)
 run_step "argocd"             install_argocd     & pids+=($!)
 run_step "kro"                install_kro        & pids+=($!)
+run_step "servicemonitor-crd" install_servicemonitor_crd & pids+=($!)
 
 fail=0
 for pid in "${pids[@]}"; do

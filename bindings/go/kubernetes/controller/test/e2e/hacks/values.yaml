@@ -1,0 +1,11 @@
+# Helm values overlay for the e2e suite, applied on top of chart/test-values.yaml: the metrics
+# endpoint and ServiceMonitor, so e2e_prometheus_test.go can verify the Prometheus wiring.
+manager:
+  metricsServer:
+    bindAddress: ":8443"
+    # Plain HTTP so the spec scrapes through the API server service proxy without a token or TLS.
+    secure: false
+
+# Needs the ServiceMonitor CRD, which test/e2e/hacks/setup.sh installs.
+prometheus:
+  enable: true

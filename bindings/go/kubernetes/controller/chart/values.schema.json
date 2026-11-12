@@ -125,9 +125,6 @@
                         },
                         "periodSeconds": {
                             "type": "integer"
-                        },
-                        "port": {
-                            "type": "integer"
                         }
                     }
                 },
@@ -329,9 +326,6 @@
                             "type": "string"
                         },
                         "periodSeconds": {
-                            "type": "integer"
-                        },
-                        "port": {
                             "type": "integer"
                         }
                     }
