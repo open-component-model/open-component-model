@@ -12,15 +12,7 @@ import (
 //go:embed schemas/Config.schema.json
 var schemaConfig []byte
 
-//go:embed schemas/Timeout.schema.json
-var schemaTimeout []byte
-
 // JSONSchema returns the JSON Schema for Config.
 func (Config) JSONSchema() []byte {
 	return schemaConfig
-}
-
-// JSONSchema returns the JSON Schema for Timeout.
-func (Timeout) JSONSchema() []byte {
-	return schemaTimeout
 }

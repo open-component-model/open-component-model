@@ -11,8 +11,8 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3"
 	"helm.sh/helm/v4/pkg/registry"
-	"oras.land/oras-go/v2"
 
 	"ocm.software/open-component-model/bindings/go/blob/compression/gzippool"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"

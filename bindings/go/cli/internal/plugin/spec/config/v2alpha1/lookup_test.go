@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	generic "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	typesv1 "ocm.software/open-component-model/bindings/go/configuration/types/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -20,7 +21,7 @@ func TestLookupConfig_AcceptsVersionedAndUnversionedType(t *testing.T) {
 			raw := &runtime.Raw{}
 			r.NoError(runtime.NewScheme(runtime.WithAllowUnknown()).Convert(&Config{
 				Type:        typ,
-				IdleTimeout: Duration(7 * time.Second),
+				IdleTimeout: typesv1.Duration(7 * time.Second),
 				Locations:   []string{"/plugins"},
 			}, raw))
 
@@ -29,7 +30,7 @@ func TestLookupConfig_AcceptsVersionedAndUnversionedType(t *testing.T) {
 				Configurations: []*runtime.Raw{raw},
 			})
 			r.NoError(err)
-			r.Equal(Duration(7*time.Second), cfg.IdleTimeout)
+			r.Equal(typesv1.Duration(7*time.Second), cfg.IdleTimeout)
 			r.Equal([]string{"/plugins"}, cfg.Locations)
 		})
 	}
