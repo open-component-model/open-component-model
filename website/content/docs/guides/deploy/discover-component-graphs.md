@@ -114,7 +114,7 @@ kubectl apply -f discovery.yaml
 ### Confirm the Discovery is ready
 
 ```bash
-kubectl get discovery platform-components -o wide
+kubectl get discovery platform-components
 ```
 
 Check that the graph was resolved and the observed generation matches:
@@ -230,7 +230,7 @@ suspended. Discovery is watch-driven with no interval.
 **Fix:** Check the `Component` and `spec.suspend`:
 
 ```bash
-kubectl get component releasechannel -o wide
+kubectl get component releasechannel
 kubectl get discovery platform-components -o jsonpath='{.spec.suspend}{"\n"}'
 ```
 
