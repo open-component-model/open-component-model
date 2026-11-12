@@ -2,7 +2,7 @@ module github.com/open-component-model/ocm-website/hack/generate-cli-docs
 
 go 1.27.2
 
-toolchain go1.27.3
+toolchain go1.27.4
 
 // Pin kube-openapi to the v0.37.0 k8s release line (structured-merge-diff v6).
 // apimachinery v0.37.0 compiles against smd/v6; newer kube-openapi pseudo-versions
