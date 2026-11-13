@@ -1,7 +1,8 @@
 package v2_test
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"strings"
 	"testing"
 	"time"
@@ -204,7 +205,7 @@ func TestDescriptor_JSON(t *testing.T) {
 
 	assert.NotEmpty(t, desc.Component.Resources[0].ToIdentity())
 
-	descData, err := json.Marshal(desc)
+	descData, err := json.Marshal(desc, runtime.JSONOptions)
 	assert.JSONEq(t, jsonData, string(descData))
 	assert.NoError(t, err)
 	assert.NoError(t, descriptorv2.ValidateRawJSON(descData))
@@ -496,7 +497,7 @@ func TestTimestamp_MarshalJSON(t *testing.T) {
 	ts.Time = descriptorv2.NewTime(timeValue)
 
 	// Test
-	data, err := json.Marshal(ts)
+	data, err := json.Marshal(ts, runtime.JSONOptions)
 
 	// Assert
 	require.NoError(t, err)
@@ -549,7 +550,7 @@ func TestTimestamp_MarshalJSON_InvalidYear(t *testing.T) {
 	ts.Time = descriptorv2.NewTime(timeValue)
 
 	// Test
-	_, err := json.Marshal(ts)
+	_, err := json.Marshal(ts, runtime.JSONOptions)
 
 	// Assert
 	require.Error(t, err)
@@ -595,7 +596,7 @@ func TestResource_Struct(t *testing.T) {
 	}
 
 	// Test
-	jsonData, err := json.Marshal(resource)
+	jsonData, err := json.Marshal(resource, runtime.JSONOptions)
 
 	// Assert
 	require.NoError(t, err)
@@ -626,7 +627,7 @@ func TestSource_Struct(t *testing.T) {
 	}
 
 	// Test
-	jsonData, err := json.Marshal(source)
+	jsonData, err := json.Marshal(source, runtime.JSONOptions)
 
 	// Assert
 	require.NoError(t, err)
@@ -654,7 +655,7 @@ func TestReference_Struct(t *testing.T) {
 	}
 
 	// Test
-	jsonData, err := json.Marshal(reference)
+	jsonData, err := json.Marshal(reference, runtime.JSONOptions)
 
 	// Assert
 	require.NoError(t, err)
@@ -675,7 +676,7 @@ func TestReference_UnsetDigestOmitted(t *testing.T) {
 		Component: "acme.org/child",
 	}
 
-	jsonData, err := json.Marshal(reference)
+	jsonData, err := json.Marshal(reference, runtime.JSONOptions)
 	r.NoError(err)
 	r.JSONEq(`{"name":"child","version":"1.0.0","componentName":"acme.org/child"}`, string(jsonData))
 
@@ -706,7 +707,7 @@ func TestSignature_Struct(t *testing.T) {
 	}
 
 	// Test
-	jsonData, err := json.Marshal(signature)
+	jsonData, err := json.Marshal(signature, runtime.JSONOptions)
 
 	// Assert
 	require.NoError(t, err)
@@ -739,7 +740,7 @@ func TestNestedDigest_Struct(t *testing.T) {
 	}
 
 	// Test
-	jsonData, err := json.Marshal(nested)
+	jsonData, err := json.Marshal(nested, runtime.JSONOptions)
 
 	// Assert
 	require.NoError(t, err)
@@ -1236,32 +1237,32 @@ func TestSchemaConformance(t *testing.T) {
 			// label.value must accept any JSON type, not only objects.
 			{
 				name:   "StringValue",
-				label:  descriptorv2.Label{Name: "imagevector.gardener.cloud/name", Value: json.RawMessage(`"alpine"`)},
+				label:  descriptorv2.Label{Name: "imagevector.gardener.cloud/name", Value: jsontext.Value(`"alpine"`)},
 				expect: assert.NoError,
 			},
 			{
 				name:   "NumberValue",
-				label:  descriptorv2.Label{Name: "priority", Value: json.RawMessage(`42`)},
+				label:  descriptorv2.Label{Name: "priority", Value: jsontext.Value(`42`)},
 				expect: assert.NoError,
 			},
 			{
 				name:   "BooleanValue",
-				label:  descriptorv2.Label{Name: "signing", Value: json.RawMessage(`true`)},
+				label:  descriptorv2.Label{Name: "signing", Value: jsontext.Value(`true`)},
 				expect: assert.NoError,
 			},
 			{
 				name:   "NullValue",
-				label:  descriptorv2.Label{Name: "optional", Value: json.RawMessage(`null`)},
+				label:  descriptorv2.Label{Name: "optional", Value: jsontext.Value(`null`)},
 				expect: assert.NoError,
 			},
 			{
 				name:   "ArrayValue",
-				label:  descriptorv2.Label{Name: "tags", Value: json.RawMessage(`["a","b"]`)},
+				label:  descriptorv2.Label{Name: "tags", Value: jsontext.Value(`["a","b"]`)},
 				expect: assert.NoError,
 			},
 			{
 				name:   "ObjectValue",
-				label:  descriptorv2.Label{Name: "metadata", Value: json.RawMessage(`{"key":"val"}`)},
+				label:  descriptorv2.Label{Name: "metadata", Value: jsontext.Value(`{"key":"val"}`)},
 				expect: assert.NoError,
 			},
 		}

@@ -2,7 +2,7 @@ package credentialplugin
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -76,7 +76,7 @@ func TestRegisterCredentialPlugin(t *testing.T) {
 
 			rawPluginSpec, err := pluginruntime.ConvertToSpec(&builder.PluginSpec)
 			r.NoError(err)
-			content, err := json.Marshal(rawPluginSpec)
+			content, err := json.Marshal(rawPluginSpec, runtime.JSONOptions)
 			r.NoError(err)
 			if tt.expectedTypes > 0 {
 				r.Contains(string(content), `"capabilities"`)
@@ -111,7 +111,7 @@ func TestRegisterCredentialPlugin_MultipleTypes(t *testing.T) {
 
 	rawPluginSpec, err := pluginruntime.ConvertToSpec(&builder.PluginSpec)
 	r.NoError(err)
-	content, err := json.Marshal(rawPluginSpec)
+	content, err := json.Marshal(rawPluginSpec, runtime.JSONOptions)
 	r.NoError(err)
 	r.Contains(string(content), `"credentialPlugin"`)
 }

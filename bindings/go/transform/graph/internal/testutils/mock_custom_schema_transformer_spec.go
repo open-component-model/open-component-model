@@ -14,7 +14,7 @@ type MockCustomSchemaObjectTransformer struct {
 	Type   runtime.Type                             `json:"type"`
 	ID     string                                   `json:"id,omitempty"`
 	Spec   *MockCustomSchemaObjectTransformerSpec   `json:"spec"`
-	Output *MockCustomSchemaObjectTransformerOutput `json:"output,omitempty"`
+	Output *MockCustomSchemaObjectTransformerOutput `json:"output,omitzero"`
 }
 
 // MockCustomSchemaObjectTransformerOutput is the output of the MockCustomSchemaObjectTransformer.

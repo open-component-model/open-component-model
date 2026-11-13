@@ -1,11 +1,13 @@
 package component_version
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress"
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress/bar"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	graphPkg "ocm.software/open-component-model/bindings/go/transform/graph"
 	graphRuntime "ocm.software/open-component-model/bindings/go/transform/graph/runtime"
 )
@@ -43,7 +45,7 @@ func formatError(t *graphPkg.Transformation, err error) string {
 	if t != nil && t.Spec != nil {
 		info := fmt.Sprintf("Transformation %s with version %s failed.\nSpec data shown below for debugging.",
 			t.DisplayName(), t.Type.Version)
-		specJSON, jsonErr := json.MarshalIndent(t.Spec.Data, "", "  ")
+		specJSON, jsonErr := json.Marshal(t.Spec.Data, runtime.JSONOptions, jsontext.WithIndent("  "))
 		if jsonErr == nil {
 			result += bar.FramedText(info, string(specJSON), 4)
 		}

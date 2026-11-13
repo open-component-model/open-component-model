@@ -9,7 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"math/big"
 	"os"
@@ -169,7 +169,7 @@ func fakeBundleJSONWithCert(t *testing.T, issuer string) []byte {
 			"signature":     "",
 		},
 	}
-	data, err := json.Marshal(bundle)
+	data, err := json.Marshal(bundle, runtime.JSONOptions)
 	require.NoError(t, err)
 	return data
 }
@@ -209,7 +209,7 @@ func fakeBundleJSONWithCertV2(t *testing.T, issuer string) []byte {
 			"signature":     "",
 		},
 	}
-	data, err := json.Marshal(bundle)
+	data, err := json.Marshal(bundle, runtime.JSONOptions)
 	require.NoError(t, err)
 	return data
 }
@@ -1367,7 +1367,7 @@ func TestExtractCertInfoFromBundleJSON(t *testing.T) {
 						"certificate": map[string]string{"rawBytes": certB64},
 					},
 				}
-				data, err := json.Marshal(bundle)
+				data, err := json.Marshal(bundle, runtime.JSONOptions)
 				require.NoError(t, err)
 				return data
 			},
@@ -1397,7 +1397,7 @@ func TestExtractCertInfoFromBundleJSON(t *testing.T) {
 						"certificate": map[string]string{"rawBytes": certB64},
 					},
 				}
-				data, err := json.Marshal(bundle)
+				data, err := json.Marshal(bundle, runtime.JSONOptions)
 				require.NoError(t, err)
 				return data
 			},

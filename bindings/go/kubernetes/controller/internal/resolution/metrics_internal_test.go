@@ -1,6 +1,7 @@
 package resolution
 
 import (
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"testing"
@@ -17,7 +18,7 @@ func TestRepositoryLabel(t *testing.T) {
 		return &oci.Repository{Type: runtime.NewUnversionedType(typ), BaseUrl: baseURL}
 	}
 	raw := &runtime.Raw{}
-	require.NoError(t, raw.UnmarshalJSON([]byte(`{"type":"OCIRegistry","baseUrl":"https://ghcr.io/org/components"}`)))
+	require.NoError(t, json.Unmarshal([]byte(`{"type":"OCIRegistry","baseUrl":"https://ghcr.io/org/components"}`), raw))
 
 	tests := []struct {
 		name string

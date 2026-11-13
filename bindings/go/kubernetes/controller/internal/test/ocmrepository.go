@@ -2,7 +2,7 @@ package test
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -65,7 +65,7 @@ func SetupCTFComponentVersionRepository(ctx SpecContext, ctfpath string, descs [
 		Expect(repo.AddComponentVersion(ctx, desc)).To(Succeed())
 	}
 
-	specData, err := json.Marshal(repoSpec)
+	specData, err := json.Marshal(repoSpec, runtime.JSONOptions)
 	Expect(err).NotTo(HaveOccurred())
 
 	return repo, specData

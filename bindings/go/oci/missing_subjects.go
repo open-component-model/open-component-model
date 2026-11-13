@@ -2,7 +2,7 @@ package oci
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -66,7 +66,7 @@ func skipMissingSubject(next findSuccessorsFunc) findSuccessorsFunc {
 			return nil, err
 		}
 		var manifest struct {
-			Subject *ociImageSpecV1.Descriptor `json:"subject,omitempty"`
+			Subject *ociImageSpecV1.Descriptor `json:"subject,omitzero"`
 		}
 		if err := json.Unmarshal(raw, &manifest); err != nil {
 			return nil, err

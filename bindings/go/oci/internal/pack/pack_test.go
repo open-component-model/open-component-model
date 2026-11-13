@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"sync/atomic"
@@ -879,7 +879,7 @@ func TestPackingPreservesResourceDigest(t *testing.T) {
 						Manifests: []ociImageSpecV1.Descriptor{root},
 					}
 					index.SchemaVersion = 2
-					indexData, err := json.Marshal(index)
+					indexData, err := json.Marshal(index, runtime.JSONOptions)
 					r.NoError(err)
 					root = content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageIndex, indexData)
 					r.NoError(writer.Push(ctx, root, bytes.NewReader(indexData)))

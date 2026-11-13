@@ -3,7 +3,8 @@ package resource_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"os"
 	"path/filepath"
 	"strings"
@@ -81,7 +82,7 @@ func setupComponent(t *testing.T, specs ...resourceSpec) string {
 		}
 
 		if spec.describes != nil {
-			value, err := json.Marshal(artifactref.References{{Identity: spec.describes}})
+			value, err := json.Marshal(artifactref.References{{Identity: spec.describes}}, runtime.JSONOptions)
 			r.NoError(err)
 			resource.Labels = []descriptor.Label{{
 				Name:    artifactref.LabelName,
@@ -122,7 +123,7 @@ func setupComponentWithAttestedImage(t *testing.T, mediaType string) string {
 	r.NoError(err)
 
 	push := func(mediaType string, value any) ociImageSpecV1.Descriptor {
-		raw, err := json.Marshal(value)
+		raw, err := json.Marshal(value, runtime.JSONOptions)
 		r.NoError(err)
 		desc := content.NewDescriptorFromBytes(mediaType, raw)
 		r.NoError(store.Push(ctx, desc, bytes.NewReader(raw)))
@@ -149,7 +150,7 @@ func setupComponentWithAttestedImage(t *testing.T, mediaType string) string {
 	statement := push(attestationMediaType, map[string]any{
 		"_type":         "https://in-toto.io/Statement/v0.1",
 		"predicateType": "https://spdx.dev/Document",
-		"predicate":     json.RawMessage(spdx("attached")),
+		"predicate":     jsontext.Value(spdx("attached")),
 	})
 	statement.Annotations = map[string]string{"in-toto.io/predicate-type": "https://spdx.dev/Document"}
 	attested := push(ociImageSpecV1.MediaTypeImageManifest, ociImageSpecV1.Manifest{

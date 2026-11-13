@@ -2,7 +2,7 @@ package resource
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -21,7 +21,7 @@ func TestGetGlobalResource(t *testing.T) {
 	response := &v1.GetGlobalResourceRequest{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == GetGlobalResource && r.Method == http.MethodPost {
-			err := json.NewEncoder(w).Encode(response)
+			err := json.MarshalWrite(w, response, runtime.JSONOptions)
 			assert.NoError(t, err)
 			return
 		}
@@ -62,7 +62,7 @@ func TestAddGlobalResource(t *testing.T) {
 	response := &v1.GetGlobalResourceResponse{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == AddGlobalResource && r.Method == http.MethodPost {
-			err := json.NewEncoder(w).Encode(response)
+			err := json.MarshalWrite(w, response, runtime.JSONOptions)
 			assert.NoError(t, err)
 			return
 		}

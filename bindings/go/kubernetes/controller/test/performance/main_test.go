@@ -1,7 +1,7 @@
 package main
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestParseFlags(t *testing.T) {
@@ -112,10 +114,10 @@ func TestResultJSON(t *testing.T) {
 		},
 	}}
 
-	raw, err := json.Marshal(res)
+	raw, err := json.Marshal(res, ocmruntime.JSONOptions)
 	r.NoError(err)
 	var got map[string]any
-	r.NoError(json.Unmarshal(raw, &got))
+	r.NoError(json.Unmarshal(raw, &got, ocmruntime.JSONOptions))
 	for _, key := range []string{"durations", "outcome", "usage", "controllerCounters", "scenario", "drift"} {
 		r.NotContains(got, key, "every phase lives in phases")
 	}

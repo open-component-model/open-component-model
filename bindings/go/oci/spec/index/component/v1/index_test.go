@@ -2,7 +2,7 @@ package v1
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"testing"
 
@@ -11,12 +11,14 @@ import (
 	"github.com/oras-project/oras-go/v3/content/memory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func Test_Manifest(t *testing.T) {
 	r := require.New(t)
 
-	data, err := json.Marshal(Manifest)
+	data, err := json.Marshal(Manifest, runtime.JSONOptions)
 	r.NoError(err)
 
 	dig := digest.FromBytes(data)

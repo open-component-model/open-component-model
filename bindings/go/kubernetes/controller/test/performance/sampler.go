@@ -21,10 +21,10 @@ var gaugePrefixes = []string{
 type sample struct {
 	// At is the offset from the start of the measurement, in seconds.
 	At              float64            `json:"at"`
-	WorkingSetBytes float64            `json:"workingSetBytes,omitempty"`
+	WorkingSetBytes float64            `json:"workingSetBytes,omitzero"`
 	Gauges          map[string]float64 `json:"gauges,omitempty"`
 	// CPUSeconds is the controller's cumulative process CPU time.
-	CPUSeconds float64 `json:"cpuSeconds,omitempty"`
+	CPUSeconds float64 `json:"cpuSeconds,omitzero"`
 }
 
 // sampler polls controller gauges and kubelet container memory. Counters only

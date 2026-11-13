@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -19,6 +19,8 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/oras-project/oras-go/v3/registry/remote/properties"
 	"golang.org/x/sync/singleflight"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // referenceSubdir is the directory under [Options.Dir] that the
@@ -369,7 +371,7 @@ func (c *ReferenceCache) writeNamespace(namespace string) error {
 		return nil
 	}
 
-	raw, err := json.Marshal(snap)
+	raw, err := json.Marshal(snap, runtime.JSONOptions)
 	if err != nil {
 		return fmt.Errorf("marshal snapshot: %w", err)
 	}

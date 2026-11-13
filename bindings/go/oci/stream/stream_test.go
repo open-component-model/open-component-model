@@ -3,7 +3,7 @@ package stream
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"testing"
 
@@ -14,6 +14,8 @@ import (
 	"github.com/oras-project/oras-go/v3/content/memory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestOCIResourceStream_Fetch(t *testing.T) {
@@ -85,7 +87,7 @@ func TestOCIResourceStream_Materialize(t *testing.T) {
 		Config:    configDesc,
 		Layers:    []ocispec.Descriptor{layerDesc},
 	}
-	manifestBytes, err := json.Marshal(manifest)
+	manifestBytes, err := json.Marshal(manifest, runtime.JSONOptions)
 	require.NoError(t, err)
 	manifestDesc := pushBlob(t, ctx, store, ocispec.MediaTypeImageManifest, manifestBytes)
 
@@ -120,7 +122,7 @@ func TestOCIResourceStream_CopyGraph(t *testing.T) {
 		Config:    configDesc,
 		Layers:    []ocispec.Descriptor{layerDesc},
 	}
-	manifestBytes, err := json.Marshal(manifest)
+	manifestBytes, err := json.Marshal(manifest, runtime.JSONOptions)
 	require.NoError(t, err)
 	manifestDesc := pushBlob(t, ctx, srcStore, ocispec.MediaTypeImageManifest, manifestBytes)
 

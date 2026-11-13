@@ -21,7 +21,7 @@ type DownloadWgetResource struct {
 	Type   runtime.Type                `json:"type"`
 	ID     string                      `json:"id"`
 	Spec   *DownloadWgetResourceSpec   `json:"spec"`
-	Output *DownloadWgetResourceOutput `json:"output,omitempty"`
+	Output *DownloadWgetResourceOutput `json:"output,omitzero"`
 }
 
 // DownloadWgetResourceOutput is the output specification of the DownloadWgetResource transformation.

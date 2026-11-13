@@ -1,7 +1,7 @@
 package v2alpha1
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 	"time"
 
@@ -15,7 +15,7 @@ import (
 // makeRaw creates a runtime.Raw from a Config by JSON marshalling.
 func makeRaw(t *testing.T, cfg *Config) *runtime.Raw {
 	t.Helper()
-	data, err := json.Marshal(cfg)
+	data, err := json.Marshal(cfg, runtime.JSONOptions)
 	require.NoError(t, err)
 	raw := &runtime.Raw{}
 	require.NoError(t, json.Unmarshal(data, raw))

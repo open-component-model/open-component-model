@@ -8,7 +8,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/json"
+	"encoding/json/v2"
 	"encoding/pem"
 	"fmt"
 	"log/slog"
@@ -174,7 +174,7 @@ stringData:
 				FilePath:   ctfPath,
 				AccessMode: ctfv1.AccessModeReadOnly,
 			}
-			specData, err := json.Marshal(repoSpec)
+			specData, err := json.Marshal(repoSpec, runtime.JSONOptions)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("mocking a component")
@@ -340,7 +340,7 @@ stringData:
 				FilePath:   ctfPath,
 				AccessMode: ctfv1.AccessModeReadOnly,
 			}
-			specData, err := json.Marshal(repoSpec)
+			specData, err := json.Marshal(repoSpec, runtime.JSONOptions)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("mocking a component")
@@ -538,7 +538,7 @@ data:
 				FilePath:   ctfPath,
 				AccessMode: ctfv1.AccessModeReadOnly,
 			}
-			specData, err = json.Marshal(repoSpec)
+			specData, err = json.Marshal(repoSpec, runtime.JSONOptions)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -884,7 +884,7 @@ data:
 				FilePath:   ctfPath,
 				AccessMode: ctfv1.AccessModeReadOnly,
 			}
-			specData, err := json.Marshal(repoSpec)
+			specData, err := json.Marshal(repoSpec, runtime.JSONOptions)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("creating an ocm config holding the verification configuration")
@@ -1094,7 +1094,7 @@ data:
 				FilePath:   ctfPath,
 				AccessMode: ctfv1.AccessModeReadOnly,
 			}
-			specData, err := json.Marshal(repoSpec)
+			specData, err := json.Marshal(repoSpec, runtime.JSONOptions)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("creating an ocm config holding the verification configuration")
@@ -1340,7 +1340,7 @@ data:
 				FilePath:   ctfPath,
 				AccessMode: ctfv1.AccessModeReadOnly,
 			}
-			specData, err := json.Marshal(repoSpec)
+			specData, err := json.Marshal(repoSpec, runtime.JSONOptions)
 			Expect(err).NotTo(HaveOccurred())
 
 			By("creating an ocm config holding the WRONG public key for verification")
@@ -1544,7 +1544,7 @@ stringData:
 			FilePath:   v1CTFPath,
 			AccessMode: ctfv1.AccessModeReadOnly,
 		}
-		v1SpecData, err := json.Marshal(v1RepoSpec)
+		v1SpecData, err := json.Marshal(v1RepoSpec, runtime.JSONOptions)
 		Expect(err).NotTo(HaveOccurred())
 
 		By("creating the v1 component and resource mocks")
@@ -1695,7 +1695,7 @@ data:
 			FilePath:   v2CTFPath,
 			AccessMode: ctfv1.AccessModeReadOnly,
 		}
-		v2SpecData, err := json.Marshal(v2RepoSpec)
+		v2SpecData, err := json.Marshal(v2RepoSpec, runtime.JSONOptions)
 		Expect(err).NotTo(HaveOccurred())
 
 		By("updating the component mock to v2")
@@ -1822,7 +1822,7 @@ data:
 			FilePath:   ctfPath,
 			AccessMode: ctfv1.AccessModeReadOnly,
 		}
-		specData, err := json.Marshal(repoSpec)
+		specData, err := json.Marshal(repoSpec, runtime.JSONOptions)
 		Expect(err).NotTo(HaveOccurred())
 
 		componentObj := test.MockComponent(ctx, "component-finalizer-add", namespace.GetName(), &test.MockComponentOptions{
@@ -1939,7 +1939,7 @@ data:
 			FilePath:   ctfPath,
 			AccessMode: ctfv1.AccessModeReadOnly,
 		}
-		specData, err := json.Marshal(repoSpec)
+		specData, err := json.Marshal(repoSpec, runtime.JSONOptions)
 		Expect(err).NotTo(HaveOccurred())
 
 		componentObj := test.MockComponent(ctx, "component-finalizer-remove", namespace.GetName(), &test.MockComponentOptions{

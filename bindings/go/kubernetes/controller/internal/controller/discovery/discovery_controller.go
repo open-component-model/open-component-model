@@ -3,7 +3,7 @@ package discovery
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 
@@ -317,7 +317,7 @@ func (r *Reconciler) setPayload(discovery *v1alpha1.Discovery, payload *internal
 		for _, record := range payload.Extracted {
 			typed := make(v1alpha1.ExtractedRecord, len(record))
 			for name, value := range record {
-				raw, err := json.Marshal(value)
+				raw, err := json.Marshal(value, runtime.JSONOptions)
 				if err != nil {
 					return fmt.Errorf("failed to marshal extracted field %q: %w", name, err)
 				}

@@ -2,7 +2,7 @@ package resource
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -133,7 +133,7 @@ func toCredentials(credentials runtime.Typed) (plugins.KV, error) {
 	if credentials == nil {
 		return plugins.KV{}, nil
 	}
-	rawCreds, err := json.Marshal(credentials)
+	rawCreds, err := json.Marshal(credentials, runtime.JSONOptions)
 	if err != nil {
 		return plugins.KV{}, err
 	}

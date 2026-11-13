@@ -3,7 +3,8 @@ package component_version
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -648,18 +649,17 @@ func renderTGD(tgd *transformv1alpha1.TransformationGraphDefinition, format stri
 	switch format {
 	case render.OutputFormatJSON.String():
 		read, write := io.Pipe()
-		encoder := json.NewEncoder(write)
-		encoder.SetIndent("", "  ")
+		encoder := jsontext.NewEncoder(write, jsontext.WithIndent("  "))
 		go func() {
-			err := encoder.Encode(tgd)
+			err := json.MarshalEncode(encoder, tgd, runtime.JSONOptions)
 			_ = write.CloseWithError(err)
 		}()
 		return read, nil
 	case render.OutputFormatNDJSON.String():
 		read, write := io.Pipe()
-		encoder := json.NewEncoder(write)
+		encoder := jsontext.NewEncoder(write)
 		go func() {
-			err := encoder.Encode(tgd)
+			err := json.MarshalEncode(encoder, tgd, runtime.JSONOptions)
 			_ = write.CloseWithError(err)
 		}()
 		return read, nil

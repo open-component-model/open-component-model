@@ -1,7 +1,7 @@
 package runtime
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -29,7 +29,7 @@ func TestRaw_UnmarshalJSON_InvalidJSON(t *testing.T) {
 	err := json.Unmarshal([]byte(input), &raw)
 
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "unexpected end of JSON input")
+	require.Contains(t, err.Error(), "unexpected EOF")
 }
 
 func TestRaw_MarshalJSON(t *testing.T) {
@@ -57,4 +57,14 @@ func TestRaw_String(t *testing.T) {
 	raw := &Raw{Data: []byte("some raw data")}
 
 	require.Equal(t, "some raw data", raw.String())
+}
+
+// The type member is extracted with a nested unmarshal, which must keep the options the
+// outer decoder was given: a .ocmconfig read through sigs.k8s.io/yaml keeps the author's
+// spelling, and losing the type here makes every dispatch on it silently skip the entry.
+func TestRaw_UnmarshalJSONFrom_KeepsDecodeOptions(t *testing.T) {
+	var raw Raw
+	require.NoError(t, json.Unmarshal([]byte(`{"Type":"example/v1","foo":"bar"}`), &raw, JSONDecodeOptions))
+
+	require.Equal(t, NewVersionedType("example", "v1"), raw.GetType())
 }
