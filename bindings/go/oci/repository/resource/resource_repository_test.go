@@ -10,6 +10,7 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/registry/remote/auth"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -458,6 +459,40 @@ func TestNewResourceRepositoryHTTPConfig_PlainHTTP(t *testing.T) {
 			if tt.wantErr != "" {
 				r.ErrorContains(err, tt.wantErr)
 			}
+		})
+	}
+}
+
+// oras lower-cases the registry it matches static credentials against, while the
+// base URL host keeps the case the user wrote; host names must match regardless.
+func TestCredentialFunc_HostCaseInsensitive(t *testing.T) {
+	for _, host := range []string{"registry.example.com", "REGISTRY.EXAMPLE.COM", "Registry.Example.Com"} {
+		t.Run(host, func(t *testing.T) {
+			r := require.New(t)
+			var saw bool
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				if _, _, ok := req.BasicAuth(); ok {
+					saw = true
+					return
+				}
+				w.Header().Set("WWW-Authenticate", `Basic realm="test"`)
+				w.WriteHeader(http.StatusUnauthorized)
+			}))
+			t.Cleanup(srv.Close)
+
+			client := &auth.Client{
+				Client:         srv.Client(),
+				Cache:          auth.NewCache(),
+				CredentialFunc: credentialFunc(host, &ocicredsv1.OCICredentials{Username: "user", Password: "pass"}),
+			}
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/v2/some/repo/manifests/latest", nil)
+			r.NoError(err)
+			// oras derives the credential lookup from the request host, not the dialled address.
+			req.Host = host
+			resp, err := client.Do(req)
+			r.NoError(err)
+			r.NoError(resp.Body.Close())
+			r.True(saw, "request went out unauthenticated")
 		})
 	}
 }
