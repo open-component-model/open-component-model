@@ -1,12 +1,10 @@
 package v2alpha1
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
-	"time"
 
 	generic "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	typesv1 "ocm.software/open-component-model/bindings/go/configuration/types/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -34,37 +32,10 @@ type Config struct {
 	Type runtime.Type `json:"type"`
 	// IdleTimeout on startup. If the plugin is orphaned (e.g. due to a panic of the CLI)
 	// and a plugin is inactive for this duration, it will automatically shut itself down.
-	IdleTimeout Duration `json:"idleTimeout"`
+	IdleTimeout typesv1.Duration `json:"idleTimeout"`
 	// Locations is a list of locations where the plugin manager will look for plugins.
 	// This can be a list of directories.
 	Locations []string `json:"locations"`
-}
-
-type Duration time.Duration
-
-func (d Duration) MarshalJSON() ([]byte, error) {
-	return json.Marshal(time.Duration(d).String())
-}
-
-func (d *Duration) UnmarshalJSON(b []byte) error {
-	var v interface{}
-	if err := json.Unmarshal(b, &v); err != nil {
-		return err
-	}
-	switch value := v.(type) {
-	case float64:
-		*d = Duration(time.Duration(value))
-		return nil
-	case string:
-		tmp, err := time.ParseDuration(value)
-		if err != nil {
-			return err
-		}
-		*d = Duration(tmp)
-		return nil
-	default:
-		return errors.New("invalid duration")
-	}
 }
 
 // LookupConfig creates a new plugin configuration from a central V1 config.

@@ -62,6 +62,17 @@ func TestIsLocalBlob(t *testing.T) {
 			true,
 		},
 		{
+			"raw legacy localOciBlob",
+			&runtime.Raw{
+				Type: runtime.Type{
+					Name:    descriptorv2.LegacyLocalOciBlobAccessType,
+					Version: descriptorv2.LocalBlobAccessTypeVersion,
+				},
+				Data: []byte(`{"type":"localOciBlob/v1","digest":"sha256:abc123"}`),
+			},
+			true,
+		},
+		{
 			"raw unknown type",
 			&runtime.Raw{
 				Type: runtime.Type{

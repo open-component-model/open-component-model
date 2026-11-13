@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	typesv1 "ocm.software/open-component-model/bindings/go/configuration/types/v1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	credv1 "ocm.software/open-component-model/bindings/go/s3/spec/credentials/v1"
@@ -720,7 +721,7 @@ func TestHTTPConfig(t *testing.T) {
 	})
 
 	t.Run("caller timeouts are preserved", func(t *testing.T) {
-		timeout := httpv1alpha1.NewTimeout(42)
+		timeout := typesv1.NewDuration(42)
 		got := httpConfig(&httpv1alpha1.Config{
 			TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: timeout},
 		})
@@ -929,7 +930,7 @@ func TestNewClient(t *testing.T) {
 		injected := &http.Client{}
 		client, err := newClient(ctx, Request{}, &option{
 			HTTPClient: injected,
-			HTTPConfig: &httpv1alpha1.Config{TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: httpv1alpha1.NewTimeout(42)}},
+			HTTPConfig: &httpv1alpha1.Config{TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: typesv1.NewDuration(42)}},
 		})
 		require.NoError(t, err)
 		assert.Same(t, injected, client.Options().HTTPClient, "the caller's client must not be rebuilt from config")
