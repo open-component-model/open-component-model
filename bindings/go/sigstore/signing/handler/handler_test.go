@@ -750,6 +750,22 @@ func TestHandler_Verify(t *testing.T) {
 			},
 		},
 		{
+			// --use-signed-timestamps and --insecure-ignore-tlog are added only on the
+			// private-infrastructure path. A public verify uses the tlog, so it must omit
+			// both even when the bundle carries a signed timestamp (timestampVerificationData).
+			name:       "public infrastructure with signed timestamp omits --use-signed-timestamps",
+			creds:      &trustedrootv1.TrustedRoot{TrustedRootJSON: `{"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1"}`},
+			bundleJSON: fakeBundleJSONWithTimestamp,
+			assertArgs: func(t *testing.T, args []string) {
+				t.Helper()
+				r := require.New(t)
+				r.False(hasArg(args, "--use-signed-timestamps"),
+					"--use-signed-timestamps must NOT be added for public infrastructure")
+				r.False(hasArg(args, "--insecure-ignore-tlog"),
+					"public infrastructure must not ignore the tlog")
+			},
+		},
+		{
 			name:  "trusted root from inline JSON credential",
 			creds: &trustedrootv1.TrustedRoot{TrustedRootJSON: `{"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1"}`},
 			assertArgs: func(t *testing.T, args []string) {
