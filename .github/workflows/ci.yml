@@ -247,6 +247,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_USER: ${{ github.actor }}
         run: task bindings/go:test/integration
+      - name: Debug sigstore scaffolding
+        if: failure()
+        timeout-minutes: 3
+        run: task bindings/go/sigstore/integration:scaffolding:diagnostics
       - name: Require sigstore report
         if: always()
         working-directory: bindings/go

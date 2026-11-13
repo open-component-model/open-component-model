@@ -15,14 +15,16 @@ vars:
   SIGSTORE_ENV_DIR: '{{.TASKFILE_DIR}}/tmp/sigstore'
   SIGSTORE_BIN_DIR: '{{.TASKFILE_DIR}}/tmp/bin'
   SIGSTORE_BRIDGE_PORT: '8080'
-  SCAFFOLDING_URL: 'https://github.com/sigstore/scaffolding/releases/download/{{.SCAFFOLDING_VERSION}}'
+  SIGSTORE_SETUP_DIR: '{{.TASKFILE_DIR}}/tmp/setup'
+  SIGSTORE_SETUP_HELPERS: '{{.TASKFILE_DIR}}/hack/setup-helpers.sh'
 
   # sslip.io is a free public DNS service that maps hostnames like <svc>.<ns>.<ip>.sslip.io
   # to the embedded IP address. Sigstore scaffolding (and other projects like Knative, Rancher, Coolify) use it
   # to give each in-cluster service a unique hostname routable via a single ingress IP.
-  # On Linux, Docker host-network mode resolves sslip.io natively via public DNS.
   # On macOS, /etc/hosts must map these to 127.0.0.1 because kubectl port-forward
   # bypasses real DNS resolution. The scaffolding:hosts task automates this.
+  # On Linux, sslip.io public DNS is not relied on: scaffolding:hosts:linux maps the real
+  # Kourier load-balancer IP into a managed /etc/hosts block instead.
   SSLIP_HOSTS: |
     127.0.0.1 fulcio.fulcio-system.172.18.255.1.sslip.io
     127.0.0.1 rekor.rekor-system.172.18.255.1.sslip.io
@@ -47,17 +49,43 @@ tasks:
           grep -qF "$line" /etc/hosts || echo "$line" | sudo tee -a /etc/hosts
         done
 
-  scaffolding:hosts:clean:
-    desc: "Remove sslip.io entries from /etc/hosts (optional, requires sudo)"
-    platforms: [darwin]
+  scaffolding:hosts:linux:
+    internal: true
+    platforms: [linux]
     cmds:
       - |
-        echo "Removing sslip.io scaffolding entries from /etc/hosts..."
-        # Avoid `sed -i` — its in-place flag differs between BSD sed (macOS default) and GNU sed
-        # (Homebrew gnubin). Write to a tmp file, then `cp` (not `mv`) back to preserve the
-        # original root:wheel ownership and permissions of /etc/hosts.
-        tmp=$(mktemp) && sudo sed '/\.172\.18\.255\.1\.sslip\.io/d' /etc/hosts > "$tmp" && sudo cp "$tmp" /etc/hosts && rm "$tmp"
-        tmp=$(mktemp) && sudo sed '/registry\.local/d' /etc/hosts > "$tmp" && sudo cp "$tmp" /etc/hosts && rm "$tmp"
+        set -euo pipefail
+        ip=$(kubectl -n kourier-system get service kourier -ojsonpath='{.status.loadBalancer.ingress[0].ip}')
+        hosts=""
+        for svc in fulcio/fulcio-system rekor/rekor-system ctlog/ctlog-system tsa/tsa-system tuf/tuf-system gettoken/default; do
+          url=$(kubectl -n "${svc#*/}" get ksvc "${svc%/*}" -ojsonpath='{.status.url}')
+          host=${url#*://}; host=${host%%/*}; host=${host%%:*}
+          [ -n "$host" ] && [ "$host" != "$url" ] || { echo "sigstore setup: incomplete ingress mapping (${svc})" >&2; exit 1; }
+          hosts="$hosts $host"
+        done
+        [ -n "$ip" ] || { echo "sigstore setup: incomplete ingress mapping (kourier ip)" >&2; exit 1; }
+        # shellcheck disable=SC2086 # word splitting of hostnames intended
+        sudo bash -c '. "$0"; write_scaffolding_hosts /etc/hosts "$@"' '{{.SIGSTORE_SETUP_HELPERS}}' "$ip" $hosts
+        # -s files: without it getent falls back to DNS, and sslip.io returns the same IP.
+        for host in $hosts; do
+          got=$(getent -s files hosts "$host" | awk 'NR==1{print $1}')
+          [ "$got" = "$ip" ] || { echo "sigstore setup: hosts mapping not effective for $host (got '${got}')" >&2; exit 1; }
+        done
+        echo "sigstore setup: mapped$hosts to $ip"
+
+  scaffolding:hosts:clean:
+    desc: "Remove scaffolding entries from /etc/hosts (requires sudo)"
+    cmds:
+      - platforms: [darwin]
+        cmd: |
+          echo "Removing sslip.io scaffolding entries from /etc/hosts..."
+          # Avoid `sed -i`: its in-place flag differs between BSD sed (macOS default) and GNU sed
+          # (Homebrew gnubin). Write to a tmp file, then `cp` (not `mv`) back to preserve the
+          # original root:wheel ownership and permissions of /etc/hosts.
+          tmp=$(mktemp) && sudo sed '/\.172\.18\.255\.1\.sslip\.io/d' /etc/hosts > "$tmp" && sudo cp "$tmp" /etc/hosts && rm "$tmp"
+          tmp=$(mktemp) && sudo sed '/registry\.local/d' /etc/hosts > "$tmp" && sudo cp "$tmp" /etc/hosts && rm "$tmp"
+      - platforms: [linux]
+        cmd: sudo bash -c '. "$0"; remove_scaffolding_hosts /etc/hosts' '{{.SIGSTORE_SETUP_HELPERS}}'
 
   scaffolding:setup:
     desc: "Create kind cluster and deploy sigstore scaffolding (~5 min, skips if already running)"
@@ -85,42 +113,21 @@ tasks:
             kind export kubeconfig 2>/dev/null || true
             task scaffolding:teardown
           fi
+      # setup-kind.sh patches (webhook retry, metallb pre-fetch, resource_blaster override) are in hack/prepare-scaffolding.sh
+      - bash '{{.TASKFILE_DIR}}/hack/prepare-scaffolding.sh' '{{.SCAFFOLDING_VERSION}}' '{{.SIGSTORE_SETUP_DIR}}'
       - |
-        curl -fLo /tmp/setup-kind.sh "{{.SCAFFOLDING_URL}}/setup-kind.sh"
-        # Patch setup-kind.sh: it patches configmap/config-network (validated by the Knative
-        # webhook) once, before Knative is up, so on a slow cluster the webhook call fails with
-        # "connection refused". A rollout wait is not enough: the pod reports Ready before its
-        # Service routes to it. Retry the patch like the script already does for the later
-        # config-features/-defaults/-autoscaler patches. Remove once upstream fixes the script.
-        tmp=$(mktemp) && sed \
-          -e 's@^kubectl patch configmap/config-network@while ! kubectl patch configmap/config-network@' \
-          -e 's@\(ingress\.class":"kourier.*\)$@\1; do echo Waiting for webhook to be up.; sleep 2; done@' \
-          /tmp/setup-kind.sh > "$tmp" && mv "$tmp" /tmp/setup-kind.sh
-        grep -q '^while ! kubectl patch configmap/config-network' /tmp/setup-kind.sh && grep -q 'ingress\.class.*; do echo Waiting for webhook' /tmp/setup-kind.sh || { echo "setup-kind.sh webhook-retry patch did not apply; upstream script changed" >&2; exit 1; }
-        chmod u+x /tmp/setup-kind.sh
-        cd /tmp && ./setup-kind.sh
+        # Fresh work dir: setup-kind.sh appends to ./metallb-crds.yaml, so a reused dir
+        # would accumulate duplicate documents across runs.
+        rm -rf '{{.SIGSTORE_SETUP_DIR}}/work' && mkdir -p '{{.SIGSTORE_SETUP_DIR}}/work/downloads'
+        cd '{{.SIGSTORE_SETUP_DIR}}/work'
+        SIGSTORE_SETUP_HELPERS='{{.SIGSTORE_SETUP_HELPERS}}' SIGSTORE_SETUP_DOWNLOADS='{{.SIGSTORE_SETUP_DIR}}/work/downloads' \
+          bash '{{.SIGSTORE_SETUP_DIR}}/release/setup-kind.sh'
       - |
-        curl -fLo /tmp/setup-scaffolding-from-release.sh "{{.SCAFFOLDING_URL}}/setup-scaffolding-from-release.sh"
-        # Patch setup-scaffolding-from-release.sh for its untested Rekor v2 (tiles) path. Upstream
-        # ships it but pins Rekor v1 in CI, so these bugs never fire there. Same sed-patching
-        # technique as upstream's own actions/setup:
-        # https://github.com/sigstore/scaffolding/blob/main/actions/setup/action.yml#L114-L116
-        # Remove once upstream fixes the script.
-        #
-        # 1. First Rekor apply carries raw <placeholder> Secret values; base64 validation fails
-        #    under set -e. Make it non-fatal (the second apply, with real keys, is the one that counts).
-        # 2. rekor-system has no provisioning Job on tiles; `wait jobs --all` errors "no matching
-        #    resources". Guard with a no-job check (upstream added this guard only for fulcio).
-        # 3. Same guard for ctlog-system.
-        tmp=$(mktemp) && sed \
-          -e 's@kubectl apply -f "${REKOR}"@kubectl apply -f "${REKOR}" || true@' \
-          -e 's@kubectl wait --timeout 5m -n rekor-system --for=condition=Complete jobs --all@kubectl -n rekor-system get job 2>\&1 | grep '"'"'No resources found'"'"' || kubectl wait --timeout 5m -n rekor-system --for=condition=Complete jobs --all@' \
-          -e 's@kubectl wait --timeout 5m -n ctlog-system --for=condition=Complete jobs --all@kubectl -n ctlog-system get job 2>\&1 | grep '"'"'No resources found'"'"' || kubectl wait --timeout 5m -n ctlog-system --for=condition=Complete jobs --all@' \
-          /tmp/setup-scaffolding-from-release.sh > "$tmp" && mv "$tmp" /tmp/setup-scaffolding-from-release.sh
-        chmod u+x /tmp/setup-scaffolding-from-release.sh
-        cd /tmp && ./setup-scaffolding-from-release.sh --release-version {{.SCAFFOLDING_VERSION}}
+        cd '{{.SIGSTORE_SETUP_DIR}}/work'
+        bash '{{.SIGSTORE_SETUP_DIR}}/release/setup-scaffolding-from-release.sh' \
+          --release-version '{{.SCAFFOLDING_VERSION}}' --release-dir '{{.SIGSTORE_SETUP_DIR}}/release'
       - |
-        curl -fL "{{.SCAFFOLDING_URL}}/testrelease.yaml" | kubectl create -f -
+        kubectl create -f '{{.SIGSTORE_SETUP_DIR}}/release/testrelease.yaml'
         kubectl -n default wait --timeout 2m --for=condition=Ready ksvc gettoken
 
   scaffolding:bridge:
@@ -142,6 +149,7 @@ tasks:
     desc: "Extract sigstore env vars from running cluster into the SIGSTORE_ENV_FILE"
     deps: [scaffolding:setup, scaffolding:bridge, cosign:install]
     cmds:
+      - task: scaffolding:hosts:linux
       - mkdir -p "{{.TASKFILE_DIR}}/tmp" "{{.SIGSTORE_ENV_DIR}}"
       - cmd: PATH="{{.SIGSTORE_BIN_DIR}}:$PATH" SIGSTORE_ENV_DIR="{{.SIGSTORE_ENV_DIR}}" SIGSTORE_BRIDGE_PORT={{.SIGSTORE_BRIDGE_PORT}} bash {{.TASKFILE_DIR}}/hack/extract-sigstore-env.sh > {{.SIGSTORE_ENV_FILE}}
         platforms: [darwin]
@@ -161,7 +169,7 @@ tasks:
           URL="${URL%/}:{{.SIGSTORE_BRIDGE_PORT}}"
           TOKEN=$(curl -sSf "$URL")
           [[ -n "$TOKEN" ]] || { echo "empty token from gettoken" >&2; exit 1; }
-          # Avoid `sed -i` — its in-place flag differs between BSD sed (macOS default) and GNU
+          # Avoid `sed -i`: its in-place flag differs between BSD sed (macOS default) and GNU
           # sed (Homebrew gnubin). Write to a tmp file and move it back.
           tmp=$(mktemp) && sed "s|^export SIGSTORE_OIDC_TOKEN=.*|export SIGSTORE_OIDC_TOKEN='${TOKEN}'|" {{.SIGSTORE_ENV_FILE}} > "$tmp" && mv "$tmp" {{.SIGSTORE_ENV_FILE}}
           echo "Token refreshed. Re-source: source {{.SIGSTORE_ENV_FILE}}"
@@ -188,6 +196,7 @@ tasks:
     cmds:
       - |
         set -euo pipefail
+        . '{{.SIGSTORE_SETUP_HELPERS}}'
         OS=$(uname -s | tr '[:upper:]' '[:lower:]')
         ARCH=$(uname -m)
         case "$ARCH" in x86_64) ARCH=amd64;; aarch64|arm64) ARCH=arm64;; esac
@@ -196,11 +205,11 @@ tasks:
         mkdir -p "{{.SIGSTORE_BIN_DIR}}"
         sha256() { (sha256sum "$1" 2>/dev/null || shasum -a 256 "$1") | awk '{print $1}'; }
         SUMS="{{.SIGSTORE_BIN_DIR}}/cosign_checksums.txt"
-        curl -fsSL "$BASE/cosign_checksums.txt" -o "$SUMS"
+        download_file "$BASE/cosign_checksums.txt" "$SUMS"
         [ "$(sha256 "$SUMS")" = "{{.COSIGN_CHECKSUMS_SHA256}}" ] || { rm -f "$SUMS"; echo "cosign_checksums.txt does not match COSIGN_CHECKSUMS_SHA256" >&2; exit 1; }
         WANT=$(awk -v n="$NAME" '$2 == n {print $1}' "$SUMS")
         rm -f "$SUMS"
-        curl -fsSL "$BASE/$NAME" -o "{{.BIN}}"
+        download_file "$BASE/$NAME" "{{.BIN}}"
         [ -n "$WANT" ] && [ "$WANT" = "$(sha256 "{{.BIN}}")" ] || { rm -f "{{.BIN}}"; echo "cosign checksum mismatch for $NAME" >&2; exit 1; }
         chmod +x "{{.BIN}}"
         echo "{{.COSIGN_VERSION}}" > "{{.BIN}}.version"
@@ -243,6 +252,50 @@ tasks:
         export PATH="{{.SIGSTORE_BIN_DIR}}:$PATH"
         . {{.SIGSTORE_ENV_FILE}}
         go test -count=1 -run "{{.INTEGRATION_TEST_IDENTIFIER}}" -timeout 180s ./...
+
+  scaffolding:diagnostics:
+    desc: "Print scaffolding cluster state for debugging a failed setup (best effort, never fails)"
+    cmds:
+      - |
+        K='kubectl --context kind-kind --request-timeout=10s'
+        if ! kind get clusters 2>/dev/null | grep -q '^kind$'; then
+          echo "sigstore diagnostics: no kind cluster named 'kind'"
+          exit 0
+        fi
+        echo '::group:: Host resources'
+        free -m || true
+        df -h || true
+        docker stats --no-stream || true
+        echo '::endgroup::'
+        echo '::group:: Nodes'
+        $K describe nodes || true
+        echo '::endgroup::'
+        echo '::group:: Pods'
+        $K get pods -A -o wide || true
+        echo '::endgroup::'
+        echo '::group:: Knative services'
+        $K get ksvc,revisions -A || true
+        echo '::endgroup::'
+        for ns in knative-serving kourier-system metallb-system fulcio-system rekor-system ctlog-system tsa-system tuf-system default; do
+          echo "::group:: Events: $ns"
+          $K -n "$ns" get events --sort-by=.lastTimestamp || true
+          echo '::endgroup::'
+        done
+        echo '::group:: Fulcio ksvc'
+        $K -n fulcio-system describe ksvc fulcio || true
+        echo '::endgroup::'
+        echo '::group:: Fulcio pods'
+        $K -n fulcio-system describe pods || true
+        echo '::endgroup::'
+        pods=$($K -n fulcio-system get pod -o name 2>/dev/null || true)
+        for pod in $pods; do
+          echo "::group:: Fulcio logs: $pod"
+          $K -n fulcio-system logs "$pod" --all-containers --tail=100 || true
+          echo '::endgroup::'
+          echo "::group:: Fulcio previous logs: $pod"
+          $K -n fulcio-system logs "$pod" --all-containers --tail=100 --previous || true
+          echo '::endgroup::'
+        done
 
   scaffolding:teardown:
     desc: "Delete kind cluster and clean up"
