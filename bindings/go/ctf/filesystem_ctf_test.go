@@ -2,7 +2,7 @@ package ctf_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"os"
@@ -21,6 +21,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	v1 "ocm.software/open-component-model/bindings/go/ctf/index/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func Test_FileSystemCTF_BasicOperations(t *testing.T) {
@@ -96,7 +97,7 @@ func Test_FileSystemCTF_MemFS(t *testing.T) {
 		Tag:        "test",
 		MediaType:  "test",
 	})
-	idxData, err := json.Marshal(idx)
+	idxData, err := json.Marshal(idx, runtime.JSONOptions)
 	r.NoError(err)
 
 	mfs := fstest.MapFS{

@@ -163,6 +163,13 @@ linters:
       - linters:
           - depguard
         path: git/integration/constructor_integration_test\.go
+      # The conformance scenario components are standalone sample services with
+      # their own go.mod. They speak plain REST, not the OCM wire format, so the
+      # encoding/json v2 rule does not apply to them (the print ban still does).
+      - linters:
+          - forbidigo
+        path: conformance/
+        text: encoding/json
     paths:
       - third_party$
       - builtin$
@@ -173,6 +180,22 @@ linters:
     funlen:
       lines: 110
       statements: 60
+    # encoding/json v1 and v2 differ on the wire: v1 escapes HTML, matches member
+    # names case-insensitively, accepts duplicate members and orders maps randomly.
+    # OCM descriptors are content-addressed and signed, so a v1 call that slips back
+    # in changes digests. Marshaling additionally needs runtime.JSONOptions, which the
+    # v1 entrypoints cannot take. The type and the option helpers that only v1
+    # declares (json.Number, MergeWithLegacySemantics) stay allowed on purpose.
+    forbidigo:
+      # Needed so the rule below matches the imported package, not the local alias.
+      analyze-types: true
+      # `forbid` replaces the defaults, so the default print ban is restated here.
+      forbid:
+        - pattern: '^(fmt\.Print(|f|ln)|print|println)$'
+          msg: Do not commit print statements.
+        - pattern: '\.(Marshal|MarshalIndent|Unmarshal|NewEncoder|NewDecoder|Valid|Compact|Indent|HTMLEscape)$'
+          pkg: '^encoding/json$'
+          msg: use encoding/json/v2 (marshal with runtime.JSONOptions) instead of encoding/json
     gocritic:
       disabled-checks:
         - elseif
@@ -192,6 +215,8 @@ linters:
       exclusions:
         - "*.MarshalJSON"
         - "*.UnmarshalJSON"
+        - "*.MarshalJSONTo"
+        - "*.UnmarshalJSONFrom"
         - "*.JSONSchema"
         - "*.SetType"
         - "*.GetType"
@@ -278,6 +303,9 @@ linters:
           allow:
             - "ocm.software/open-component-model/bindings/go/blob"
             - "ocm.software/open-component-model/bindings/go/ctf"
+            # ctf writes OCM-format JSON (index.json, artifact descriptors) and needs the
+            # shared marshal options from runtime, which blob/filesystem already pulls in.
+            - "ocm.software/open-component-model/bindings/go/runtime"
           deny:
             - pkg: "ocm.software/open-component-model/bindings/go/"
               desc: "ctf must not import bindings outside its allowed set"

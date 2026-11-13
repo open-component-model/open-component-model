@@ -2,7 +2,7 @@ package cache
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"os"
 	"path/filepath"
@@ -17,6 +17,8 @@ import (
 	"github.com/oras-project/oras-go/v3/registry/remote/properties"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // resolverFn adapts a function to the upstream resolver interface
@@ -179,7 +181,7 @@ func TestReferenceCache_Load_DropsExpiredEntries(t *testing.T) {
 	entry := snap.References["v1"]
 	entry.SavedAt = time.Now().Add(-2 * time.Hour)
 	snap.References["v1"] = entry
-	rewritten, err := json.Marshal(snap)
+	rewritten, err := json.Marshal(snap, ocmruntime.JSONOptions)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(snapPath, rewritten, 0o600))
 

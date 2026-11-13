@@ -1,7 +1,8 @@
 package ctf
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"strings"
 
@@ -57,11 +58,16 @@ const (
 	AccessModeCreate    = "create"
 )
 
-// UnmarshalJSON implements custom unmarshaling for AccessMode to support both
+// UnmarshalJSONFrom implements custom unmarshaling for AccessMode to support both
 // string values ("readonly", "readwrite", "create") and numeric values (0, 1, 2).
 // OCM v1 CTF implementation and spec has this field as byte. But we would like to
 // keep the string representation for ease of usage.
-func (mode *AccessMode) UnmarshalJSON(data []byte) error {
+func (mode *AccessMode) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	data, err := dec.ReadValue()
+	if err != nil {
+		return err
+	}
+
 	var num int
 	if err := json.Unmarshal(data, &num); err == nil {
 		switch num {

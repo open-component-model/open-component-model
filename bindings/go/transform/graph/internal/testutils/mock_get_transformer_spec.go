@@ -14,7 +14,7 @@ type MockGetObjectTransformer struct {
 	Type   runtime.Type                    `json:"type"`
 	ID     string                          `json:"id,omitempty"`
 	Spec   *MockGetObjectTransformerSpec   `json:"spec"`
-	Output *MockGetObjectTransformerOutput `json:"output,omitempty"`
+	Output *MockGetObjectTransformerOutput `json:"output,omitzero"`
 }
 
 // MockGetObjectTransformerOutput is the output of the MockGetObjectTransformer.

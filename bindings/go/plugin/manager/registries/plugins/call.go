@@ -3,7 +3,7 @@ package plugins
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // CallOptions contains options for calling a plugin endpoint.
@@ -69,7 +70,7 @@ func Call(ctx context.Context, client *http.Client, locationType types.Connectio
 
 	var body io.Reader
 	if options.Payload != nil {
-		content, err := json.Marshal(options.Payload)
+		content, err := json.Marshal(options.Payload, runtime.JSONOptions)
 		if err != nil {
 			return fmt.Errorf("failed to marshal payload: %w", err)
 		}
@@ -136,8 +137,7 @@ func Call(ctx context.Context, client *http.Client, locationType types.Connectio
 		return nil
 	}
 
-	decoder := json.NewDecoder(resp.Body)
-	if err := decoder.Decode(&options.Result); err != nil {
+	if err := json.UnmarshalRead(resp.Body, &options.Result); err != nil {
 		return fmt.Errorf("failed to decode response from plugin: %w", err)
 	}
 

@@ -3,7 +3,7 @@ package componentversionrepository
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -188,7 +188,7 @@ func (r *RepositoryPlugin) GetLocalResource(ctx context.Context, request ocmrepo
 	}
 	addParam("name", request.Name)
 	addParam("version", request.Version)
-	identityEncoded, err := json.Marshal(request.Identity)
+	identityEncoded, err := json.Marshal(request.Identity, runtime.JSONOptions)
 	var response ocmrepositoryv1.GetLocalResourceResponse
 	if err != nil {
 		return response, err
@@ -244,7 +244,7 @@ func (r *RepositoryPlugin) GetLocalSource(ctx context.Context, request ocmreposi
 	}
 	addParam("name", request.Name)
 	addParam("version", request.Version)
-	identityEncoded, err := json.Marshal(request.Identity)
+	identityEncoded, err := json.Marshal(request.Identity, runtime.JSONOptions)
 	var response ocmrepositoryv1.GetLocalSourceResponse
 	if err != nil {
 		return response, err
@@ -327,7 +327,7 @@ func toCredentials(credentials runtime.Typed) (plugins.KV, error) {
 	if credentials == nil {
 		return plugins.KV{Key: "Authorization", Value: "{}"}, nil
 	}
-	rawCreds, err := json.Marshal(credentials)
+	rawCreds, err := json.Marshal(credentials, runtime.JSONOptions)
 	if err != nil {
 		return plugins.KV{}, err
 	}

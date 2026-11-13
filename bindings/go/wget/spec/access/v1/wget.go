@@ -21,7 +21,7 @@ type Wget struct {
 
 	// URL is the HTTP or HTTPS endpoint to download the resource from.
 	// Other URL schemes are rejected.
-	URL string `json:"url"`
+	URL string `json:"url,case:ignore"` // case:ignore still decodes the legacy upper-case "URL" member OCM v1 wrote.
 
 	// MediaType is the media type of the resource with optional format qualifiers.
 	// If empty, the Content-Type response header is used, falling back to
@@ -38,7 +38,7 @@ type Wget struct {
 	Body []byte `json:"body,omitempty"`
 
 	// NoRedirect disables following HTTP redirects when set to true.
-	NoRedirect bool `json:"noRedirect,omitempty"`
+	NoRedirect bool `json:"noRedirect,omitzero"`
 }
 
 // Validate verifies that the URL of the Wget access is set and uses a supported scheme.

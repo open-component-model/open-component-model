@@ -20,7 +20,7 @@ type OCIAddLocalResource struct {
 	Type   runtime.Type               `json:"type"`
 	ID     string                     `json:"id"`
 	Spec   *OCIAddLocalResourceSpec   `json:"spec"`
-	Output *OCIAddLocalResourceOutput `json:"output,omitempty"`
+	Output *OCIAddLocalResourceOutput `json:"output,omitzero"`
 }
 
 // OCIAddLocalResourceOutput is the output specification of the

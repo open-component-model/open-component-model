@@ -2,7 +2,7 @@ package ctf
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io/fs"
 	"path"
@@ -10,6 +10,8 @@ import (
 	"time"
 
 	ociimagespec "github.com/opencontainers/image-spec/specs-go/v1"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // OCILayoutFS returns a read-only view of the ArtifactSet as an OCI Image Layout,
@@ -56,7 +58,7 @@ type synthesizedFile struct {
 var _ fs.File = (*synthesizedFile)(nil)
 
 func newSynthesizedFile(name string, v any) (fs.File, error) {
-	data, err := json.Marshal(v)
+	data, err := json.Marshal(v, runtime.JSONOptions)
 	if err != nil {
 		return nil, fmt.Errorf("unable to marshal %s: %w", name, err)
 	}

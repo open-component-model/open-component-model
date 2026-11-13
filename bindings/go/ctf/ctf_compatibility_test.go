@@ -3,7 +3,7 @@ package ctf_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"io/fs"
@@ -210,7 +210,7 @@ func Test_CTF_Advanced_ReadOnly_Compatibility(t *testing.T) {
 				})
 
 				index := ociimagespecv1.Index{}
-				r.NoError(json.NewDecoder(rawOCIIndex).Decode(&index))
+				r.NoError(json.UnmarshalRead(rawOCIIndex, &index))
 				r.Len(index.Manifests, 1)
 				r.NotNil(artifactSetIndex.Manifests[0].Annotations[ociimagespecv1.AnnotationRefName])
 				r.Equal(

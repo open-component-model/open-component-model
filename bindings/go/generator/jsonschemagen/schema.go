@@ -2,12 +2,14 @@ package jsonschemagen
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"go/ast"
 	"go/types"
 	"slices"
 
 	"ocm.software/open-component-model/bindings/go/generator/universe"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const (
@@ -21,7 +23,7 @@ type JSONSchemaDraft202012 struct {
 	ID          string `json:"$id,omitempty"`
 	Title       string `json:"title,omitempty"`
 	Type        string `json:"type,omitempty"`
-	Deprecated  *bool  `json:"deprecated,omitempty"`
+	Deprecated  *bool  `json:"deprecated,omitzero"`
 	Ref         string `json:"$ref,omitempty"`
 	Description string `json:"description,omitempty"`
 	Format      string `json:"format,omitempty"`
@@ -32,34 +34,34 @@ type JSONSchemaDraft202012 struct {
 
 	ContentEncoding string `json:"contentEncoding,omitempty"`
 
-	Const any `json:"const,omitempty"`
+	Const any `json:"const,omitzero"`
 
-	Minimum          *float64 `json:"minimum,omitempty"`
-	Maximum          *float64 `json:"maximum,omitempty"`
-	ExclusiveMinimum *float64 `json:"exclusiveMinimum,omitempty"`
-	ExclusiveMaximum *float64 `json:"exclusiveMaximum,omitempty"`
+	Minimum          *float64 `json:"minimum,omitzero"`
+	Maximum          *float64 `json:"maximum,omitzero"`
+	ExclusiveMinimum *float64 `json:"exclusiveMinimum,omitzero"`
+	ExclusiveMaximum *float64 `json:"exclusiveMaximum,omitzero"`
 
-	MinLength *int   `json:"minLength,omitempty"`
-	MaxLength *int   `json:"maxLength,omitempty"`
+	MinLength *int   `json:"minLength,omitzero"`
+	MaxLength *int   `json:"maxLength,omitzero"`
 	Pattern   string `json:"pattern,omitempty"`
 
-	MinItems    *int  `json:"minItems,omitempty"`
-	MaxItems    *int  `json:"maxItems,omitempty"`
-	UniqueItems *bool `json:"uniqueItems,omitempty"`
+	MinItems    *int  `json:"minItems,omitzero"`
+	MaxItems    *int  `json:"maxItems,omitzero"`
+	UniqueItems *bool `json:"uniqueItems,omitzero"`
 
-	MinProperties *int                     `json:"minProperties,omitempty"`
-	MaxProperties *int                     `json:"maxProperties,omitempty"`
+	MinProperties *int                     `json:"minProperties,omitzero"`
+	MaxProperties *int                     `json:"maxProperties,omitzero"`
 	Properties    map[string]*SchemaOrBool `json:"properties,omitempty"`
 	Enum          []any                    `json:"enum,omitempty"`
 
 	Required             []string      `json:"required,omitempty"`
-	AdditionalProperties *SchemaOrBool `json:"additionalProperties,omitempty"`
+	AdditionalProperties *SchemaOrBool `json:"additionalProperties,omitzero"`
 
 	OneOf []*JSONSchemaDraft202012          `json:"oneOf,omitempty"`
 	AnyOf []*JSONSchemaDraft202012          `json:"anyOf,omitempty"`
 	Defs  map[string]*JSONSchemaDraft202012 `json:"$defs,omitempty"`
 
-	Items    *JSONSchemaDraft202012 `json:"items,omitempty"`
+	Items    *JSONSchemaDraft202012 `json:"items,omitzero"`
 	Examples []any                  `json:"examples,omitempty"`
 }
 
@@ -68,14 +70,21 @@ type SchemaOrBool struct {
 	Bool   *bool
 }
 
-func (sb SchemaOrBool) MarshalJSON() ([]byte, error) {
+func (sb SchemaOrBool) MarshalJSONTo(enc *jsontext.Encoder) error {
 	if sb.Bool != nil {
-		return json.Marshal(*sb.Bool)
+		return json.MarshalEncode(enc, *sb.Bool, runtime.JSONOptions)
 	}
-	return json.Marshal(sb.Schema)
+	return json.MarshalEncode(enc, sb.Schema, runtime.JSONOptions)
 }
 
-func (sb *SchemaOrBool) UnmarshalJSON(data []byte) error {
+func (sb *SchemaOrBool) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	data, err := dec.ReadValue()
+	if err != nil {
+		return err
+	}
+	// ReadValue borrows the decoder's buffer, which the next read invalidates.
+	data = data.Clone()
+
 	if bytes.EqualFold(data, []byte("true")) || bytes.EqualFold(data, []byte("false")) {
 		var b bool
 		if err := json.Unmarshal(data, &b); err != nil {
@@ -86,7 +95,7 @@ func (sb *SchemaOrBool) UnmarshalJSON(data []byte) error {
 	}
 
 	var sch JSONSchemaDraft202012
-	if err := json.Unmarshal(data, &sch); err != nil {
+	if err := json.Unmarshal(data, &sch, dec.Options()); err != nil {
 		return err
 	}
 	sb.Schema = &sch
@@ -176,10 +185,10 @@ func (g *generation) schemaForExpr(expr ast.Expr, ctx *universe.TypeInfo, field 
 		return sch
 	}
 
-	// Types not registered in the universe (e.g. encoding/json.RawMessage) need direct
+	// Types not registered in the universe (e.g. jsontext.Value) need direct
 	// resolution via types.Info to detect well-known external types.
 	if key, ok := universe.ResolveExprToTypeKey(ctx.Pkg.TypesInfo, expr); ok {
-		if universe.IsJSONRawMessageKey(key) {
+		if universe.IsRawJSONKey(key) {
 			return anySchema()
 		}
 	}

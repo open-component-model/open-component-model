@@ -1,7 +1,7 @@
 package access_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"testing"
 
@@ -39,10 +39,10 @@ func TestConvertToV2_WireFormats(t *testing.T) {
 					r := require.New(t)
 					r.NoError(json.Unmarshal(data, source))
 					r.NoError(accessspec.Scheme.Convert(source, obj))
-					wire, err := json.Marshal(obj)
+					wire, err := json.Marshal(obj, runtime.JSONOptions)
 					r.NoError(err)
 					r.JSONEq(string(data), string(wire))
-					before, err := json.Marshal(source)
+					before, err := json.Marshal(source, runtime.JSONOptions)
 					r.NoError(err)
 					out, err := accessspec.ConvertToV2(source)
 					r.NoError(err)
@@ -52,11 +52,11 @@ func TestConvertToV2_WireFormats(t *testing.T) {
 					}
 					r.Equal(&v2.S3{Type: expectedType, BucketName: "b", ObjectKey: "k", Region: "r", Version: "ver", MediaType: "m", Endpoint: "https://store.example", UsePathStyle: true}, out)
 					r.NoError(out.Validate())
-					wire, err = json.Marshal(out)
+					wire, err = json.Marshal(out, runtime.JSONOptions)
 					r.NoError(err)
 					r.JSONEq(fmt.Sprintf(`{"type":%q,"bucketName":"b","objectKey":"k","region":"r","version":"ver","mediaType":"m","endpoint":"https://store.example","usePathStyle":true}`, expectedType.String()), string(wire))
 					out.BucketName, out.ObjectKey = "changed", "changed"
-					after, err := json.Marshal(source)
+					after, err := json.Marshal(source, runtime.JSONOptions)
 					r.NoError(err)
 					r.Equal(string(before), string(after))
 				})
@@ -143,7 +143,7 @@ func TestScheme_V2FieldAliases(t *testing.T) {
 					r.NoError(err)
 					r.Equal(expected, out)
 					r.NoError(out.Validate())
-					wire, err := json.Marshal(obj)
+					wire, err := json.Marshal(obj, runtime.JSONOptions)
 					r.NoError(err)
 					r.JSONEq(fmt.Sprintf(`{"type":%q,"bucketName":"b","objectKey":"k","region":"r","version":"ver","mediaType":"m","endpoint":"https://store.example","usePathStyle":true}`, typ), string(wire))
 				})

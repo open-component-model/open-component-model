@@ -24,7 +24,7 @@ type GetOCIArtifact struct {
 	Type   runtime.Type          `json:"type"`
 	ID     string                `json:"id"`
 	Spec   *GetOCIArtifactSpec   `json:"spec"`
-	Output *GetOCIArtifactOutput `json:"output,omitempty"`
+	Output *GetOCIArtifactOutput `json:"output,omitzero"`
 }
 
 // GetOCIArtifactOutput is the output specification of the

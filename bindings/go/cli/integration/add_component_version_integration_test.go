@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -35,6 +35,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
@@ -1132,7 +1133,7 @@ components:
 
 		// Decode the stored access as plain fields rather than importing the
 		// github binding, keeping this test black-box like its wget sibling.
-		raw, err := json.Marshal(res.Access)
+		raw, err := json.Marshal(res.Access, runtime.JSONOptions)
 		r.NoError(err)
 		var stored map[string]string
 		r.NoError(json.Unmarshal(raw, &stored))
@@ -1384,7 +1385,7 @@ components:
 
 	// Decode the stored access as plain fields rather than importing the git binding,
 	// keeping this test black-box like its github sibling.
-	raw, err := json.Marshal(res.Access)
+	raw, err := json.Marshal(res.Access, runtime.JSONOptions)
 	r.NoError(err)
 	var stored map[string]string
 	r.NoError(json.Unmarshal(raw, &stored))

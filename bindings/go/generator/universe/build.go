@@ -23,6 +23,7 @@ import (
 const (
 	RuntimePackage      = "ocm.software/open-component-model/bindings/go/runtime"
 	EncodingJSONPackage = "encoding/json"
+	JSONTextPackage     = "encoding/json/jsontext"
 )
 
 // Universe is an indexed view over Go types discovered during scanning.
@@ -99,8 +100,11 @@ func IsRuntimeTyped(ti *TypeInfo) bool {
 	return ti.Key.PkgPath == RuntimePackage && ti.Key.TypeName == "Typed"
 }
 
-func IsJSONRawMessageKey(key TypeKey) bool {
-	return key.PkgPath == EncodingJSONPackage && key.TypeName == "RawMessage"
+// IsRawJSONKey reports whether the key denotes a raw JSON value, i.e. encoding/json/jsontext.Value
+// or its v1 alias encoding/json.RawMessage.
+func IsRawJSONKey(key TypeKey) bool {
+	return (key.PkgPath == EncodingJSONPackage && key.TypeName == "RawMessage") ||
+		(key.PkgPath == JSONTextPackage && key.TypeName == "Value")
 }
 
 // ResolveExprToTypeKey resolves an AST expression to its (pkgPath, typeName) without

@@ -4,7 +4,8 @@ package client
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -151,7 +152,8 @@ func DigestAlgorithm(known digest.Digest) digest.Algorithm {
 
 // DecodeJSON decodes a JSON response body into out; an empty body leaves out unchanged.
 func DecodeJSON(body io.Reader, out any) error {
-	if err := json.NewDecoder(io.LimitReader(body, maxJSONBytes)).Decode(out); err != nil && !errors.Is(err, io.EOF) {
+	dec := jsontext.NewDecoder(io.LimitReader(body, maxJSONBytes))
+	if err := json.UnmarshalDecode(dec, out); err != nil && !errors.Is(err, io.EOF) {
 		return err
 	}
 	return nil

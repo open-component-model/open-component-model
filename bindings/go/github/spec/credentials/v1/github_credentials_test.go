@@ -1,7 +1,7 @@
 package v1
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,7 +34,7 @@ func TestMustRegisterCredentialType(t *testing.T) {
 func TestGitHubCredentials_JSONRoundTrip(t *testing.T) {
 	creds := &GitHubCredentials{Type: runtime.NewVersionedType(GitHubCredentialsType, Version), Token: "ghp_secret"}
 
-	data, err := json.Marshal(creds)
+	data, err := json.Marshal(creds, runtime.JSONOptions)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"type":"GitHubCredentials/v1","token":"ghp_secret"}`, string(data))
 
@@ -42,7 +42,7 @@ func TestGitHubCredentials_JSONRoundTrip(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &decoded))
 	assert.Equal(t, creds, &decoded)
 
-	again, err := json.Marshal(&decoded)
+	again, err := json.Marshal(&decoded, runtime.JSONOptions)
 	require.NoError(t, err)
 	assert.JSONEq(t, string(data), string(again))
 }

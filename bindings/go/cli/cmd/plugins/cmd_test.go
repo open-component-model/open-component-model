@@ -2,7 +2,10 @@ package plugins_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
+	"errors"
+	"io"
 	"os"
 	"testing"
 
@@ -17,6 +20,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const (
@@ -52,7 +56,7 @@ func pluginInfoLabel(t *testing.T, description string, platforms []string) descr
 		Description: description,
 		Platforms:   platforms,
 	}
-	raw, err := json.Marshal(info)
+	raw, err := json.Marshal(info, runtime.JSONOptions)
 	require.NoError(t, err)
 	return descriptor.Label{
 		Name:  list.PluginInfoKey,
@@ -226,11 +230,15 @@ func TestPluginRegistryList(t *testing.T) {
 		r.NoError(err)
 
 		// NDJSON: each line is a valid JSON plugin object
-		dec := json.NewDecoder(out)
+		dec := jsontext.NewDecoder(out)
 		var plugins []list.PluginInfo
-		for dec.More() {
+		for {
 			var p list.PluginInfo
-			r.NoError(dec.Decode(&p))
+			err := json.UnmarshalDecode(dec, &p)
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			r.NoError(err)
 			plugins = append(plugins, p)
 		}
 		r.Len(plugins, 2)

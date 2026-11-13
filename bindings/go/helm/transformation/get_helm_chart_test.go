@@ -1,7 +1,7 @@
 package transformation_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -77,7 +77,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 			helmAccessData, err := json.Marshal(map[string]string{
 				"helmRepository": srv.URL,
 				"helmChart":      "mychart-0.1.0.tgz",
-			})
+			}, runtime.JSONOptions)
 			r.NoError(err)
 
 			spec := &v1alpha1.GetHelmChart{
@@ -146,7 +146,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 			helmAccessData, err := json.Marshal(map[string]string{
 				"helmRepository": srv.URL,
 				"helmChart":      "mychart-0.1.0.tgz",
-			})
+			}, runtime.JSONOptions)
 			r.NoError(err)
 
 			spec := &v1alpha1.GetHelmChart{
@@ -217,7 +217,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 			helmAccessData, err := json.Marshal(map[string]string{
 				"helmRepository": srv.URL,
 				"helmChart":      "mychart-0.1.0.tgz",
-			})
+			}, runtime.JSONOptions)
 			r.NoError(err)
 
 			spec := &v1alpha1.GetHelmChart{
@@ -278,7 +278,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 		helmAccessData, err := json.Marshal(map[string]string{
 			"helmRepository": srv.URL,
 			"helmChart":      "mychart-0.1.0.tgz",
-		})
+		}, runtime.JSONOptions)
 		r.NoError(err)
 
 		spec := &v1alpha1.GetHelmChart{
