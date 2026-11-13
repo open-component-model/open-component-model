@@ -7,13 +7,15 @@ package replay_test
 
 import (
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
 	trustedrootv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot/v1alpha1"
 )
@@ -23,7 +25,7 @@ type bundleJSON struct {
 		Certificate *struct {
 			RawBytes string `json:"rawBytes"`
 		} `json:"certificate"`
-		TlogEntries []json.RawMessage `json:"tlogEntries"`
+		TlogEntries []jsontext.Value `json:"tlogEntries"`
 	} `json:"verificationMaterial"`
 	MessageSignature *struct {
 		Signature string `json:"signature"`
@@ -113,7 +115,7 @@ func Test_Replay_TamperedBundle(t *testing.T) {
 		var mm map[string]any
 		r.NoError(json.Unmarshal(raw, &mm))
 		f(mm)
-		modified, err := json.Marshal(mm)
+		modified, err := json.Marshal(mm, runtime.JSONOptions)
 		r.NoError(err)
 		return base64.StdEncoding.EncodeToString(modified)
 	}
