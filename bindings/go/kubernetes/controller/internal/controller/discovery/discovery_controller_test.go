@@ -246,7 +246,7 @@ func TestReconcile_PublishesRawAndExtractedPayloads(t *testing.T) {
 	r.Nil(current.Status.Extracted)
 	r.Equal(v1alpha1.SucceededReason, status.FindCondition(current, v1alpha1.ReadyCondition).Reason)
 
-	current.Spec.Extract = &v1alpha1.Extract{ByComponents: map[string]string{"name": "component.name"}}
+	current.Spec.Extract = &v1alpha1.Extract{ByComponents: map[string]string{"name": "component.name", "path": "referencePath"}}
 	r.NoError(c.Update(t.Context(), current))
 	r.NoError(c.Get(t.Context(), client.ObjectKeyFromObject(discovery), current))
 
@@ -258,6 +258,8 @@ func TestReconcile_PublishesRawAndExtractedPayloads(t *testing.T) {
 	r.Len(current.Status.Extracted, 2)
 	r.Contains(string(current.Status.Extracted[0]["name"].Raw), "child")
 	r.Contains(string(current.Status.Extracted[1]["name"].Raw), "root")
+	r.JSONEq(`[{"name":"child"}]`, string(current.Status.Extracted[0]["path"].Raw))
+	r.JSONEq(`[]`, string(current.Status.Extracted[1]["path"].Raw))
 }
 
 func TestReconcile_UnreadyComponentIsRetryable(t *testing.T) {
