@@ -1,7 +1,7 @@
 package internal
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"

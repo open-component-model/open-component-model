@@ -4,7 +4,7 @@ import (
 	archivetar "archive/tar"
 	"bytes"
 	"compress/gzip"
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/opencontainers/image-spec/specs-go"
@@ -15,6 +15,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // Customer local blobs arrive with docker (not OCI) artifact-set media types, e.g.
@@ -40,7 +41,8 @@ func Test_DockerArtifactSet_ReadOCILayout(t *testing.T) {
 		MediaType: dockerManifest,
 		Config:    config,
 		Layers:    []ociImageSpecV1.Descriptor{layer},
-	})
+	}, runtime.JSONOptions)
+
 	r.NoError(err)
 	manifest := content.NewDescriptorFromBytes(dockerManifest, manifestData)
 
@@ -50,7 +52,8 @@ func Test_DockerArtifactSet_ReadOCILayout(t *testing.T) {
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		MediaType: ociImageSpecV1.MediaTypeImageIndex,
 		Manifests: []ociImageSpecV1.Descriptor{tagged},
-	})
+	}, runtime.JSONOptions)
+
 	r.NoError(err)
 
 	// LegacyOCI layout: oci-layout + index.json + flat blobs/<algo>.<encoded>.

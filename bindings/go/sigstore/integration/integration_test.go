@@ -8,7 +8,8 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"log"
 	"os"
 	"testing"
@@ -77,8 +78,8 @@ type bundleJSON struct {
 		Certificate *struct {
 			RawBytes string `json:"rawBytes"`
 		} `json:"certificate"`
-		TlogEntries               []json.RawMessage `json:"tlogEntries"`
-		TimestampVerificationData json.RawMessage   `json:"timestampVerificationData,omitempty"`
+		TlogEntries               []jsontext.Value `json:"tlogEntries"`
+		TimestampVerificationData jsontext.Value   `json:"timestampVerificationData,omitzero"`
 	} `json:"verificationMaterial"`
 	MessageSignature *struct {
 		Signature string `json:"signature"`
@@ -217,7 +218,7 @@ func Test_Integration_TamperedBundle(t *testing.T) {
 		var m map[string]any
 		r.NoError(json.Unmarshal(raw, &m))
 		f(m)
-		modified, err := json.Marshal(m)
+		modified, err := json.Marshal(m, runtime.JSONOptions)
 		r.NoError(err)
 		return base64.StdEncoding.EncodeToString(modified)
 	}

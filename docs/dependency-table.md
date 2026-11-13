@@ -5,7 +5,7 @@
 | 0 | `cel`, `configuration/types`, `dag`, `runtime` | — |
 | 1 | `blob`, `configuration`, `descriptor/v2`, `generator` | `runtime` |
 | 2 | `credentials` | `configuration`, `dag`, `runtime` |
-| 2 | `ctf` | `blob` |
+| 2 | `ctf` | `blob`, `runtime` |
 | 2 | `descriptor/runtime` | `descriptor/v2`, `runtime` |
 | 2 | `http` | `configuration`, `runtime` |
 | 3 | `descriptor/normalisation` | `descriptor/runtime`, `descriptor/v2`, `runtime` |

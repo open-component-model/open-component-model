@@ -19,7 +19,7 @@ type CTFAddComponentVersion struct {
 	Type   runtime.Type                  `json:"type"`
 	ID     string                        `json:"id,omitempty"`
 	Spec   *CTFAddComponentVersionSpec   `json:"spec"`
-	Output *CTFAddComponentVersionOutput `json:"output,omitempty"`
+	Output *CTFAddComponentVersionOutput `json:"output,omitzero"`
 }
 
 // CTFAddComponentVersionOutput is the output specification of the

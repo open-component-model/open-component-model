@@ -82,7 +82,7 @@ type TransferOCILocalBlobToOCILocalBlob struct {
 	Type   runtime.Type                            `json:"type"`
 	ID     string                                  `json:"id"`
 	Spec   *TransferOCILocalBlobToOCILocalBlobSpec `json:"spec"`
-	Output *TransferLocalBlobOutput                `json:"output,omitempty"`
+	Output *TransferLocalBlobOutput                `json:"output,omitzero"`
 }
 
 // TransferOCILocalBlobToOCILocalBlobSpec is the input specification for the
@@ -116,7 +116,7 @@ type TransferOCILocalBlobToCTFLocalBlob struct {
 	Type   runtime.Type                            `json:"type"`
 	ID     string                                  `json:"id"`
 	Spec   *TransferOCILocalBlobToCTFLocalBlobSpec `json:"spec"`
-	Output *TransferLocalBlobOutput                `json:"output,omitempty"`
+	Output *TransferLocalBlobOutput                `json:"output,omitzero"`
 }
 
 // TransferOCILocalBlobToCTFLocalBlobSpec is the input specification for the
@@ -143,7 +143,7 @@ type TransferCTFLocalBlobToOCILocalBlob struct {
 	Type   runtime.Type                            `json:"type"`
 	ID     string                                  `json:"id"`
 	Spec   *TransferCTFLocalBlobToOCILocalBlobSpec `json:"spec"`
-	Output *TransferLocalBlobOutput                `json:"output,omitempty"`
+	Output *TransferLocalBlobOutput                `json:"output,omitzero"`
 }
 
 // TransferCTFLocalBlobToOCILocalBlobSpec is the input specification for the
@@ -177,7 +177,7 @@ type TransferCTFLocalBlobToCTFLocalBlob struct {
 	Type   runtime.Type                            `json:"type"`
 	ID     string                                  `json:"id"`
 	Spec   *TransferCTFLocalBlobToCTFLocalBlobSpec `json:"spec"`
-	Output *TransferLocalBlobOutput                `json:"output,omitempty"`
+	Output *TransferLocalBlobOutput                `json:"output,omitzero"`
 }
 
 // TransferCTFLocalBlobToCTFLocalBlobSpec is the input specification for the
@@ -213,7 +213,7 @@ type TransferOCILocalBlobToOCIArtifact struct {
 	Type   runtime.Type                           `json:"type"`
 	ID     string                                 `json:"id"`
 	Spec   *TransferOCILocalBlobToOCIArtifactSpec `json:"spec"`
-	Output *TransferLocalBlobToOCIArtifactOutput  `json:"output,omitempty"`
+	Output *TransferLocalBlobToOCIArtifactOutput  `json:"output,omitzero"`
 }
 
 // TransferOCILocalBlobToOCIArtifactSpec is the input specification for the
@@ -240,7 +240,7 @@ type TransferCTFLocalBlobToOCIArtifact struct {
 	Type   runtime.Type                           `json:"type"`
 	ID     string                                 `json:"id"`
 	Spec   *TransferCTFLocalBlobToOCIArtifactSpec `json:"spec"`
-	Output *TransferLocalBlobToOCIArtifactOutput  `json:"output,omitempty"`
+	Output *TransferLocalBlobToOCIArtifactOutput  `json:"output,omitzero"`
 }
 
 // TransferCTFLocalBlobToOCIArtifactSpec is the input specification for the
@@ -267,7 +267,7 @@ type TransferOCIArtifactToOCILocalBlob struct {
 	Type   runtime.Type                           `json:"type"`
 	ID     string                                 `json:"id"`
 	Spec   *TransferOCIArtifactToOCILocalBlobSpec `json:"spec"`
-	Output *TransferLocalBlobOutput               `json:"output,omitempty"`
+	Output *TransferLocalBlobOutput               `json:"output,omitzero"`
 }
 
 // TransferOCIArtifactToOCILocalBlobSpec is the input specification for the
@@ -307,7 +307,7 @@ type TransferOCIArtifactToCTFLocalBlob struct {
 	Type   runtime.Type                           `json:"type"`
 	ID     string                                 `json:"id"`
 	Spec   *TransferOCIArtifactToCTFLocalBlobSpec `json:"spec"`
-	Output *TransferLocalBlobOutput               `json:"output,omitempty"`
+	Output *TransferLocalBlobOutput               `json:"output,omitzero"`
 }
 
 // TransferOCIArtifactToCTFLocalBlobSpec is the input specification for the

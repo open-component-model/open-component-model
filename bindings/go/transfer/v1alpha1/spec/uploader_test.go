@@ -175,7 +175,7 @@ configurations:
       X-Foo: [bar]
 `)
 		_, err := spec.LookupUploaderConfigs(generic)
-		require.ErrorContains(t, err, `unknown field "headers"`)
+		require.ErrorContains(t, err, `unknown object member name "headers"`)
 	})
 	t.Run("localblob and reference uploaders are decoded", func(t *testing.T) {
 		r := require.New(t)

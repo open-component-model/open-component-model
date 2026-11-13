@@ -1,11 +1,13 @@
 package component
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/oras-project/oras-go/v3/content"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // MediaType is the media type for ComponentConfiguration
@@ -26,7 +28,7 @@ const (
 // Config is a Component-Descriptor OCI configuration that is used to componentVersionStore the reference to the
 // (pseudo-)layer used to componentVersionStore the Component-Descriptor in.
 type Config struct {
-	ComponentDescriptorLayer *ociImageSpecV1.Descriptor `json:"componentDescriptorLayer,omitempty"`
+	ComponentDescriptorLayer *ociImageSpecV1.Descriptor `json:"componentDescriptorLayer,omitzero"`
 }
 
 // New creates a Config from a ComponentDescriptorLayer descriptor.
@@ -36,7 +38,7 @@ func New(componentDescriptorLayerOCIDescriptor ociImageSpecV1.Descriptor) (encod
 	componentConfig := Config{
 		ComponentDescriptorLayer: &componentDescriptorLayerOCIDescriptor,
 	}
-	componentConfigRaw, err := json.Marshal(componentConfig)
+	componentConfigRaw, err := json.Marshal(componentConfig, runtime.JSONOptions)
 	if err != nil {
 		return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to marshal component config: %w", err)
 	}

@@ -19,7 +19,7 @@ type GetGitResource struct {
 	Type   runtime.Type          `json:"type"`
 	ID     string                `json:"id"`
 	Spec   *GetGitResourceSpec   `json:"spec"`
-	Output *GetGitResourceOutput `json:"output,omitempty"`
+	Output *GetGitResourceOutput `json:"output,omitzero"`
 }
 
 // GetGitResourceSpec configures the resource download and archive destination.

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"slices"
@@ -264,13 +264,10 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 		return nil, fmt.Errorf("failed to apply config type allowlist: %w", err)
 	}
 
-	content, err := json.Marshal(filtered)
-	if err != nil {
+	hasher := sha256.New()
+	if err := json.MarshalWrite(hasher, filtered, runtime.JSONOptions); err != nil {
 		return nil, err
 	}
-
-	hasher := sha256.New()
-	hasher.Write(content)
 	hash := hasher.Sum(nil)
 
 	result := Configuration{

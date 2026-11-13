@@ -3,7 +3,7 @@ package manager
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -365,7 +365,7 @@ func TestPluginManagerMultiplePluginsForSameType(t *testing.T) {
 			PluginType: ocmrepositoryv1.ComponentVersionRepositoryPluginType,
 		},
 	}
-	serialized, err := json.Marshal(rawPluginSpec)
+	serialized, err := json.Marshal(rawPluginSpec, runtime.JSONOptions)
 	require.NoError(t, err)
 	config := &genericv1.Config{
 		Type: runtime.Type{
@@ -434,7 +434,7 @@ func TestCredentialTypeRegistryPopulatedFromCredentialPluginCapability(t *testin
 	pluginSpec := pluginruntime.PluginSpec{CapabilitySpecs: []runtime.Typed{&capabilitySpec}}
 	rawPluginSpec, err := pluginruntime.ConvertToSpec(&pluginSpec)
 	require.NoError(t, err)
-	serialized, err := json.Marshal(rawPluginSpec)
+	serialized, err := json.Marshal(rawPluginSpec, runtime.JSONOptions)
 	require.NoError(t, err)
 
 	testPlugin := types.Plugin{

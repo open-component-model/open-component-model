@@ -126,6 +126,23 @@ func TestAddToDescriptor(t *testing.T) {
 	}
 }
 
+// The annotation is stored in the manifest and therefore part of its digest, so the bytes
+// must stay what encoding/json v1 produced, which escaped <, > and & as well as the line
+// terminators U+2028 and U+2029.
+func TestAddToDescriptor_EscapesLikeV1(t *testing.T) {
+	desc := &ociImageSpecV1.Descriptor{}
+	annotation := ArtifactOCIAnnotation{
+		Identity: runtime.Identity{"name": "a<b>&c\u2028d\u2029e"},
+		Kind:     ArtifactKindResource,
+	}
+	require.NoError(t, annotation.AddToDescriptor(desc))
+
+	// The exact bytes are the point here, not JSON equality.
+	assert.Equal(t, //nolint:testifylint // encoded-compare: the escaping is what is under test
+		`[{"identity":{"name":"a\u003cb\u003e\u0026c\u2028d\u2029e"},"kind":"resource"}]`,
+		desc.Annotations[ArtifactAnnotationKey])
+}
+
 func TestIsArtifactForResource(t *testing.T) {
 	tests := []struct {
 		name       string

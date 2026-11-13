@@ -2,6 +2,7 @@ package config_test
 
 import (
 	"bytes"
+	"encoding/json/v2"
 	"io"
 	"os"
 	"strings"
@@ -36,7 +37,7 @@ func TestGetEffectiveConfig_IncludesVersioning(t *testing.T) {
 	r := require.New(t)
 
 	raw := &runtime.Raw{}
-	r.NoError(raw.UnmarshalJSON([]byte(versioningEntry)))
+	r.NoError(json.Unmarshal([]byte(versioningEntry), raw))
 	cfg := &genericv1.Config{
 		Type:           runtime.NewVersionedType(genericv1.ConfigType, genericv1.ConfigTypeV1),
 		Configurations: []*runtime.Raw{raw},
@@ -106,7 +107,7 @@ func TestGetEffectiveConfig_OCICache(t *testing.T) {
 			}
 			for _, entry := range tt.entries {
 				raw := &runtime.Raw{}
-				r.NoError(raw.UnmarshalJSON([]byte(entry)))
+				r.NoError(json.Unmarshal([]byte(entry), raw))
 				cfg.Configurations = append(cfg.Configurations, raw)
 			}
 

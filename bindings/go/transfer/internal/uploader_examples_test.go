@@ -1,7 +1,7 @@
 package internal
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"fmt"
 	"strings"
 	"testing"
@@ -24,7 +24,7 @@ import (
 // examples").
 func examplesResources() []descriptor.Resource {
 	app := ociImageResource("app", "1.0.0", "ghcr.io/acme/app:1.0.0")
-	app.Labels = []descriptor.Label{{Name: "ocm.software/transfer", Value: json.RawMessage(`"oci"`)}}
+	app.Labels = []descriptor.Label{{Name: "ocm.software/transfer", Value: jsontext.Value(`"oci"`)}}
 
 	bundle := dockerManifestLocalBlobResource("bundle", "1.0.0")
 	bundleAccess := bundle.Access.(*descriptorv2.LocalBlob)

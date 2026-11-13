@@ -5,7 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/rand"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -649,7 +649,7 @@ func uploadDownloadBarebonesOCIImage(t *testing.T, repo *oci.Repository, from, t
 	})
 
 	var manifest ociImageSpecV1.Manifest
-	r.NoError(json.NewDecoder(dataStreamFromManifest).Decode(&manifest))
+	r.NoError(json.UnmarshalRead(dataStreamFromManifest, &manifest))
 
 	r.Len(manifest.Layers, 1)
 
@@ -815,7 +815,7 @@ func createSingleLayerOCIImage(t *testing.T, data []byte, ref ...string) ([]byte
 
 	r.NoError(w.Push(t.Context(), desc, bytes.NewReader(data)))
 
-	configRaw, err := json.Marshal(map[string]string{})
+	configRaw, err := json.Marshal(map[string]string{}, ocmruntime.JSONOptions)
 	r.NoError(err)
 	configDesc := ociImageSpecV1.Descriptor{
 		Digest:    digest.FromBytes(configRaw),
@@ -832,7 +832,7 @@ func createSingleLayerOCIImage(t *testing.T, data []byte, ref ...string) ([]byte
 			desc,
 		},
 	}
-	manifestRaw, err := json.Marshal(manifest)
+	manifestRaw, err := json.Marshal(manifest, ocmruntime.JSONOptions)
 	r.NoError(err)
 
 	manifestDesc := ociImageSpecV1.Descriptor{
@@ -1593,7 +1593,7 @@ func pushChainLink(t *testing.T, ctx context.Context, store ocispec.Store, subje
 		Layers:       []ociImageSpecV1.Descriptor{empty},
 		Subject:      &subject,
 	}
-	body, err := json.Marshal(manifest)
+	body, err := json.Marshal(manifest, ocmruntime.JSONOptions)
 	r.NoError(err)
 	desc := ociImageSpecV1.Descriptor{
 		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
@@ -1833,7 +1833,7 @@ func assertOwnershipReferrerAnnotations(t *testing.T, ctx context.Context, resol
 	r.NoError(err)
 	defer func() { r.NoError(rc.Close()) }()
 	var manifest ociImageSpecV1.Manifest
-	r.NoError(json.NewDecoder(rc).Decode(&manifest))
+	r.NoError(json.UnmarshalRead(rc, &manifest))
 	r.NotNil(manifest.Subject, "ownership referrer manifest must carry a subject")
 	assert.Equal(t, subject.Digest, manifest.Subject.Digest,
 		"referrer subject digest must match the resolved subject manifest digest")

@@ -2,7 +2,7 @@ package digestprocessor
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -50,7 +50,7 @@ func TestPluginFlow(t *testing.T) {
 		Type:       osutil.ConnectionType(t.Context()),
 		PluginType: inputv1.InputPluginType,
 	}
-	serialized, err := json.Marshal(config)
+	serialized, err := json.Marshal(config, runtime.JSONOptions)
 	require.NoError(t, err)
 
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))
@@ -116,7 +116,7 @@ func TestShutdown(t *testing.T) {
 		Type:       osutil.ConnectionType(t.Context()),
 		PluginType: inputv1.InputPluginType,
 	}
-	serialized, err := json.Marshal(config)
+	serialized, err := json.Marshal(config, runtime.JSONOptions)
 	require.NoError(t, err)
 
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))

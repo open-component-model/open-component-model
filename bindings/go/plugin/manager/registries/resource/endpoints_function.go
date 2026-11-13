@@ -1,7 +1,7 @@
 package resource
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 
@@ -26,19 +26,18 @@ func handleError(w http.ResponseWriter, err error, status int, message string) {
 	http.Error(w, fmt.Sprintf("%s: %v", message, err), status)
 }
 
-// handleJSONResponse encodes the response as JSON and writes it to the http.ResponseWriter
+// handleJSONResponse encodes the response as JSON and writes it to the http.ResponseWriter.
+// Encoding happens into a buffer, so a half way failure stays an error-only 500 instead of
+// a 200 with a truncated body; see [plugins.WriteJSON].
 func handleJSONResponse(w http.ResponseWriter, response interface{}) {
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		handleError(w, err, http.StatusInternalServerError, "failed to encode response")
-		return
-	}
+	plugins.WriteJSON(w, response)
 }
 
 // handleGetIdentity handles the GetIdentity endpoint
 func handleGetIdentity(plugin v1.ReadWriteResourcePluginContract) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var request v1.GetIdentityRequest[runtime.Typed]
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		if err := json.UnmarshalRead(r.Body, &request); err != nil {
 			handleError(w, err, http.StatusBadRequest, "failed to unmarshal request")
 			return
 		}
@@ -57,7 +56,7 @@ func handleGetIdentity(plugin v1.ReadWriteResourcePluginContract) http.HandlerFu
 func handleGetGlobalResource(plugin v1.ReadWriteResourcePluginContract) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var request v1.GetGlobalResourceRequest
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		if err := json.UnmarshalRead(r.Body, &request); err != nil {
 			handleError(w, err, http.StatusBadRequest, "failed to unmarshal request")
 			return
 		}
@@ -81,7 +80,7 @@ func handleGetGlobalResource(plugin v1.ReadWriteResourcePluginContract) http.Han
 func handleAddGlobalResource(plugin v1.ReadWriteResourcePluginContract) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var request v1.AddGlobalResourceRequest
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		if err := json.UnmarshalRead(r.Body, &request); err != nil {
 			handleError(w, err, http.StatusBadRequest, "failed to unmarshal request")
 			return
 		}

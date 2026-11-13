@@ -1,10 +1,12 @@
 package versioncheck
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"os"
 	"path/filepath"
 	"time"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const (
@@ -73,7 +75,7 @@ func WriteCache(dir string, entry *CacheEntry) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	data, err := json.Marshal(entry)
+	data, err := json.Marshal(entry, runtime.JSONOptions)
 	if err != nil {
 		return err
 	}

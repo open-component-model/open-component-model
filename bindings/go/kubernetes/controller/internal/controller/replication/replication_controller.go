@@ -2,7 +2,7 @@ package replication
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"sync"
@@ -339,7 +339,7 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		return ctrl.Result{}, fmt.Errorf("failed to build transfer graph definition: %w", err)
 	}
 
-	content, err := json.Marshal(tgd)
+	content, err := json.Marshal(tgd, runtime.JSONOptions)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetRepositoryFailedReason, err.Error())
 

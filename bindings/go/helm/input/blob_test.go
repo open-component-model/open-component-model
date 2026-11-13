@@ -1,7 +1,7 @@
 package input_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -142,7 +142,7 @@ func TestGetV1HelmBlob_Success(t *testing.T) {
 				require.NoError(t, manifestRaw.Close())
 			})
 			manifest := ociImageSpecV1.Manifest{}
-			require.NoError(t, json.NewDecoder(manifestRaw).Decode(&manifest))
+			require.NoError(t, json.UnmarshalRead(manifestRaw, &manifest))
 
 			require.GreaterOrEqual(t, len(manifest.Layers), 1, "expected at least one layer")
 			require.Equal(t, registry.ChartLayerMediaType, manifest.Layers[0].MediaType, "expected first layer to be chart layer")

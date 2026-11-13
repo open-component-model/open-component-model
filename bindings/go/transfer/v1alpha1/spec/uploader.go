@@ -82,7 +82,7 @@ type HTTPUploaderConfig struct {
 	// Header carries additional HTTP request headers.
 	Header map[string][]string `json:"header,omitempty"`
 	// NoRedirect disables following HTTP redirects for the upload request.
-	NoRedirect bool `json:"noRedirect,omitempty"`
+	NoRedirect bool `json:"noRedirect,omitzero"`
 	// MediaType overrides the media type recorded on the uploaded resource; when
 	// empty it defaults to the source access media type where available.
 	MediaType string `json:"mediaType,omitempty"`
