@@ -1,7 +1,7 @@
 package v1alpha1
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"

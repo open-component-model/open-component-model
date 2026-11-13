@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -35,6 +35,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
+	"ocm.software/open-component-model/bindings/go/runtime"
 	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
@@ -66,7 +67,8 @@ configurations:
       properties:
         username: %[3]q
         password: %[4]q
-`,
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`,
 		},
 		{
 			name: "targeting fallback resolvers",
@@ -90,7 +92,8 @@ configurations:
   - repository:
       type: OCIRepository
       hostname: %[1]q
-`,
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`,
 			external: true,
 		},
 		{
@@ -116,7 +119,8 @@ configurations:
       type: OCIRepository/v1
       baseUrl: http://%[1]s:%[2]s
     componentNamePattern: "*"
-`,
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`,
 			external: true,
 		},
 	}
@@ -688,6 +692,13 @@ generated: "2024-01-01T00:00:00.000000000Z"
 	r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
 
 	ctfDir := filepath.Join(tempDir, "ctf")
+	// The chart server runs without TLS, and an http:// URL alone no longer selects plain HTTP.
+	cfgPath := filepath.Join(tempDir, "ocmconfig.yaml")
+	r.NoError(os.WriteFile(cfgPath, []byte(`type: generic.config.ocm.software/v1
+configurations:
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true
+`), os.ModePerm))
 
 	addCMD := cmd.New()
 	addCMD.SetArgs([]string{
@@ -695,6 +706,7 @@ generated: "2024-01-01T00:00:00.000000000Z"
 		"component-version",
 		"--repository", fmt.Sprintf("ctf::%s", ctfDir),
 		"--constructor", constructorPath,
+		"--config", cfgPath,
 	})
 	r.NoError(addCMD.ExecuteContext(ctx), "add cv with helm access should succeed and trigger digest processor")
 
@@ -749,6 +761,13 @@ func Test_Integration_HelmInput_RemoteRepository(t *testing.T) {
 	r.NoError(os.WriteFile(constructorPath, []byte(constructor), os.ModePerm))
 
 	ctfDir := filepath.Join(tempDir, "ctf")
+	// The chart server runs without TLS, and an http:// URL alone no longer selects plain HTTP.
+	cfgPath := filepath.Join(tempDir, "ocmconfig.yaml")
+	r.NoError(os.WriteFile(cfgPath, []byte(`type: generic.config.ocm.software/v1
+configurations:
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true
+`), os.ModePerm))
 
 	addCMD := cmd.New()
 	addCMD.SetArgs([]string{
@@ -756,6 +775,7 @@ func Test_Integration_HelmInput_RemoteRepository(t *testing.T) {
 		"component-version",
 		"--repository", fmt.Sprintf("ctf::%s", ctfDir),
 		"--constructor", constructorPath,
+		"--config", cfgPath,
 	})
 	r.NoError(addCMD.ExecuteContext(ctx), "add cv with remote helm input should succeed")
 
@@ -810,7 +830,8 @@ configurations:
       properties:
         username: %[3]q
         password: %[4]q
-`, registry.Host, registry.Port, registry.User, registry.Password)
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`, registry.Host, registry.Port, registry.User, registry.Password)
 
 	tempDir := t.TempDir()
 	cfgPath := filepath.Join(tempDir, "ocmconfig.yaml")
@@ -907,7 +928,8 @@ configurations:
       properties:
         username: %[3]q
         password: %[4]q
-`, registry.Host, registry.Port, registry.User, registry.Password)
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`, registry.Host, registry.Port, registry.User, registry.Password)
 	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
@@ -1111,7 +1133,7 @@ components:
 
 		// Decode the stored access as plain fields rather than importing the
 		// github binding, keeping this test black-box like its wget sibling.
-		raw, err := json.Marshal(res.Access)
+		raw, err := json.Marshal(res.Access, runtime.JSONOptions)
 		r.NoError(err)
 		var stored map[string]string
 		r.NoError(json.Unmarshal(raw, &stored))
@@ -1363,7 +1385,7 @@ components:
 
 	// Decode the stored access as plain fields rather than importing the git binding,
 	// keeping this test black-box like its github sibling.
-	raw, err := json.Marshal(res.Access)
+	raw, err := json.Marshal(res.Access, runtime.JSONOptions)
 	r.NoError(err)
 	var stored map[string]string
 	r.NoError(json.Unmarshal(raw, &stored))
@@ -1562,7 +1584,8 @@ configurations:
     - type: S3Credentials/v1
       accessKeyId: %[7]q
       secretAccessKey: %[8]q
-`, registry.Host, registry.Port, registry.User, registry.Password, host, port, s3AccessKey, s3SecretKey)
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`, registry.Host, registry.Port, registry.User, registry.Password, host, port, s3AccessKey, s3SecretKey)
 	cfgPath = filepath.Join(t.TempDir(), "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 	return endpoint, cfgPath

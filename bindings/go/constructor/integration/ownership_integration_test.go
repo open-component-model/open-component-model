@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,9 +12,9 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/content"
+	orasregistry "github.com/oras-project/oras-go/v3/registry"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2/content"
-	orasregistry "oras.land/oras-go/v2/registry"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -202,7 +202,7 @@ func singleLayerOCILayoutTarGzip(t *testing.T, layerData []byte) []byte {
 	}
 	r.NoError(w.Push(ctx, layerDesc, bytes.NewReader(layerData)))
 
-	configRaw, err := json.Marshal(map[string]string{})
+	configRaw, err := json.Marshal(map[string]string{}, runtime.JSONOptions)
 	r.NoError(err)
 	configDesc := ociImageSpecV1.Descriptor{
 		MediaType: ociImageSpecV1.MediaTypeImageConfig,
@@ -217,7 +217,7 @@ func singleLayerOCILayoutTarGzip(t *testing.T, layerData []byte) []byte {
 		Config:    configDesc,
 		Layers:    []ociImageSpecV1.Descriptor{layerDesc},
 	}
-	manifestRaw, err := json.Marshal(manifest)
+	manifestRaw, err := json.Marshal(manifest, runtime.JSONOptions)
 	r.NoError(err)
 	manifestDesc := ociImageSpecV1.Descriptor{
 		MediaType: ociImageSpecV1.MediaTypeImageManifest,

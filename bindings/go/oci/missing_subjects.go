@@ -2,17 +2,17 @@ package oci
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3"
+	"github.com/oras-project/oras-go/v3/content"
+	"github.com/oras-project/oras-go/v3/errdef"
 	slogcontext "github.com/veqryn/slog-context"
-	"oras.land/oras-go/v2"
-	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/errdef"
 
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
 )
@@ -66,7 +66,7 @@ func skipMissingSubject(next findSuccessorsFunc) findSuccessorsFunc {
 			return nil, err
 		}
 		var manifest struct {
-			Subject *ociImageSpecV1.Descriptor `json:"subject,omitempty"`
+			Subject *ociImageSpecV1.Descriptor `json:"subject,omitzero"`
 		}
 		if err := json.Unmarshal(raw, &manifest); err != nil {
 			return nil, err

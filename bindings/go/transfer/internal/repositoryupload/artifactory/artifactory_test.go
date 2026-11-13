@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -16,9 +16,9 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/content/memory"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v4/pkg/registry"
-	"oras.land/oras-go/v2/content/memory"
 
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
@@ -54,7 +54,7 @@ func helmChartLayout(t *testing.T, chart []byte) []byte {
 		MediaType: ocispec.MediaTypeImageManifest,
 		Config:    push(registry.ConfigMediaType, []byte(`{"name":"mychart","version":"0.1.0","apiVersion":"v2"}`)),
 		Layers:    []ocispec.Descriptor{push(registry.ChartLayerMediaType, chart)},
-	})
+	}, runtime.JSONOptions)
 	r.NoError(err)
 	b, err := ocitar.CopyToOCILayoutInMemory(t.Context(), store, push(ocispec.MediaTypeImageManifest, manifest), ocitar.CopyToOCILayoutOptions{})
 	r.NoError(err)

@@ -1,7 +1,7 @@
 package v2_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,7 +32,7 @@ func TestLocalBlob_Struct(t *testing.T) {
 	}
 
 	// Test
-	jsonData, err := json.Marshal(blob)
+	jsonData, err := json.Marshal(blob, runtime.JSONOptions)
 
 	// Assert
 	require.NoError(t, err)
@@ -155,5 +155,68 @@ func TestLocalBlob_UnmarshalJSON_UnversionedLegacy(t *testing.T) {
 func TestLocalBlob_Constants(t *testing.T) {
 	assert.Equal(t, "LocalBlob", descriptorv2.LocalBlobAccessType)
 	assert.Equal(t, "localBlob", descriptorv2.LegacyLocalBlobAccessType)
+	assert.Equal(t, "localOciBlob", descriptorv2.LegacyLocalOciBlobAccessType)
 	assert.Equal(t, "v1", descriptorv2.LocalBlobAccessTypeVersion)
+}
+
+func TestLocalBlob_UnmarshalJSON_LegacyLocalOciBlob(t *testing.T) {
+	tests := []struct {
+		name               string
+		data               string
+		wantType           runtime.Type
+		wantLocalReference string
+	}{
+		{
+			name:               "versioned legacy type maps digest and normalises the type",
+			data:               `{"type":"localOciBlob/v1","digest":"sha256:abc123"}`,
+			wantType:           runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion),
+			wantLocalReference: "sha256:abc123",
+		},
+		{
+			name:               "unversioned legacy type maps digest and normalises the type",
+			data:               `{"type":"localOciBlob","digest":"sha256:abc123"}`,
+			wantType:           runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion),
+			wantLocalReference: "sha256:abc123",
+		},
+		{
+			name:     "localReference wins over digest",
+			data:     `{"type":"localOciBlob/v1","localReference":"sha256:abc123","digest":"sha256:def456"}`,
+			wantType: runtime.NewVersionedType(descriptorv2.LegacyLocalOciBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion),
+			// keeps its spelling: nothing was mapped, so the stored access is already resolvable
+			wantLocalReference: "sha256:abc123",
+		},
+		{
+			name:               "digest is ignored for a LocalBlob access",
+			data:               `{"type":"LocalBlob/v1","digest":"sha256:abc123"}`,
+			wantType:           runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion),
+			wantLocalReference: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+
+			var blob descriptorv2.LocalBlob
+			r.NoError(json.Unmarshal([]byte(tt.data), &blob))
+			r.Equal(tt.wantType, blob.Type)
+			r.Equal(tt.wantLocalReference, blob.LocalReference)
+			r.Empty(blob.MediaType)
+		})
+	}
+}
+
+// TestLocalBlob_MarshalJSON_DropsLegacyDigest keeps the legacy spelling read-only: a
+// descriptor v2 writes never carries the digest field.
+func TestLocalBlob_MarshalJSON_DropsLegacyDigest(t *testing.T) {
+	r := require.New(t)
+
+	var blob descriptorv2.LocalBlob
+	r.NoError(json.Unmarshal([]byte(`{"type":"localOciBlob/v1","digest":"sha256:abc123"}`), &blob))
+
+	data, err := json.Marshal(blob)
+	r.NoError(err)
+	r.NotContains(string(data), "digest")
+	r.NotContains(string(data), descriptorv2.LegacyLocalOciBlobAccessType)
+	r.Contains(string(data), `"localReference":"sha256:abc123"`)
 }

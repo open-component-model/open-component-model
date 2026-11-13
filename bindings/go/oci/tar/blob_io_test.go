@@ -3,7 +3,7 @@ package tar
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"os"
@@ -13,16 +13,17 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3"
+	"github.com/oras-project/oras-go/v3/content"
+	"github.com/oras-project/oras-go/v3/content/memory"
+	orasoci "github.com/oras-project/oras-go/v3/content/oci"
+	"github.com/oras-project/oras-go/v3/errdef"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2"
-	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/content/memory"
-	orasoci "oras.land/oras-go/v2/content/oci"
-	"oras.land/oras-go/v2/errdef"
 
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestCopyOCILayout(t *testing.T) {
@@ -80,7 +81,7 @@ func TestCopyOCILayout(t *testing.T) {
 		index := ociImageSpecV1.Index{
 			Manifests: []ociImageSpecV1.Descriptor{manifest},
 		}
-		indexBytes, err := json.Marshal(index)
+		indexBytes, err := json.Marshal(index, runtime.JSONOptions)
 		require.NoError(t, err)
 		indexDesc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageIndex, indexBytes)
 		require.NoError(t, ociLayout.Push(t.Context(), indexDesc, bytes.NewReader(indexBytes)))
@@ -154,7 +155,7 @@ func TestCopyToOCILayoutInMemoryBasedOnIndex(t *testing.T) {
 			manifest,
 		},
 	}
-	indexSerialized, err := json.Marshal(index)
+	indexSerialized, err := json.Marshal(index, runtime.JSONOptions)
 	require.NoError(t, err)
 	indexDesc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageIndex, indexSerialized)
 
@@ -300,7 +301,8 @@ func buildLayoutWithSourceReferrer(t *testing.T, artifactType string) []byte {
 		Config:       empty,
 		Layers:       []ociImageSpecV1.Descriptor{empty},
 		Subject:      &main,
-	})
+	}, runtime.JSONOptions)
+
 	r.NoError(err)
 	refDesc := ociImageSpecV1.Descriptor{
 		MediaType:    ociImageSpecV1.MediaTypeImageManifest,

@@ -6,7 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
-	"encoding/json"
+	"encoding/json/v2"
 	"encoding/pem"
 	"fmt"
 
@@ -99,7 +99,7 @@ func verificationConfig(publicKeyPEM string) (string, error) {
 		},
 	}
 	// JSON is valid YAML, which is what the controller reads.
-	raw, err := json.Marshal(cfg)
+	raw, err := json.Marshal(cfg, ocmruntime.JSONOptions)
 	if err != nil {
 		return "", err
 	}

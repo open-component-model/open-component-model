@@ -107,8 +107,8 @@ func Test_Integration_TransferOCIImageLayer(t *testing.T) {
 				registryCreds{sourceAddr, sourceUser, sourcePwd},
 				registryCreds{targetAddr, targetUser, targetPwd},
 			)
-			repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-			graph, err := transfer.NewDefaultBuilder(repoProvider, ociresource.NewResourceRepository(nil), credResolver).BuildAndCheck(tgd)
+			repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig()))
+			graph, err := transfer.NewDefaultBuilder(repoProvider, ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig())), credResolver, transfer.WithHTTPConfig(plainHTTPConfig())).BuildAndCheck(tgd)
 			r.NoError(err)
 			r.NoError(graph.Process(ctx))
 

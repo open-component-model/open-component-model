@@ -2,7 +2,7 @@ package integration_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"testing"
@@ -106,8 +106,9 @@ func Test_Integration_TransferRelativeOCIReference(t *testing.T) {
 		r.NoError(err)
 
 		b := transfer.NewDefaultBuilder(
-			provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir())),
-			ociresource.NewResourceRepository(nil), credResolver,
+			provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig())),
+			ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig())), credResolver,
+			transfer.WithHTTPConfig(plainHTTPConfig()),
 		)
 		graph, err := b.BuildAndCheck(tgd)
 		r.NoError(err)
@@ -170,8 +171,9 @@ func Test_Integration_TransferRelativeOCIReference(t *testing.T) {
 		r.NoError(err)
 
 		b := transfer.NewDefaultBuilder(
-			provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir())),
-			ociresource.NewResourceRepository(nil), credResolver,
+			provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig())),
+			ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig())), credResolver,
+			transfer.WithHTTPConfig(plainHTTPConfig()),
 		)
 		graph, err := b.BuildAndCheck(tgd)
 		r.NoError(err)
@@ -197,7 +199,7 @@ func Test_Integration_TransferRelativeOCIReference(t *testing.T) {
 			"relativeOciReference must become an OCIImage after a transfer with an OCI uploader")
 
 		var ociImage ociaccessv1.OCIImage
-		rawAccess, err := json.Marshal(gotAccess)
+		rawAccess, err := json.Marshal(gotAccess, runtime.JSONOptions)
 		r.NoError(err)
 		r.NoError(json.Unmarshal(rawAccess, &ociImage))
 		r.Contains(ociImage.ImageReference, targetAddr,

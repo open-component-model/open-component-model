@@ -1,0 +1,8 @@
+apiVersion: examples.ocm.software/v1alpha1
+kind: KustomizeConfigurationLocalizationCrossplane
+metadata:
+  name: kustomize-configuration-localization-crossplane
+spec:
+  prefix: kustomize-configuration-localization-crossplane
+  podinfo:
+    message: "kustomize-configuration-localization"

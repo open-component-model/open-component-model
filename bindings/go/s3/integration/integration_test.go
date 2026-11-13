@@ -3,7 +3,7 @@ package integration_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net"
 	"testing"
@@ -19,6 +19,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	typesv1 "ocm.software/open-component-model/bindings/go/configuration/types/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -70,15 +71,15 @@ func Test_Integration_S3(t *testing.T) {
 	// A real http configuration: the retry section drives the SDK's attempt count, and
 	// the per-host entry routes S3 requests through the host-specific transport.
 	httpConfig := &httpv1alpha1.Config{
-		TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: httpv1alpha1.NewTimeout(30 * time.Second)},
+		TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: typesv1.NewDuration(30 * time.Second)},
 		Retry: &httpv1alpha1.RetryConfig{
 			MaxRetries: new(2),
-			MinWait:    httpv1alpha1.NewTimeout(50 * time.Millisecond),
-			MaxWait:    httpv1alpha1.NewTimeout(time.Second),
+			MinWait:    typesv1.NewDuration(50 * time.Millisecond),
+			MaxWait:    typesv1.NewDuration(time.Second),
 		},
 		Hosts: map[string]*httpv1alpha1.HostConfig{
 			hostPort: {TimeoutConfig: httpv1alpha1.TimeoutConfig{
-				ResponseHeaderTimeout: httpv1alpha1.NewTimeout(10 * time.Second),
+				ResponseHeaderTimeout: typesv1.NewDuration(10 * time.Second),
 			}},
 		},
 	}
@@ -172,7 +173,7 @@ func Test_Integration_S3(t *testing.T) {
 					"type": tt.typ, tt.bucketField: bucket, tt.keyField: key,
 					"region": "us-east-1", "mediaType": "text/plain",
 					"endpoint": endpoint, "usePathStyle": true,
-				})
+				}, runtime.JSONOptions)
 				r.NoError(err)
 				for _, wire := range []runtime.Typed{&runtime.Raw{}, &runtime.Unstructured{}} {
 					r.NoError(json.Unmarshal(data, wire))
@@ -200,7 +201,7 @@ func Test_Integration_S3(t *testing.T) {
 					r.Equal(bucket, normalized.BucketName)
 					r.Equal(key, normalized.ObjectKey)
 					r.Equal(version, normalized.Version)
-					encoded, err := json.Marshal(pinned.Access)
+					encoded, err := json.Marshal(pinned.Access, runtime.JSONOptions)
 					r.NoError(err)
 					var fields map[string]any
 					r.NoError(json.Unmarshal(encoded, &fields))
@@ -233,7 +234,7 @@ func Test_Integration_S3(t *testing.T) {
 
 		// A timeout no request can meet, with retries off so the single attempt fails fast.
 		strict := repository.NewResourceRepository(repository.WithHTTPConfig(&httpv1alpha1.Config{
-			TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: httpv1alpha1.NewTimeout(time.Nanosecond)},
+			TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: typesv1.NewDuration(time.Nanosecond)},
 			Retry:         &httpv1alpha1.RetryConfig{MaxRetries: new(-1)},
 		}))
 

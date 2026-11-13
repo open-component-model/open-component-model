@@ -3,7 +3,7 @@ package component_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"testing"
@@ -16,6 +16,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/internal/lister/component"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	componentConfig "ocm.software/open-component-model/bindings/go/oci/spec/config/component"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 type mockStore struct {
@@ -130,7 +131,7 @@ func TestReferenceTagVersionResolver(t *testing.T) {
 						Annotations: map[string]string{
 							annotations.OCMComponentVersion: annotations.NewComponentVersionAnnotation("example.com/repo", "v1.0.0"),
 						},
-					})
+					}, runtime.JSONOptions)
 					if err != nil {
 						return nil, fmt.Errorf("failed to marshal manifest: %w", err)
 					}
@@ -155,7 +156,7 @@ func TestReferenceTagVersionResolver(t *testing.T) {
 						Annotations: map[string]string{
 							annotations.OCMComponentVersion: annotations.NewComponentVersionAnnotation("example.com/repo", "v1.0.0"),
 						},
-					})
+					}, runtime.JSONOptions)
 					if err != nil {
 						return nil, fmt.Errorf("failed to marshal manifest: %w", err)
 					}
@@ -191,7 +192,7 @@ func TestReferenceTagVersionResolver(t *testing.T) {
 				fetchFunc: func(ctx context.Context, desc ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 					data, err := json.Marshal(&ociImageSpecV1.Index{
 						MediaType: ociImageSpecV1.MediaTypeImageIndex,
-					})
+					}, runtime.JSONOptions)
 					if err != nil {
 						return nil, fmt.Errorf("failed to marshal manifest: %w", err)
 					}
@@ -217,7 +218,7 @@ func TestReferenceTagVersionResolver(t *testing.T) {
 						Config: ociImageSpecV1.Descriptor{
 							MediaType: componentConfig.MediaType,
 						},
-					})
+					}, runtime.JSONOptions)
 					if err != nil {
 						return nil, fmt.Errorf("failed to marshal manifest: %w", err)
 					}
@@ -242,7 +243,7 @@ func TestReferenceTagVersionResolver(t *testing.T) {
 						Config: ociImageSpecV1.Descriptor{
 							MediaType: componentConfig.LegacyMediaType,
 						},
-					})
+					}, runtime.JSONOptions)
 					if err != nil {
 						return nil, fmt.Errorf("failed to marshal manifest: %w", err)
 					}
@@ -270,7 +271,7 @@ func TestReferenceTagVersionResolver(t *testing.T) {
 						Annotations: map[string]string{
 							annotations.OCMComponentVersion: annotations.NewComponentVersionAnnotation("example.com/repo", "v1.0.0"),
 						},
-					})
+					}, runtime.JSONOptions)
 					if err != nil {
 						return nil, fmt.Errorf("failed to marshal manifest: %w", err)
 					}
@@ -295,7 +296,7 @@ func TestReferenceTagVersionResolver(t *testing.T) {
 						Config: ociImageSpecV1.Descriptor{
 							MediaType: "application/vnd.oci.image.config.v1+json",
 						},
-					})
+					}, runtime.JSONOptions)
 					if err != nil {
 						return nil, fmt.Errorf("failed to marshal manifest: %w", err)
 					}

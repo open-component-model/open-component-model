@@ -51,7 +51,7 @@ func TestLookupUploaderConfigs_Git(t *testing.T) {
     repository: https://git.example.com/repo.git
     ref: refs/heads/main
     baseUrl: https://git.example.com`,
-			wantErr: `unknown field "baseUrl"`,
+			wantErr: `unknown object member name "baseUrl"`,
 		},
 		{
 			name: "unknown field",
@@ -59,7 +59,7 @@ func TestLookupUploaderConfigs_Git(t *testing.T) {
     repository: https://git.example.com/repo.git
     ref: refs/heads/main
     depth: 1`,
-			wantErr: `unknown field "depth"`,
+			wantErr: `unknown object member name "depth"`,
 		},
 	}
 	for _, tt := range tests {

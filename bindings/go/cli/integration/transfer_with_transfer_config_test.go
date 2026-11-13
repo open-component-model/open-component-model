@@ -44,7 +44,8 @@ func writeOCMConfigWithCredsAndTransfer(t *testing.T, regs []internal.ConfigOpts
         username: %q
         password: %q`, o.Host, o.Port, o.User, o.Password)
 	}
-	cfg += "\n" + transferEntry + "\n"
+	cfg += "\n" + transferEntry + "\n" + `- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`
 
 	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
 	require.NoError(t, os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
@@ -111,7 +112,7 @@ func Test_Integration_TransferWithTransferConfig_FileDrivesLocalBlobUploader(t *
 		},
 	}
 
-	resourceRepo := ocires.NewResourceRepository(&filesystemv1alpha1.Config{})
+	resourceRepo := ocires.NewResourceRepository(&filesystemv1alpha1.Config{}, ocires.WithHTTPConfig(loadHTTPConfig(t, cfgPath)))
 	uploaded, err := resourceRepo.UploadResource(ctx, &resource, inmemory.New(bytes.NewReader(imageData)), &ocicredsv1.OCICredentials{
 		Type:     ocicredsv1.OCICredentialsVersionedType,
 		Username: sourceRegistry.User,
@@ -332,5 +333,5 @@ func Test_Integration_TransferWithTransferConfig_StaleCopyModeRejected(t *testin
 
 	err = transferCMD.ExecuteContext(ctx)
 	r.Error(err, "stale copyMode in transfer config should fail before transfer starts")
-	r.Contains(err.Error(), `unknown field "copyMode"`, "error should identify the stale field")
+	r.Contains(err.Error(), `unknown object member name "copyMode"`, "error should identify the stale field")
 }

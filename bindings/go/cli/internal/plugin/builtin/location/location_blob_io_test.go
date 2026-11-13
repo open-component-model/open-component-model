@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sys/unix"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
@@ -58,7 +57,7 @@ func TestWriteAndRead(t *testing.T) {
 			},
 			setup: func(t *testing.T) error {
 				t.Helper()
-				return unix.Mkfifo(filepath.Join(tempDir, "pipe"), 0o666)
+				return mkfifo(filepath.Join(tempDir, "pipe"))
 			},
 			cleanup: func() error {
 				return os.Remove(filepath.Join(tempDir, "pipe"))

@@ -4,7 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2/content"
+	"github.com/oras-project/oras-go/v3/content"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/direct"
@@ -91,13 +91,8 @@ func (t *Transformer) extractOCIArtifact(ctx context.Context, store content.Fetc
 		err = errors.Join(err, manifestReader.Close())
 	}()
 
-	manifestData, err := io.ReadAll(manifestReader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read manifest data: %w", err)
-	}
-
 	var manifest ociImageSpecV1.Manifest
-	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+	if err := json.UnmarshalRead(manifestReader, &manifest); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal manifest: %w", err)
 	}
 
@@ -229,13 +224,8 @@ func (t *Transformer) extractHelmMetadata(ctx context.Context, store content.Fet
 	}
 	defer configReader.Close()
 
-	configData, err := io.ReadAll(configReader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read Helm config data: %w", err)
-	}
-
 	var metadata helmChartMetadata
-	if err := json.Unmarshal(configData, &metadata); err != nil {
+	if err := json.UnmarshalRead(configReader, &metadata); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal Helm config: %w", err)
 	}
 

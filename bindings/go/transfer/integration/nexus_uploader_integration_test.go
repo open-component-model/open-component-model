@@ -4,7 +4,8 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -82,10 +83,10 @@ func Test_Integration_NexusUploader(t *testing.T) {
 		const component, version = "ocm.software/nexus-helm-uploader-test", "1.0.0"
 		sourcePath := t.TempDir()
 		ctfRepo := createCTFRepository(t, sourcePath)
-		helmAccessData, err := json.Marshal(map[string]string{"type": "Helm/v1", "helmRepository": srcSrv.URL, "helmChart": "mychart-0.1.0.tgz"})
+		helmAccessData, err := json.Marshal(map[string]string{"type": "Helm/v1", "helmRepository": srcSrv.URL, "helmChart": "mychart-0.1.0.tgz"}, runtime.JSONOptions)
 		r.NoError(err)
 		rawHelmAccess := &runtime.Raw{}
-		r.NoError(rawHelmAccess.UnmarshalJSON(helmAccessData))
+		r.NoError(json.Unmarshal(helmAccessData, rawHelmAccess))
 		r.NoError(ctfRepo.AddComponentVersion(t.Context(), &descriptor.Descriptor{
 			Meta: descriptor.Meta{Version: "v2"},
 			Component: descriptor.Component{
@@ -104,7 +105,7 @@ func Test_Integration_NexusUploader(t *testing.T) {
 		targetPath, targetSpec := newTargetCTF(t)
 		up := uploader(runtime.NewVersionedType(helmaccessv1.Type, helmaccessv1.LegacyTypeVersion), nexusHelmRepository, "")
 		for range 2 {
-			transferOnce(t, ctfRepo, sourceSpec, targetSpec, up, helmresource.NewResourceRepository(nil), creds, component, version)
+			transferOnce(t, ctfRepo, sourceSpec, targetSpec, up, helmresource.NewResourceRepository(nil, helmresource.WithHTTPConfig(plainHTTPConfig())), creds, component, version)
 		}
 
 		gotDesc, err := createCTFRepository(t, targetPath).GetComponentVersion(t.Context(), component, version)
@@ -191,7 +192,7 @@ func Test_Integration_NexusUploader(t *testing.T) {
 		r.Eventually(func() bool {
 			status, body := nexusRequest(t, http.MethodGet, baseURL+"/repository/"+nexusNpmRepository+"/ocm-integration-demo", adminPassword, nil)
 			var metadata struct {
-				Versions map[string]json.RawMessage `json:"versions"`
+				Versions map[string]jsontext.Value `json:"versions"`
 			}
 			return status == http.StatusOK && json.Unmarshal(body, &metadata) == nil && metadata.Versions["1.0.0"] != nil
 		}, 15*time.Second, 500*time.Millisecond, "the npm package metadata lists the uploaded version")
@@ -266,7 +267,7 @@ func startNexus(t *testing.T) (baseURL, adminPassword string) {
 		var eula map[string]any
 		r.NoError(json.Unmarshal(body, &eula))
 		eula["accepted"] = true
-		accepted, err := json.Marshal(eula)
+		accepted, err := json.Marshal(eula, runtime.JSONOptions)
 		r.NoError(err)
 		status, body = nexusRequest(t, http.MethodPost, eulaURL, adminPassword, accepted)
 		r.Equal(http.StatusNoContent, status, string(body))

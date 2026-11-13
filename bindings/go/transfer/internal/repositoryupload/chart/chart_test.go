@@ -3,7 +3,7 @@ package chart
 import (
 	"archive/tar"
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"os"
@@ -12,9 +12,9 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/content/memory"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v4/pkg/registry"
-	"oras.land/oras-go/v2/content/memory"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
@@ -40,7 +40,7 @@ func chartLayout(t *testing.T, configMediaType string, chart []byte) blob.ReadOn
 		MediaType: ocispec.MediaTypeImageManifest,
 		Config:    push(configMediaType, []byte(`{"name":"mychart","version":"0.1.0","apiVersion":"v2"}`)),
 		Layers:    []ocispec.Descriptor{push(registry.ChartLayerMediaType, chart), push(registry.ProvLayerMediaType, []byte("prov"))},
-	})
+	}, runtime.JSONOptions)
 	require.NoError(t, err)
 	b, err := ocitar.CopyToOCILayoutInMemory(ctx, store, push(ocispec.MediaTypeImageManifest, manifest), ocitar.CopyToOCILayoutOptions{})
 	require.NoError(t, err)

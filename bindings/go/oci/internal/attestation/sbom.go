@@ -20,14 +20,15 @@ package attestation
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2/content"
+	"github.com/oras-project/oras-go/v3/content"
 
 	"ocm.software/open-component-model/bindings/go/oci/internal/identity"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
@@ -61,7 +62,7 @@ func DiscoverSBOMs(ctx context.Context, store spec.Store, reference string, opts
 		return nil, fmt.Errorf("parsing reference %q failed: %w", reference, err)
 	}
 
-	root, err := store.Resolve(ctx, parsed.ReferenceOrTag())
+	root, err := store.Resolve(ctx, parsed.GetReference())
 	if err != nil {
 		return nil, fmt.Errorf("resolving reference %q failed: %w", reference, err)
 	}
@@ -176,7 +177,7 @@ func sbomsFromAttestation(
 		}
 
 		var envelope struct {
-			Predicate json.RawMessage `json:"predicate"`
+			Predicate jsontext.Value `json:"predicate"`
 		}
 		if err := json.Unmarshal(statement, &envelope); err != nil {
 			return nil, fmt.Errorf("malformed sbom in attestation %s: in-toto statement %s of predicate type %s is not valid json: %w",

@@ -2,7 +2,7 @@ package transformer
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"os"
 	"path/filepath"
@@ -47,7 +47,7 @@ func (m *mockResourceRepositoryForAddOCI) UploadResource(ctx context.Context, re
 		Reference: "ghcr.io/test/artifact@sha256:test-digest",
 		MediaType: "application/vnd.oci.image.layer.v1.tar+gzip",
 	}
-	accessData, err := json.Marshal(access)
+	accessData, err := json.Marshal(access, runtime.JSONOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +116,7 @@ func TestAddOCIArtifact_Transform(t *testing.T) {
 					Name:    blobv1alpha1.FileType,
 					Version: blobv1alpha1.Version,
 				},
-				URI:       "file://" + testFile,
+				URI:       fileURI(t, testFile),
 				MediaType: "application/vnd.oci.image.layer.v1.tar+gzip",
 			},
 		},

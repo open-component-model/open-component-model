@@ -1,6 +1,7 @@
 package v1_test
 
 import (
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -27,15 +28,15 @@ func TestTransportCredentials(t *testing.T) {
 		{name: "bearer missing token", json: `{"type":"GitBearerCredentials/v1"}`, wantErr: "requires a token"},
 		{name: "SSH conflicting keys", json: `{"type":"GitSSHCredentials/v1","privateKey":"key","privateKeyPEM":"pem"}`, wantErr: "only one"},
 		{name: "SSH passphrase without key", json: `{"type":"GitSSHCredentials/v1","passphrase":"phrase"}`, wantErr: "requires a private key"},
-		{name: "HTTPS mixed bearer", json: `{"type":"GitHTTPSCredentials/v1","username":"user","password":"secret","token":"secret"}`, wantErr: `unknown field "token"`},
-		{name: "bearer mixed HTTPS", json: `{"type":"GitBearerCredentials/v1","token":"secret","username":"user"}`, wantErr: `unknown field "username"`},
-		{name: "SSH HTTP password", json: `{"type":"GitSSHCredentials/v1","privateKey":"key","password":"secret"}`, wantErr: `unknown field "password"`},
+		{name: "HTTPS mixed bearer", json: `{"type":"GitHTTPSCredentials/v1","username":"user","password":"secret","token":"secret"}`, wantErr: `unknown object member name "token"`},
+		{name: "bearer mixed HTTPS", json: `{"type":"GitBearerCredentials/v1","token":"secret","username":"user"}`, wantErr: `unknown object member name "username"`},
+		{name: "SSH HTTP password", json: `{"type":"GitSSHCredentials/v1","privateKey":"key","password":"secret"}`, wantErr: `unknown object member name "password"`},
 		{name: "unsupported", json: `{"type":"GitHTTPSCredentials/v2"}`, wantErr: "unsupported git credential type"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			raw := &runtime.Raw{}
-			r.NoError(raw.UnmarshalJSON([]byte(tc.json)))
+			r.NoError(json.Unmarshal([]byte(tc.json), raw))
 			got, err := v1.ConvertCredentials(raw)
 			if tc.wantErr != "" {
 				r.ErrorContains(err, tc.wantErr)

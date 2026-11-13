@@ -5,7 +5,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/x509"
-	"encoding/json"
+	"encoding/json/v2"
 	"encoding/pem"
 	"fmt"
 	"io"
@@ -19,8 +19,8 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/content/memory"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2/content/memory"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	blobfs "ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -35,6 +35,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
@@ -92,7 +93,8 @@ configurations:
       properties:
         username: %[7]q
         password: %[8]q
-`, sourceRegistry.Host, sourceRegistry.Port, sourceRegistry.User, sourceRegistry.Password,
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`, sourceRegistry.Host, sourceRegistry.Port, sourceRegistry.User, sourceRegistry.Password,
 		targetRegistry.Host, targetRegistry.Port, targetRegistry.User, targetRegistry.Password)
 
 	tempdir := t.TempDir()
@@ -101,7 +103,7 @@ configurations:
 
 	// Set up repository provider and credential resolver to check whether the
 	// transfers worked as expected.
-	repoProvider := provider.NewComponentVersionRepositoryProvider()
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithHTTPConfig(loadHTTPConfig(t, cfgPath)))
 	ocmconf, err := configuration.GetConfigFromPath(cfgPath)
 	r.NoError(err)
 	credconf, err := runtime.LookupCredentialConfig(ocmconf)
@@ -150,7 +152,7 @@ configurations:
 
 	// Upload the resource to the source oci registry where the constructor
 	// image reference is pointing to.
-	resourceRepo := ocires.NewResourceRepository(&filesystemv1alpha1.Config{})
+	resourceRepo := ocires.NewResourceRepository(&filesystemv1alpha1.Config{}, ocires.WithHTTPConfig(loadHTTPConfig(t, cfgPath)))
 	id, err := resourceRepo.GetResourceCredentialConsumerIdentity(ctx, &resource)
 	r.NoError(err, "should be able to get credential consumer identity for resource")
 	creds, err := credentialResolver.Resolve(ctx, id)
@@ -542,6 +544,18 @@ func createRepo(ctx context.Context, repoProvider *provider.CachingComponentVers
 	return targetRepo, nil
 }
 
+// loadHTTPConfig returns the HTTP client configuration from the OCM config at
+// cfgPath, so library-level checks reach the plain-HTTP test registries the
+// same way the CLI does.
+func loadHTTPConfig(t *testing.T, cfgPath string) *httpv1alpha1.Config {
+	t.Helper()
+	ocmconf, err := configuration.GetConfigFromPath(cfgPath)
+	require.NoError(t, err)
+	httpConf, err := httpv1alpha1.LookupConfig(ocmconf)
+	require.NoError(t, err)
+	return httpConf
+}
+
 // Test_Integration_Transfer_OCIArtifact_PreservesSignatures transfers a signed component
 // with OCI artifact resources from CTF to OCI registry and verifies signatures are preserved.
 func Test_Integration_Transfer_OCIArtifact_PreservesSignatures(t *testing.T) {
@@ -579,7 +593,8 @@ configurations:
       properties:
         username: %[7]q
         password: %[8]q
-`, sourceRegistry.Host, sourceRegistry.Port, sourceRegistry.User, sourceRegistry.Password,
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`, sourceRegistry.Host, sourceRegistry.Port, sourceRegistry.User, sourceRegistry.Password,
 		targetRegistry.Host, targetRegistry.Port, targetRegistry.User, targetRegistry.Password)
 
 	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
@@ -605,7 +620,7 @@ configurations:
 	targetAccess.(*v1.OCIImage).ImageReference = fmt.Sprintf("http://%s", sourceRegistry.Reference("test-signed:v1.0.0"))
 	resource.Access = targetAccess
 
-	resourceRepo := ocires.NewResourceRepository(&filesystemv1alpha1.Config{})
+	resourceRepo := ocires.NewResourceRepository(&filesystemv1alpha1.Config{}, ocires.WithHTTPConfig(loadHTTPConfig(t, cfgPath)))
 	newRes, err := resourceRepo.UploadResource(ctx, &resource, inmemory.New(bytes.NewReader(data)), &ocicredsv1.OCICredentials{
 		Type:     ocicredsv1.OCICredentialsVersionedType,
 		Username: sourceRegistry.User,
@@ -732,6 +747,8 @@ func Test_Integration_Transfer_OCIArtifact_PreservesV1DescriptorDigest(t *testin
 	cfg, err := os.ReadFile(cfgPath)
 	r.NoError(err)
 	cfg = append(cfg, []byte(fmt.Sprintf(`
+- type: credentials.config.ocm.software
+  consumers:
   - identity:
       type: RSA/v1alpha1
       algorithm: RSASSA-PSS
@@ -746,7 +763,7 @@ func Test_Integration_Transfer_OCIArtifact_PreservesV1DescriptorDigest(t *testin
 	r.NoError(os.WriteFile(cfgPath, cfg, 0o600))
 
 	sourceRepo := sourceRegistry.Connect(t)
-	resourceRepo := ocires.NewResourceRepository(&filesystemv1alpha1.Config{})
+	resourceRepo := ocires.NewResourceRepository(&filesystemv1alpha1.Config{}, ocires.WithHTTPConfig(loadHTTPConfig(t, cfgPath)))
 	originalData := []byte("issue-3674-artifact")
 	data, access := createSingleLayerOCIImage(t, originalData,
 		"http://"+sourceRegistry.Reference("issue-3674-artifact:1.0.0"))
@@ -931,7 +948,7 @@ func createSingleLayerOCIImage(t *testing.T, data []byte, ref ...string) ([]byte
 
 	r.NoError(w.Push(t.Context(), desc, bytes.NewReader(data)))
 
-	configRaw, err := json.Marshal(map[string]string{})
+	configRaw, err := json.Marshal(map[string]string{}, ocmruntime.JSONOptions)
 	r.NoError(err)
 	configDesc := ociImageSpecV1.Descriptor{
 		Digest:    digest.FromBytes(configRaw),
@@ -948,7 +965,7 @@ func createSingleLayerOCIImage(t *testing.T, data []byte, ref ...string) ([]byte
 			desc,
 		},
 	}
-	manifestRaw, err := json.Marshal(manifest)
+	manifestRaw, err := json.Marshal(manifest, ocmruntime.JSONOptions)
 	r.NoError(err)
 
 	manifestDesc := ociImageSpecV1.Descriptor{

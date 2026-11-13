@@ -3,7 +3,8 @@ package utf8
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"strings"
@@ -124,11 +125,14 @@ func GetV1UTF8Blob(utf8 v1.UTF8) (blob.ReadOnlyBlob, error) {
 	case len(utf8.JSON) > 0, len(utf8.FormattedJSON) > 0:
 		var data []byte
 		var err error
+		// EscapeForHTML and EscapeForJS restore what encoding/json v1 escaped here: the
+		// marshaled bytes are the resource content, so their digest - and any signature
+		// over it - must not change for an input that stayed the same.
 		switch {
 		case len(utf8.JSON) > 0:
-			data, err = json.Marshal(utf8.JSON)
+			data, err = json.Marshal(utf8.JSON, runtime.JSONOptions, jsontext.EscapeForHTML(true), jsontext.EscapeForJS(true))
 		case len(utf8.FormattedJSON) > 0:
-			data, err = json.MarshalIndent(utf8.FormattedJSON, "", "  ")
+			data, err = json.Marshal(utf8.FormattedJSON, runtime.JSONOptions, jsontext.EscapeForHTML(true), jsontext.EscapeForJS(true), jsontext.WithIndent("  "))
 		}
 		if err != nil {
 			return nil, fmt.Errorf("error marshalling utf8 JSON input: %w", err)

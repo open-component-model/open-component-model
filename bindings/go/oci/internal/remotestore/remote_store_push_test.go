@@ -15,9 +15,10 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/registry/remote"
+	"github.com/oras-project/oras-go/v3/registry/remote/auth"
+	"github.com/oras-project/oras-go/v3/registry/remote/credentials"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2/registry/remote"
-	"oras.land/oras-go/v2/registry/remote/auth"
 )
 
 // recordedRequest captures the salient parts of one registry request.
@@ -158,8 +159,8 @@ func newTestStore(t *testing.T, srv *httptest.Server, chunkSize, threshold int64
 	t.Helper()
 	repo, err := remote.NewRepository(srv.Listener.Addr().String() + "/test-repo")
 	require.NoError(t, err)
-	repo.PlainHTTP = true
-	repo.Client = &http.Client{}
+	repo.Registry.PlainHTTP = true
+	repo.Registry.Client = &http.Client{}
 	return &RemoteStore{Repository: repo, ChunkSize: chunkSize, ChunkThreshold: threshold}
 }
 
@@ -224,7 +225,7 @@ func TestRemoteStore_Push_ChunkedDoesNotOverwriteUnclosedBodies(t *testing.T) {
 	transport := &lateReadTransport{}
 	repo, err := remote.NewRepository("registry.example/test-repo")
 	r.NoError(err)
-	repo.Client = &http.Client{Transport: transport}
+	repo.Registry.Client = &http.Client{Transport: transport}
 	store := &RemoteStore{Repository: repo, ChunkSize: 4, ChunkThreshold: 1}
 
 	r.NoError(store.Push(t.Context(), desc, bytes.NewReader(data)))
@@ -554,7 +555,7 @@ func TestRemoteStore_Push_InvokesHandleWarning(t *testing.T) {
 
 	var warnings []string
 	store := newTestStore(t, srv, 2, 1)
-	store.HandleWarning = func(w remote.Warning) { warnings = append(warnings, w.Text) }
+	store.Registry.HandleWarning = func(w remote.Warning) { warnings = append(warnings, w.Text) }
 
 	data := []byte("hello")
 	dig := digest.FromBytes(data)
@@ -770,8 +771,8 @@ func TestRemoteStore_Push_DoesNotFollowPATCHRedirectToOtherHost(t *testing.T) {
 
 			repo, err := remote.NewRepository(registry.Listener.Addr().String() + "/test-repo")
 			r.NoError(err)
-			repo.PlainHTTP = true
-			repo.Client = tc.client()
+			repo.Registry.PlainHTTP = true
+			repo.Registry.Client = tc.client()
 			store := &RemoteStore{Repository: repo, ChunkSize: 8, ChunkThreshold: 1}
 
 			data := bytes.Repeat([]byte("secret"), 8) // 48 bytes, above threshold
@@ -830,11 +831,11 @@ func TestRemoteStore_Push_ChunkedThroughAuthClientRewindsBody(t *testing.T) {
 
 	repo, err := remote.NewRepository(srv.Listener.Addr().String() + "/test-repo")
 	r.NoError(err)
-	repo.PlainHTTP = true
-	repo.Client = &auth.Client{
+	repo.Registry.PlainHTTP = true
+	repo.Registry.Client = &auth.Client{
 		Client: &http.Client{},
 		Cache:  auth.NewCache(),
-		Credential: auth.StaticCredential(srv.Listener.Addr().String(), auth.Credential{
+		CredentialFunc: credentials.StaticCredentialFunc(srv.Listener.Addr().String(), credentials.Credential{
 			Username: user,
 			Password: pass,
 		}),

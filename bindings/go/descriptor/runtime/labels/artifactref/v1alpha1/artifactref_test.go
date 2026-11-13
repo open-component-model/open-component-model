@@ -1,7 +1,8 @@
 package v1alpha1_test
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -20,7 +21,7 @@ func referenceLabel(t *testing.T, identities ...runtime.Identity) descriptor.Lab
 	for _, identity := range identities {
 		refs = append(refs, artifactref.Reference{Identity: identity})
 	}
-	raw, err := json.Marshal(refs)
+	raw, err := json.Marshal(refs, runtime.JSONOptions)
 	require.NoError(t, err)
 	return descriptor.Label{
 		Name:    artifactref.LabelName,
@@ -35,7 +36,7 @@ func TestFromLabels(t *testing.T) {
 		label := descriptor.Label{
 			Name:    artifactref.LabelName,
 			Version: artifactref.Version,
-			Value:   json.RawMessage(`[{"identity":{"name":"cli","version":"1.0.0"}}]`),
+			Value:   jsontext.Value(`[{"identity":{"name":"cli","version":"1.0.0"}}]`),
 			Signing: true,
 		}
 
@@ -50,7 +51,7 @@ func TestFromLabels(t *testing.T) {
 		label := descriptor.Label{
 			Name:    artifactref.LabelName,
 			Version: artifactref.Version,
-			Value:   json.RawMessage(`[{"identity":{"name":"cli"}},{"identity":{"name":"server","version":"2.0.0"}}]`),
+			Value:   jsontext.Value(`[{"identity":{"name":"cli"}},{"identity":{"name":"server","version":"2.0.0"}}]`),
 		}
 
 		refs, ok, err := artifactref.FromLabels([]descriptor.Label{label})
@@ -69,7 +70,7 @@ func TestFromLabels(t *testing.T) {
 	})
 
 	t.Run("distinguishes an empty list from an absent label", func(t *testing.T) {
-		label := descriptor.Label{Name: artifactref.LabelName, Version: artifactref.Version, Value: json.RawMessage(`[]`)}
+		label := descriptor.Label{Name: artifactref.LabelName, Version: artifactref.Version, Value: jsontext.Value(`[]`)}
 		refs, ok, err := artifactref.FromLabels([]descriptor.Label{label})
 		require.NoError(t, err)
 		assert.True(t, ok, "label is present even though it selects nothing")
@@ -81,7 +82,7 @@ func TestFromLabels(t *testing.T) {
 			label := descriptor.Label{
 				Name:    artifactref.LabelName,
 				Version: version,
-				Value:   json.RawMessage(`[{"identity":{"name":"cli"}}]`),
+				Value:   jsontext.Value(`[{"identity":{"name":"cli"}}]`),
 			}
 			refs, ok, err := artifactref.FromLabels([]descriptor.Label{label})
 			require.NoError(t, err, version)
@@ -91,7 +92,7 @@ func TestFromLabels(t *testing.T) {
 	})
 
 	t.Run("accepts a label carrying no version", func(t *testing.T) {
-		label := descriptor.Label{Name: artifactref.LabelName, Value: json.RawMessage(`[{"identity":{"name":"cli"}}]`)}
+		label := descriptor.Label{Name: artifactref.LabelName, Value: jsontext.Value(`[{"identity":{"name":"cli"}}]`)}
 		refs, ok, err := artifactref.FromLabels([]descriptor.Label{label})
 		require.NoError(t, err)
 		require.True(t, ok)
@@ -101,8 +102,8 @@ func TestFromLabels(t *testing.T) {
 
 	t.Run("finds the conforming label among several versions", func(t *testing.T) {
 		labels := []descriptor.Label{
-			{Name: artifactref.LabelName, Version: "v2", Value: json.RawMessage(`[{"identity":{"name":"future"}}]`)},
-			{Name: artifactref.LabelName, Version: artifactref.Version, Value: json.RawMessage(`[{"identity":{"name":"cli"}}]`)},
+			{Name: artifactref.LabelName, Version: "v2", Value: jsontext.Value(`[{"identity":{"name":"future"}}]`)},
+			{Name: artifactref.LabelName, Version: artifactref.Version, Value: jsontext.Value(`[{"identity":{"name":"cli"}}]`)},
 		}
 		refs, ok, err := artifactref.FromLabels(labels)
 		require.NoError(t, err)
@@ -112,7 +113,7 @@ func TestFromLabels(t *testing.T) {
 	})
 
 	t.Run("rejects a value that is not a list", func(t *testing.T) {
-		label := descriptor.Label{Name: artifactref.LabelName, Version: artifactref.Version, Value: json.RawMessage(`{"identity":{"name":"cli"}}`)}
+		label := descriptor.Label{Name: artifactref.LabelName, Version: artifactref.Version, Value: jsontext.Value(`{"identity":{"name":"cli"}}`)}
 		_, _, err := artifactref.FromLabels([]descriptor.Label{label})
 		require.ErrorContains(t, err, artifactref.LabelName)
 	})
@@ -306,7 +307,7 @@ func TestFindDescribingResources(t *testing.T) {
 					Labels: []descriptor.Label{{
 						Name:    artifactref.LabelName,
 						Version: artifactref.Version,
-						Value:   json.RawMessage(`"not-a-list"`),
+						Value:   jsontext.Value(`"not-a-list"`),
 					}},
 				},
 			},

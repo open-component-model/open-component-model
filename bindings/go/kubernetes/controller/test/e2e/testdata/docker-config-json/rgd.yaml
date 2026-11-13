@@ -29,6 +29,8 @@ spec:
           ocmConfig:
             - kind: Secret
               name: docker-config-json
+            - kind: ConfigMap
+              name: ocm-plain-http
     - id: ocirepository
       template:
         apiVersion: source.toolkit.fluxcd.io/v1

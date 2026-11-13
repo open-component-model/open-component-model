@@ -71,10 +71,10 @@ ocm transfer cv \
   <your-registry>
 ```
 
-Replace `<your-registry>` with your registry address (e.g. `http://localhost:5001` for a local HTTP registry, or `ghcr.io/my-org/ocm` for a remote HTTPS registry).
+Replace `<your-registry>` with your registry address (e.g. `localhost:5001` for a local registry, or `ghcr.io/my-org/ocm` for a remote HTTPS registry).
 
 {{< callout context="note" title="Note" icon="outline/info-circle" >}}
-For local registries running without TLS, use the `http://` scheme prefix (e.g. `http://localhost:5001`). HTTPS registries work without a scheme prefix.
+For local registries running without TLS, set `plainHTTP: true` for the host in the HTTP configuration; see [Use plain HTTP for a local registry]({{< relref "docs/guides/transfer/configure-http.md#use-plain-http-for-a-local-registry" >}}). An `http://` prefix on its own is deprecated and no longer selects plain HTTP.
 {{< /callout >}}
 
 During transfer, OCM stores the OCI manifest and its layers as native OCI objects in the registry. The component version's index references the manifest directly.
@@ -152,7 +152,7 @@ ocm transfer cv \
 ```
 
 {{< callout context="note" title="Note" icon="outline/info-circle" >}}
-For local registries running without TLS, use the `http://` scheme prefix (e.g. `http://localhost:5001`). HTTPS registries work without a scheme prefix.
+For local registries running without TLS, set `plainHTTP: true` for the host in the HTTP configuration; see [Use plain HTTP for a local registry]({{< relref "docs/guides/transfer/configure-http.md#use-plain-http-for-a-local-registry" >}}). An `http://` prefix on its own is deprecated and no longer selects plain HTTP.
 {{< /callout >}}
 
 With the local blob uploader configuration, OCM:
@@ -306,12 +306,12 @@ The image is stored as a first-class OCI manifest in the registry. No OCM toolin
 
 ## How Native Access Works
 
-Under the hood, OCM v2 stores component versions as [OCI Image Indexes](https://github.com/opencontainers/image-spec/blob/main/image-index.md). When a local blob has an OCI-native media type (image manifest, image index, or OCI image layout), it is stored as a separate OCI manifest referenced from the component version's index — not as an opaque layer.
+Under the hood, OCM v2 stores a component version that embeds OCI artifacts as an [OCI image index](https://github.com/opencontainers/image-spec/blob/main/image-index.md). When a local blob has an OCI-native media type (image manifest, image index, or OCI image layout), it is stored as a separate OCI manifest referenced from the component version's index — not as an opaque layer.
 
 ```mermaid
 flowchart TB
     subgraph index ["Component Version (OCI Index)"]
-        Desc["Descriptor Manifest<br/>software.ocm.descriptor=true"]
+        Desc["OCI Manifest of the Component Descriptor<br/>(first entry of the index)"]
         NativeImg["Image Manifest<br/>(native OCI artifact)"]
     end
 
@@ -325,7 +325,7 @@ flowchart TB
 
 This means:
 
-- **Non-OCI blobs** (plain files, config data) are stored as layers in the descriptor manifest, accessed only through OCM tooling
+- **Non-OCI blobs** (plain files, config data) are stored as layers in the component descriptor's OCI manifest, accessed only through OCM tooling
 - **Native OCI artifacts** (images, Helm charts) are stored as separate manifests in the index, accessible both through OCM and directly through any OCI client
 
 ## Check Your Understanding
@@ -428,5 +428,6 @@ rm -rf /tmp/ocm-native-oci /tmp/ocm-transfer-native /tmp/ocm-fetch-oci
 ## Related Documentation
 
 - [Concept: Transfer and Transport]({{< relref "docs/concepts/transfer-concept.md" >}}) - Understand resource handling during transfer
+- [Concept: Component Version Storage]({{< relref "docs/concepts/component-storage.md" >}}) - How component versions and local blobs map to OCI artifacts
 - [Reference: Input and Access Types]({{< relref "docs/reference/input-and-access-types.md" >}}) - All supported resource types
 - [OCM OCI Storage Spec: Index Representation](https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/03-storage-backends/oci.md#62-index-representation) - How component versions map to OCI indexes

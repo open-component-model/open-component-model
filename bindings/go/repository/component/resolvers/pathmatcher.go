@@ -2,13 +2,12 @@ package resolvers
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
-
-	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -32,15 +31,15 @@ var _ ComponentVersionRepositoryResolver = (*pathMatcherResolver)(nil)
 // It handles credential resolution and caching internally.
 func (p *pathMatcherResolver) getRepository(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
 	// Canonicalize the specification for cache key
-	specdata, err := json.Marshal(specification)
+	specdata, err := json.Marshal(specification, runtime.JSONOptions)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling repository to json failed: %w", err)
 	}
-	specdata, err = jsoncanonicalizer.Transform(specdata)
-	if err != nil {
+	canonical := jsontext.Value(specdata)
+	if err := canonical.Canonicalize(); err != nil {
 		return nil, fmt.Errorf("canonicalizing repository json failed: %w", err)
 	}
-	cacheKey := string(specdata)
+	cacheKey := string(canonical)
 
 	// Fast path: check cache with read lock
 	p.lock.RLock()

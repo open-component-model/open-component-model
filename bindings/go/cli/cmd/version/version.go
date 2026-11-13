@@ -1,7 +1,8 @@
 package version
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"runtime/debug"
@@ -12,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const (
@@ -103,12 +105,12 @@ func Write(w io.Writer, format string) error {
 		if err != nil {
 			return err
 		}
-		return json.NewEncoder(w).Encode(legacy)
+		return json.MarshalEncode(jsontext.NewEncoder(w), legacy, runtime.JSONOptions)
 	case OutputGoBuildInfo:
 		_, err := io.Copy(w, strings.NewReader(ver.String()))
 		return err
 	case OutputGoBuildInfoJSON:
-		return json.NewEncoder(w).Encode(ver)
+		return json.MarshalEncode(jsontext.NewEncoder(w), ver, runtime.JSONOptions)
 	default:
 		return fmt.Errorf("unknown version format %q", format)
 	}

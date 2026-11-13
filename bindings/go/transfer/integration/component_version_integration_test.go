@@ -100,11 +100,11 @@ func Test_Integration_TransferLocalBlob_CTFToOCI(t *testing.T) {
 	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
 
 	repoProvider := provider.NewComponentVersionRepositoryProvider(
-		provider.WithTempDir(t.TempDir()),
+		provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig()),
 	)
-	resourceRepo := ociresource.NewResourceRepository(nil)
+	resourceRepo := ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig()))
 
-	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
+	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver, transfer.WithHTTPConfig(plainHTTPConfig()))
 	graph, err := b.BuildAndCheck(tgd)
 	r.NoError(err, "graph should build and validate")
 
@@ -179,9 +179,9 @@ func Test_Integration_TransferDescriptorOnly_CTFToOCI(t *testing.T) {
 	// 4. Build and execute the graph.
 	ctx := t.Context()
 	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
-	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-	resourceRepo := ociresource.NewResourceRepository(nil)
-	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig()))
+	resourceRepo := ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig()))
+	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver, transfer.WithHTTPConfig(plainHTTPConfig()))
 	graph, err := b.BuildAndCheck(tgd)
 	r.NoError(err)
 	r.NoError(graph.Process(ctx))
@@ -248,9 +248,9 @@ func Test_Integration_TransferMultipleResources_CTFToOCI(t *testing.T) {
 	// 4. Build and execute the graph.
 	ctx := t.Context()
 	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
-	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-	resourceRepo := ociresource.NewResourceRepository(nil)
-	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig()))
+	resourceRepo := ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig()))
+	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver, transfer.WithHTTPConfig(plainHTTPConfig()))
 	graph, err := b.BuildAndCheck(tgd)
 	r.NoError(err)
 	r.NoError(graph.Process(ctx))
@@ -317,9 +317,9 @@ func Test_Integration_TransferCTFToCTF(t *testing.T) {
 
 	// 3. Build and execute the graph (no credentials needed for CTF-to-CTF).
 	ctx := t.Context()
-	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-	resourceRepo := ociresource.NewResourceRepository(nil)
-	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, nil)
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig()))
+	resourceRepo := ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig()))
+	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, nil, transfer.WithHTTPConfig(plainHTTPConfig()))
 	graph, err := b.BuildAndCheck(tgd)
 	r.NoError(err)
 	r.NoError(graph.Process(ctx))
@@ -382,9 +382,9 @@ func Test_Integration_TransferMultipleComponents_CTFToOCI(t *testing.T) {
 	// 4. Build and execute the graph.
 	ctx := t.Context()
 	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
-	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-	resourceRepo := ociresource.NewResourceRepository(nil)
-	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig()))
+	resourceRepo := ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig()))
+	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver, transfer.WithHTTPConfig(plainHTTPConfig()))
 	graph, err := b.BuildAndCheck(tgd)
 	r.NoError(err)
 	r.NoError(graph.Process(ctx))
@@ -453,9 +453,9 @@ func Test_Integration_TransferWithFromRepository(t *testing.T) {
 	// 4. Build and execute the graph.
 	ctx := t.Context()
 	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
-	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-	resourceRepo := ociresource.NewResourceRepository(nil)
-	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig()))
+	resourceRepo := ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig()))
+	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver, transfer.WithHTTPConfig(plainHTTPConfig()))
 	graph, err := b.BuildAndCheck(tgd)
 	r.NoError(err)
 	r.NoError(graph.Process(ctx))
@@ -560,9 +560,9 @@ func Test_Integration_TransferRecursive_CTFToOCI(t *testing.T) {
 	// 4. Build and execute the graph.
 	ctx := t.Context()
 	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
-	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
-	resourceRepo := ociresource.NewResourceRepository(nil)
-	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig()))
+	resourceRepo := ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig()))
+	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver, transfer.WithHTTPConfig(plainHTTPConfig()))
 	graph, err := b.BuildAndCheck(tgd)
 	r.NoError(err)
 	r.NoError(graph.Process(ctx))

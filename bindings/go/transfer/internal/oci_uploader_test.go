@@ -1,7 +1,7 @@
 package internal
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"strings"
 	"testing"
@@ -26,7 +26,7 @@ import (
 // Transfer{OCI,CTF}LocalBlobToOCIArtifact (targetResource) or AddOCIArtifact (resource) transformation pushes to.
 func specImageReference(t *testing.T, tr transformv1alpha1.GenericTransformation) string {
 	t.Helper()
-	data, err := json.Marshal(tr.Spec.Data)
+	data, err := json.Marshal(tr.Spec.Data, runtime.JSONOptions)
 	require.NoError(t, err)
 	var spec struct {
 		Resource struct {

@@ -2,6 +2,7 @@ package configuration
 
 import (
 	"context"
+	"encoding/json/v2"
 	"strings"
 	"testing"
 	"time"
@@ -682,7 +683,7 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 		}
 		for _, entry := range entries {
 			raw := &ocmruntime.Raw{}
-			require.NoError(t, raw.UnmarshalJSON([]byte(entry)))
+			require.NoError(t, json.Unmarshal([]byte(entry), raw))
 			cfg.Configurations = append(cfg.Configurations, raw)
 		}
 		return cfg

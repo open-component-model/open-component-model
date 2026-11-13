@@ -5,9 +5,11 @@ import (
 	"bufio"
 	"compress/gzip"
 	"context"
-	"encoding/json"
+	// jsonv1 is imported for the two legacy-compat options it alone declares; everything
+	// else uses encoding/json/v2.
+	jsonv1 "encoding/json"
 	"encoding/json/jsontext"
-	jsonv2 "encoding/json/v2"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -18,8 +20,8 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/errdef"
 	slogcontext "github.com/veqryn/slog-context"
-	"oras.land/oras-go/v2/errdef"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/ctf"
@@ -39,13 +41,13 @@ const (
 	jsonTokenKeep = 4 << 10
 )
 
-// jsonOptions decode like encoding/json, which consumers of a layout use, in
+// jsonOptions decode like encoding/json v1, which consumers of a layout use, in
 // everything that decides which members fill which fields. They are not the full
-// [json.DefaultOptionsV1], which buffers every skipped value whole.
-var jsonOptions = jsonv2.JoinOptions(
-	jsonv2.MatchCaseInsensitiveNames(true),
-	json.MatchCaseSensitiveDelimiter(true),
-	json.MergeWithLegacySemantics(true),
+// [jsonv1.DefaultOptionsV1], which buffers every skipped value whole.
+var jsonOptions = json.JoinOptions(
+	json.MatchCaseInsensitiveNames(true),
+	jsonv1.MatchCaseSensitiveDelimiter(true),
+	jsonv1.MergeWithLegacySemantics(true),
 	jsontext.AllowDuplicateNames(true),
 	jsontext.AllowInvalidUTF8(true),
 )
@@ -347,7 +349,7 @@ func (ins *layoutInspection) blob(hdr *tar.Header, blobName string, r io.Reader)
 func (ins *layoutInspection) decodeJSON(r io.Reader, out any) error {
 	ins.truncator = jsonTruncator{r: r}
 	ins.dec.Reset(&ins.truncator, jsonOptions)
-	return jsonv2.UnmarshalDecode(&ins.dec, out)
+	return json.UnmarshalDecode(&ins.dec, out)
 }
 
 // jsonTruncator passes JSON through, but keeps only the first jsonTokenKeep bytes

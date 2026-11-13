@@ -3,9 +3,11 @@ package manager
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -19,6 +21,7 @@ import (
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
+	"ocm.software/open-component-model/bindings/go/plugin/internal/osutil"
 	credentialpluginv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentialplugin/v1"
 	ocmrepositoryv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -54,7 +57,7 @@ func TestPluginManager(t *testing.T) {
 	t.Cleanup(func() {
 		require.NoError(t, pm.Shutdown(ctx))
 		// make sure it's not there but during a proper shutdown now this is removed by the plugin
-		if err := os.Remove("/tmp/test-plugin-plugin.socket"); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(osutil.SocketPath("test-plugin-component-version")); err != nil && !os.IsNotExist(err) {
 			t.Fatal(fmt.Errorf("error was not nil and not NotFound when clearing the socket: %w", err))
 		}
 	})
@@ -118,7 +121,7 @@ func TestConfigurationPassedToPlugin(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		// make sure it's not there but during a proper shutdown now this is removed by the plugin
-		if err := os.Remove("/tmp/test-plugin-plugin.socket"); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(osutil.SocketPath("test-plugin-component-version")); err != nil && !os.IsNotExist(err) {
 			t.Fatal(fmt.Errorf("error was not nil and not NotFound when clearing the socket: %w", err))
 		}
 	})
@@ -184,7 +187,7 @@ func TestPluginManagerCancelContext(t *testing.T) {
 	t.Cleanup(func() {
 		require.NoError(t, pm.Shutdown(ctx))
 		// normally, this shouldn't exist because shutdown deletes now properly, but sometimes this deletes it earlier.
-		if err := os.Remove("/tmp/test-plugin-component-version-plugin.socket"); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(osutil.SocketPath("test-plugin-component-version")); err != nil && !os.IsNotExist(err) {
 			t.Fatal(fmt.Errorf("error was not nil and not NotFound when clearing the socket: %w", err))
 		}
 	})
@@ -238,7 +241,7 @@ func TestPluginManagerShutdownPlugin(t *testing.T) {
 	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata"), WithConfiguration(config)))
 	t.Cleanup(func() {
 		// make sure it's gone even if the test fails, but ignore the deletion error since it should be removed.
-		if err := os.Remove("/tmp/test-plugin-plugin.socket"); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(osutil.SocketPath("test-plugin-component-version")); err != nil && !os.IsNotExist(err) {
 			t.Fatal(fmt.Errorf("error was not nil and not NotFound when clearing the socket: %w", err))
 		}
 	})
@@ -261,8 +264,10 @@ func TestPluginManagerShutdownPlugin(t *testing.T) {
 		_, err = plugin.GetComponentVersion(context.Background(), "test", "v1.0.0")
 		return err != nil
 	}, 1*time.Second, 100*time.Millisecond)
-	_, err = os.Stat("/tmp/test-plugin-plugin.socket")
-	require.Error(t, err)
+	require.Eventually(t, func() bool {
+		_, err := os.Stat(osutil.SocketPath("test-plugin-component-version"))
+		return errors.Is(err, fs.ErrNotExist)
+	}, 1*time.Second, 100*time.Millisecond)
 }
 
 func TestPluginManagerShutdownWithoutWait(t *testing.T) {
@@ -291,7 +296,7 @@ func TestPluginManagerShutdownWithoutWait(t *testing.T) {
 	require.NoError(t, pm.RegisterPlugins(ctx, filepath.Join("..", "tmp", "testdata"), WithConfiguration(config)))
 	t.Cleanup(func() {
 		// make sure it's gone even if the test fails, but ignore the deletion error since it should be removed.
-		if err := os.Remove("/tmp/test-plugin-plugin.socket"); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(osutil.SocketPath("test-plugin-component-version")); err != nil && !os.IsNotExist(err) {
 			t.Fatal(fmt.Errorf("error was not nil and not NotFound when clearing the socket: %w", err))
 		}
 	})
@@ -360,7 +365,7 @@ func TestPluginManagerMultiplePluginsForSameType(t *testing.T) {
 			PluginType: ocmrepositoryv1.ComponentVersionRepositoryPluginType,
 		},
 	}
-	serialized, err := json.Marshal(rawPluginSpec)
+	serialized, err := json.Marshal(rawPluginSpec, runtime.JSONOptions)
 	require.NoError(t, err)
 	config := &genericv1.Config{
 		Type: runtime.Type{
@@ -399,10 +404,10 @@ func TestCredentialTypeRegistryPopulatedFromPlugin(t *testing.T) {
 	require.NoError(t, pm.RegisterPlugins(t.Context(), filepath.Join("..", "tmp", "testdata"), WithConfiguration(config)))
 	t.Cleanup(func() {
 		require.NoError(t, pm.Shutdown(t.Context()))
-		if err := os.Remove("/tmp/test-plugin-plugin.socket"); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(osutil.SocketPath("test-plugin-component-version")); err != nil && !os.IsNotExist(err) {
 			t.Fatal(fmt.Errorf("error was not nil and not NotFound when clearing the socket: %w", err))
 		}
-		if err := os.Remove("/tmp/test-plugin-credential-repository-plugin.socket"); err != nil && !os.IsNotExist(err) {
+		if err := os.Remove(osutil.SocketPath("test-plugin-credential-repository")); err != nil && !os.IsNotExist(err) {
 			t.Fatal(fmt.Errorf("error was not nil and not NotFound when clearing the socket: %w", err))
 		}
 	})
@@ -429,7 +434,7 @@ func TestCredentialTypeRegistryPopulatedFromCredentialPluginCapability(t *testin
 	pluginSpec := pluginruntime.PluginSpec{CapabilitySpecs: []runtime.Typed{&capabilitySpec}}
 	rawPluginSpec, err := pluginruntime.ConvertToSpec(&pluginSpec)
 	require.NoError(t, err)
-	serialized, err := json.Marshal(rawPluginSpec)
+	serialized, err := json.Marshal(rawPluginSpec, runtime.JSONOptions)
 	require.NoError(t, err)
 
 	testPlugin := types.Plugin{

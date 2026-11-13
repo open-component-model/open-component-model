@@ -20,7 +20,7 @@ type OCIGetLocalResource struct {
 	Type   runtime.Type               `json:"type"`
 	ID     string                     `json:"id"`
 	Spec   *OCIGetLocalResourceSpec   `json:"spec"`
-	Output *OCIGetLocalResourceOutput `json:"output,omitempty"`
+	Output *OCIGetLocalResourceOutput `json:"output,omitzero"`
 }
 
 // OCIGetLocalResourceOutput is the output specification of the

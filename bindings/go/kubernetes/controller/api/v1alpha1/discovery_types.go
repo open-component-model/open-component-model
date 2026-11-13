@@ -1,12 +1,14 @@
 package v1alpha1
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const KindDiscovery = "Discovery"
@@ -87,15 +89,19 @@ type ExtractedRecord map[string]apiextensionsv1.JSON
 
 // MarshalJSON and UnmarshalJSON forward to the default map (de)serialization
 // and are semantically identical to the built-in behavior of a named map type.
-// They are NOT dead code: controller-gen treats a type implementing
-// json.Marshaler as opaque and honors the Type=object +
+// They are NOT dead code: controller-gen treats a type implementing a custom
+// JSON marshaler as opaque and honors the Type=object +
 // PreserveUnknownFields markers verbatim. Without them, controller-gen
 // introspects the underlying map[string]JSON and emits an additionalProperties
 // schema on status.extracted, which turns the status subschema non-structural
 // and breaks the status-level CEL rule (self.extracted becomes undefined at CRD
 // install). Keep both methods so the generated CRD stays structural.
+//
+// controller-gen matches these by method name, so they stay on the
+// encoding/json v1 signature instead of MarshalJSONTo/UnmarshalJSONFrom.
+// encoding/json/v2 honors them all the same.
 func (in ExtractedRecord) MarshalJSON() ([]byte, error) {
-	return json.Marshal(map[string]apiextensionsv1.JSON(in))
+	return json.Marshal(map[string]apiextensionsv1.JSON(in), runtime.JSONOptions)
 }
 
 func (in *ExtractedRecord) UnmarshalJSON(data []byte) error {
@@ -155,8 +161,10 @@ type DiscoveryStatus struct {
 // Discovery is the Schema for the discoveries API.
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,description="Indicates if the Discovery is Ready",priority=1
-// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Displays the Age of the Resource"
+// +kubebuilder:printcolumn:name="Component Ref",type=string,JSONPath=`.spec.componentRef.name`,description="Referenced Component"
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`,description="Indicates if the Discovery is Ready"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Displays the Age of the Discovery"
+// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,description="Ready condition message"
 type Discovery struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

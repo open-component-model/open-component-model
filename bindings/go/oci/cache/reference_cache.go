@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -17,8 +17,10 @@ import (
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/registry/remote/properties"
 	"golang.org/x/sync/singleflight"
-	"oras.land/oras-go/v2/registry"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // referenceSubdir is the directory under [Options.Dir] that the
@@ -182,7 +184,7 @@ func NewReferenceCache(opts Options) (*ReferenceCache, error) {
 // Add is best-effort with respect to disk: if a rewrite fails, the
 // in-memory entry is still added and a warning is logged. The caller
 // never sees an error from this method.
-func (c *ReferenceCache) Add(ref registry.Reference, desc ociImageSpecV1.Descriptor) {
+func (c *ReferenceCache) Add(ref properties.Reference, desc ociImageSpecV1.Descriptor) {
 	k := c.buildKey(ref)
 
 	c.lru.Add(k, referenceEntry{Descriptor: desc, SavedAt: time.Now()})
@@ -208,7 +210,7 @@ func (c *ReferenceCache) Add(ref registry.Reference, desc ociImageSpecV1.Descrip
 // the entry is not cached. Callers must invalidate whenever a tag is
 // re-pointed or deleted upstream, because OCI tags are mutable and the
 // cache otherwise keeps serving the old descriptor until TTL expiry.
-func (c *ReferenceCache) Invalidate(ref registry.Reference) {
+func (c *ReferenceCache) Invalidate(ref properties.Reference) {
 	if c == nil {
 		return
 	}
@@ -225,7 +227,7 @@ func (c *ReferenceCache) Invalidate(ref registry.Reference) {
 // Lookup returns the cached descriptor for the (namespace, reference)
 // pair and whether it was found. See [ReferenceCache.Add] for the
 // namespace contract.
-func (c *ReferenceCache) Lookup(ref registry.Reference) (ociImageSpecV1.Descriptor, bool) {
+func (c *ReferenceCache) Lookup(ref properties.Reference) (ociImageSpecV1.Descriptor, bool) {
 	v, ok := c.lru.Get(c.buildKey(ref))
 	return v.Descriptor, ok
 }
@@ -240,12 +242,12 @@ func (c *ReferenceCache) Lookup(ref registry.Reference) (ociImageSpecV1.Descript
 // See [ReferenceCache.Add] for the namespace contract. A nil receiver
 // is supported: the call falls straight through to upstream so
 // resolver decorators can compose without nil-checks.
-func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, ref registry.Reference) (ociImageSpecV1.Descriptor, error) {
+func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, ref properties.Reference) (ociImageSpecV1.Descriptor, error) {
 	if c == nil {
-		return upstream.Resolve(ctx, ref.Reference)
+		return upstream.Resolve(ctx, ref.GetReference())
 	}
 	k := c.buildKey(ref)
-	servableFromCache := c.opts.RemotePolicy == RemotePolicyIfNotPresent && ref.ValidateReferenceAsDigest() == nil
+	servableFromCache := c.opts.RemotePolicy == RemotePolicyIfNotPresent && ref.ValidateDigest() == nil
 	if servableFromCache {
 		if v, ok := c.lru.Get(k); ok {
 			c.logger.DebugContext(ctx, "refcache: hit",
@@ -257,7 +259,7 @@ func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, ref reg
 	}
 	if c.opts.RemotePolicy == RemotePolicyAlways {
 		// make sure we aren't sharing credentials here
-		desc, err := upstream.Resolve(ctx, ref.Reference)
+		desc, err := upstream.Resolve(ctx, ref.GetReference())
 		if err != nil {
 			return ociImageSpecV1.Descriptor{}, err
 		}
@@ -266,13 +268,13 @@ func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, ref reg
 	}
 	// Collapse concurrent misses (or calls that must reach upstream) for
 	// the same key into one upstream round-trip.
-	v, err, _ := c.sf.Do(k.namespace+"\x00"+ref.Reference, func() (any, error) {
+	v, err, _ := c.sf.Do(k.namespace+"\x00"+ref.GetReference(), func() (any, error) {
 		if servableFromCache {
 			if v, ok := c.lru.Get(k); ok {
 				return v.Descriptor, nil
 			}
 		}
-		desc, err := upstream.Resolve(ctx, ref.Reference)
+		desc, err := upstream.Resolve(ctx, ref.GetReference())
 		if err != nil {
 			return ociImageSpecV1.Descriptor{}, err
 		}
@@ -306,11 +308,11 @@ func (c *ReferenceCache) drainNamespacesWithEvictedRefs() map[string]struct{} {
 	return namespaces
 }
 
-// buildKey constructs the in-memory cache key from the parsed registry.Reference.
-func (c *ReferenceCache) buildKey(ref registry.Reference) referenceKey {
+// buildKey constructs the in-memory cache key from the parsed properties.Reference.
+func (c *ReferenceCache) buildKey(ref properties.Reference) referenceKey {
 	return referenceKey{
 		namespace: ref.Registry + "/" + ref.Repository,
-		reference: ref.Reference,
+		reference: ref.GetReference(),
 	}
 }
 
@@ -369,7 +371,7 @@ func (c *ReferenceCache) writeNamespace(namespace string) error {
 		return nil
 	}
 
-	raw, err := json.Marshal(snap)
+	raw, err := json.Marshal(snap, runtime.JSONOptions)
 	if err != nil {
 		return fmt.Errorf("marshal snapshot: %w", err)
 	}

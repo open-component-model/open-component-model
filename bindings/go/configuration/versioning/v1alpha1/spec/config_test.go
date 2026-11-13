@@ -1,6 +1,7 @@
 package spec_test
 
 import (
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -19,7 +20,7 @@ func makeGenericConfig(t *testing.T, entries ...string) *genericv1.Config {
 	}
 	for _, entry := range entries {
 		raw := &runtime.Raw{}
-		require.NoError(t, raw.UnmarshalJSON([]byte(entry)))
+		require.NoError(t, json.Unmarshal([]byte(entry), raw))
 		cfg.Configurations = append(cfg.Configurations, raw)
 	}
 	return cfg

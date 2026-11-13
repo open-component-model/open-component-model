@@ -2,7 +2,7 @@ package digest_test
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"encoding/pem"
 	"fmt"
 	"net/http"
@@ -50,6 +50,11 @@ entries:
       apiVersion: v2
 `
 
+// plainHTTPConfig enables plain HTTP for every host, as the httptest servers need.
+func plainHTTPConfig() *httpv1alpha1.Config {
+	return &httpv1alpha1.Config{ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: new(true)}}
+}
+
 func helmAccessResource(t *testing.T, helmRepository, helmChart string) *descruntime.Resource {
 	t.Helper()
 	data := map[string]string{
@@ -57,7 +62,7 @@ func helmAccessResource(t *testing.T, helmRepository, helmChart string) *descrun
 		"helmRepository": helmRepository,
 		"helmChart":      helmChart,
 	}
-	raw, err := json.Marshal(data)
+	raw, err := json.Marshal(data, runtime.JSONOptions)
 	require.NoError(t, err)
 
 	r := &descruntime.Resource{}
@@ -176,7 +181,7 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 
 	t.Run("applies digest from index with sha256 prefix", func(t *testing.T) {
 		t.Parallel()
-		p := digest.NewDigestProcessor(t.TempDir())
+		p := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig()))
 		resource := helmAccessResource(t, srv.URL, "mychart:1.0.0")
 
 		result, err := p.ProcessResourceDigest(t.Context(), resource, nil)
@@ -191,7 +196,7 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 
 	t.Run("applies digest from index with bare hex", func(t *testing.T) {
 		t.Parallel()
-		p := digest.NewDigestProcessor(t.TempDir())
+		p := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig()))
 		resource := helmAccessResource(t, srv.URL, "barehex:1.0.0")
 
 		result, err := p.ProcessResourceDigest(t.Context(), resource, nil)
@@ -205,7 +210,7 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 
 	t.Run("does not mutate original resource", func(t *testing.T) {
 		t.Parallel()
-		p := digest.NewDigestProcessor(t.TempDir())
+		p := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig()))
 		resource := helmAccessResource(t, srv.URL, "mychart:1.0.0")
 
 		result, err := p.ProcessResourceDigest(t.Context(), resource, nil)
@@ -218,7 +223,7 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 
 	t.Run("verifies matching existing digest", func(t *testing.T) {
 		t.Parallel()
-		p := digest.NewDigestProcessor(t.TempDir())
+		p := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig()))
 		resource := helmAccessResource(t, srv.URL, "mychart:1.0.0")
 		resource.Digest = &descruntime.Digest{
 			HashAlgorithm:          "SHA-256",
@@ -234,7 +239,7 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 
 	t.Run("returns error on digest mismatch", func(t *testing.T) {
 		t.Parallel()
-		p := digest.NewDigestProcessor(t.TempDir())
+		p := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig()))
 		resource := helmAccessResource(t, srv.URL, "mychart:1.0.0")
 		resource.Digest = &descruntime.Digest{
 			HashAlgorithm:          "SHA-256",
@@ -249,7 +254,7 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 
 	t.Run("returns error when chart not found in index", func(t *testing.T) {
 		t.Parallel()
-		p := digest.NewDigestProcessor(t.TempDir())
+		p := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig()))
 		resource := helmAccessResource(t, srv.URL, "nonexistent:1.0.0")
 
 		_, err := p.ProcessResourceDigest(t.Context(), resource, nil)
@@ -259,7 +264,7 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 
 	t.Run("returns error for empty helm repository", func(t *testing.T) {
 		t.Parallel()
-		p := digest.NewDigestProcessor(t.TempDir())
+		p := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig()))
 		resource := helmAccessResource(t, "", "mychart:1.0.0")
 
 		_, err := p.ProcessResourceDigest(t.Context(), resource, nil)
@@ -268,8 +273,26 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 	})
 }
 
-// A chart the index lists without digest is downloaded and hashed. The HTTP configuration
-// applies to the index and the chart: the server's certificate is only trusted through it.
+// An http:// repository index is fetched only when plainHTTP is enabled for its host,
+// as for chart downloads.
+func TestProcessResourceDigest_HTTPIndexNeedsPlainHTTP(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		assert.Fail(t, "no request may reach the repository")
+	}))
+	t.Cleanup(srv.Close)
+
+	for name, opts := range map[string][]digest.Option{
+		"without the HTTP configuration": nil,
+		"with plainHTTP not enabled":     {digest.WithHTTPConfig(&httpv1alpha1.Config{})},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := require.New(t)
+			_, err := digest.NewDigestProcessor(t.TempDir(), opts...).ProcessResourceDigest(t.Context(), helmAccessResource(t, srv.URL, "mychart:1.0.0"), nil)
+			r.ErrorContains(err, "plain HTTP is not enabled")
+		})
+	}
+}
+
 func TestProcessResourceDigest_HTTPIndexWithoutDigest(t *testing.T) {
 	tgz, err := os.ReadFile("../testdata/mychart-0.1.0.tgz")
 	require.NoError(t, err)
@@ -363,7 +386,7 @@ func TestProcessResourceDigest_HTTPIndexWithoutDigestDownloadsListedURL(t *testi
 			}))
 			t.Cleanup(srv.Close)
 
-			result, err := digest.NewDigestProcessor(t.TempDir()).ProcessResourceDigest(t.Context(), helmAccessResource(t, srv.URL, "mychart:0.1.0"), creds)
+			result, err := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig())).ProcessResourceDigest(t.Context(), helmAccessResource(t, srv.URL, "mychart:0.1.0"), creds)
 			r.NoError(err)
 			r.Equal(godigest.FromBytes(tgz).Encoded(), result.Digest.Value)
 			r.Equal(int32(1), indexFetches.Load(), "the index is fetched once")
@@ -398,7 +421,7 @@ func TestProcessResourceDigest_CancelEndsStalledChartDownload(t *testing.T) {
 		<-requested
 		cancel()
 	}()
-	_, err := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(&httpv1alpha1.Config{})).
+	_, err := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig())).
 		ProcessResourceDigest(ctx, helmAccessResource(t, srv.URL, "mychart:0.1.0"), nil)
 	r.ErrorIs(err, context.Canceled)
 	select {

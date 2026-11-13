@@ -1,7 +1,8 @@
 package main
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"math"
 	"os"
@@ -10,34 +11,33 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
+
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
 type result struct {
-	Scenario scenario `json:"scenario"`
-	Objects  int      `json:"objects"`
-	Repeat   int      `json:"repeat"`
-	// Versions, Depth, Resources, Fanout, Repositories and Signed are set for the scenarios they shape.
-	// Depth is a pointer because 0 is a valid chain length.
-	Versions     int         `json:"versions,omitempty"`
-	Depth        *int        `json:"depth,omitempty"`
-	Resources    int         `json:"resources,omitempty"`
-	Fanout       int         `json:"fanout,omitempty"`
-	Repositories int         `json:"repositories,omitempty"`
-	Signed       bool        `json:"signed,omitempty"`
+	Objects      int         `json:"objects"`
+	Repeat       int         `json:"repeat"`
+	Versions     int         `json:"versions"`
+	Depth        int         `json:"depth"`
+	Resources    int         `json:"resources"`
+	Repositories int         `json:"repositories"`
+	Signed       bool        `json:"signed"`
 	RunID        string      `json:"runID"`
 	StartedAt    time.Time   `json:"startedAt"`
 	Environment  environment `json:"environment"`
-	Durations    durations   `json:"durations"`
-	Outcome      outcome     `json:"outcome"`
-	Usage        usage       `json:"usage"`
-	// ControllerCounters are end-minus-start deltas over the measurement window.
-	ControllerCounters map[string]float64 `json:"controllerCounters"`
-	// ControllerGaugePeaks are the maxima of the sampled gauges.
-	ControllerGaugePeaks map[string]float64 `json:"controllerGaugePeaks"`
-	RegistryCounters     map[string]float64 `json:"registryCounters"`
-	// ControllerRestarted invalidates the counter deltas: a restart resets them.
-	ControllerRestarted bool     `json:"controllerRestarted"`
-	Errors              []string `json:"errors,omitempty"`
+	// Phases are the measured phases in execution order. A phase that did not
+	// complete is the last one: the phases after it are not measured.
+	Phases []phaseResult `json:"phases"`
+}
+
+// phaseResult holds the numbers of one measured phase of a run.
+type phaseResult struct {
+	Name      string    `json:"name"`
+	Outcome   outcome   `json:"outcome"`
+	Durations durations `json:"durations"`
+	Cost      cost      `json:"cost"`
+	Errors    []string  `json:"errors,omitempty"`
 }
 
 type environment struct {
@@ -50,10 +50,12 @@ type environment struct {
 	KubernetesVersion   string                      `json:"kubernetesVersion"`
 }
 
-// durations are in seconds, measured from the moment object creation starts.
+// durations are in seconds. All but Prepare are measured from the moment the phase's change starts.
 type durations struct {
-	Publish    float64 `json:"publish"`
-	Create     float64 `json:"create"`
+	// Prepare is how long the phase took before its window, publishing its component versions for example.
+	Prepare float64 `json:"prepare"`
+	// Change is how long applying the change took.
+	Change     float64 `json:"change"`
 	Total      float64 `json:"total"`
 	FirstReady float64 `json:"firstReady"`
 	P50        float64 `json:"p50"`
@@ -72,32 +74,61 @@ type outcome struct {
 	FailureReasons map[string]int `json:"failureReasons,omitempty"`
 	// Unsettled is set when the controller queues did not drain within the timeout.
 	Unsettled bool `json:"unsettled"`
+	// ControllerRestarted invalidates the counter deltas: a restart resets them.
+	ControllerRestarted bool `json:"controllerRestarted"`
+	// NotReady counts the run's controller objects that were not Ready when the phase
+	// timed out, keyed by kind and reason.
+	NotReady map[string]int `json:"notReady,omitempty"`
 }
 
-type usage struct {
-	CPUSeconds          float64 `json:"cpuSeconds"`
-	AvgCores            float64 `json:"avgCores"`
-	PeakCores           float64 `json:"peakCores"`
-	PeakWorkingSetBytes float64 `json:"peakWorkingSetBytes"`
-	PeakRSSBytes        float64 `json:"peakRSSBytes"`
+// complete reports whether every pipeline was done, the queues drained and the
+// controller kept running. Only then does the next phase start from a known state.
+func (o outcome) complete() bool {
+	return !o.TimedOut && !o.Unsettled && !o.ControllerRestarted
+}
+
+// cost is what the controller and the registry spent in the window of a phase.
+type cost struct {
 	// RegistryRequests is nil when the registry metrics could not be read.
-	RegistryRequests *float64 `json:"registryRequests"`
+	RegistryRequests    *float64 `json:"registryRequests"`
+	CPUSeconds          float64  `json:"cpuSeconds"`
+	AvgCores            float64  `json:"avgCores"`
+	PeakCores           float64  `json:"peakCores"`
+	PeakWorkingSetBytes float64  `json:"peakWorkingSetBytes"`
+	PeakRSSBytes        float64  `json:"peakRSSBytes"`
+	// ControllerCounters are end-minus-start deltas over the window.
+	ControllerCounters map[string]float64 `json:"controllerCounters"`
+	// ControllerGaugePeaks are the maxima of the sampled gauges.
+	ControllerGaugePeaks map[string]float64 `json:"controllerGaugePeaks"`
+	RegistryCounters     map[string]float64 `json:"registryCounters"`
 }
 
-// notes lists what makes a run unusable as a benchmark number.
+// notes lists what makes a run unusable as a benchmark number, each note led by its phase.
 func (r *result) notes() []string {
 	var notes []string
-	if r.Outcome.TimedOut {
+	for _, p := range r.Phases {
+		notes = append(notes, p.notes()...)
+	}
+	return notes
+}
+
+// notes lists what makes a phase unusable as a benchmark number.
+func (p *phaseResult) notes() []string {
+	var notes []string
+	if p.Outcome.TimedOut {
 		notes = append(notes, "timed out")
 	}
-	if r.Outcome.Unsettled {
+	if p.Outcome.Unsettled {
 		notes = append(notes, "queues not drained")
 	}
-	if r.ControllerRestarted {
+	if p.Outcome.ControllerRestarted {
 		notes = append(notes, "controller restarted")
 	}
-	if len(r.Errors) > 0 {
+	if len(p.Errors) > 0 {
 		notes = append(notes, "metric errors")
+	}
+	for i, n := range notes {
+		notes[i] = p.Name + " " + n
 	}
 	return notes
 }
@@ -112,34 +143,40 @@ func percentile(sorted []time.Duration, p float64) time.Duration {
 }
 
 func writeJSON(path string, v any) error {
-	data, err := json.MarshalIndent(v, "", "  ")
+	data, err := json.Marshal(v, ocmruntime.JSONOptions, jsontext.WithIndent("  "))
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(path, append(data, '\n'), 0o600)
 }
 
-// writeSummary renders one table row per run, for a quick read of an
-// invocation. result.json files remain the source of truth.
+// writeSummary renders one table row per phase of every run, for a quick read of
+// an invocation. result.json files remain the source of truth.
 func writeSummary(dir string, results []*result) error {
 	var b strings.Builder
-	b.WriteString("| Scenario | Objects | Repeat | Image | Signed | Ready | Failed | Pending | Total (s) | Settled (s) | p50 (s) | p90 (s) | CPU (s) | Avg cores | Peak cores | Peak WS (MiB) | Registry reqs | Notes |\n")
+	b.WriteString("| Phase | Objects | Repeat | Image | Signed | Ready | Failed | Pending | Total (s) | Settled (s) | p50 (s) | p90 (s) | CPU (s) | Avg cores | Peak cores | Peak WS (MiB) | Registry reqs | Notes |\n")
 	b.WriteString("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n")
 	for _, r := range results {
-		requests := "n/a"
-		if r.Usage.RegistryRequests != nil {
-			requests = fmt.Sprintf("%.0f", *r.Usage.RegistryRequests)
+		for i := range r.Phases {
+			writeSummaryRow(&b, r, &r.Phases[i])
 		}
-		signed := "no"
-		if r.Signed {
-			signed = "yes"
-		}
-		fmt.Fprintf(&b, "| %s | %d | %d | %s | %s | %d | %d | %d | %.1f | %.1f | %.1f | %.1f | %.1f | %.2f | %.2f | %.0f | %s | %s |\n",
-			r.Scenario, r.Objects, r.Repeat, shortImageID(r.Environment.ControllerImageID), signed, r.Outcome.Ready, r.Outcome.Failed, r.Outcome.Pending,
-			r.Durations.Total, r.Durations.Settled, r.Durations.P50, r.Durations.P90, r.Usage.CPUSeconds, r.Usage.AvgCores, r.Usage.PeakCores,
-			r.Usage.PeakWorkingSetBytes/(1<<20), requests, strings.Join(r.notes(), ", "))
 	}
 	return os.WriteFile(filepath.Join(dir, "summary.md"), []byte(b.String()), 0o600)
+}
+
+func writeSummaryRow(b *strings.Builder, r *result, p *phaseResult) {
+	requests := "n/a"
+	if p.Cost.RegistryRequests != nil {
+		requests = fmt.Sprintf("%.0f", *p.Cost.RegistryRequests)
+	}
+	signed := "no"
+	if r.Signed {
+		signed = "yes"
+	}
+	fmt.Fprintf(b, "| %s | %d | %d | %s | %s | %d | %d | %d | %.1f | %.1f | %.1f | %.1f | %.1f | %.2f | %.2f | %.0f | %s | %s |\n",
+		p.Name, r.Objects, r.Repeat, shortImageID(r.Environment.ControllerImageID), signed, p.Outcome.Ready, p.Outcome.Failed, p.Outcome.Pending,
+		p.Durations.Total, p.Durations.Settled, p.Durations.P50, p.Durations.P90, p.Cost.CPUSeconds, p.Cost.AvgCores, p.Cost.PeakCores,
+		p.Cost.PeakWorkingSetBytes/(1<<20), requests, strings.Join(p.notes(), ", "))
 }
 
 // shortImageID keeps the first 12 hex digits of the digest, as docker does.

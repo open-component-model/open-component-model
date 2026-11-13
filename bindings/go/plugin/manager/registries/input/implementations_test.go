@@ -2,7 +2,7 @@ package input
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -21,7 +21,7 @@ func TestProcessResourceHandler(t *testing.T) {
 	response := &v1.ProcessResourceInputResponse{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == ProcessResource && r.Method == http.MethodPost {
-			err := json.NewEncoder(w).Encode(response)
+			err := json.MarshalWrite(w, response, runtime.JSONOptions)
 			assert.NoError(t, err)
 			return
 		}

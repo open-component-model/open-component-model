@@ -1,7 +1,7 @@
 package runtime_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -107,9 +107,11 @@ func TestRuntimeDescriptorMarshaling(t *testing.T) {
 			},
 		},
 	}
-	data, err := json.Marshal(d)
+	data, err := json.Marshal(d, runtime.JSONOptions)
 	require.ErrorContains(t, err, "marshalling of runtime descriptor is not supported")
-	require.Nil(t, data)
+	// encoding/json/v2 returns the (empty) buffer written so far on error,
+	// where v1 returned a nil slice.
+	require.Empty(t, data)
 }
 
 func TestRuntimeDescriptorUnmarshaling(t *testing.T) {
@@ -209,6 +211,16 @@ func TestConvertFromV2Provider(t *testing.T) {
 				Labels: []descriptorRuntime.Label{{Name: "label1", Value: []byte(`"value1"`)}},
 			},
 			wantErr: false,
+		},
+		{
+			// A descriptor written by OCM v1 can carry a duplicate member, which
+			// encoding/json v1 resolved last-wins. Rejecting it would make the
+			// stored descriptor unreadable.
+			name:     "json provider with a duplicate member",
+			provider: `{"name": "first", "name": "second"}`,
+			want: descriptorRuntime.Provider{
+				Name: "second",
+			},
 		},
 		{
 			name:     "invalid json",
@@ -552,6 +564,25 @@ func TestConvertToV2Provider(t *testing.T) {
 				Labels: []descriptorRuntime.Label{{Name: "test", Value: []byte(`"value"`)}},
 			},
 			want: `{"name":"test-provider","labels":[{"name":"test","value":"value"}]}`,
+		},
+		{
+			// v1 escaped <, > and &; a descriptor holding one of them must not change
+			// bytes on a read/write cycle that modifies nothing.
+			name: "provider label with HTML characters",
+			provider: descriptorRuntime.Provider{
+				Name:   "test-provider",
+				Labels: []descriptorRuntime.Label{{Name: "test", Value: []byte(`"a<b>c&d"`)}},
+			},
+			want: `{"name":"test-provider","labels":[{"name":"test","value":"a\u003cb\u003ec\u0026d"}]}`,
+		},
+		{
+			// v1 also escaped the line terminators U+2028 and U+2029.
+			name: "provider label with JS line terminators",
+			provider: descriptorRuntime.Provider{
+				Name:   "test-provider",
+				Labels: []descriptorRuntime.Label{{Name: "test", Value: []byte("\"line1\u2028line2\u2029line3\"")}},
+			},
+			want: `{"name":"test-provider","labels":[{"name":"test","value":"line1\u2028line2\u2029line3"}]}`,
 		},
 	}
 

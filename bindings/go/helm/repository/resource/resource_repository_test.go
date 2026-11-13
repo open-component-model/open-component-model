@@ -5,7 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"encoding/pem"
 	"errors"
 	"io"
@@ -34,6 +34,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// plainHTTPConfig marks every host as plain HTTP, which the httptest servers
+// in this package are.
+func plainHTTPConfig() *httpv1alpha1.Config {
+	return &httpv1alpha1.Config{ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: new(true)}}
+}
+
 func helmResource(t *testing.T, helmRepository, helmChart string) *descriptor.Resource {
 	t.Helper()
 
@@ -43,7 +49,7 @@ func helmResource(t *testing.T, helmRepository, helmChart string) *descriptor.Re
 	if helmChart != "" {
 		data["helmChart"] = helmChart
 	}
-	raw, err := json.Marshal(data)
+	raw, err := json.Marshal(data, runtime.JSONOptions)
 	require.NoError(t, err)
 
 	return &descriptor.Resource{
@@ -127,7 +133,7 @@ func TestDownloadResource(t *testing.T) {
 	srv := httptest.NewServer(http.FileServer(http.Dir("../../testdata")))
 	t.Cleanup(srv.Close)
 
-	repo := NewResourceRepository(nil)
+	repo := NewResourceRepository(nil, WithHTTPConfig(plainHTTPConfig()))
 	ctx := context.Background()
 
 	t.Run("downloads chart from HTTP server", func(t *testing.T) {
@@ -147,7 +153,7 @@ func TestDownloadResource(t *testing.T) {
 		tempDir := t.TempDir()
 		repoWithConfig := NewResourceRepository(&filesystemv1alpha1.Config{
 			TempFolder: &tempDir,
-		})
+		}, WithHTTPConfig(plainHTTPConfig()))
 
 		res := helmResource(t, srv.URL, "mychart-0.1.0.tgz")
 		blob, err := repoWithConfig.DownloadResource(ctx, res, nil)
@@ -267,7 +273,7 @@ func TestDownloadResource_VerifiesChartDigest(t *testing.T) {
 				NormalisationAlgorithm: descriptor.GenericBlobDigestV1,
 				Value:                  tc.value,
 			}
-			b, err := NewResourceRepository(nil).DownloadResource(t.Context(), res, nil)
+			b, err := NewResourceRepository(nil, WithHTTPConfig(plainHTTPConfig())).DownloadResource(t.Context(), res, nil)
 			if tc.wantErr != "" {
 				r.ErrorContains(err, tc.wantErr)
 				return
@@ -407,7 +413,7 @@ func newChartRegistry(t *testing.T, repo, tag string, tgz []byte) (*httptest.Ser
 			Digest:    digest.FromBytes(tgz),
 			Size:      int64(len(tgz)),
 		}},
-	})
+	}, runtime.JSONOptions)
 	require.NoError(t, err)
 	manifestDigest := digest.FromBytes(manifest)
 

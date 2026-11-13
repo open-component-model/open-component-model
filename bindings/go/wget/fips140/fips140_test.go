@@ -11,7 +11,7 @@ package fips140
 
 import (
 	"crypto/fips140"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -68,7 +68,7 @@ func TestDownloadResource_LegacyChecksums(t *testing.T) {
 
 func wgetResource(t *testing.T, url string) *descruntime.Resource {
 	t.Helper()
-	raw, err := json.Marshal(map[string]any{"url": url})
+	raw, err := json.Marshal(map[string]any{"url": url}, runtime.JSONOptions)
 	require.NoError(t, err)
 	res := &descruntime.Resource{}
 	res.Name, res.Version, res.Type = "fips-resource", "1.0.0", "blob"

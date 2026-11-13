@@ -19,7 +19,7 @@ type OCIAddComponentVersion struct {
 	Type   runtime.Type                  `json:"type"`
 	ID     string                        `json:"id,omitempty"`
 	Spec   *OCIAddComponentVersionSpec   `json:"spec"`
-	Output *OCIAddComponentVersionOutput `json:"output,omitempty"`
+	Output *OCIAddComponentVersionOutput `json:"output,omitzero"`
 }
 
 // OCIAddComponentVersionOutput is the output specification of the

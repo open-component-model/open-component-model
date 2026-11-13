@@ -17,7 +17,7 @@ type ListComponentsRequest[T runtime.Typed] struct {
 
 type ListComponentsResponse struct {
 	List   []string                      `json:"list"`
-	Header *ListComponentsResponseHeader `json:"header,omitempty"`
+	Header *ListComponentsResponseHeader `json:"header,omitzero"`
 }
 
 // ListComponentsResponseHeader must be set by the plug-in in the response when additional components are available.
