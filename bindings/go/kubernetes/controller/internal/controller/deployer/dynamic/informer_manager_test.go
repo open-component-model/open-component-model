@@ -25,17 +25,16 @@ func TestInformerManagerSharesInformersAcrossParents(t *testing.T) {
 	mgr := &InformerManager{cache: fake, tasks: map[schema.GroupVersionKind]*watchTask{}}
 
 	first, second := parent("a", "deployer"), parent("b", "deployer")
+	r.False(mgr.JoinIfActive(first, child(configMapGVK, "a")), "nothing to join before the first register")
 	r.NoError(mgr.Register(ctx, first, child(configMapGVK, "a")))
-	r.NoError(mgr.Register(ctx, second, child(configMapGVK, "b")))
+	r.True(mgr.JoinIfActive(second, child(configMapGVK, "b")), "a running informer is joined without a register round trip")
 	r.Equal(1, fake.gets[configMapGVK], "the cache runs one informer per GVK, whatever the namespace")
-	r.True(mgr.HasSynced(first, child(configMapGVK, "a")))
-	r.True(mgr.HasSynced(second, child(configMapGVK, "b")))
 
 	r.NoError(mgr.Unregister(ctx, first, child(configMapGVK, "a")))
 	r.Empty(mgr.ActiveForParent(first))
 	r.True(mgr.IsStopped(first, child(configMapGVK, "a")))
 	r.False(mgr.IsStopped(second, child(configMapGVK, "b")))
-	r.True(mgr.HasSynced(second, child(configMapGVK, "b")), "another parent's unregister must not stop a shared informer")
+	r.True(mgr.JoinIfActive(second, child(configMapGVK, "b")), "another parent's unregister must not stop a shared informer")
 	r.Zero(fake.removes[configMapGVK])
 
 	r.NoError(mgr.Unregister(ctx, second, child(configMapGVK, "b")))
@@ -58,7 +57,6 @@ func TestInformerManagerActiveForParentIsPerInstance(t *testing.T) {
 	active := mgr.ActiveForParent(first)
 	r.Len(active, 1, "a parent must only see its own watches, not those of every parent of its kind")
 	r.Equal(configMapGVK, active[0].GetObjectKind().GroupVersionKind())
-	r.False(mgr.HasSynced(first, child(secretGVK, "ns")), "a parent that never registered must register before relying on the watch")
 }
 
 func parent(namespace, name string) client.Object {

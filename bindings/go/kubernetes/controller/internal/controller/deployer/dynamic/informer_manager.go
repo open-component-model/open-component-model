@@ -245,15 +245,19 @@ func (mgr *InformerManager) IsStopped(parent, obj client.Object) bool {
 	return !ok || !task.parents.Has(client.ObjectKeyFromObject(parent))
 }
 
-// HasSynced reports whether parent watches the GVK of obj and the informer has synced.
-func (mgr *InformerManager) HasSynced(parent, obj client.Object) bool {
-	mgr.tasksMu.RLock()
-	defer mgr.tasksMu.RUnlock()
+// JoinIfActive adds parent to the watchers of the GVK of obj if its informer already runs and doesn't do another
+// roundtrip if we are already active.
+func (mgr *InformerManager) JoinIfActive(parent, obj client.Object) bool {
+	mgr.tasksMu.Lock()
+	defer mgr.tasksMu.Unlock()
 
 	task, ok := mgr.tasks[obj.GetObjectKind().GroupVersionKind()]
+	if !ok {
+		return false
+	}
+	task.parents.Insert(client.ObjectKeyFromObject(parent))
 
-	return ok && task.parents.Has(client.ObjectKeyFromObject(parent)) &&
-		task.informer.HasSynced() && task.registration.HasSynced()
+	return task.informer.HasSynced() && task.registration.HasSynced()
 }
 
 // --- Register / Unregister ---
