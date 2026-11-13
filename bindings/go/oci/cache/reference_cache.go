@@ -237,7 +237,9 @@ func (c *ReferenceCache) Lookup(ref properties.Reference) (ociImageSpecV1.Descri
 // upstream, for tags too: a tag re-pointed upstream resolves to the
 // cached descriptor until the entry expires after [Options.TTL].
 // Errors are returned unchanged and not cached. Under
-// [RemotePolicyAlways] concurrent calls are not collapsed: every caller
+// [RemotePolicyAlways] a cached descriptor would skip the registry's
+// access check, so Resolve passes every call through to upstream and
+// records nothing: concurrent calls are not collapsed, every caller
 // resolves against its own upstream.
 //
 // See [ReferenceCache.Add] for the namespace contract. A nil receiver
@@ -247,33 +249,21 @@ func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, ref pro
 	if c == nil {
 		return upstream.Resolve(ctx, ref.GetReference())
 	}
-	k := c.buildKey(ref)
-	servableFromCache := c.opts.RemotePolicy == RemotePolicyIfNotPresent
-	if servableFromCache {
-		if v, ok := c.lru.Get(k); ok {
-			c.logger.DebugContext(ctx, "refcache: hit",
-				slog.String("namespace", k.namespace),
-				slog.String("reference", k.reference),
-				slog.String("digest", v.Descriptor.Digest.String()))
-			return v.Descriptor, nil
-		}
-	}
 	if c.opts.RemotePolicy == RemotePolicyAlways {
-		// make sure we aren't sharing credentials here
-		desc, err := upstream.Resolve(ctx, ref.GetReference())
-		if err != nil {
-			return ociImageSpecV1.Descriptor{}, err
-		}
-		c.Add(ref, desc)
-		return desc, nil
+		return upstream.Resolve(ctx, ref.GetReference())
 	}
-	// Collapse concurrent misses (or calls that must reach upstream) for
-	// the same key into one upstream round-trip.
+	k := c.buildKey(ref)
+	if v, ok := c.lru.Get(k); ok {
+		c.logger.DebugContext(ctx, "refcache: hit",
+			slog.String("namespace", k.namespace),
+			slog.String("reference", k.reference),
+			slog.String("digest", v.Descriptor.Digest.String()))
+		return v.Descriptor, nil
+	}
+	// Collapse concurrent misses for the same key into one upstream round-trip.
 	v, err, _ := c.sf.Do(k.namespace+"\x00"+ref.GetReference(), func() (any, error) {
-		if servableFromCache {
-			if v, ok := c.lru.Get(k); ok {
-				return v.Descriptor, nil
-			}
+		if v, ok := c.lru.Get(k); ok {
+			return v.Descriptor, nil
 		}
 		desc, err := upstream.Resolve(ctx, ref.GetReference())
 		if err != nil {

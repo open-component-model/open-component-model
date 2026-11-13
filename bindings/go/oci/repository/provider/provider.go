@@ -132,7 +132,7 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 	if opts := applyReferenceCacheConfig(options.ReferenceCacheOptions, options.CacheConfig); opts != nil {
 		prov.referenceCaches = NewReferenceCaches(options.TempDir, *opts)
 	}
-	if options.ReferenceCaches != nil && options.CacheConfig.ReferenceEnabled(true) {
+	if options.ReferenceCaches != nil && options.CacheConfig.ReferenceEnabled(true) && !checksRemote(options.CacheConfig) {
 		prov.referenceCaches = options.ReferenceCaches
 	}
 	// Wire the shared blob cache constructor now that prov exists so the

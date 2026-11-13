@@ -24,15 +24,20 @@ type ReferenceCaches struct {
 
 // NewReferenceCaches returns reference caches that keep each scope in a subdirectory of
 // opts.Dir. An empty opts.Dir means <tempDir>/ocm-oci-refcache, and an empty tempDir the
-// directory of [os.TempDir].
+// directory of [os.TempDir]. Under [cache.RemotePolicyAlways] it returns nil: such a
+// reference cache would serve nothing, see [cache.ReferenceCache.Resolve].
 func NewReferenceCaches(tempDir string, opts cache.Options) *ReferenceCaches {
+	if opts.RemotePolicy == cache.RemotePolicyAlways {
+		return nil
+	}
 	return &ReferenceCaches{tempDir: tempDir, opts: opts}
 }
 
 // get returns the reference cache for the repository of identity, creating it on first use.
 // The scope is based solely on repository identity (host[:port]/path); credentials are
-// excluded because short-lived tokens would create new scopes and kill cache reuse. Use
-// [cache.RemotePolicyAlways] to require remote authorisation on every cache hit.
+// excluded because short-lived tokens would create new scopes and kill cache reuse. Under
+// [cache.RemotePolicyAlways], which requires remote authorisation on every access, there are
+// no reference caches.
 //
 // Concurrent first-use callers for the same scope are collapsed so exactly one
 // [cache.NewReferenceCache] runs. A nil r and a cache that fails to initialise return nil,

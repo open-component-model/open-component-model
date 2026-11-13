@@ -459,6 +459,8 @@ func TestReferenceCache_Always_AlwaysCallsUpstream(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.EqualValues(t, 2, resolves.Load(), "Always must call upstream on every resolve")
+	_, ok := c.Lookup(ref)
+	assert.False(t, ok, "Always must not record a descriptor it never serves")
 }
 
 func TestReferenceCache_Always_ConcurrentCallersResolveIndependently(t *testing.T) {

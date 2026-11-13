@@ -111,7 +111,7 @@ func NewBlobCache(tempDir string, cfg *ocicachev1alpha1.Config) (*ocicache.BlobC
 
 // NewReferenceCaches creates the reference caches to pass to [WithReferenceCaches]. The reference
 // cache is off by default: a cached tag hides a tag moved in the registry until the entry expires.
-// It returns nil unless cfg turns the reference cache on.
+// It returns nil unless cfg turns the reference cache on, and under remotePolicy Always.
 func NewReferenceCaches(tempDir string, cfg *ocicachev1alpha1.Config) *provider.ReferenceCaches {
 	if !cfg.ReferenceEnabled(false) {
 		return nil
