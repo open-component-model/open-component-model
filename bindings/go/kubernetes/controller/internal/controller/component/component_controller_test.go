@@ -24,6 +24,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const (
@@ -768,6 +769,15 @@ var _ = Describe("Component Controller", func() {
 							},
 						},
 						Provider: descruntime.Provider{Name: "ocm.software"},
+						Resources: []descruntime.Resource{{
+							ElementMeta: descruntime.ElementMeta{ObjectMeta: descruntime.ObjectMeta{Name: "data", Version: Version1}},
+							Type:        "blob",
+							Relation:    descruntime.ExternalRelation,
+							Access: &runtime.Raw{
+								Type: runtime.NewUnversionedType("wget/v1"),
+								Data: []byte(`{"type":"wget/v1","url":"https://example.invalid/data"}`),
+							},
+						}},
 					},
 				},
 			})
@@ -836,6 +846,15 @@ var _ = Describe("Component Controller", func() {
 							},
 						},
 						Provider: descruntime.Provider{Name: "ocm.software"},
+						Resources: []descruntime.Resource{{
+							ElementMeta: descruntime.ElementMeta{ObjectMeta: descruntime.ObjectMeta{Name: "data", Version: Version1}},
+							Type:        "blob",
+							Relation:    descruntime.ExternalRelation,
+							Access: &runtime.Raw{
+								Type: runtime.NewUnversionedType("wget/v1"),
+								Data: []byte(`{"type":"wget/v1","url":"https://example.invalid/data"}`),
+							},
+						}},
 					},
 				},
 			})
@@ -887,7 +906,7 @@ var _ = Describe("Component Controller", func() {
 			Expect(k8sClient.Create(ctx, component)).To(Succeed())
 
 			By("checking that the component has not been reconciled successfully")
-			test.WaitForNotReadyObject(ctx, k8sClient, component, v1alpha1.GetComponentVersionFailedReason)
+			test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, component, v1alpha1.GetComponentVersionFailedReason, "signature verification failed")
 
 			By("delete resources manually")
 			test.DeleteObject(ctx, k8sClient, component)

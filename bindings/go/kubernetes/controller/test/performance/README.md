@@ -112,10 +112,11 @@ generated for the run. The Components reference a Secret that holds only the pub
 verify the root as well. The controller verifies the root by signature and every component version below it
 against the digest its parent records for it.
 
-The controller accepts a descriptor that misses a resource or reference digest without verifying it at all.
-The benchmark therefore writes every image and reference digest, and refuses to sign a component version
-that is not safely digestible, the same check `ocm sign cv` makes. Component versions are published level
-by level, leaves first, because a reference digest needs the referenced component version.
+The controller verifies requested signatures even when resource or reference digests are missing. The
+benchmark uses stricter fixtures: it writes every image and reference digest and refuses to sign a
+component version that is not safely digestible. This allows reference-chain and selected-resource
+integrity checks in addition to signature verification. Component versions are published level by level,
+leaves first, because a reference digest needs the referenced component version.
 
 The NamespacedDeployers apply one ConfigMap each as the `perf-deployer` service account, which a Role in their
 namespace allows to write ConfigMaps. The ConfigMap's data holds the release version, so the phases read the deployed

@@ -1,6 +1,6 @@
 ---
 title: "Verify Component Signatures on Deployment"
-description: "Configure the OCM controller to verify component version signatures on reconciliation, ensuring only trusted components are deployed."
+description: "Configure parent-component signature verification and understand reference-digest checks during resource resolution and deployment."
 weight: 70
 toc: true
 aliases:
@@ -168,8 +168,9 @@ kubectl apply -f component.yaml
 
 {{< callout context="note" title="Note" icon="outline/info-circle" >}}
 The Secret is looked up in the `Component`'s own namespace unless the reference sets a
-`namespace` field. The configuration also propagates: a `Resource` or `NamespacedDeployer` that references
-this `Component` inherits it and verifies the same signature.
+`namespace` field. A `Resource` inherits this configuration from its referenced `Component`;
+a `NamespacedDeployer` or `Deployer` inherits it through its referenced `Resource`. These
+consumers re-verify the configured signatures on the parent component version.
 {{< /callout >}}
 
 {{< callout context="caution" title="Ensure component version verification" icon="outline/alert-triangle" >}}
@@ -231,24 +232,79 @@ helloworld-component   github.com/acme.org/helloworld             False   7s    
 {{< /step >}}
 {{< /steps >}}
 
-## How verification protects component references
+## When component references are verified {#how-verification-protects-component-references}
 
-Component references can carry digests. When the controller resolves a reference that includes a
-digest, it computes a fresh digest of the referenced component and compares it against the
-recorded value. If they do not match, reconciliation fails.
+The steps above verify the signatures on the component version selected by the `Component` CR.
+The `Component` controller does **not** fetch referenced component versions or verify resource
+content. Its Ready condition therefore does not mean the whole component graph has been verified.
+
+Reference-digest checks happen when a `Resource`, `NamespacedDeployer`, or `Deployer` resolves a
+selected resource from a referenced component version. The path is defined on the `Resource`
+in `spec.resource.byReference.referencePath`.
+
+At each hop with a complete reference digest, the resolved child's descriptor digest is
+compared with the digest recorded by its parent. A mismatch makes the CR performing the check
+NotReady. Only the selected path is traversed, not every reference in the parent. If
+`referencePath` is omitted, the resource is selected directly from the parent component version
+and no reference traversal is needed.
+
+Children reached through the path are checked against reference digests, not their own
+signatures. `verificationPolicy` controls the separate check of the **selected resource's
+content**; `Never` does not disable configured parent signatures or checks of complete
+reference digests.
+
+For example, if the signed parent contains a component reference named `application`, and that
+child contains a resource named `manifests`, select it with a `Resource` like this:
+
+```yaml
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: application-manifests
+spec:
+  componentRef:
+    name: helloworld-component
+  resource:
+    byReference:
+      referencePath:
+        - name: application
+      resource:
+        name: manifests
+  verificationPolicy: Always
+```
+
+`application` is the reference's name in the parent descriptor, not the name of another
+Kubernetes `Component` CR. To deploy the selected manifests, point a `NamespacedDeployer` at
+`application-manifests` as described in [Deploy Kubernetes Manifests with the OCM Deployer]({{< relref "deploy-manifests-with-deployer.md" >}}).
 
 Reference digests are computed and added automatically by `ocm add cv`. The `ocm sign cv`
 command checks that the component version is safely digestible and warns if any reference or
 resource digests are missing.
 
+{{< callout context="caution" title="A verified parent does not always authenticate its children" icon="outline/alert-triangle" >}}
+If any selected reference has an absent or incomplete digest, that child is resolved without
+digest or signature verification, even under `verificationPolicy: Always`. That policy verifies
+the selected resource against its own descriptor; it does not establish a complete trust chain.
+
+For end-to-end integrity, record complete, valid digests on every reference along the selected
+path and a usable digest on the selected resource. Re-sign affected parent descriptors after
+updating them.
+{{< /callout >}}
+
 ## Troubleshooting
 
-When verification fails, the `Component` resource's Ready condition is set to `False` with the
-error message. Check it with:
+Inspect the Ready condition on the CR whose reconciliation failed. Parent-signature failures
+can appear on the `Component` or on a consumer re-verifying it. Reference-path failures appear
+on the `Resource`, or on the `NamespacedDeployer` / `Deployer` when it re-resolves the path;
+the parent `Component` may remain Ready.
 
 ```bash
 kubectl get component <name> -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}'
+kubectl get resource <name> -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}'
+kubectl get namespaceddeployer <name> -o jsonpath='{.status.conditions[?(@.type=="Ready")].message}'
 ```
+
+For a cluster-scoped `Deployer`, use `kubectl get deployer <name>` with the same JSONPath.
 
 ### Symptom: "signature verification failed for signature ..."
 
@@ -291,22 +347,32 @@ ocm get cv ghcr.io/<your-namespace>//github.com/acme.org/parent-component:1.0.0 
 Look at the `componentReferences:` section and their `digest` fields. To resolve, rebuild the
 parent component version with correct reference digests, re-sign it, and then publish it.
 
-### Symptom: "not safely digestible" event
+### Symptom: "not safely digestible" warning
 
-The `Component` becomes Ready, but a Kubernetes event with severity error is emitted containing
-"not safely digestible".
-
-**Cause:** The component version does not satisfy OCM's digest consistency rules:
+The component version does not satisfy OCM's digest consistency rules:
 
 - Component references must have complete digests (hash algorithm, normalisation algorithm, value)
 - Resources with access must have complete digests
 - Resources without access must not carry a digest
 
-Without consistent digests, signature verification is skipped because the normalised form cannot
-be reliably computed.
+**Behaviour:** Incomplete digests are logged as a warning but never skip signature verification.
+Configured signatures are always verified; a missing or invalid signature still fails the
+`Component`, `Resource`, or `Deployer`. A separate, stricter rule applies to the resource a
+`Resource` selects: under the default `verificationPolicy: Always` the selected resource must
+record a usable digest. The failure message distinguishes two cases:
 
-**Fix:** Rebuild the component version with consistent digests, re-sign it, and then publish it.
-The `ocm sign cv` command warns when a component version is not safely digestible.
+- `has no digest to verify`: the digest is missing, excluded from verification, or has neither
+  `hashAlgorithm` nor `value`. This includes a digest containing only `normalisationAlgorithm`.
+  Rebuild the component version with a usable recorded digest for the selected resource.
+- `has an invalid digest`: exactly one of `hashAlgorithm` and `value` is missing, the value is
+  malformed, or the hash algorithm is unsupported. Correct the digest fields and value, using
+  SHA-256 or SHA-512.
+
+After correcting the descriptor, re-sign it as applicable and publish it. The `ocm sign cv`
+command warns when a component version is not safely digestible.
+
+To explicitly skip the resource-digest check, set `verificationPolicy: Never`; configured
+component signatures are still verified.
 
 ### Symptom: "failed to get Secret" or "secret does not contain supported keys"
 

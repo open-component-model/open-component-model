@@ -39,7 +39,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/applyset"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/deployer/cache"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/deployer/dynamic"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
@@ -409,6 +408,17 @@ func (r *Reconciler) reconcileDeployment(ctx context.Context, deployer deliveryv
 		return ctrl.Result{}, err
 	}
 
+	// The deployer re-resolves the descriptor, so prior Resource readiness does not prove the freshly
+	// resolved descriptor still records a digest. Enforce the Resource's policy again before consuming
+	// the download cache, unless the Resource opted out of verification.
+	if resource.Spec.VerificationPolicy != deliveryv1alpha1.VerificationPolicyNever {
+		if err := ocm.RequireResourceDigest(matchedResource); err != nil {
+			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetOCMResourceFailedReason, err.Error())
+
+			return ctrl.Result{}, fmt.Errorf("failed to verify resource: %w", err)
+		}
+	}
+
 	key := buildResourceCacheKey(matchedResource, componentDescriptor, cfg, resource.Spec.Resource.ByReference.Resource.String())
 
 	objs, err := r.DownloadCache.Load(key, func() ([]*unstructured.Unstructured, error) {
@@ -568,9 +578,6 @@ func (r *Reconciler) resolveComponentAndMatchResource(
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ComponentDriftResolutionInProgress, err.Error())
 
 		return nil, nil, err
-	case errors.Is(err, resolution.ErrNotSafelyDigestible):
-		// Ignore error, but log event
-		event.New(r.EventRecorder, deployer, nil, deliveryv1alpha1.EventSeverityError, "%s", err.Error())
 	default:
 		if err != nil {
 			status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetComponentVersionFailedReason, err.Error())
@@ -1107,18 +1114,14 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 		resolution.Verification{Verifications: verifications},
 		component.Status.Component.Component,
 		component.Status.Component.Version)
-	// Only return the error if it is not of type `ErrNotSafelyDigestible`. If it is of that type, we need to check
-	// if there is a reference path to resolve.
-	if err != nil && !errors.Is(err, resolution.ErrNotSafelyDigestible) {
+	if err != nil {
 		return nil, fmt.Errorf("failed to get component version: %w", err)
 	}
 
 	// Early return if the component version from the component and resource status are the same.
-	// Returning the error as well as this could be of type `ErrNotSafelyDigestible`, which is a fallthrough with
-	// an error event. The error will be checked in the calling code.
 	if component.Status.Component.Component == resource.Status.Component.Component &&
 		component.Status.Component.Version == resource.Status.Component.Version {
-		return componentDescriptorComponent, err
+		return componentDescriptorComponent, nil
 	}
 
 	// If the component CR got an update while the deployer reconciler is already running, it is possible that the
@@ -1142,14 +1145,11 @@ func (r *Reconciler) getEffectiveComponentDescriptor(
 		resource.Spec.Resource.ByReference.ReferencePath,
 		resolveOpts,
 	)
-	if errReferencePath != nil && !errors.Is(errReferencePath, resolution.ErrNotSafelyDigestible) {
+	if errReferencePath != nil {
 		return nil, fmt.Errorf("failed to resolve resource reference path: %w", errReferencePath)
 	}
 
-	// Join potential errors of type ErrNotSafelyDigestible to be handled by the calling function.
-	err = errors.Join(err, errReferencePath)
-
-	return resourceDescriptor, err
+	return resourceDescriptor, nil
 }
 
 func updateDeployedObjectStatusReferences[T client.Object](objs []T, deployer deliveryv1alpha1.DeployerObject) {
