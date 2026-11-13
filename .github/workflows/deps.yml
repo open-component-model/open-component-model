@@ -1,0 +1,83 @@
+name: deps
+on:
+  schedule:
+    - cron: '0 0 * * *' # At 00:00, every day: create branches
+  workflow_dispatch:
+    inputs:
+      dryRun:
+        description: 'Report what would change without pushing or opening PRs'
+        type: boolean
+        default: false
+      scheduleTime:
+        description: 'Evaluate the schedule time windows at this RFC 3339 time instead of now (e.g. 2026-11-15T00:30:00Z), the replacement for ignoring the schedule'
+        type: string
+        default: ''
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+    paths:
+      - .github/renovate.json5
+      - .github/workflows/deps.yml
+
+# Write-enabled runs (schedule, push, dispatch) queue in one group: two of them
+# would push the same branches and the loser fails its --force-with-lease. Each
+# pull request dry-run gets its own group, it writes nothing.
+concurrency:
+  group: deps-${{ github.event_name == 'pull_request' && github.ref || 'write' }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # Compatibility mode: deps translates the Renovate config in memory instead of
+  # reading a .deps.yaml, so .github/renovate.json5 stays the single source of
+  # truth. A Renovate file name here turns --renovate on.
+  DEPS_CONFIG: .github/renovate.json5
+  DEPS_SCHEDULE_TIME: ${{ inputs.scheduleTime }}
+
+jobs:
+  deps:
+    runs-on: ubuntu-26.04-arm
+    environment:
+      name: automation
+      deployment: false
+    steps:
+      - if: ${{ github.event_name != 'pull_request' && github.repository_owner == 'open-component-model' }}
+        id: generate_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          # Push update branches and create the commits through the API, so GitHub signs them.
+          permission-contents: write
+          # Maintain the dependency dashboard issue.
+          permission-issues: write
+          # Open, update and close dependency-update PRs.
+          permission-pull-requests: write
+          # Bump action SHAs in .github/workflows/*.
+          permission-workflows: write
+          # Read check runs and commit statuses for the automerge fallback.
+          permission-checks: read
+          permission-statuses: read
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 # zizmor: ignore[artipacked] intentional: deps lists, pushes and deletes its branches with the checkout's credentials
+        with:
+          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Run
+        uses: jakobmoellerdev/deps@a98b4b8956a81c5908d6af8ed7b088e95d8bde8c # v0.15.1
+        with:
+          version: v0.15.1
+          token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
+          # Pull requests only check that the config still resolves and what it would do.
+          dry-run: ${{ (github.event_name == 'pull_request' || inputs.dryRun) && 'true' || 'false' }}
+          # prConcurrentLimit/prHourlyLimit are 0 in the config; don't cap a run either.
+          max-new-prs: '0'
+          show-skipped: 'true'
+          log-level: info
