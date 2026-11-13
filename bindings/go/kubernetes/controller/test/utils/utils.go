@@ -18,8 +18,8 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2"
-	ocistore "oras.land/oras-go/v2/content/oci"
+	"github.com/oras-project/oras-go/v3"
+	ocistore "github.com/oras-project/oras-go/v3/content/oci"
 	"sigs.k8s.io/yaml"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
@@ -100,10 +100,17 @@ func DeployResource(ctx context.Context, manifestFilePath string) error {
 		return err
 	}
 	DeferCleanup(func(ctx SpecContext) error {
-		cmd = exec.CommandContext(ctx, "kubectl", "delete", "-f", manifestFilePath)
+		// No --timeout: the OCM finalizer teardown is a dependency cascade
+		// (Deployer -> Resource -> Component -> Repository) whose controllers
+		// return errors on the transient "still referenced" condition, so
+		// controller-runtime's exponential backoff can stretch a brief ordering
+		// conflict into several minutes. Let the Ginkgo spec deadline bound the
+		// wait instead of a fixed timeout that flakes on slow teardowns (observed
+		// exceeding 180s on the cross-namespace Repository finalizer).
+		cmd = exec.CommandContext(ctx, "kubectl", "delete", "--ignore-not-found", "--wait=true", "-f", manifestFilePath)
 		_, err := Run(cmd)
 		if err != nil {
-			GinkgoLogr.V(3).Info("WARNING: failed to delete resource", "manifest", manifestFilePath)
+			GinkgoLogr.V(3).Info("WARNING: cleanup failed", "manifest", manifestFilePath)
 		}
 
 		return err
@@ -407,6 +414,60 @@ func DumpLogs(namespace, resourceType string) {
 		"custom-columns=NAME:.metadata.name,READY:.status.conditions[?(@.type==\"Ready\")].status,READY_MSG:.status.conditions[?(@.type==\"Ready\")].message",
 	)
 	logCmd("kro-logs", "kubectl", "logs", "-n", namespace, "--all-containers", "--tail=100", "-l", "app.kubernetes.io/name=kro")
+}
+
+// DumpCrossplaneDiagnostics dumps Crossplane composite/managed resource status and
+// crossplane-system logs on test failure. DumpLogs targets kro's
+// app.kubernetes.io/name=kro selector, which matches nothing in crossplane-system
+// (Crossplane pods carry app=crossplane), so the Crossplane flow needs its own dump
+// to surface the XR Ready condition, composed resources, and controller logs.
+// Creates its own context with a 30s timeout to survive parent context cancellation.
+func DumpCrossplaneDiagnostics() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	logLine := func(msg string) {
+		GinkgoLogr.Info(msg)
+	}
+
+	logCmd := func(label string, args ...string) {
+		cmd := exec.CommandContext(ctx, args[0], args[1:]...) //nolint:gosec // args are hardcoded in test code
+		output, err := Run(cmd)
+		if err != nil {
+			logLine(fmt.Sprintf("[DIAG] %s: error: %v", label, err))
+		} else {
+			for _, line := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+				logLine(fmt.Sprintf("[DIAG] %s: %s", label, line))
+			}
+		}
+	}
+
+	logCmd("xr-conditions",
+		"kubectl", "get", "composite", "-o",
+		"custom-columns=NAME:.metadata.name,READY:.status.conditions[?(@.type==\"Ready\")].status,READY_MSG:.status.conditions[?(@.type==\"Ready\")].message",
+	)
+	// Composed resources the Compositions create. Crossplane v2 has no `managed`
+	// category for these, so dump each kind's Ready condition across all namespaces
+	// to show which composed resource (e.g. the Flux Kustomization) blocks the XR.
+	readyCols := "custom-columns=NS:.metadata.namespace,NAME:.metadata.name," +
+		"READY:.status.conditions[?(@.type==\"Ready\")].status," +
+		"MSG:.status.conditions[?(@.type==\"Ready\")].message"
+	for _, kind := range []string{
+		"resources.delivery.ocm.software",
+		"gitrepositories.source.toolkit.fluxcd.io",
+		"ocirepositories.source.toolkit.fluxcd.io",
+		"kustomizations.kustomize.toolkit.fluxcd.io",
+		"helmreleases.helm.toolkit.fluxcd.io",
+	} {
+		logCmd("composed/"+kind, "kubectl", "get", kind, "-A", "-o", readyCols)
+	}
+	logCmd("composed/applications.argoproj.io",
+		"kubectl", "get", "applications.argoproj.io", "-A", "-o",
+		"custom-columns=NS:.metadata.namespace,NAME:.metadata.name,"+
+			"SYNC:.status.sync.status,HEALTH:.status.health.status",
+	)
+	logCmd("crossplane-events", "kubectl", "get", "events", "-n", "crossplane-system", "--sort-by=.lastTimestamp")
+	logCmd("crossplane-logs", "kubectl", "logs", "-n", "crossplane-system", "--all-containers", "--tail=100", "-l", "app=crossplane")
 }
 
 // CompareResourceField compares the value of a specific field in a Kubernetes resource

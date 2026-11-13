@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Duration is a Go time.Duration that marshals as a duration string (e.g. \"30s\", \"5m\", \"1h\") and also accepts a nanoseconds integer.",
+  "title": "Duration",
+  "description": "Duration is a Go duration string such as 30s, 5m or 1h30m, or an integer number of nanoseconds.",
+  "anyOf": [
+    {
+      "type": "string",
+      "examples": ["30s", "5m", "1h30m", "0s"]
+    },
+    {
+      "type": "integer",
+      "description": "Duration in nanoseconds."
+    }
+  ]
+}

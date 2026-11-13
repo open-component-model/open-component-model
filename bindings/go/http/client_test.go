@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	typesv1 "ocm.software/open-component-model/bindings/go/configuration/types/v1"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	"ocm.software/open-component-model/bindings/go/http/internal/retry"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -47,9 +48,9 @@ func TestNew(t *testing.T) {
 	t.Run("config timeouts flow into transport and overall timeout", func(t *testing.T) {
 		cfg := &httpv1alpha1.Config{
 			TimeoutConfig: httpv1alpha1.TimeoutConfig{
-				Timeout:             httpv1alpha1.NewTimeout(90 * time.Second),
-				TLSHandshakeTimeout: httpv1alpha1.NewTimeout(7 * time.Second),
-				IdleConnTimeout:     httpv1alpha1.NewTimeout(45 * time.Second),
+				Timeout:             typesv1.NewDuration(90 * time.Second),
+				TLSHandshakeTimeout: typesv1.NewDuration(7 * time.Second),
+				IdleConnTimeout:     typesv1.NewDuration(45 * time.Second),
 			},
 		}
 		c := ocmhttp.New(ocmhttp.WithConfig(cfg))
@@ -74,7 +75,7 @@ func TestNew(t *testing.T) {
 	t.Run("nil Timeout leaves overall deadline unset", func(t *testing.T) {
 		cfg := &httpv1alpha1.Config{
 			TimeoutConfig: httpv1alpha1.TimeoutConfig{
-				IdleConnTimeout: httpv1alpha1.NewTimeout(30 * time.Second),
+				IdleConnTimeout: typesv1.NewDuration(30 * time.Second),
 			},
 		}
 		c := ocmhttp.New(ocmhttp.WithConfig(cfg))
@@ -89,12 +90,12 @@ func TestNew(t *testing.T) {
 		// override could take effect.
 		cfg := &httpv1alpha1.Config{
 			TimeoutConfig: httpv1alpha1.TimeoutConfig{
-				Timeout: httpv1alpha1.NewTimeout(30 * time.Second),
+				Timeout: typesv1.NewDuration(30 * time.Second),
 			},
 			Hosts: map[string]*httpv1alpha1.HostConfig{
 				"slow.example.com": {
 					TimeoutConfig: httpv1alpha1.TimeoutConfig{
-						Timeout: httpv1alpha1.NewTimeout(5 * time.Minute),
+						Timeout: typesv1.NewDuration(5 * time.Minute),
 					},
 				},
 			},
@@ -132,7 +133,7 @@ func TestNewClient_PerHostRouting(t *testing.T) {
 		Hosts: map[string]*httpv1alpha1.HostConfig{
 			slowHost: {
 				TimeoutConfig: httpv1alpha1.TimeoutConfig{
-					ResponseHeaderTimeout: httpv1alpha1.NewTimeout(5 * time.Millisecond),
+					ResponseHeaderTimeout: typesv1.NewDuration(5 * time.Millisecond),
 				},
 			},
 		},
@@ -253,7 +254,7 @@ func TestNew_NilHostEntry_Skipped(t *testing.T) {
 	host := mustHost(t, srv.URL)
 	cfg := &httpv1alpha1.Config{
 		TimeoutConfig: httpv1alpha1.TimeoutConfig{
-			Timeout: httpv1alpha1.NewTimeout(30 * time.Second),
+			Timeout: typesv1.NewDuration(30 * time.Second),
 		},
 		Hosts: map[string]*httpv1alpha1.HostConfig{
 			host: nil,
@@ -292,11 +293,11 @@ func TestRetryConfig_Wiring(t *testing.T) {
 
 		cfg := &httpv1alpha1.Config{
 			TimeoutConfig: httpv1alpha1.TimeoutConfig{
-				Timeout: httpv1alpha1.NewTimeout(10 * time.Second),
+				Timeout: typesv1.NewDuration(10 * time.Second),
 			},
 			Retry: &httpv1alpha1.RetryConfig{
-				MinWait: httpv1alpha1.NewTimeout(1 * time.Millisecond),
-				MaxWait: httpv1alpha1.NewTimeout(5 * time.Millisecond),
+				MinWait: typesv1.NewDuration(1 * time.Millisecond),
+				MaxWait: typesv1.NewDuration(5 * time.Millisecond),
 			},
 		}
 		c := ocmhttp.New(ocmhttp.WithConfig(cfg))
@@ -317,7 +318,7 @@ func TestRetryConfig_Wiring(t *testing.T) {
 		negOne := -1
 		cfg := &httpv1alpha1.Config{
 			TimeoutConfig: httpv1alpha1.TimeoutConfig{
-				Timeout: httpv1alpha1.NewTimeout(10 * time.Second),
+				Timeout: typesv1.NewDuration(10 * time.Second),
 			},
 			Retry: &httpv1alpha1.RetryConfig{
 				MaxRetries: &negOne,
@@ -341,12 +342,12 @@ func TestRetryConfig_Wiring(t *testing.T) {
 		two := 2
 		cfg := &httpv1alpha1.Config{
 			TimeoutConfig: httpv1alpha1.TimeoutConfig{
-				Timeout: httpv1alpha1.NewTimeout(10 * time.Second),
+				Timeout: typesv1.NewDuration(10 * time.Second),
 			},
 			Retry: &httpv1alpha1.RetryConfig{
 				MaxRetries: &two,
-				MinWait:    httpv1alpha1.NewTimeout(1 * time.Millisecond),
-				MaxWait:    httpv1alpha1.NewTimeout(5 * time.Millisecond),
+				MinWait:    typesv1.NewDuration(1 * time.Millisecond),
+				MaxWait:    typesv1.NewDuration(5 * time.Millisecond),
 			},
 		}
 		c := ocmhttp.New(ocmhttp.WithConfig(cfg))
@@ -369,12 +370,12 @@ func TestRetryConfig_Wiring(t *testing.T) {
 		globalTwo := 2
 		cfg := &httpv1alpha1.Config{
 			TimeoutConfig: httpv1alpha1.TimeoutConfig{
-				Timeout: httpv1alpha1.NewTimeout(10 * time.Second),
+				Timeout: typesv1.NewDuration(10 * time.Second),
 			},
 			Retry: &httpv1alpha1.RetryConfig{
 				MaxRetries: &globalTwo,
-				MinWait:    httpv1alpha1.NewTimeout(1 * time.Millisecond),
-				MaxWait:    httpv1alpha1.NewTimeout(5 * time.Millisecond),
+				MinWait:    typesv1.NewDuration(1 * time.Millisecond),
+				MaxWait:    typesv1.NewDuration(5 * time.Millisecond),
 			},
 			Hosts: map[string]*httpv1alpha1.HostConfig{
 				host: {

@@ -3,8 +3,8 @@ package oci
 import (
 	"testing"
 
+	"github.com/oras-project/oras-go/v3/errdef"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2/errdef"
 )
 
 func TestVersionToOCITag(t *testing.T) {

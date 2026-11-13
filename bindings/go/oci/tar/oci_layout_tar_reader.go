@@ -12,8 +12,8 @@ import (
 
 	"github.com/nlepage/go-tarfs"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/content/oci"
 	slogcontext "github.com/veqryn/slog-context"
-	"oras.land/oras-go/v2/content/oci"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/ctf"

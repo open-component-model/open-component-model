@@ -11,10 +11,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/oras-project/oras-go/v3/registry/remote"
+	"github.com/oras-project/oras-go/v3/registry/remote/auth"
+	"github.com/oras-project/oras-go/v3/registry/remote/credentials"
+	"github.com/oras-project/oras-go/v3/registry/remote/properties"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2/registry/remote"
-	"oras.land/oras-go/v2/registry/remote/auth"
 
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
@@ -50,7 +52,7 @@ func TestURLPathResolver_SetClient(t *testing.T) {
 	require.NoError(t, err)
 
 	// Set the client
-	resolver.SetClient(repo.Client)
+	resolver.SetClient(repo.Registry.Client)
 
 	// Verify the client was set by using it
 	store, err := resolver.StoreForReference(context.Background(), "example.com/test")
@@ -415,8 +417,8 @@ func TestURLPathResolver_Ping(t *testing.T) {
 		// Create auth client with credentials
 		authClient := &auth.Client{
 			Client: http.DefaultClient,
-			Credential: func(ctx context.Context, registry string) (auth.Credential, error) {
-				return auth.Credential{
+			CredentialFunc: func(ctx context.Context, _ properties.Resource) (credentials.Credential, error) {
+				return credentials.Credential{
 					Username: expectedUsername,
 					Password: expectedPassword,
 				}, nil
@@ -471,8 +473,8 @@ func TestURLPathResolver_Ping(t *testing.T) {
 		// Create auth client with credentials
 		authClient := &auth.Client{
 			Client: http.DefaultClient,
-			Credential: func(ctx context.Context, registry string) (auth.Credential, error) {
-				return auth.Credential{
+			CredentialFunc: func(ctx context.Context, _ properties.Resource) (credentials.Credential, error) {
+				return credentials.Credential{
 					Username: "testuser",
 					Password: "testpass",
 				}, nil
@@ -672,7 +674,7 @@ func TestURLPathResolver_PlainHTTP(t *testing.T) {
 			r.NoError(err)
 			remoteStore, ok := store.(*remotestore.RemoteStore)
 			r.True(ok, "expected a bare RemoteStore when no cache is configured, got %T", store)
-			r.Equal(tt.wantPlain, remoteStore.PlainHTTP)
+			r.Equal(tt.wantPlain, remoteStore.Registry.PlainHTTP)
 		}
 
 		t.Run(tt.name+" (prefix on the reference)", func(t *testing.T) {
@@ -763,7 +765,7 @@ func TestURLPathResolver_BaseSchemeOnlyForBaseHost(t *testing.T) {
 			r.NoError(err)
 			remoteStore, ok := store.(*remotestore.RemoteStore)
 			r.True(ok, "expected a bare RemoteStore when no cache is configured, got %T", store)
-			r.Equal(tt.wantPlain, remoteStore.PlainHTTP)
+			r.Equal(tt.wantPlain, remoteStore.Registry.PlainHTTP)
 		})
 	}
 }
@@ -880,7 +882,7 @@ func TestURLPathResolver_PlainHTTPFromHTTPConfig(t *testing.T) {
 			r.NoError(err)
 			remoteStore, ok := store.(*remotestore.RemoteStore)
 			r.True(ok, "expected a bare RemoteStore when no cache is configured, got %T", store)
-			r.Equal(tt.plainHTTP, remoteStore.PlainHTTP)
+			r.Equal(tt.plainHTTP, remoteStore.Registry.PlainHTTP)
 		})
 	}
 

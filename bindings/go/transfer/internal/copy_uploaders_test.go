@@ -31,6 +31,13 @@ func TestBuildGraphDefinition_LocalBlobAndReferenceUploaders(t *testing.T) {
 		Relation:    descriptor.ExternalRelation,
 		Access:      &runtime.Raw{Type: runtime.NewVersionedType("s3", "v1"), Data: []byte(`{"type":"s3/v1","bucket":"b","key":"k"}`)},
 	}
+	// An OCM v1 localOciBlob access as it is stored in a v1 repository: the blob reference
+	// is in digest and no media type is recorded.
+	legacyLocalOciBlob := localBlobResource("legacy-blob", "1.0.0")
+	legacyLocalOciBlob.Access = &runtime.Raw{
+		Type: runtime.NewVersionedType("localOciBlob", "v1"),
+		Data: []byte(`{"type":"localOciBlob/v1","digest":"sha256:abc123"}`),
+	}
 	// A local blob with a referenceName but no mediaType: the default OCI match must
 	// evaluate to false for it instead of failing on the missing field.
 	namedBlobWithoutMediaType := localBlobResource("named-blob", "1.0.0")
@@ -72,6 +79,17 @@ func TestBuildGraphDefinition_LocalBlobAndReferenceUploaders(t *testing.T) {
 		{
 			name:      "baseline copies a local blob",
 			resource:  blob,
+			wantTypes: localBlobNodes,
+		},
+		{
+			name:      "baseline copies an OCM v1 localOciBlob",
+			resource:  legacyLocalOciBlob,
+			wantTypes: localBlobNodes,
+		},
+		{
+			name:      "local blob uploader copies an OCM v1 localOciBlob",
+			resource:  legacyLocalOciBlob,
+			uploaders: []transferv1alpha1.UploaderConfig{&transferv1alpha1.LocalBlobUploaderConfig{}},
 			wantTypes: localBlobNodes,
 		},
 		{
