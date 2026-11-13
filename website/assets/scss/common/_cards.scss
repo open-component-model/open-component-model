@@ -342,16 +342,6 @@
   }
 }
 
-/* subtle divider between card sections; adjust spacing via margin */
-.section-divider {
-  border: 0;
-  border-top: 1px solid var(--lp-c-divider);
-  height: 0;
-  max-width: 1152px;
-  margin: 40px auto;
-  opacity: 0.6;
-}
-
 /* ============================================
    Responsive Behavior
    ============================================ */
