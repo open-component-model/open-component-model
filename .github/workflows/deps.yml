@@ -22,6 +22,13 @@ on:
       - .github/renovate.json5
       - .github/workflows/deps.yml
 
+# Write-enabled runs (schedule, push, dispatch) queue in one group: two of them
+# would push the same branches and the loser fails its --force-with-lease. Each
+# pull request dry-run gets its own group, it writes nothing.
+concurrency:
+  group: deps-${{ github.event_name == 'pull_request' && github.ref || 'write' }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
@@ -59,11 +66,9 @@ jobs:
           permission-statuses: read
 
       - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 # zizmor: ignore[artipacked] intentional: deps lists, pushes and deletes its branches with the checkout's credentials
         with:
           token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
-          # persist-credentials kept intentionally — deps lists and deletes its
-          # branches with the checkout's credentials. Zizmor flags this; accepted.
 
       - name: Run
         uses: jakobmoellerdev/deps@a98b4b8956a81c5908d6af8ed7b088e95d8bde8c # v0.15.1
