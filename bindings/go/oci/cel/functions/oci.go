@@ -39,16 +39,11 @@ func ParseReference(reference string) (Reference, error) {
 	if err != nil {
 		return Reference{}, err
 	}
-	var digest string
-	// A validation error means the reference carries no digest.
-	if d, err := r.Digest(); err == nil {
-		digest = d.String()
-	}
 	return Reference{
 		Host:       r.Host(),
 		Repository: strings.TrimLeft(r.Repository, "/"),
 		Tag:        r.Tag,
-		Digest:     digest,
+		Digest:     r.Digest,
 	}, nil
 }
 

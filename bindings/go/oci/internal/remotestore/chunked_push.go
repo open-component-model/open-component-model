@@ -14,9 +14,9 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2/registry/remote"
-	"oras.land/oras-go/v2/registry/remote/auth"
-	"oras.land/oras-go/v2/registry/remote/errcode"
+	"github.com/oras-project/oras-go/v3/registry/remote"
+	"github.com/oras-project/oras-go/v3/registry/remote/auth"
+	"github.com/oras-project/oras-go/v3/registry/remote/errcode"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
@@ -152,7 +152,7 @@ func (r *RemoteStore) pushChunked(
 	content io.Reader,
 	fallback func() error,
 ) (ociImageSpecV1.Descriptor, error) {
-	ctx = auth.AppendRepositoryScope(ctx, r.Reference, auth.ActionPull, auth.ActionPush)
+	ctx = auth.AppendRepositoryScope(ctx, r.Reference(), auth.ActionPull, auth.ActionPush)
 
 	up, err := r.openUploadSession(ctx, knownDigest)
 	if err != nil {
@@ -211,7 +211,7 @@ func (r *RemoteStore) openUploadSession(ctx context.Context, knownDigest digest.
 	if r.ChunkSize > MaxChunkSize {
 		return nil, fmt.Errorf("chunked blob push: configured chunk size %d exceeds the maximum supported chunk size %d", r.ChunkSize, MaxChunkSize)
 	}
-	uploads := r.endpoint(path.Join("/v2", r.Reference.Repository, "blobs", "uploads") + "/")
+	uploads := r.endpoint(path.Join("/v2", r.RepositoryName, "blobs", "uploads") + "/")
 	var digester digest.Digester
 	if knownDigest == "" {
 		digester = digest.Canonical.Digester()
@@ -348,9 +348,9 @@ func (r *RemoteStore) closeUploadSession(ctx context.Context, up *chunkedUpload,
 }
 
 // do sends an HTTP request using the same client resolution and response
-// handling as the embedded oras *remote.Repository: it uses r.Client (falling
+// handling as the embedded oras *remote.Repository: it uses r.Registry.Client (falling
 // back to auth.DefaultClient) so retries, authentication, TLS, proxy and header
-// configuration are respected identically, and it applies r.HandleWarning to
+// configuration are respected identically, and it applies r.Registry.HandleWarning to
 // response Warning headers just as oras' internal do() does.
 // It also refuses to auto-follow redirects for body-carrying requests: a
 // registry-controlled 307/308 must never replay the blob body to a host this
@@ -364,7 +364,7 @@ func (r *RemoteStore) closeUploadSession(ctx context.Context, up *chunkedUpload,
 // upload-location handoffs still occur explicitly through the Location header,
 // which resolveUploadLocation validates for host and scheme.
 func (r *RemoteStore) do(req *http.Request) (*http.Response, error) {
-	client := r.Client
+	client := r.Registry.Client
 	if client == nil {
 		client = auth.DefaultClient
 	}
@@ -375,10 +375,10 @@ func (r *RemoteStore) do(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	if r.HandleWarning != nil {
+	if r.Registry.HandleWarning != nil {
 		for _, h := range resp.Header.Values("Warning") {
 			if value, perr := parseWarningHeader(h); perr == nil {
-				r.HandleWarning(remote.Warning{WarningValue: value})
+				r.Registry.HandleWarning(remote.Warning{WarningValue: value})
 			}
 		}
 	}
@@ -386,8 +386,9 @@ func (r *RemoteStore) do(req *http.Request) (*http.Response, error) {
 }
 
 // noFollowRedirects returns a client equivalent to c but that stops at the
-// first response instead of following redirects, without mutating c. It shares
-// c's credential cache and configuration; only redirect handling changes.
+// first response instead of following redirects, without mutating c. An
+// *auth.Client is derived via Clone, so it shares c's credential cache and
+// configuration; only redirect handling changes.
 //
 // The redirect policy lives on a concrete *http.Client, reached differently per
 // implementation: an *auth.Client carries it on its inner client (oras' send()
@@ -398,9 +399,9 @@ func (r *RemoteStore) do(req *http.Request) (*http.Response, error) {
 func noFollowRedirects(c remote.Client) remote.Client {
 	switch client := c.(type) {
 	case *auth.Client:
-		copyClient := *client
+		copyClient := client.Clone()
 		copyClient.Client = redirectSuppressed(client.Client)
-		return &copyClient
+		return copyClient
 	case *http.Client:
 		return redirectSuppressed(client)
 	default:
@@ -458,10 +459,10 @@ func parseWarningHeader(header string) (remote.WarningValue, error) {
 // repository's scheme and host.
 func (r *RemoteStore) endpoint(p string) *url.URL {
 	scheme := "https"
-	if r.PlainHTTP {
+	if r.Registry.PlainHTTP {
 		scheme = "http"
 	}
-	return &url.URL{Scheme: scheme, Host: r.Reference.Host(), Path: p}
+	return &url.URL{Scheme: scheme, Host: r.Reference().Host(), Path: p}
 }
 
 // cancelUpload issues a best-effort DELETE to release an in-progress upload

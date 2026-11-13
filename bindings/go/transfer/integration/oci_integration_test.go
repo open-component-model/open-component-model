@@ -9,12 +9,13 @@ import (
 
 	"github.com/opencontainers/image-spec/specs-go"
 	ocispecv1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3"
+	"github.com/oras-project/oras-go/v3/content/memory"
+	"github.com/oras-project/oras-go/v3/registry/remote"
+	"github.com/oras-project/oras-go/v3/registry/remote/auth"
+	orascreds "github.com/oras-project/oras-go/v3/registry/remote/credentials"
+	"github.com/oras-project/oras-go/v3/registry/remote/retry"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2"
-	"oras.land/oras-go/v2/content/memory"
-	"oras.land/oras-go/v2/registry/remote"
-	"oras.land/oras-go/v2/registry/remote/auth"
-	"oras.land/oras-go/v2/registry/remote/retry"
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
@@ -83,12 +84,12 @@ func pushTestOCIImage(t *testing.T, registryAddr, user, password, repoPath, tag 
 	require.NoError(t, store.Push(ctx, manifestDesc, bytes.NewReader(manifestContent)))
 	require.NoError(t, store.Tag(ctx, manifestDesc, tag))
 
-	repo, err := remote.NewRepository(ref)
+	repo, err := remote.NewRepository(fmt.Sprintf("%s/%s", registryAddr, repoPath))
 	require.NoError(t, err)
-	repo.PlainHTTP = true
-	repo.Client = &auth.Client{
-		Client:     retry.DefaultClient,
-		Credential: auth.StaticCredential(registryAddr, auth.Credential{Username: user, Password: password}),
+	repo.Registry.PlainHTTP = true
+	repo.Registry.Client = &auth.Client{
+		Client:         retry.DefaultClient,
+		CredentialFunc: orascreds.StaticCredentialFunc(registryAddr, orascreds.Credential{Username: user, Password: password}),
 	}
 
 	_, err = oras.Copy(ctx, store, tag, repo, tag, oras.DefaultCopyOptions)
@@ -445,12 +446,12 @@ func pushTestDockerManifest(t *testing.T, registryAddr, user, password, repoPath
 	require.NoError(t, store.Push(ctx, manifestDesc, bytes.NewReader(manifestContent)))
 	require.NoError(t, store.Tag(ctx, manifestDesc, tag))
 
-	repo, err := remote.NewRepository(ref)
+	repo, err := remote.NewRepository(fmt.Sprintf("%s/%s", registryAddr, repoPath))
 	require.NoError(t, err)
-	repo.PlainHTTP = true
-	repo.Client = &auth.Client{
-		Client:     retry.DefaultClient,
-		Credential: auth.StaticCredential(registryAddr, auth.Credential{Username: user, Password: password}),
+	repo.Registry.PlainHTTP = true
+	repo.Registry.Client = &auth.Client{
+		Client:         retry.DefaultClient,
+		CredentialFunc: orascreds.StaticCredentialFunc(registryAddr, orascreds.Credential{Username: user, Password: password}),
 	}
 
 	_, err = oras.Copy(ctx, store, tag, repo, tag, oras.DefaultCopyOptions)

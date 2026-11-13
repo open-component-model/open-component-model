@@ -14,8 +14,8 @@ import (
 	"strings"
 
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	orascontent "github.com/oras-project/oras-go/v3/content"
 	"helm.sh/helm/v4/pkg/registry"
-	orascontent "oras.land/oras-go/v2/content"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
