@@ -399,6 +399,23 @@ func TestGetV1UTF8Blob(t *testing.T) {
 	}
 }
 
+// The marshaled bytes are the resource content, so their digest - and any signature over
+// it - must stay what encoding/json v1 produced, which escaped <, > and & as well as the
+// line terminators U+2028 and U+2029.
+func TestGetV1UTF8Blob_JSONEscapesLikeV1(t *testing.T) {
+	b, err := utf8.GetV1UTF8Blob(v1.UTF8{JSON: jsontext.Value("{\"q\":\"a<b>&c\u2028d\u2029e\"}")})
+	require.NoError(t, err)
+
+	reader, err := b.ReadCloser()
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, reader.Close()) })
+	data, err := io.ReadAll(reader)
+	require.NoError(t, err)
+
+	// The exact bytes are the point here, not JSON equality.
+	assert.Equal(t, `{"q":"a\u003cb\u003e\u0026c\u2028d\u2029e"}`, string(data)) //nolint:testifylint // encoded-compare: the escaping is what is under test
+}
+
 func TestScheme_ResolvesAllUTF8InputAliases(t *testing.T) {
 	tests := []struct {
 		name string

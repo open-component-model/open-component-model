@@ -18,9 +18,10 @@ func WriteSchemaJSON(ti *universe.TypeInfo, schema *jsonschemagen.JSONSchemaDraf
 		return err
 	}
 
-	// EscapeForHTML keeps <, > and & escaped as \u003c, \u003e and \u0026, which is what
-	// encoding/json v1 did unconditionally and what the committed schema files contain.
-	raw, err := json.Marshal(schema, runtime.JSONOptions, jsontext.WithIndent("  "), jsontext.EscapeForHTML(true))
+	// EscapeForHTML keeps <, > and & escaped as \u003c, \u003e and \u0026 and EscapeForJS
+	// keeps U+2028 and U+2029 escaped, which is what encoding/json v1 did unconditionally
+	// and what the committed schema files contain.
+	raw, err := json.Marshal(schema, runtime.JSONOptions, jsontext.WithIndent("  "), jsontext.EscapeForHTML(true), jsontext.EscapeForJS(true))
 	if err != nil {
 		return err
 	}

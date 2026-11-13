@@ -1,6 +1,7 @@
 package annotations
 
 import (
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
@@ -53,7 +54,10 @@ func (a ArtifactOCIAnnotation) AddToDescriptor(descriptor *ociImageSpecV1.Descri
 		}
 	}
 	annotations = append(annotations, a)
-	annotation, err := json.Marshal(annotations, runtime.JSONOptions)
+	// EscapeForHTML and EscapeForJS restore what encoding/json v1 escaped here: the
+	// annotation is stored in the manifest and therefore part of its digest, so an
+	// identity carrying <, >, & or a line terminator must not change bytes.
+	annotation, err := json.Marshal(annotations, runtime.JSONOptions, jsontext.EscapeForHTML(true), jsontext.EscapeForJS(true))
 	if err != nil {
 		return fmt.Errorf("could not marshal artifact annotations: %w", err)
 	}
