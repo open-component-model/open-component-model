@@ -170,9 +170,8 @@ The controller accepts a fixed set of OCM configuration types and silently drops
 | `transfer.config.ocm.software`    | replication settings                                                                                                           |
 | `http.config.ocm.software`        | HTTP client timeouts, retries, per-host overrides, and `insecureSkipVerify` for local registries with self-signed certificates |
 
-`filesystem.config.ocm.software` and `oci.cache.config.ocm.software` are deliberately **not** accepted. The OCI cache
-remote policy, time to live (`ttl`), maximum blob size (`maxBlobSize`), and maximum total size (`maxTotalSize`) are set
-for the whole controller instead, see
+`filesystem.config.ocm.software` and `oci.cache.config.ocm.software` are deliberately **not** accepted. The OCI caches,
+their remote policy, time to live, and size limits are set for the whole controller instead, see
 [Caching]({{< relref "docs/reference/configuration/caching.md#configuration-in-the-controller" >}}).
 
 {{<callout context="caution" title="Shared OCI cache" icon="outline/alert-triangle">}}
