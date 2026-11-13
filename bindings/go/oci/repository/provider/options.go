@@ -114,7 +114,8 @@ func WithBlobCacheOptions(opts *cache.Options) Option {
 // WithOCICacheConfig applies cfg to the blob and the reference cache. The options of
 // [WithBlobCacheOptions] and [WithReferenceCacheOptions] are the defaults it applies to;
 // a cache without options is off unless cfg enables it. cfg only turns off a cache set with
-// [WithBlobCache] or [WithReferenceCaches].
+// [WithBlobCache] or [WithReferenceCaches]. Under remotePolicy Always the provider uses no
+// reference cache, whatever cfg enables.
 func WithOCICacheConfig(cfg *ocicachev1alpha1.Config) Option {
 	return func(o *Options) {
 		o.CacheConfig = cfg
@@ -201,6 +202,11 @@ func enabledCopy(opts *cache.Options, enabled bool) (*cache.Options, bool) {
 		applied = *opts
 	}
 	return &applied, true
+}
+
+// checksRemote reports whether cfg requires remote authorisation on every access.
+func checksRemote(cfg *ocicachev1alpha1.Config) bool {
+	return cfg != nil && cfg.RemotePolicy == ocicachev1alpha1.RemotePolicyAlways
 }
 
 func applyRemotePolicy(opts *cache.Options, cfg *ocicachev1alpha1.Config) {

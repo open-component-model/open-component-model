@@ -24,7 +24,8 @@ func init() {
 	)
 }
 
-// RemotePolicy controls when the OCI caches contact the registry on a cache hit.
+// RemotePolicy controls whether the registry authorizes every access to cached content.
+// Set it to Always where callers with different registry access share the caches.
 //
 // The zero value means [RemotePolicyIfNotPresent].
 // +ocm:jsonschema-gen:enum=IfNotPresent,Always
@@ -33,7 +34,8 @@ type RemotePolicy string
 const (
 	// RemotePolicyIfNotPresent returns cached content without contacting the registry.
 	RemotePolicyIfNotPresent RemotePolicy = "IfNotPresent"
-	// RemotePolicyAlways asks the registry to authorize every cache hit.
+	// RemotePolicyAlways asks the registry to authorize every cache hit. The reference cache is
+	// then off: resolving a tag is the authorization itself.
 	RemotePolicyAlways RemotePolicy = "Always"
 )
 
@@ -49,8 +51,8 @@ type Config struct {
 	// +ocm:jsonschema-gen:enum:deprecated=oci.cache.config.ocm.software
 	Type runtime.Type `json:"type"`
 
-	// RemotePolicy controls when the caches contact the registry on a cache hit:
-	// IfNotPresent (default) or Always. See [RemotePolicy].
+	// RemotePolicy controls whether the registry authorizes every access to cached content:
+	// IfNotPresent (default) or Always. Always turns off the reference cache. See [RemotePolicy].
 	RemotePolicy RemotePolicy `json:"remotePolicy,omitempty"`
 
 	// Blob configures the blob cache.
@@ -93,11 +95,11 @@ type BlobCacheConfig struct {
 // +ocm:jsonschema-gen=true
 type ReferenceCacheConfig struct {
 	// Enabled turns the reference cache on or off. Defaults to true in the CLI and to false
-	// in the controller.
+	// in the controller. The Always remote policy turns it off regardless.
 	Enabled *bool `json:"enabled,omitempty"`
 
-	// TTL is the maximum age of an entry. Under the IfNotPresent remote policy, a tag moved in
-	// the registry resolves to its old digest until the entry expires. Must be positive.
+	// TTL is the maximum age of an entry. A tag moved in the registry resolves to its old
+	// digest until the entry expires. Must be positive.
 	// Defaults to 10m. See [typesv1.Duration] for the accepted forms.
 	TTL *typesv1.Duration `json:"ttl,omitempty"`
 }

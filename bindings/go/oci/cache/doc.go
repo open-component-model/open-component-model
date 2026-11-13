@@ -52,6 +52,8 @@
 //
 //   - [ReferenceCache] is unconditional within its namespace: every
 //     successful upstream resolve is recorded. Under
+//     [RemotePolicyAlways] it records and serves nothing, because a
+//     cached descriptor would skip the registry's access check. Under
 //     [RemotePolicyIfNotPresent] it serves tags from the cache, so a tag
 //     re-pointed upstream stays stale for up to [Options.TTL]. OCM
 //     component versions are tags that are not meant to change, which

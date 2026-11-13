@@ -127,6 +127,10 @@ func TestNewReferenceCaches(t *testing.T) {
 	r.Nil(setup.NewReferenceCaches(t.TempDir(), nil), "the reference cache is off by default")
 	r.Nil(setup.NewReferenceCaches(t.TempDir(), &ocicachev1alpha1.Config{Blob: &ocicachev1alpha1.BlobCacheConfig{Enabled: new(true)}}))
 	r.NotNil(setup.NewReferenceCaches(t.TempDir(), &ocicachev1alpha1.Config{Reference: &ocicachev1alpha1.ReferenceCacheConfig{Enabled: new(true)}}))
+	r.Nil(setup.NewReferenceCaches(t.TempDir(), &ocicachev1alpha1.Config{
+		RemotePolicy: ocicachev1alpha1.RemotePolicyAlways,
+		Reference:    &ocicachev1alpha1.ReferenceCacheConfig{Enabled: new(true)},
+	}), "Always leaves no reference cache")
 }
 
 func TestNewBlobCache_Disabled(t *testing.T) {

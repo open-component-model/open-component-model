@@ -28,6 +28,8 @@ const (
 	// verify the caller is authorised. Mirrors Kubernetes imagePullPolicy:Always.
 	// A [BlobCache] only counts a hit if the caller's repository served the
 	// blob before, so a registry that claims to hold a digest gains nothing.
+	// A [ReferenceCache] serves no hits: resolving a reference is the
+	// access check itself.
 	RemotePolicyAlways RemotePolicy = "Always"
 )
 

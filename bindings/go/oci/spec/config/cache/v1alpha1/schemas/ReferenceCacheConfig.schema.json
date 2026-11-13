@@ -8,11 +8,11 @@
   "properties": {
     "enabled": {
       "type": "boolean",
-      "description": "Enabled turns the reference cache on or off. Defaults to true in the CLI and to false\nin the controller."
+      "description": "Enabled turns the reference cache on or off. Defaults to true in the CLI and to false\nin the controller. The Always remote policy turns it off regardless."
     },
     "ttl": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.types.v1.Duration",
-      "description": "TTL is the maximum age of an entry. Under the IfNotPresent remote policy, a tag moved in\nthe registry resolves to its old digest until the entry expires. Must be positive.\nDefaults to 10m. See [typesv1.Duration] for the accepted forms."
+      "description": "TTL is the maximum age of an entry. A tag moved in the registry resolves to its old\ndigest until the entry expires. Must be positive.\nDefaults to 10m. See [typesv1.Duration] for the accepted forms."
     }
   },
   "additionalProperties": false,

@@ -298,8 +298,11 @@ func main() {
 		setupLog.Info("OCI blob caching is disabled by configuration")
 	}
 	referenceCaches := setup.NewReferenceCaches("", ociCacheConfig)
-	if referenceCaches != nil {
+	switch {
+	case referenceCaches != nil:
 		setupLog.Info("OCI reference caching is enabled by configuration: a moved tag resolves to its old digest until the cache entry expires")
+	case ociCacheConfig.ReferenceEnabled(false):
+		setupLog.Info("OCI reference caching is off: remotePolicy Always resolves every tag against the registry")
 	}
 	newPluginManager := func(ctx context.Context, cfg *genericv1.Config) (*manager.PluginManager, error) {
 		return setup.NewPluginManager(ctx, cfg, pluginLogger, setup.WithBlobCache(blobCache), setup.WithReferenceCaches(referenceCaches))

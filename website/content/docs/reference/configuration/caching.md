@@ -37,8 +37,8 @@ do not run into registry rate limits. A tag moved to a new digest in the registr
 entry expires, see [Moved Tags](#moved-tags).
 
 The reference cache has one instance per repository location (`hostname[:port]/path`). Credentials are not part of
-the key, so rotating short-lived tokens does not make the cache useless. Use the `Always` [remote policy](#remote-policy)
-when every access must be authorized by the registry.
+the key, so rotating short-lived tokens does not make the cache useless. The `Always` [remote policy](#remote-policy),
+which has the registry authorize every access, turns off the reference cache.
 
 The controller uses only the blob cache unless the [configuration](#configuration-in-the-controller) turns on the
 reference cache. One instance of each serves every namespace.
@@ -136,13 +136,14 @@ All other blobs are downloaded from the registry every time.
 
 ## Remote Policy
 
-The remote policy decides whether OCM contacts the registry when it finds an entry in the cache. The default is
+The remote policy decides whether the registry authorizes every access to cached content. Use `Always` where callers
+with different registry access share the caches, such as the namespaces served by the controller. The default is
 `IfNotPresent` for both the CLI and the controller.
 
-| Policy         | Blob cache hit                                                                                                                                                 | Reference cache                                                                   |
-|----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------|
-| `IfNotPresent` | Returns the cached blob without contacting the registry.                                                                                                       | Returns the cached descriptor of a tag or digest without contacting the registry. |
-| `Always`       | Checks that the blob exists and is accessible in the registry, then returns the cached blob without downloading it again. If the check fails, the fetch fails. | Always resolves against the registry and updates the cache with the result.       |
+| Policy         | Blob cache hit                                                                                                                                                 | Reference cache                                                                                       |
+|----------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------|
+| `IfNotPresent` | Returns the cached blob without contacting the registry.                                                                                                       | Returns the cached descriptor of a tag or digest without contacting the registry.                     |
+| `Always`       | Checks that the blob exists and is accessible in the registry, then returns the cached blob without downloading it again. If the check fails, the fetch fails. | Off. Resolving a tag or digest is the registry's access check, so every resolve goes to the registry. |
 
 With `IfNotPresent`, anyone who can read the cache directory can read cached manifests and component descriptors
 without registry access. On macOS `$TMPDIR` is per user, but on Linux the default `/tmp` is shared by all users. On
@@ -161,8 +162,7 @@ at once.
 If you publish component versions again, read them with one of these:
 
 - a shorter `reference.ttl`, which bounds how long a moved tag stays stale;
-- `reference.enabled: false`, which resolves every tag against the registry;
-- `remotePolicy: Always`, which also resolves every tag against the registry.
+- `reference.enabled: false`, which resolves every tag against the registry.
 
 ## Configuration
 
@@ -184,11 +184,11 @@ configurations:
 
 All fields are optional. An omitted field keeps its default.
 
-| Field          | Type                       | Default        | Description                                                                  |
-|----------------|----------------------------|----------------|------------------------------------------------------------------------------|
-| `remotePolicy` | `IfNotPresent` or `Always` | `IfNotPresent` | [Remote policy](#remote-policy) of the blob cache and every reference cache. |
-| `blob`         | object                     |                | The blob cache, see below.                                                   |
-| `reference`    | object                     |                | The reference cache, see below.                                              |
+| Field          | Type                       | Default        | Description                                                                                                            |
+|----------------|----------------------------|----------------|------------------------------------------------------------------------------------------------------------------------|
+| `remotePolicy` | `IfNotPresent` or `Always` | `IfNotPresent` | [Remote policy](#remote-policy): whether the registry authorizes every access. `Always` turns off the reference cache. |
+| `blob`         | object                     |                | The blob cache, see below.                                                                                             |
+| `reference`    | object                     |                | The reference cache, see below.                                                                                        |
 
 Fields of `blob`:
 
@@ -201,10 +201,10 @@ Fields of `blob`:
 
 Fields of `reference`:
 
-| Field     | Type                                                             | Default                            | Description                                                                                                          |
-|-----------|------------------------------------------------------------------|------------------------------------|----------------------------------------------------------------------------------------------------------------------|
-| `enabled` | boolean                                                          | `true` (CLI), `false` (controller) | `false` turns off the reference cache: every tag and digest is resolved against the registry.                        |
-| `ttl`     | duration string such as `30s` or `1h30m`, or integer nanoseconds | `10m`                              | Time to live of the entries. With `IfNotPresent`, how long a [moved tag](#moved-tags) stays stale. Must be positive. |
+| Field     | Type                                                             | Default                            | Description                                                                                                                                   |
+|-----------|------------------------------------------------------------------|------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
+| `enabled` | boolean                                                          | `true` (CLI), `false` (controller) | `false` turns off the reference cache: every tag and digest is resolved against the registry. `remotePolicy: Always` turns it off regardless. |
+| `ttl`     | duration string such as `30s` or `1h30m`, or integer nanoseconds | `10m`                              | Time to live of the entries: how long a [moved tag](#moved-tags) stays stale. Must be positive.                                               |
 
 An unknown `remotePolicy`, a `ttl` that is not a positive duration, a `maxBlobSize` that is not positive, or a
 negative `maxTotalSize` makes the CLI and the controller fail at startup, even if a later entry overrides it. To use a
@@ -249,9 +249,9 @@ directly, for example with `kubectl edit`, restarts nothing: the controller pick
 The controller uses only the blob cache by default. The blob cache lives in the pod's `tmp` volume and counts against
 its ephemeral storage: keep `blob.maxTotalSize` below an ephemeral-storage limit set on the pod.
 
-`reference.enabled: true` turns on the reference cache in the controller. It saves the registry request that resolves
-the tag of a component version on every reconciliation, but a [moved tag](#moved-tags) is then picked up only after
-`reference.ttl`.
+`reference.enabled: true` turns on the reference cache in the controller, unless `remotePolicy` is `Always`. It
+saves the registry request that resolves the tag of a component version on every reconciliation, but a
+[moved tag](#moved-tags) is then picked up only after `reference.ttl`.
 `oci.cache.config.ocm.software` is the only type accepted here. Any other type, or an invalid field, results in a
 startup error.
 

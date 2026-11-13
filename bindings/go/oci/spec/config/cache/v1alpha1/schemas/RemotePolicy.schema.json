@@ -4,14 +4,14 @@
   "$id": "ocm.software/open-component-model/bindings/go/oci/spec/config/cache/v1alpha1/schemas/RemotePolicy.schema.json",
   "title": "RemotePolicy",
   "type": "string",
-  "description": "RemotePolicy controls when the OCI caches contact the registry on a cache hit.\n\nThe zero value means [RemotePolicyIfNotPresent].",
+  "description": "RemotePolicy controls whether the registry authorizes every access to cached content.\nSet it to Always where callers with different registry access share the caches.\n\nThe zero value means [RemotePolicyIfNotPresent].",
   "oneOf": [
     {
       "description": "RemotePolicyIfNotPresent returns cached content without contacting the registry.",
       "const": "IfNotPresent"
     },
     {
-      "description": "RemotePolicyAlways asks the registry to authorize every cache hit.",
+      "description": "RemotePolicyAlways asks the registry to authorize every cache hit. The reference cache is\nthen off: resolving a tag is the authorization itself.",
       "const": "Always"
     }
   ]

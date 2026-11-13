@@ -14,7 +14,7 @@ import (
 func TestWithOCICacheConfig(t *testing.T) {
 	always := &ocicachev1alpha1.Config{RemotePolicy: ocicachev1alpha1.RemotePolicyAlways}
 	all := &ocicachev1alpha1.Config{
-		RemotePolicy: ocicachev1alpha1.RemotePolicyAlways,
+		RemotePolicy: ocicachev1alpha1.RemotePolicyIfNotPresent,
 		Blob: &ocicachev1alpha1.BlobCacheConfig{
 			TTL:          typesv1.NewDuration(time.Hour),
 			MaxBlobSize:  new(int64(1024)),
@@ -37,16 +37,23 @@ func TestWithOCICacheConfig(t *testing.T) {
 		wantRef  *cache.Options
 	}{
 		{
-			name:     "policy applied to both caches",
+			name:     "Always leaves no reference cache",
 			opts:     append(bothCaches, WithOCICacheConfig(always)),
 			wantBlob: &cache.Options{RemotePolicy: cache.RemotePolicyAlways},
-			wantRef:  &cache.Options{RemotePolicy: cache.RemotePolicyAlways},
+		},
+		{
+			name: "Always leaves no reference cache even if enabled",
+			opts: append(bothCaches, WithOCICacheConfig(&ocicachev1alpha1.Config{
+				RemotePolicy: ocicachev1alpha1.RemotePolicyAlways,
+				Reference:    &ocicachev1alpha1.ReferenceCacheConfig{Enabled: new(true)},
+			})),
+			wantBlob: &cache.Options{RemotePolicy: cache.RemotePolicyAlways},
 		},
 		{
 			name:     "each section applies to its cache",
 			opts:     append(bothCaches, WithOCICacheConfig(all)),
-			wantBlob: &cache.Options{RemotePolicy: cache.RemotePolicyAlways, TTL: time.Hour, MaxBlobSize: 1024, MaxTotalSize: 4096},
-			wantRef:  &cache.Options{RemotePolicy: cache.RemotePolicyAlways, TTL: time.Minute},
+			wantBlob: &cache.Options{RemotePolicy: cache.RemotePolicyIfNotPresent, TTL: time.Hour, MaxBlobSize: 1024, MaxTotalSize: 4096},
+			wantRef:  &cache.Options{RemotePolicy: cache.RemotePolicyIfNotPresent, TTL: time.Minute},
 		},
 		{
 			name: "unset fields keep the options",
@@ -111,6 +118,11 @@ func TestWithOCICacheConfig(t *testing.T) {
 		rc := NewReferenceCaches(t.TempDir(), cache.Options{})
 		r.Same(rc, NewComponentVersionRepositoryProvider(WithReferenceCaches(rc)).referenceCaches)
 		r.Nil(NewComponentVersionRepositoryProvider(WithReferenceCaches(rc), WithOCICacheConfig(enabled(true, false))).referenceCaches)
+		r.Nil(NewComponentVersionRepositoryProvider(WithReferenceCaches(rc), WithOCICacheConfig(always)).referenceCaches)
+	})
+
+	t.Run("no reference caches under Always", func(t *testing.T) {
+		require.Nil(t, NewReferenceCaches(t.TempDir(), cache.Options{RemotePolicy: cache.RemotePolicyAlways}))
 	})
 
 	t.Run("shared options are not mutated", func(t *testing.T) {
