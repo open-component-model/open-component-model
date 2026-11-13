@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"oras.land/oras-go/v2/registry/remote"
+	"github.com/oras-project/oras-go/v3/registry/remote"
 
 	"ocm.software/open-component-model/bindings/go/ctf"
 	"ocm.software/open-component-model/bindings/go/oci"
@@ -110,9 +110,7 @@ func NewResolver(_ context.Context, client remote.Client, repository *ocirepospe
 	if purl.Scheme != "" {
 		// Note, baseURL here might already be trimmed, but to keep this if simple and clean, we call trim anyways.
 		opts = append(opts, urlresolver.WithBaseURL(strings.TrimPrefix(baseURL, purl.Scheme+"://")))
-		if purl.Scheme == "http" {
-			opts = append(opts, urlresolver.WithPlainHTTP(true))
-		}
+		opts = append(opts, urlresolver.WithBaseURLScheme(purl.Scheme))
 	} else {
 		opts = append(opts, urlresolver.WithBaseURL(baseURL))
 	}

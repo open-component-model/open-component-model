@@ -26,6 +26,6 @@
 //	ociRepo := &ocirepospecv1.Repository{
 //		BaseUrl: "https://registry.example.com",
 //	}
-//	client := remote.NewRepository("registry.example.com").Client
+//	client := &auth.Client{CredentialFunc: credentialFunc}
 //	repo, err := NewFromOCIRepoV1(ctx, ociRepo, client)
 package repository

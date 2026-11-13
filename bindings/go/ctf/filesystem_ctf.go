@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -127,11 +128,11 @@ func (c *FileSystemCTF) SetIndex(_ context.Context, index v1.Index) (err error) 
 // If the directory does not exist, it will be created.
 // Always uses atomic write (temp file + rename) for safe concurrent access.
 func (c *FileSystemCTF) writeFile(name string, raw io.Reader, size int64) error {
-	staged, err := c.stageFile(filepath.Dir(name), "."+filepath.Base(name)+".*", raw, size)
+	staged, err := c.stageFile(path.Dir(name), "."+path.Base(name)+".*", raw, size)
 	if err != nil {
 		return err
 	}
-	if err := publishFile(staged, filepath.Base(name)); err != nil {
+	if err := publishFile(staged, path.Base(name)); err != nil {
 		return errors.Join(err, os.Remove(staged))
 	}
 	return nil
@@ -180,7 +181,7 @@ func publishFile(staged, fileName string) error {
 	if err := os.Chmod(staged, 0o444); err != nil {
 		return fmt.Errorf("unable to make temp file readonly: %w", err)
 	}
-	if err := os.Rename(staged, filepath.Join(filepath.Dir(staged), fileName)); err != nil {
+	if err := replaceFile(staged, filepath.Join(filepath.Dir(staged), fileName)); err != nil {
 		return fmt.Errorf("unable to rename temp file: %w", err)
 	}
 	return nil
@@ -221,7 +222,7 @@ func (c *FileSystemCTF) DeleteBlob(_ context.Context, digest string) (err error)
 	if err != nil {
 		return err
 	}
-	if err = c.remFS.Remove(filepath.Join(BlobsDirectoryName, file)); err != nil {
+	if err = c.remFS.Remove(path.Join(BlobsDirectoryName, file)); err != nil {
 		return fmt.Errorf("unable to delete blob: %w", err)
 	}
 
@@ -238,15 +239,15 @@ func (c *FileSystemCTF) GetBlob(_ context.Context, digest string) (blob.ReadOnly
 	if err != nil {
 		return nil, err
 	}
-	path := filepath.Join(BlobsDirectoryName, file)
-	if _, err := c.statFS.Stat(path); err != nil {
+	name := path.Join(BlobsDirectoryName, file)
+	if _, err := c.statFS.Stat(name); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, fmt.Errorf("blob %s not found: %w", digest, err)
 		}
 		return nil, fmt.Errorf("unable to stat blob: %w", err)
 	}
 
-	b := NewCASFileBlob(c.fs, filepath.Join(BlobsDirectoryName, file))
+	b := NewCASFileBlob(c.fs, name)
 	b.SetPrecalculatedDigest(digest)
 	return b, nil
 }
@@ -363,7 +364,7 @@ func (s *stagedBlob) Publish() error {
 	}
 	s.done = true
 	if s.ctf.statFS != nil {
-		if _, err := s.ctf.statFS.Stat(filepath.Join(BlobsDirectoryName, s.file)); err == nil {
+		if _, err := s.ctf.statFS.Stat(path.Join(BlobsDirectoryName, s.file)); err == nil {
 			return nil
 		}
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	typesv1 "ocm.software/open-component-model/bindings/go/configuration/types/v1"
 	httpspec "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 )
 
@@ -18,7 +19,7 @@ func TestConfig_ParseYAML(t *testing.T) {
 		tests := []struct {
 			name   string
 			yaml   string
-			expect *httpspec.Timeout
+			expect *typesv1.Duration
 		}{
 			{
 				name: "parses string like 5m",
@@ -28,7 +29,7 @@ configurations:
   - type: http.config.ocm.software/v1alpha1
     timeout: 5m
 `,
-				expect: httpspec.NewTimeout(5 * time.Minute),
+				expect: typesv1.NewDuration(5 * time.Minute),
 			},
 			{
 				name: "parses nanoseconds number",
@@ -38,7 +39,7 @@ configurations:
   - type: http.config.ocm.software/v1alpha1
     timeout: 300000000000
 `,
-				expect: httpspec.NewTimeout(5 * time.Minute),
+				expect: typesv1.NewDuration(5 * time.Minute),
 			},
 			{
 				name: "nil when omitted",
@@ -89,17 +90,17 @@ configurations:
 		require.NoError(t, err)
 
 		require.NotNil(t, cfg.Timeout)
-		assert.Equal(t, httpspec.Timeout(2*time.Minute), *cfg.Timeout)
+		assert.Equal(t, typesv1.Duration(2*time.Minute), *cfg.Timeout)
 		require.NotNil(t, cfg.TCPDialTimeout)
-		assert.Equal(t, httpspec.Timeout(15*time.Second), *cfg.TCPDialTimeout)
+		assert.Equal(t, typesv1.Duration(15*time.Second), *cfg.TCPDialTimeout)
 		require.NotNil(t, cfg.TCPKeepAlive)
-		assert.Equal(t, httpspec.Timeout(30*time.Second), *cfg.TCPKeepAlive)
+		assert.Equal(t, typesv1.Duration(30*time.Second), *cfg.TCPKeepAlive)
 		require.NotNil(t, cfg.TLSHandshakeTimeout)
-		assert.Equal(t, httpspec.Timeout(5*time.Second), *cfg.TLSHandshakeTimeout)
+		assert.Equal(t, typesv1.Duration(5*time.Second), *cfg.TLSHandshakeTimeout)
 		require.NotNil(t, cfg.ResponseHeaderTimeout)
-		assert.Equal(t, httpspec.Timeout(10*time.Second), *cfg.ResponseHeaderTimeout)
+		assert.Equal(t, typesv1.Duration(10*time.Second), *cfg.ResponseHeaderTimeout)
 		require.NotNil(t, cfg.IdleConnTimeout)
-		assert.Equal(t, httpspec.Timeout(60*time.Second), *cfg.IdleConnTimeout)
+		assert.Equal(t, typesv1.Duration(60*time.Second), *cfg.IdleConnTimeout)
 	})
 
 	t.Run("transport-level timeouts nil when omitted", func(t *testing.T) {
@@ -118,7 +119,7 @@ configurations:
 		require.NoError(t, err)
 
 		require.NotNil(t, cfg.Timeout)
-		assert.Equal(t, httpspec.Timeout(30*time.Second), *cfg.Timeout)
+		assert.Equal(t, typesv1.Duration(30*time.Second), *cfg.Timeout)
 		assert.Nil(t, cfg.TCPDialTimeout)
 		assert.Nil(t, cfg.TCPKeepAlive)
 		assert.Nil(t, cfg.TLSHandshakeTimeout)
@@ -146,14 +147,14 @@ configurations:
 		require.NoError(t, err)
 
 		require.NotNil(t, cfg.Timeout)
-		assert.Equal(t, httpspec.Timeout(30*time.Second), *cfg.Timeout)
+		assert.Equal(t, typesv1.Duration(30*time.Second), *cfg.Timeout)
 		require.Contains(t, cfg.Hosts, "ghcr.io:443")
 
 		host := cfg.Hosts["ghcr.io:443"]
 		require.NotNil(t, host.Timeout)
-		assert.Equal(t, httpspec.Timeout(60*time.Second), *host.Timeout)
+		assert.Equal(t, typesv1.Duration(60*time.Second), *host.Timeout)
 		require.NotNil(t, host.TLSHandshakeTimeout)
-		assert.Equal(t, httpspec.Timeout(5*time.Second), *host.TLSHandshakeTimeout)
+		assert.Equal(t, typesv1.Duration(5*time.Second), *host.TLSHandshakeTimeout)
 	})
 
 	t.Run("invalid", func(t *testing.T) {
@@ -170,7 +171,7 @@ configurations:
   - type: http.config.ocm.software/v1alpha1
     timeout: 1Gb
 `,
-				expectMsg: `invalid timeout value "1Gb": must be a duration like 30s, 5m, or nanoseconds number`,
+				expectMsg: `invalid duration "1Gb"`,
 			},
 			{
 				name: "rejects non-duration string",
@@ -180,7 +181,7 @@ configurations:
   - type: http.config.ocm.software/v1alpha1
     timeout: notaduration
 `,
-				expectMsg: `invalid timeout value "notaduration": must be a duration like 30s, 5m, or nanoseconds number`,
+				expectMsg: `invalid duration "notaduration"`,
 			},
 			{
 				name: "rejects non-string non-number type",
@@ -190,7 +191,7 @@ configurations:
   - type: http.config.ocm.software/v1alpha1
     timeout: true
 `,
-				expectMsg: `timeout must be a duration string or nanoseconds number, got bool`,
+				expectMsg: `duration must be a string like 30s or a number of nanoseconds, got bool`,
 			},
 		}
 
@@ -237,9 +238,9 @@ configurations:
 		cfg, err := httpspec.ResolveHTTPConfig(&generic)
 		require.NoError(t, err)
 		require.NotNil(t, cfg.Timeout)
-		assert.Equal(t, httpspec.Timeout(1*time.Minute), *cfg.Timeout)
+		assert.Equal(t, typesv1.Duration(1*time.Minute), *cfg.Timeout)
 		require.NotNil(t, cfg.TCPDialTimeout)
-		assert.Equal(t, httpspec.Timeout(5*time.Second), *cfg.TCPDialTimeout)
+		assert.Equal(t, typesv1.Duration(5*time.Second), *cfg.TCPDialTimeout)
 		require.Contains(t, cfg.Hosts, "ghcr.io:443")
 	})
 
@@ -285,29 +286,29 @@ func TestMerge(t *testing.T) {
 	t.Run("last non-nil pointer wins for timeouts", func(t *testing.T) {
 		a := &httpspec.Config{
 			TimeoutConfig: httpspec.TimeoutConfig{
-				Timeout:        httpspec.NewTimeout(1 * time.Minute),
-				TCPDialTimeout: httpspec.NewTimeout(10 * time.Second),
-				TCPKeepAlive:   httpspec.NewTimeout(15 * time.Second),
+				Timeout:        typesv1.NewDuration(1 * time.Minute),
+				TCPDialTimeout: typesv1.NewDuration(10 * time.Second),
+				TCPKeepAlive:   typesv1.NewDuration(15 * time.Second),
 			},
 		}
 		b := &httpspec.Config{
 			TimeoutConfig: httpspec.TimeoutConfig{
-				Timeout:             httpspec.NewTimeout(2 * time.Minute),
-				TCPDialTimeout:      httpspec.NewTimeout(20 * time.Second),
-				TLSHandshakeTimeout: httpspec.NewTimeout(5 * time.Second),
+				Timeout:             typesv1.NewDuration(2 * time.Minute),
+				TCPDialTimeout:      typesv1.NewDuration(20 * time.Second),
+				TLSHandshakeTimeout: typesv1.NewDuration(5 * time.Second),
 			},
 		}
 
 		merged := httpspec.Merge(a, b)
 
 		require.NotNil(t, merged.Timeout)
-		assert.Equal(t, httpspec.Timeout(2*time.Minute), *merged.Timeout)
+		assert.Equal(t, typesv1.Duration(2*time.Minute), *merged.Timeout)
 		require.NotNil(t, merged.TCPDialTimeout)
-		assert.Equal(t, httpspec.Timeout(20*time.Second), *merged.TCPDialTimeout)
+		assert.Equal(t, typesv1.Duration(20*time.Second), *merged.TCPDialTimeout)
 		require.NotNil(t, merged.TCPKeepAlive)
-		assert.Equal(t, httpspec.Timeout(15*time.Second), *merged.TCPKeepAlive)
+		assert.Equal(t, typesv1.Duration(15*time.Second), *merged.TCPKeepAlive)
 		require.NotNil(t, merged.TLSHandshakeTimeout)
-		assert.Equal(t, httpspec.Timeout(5*time.Second), *merged.TLSHandshakeTimeout)
+		assert.Equal(t, typesv1.Duration(5*time.Second), *merged.TLSHandshakeTimeout)
 		assert.Nil(t, merged.ResponseHeaderTimeout)
 		assert.Nil(t, merged.IdleConnTimeout)
 	})
@@ -315,32 +316,32 @@ func TestMerge(t *testing.T) {
 	t.Run("nil fields do not override", func(t *testing.T) {
 		a := &httpspec.Config{
 			TimeoutConfig: httpspec.TimeoutConfig{
-				IdleConnTimeout: httpspec.NewTimeout(90 * time.Second),
+				IdleConnTimeout: typesv1.NewDuration(90 * time.Second),
 			},
 		}
 		b := &httpspec.Config{
 			TimeoutConfig: httpspec.TimeoutConfig{
-				Timeout: httpspec.NewTimeout(30 * time.Second),
+				Timeout: typesv1.NewDuration(30 * time.Second),
 			},
 		}
 
 		merged := httpspec.Merge(a, b)
 
 		require.NotNil(t, merged.Timeout)
-		assert.Equal(t, httpspec.Timeout(30*time.Second), *merged.Timeout)
+		assert.Equal(t, typesv1.Duration(30*time.Second), *merged.Timeout)
 		require.NotNil(t, merged.IdleConnTimeout)
-		assert.Equal(t, httpspec.Timeout(90*time.Second), *merged.IdleConnTimeout)
+		assert.Equal(t, typesv1.Duration(90*time.Second), *merged.IdleConnTimeout)
 	})
 
 	t.Run("hosts merge maps", func(t *testing.T) {
 		a := &httpspec.Config{
 			Hosts: map[string]*httpspec.HostConfig{
-				"a.com": {TimeoutConfig: httpspec.TimeoutConfig{Timeout: httpspec.NewTimeout(10 * time.Second)}},
+				"a.com": {TimeoutConfig: httpspec.TimeoutConfig{Timeout: typesv1.NewDuration(10 * time.Second)}},
 			},
 		}
 		b := &httpspec.Config{
 			Hosts: map[string]*httpspec.HostConfig{
-				"b.com": {TimeoutConfig: httpspec.TimeoutConfig{IdleConnTimeout: httpspec.NewTimeout(60 * time.Second)}},
+				"b.com": {TimeoutConfig: httpspec.TimeoutConfig{IdleConnTimeout: typesv1.NewDuration(60 * time.Second)}},
 			},
 		}
 
@@ -348,27 +349,27 @@ func TestMerge(t *testing.T) {
 
 		require.Len(t, merged.Hosts, 2)
 		require.NotNil(t, merged.Hosts["a.com"].Timeout)
-		assert.Equal(t, httpspec.Timeout(10*time.Second), *merged.Hosts["a.com"].Timeout)
+		assert.Equal(t, typesv1.Duration(10*time.Second), *merged.Hosts["a.com"].Timeout)
 		require.NotNil(t, merged.Hosts["b.com"].IdleConnTimeout)
-		assert.Equal(t, httpspec.Timeout(60*time.Second), *merged.Hosts["b.com"].IdleConnTimeout)
+		assert.Equal(t, typesv1.Duration(60*time.Second), *merged.Hosts["b.com"].IdleConnTimeout)
 	})
 
 	t.Run("nil element is skipped", func(t *testing.T) {
 		a := &httpspec.Config{
 			TimeoutConfig: httpspec.TimeoutConfig{
-				Timeout: httpspec.NewTimeout(10 * time.Second),
+				Timeout: typesv1.NewDuration(10 * time.Second),
 			},
 		}
 		b := &httpspec.Config{
 			TimeoutConfig: httpspec.TimeoutConfig{
-				IdleConnTimeout: httpspec.NewTimeout(60 * time.Second),
+				IdleConnTimeout: typesv1.NewDuration(60 * time.Second),
 			},
 		}
 		merged := httpspec.Merge(a, nil, b)
 		require.NotNil(t, merged.Timeout)
-		assert.Equal(t, httpspec.Timeout(10*time.Second), *merged.Timeout)
+		assert.Equal(t, typesv1.Duration(10*time.Second), *merged.Timeout)
 		require.NotNil(t, merged.IdleConnTimeout)
-		assert.Equal(t, httpspec.Timeout(60*time.Second), *merged.IdleConnTimeout)
+		assert.Equal(t, typesv1.Duration(60*time.Second), *merged.IdleConnTimeout)
 	})
 
 	t.Run("empty returns nil", func(t *testing.T) {
@@ -378,36 +379,36 @@ func TestMerge(t *testing.T) {
 	t.Run("last non-nil wins across three configs", func(t *testing.T) {
 		a := &httpspec.Config{
 			TimeoutConfig: httpspec.TimeoutConfig{
-				Timeout:        httpspec.NewTimeout(1 * time.Minute),
-				TCPDialTimeout: httpspec.NewTimeout(10 * time.Second),
-				TCPKeepAlive:   httpspec.NewTimeout(15 * time.Second),
+				Timeout:        typesv1.NewDuration(1 * time.Minute),
+				TCPDialTimeout: typesv1.NewDuration(10 * time.Second),
+				TCPKeepAlive:   typesv1.NewDuration(15 * time.Second),
 			},
 		}
 		b := &httpspec.Config{
 			TimeoutConfig: httpspec.TimeoutConfig{
-				TCPDialTimeout:      httpspec.NewTimeout(20 * time.Second),
-				TLSHandshakeTimeout: httpspec.NewTimeout(5 * time.Second),
+				TCPDialTimeout:      typesv1.NewDuration(20 * time.Second),
+				TLSHandshakeTimeout: typesv1.NewDuration(5 * time.Second),
 			},
 		}
 		c := &httpspec.Config{
 			TimeoutConfig: httpspec.TimeoutConfig{
-				Timeout:         httpspec.NewTimeout(3 * time.Minute),
-				IdleConnTimeout: httpspec.NewTimeout(90 * time.Second),
+				Timeout:         typesv1.NewDuration(3 * time.Minute),
+				IdleConnTimeout: typesv1.NewDuration(90 * time.Second),
 			},
 		}
 
 		merged := httpspec.Merge(a, b, c)
 
 		require.NotNil(t, merged.Timeout)
-		assert.Equal(t, httpspec.Timeout(3*time.Minute), *merged.Timeout, "c overrides a")
+		assert.Equal(t, typesv1.Duration(3*time.Minute), *merged.Timeout, "c overrides a")
 		require.NotNil(t, merged.TCPDialTimeout)
-		assert.Equal(t, httpspec.Timeout(20*time.Second), *merged.TCPDialTimeout, "b overrides a, c does not touch")
+		assert.Equal(t, typesv1.Duration(20*time.Second), *merged.TCPDialTimeout, "b overrides a, c does not touch")
 		require.NotNil(t, merged.TCPKeepAlive)
-		assert.Equal(t, httpspec.Timeout(15*time.Second), *merged.TCPKeepAlive, "carried from a, neither b nor c set it")
+		assert.Equal(t, typesv1.Duration(15*time.Second), *merged.TCPKeepAlive, "carried from a, neither b nor c set it")
 		require.NotNil(t, merged.TLSHandshakeTimeout)
-		assert.Equal(t, httpspec.Timeout(5*time.Second), *merged.TLSHandshakeTimeout, "set only by b")
+		assert.Equal(t, typesv1.Duration(5*time.Second), *merged.TLSHandshakeTimeout, "set only by b")
 		require.NotNil(t, merged.IdleConnTimeout)
-		assert.Equal(t, httpspec.Timeout(90*time.Second), *merged.IdleConnTimeout, "set only by c")
+		assert.Equal(t, typesv1.Duration(90*time.Second), *merged.IdleConnTimeout, "set only by c")
 		assert.Nil(t, merged.ResponseHeaderTimeout, "untouched by any input")
 	})
 }
@@ -416,17 +417,17 @@ func TestTimeoutConfig_Validate(t *testing.T) {
 	t.Run("nil and zero pointers are valid", func(t *testing.T) {
 		assert.NoError(t, (&httpspec.TimeoutConfig{}).Validate())
 		assert.NoError(t, (&httpspec.TimeoutConfig{
-			Timeout:               httpspec.NewTimeout(0),
-			TCPDialTimeout:        httpspec.NewTimeout(0),
-			TLSHandshakeTimeout:   httpspec.NewTimeout(0),
-			ResponseHeaderTimeout: httpspec.NewTimeout(0),
-			IdleConnTimeout:       httpspec.NewTimeout(0),
+			Timeout:               typesv1.NewDuration(0),
+			TCPDialTimeout:        typesv1.NewDuration(0),
+			TLSHandshakeTimeout:   typesv1.NewDuration(0),
+			ResponseHeaderTimeout: typesv1.NewDuration(0),
+			IdleConnTimeout:       typesv1.NewDuration(0),
 		}).Validate())
 	})
 
 	t.Run("negative TCPKeepAlive is allowed (means disabled)", func(t *testing.T) {
 		assert.NoError(t, (&httpspec.TimeoutConfig{
-			TCPKeepAlive: httpspec.NewTimeout(-1 * time.Second),
+			TCPKeepAlive: typesv1.NewDuration(-1 * time.Second),
 		}).Validate())
 	})
 
@@ -435,11 +436,11 @@ func TestTimeoutConfig_Validate(t *testing.T) {
 		field string
 		cfg   httpspec.TimeoutConfig
 	}{
-		{"timeout", "timeout", httpspec.TimeoutConfig{Timeout: httpspec.NewTimeout(-5 * time.Minute)}},
-		{"tcpDialTimeout", "tcpDialTimeout", httpspec.TimeoutConfig{TCPDialTimeout: httpspec.NewTimeout(-10 * time.Second)}},
-		{"tlsHandshakeTimeout", "tlsHandshakeTimeout", httpspec.TimeoutConfig{TLSHandshakeTimeout: httpspec.NewTimeout(-1 * time.Hour)}},
-		{"responseHeaderTimeout", "responseHeaderTimeout", httpspec.TimeoutConfig{ResponseHeaderTimeout: httpspec.NewTimeout(-1 * time.Second)}},
-		{"idleConnTimeout", "idleConnTimeout", httpspec.TimeoutConfig{IdleConnTimeout: httpspec.NewTimeout(-30 * time.Second)}},
+		{"timeout", "timeout", httpspec.TimeoutConfig{Timeout: typesv1.NewDuration(-5 * time.Minute)}},
+		{"tcpDialTimeout", "tcpDialTimeout", httpspec.TimeoutConfig{TCPDialTimeout: typesv1.NewDuration(-10 * time.Second)}},
+		{"tlsHandshakeTimeout", "tlsHandshakeTimeout", httpspec.TimeoutConfig{TLSHandshakeTimeout: typesv1.NewDuration(-1 * time.Hour)}},
+		{"responseHeaderTimeout", "responseHeaderTimeout", httpspec.TimeoutConfig{ResponseHeaderTimeout: typesv1.NewDuration(-1 * time.Second)}},
+		{"idleConnTimeout", "idleConnTimeout", httpspec.TimeoutConfig{IdleConnTimeout: typesv1.NewDuration(-30 * time.Second)}},
 	}
 	for _, tc := range negativeCases {
 		t.Run("rejects negative "+tc.name, func(t *testing.T) {
@@ -453,24 +454,24 @@ func TestTimeoutConfig_Validate(t *testing.T) {
 
 func TestTimeout_MarshalJSON(t *testing.T) {
 	t.Run("marshals to duration string", func(t *testing.T) {
-		d := httpspec.Timeout(30 * time.Second)
+		d := typesv1.Duration(30 * time.Second)
 		b, err := d.MarshalJSON()
 		require.NoError(t, err)
 		assert.Equal(t, `"30s"`, string(b))
 	})
 
 	t.Run("zero marshals to 0s", func(t *testing.T) {
-		d := httpspec.Timeout(0)
+		d := typesv1.Duration(0)
 		b, err := d.MarshalJSON()
 		require.NoError(t, err)
 		assert.Equal(t, `"0s"`, string(b))
 	})
 
 	t.Run("round-trips through JSON", func(t *testing.T) {
-		original := httpspec.Timeout(5 * time.Minute)
+		original := typesv1.Duration(5 * time.Minute)
 		b, err := original.MarshalJSON()
 		require.NoError(t, err)
-		var got httpspec.Timeout
+		var got typesv1.Duration
 		require.NoError(t, got.UnmarshalJSON(b))
 		assert.Equal(t, original, got)
 	})
@@ -478,42 +479,42 @@ func TestTimeout_MarshalJSON(t *testing.T) {
 
 func TestMergeTimeoutConfig_NilSrc(t *testing.T) {
 	dst := httpspec.TimeoutConfig{
-		Timeout:        httpspec.NewTimeout(30 * time.Second),
-		TCPDialTimeout: httpspec.NewTimeout(10 * time.Second),
+		Timeout:        typesv1.NewDuration(30 * time.Second),
+		TCPDialTimeout: typesv1.NewDuration(10 * time.Second),
 	}
 	result := httpspec.MergeTimeoutConfig(&dst, nil)
 	require.NotNil(t, result.Timeout)
-	assert.Equal(t, httpspec.Timeout(30*time.Second), *result.Timeout)
+	assert.Equal(t, typesv1.Duration(30*time.Second), *result.Timeout)
 	require.NotNil(t, result.TCPDialTimeout)
-	assert.Equal(t, httpspec.Timeout(10*time.Second), *result.TCPDialTimeout)
+	assert.Equal(t, typesv1.Duration(10*time.Second), *result.TCPDialTimeout)
 }
 
 func TestMerge_SameHostKeyLastWins(t *testing.T) {
 	a := &httpspec.Config{
 		Hosts: map[string]*httpspec.HostConfig{
-			"ghcr.io": {TimeoutConfig: httpspec.TimeoutConfig{Timeout: httpspec.NewTimeout(10 * time.Second)}},
+			"ghcr.io": {TimeoutConfig: httpspec.TimeoutConfig{Timeout: typesv1.NewDuration(10 * time.Second)}},
 		},
 	}
 	b := &httpspec.Config{
 		Hosts: map[string]*httpspec.HostConfig{
-			"ghcr.io": {TimeoutConfig: httpspec.TimeoutConfig{Timeout: httpspec.NewTimeout(60 * time.Second)}},
+			"ghcr.io": {TimeoutConfig: httpspec.TimeoutConfig{Timeout: typesv1.NewDuration(60 * time.Second)}},
 		},
 	}
 	merged := httpspec.Merge(a, b)
 	require.Len(t, merged.Hosts, 1)
 	require.NotNil(t, merged.Hosts["ghcr.io"].Timeout)
-	assert.Equal(t, httpspec.Timeout(60*time.Second), *merged.Hosts["ghcr.io"].Timeout, "b's value must win")
+	assert.Equal(t, typesv1.Duration(60*time.Second), *merged.Hosts["ghcr.io"].Timeout, "b's value must win")
 }
 
 func TestConfig_Validate(t *testing.T) {
 	t.Run("valid global with valid hosts", func(t *testing.T) {
 		cfg := &httpspec.Config{
 			TimeoutConfig: httpspec.TimeoutConfig{
-				Timeout:         httpspec.NewTimeout(30 * time.Second),
-				IdleConnTimeout: httpspec.NewTimeout(90 * time.Second),
+				Timeout:         typesv1.NewDuration(30 * time.Second),
+				IdleConnTimeout: typesv1.NewDuration(90 * time.Second),
 			},
 			Hosts: map[string]*httpspec.HostConfig{
-				"ghcr.io:443": {TimeoutConfig: httpspec.TimeoutConfig{Timeout: httpspec.NewTimeout(60 * time.Second)}},
+				"ghcr.io:443": {TimeoutConfig: httpspec.TimeoutConfig{Timeout: typesv1.NewDuration(60 * time.Second)}},
 			},
 		}
 		assert.NoError(t, cfg.Validate())
@@ -522,7 +523,7 @@ func TestConfig_Validate(t *testing.T) {
 	t.Run("propagates global error", func(t *testing.T) {
 		cfg := &httpspec.Config{
 			TimeoutConfig: httpspec.TimeoutConfig{
-				Timeout: httpspec.NewTimeout(-1 * time.Second),
+				Timeout: typesv1.NewDuration(-1 * time.Second),
 			},
 		}
 		err := cfg.Validate()
@@ -533,7 +534,7 @@ func TestConfig_Validate(t *testing.T) {
 	t.Run("wraps host error with host key", func(t *testing.T) {
 		cfg := &httpspec.Config{
 			Hosts: map[string]*httpspec.HostConfig{
-				"ghcr.io:443": {TimeoutConfig: httpspec.TimeoutConfig{Timeout: httpspec.NewTimeout(-5 * time.Second)}},
+				"ghcr.io:443": {TimeoutConfig: httpspec.TimeoutConfig{Timeout: typesv1.NewDuration(-5 * time.Second)}},
 			},
 		}
 		err := cfg.Validate()
@@ -575,9 +576,9 @@ configurations:
 		require.NotNil(t, cfg.Retry.MaxRetries)
 		assert.Equal(t, 3, *cfg.Retry.MaxRetries)
 		require.NotNil(t, cfg.Retry.MinWait)
-		assert.Equal(t, httpspec.Timeout(100*time.Millisecond), *cfg.Retry.MinWait)
+		assert.Equal(t, typesv1.Duration(100*time.Millisecond), *cfg.Retry.MinWait)
 		require.NotNil(t, cfg.Retry.MaxWait)
-		assert.Equal(t, httpspec.Timeout(5*time.Second), *cfg.Retry.MaxWait)
+		assert.Equal(t, typesv1.Duration(5*time.Second), *cfg.Retry.MaxWait)
 	})
 
 	t.Run("retry omitted leaves Retry nil", func(t *testing.T) {
@@ -644,7 +645,7 @@ configurations:
 		host := cfg.Hosts["ghcr.io:443"]
 		require.NotNil(t, host.Retry)
 		assert.Equal(t, 2, *host.Retry.MaxRetries)
-		assert.Equal(t, httpspec.Timeout(50*time.Millisecond), *host.Retry.MinWait)
+		assert.Equal(t, typesv1.Duration(50*time.Millisecond), *host.Retry.MinWait)
 	})
 }
 
@@ -666,21 +667,21 @@ func TestRetryConfig_Validate(t *testing.T) {
 	})
 
 	t.Run("rejects negative MinWait", func(t *testing.T) {
-		err := (&httpspec.RetryConfig{MinWait: httpspec.NewTimeout(-1 * time.Millisecond)}).Validate()
+		err := (&httpspec.RetryConfig{MinWait: typesv1.NewDuration(-1 * time.Millisecond)}).Validate()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "minWait")
 	})
 
 	t.Run("rejects negative MaxWait", func(t *testing.T) {
-		err := (&httpspec.RetryConfig{MaxWait: httpspec.NewTimeout(-1 * time.Second)}).Validate()
+		err := (&httpspec.RetryConfig{MaxWait: typesv1.NewDuration(-1 * time.Second)}).Validate()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "maxWait")
 	})
 
 	t.Run("rejects MinWait greater than MaxWait", func(t *testing.T) {
 		err := (&httpspec.RetryConfig{
-			MinWait: httpspec.NewTimeout(5 * time.Second),
-			MaxWait: httpspec.NewTimeout(1 * time.Second),
+			MinWait: typesv1.NewDuration(5 * time.Second),
+			MaxWait: typesv1.NewDuration(1 * time.Second),
 		}).Validate()
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "minWait")
@@ -689,8 +690,8 @@ func TestRetryConfig_Validate(t *testing.T) {
 
 	t.Run("equal MinWait and MaxWait is valid", func(t *testing.T) {
 		assert.NoError(t, (&httpspec.RetryConfig{
-			MinWait: httpspec.NewTimeout(1 * time.Second),
-			MaxWait: httpspec.NewTimeout(1 * time.Second),
+			MinWait: typesv1.NewDuration(1 * time.Second),
+			MaxWait: typesv1.NewDuration(1 * time.Second),
 		}).Validate())
 	})
 
@@ -746,17 +747,17 @@ func TestRetryConfig_Merge(t *testing.T) {
 		two := 2
 		dst := &httpspec.RetryConfig{
 			MaxRetries: &five,
-			MinWait:    httpspec.NewTimeout(200 * time.Millisecond),
+			MinWait:    typesv1.NewDuration(200 * time.Millisecond),
 		}
 		src := &httpspec.RetryConfig{
 			MaxRetries: &two,
-			MaxWait:    httpspec.NewTimeout(5 * time.Second),
+			MaxWait:    typesv1.NewDuration(5 * time.Second),
 		}
 		result := httpspec.MergeRetryConfig(dst, src)
 		require.NotNil(t, result)
 		assert.Equal(t, 2, *result.MaxRetries, "src overrides dst")
-		assert.Equal(t, httpspec.Timeout(200*time.Millisecond), *result.MinWait, "dst preserved when src nil")
-		assert.Equal(t, httpspec.Timeout(5*time.Second), *result.MaxWait, "src set")
+		assert.Equal(t, typesv1.Duration(200*time.Millisecond), *result.MinWait, "dst preserved when src nil")
+		assert.Equal(t, typesv1.Duration(5*time.Second), *result.MaxWait, "src set")
 	})
 
 	t.Run("Merge wires RetryConfig", func(t *testing.T) {
@@ -862,6 +863,46 @@ configurations:
 	})
 }
 
+func TestConfig_ParseYAML_PlainHTTP(t *testing.T) {
+	t.Run("plainHTTP true at global scope", func(t *testing.T) {
+		r := require.New(t)
+		yaml := `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    plainHTTP: true
+`
+		var generic genericv1.Config
+		r.NoError(genericv1.Scheme.Decode(strings.NewReader(yaml), &generic))
+		r.Len(generic.Configurations, 1)
+
+		var cfg httpspec.Config
+		r.NoError(httpspec.Scheme.Convert(generic.Configurations[0], &cfg))
+		r.NotNil(cfg.PlainHTTP)
+		r.True(*cfg.PlainHTTP)
+	})
+
+	t.Run("plainHTTP per-host with a port in the key", func(t *testing.T) {
+		r := require.New(t)
+		yaml := `
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    hosts:
+      "registry.local:5000":
+        plainHTTP: true
+`
+		var generic genericv1.Config
+		r.NoError(genericv1.Scheme.Decode(strings.NewReader(yaml), &generic))
+		var cfg httpspec.Config
+		r.NoError(httpspec.Scheme.Convert(generic.Configurations[0], &cfg))
+		r.Nil(cfg.PlainHTTP)
+		r.Contains(cfg.Hosts, "registry.local:5000")
+		r.NotNil(cfg.Hosts["registry.local:5000"].PlainHTTP)
+		r.True(*cfg.Hosts["registry.local:5000"].PlainHTTP)
+	})
+}
+
 func TestMerge_TLS(t *testing.T) {
 	tr := true
 	fa := false
@@ -942,14 +983,14 @@ func TestConfig_ResolveHost(t *testing.T) {
 	five, two, seven := 5, 2, 7
 	tr := true
 	cfg := &httpspec.Config{
-		TimeoutConfig: httpspec.TimeoutConfig{Timeout: httpspec.NewTimeout(30 * time.Second)},
-		Retry:         &httpspec.RetryConfig{MaxRetries: &five, MinWait: httpspec.NewTimeout(200 * time.Millisecond)},
+		TimeoutConfig: httpspec.TimeoutConfig{Timeout: typesv1.NewDuration(30 * time.Second)},
+		Retry:         &httpspec.RetryConfig{MaxRetries: &five, MinWait: typesv1.NewDuration(200 * time.Millisecond)},
 		Hosts: map[string]*httpspec.HostConfig{
 			"example.com": {
 				Retry: &httpspec.RetryConfig{MaxRetries: &two},
 			},
 			"example.com:9000": {
-				TimeoutConfig: httpspec.TimeoutConfig{Timeout: httpspec.NewTimeout(time.Minute)},
+				TimeoutConfig: httpspec.TimeoutConfig{Timeout: typesv1.NewDuration(time.Minute)},
 				TLSConfig:     httpspec.TLSConfig{InsecureSkipVerify: &tr},
 				Retry:         &httpspec.RetryConfig{MaxRetries: &seven},
 			},
@@ -964,7 +1005,7 @@ func TestConfig_ResolveHost(t *testing.T) {
 
 	t.Run("a host with no entry of its own yields the global values", func(t *testing.T) {
 		resolved := cfg.ResolveHost("other.com")
-		assert.Equal(t, httpspec.Timeout(30*time.Second), *resolved.Timeout)
+		assert.Equal(t, typesv1.Duration(30*time.Second), *resolved.Timeout)
 		require.NotNil(t, resolved.Retry)
 		assert.Equal(t, 5, *resolved.Retry.MaxRetries)
 		assert.Nil(t, resolved.InsecureSkipVerify)
@@ -986,8 +1027,8 @@ func TestConfig_ResolveHost(t *testing.T) {
 		resolved := cfg.ResolveHost("example.com")
 		require.NotNil(t, resolved.Retry)
 		assert.Equal(t, 2, *resolved.Retry.MaxRetries, "host overrides global")
-		assert.Equal(t, httpspec.Timeout(200*time.Millisecond), *resolved.Retry.MinWait, "global preserved where host is nil")
-		assert.Equal(t, httpspec.Timeout(30*time.Second), *resolved.Timeout, "global preserved where host is nil")
+		assert.Equal(t, typesv1.Duration(200*time.Millisecond), *resolved.Retry.MinWait, "global preserved where host is nil")
+		assert.Equal(t, typesv1.Duration(30*time.Second), *resolved.Timeout, "global preserved where host is nil")
 	})
 
 	// Which of the two entries wins is [httpspec.HostKeys]'s business and is pinned by
@@ -996,7 +1037,7 @@ func TestConfig_ResolveHost(t *testing.T) {
 		resolved := cfg.ResolveHost("example.com:9000")
 		require.NotNil(t, resolved.Retry)
 		assert.Equal(t, 7, *resolved.Retry.MaxRetries)
-		assert.Equal(t, httpspec.Timeout(time.Minute), *resolved.Timeout)
+		assert.Equal(t, typesv1.Duration(time.Minute), *resolved.Timeout)
 		require.NotNil(t, resolved.InsecureSkipVerify)
 		assert.True(t, *resolved.InsecureSkipVerify)
 	})
@@ -1010,6 +1051,74 @@ func TestConfig_ResolveHost(t *testing.T) {
 	t.Run("does not mutate the config", func(t *testing.T) {
 		_ = cfg.ResolveHost("example.com:9000")
 		assert.Equal(t, 5, *cfg.Retry.MaxRetries)
-		assert.Equal(t, httpspec.Timeout(30*time.Second), *cfg.Timeout)
+		assert.Equal(t, typesv1.Duration(30*time.Second), *cfg.Timeout)
+	})
+}
+
+func TestMerge_PlainHTTP(t *testing.T) {
+	tr := true
+	fa := false
+
+	t.Run("later layer overrides earlier, nil keeps earlier", func(t *testing.T) {
+		r := require.New(t)
+		a := &httpspec.Config{ProtocolConfig: httpspec.ProtocolConfig{PlainHTTP: &tr}}
+		merged := httpspec.Merge(a, &httpspec.Config{})
+		r.NotNil(merged.PlainHTTP)
+		r.True(*merged.PlainHTTP)
+
+		merged = httpspec.Merge(a, &httpspec.Config{ProtocolConfig: httpspec.ProtocolConfig{PlainHTTP: &fa}})
+		r.NotNil(merged.PlainHTTP)
+		r.False(*merged.PlainHTTP)
+	})
+
+	t.Run("host entry overrides global in ResolveHost", func(t *testing.T) {
+		r := require.New(t)
+		cfg := &httpspec.Config{
+			ProtocolConfig: httpspec.ProtocolConfig{PlainHTTP: &tr},
+			Hosts: map[string]*httpspec.HostConfig{
+				"ghcr.io":        {ProtocolConfig: httpspec.ProtocolConfig{PlainHTTP: &fa}},
+				"localhost:5000": {},
+			},
+		}
+		r.False(*cfg.ResolveHost("ghcr.io").PlainHTTP, "host false wins over global true")
+		r.True(*cfg.ResolveHost("localhost:5000").PlainHTTP, "host entry without the field inherits the global value")
+		r.True(*cfg.ResolveHost("other.io").PlainHTTP)
+	})
+
+	t.Run("per-host true without global, bare hostname covers every port", func(t *testing.T) {
+		r := require.New(t)
+		cfg := &httpspec.Config{
+			Hosts: map[string]*httpspec.HostConfig{
+				"registry.local": {ProtocolConfig: httpspec.ProtocolConfig{PlainHTTP: &tr}},
+			},
+		}
+		r.True(*cfg.ResolveHost("registry.local:5000").PlainHTTP)
+		r.True(*cfg.ResolveHost("registry.local").PlainHTTP)
+		r.Nil(cfg.ResolveHost("ghcr.io").PlainHTTP)
+	})
+
+	t.Run("round-trips through JSON", func(t *testing.T) {
+		r := require.New(t)
+		var cfg httpspec.Config
+		r.NoError(json.Unmarshal([]byte(`{"type":"http.config.ocm.software/v1alpha1","plainHTTP":true,"hosts":{"ghcr.io":{"plainHTTP":false}}}`), &cfg))
+		r.True(*cfg.PlainHTTP)
+		r.False(*cfg.Hosts["ghcr.io"].PlainHTTP)
+
+		out, err := json.Marshal(&cfg)
+		r.NoError(err)
+		var again httpspec.Config
+		r.NoError(json.Unmarshal(out, &again))
+		r.True(*again.PlainHTTP)
+		// The explicit per-host false is what keeps HTTPS against the global
+		// true, so it must survive being written out.
+		r.NotNil(again.Hosts["ghcr.io"].PlainHTTP)
+		r.False(*again.Hosts["ghcr.io"].PlainHTTP)
+	})
+
+	t.Run("unset plainHTTP is left out of JSON", func(t *testing.T) {
+		r := require.New(t)
+		out, err := json.Marshal(&httpspec.Config{Hosts: map[string]*httpspec.HostConfig{"ghcr.io": {}}})
+		r.NoError(err)
+		r.NotContains(string(out), "plainHTTP")
 	})
 }
