@@ -19,12 +19,12 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3"
+	"github.com/oras-project/oras-go/v3/content"
+	"github.com/oras-project/oras-go/v3/content/memory"
+	"github.com/oras-project/oras-go/v3/errdef"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2"
-	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/content/memory"
-	"oras.land/oras-go/v2/errdef"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -3024,7 +3024,7 @@ func TestRepositoryHealthCheck(t *testing.T) {
 
 	t.Run("URL resolver health check with invalid URL fails", func(t *testing.T) {
 		// Create a repository with URL resolver pointing to invalid URL
-		resolver, err := url.New(url.WithBaseURL("http://invalid.nonexistent.domain"))
+		resolver, err := url.New(url.WithBaseURL("http://invalid.nonexistent.domain"), url.WithPlainHTTP(true))
 		require.NoError(t, err)
 
 		repo := Repository(t,

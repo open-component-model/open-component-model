@@ -81,7 +81,8 @@ configurations:
     credentials:
     - type: TSACredentials/v1alpha1
       rootCertsPEMFile: %[10]q
-`, registry.Host, registry.Port, registry.User, registry.Password, pubPEM, privPEM,
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`, registry.Host, registry.Port, registry.User, registry.Password, pubPEM, privPEM,
 		tsaServerURL.Hostname(), tsaServerURL.Port(), tsaServerURL.Scheme, writePEMCertFile(t, dir, "tsa-root.pem", tsaCert))), 0o600))
 
 	resolver, err := urlresolver.New(

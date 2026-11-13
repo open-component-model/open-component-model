@@ -70,7 +70,10 @@ get cvs ghcr.io/open-component-model//ocm.software/cli -o widetree --recursive
 Specifying types and schemes:
 
 get cv ctf::github.com/locally-checked-out-repo//ocm.software/cli:0.12.0
-get cvs oci::http://localhost:8080//ocm.software/cli
+get cvs oci::localhost:8080//ocm.software/cli
+
+A registry without TLS needs plainHTTP in the HTTP client configuration; an http:// prefix on the
+repository is deprecated and fails without it (see https://ocm.software/docs/changelog/migrate-from-http-prefixes/).
 ```
 
 ### Options
@@ -116,6 +119,7 @@ get cvs oci::http://localhost:8080//ocm.software/cli
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
+                                              the interactive progress display needs a terminal and the text format; any other format prints its records in full instead
                                            (must be one of [json text]) (default text)
       --loglevel enum                      sets the logging level
                                               debug: Show all logs including detailed debugging information

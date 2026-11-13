@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"path/filepath"
 	"strings"
 
 	"ocm.software/open-component-model/bindings/go/git/internal/endpoint"
@@ -39,15 +40,16 @@ func IdentityFromURL(repository string) (runtime.Identity, error) {
 		return nil, err
 	}
 
-	hostname := ep.Host
+	hostname, path := ep.Host, ep.Path
 	if ep.Protocol == "file" {
-		hostname = "localhost"
+		// Identities match paths with / separators, so a windows path matches the same patterns.
+		hostname, path = "localhost", filepath.ToSlash(path)
 	}
 
 	id := runtime.Identity{
 		runtime.IdentityAttributeHostname: hostname,
 		runtime.IdentityAttributeScheme:   ep.Protocol,
-		runtime.IdentityAttributePath:     strings.TrimPrefix(ep.Path, "/"),
+		runtime.IdentityAttributePath:     strings.TrimPrefix(path, "/"),
 	}
 
 	if port := endpoint.Port(ep); port != "" {

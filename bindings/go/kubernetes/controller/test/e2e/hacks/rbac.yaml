@@ -1,7 +1,14 @@
-# This is the required configuration for our test deployments to work.
-# It is not intended for production use and should not be used as a reference for production RBAC configuration.
-# Out test suite relies on kro for many examples, and the manager needs permissions to manage the custom resources defined by kro,
-# as well as some core Kubernetes resources for its ApplySet operations.
+# Required RBAC for the e2e test deployments. It is NOT intended for production
+# use and should not be copied as a reference for production RBAC.
+#
+# The suite exercises both kro and Crossplane examples. The OCM controller needs
+# permission to manage the custom resources those engines define (kro.run
+# ResourceGraphDefinitions and apiextensions.crossplane.io XRDs/Compositions)
+# plus core Kubernetes resources for its ApplySet operations. Separately, the
+# Crossplane service account needs access to the resources its Compositions
+# create; that grant (crossplane-ocm-resources) is aggregated into the crossplane
+# SA via a label, with no binding. On a shared cluster, scope these down to the
+# groups and namespaces you actually use.
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -62,3 +69,130 @@ subjects:
   - kind: ServiceAccount
     name: ocm-k8s-toolkit-controller-manager
     namespace: ocm-k8s-toolkit-system
+---
+# Grant the OCM controller permission to manage Crossplane XRDs/Compositions
+# (the Crossplane analogue of the kro.run grant above). Bound to the same
+# controller-manager service account.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: controller-manager-crossplane-e2e
+rules:
+  - apiGroups: ["apiextensions.crossplane.io"]
+    resources: ["compositeresourcedefinitions", "compositions"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: controller-manager-crossplane-e2e
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: controller-manager-crossplane-e2e
+subjects:
+  - kind: ServiceAccount
+    name: ocm-k8s-toolkit-controller-manager
+    namespace: ocm-k8s-toolkit-system
+---
+# Crossplane Compositions run under the `crossplane` service account, which by
+# default cannot create the resources they produce, so the XR never becomes
+# Ready. The rbac.crossplane.io/aggregate-to-crossplane label makes Crossplane's
+# RBAC manager fold these rules into the crossplane SA automatically, so no
+# explicit binding is needed. XR/XRD access is already granted by that manager,
+# which is why examples.ocm.software (the XR group) is intentionally omitted.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: crossplane-ocm-resources
+  labels:
+    rbac.crossplane.io/aggregate-to-crossplane: "true"
+rules:
+  - apiGroups: ["delivery.ocm.software"]
+    resources: ["resources", "resources/status"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["source.toolkit.fluxcd.io"]
+    resources: ["ocirepositories", "ocirepositories/status", "gitrepositories", "gitrepositories/status"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["kustomize.toolkit.fluxcd.io"]
+    resources: ["kustomizations", "kustomizations/status"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["helm.toolkit.fluxcd.io"]
+    resources: ["helmreleases", "helmreleases/status"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications", "applications/status"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+---
+# Aggregation-mode RBAC for the kro controller.
+# kro runs with rbac.mode=aggregation (see setup.sh install_kro), which ships kro with only
+# enough access to manage ResourceGraphDefinitions and CustomResourceDefinitions. This
+# ClusterRole is aggregated into kro's controller ClusterRole via the
+# rbac.kro.run/aggregate-to-controller label and grants kro access to every resource type the
+# E2E example RGDs create or read. Not intended for production use.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kro-controller-ocm-e2e
+  labels:
+    rbac.kro.run/aggregate-to-controller: "true"
+rules:
+  # Generated instance CRDs (schema group defaults to kro.run), one plural per RGD schema
+  # kind across examples/ and test/e2e/testdata/. kro reconciles these instances, so it
+  # needs full control plus status/finalizers.
+  - apiGroups: ["kro.run"]
+    resources:
+      - helmsimples
+      - helmnesteds
+      - helmnestedsigneds
+      - helmsignings
+      - helmconfigurationlocalizations
+      - helmsimplenestedstatuses
+      - kustomizeconfigurationlocalizations
+      - kustomizesimples
+      - basicauths
+      - dockerconfigjsons
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["kro.run"]
+    resources:
+      - helmsimples/status
+      - helmnesteds/status
+      - helmnestedsigneds/status
+      - helmsignings/status
+      - helmconfigurationlocalizations/status
+      - helmsimplenestedstatuses/status
+      - kustomizeconfigurationlocalizations/status
+      - kustomizesimples/status
+      - basicauths/status
+      - dockerconfigjsons/status
+      - helmsimples/finalizers
+      - helmnesteds/finalizers
+      - helmnestedsigneds/finalizers
+      - helmsignings/finalizers
+      - helmconfigurationlocalizations/finalizers
+      - helmsimplenestedstatuses/finalizers
+      - kustomizeconfigurationlocalizations/finalizers
+      - kustomizesimples/finalizers
+      - basicauths/finalizers
+      - dockerconfigjsons/finalizers
+    verbs: ["get", "patch", "update"]
+  # OCM resources the RGDs declare (delivery.ocm.software/v1alpha1 Resource).
+  - apiGroups: ["delivery.ocm.software"]
+    resources: ["resources", "resources/status"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  # FluxCD sources the RGDs create.
+  - apiGroups: ["source.toolkit.fluxcd.io"]
+    resources: ["ocirepositories", "gitrepositories"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  # FluxCD Helm appliers the RGDs create.
+  - apiGroups: ["helm.toolkit.fluxcd.io"]
+    resources: ["helmreleases"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  # FluxCD Kustomize appliers the RGDs create.
+  - apiGroups: ["kustomize.toolkit.fluxcd.io"]
+    resources: ["kustomizations"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
+  # ArgoCD Applications the RGDs create.
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]

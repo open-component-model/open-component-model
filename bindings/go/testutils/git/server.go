@@ -1,8 +1,4 @@
-// Package gittest serves Git repositories over HTTP for tests.
-//
-// Git/v1 accesses reject local repositories, so a test that uses a local
-// fixture must serve it under a remote URL.
-package gittest
+package git
 
 import (
 	"crypto/fips140"
@@ -15,16 +11,19 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/transport"
 )
 
-// TestingT is the part of testing.TB that Serve uses. A testing.TB and
-// ginkgo's GinkgoT() satisfy it.
+// TestingT is the part of testing.TB that Serve uses. A testing.TB and ginkgo's
+// GinkgoT() satisfy it.
 type TestingT interface {
 	Helper()
 	Cleanup(func())
 }
 
 // Serve serves the repository at dir over plain HTTP from an in-process go-git
-// backend and returns its URL. dir can be a bare repository or a work tree.
-// The server accepts pushes without credentials and stops when the test ends.
+// backend and returns its URL. dir can be a bare repository or a work tree. The
+// server accepts pushes without credentials and stops when the test ends.
+//
+// Git/v1 accesses reject local repositories, so a test that uses a local fixture
+// must serve it under a remote URL.
 func Serve(t TestingT, dir string) string {
 	t.Helper()
 	b := backend.New(transport.NewFilesystemLoader(osfs.New(filepath.Dir(dir)), false))

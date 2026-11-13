@@ -18,15 +18,19 @@
       }
     },
     "idleConnTimeout": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.types.v1.Duration",
       "description": "IdleConnTimeout is the maximum amount of time an idle\n(keep-alive) connection will remain idle before closing itself.\nZero means no limit."
     },
     "insecureSkipVerify": {
       "type": "boolean",
       "description": "InsecureSkipVerify disables verification of the server's TLS certificate\nchain and host name. Setting this to true makes connections vulnerable to\nactive MITM attacks; use only for development and local registry testing.\nA warning is logged at transport build time and on every new host connection.\n\nNil means \"unset\" (TLS verification stays enabled at the top level). When\nTLSConfig is embedded in HostConfig, nil additionally means \"inherit from\nthe global Config\"; an explicit false on a host re-enables verification\neven when the global config sets true. See HostConfig for per-host merge\nsemantics."
     },
+    "plainHTTP": {
+      "type": "boolean",
+      "description": "PlainHTTP makes OCI registry clients use cleartext HTTP, also for https://\nreferences. Credentials go unencrypted: set it per host, never for a\npublic registry. Helm charts follow it too: an oci:// chart uses the\nsetting for its registry host, and a classic http:// repository URL is\naccepted only when its host is plainHTTP.\n\nNil means HTTPS at the top level and \"inherit\" in a HostConfig; an\nexplicit false on a host wins over a global true.\n\nThis field alone decides the connection. A scheme prefix on a reference\nor base URL is deprecated and only checked against it: http:// on a host\nthat is not plainHTTP is an error, https:// on a plainHTTP host warns\nabout the downgrade. Set this field to true and drop the prefix."
+    },
     "responseHeaderTimeout": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.types.v1.Duration",
       "description": "ResponseHeaderTimeout specifies the amount of time to wait for\na server's response headers after fully writing the request\n(including its body, if any). This time does not include the\ntime to read the response body."
     },
     "retry": {
@@ -42,19 +46,19 @@
       "description": "RootCAsPEMFile is a path to a PEM file with additional root CA certificates.\nSame semantics as RootCAsPEM, but loaded from disk. Ignored when RootCAsPEM\nis also set, and when InsecureSkipVerify is true."
     },
     "tcpDialTimeout": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.types.v1.Duration",
       "description": "TCPDialTimeout is the maximum amount of time a dial will wait\nfor a TCP connect to complete. When dialing a host name with\nmultiple IP addresses, the timeout may be divided between them.\nThe operating system may impose its own earlier timeout."
     },
     "tcpKeepAlive": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.types.v1.Duration",
       "description": "TCPKeepAlive specifies the interval between keep-alive probes\nfor an active network connection. If negative, keep-alive\nprobes are disabled."
     },
     "timeout": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.types.v1.Duration",
       "description": "Timeout specifies a time limit for requests made by the HTTP\nclient. The timeout includes connection time, any redirects,\nand reading the response body. A timeout of zero means no\ntimeout."
     },
     "tlsHandshakeTimeout": {
-      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
+      "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.types.v1.Duration",
       "description": "TLSHandshakeTimeout specifies the maximum amount of time to\nwait for a TLS handshake. Zero means no timeout."
     },
     "type": {
@@ -75,6 +79,27 @@
   ],
   "additionalProperties": false,
   "$defs": {
+    "ocm.software.open-component-model.bindings.go.configuration.types.v1.Duration": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "$comment": "Duration is a Go time.Duration that marshals as a duration string (e.g. \"30s\", \"5m\", \"1h\") and also accepts a nanoseconds integer.",
+      "title": "Duration",
+      "description": "Duration is a Go duration string such as 30s, 5m or 1h30m, or an integer number of nanoseconds.",
+      "anyOf": [
+        {
+          "type": "string",
+          "examples": [
+            "30s",
+            "5m",
+            "1h30m",
+            "0s"
+          ]
+        },
+        {
+          "type": "integer",
+          "description": "Duration in nanoseconds."
+        }
+      ]
+    },
     "ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.HostConfig": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$comment": "generated by the ocm schema generation tool",
@@ -87,15 +112,19 @@
           "description": "DisableHTTP2 restricts the client to HTTP/1.1. By default HTTP/2 is\nnegotiated via TLS ALPN, which multiplexes every concurrent request to a\nhost over one TCP connection: a single connection loss or GOAWAY then\naffects all in-flight transfers at once. With HTTP/1.1 each concurrent\nrequest uses its own connection, at the cost of more TLS handshakes."
         },
         "idleConnTimeout": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.types.v1.Duration",
           "description": "IdleConnTimeout is the maximum amount of time an idle\n(keep-alive) connection will remain idle before closing itself.\nZero means no limit."
         },
         "insecureSkipVerify": {
           "type": "boolean",
           "description": "InsecureSkipVerify disables verification of the server's TLS certificate\nchain and host name. Setting this to true makes connections vulnerable to\nactive MITM attacks; use only for development and local registry testing.\nA warning is logged at transport build time and on every new host connection.\n\nNil means \"unset\" (TLS verification stays enabled at the top level). When\nTLSConfig is embedded in HostConfig, nil additionally means \"inherit from\nthe global Config\"; an explicit false on a host re-enables verification\neven when the global config sets true. See HostConfig for per-host merge\nsemantics."
         },
+        "plainHTTP": {
+          "type": "boolean",
+          "description": "PlainHTTP makes OCI registry clients use cleartext HTTP, also for https://\nreferences. Credentials go unencrypted: set it per host, never for a\npublic registry. Helm charts follow it too: an oci:// chart uses the\nsetting for its registry host, and a classic http:// repository URL is\naccepted only when its host is plainHTTP.\n\nNil means HTTPS at the top level and \"inherit\" in a HostConfig; an\nexplicit false on a host wins over a global true.\n\nThis field alone decides the connection. A scheme prefix on a reference\nor base URL is deprecated and only checked against it: http:// on a host\nthat is not plainHTTP is an error, https:// on a plainHTTP host warns\nabout the downgrade. Set this field to true and drop the prefix."
+        },
         "responseHeaderTimeout": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.types.v1.Duration",
           "description": "ResponseHeaderTimeout specifies the amount of time to wait for\na server's response headers after fully writing the request\n(including its body, if any). This time does not include the\ntime to read the response body."
         },
         "retry": {
@@ -111,19 +140,19 @@
           "description": "RootCAsPEMFile is a path to a PEM file with additional root CA certificates.\nSame semantics as RootCAsPEM, but loaded from disk. Ignored when RootCAsPEM\nis also set, and when InsecureSkipVerify is true."
         },
         "tcpDialTimeout": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.types.v1.Duration",
           "description": "TCPDialTimeout is the maximum amount of time a dial will wait\nfor a TCP connect to complete. When dialing a host name with\nmultiple IP addresses, the timeout may be divided between them.\nThe operating system may impose its own earlier timeout."
         },
         "tcpKeepAlive": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.types.v1.Duration",
           "description": "TCPKeepAlive specifies the interval between keep-alive probes\nfor an active network connection. If negative, keep-alive\nprobes are disabled."
         },
         "timeout": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.types.v1.Duration",
           "description": "Timeout specifies a time limit for requests made by the HTTP\nclient. The timeout includes connection time, any redirects,\nand reading the response body. A timeout of zero means no\ntimeout."
         },
         "tlsHandshakeTimeout": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.types.v1.Duration",
           "description": "TLSHandshakeTimeout specifies the maximum amount of time to\nwait for a TLS handshake. Zero means no timeout."
         }
       },
@@ -139,6 +168,10 @@
         "disableHTTP2": {
           "type": "boolean",
           "description": "DisableHTTP2 restricts the client to HTTP/1.1. By default HTTP/2 is\nnegotiated via TLS ALPN, which multiplexes every concurrent request to a\nhost over one TCP connection: a single connection loss or GOAWAY then\naffects all in-flight transfers at once. With HTTP/1.1 each concurrent\nrequest uses its own connection, at the cost of more TLS handshakes."
+        },
+        "plainHTTP": {
+          "type": "boolean",
+          "description": "PlainHTTP makes OCI registry clients use cleartext HTTP, also for https://\nreferences. Credentials go unencrypted: set it per host, never for a\npublic registry. Helm charts follow it too: an oci:// chart uses the\nsetting for its registry host, and a classic http:// repository URL is\naccepted only when its host is plainHTTP.\n\nNil means HTTPS at the top level and \"inherit\" in a HostConfig; an\nexplicit false on a host wins over a global true.\n\nThis field alone decides the connection. A scheme prefix on a reference\nor base URL is deprecated and only checked against it: http:// on a host\nthat is not plainHTTP is an error, https:// on a plainHTTP host warns\nabout the downgrade. Set this field to true and drop the prefix."
         }
       },
       "additionalProperties": false
@@ -157,11 +190,11 @@
           "maximum": 9223372036854776000
         },
         "maxWait": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.types.v1.Duration",
           "description": "MaxWait is the upper bound applied to the backoff duration between\nretry attempts. Nil uses the library default (3s)."
         },
         "minWait": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.types.v1.Duration",
           "description": "MinWait is the lower bound applied to the backoff duration between\nretry attempts. Nil uses the library default (200ms)."
         }
       },
@@ -189,27 +222,6 @@
       },
       "additionalProperties": false
     },
-    "ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout": {
-      "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$comment": "Timeout is a Go time.Duration that marshals as a human-readable duration string (e.g. \"30s\", \"5m\", \"1h\") or as a nanoseconds integer.",
-      "title": "Timeout",
-      "description": "Timeout wraps time.Duration to support JSON/YAML marshaling\nof human-readable duration strings (e.g. \"30s\", \"5m\", \"1h\").",
-      "anyOf": [
-        {
-          "type": "string",
-          "examples": [
-            "30s",
-            "5m",
-            "1h",
-            "0s"
-          ]
-        },
-        {
-          "type": "integer",
-          "description": "Duration in nanoseconds."
-        }
-      ]
-    },
     "ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.TimeoutConfig": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "$comment": "generated by the ocm schema generation tool",
@@ -218,27 +230,27 @@
       "description": "TimeoutConfig holds HTTP client timeout settings.\nAll fields are pointers; nil means \"use default\".",
       "properties": {
         "idleConnTimeout": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.types.v1.Duration",
           "description": "IdleConnTimeout is the maximum amount of time an idle\n(keep-alive) connection will remain idle before closing itself.\nZero means no limit."
         },
         "responseHeaderTimeout": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.types.v1.Duration",
           "description": "ResponseHeaderTimeout specifies the amount of time to wait for\na server's response headers after fully writing the request\n(including its body, if any). This time does not include the\ntime to read the response body."
         },
         "tcpDialTimeout": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.types.v1.Duration",
           "description": "TCPDialTimeout is the maximum amount of time a dial will wait\nfor a TCP connect to complete. When dialing a host name with\nmultiple IP addresses, the timeout may be divided between them.\nThe operating system may impose its own earlier timeout."
         },
         "tcpKeepAlive": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.types.v1.Duration",
           "description": "TCPKeepAlive specifies the interval between keep-alive probes\nfor an active network connection. If negative, keep-alive\nprobes are disabled."
         },
         "timeout": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.types.v1.Duration",
           "description": "Timeout specifies a time limit for requests made by the HTTP\nclient. The timeout includes connection time, any redirects,\nand reading the response body. A timeout of zero means no\ntimeout."
         },
         "tlsHandshakeTimeout": {
-          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.http.spec.config.v1alpha1.Timeout",
+          "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.types.v1.Duration",
           "description": "TLSHandshakeTimeout specifies the maximum amount of time to\nwait for a TLS handshake. Zero means no timeout."
         }
       },

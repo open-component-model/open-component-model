@@ -18,6 +18,10 @@ jobs:
     outputs:
       run_go: ${{ steps.compute.outputs.run_go }}
       run_lint: ${{ steps.compute.outputs.run_lint }}
+      # Native windows legs (unit tests and the GOOS=windows lint run) are limited to
+      # pushes to main: windows runners are billed at a premium, so windows-only
+      # breakage is caught at merge time rather than on every PR push.
+      run_windows: ${{ steps.compute.outputs.run_windows }}
       dependency_list_changed: ${{ steps.filter.outputs.dependency_list }}
       lint_changed: ${{ steps.filter.outputs.lint }}
     steps:
@@ -66,10 +70,12 @@ jobs:
 
             core.setOutput('run_go', runGo);
             core.setOutput('run_lint', runLint);
+            core.setOutput('run_windows', isPush);
             await core.summary
               .addRaw('### CI Scope\n\n')
               .addRaw(`**build/test bindings/go:** ${runGo}\n\n`)
-              .addRaw(`**lint all Go modules:** ${runLint}\n`)
+              .addRaw(`**lint all Go modules:** ${runLint}\n\n`)
+              .addRaw(`**native windows legs:** ${isPush}\n`)
               .write();
 
   golangci_lint_verify:
@@ -139,7 +145,7 @@ jobs:
           }
 
   golangci_lint:
-    name: "golangci-lint"
+    name: "golangci-lint (${{ matrix.module }}, ${{ matrix.goos }})"
     needs:
      - changes
      - golangci_lint_verify
@@ -156,6 +162,13 @@ jobs:
         module:
           - bindings/go
           - conformance/scenarios/sovereign/components/notes
+        # Windows-only code (plugin process handling, path helpers) sits behind
+        # build tags a linux-only lint run never type-checks, so it is linted with
+        # GOOS=windows alongside the native windows unit tests.
+        goos: ${{ fromJSON(needs.changes.outputs.run_windows == 'true' && '["linux","windows"]' || '["linux"]') }}
+        exclude:
+          - module: conformance/scenarios/sovereign/components/notes
+            goos: windows
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -174,13 +187,30 @@ jobs:
         run: |
           source .env
           echo "golangci_lint=${GOLANGCI_LINT_VERSION}" >> $GITHUB_OUTPUT
-      - name: golangci-lint ${{ matrix.module }}
+      - name: Determine lint targets
+        id: targets
+        working-directory: ${{ matrix.module }}
+        env:
+          GOOS: ${{ matrix.goos }}
+        run: |
+          if [ "$GOOS" = windows ]; then
+            # The controller ships as a linux image only and controller-runtime's
+            # envtest does not build for windows; keep this filter in sync with the
+            # one in bindings/go/Taskfile.yml.
+            # golangci-lint takes directories, not import paths.
+            echo "pkgs=$(go list -f '{{.Dir}}' ./... | grep -v /kubernetes/controller | sed "s#^$PWD/#./#" | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
+          else
+            echo "pkgs=./..." >> "$GITHUB_OUTPUT"
+          fi
+      - name: golangci-lint ${{ matrix.module }} (GOOS=${{ matrix.goos }})
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
+        env:
+          GOOS: ${{ matrix.goos }}
         with:
           verify: 'false' # we verify in a separate command ONCE instead of every run on every module
           version: ${{ steps.versions.outputs.golangci_lint }}
           working-directory: ${{ github.workspace }}/${{ matrix.module }}
-          args: --timeout 10m --config=${{ github.workspace }}/golangci.yml
+          args: --timeout 10m --config=${{ github.workspace }}/golangci.yml ${{ steps.targets.outputs.pkgs }}
           # Bust the analysis cache when lint config/tooling changes (the `lint`
           # filter: .env / golangci.yml): the golangci-lint-action cache key is
           # not derived from golangci.yml, so a config-only change would
@@ -243,7 +273,7 @@ jobs:
           awk -v p="$pct" -v f="$floor" 'BEGIN{exit (p+0 < f+0)}' \
             || { echo "::error::integration coverage ${pct}% is below the ${floor}% floor"; exit 1; }
       - name: Publish integration test report
-        uses: mikepenz/action-junit-report@a9170d5795813c01ab4901ffb045b52bab4ab09d # v6.5.0
+        uses: mikepenz/action-junit-report@6ef3fdcfcd5f0b5d14df3e659ef19b8c6820f93d # v6.6.1
         if: always()
         with:
           report_paths: '${{ github.workspace }}/bindings/go/output/junit*.xml'
@@ -259,10 +289,20 @@ jobs:
           check_retries: true
 
   run_unit_tests:
-    name: "Unit Tests"
+    name: "Unit Tests (${{ matrix.goos }})"
     needs: changes
-    runs-on: ubuntu-26.04-arm
+    runs-on: ${{ matrix.runner }}
     if: ${{ needs.changes.outputs.run_go == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # The CLI ships windows binaries that cli.yml only cross-compiles, so
+        # OS-specific paths (file paths, plugin processes, sockets) need a native run.
+        include: ${{ fromJSON(needs.changes.outputs.run_windows == 'true' && '[{"runner":"ubuntu-26.04-arm","goos":"linux","goarch":"arm64"},{"runner":"windows-latest","goos":"windows","goarch":"amd64","exe":".exe"}]' || '[{"runner":"ubuntu-26.04-arm","goos":"linux","goarch":"arm64"}]') }}
+    defaults:
+      run:
+        # Task resolves grep/mkdir/mv from PATH; on Windows Git Bash provides them.
+        shell: bash
     steps:
       - name: Install Task
         uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
@@ -279,10 +319,22 @@ jobs:
         with:
           go-version-file: '${{ github.workspace }}/bindings/go/go.mod'
           cache-dependency-path: '${{ github.workspace }}/bindings/go/go.sum'
+      - name: Build and smoke test CLI
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          EXE: ${{ matrix.exe }}
+        run: |
+          task bindings/go/cli:build/single GOOS="$GOOS" GOARCH="$GOARCH"
+          bin="bindings/go/cli/tmp/bin/ocm-$GOOS-$GOARCH"
+          # Windows only executes files with an .exe extension.
+          cp "$bin" "bindings/go/cli/tmp/bin/ocm$EXE"
+          "bindings/go/cli/tmp/bin/ocm$EXE" version
       - name: Run Tests
         run: task bindings/go:test
       - name: Coverage summary and threshold
-        if: always()
+        # The floor is calibrated on Linux, which also covers the controller.
+        if: ${{ always() && matrix.goos == 'linux' }}
         working-directory: bindings/go
         run: |
           if [ ! -f output/coverage.unit.out ]; then

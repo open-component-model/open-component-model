@@ -11,10 +11,10 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/registry/remote"
+	"github.com/oras-project/oras-go/v3/registry/remote/properties"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2/registry"
-	"oras.land/oras-go/v2/registry/remote"
 
 	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
@@ -63,10 +63,11 @@ func TestCachedStore_Resolve_DelegatesToReferenceCache(t *testing.T) {
 	// The reference itself is a digest, the only form the cache may
 	// answer without upstream.
 	inner := &remote.Repository{
-		Reference: registry.Reference{Registry: "ghcr.io", Repository: "owner/repo"},
+		Registry:       &remote.Registry{Reference: properties.Reference{Registry: "ghcr.io"}},
+		RepositoryName: "owner/repo",
 	}
 	ref := desc.Digest.String()
-	rc.Add(registry.Reference{Registry: "ghcr.io", Repository: "owner/repo", Reference: ref}, desc)
+	rc.Add(properties.Reference{Registry: "ghcr.io", Repository: "owner/repo", Digest: ref}, desc)
 
 	repo := newCachedStore(inner, nil, rc)
 	got, err := repo.Resolve(t.Context(), ref)
@@ -82,15 +83,16 @@ func TestCachedStore_Resolve_WithFullReferenceAndNormalization(t *testing.T) {
 		Size:      15,
 	}
 	inner := &remote.Repository{
-		Reference: registry.Reference{Registry: "ghcr.io", Repository: "owner/repo"},
+		Registry:       &remote.Registry{Reference: properties.Reference{Registry: "ghcr.io"}},
+		RepositoryName: "owner/repo",
 	}
 	repo := newCachedStore(inner, nil, rc)
 
 	// 1. Add as normalized digest reference to cache
-	rc.Add(registry.Reference{
+	rc.Add(properties.Reference{
 		Registry:   "ghcr.io",
 		Repository: "owner/repo",
-		Reference:  desc.Digest.String(),
+		Digest:     desc.Digest.String(),
 	}, desc)
 
 	// 2. Resolve using fully-qualified reference (should hit, since ParseReference normalizes it to the bare digest)
@@ -140,8 +142,8 @@ func TestCachedStore_Fetch_Always_HitsAreBoundToTheRepository(t *testing.T) {
 	repoAt := func(name string) *remote.Repository {
 		repo, err := remote.NewRepository(srv.Listener.Addr().String() + "/" + name)
 		r.NoError(err)
-		repo.PlainHTTP = true
-		repo.Client = &http.Client{}
+		repo.Registry.PlainHTTP = true
+		repo.Registry.Client = &http.Client{}
 		return repo
 	}
 	c := newTestCache(t, Options{RemotePolicy: RemotePolicyAlways})
@@ -221,8 +223,8 @@ func plainHTTPRepo(t *testing.T, srv *httptest.Server) *remote.Repository {
 	t.Helper()
 	repo, err := remote.NewRepository(srv.Listener.Addr().String() + "/test-repo")
 	require.NoError(t, err)
-	repo.PlainHTTP = true
-	repo.Client = &http.Client{}
+	repo.Registry.PlainHTTP = true
+	repo.Registry.Client = &http.Client{}
 	return repo
 }
 
@@ -273,10 +275,10 @@ func TestCachedStore_Untag_SuccessInvalidatesCache(t *testing.T) {
 	rc := newTestRefCache(t, Options{})
 	repo := newCachedStore(inner, nil, rc)
 
-	ref := registry.Reference{
-		Registry:   inner.Reference.Registry,
-		Repository: inner.Reference.Repository,
-		Reference:  "latest",
+	ref := properties.Reference{
+		Registry:   inner.Reference().Registry,
+		Repository: inner.Reference().Repository,
+		Tag:        "latest",
 	}
 
 	desc := ociImageSpecV1.Descriptor{Digest: digest.FromBytes([]byte("x")), Size: 1}
@@ -299,10 +301,10 @@ func TestCachedStore_Untag_FailureKeepsCache(t *testing.T) {
 	rc := newTestRefCache(t, Options{})
 	repo := newCachedStore(inner, nil, rc)
 
-	ref := registry.Reference{
-		Registry:   inner.Reference.Registry,
-		Repository: inner.Reference.Repository,
-		Reference:  "latest",
+	ref := properties.Reference{
+		Registry:   inner.Reference().Registry,
+		Repository: inner.Reference().Repository,
+		Tag:        "latest",
 	}
 
 	desc := ociImageSpecV1.Descriptor{Digest: digest.FromBytes([]byte("x")), Size: 1}
@@ -350,10 +352,10 @@ func TestCachedStore_Tag_SuccessRefreshesCache(t *testing.T) {
 	rc := newTestRefCache(t, Options{})
 	repo := newCachedStore(inner, nil, rc)
 
-	ref := registry.Reference{
-		Registry:   inner.Reference.Registry,
-		Repository: inner.Reference.Repository,
-		Reference:  "latest",
+	ref := properties.Reference{
+		Registry:   inner.Reference().Registry,
+		Repository: inner.Reference().Repository,
+		Tag:        "latest",
 	}
 
 	require.NoError(t, repo.Tag(t.Context(), desc, "latest"))
@@ -372,10 +374,10 @@ func TestCachedStore_Tag_FailureLeavesCacheEmpty(t *testing.T) {
 	rc := newTestRefCache(t, Options{})
 	repo := newCachedStore(inner, nil, rc)
 
-	ref := registry.Reference{
-		Registry:   inner.Reference.Registry,
-		Repository: inner.Reference.Repository,
-		Reference:  "latest",
+	ref := properties.Reference{
+		Registry:   inner.Reference().Registry,
+		Repository: inner.Reference().Repository,
+		Tag:        "latest",
 	}
 
 	desc := ociImageSpecV1.Descriptor{

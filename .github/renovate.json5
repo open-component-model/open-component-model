@@ -15,11 +15,11 @@
     enabled: true,
   },
   'updateNotScheduled': true, // Update branches that have already been created
-  'minimumReleaseAge': '28 days',
+  'minimumReleaseAge': '5 days',
   // config:best-practices this is usually disabled by default.
   // https://github.com/google/docsy/blob/9f8acf7a4547cb1c5d1b88b3db588793bfd6eb25/renovate.json5#L7
-  // Also, disabling this means that transitive dependencies that aren't 28 days old at least,
-  // will not get in. Because lock file maintenance doesn't care about that when it's refreshing the lock file.
+  // Disabling lockfile maintenance does not guarantee transitive release ages:
+  // dependency updates and npm retries without --before can still bypass the cutoff.
   lockFileMaintenance: {
     enabled: false,
   },
@@ -139,6 +139,7 @@
       // bumped here. See the depType 'golang' rule at the end of packageRules.
       // Docker image digests for `golang` are handled by 'Digest pins' above.
       matchDatasources: ["golang-version"],
+      minimumReleaseAge: '0 days', // Go toolchain releases are gated upstream; no stability delay.
       rangeStrategy: "bump",
       groupName: "Golang versions",
       groupSlug: "golang-versions",
@@ -206,7 +207,7 @@
         'ghcr.io/open-component-model/cosign',
       ],
       versioning: 'regex:^v(?<major>\\d+)\\.(?<minor>\\d+)\\.(?<patch>\\d+)[-+]ocm\\.(?<build>\\d+)$',
-      // Our own fork; releases are gated by its CI. The global 28-day age would
+      // Our own fork; releases are gated by its CI. The global 5-day age would
       // hold every release back, so the run its release workflow dispatches
       // would find nothing.
       minimumReleaseAge: '0 days',
@@ -318,6 +319,21 @@
       enabled: false,
     },
     {
+      // sigs.k8s.io/kustomize/{api,kyaml} are indirect (helm -> k8s.io/cli-runtime)
+      // and follow the Kubernetes release train: cli-runtime v0.37.x pins
+      // v0.21.1, v0.38.x pins v0.21.3. v0.21.3 needs a kube-openapi built on
+      // structured-merge-diff/v7, which apimachinery v0.37.x (smd/v6) cannot
+      // compile against (#4184, #4185). Same failure mode as kube-openapi (#3770).
+      // Not re-enabled on purpose: the 'Kubernetes dependencies' group PR raises
+      // them via MVS + gomodTidy when it bumps k8s.io/cli-runtime.
+      matchManagers: ['gomod'],
+      matchPackageNames: [
+        'sigs.k8s.io/kustomize/api',
+        'sigs.k8s.io/kustomize/kyaml',
+      ],
+      enabled: false,
+    },
+    {
       // The internal org workflows repo is tracked on @main intentionally
       // (see .github/workflows/stale.yaml). Disable Renovate so it does not
       // re-pin the ref to a SHA and then bump it on every upstream commit.
@@ -345,7 +361,7 @@
     },
     {
       matchDatasources: ['npm'],
-      minimumReleaseAge: '28 days',
+      minimumReleaseAge: '5 days',
     },
     {
       // Renovate has no release timestamp for these types and

@@ -7,24 +7,25 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
-	"oras.land/oras-go/v2/registry/remote/auth"
-	remotecredentials "oras.land/oras-go/v2/registry/remote/credentials"
+	remotecredentials "github.com/oras-project/oras-go/v3/registry/remote/credentials"
+	"github.com/oras-project/oras-go/v3/registry/remote/properties"
 
 	"ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// MapCredentials converts a [credentialsv1.OCICredentials] to an auth.Credential.
-// A nil input yields an empty [auth.Credential].
-func MapCredentials(credentials *v1.OCICredentials) auth.Credential {
+// MapCredentials converts a [credentialsv1.OCICredentials] to a remotecredentials.Credential.
+// A nil input yields an empty [remotecredentials.Credential].
+func MapCredentials(credentials *v1.OCICredentials) remotecredentials.Credential {
 	if credentials == nil {
-		return auth.Credential{}
+		return remotecredentials.Credential{}
 	}
-	cred := auth.Credential{}
+	cred := remotecredentials.Credential{}
 	cred.Username = credentials.Username
 	cred.Password = credentials.Password
 	cred.AccessToken = credentials.AccessToken
@@ -56,26 +57,33 @@ func MapCredentials(credentials *v1.OCICredentials) auth.Credential {
 // This will create a function that checks if the host and port match "example.com:443",
 // and returns the provided credentials if they do. If the host and port don't match,
 // it will return empty credentials.
-func CredentialFunc(identity *identityv1.OCIRegistryIdentity, credentials *v1.OCICredentials) auth.CredentialFunc {
+func CredentialFunc(identity *identityv1.OCIRegistryIdentity, credentials *v1.OCICredentials) remotecredentials.CredentialFunc {
 	credential := MapCredentials(credentials)
 	hasHost := identity != nil && identity.Hostname != ""
 	hasPort := identity != nil && identity.Port != ""
 
-	return func(ctx context.Context, hostport string) (auth.Credential, error) {
+	return func(ctx context.Context, resource properties.Resource) (remotecredentials.Credential, error) {
+		// Registry is the canonical registry name: lower-cased, and docker.io rather than
+		// registry-1.docker.io. Host() maps the latter back.
+		hostport := resource.Registry
 		actualHost, actualPort, err := net.SplitHostPort(hostport)
 		if err != nil {
 			// it can happen that no port is given here
 			err, addrError := errors.AsType[*net.AddrError](err)
 			portIsMissing := addrError && err.Err == "missing port in address"
 			if !portIsMissing {
-				return auth.Credential{}, fmt.Errorf("failed to split host and port: %w", err)
+				return remotecredentials.Credential{}, fmt.Errorf("failed to split host and port: %w", err)
 			}
 			actualHost = hostport
 		}
-		hostMismatch := hasHost && identity.Hostname != actualHost
+		// Host names are case-insensitive, but the identity keeps the case written in the base URL.
+		// Docker Hub identities may use either docker.io or the registry-1.docker.io endpoint.
+		hostMismatch := hasHost &&
+			!strings.EqualFold(identity.Hostname, actualHost) &&
+			!strings.EqualFold(identity.Hostname, resource.Host())
 		portMismatch := hasPort && identity.Port != actualPort
 		if hostMismatch || portMismatch {
-			return auth.EmptyCredential, nil
+			return remotecredentials.EmptyCredential, nil
 		}
 		return credential, nil
 	}
@@ -124,7 +132,7 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig v1.Docke
 	if err != nil {
 		return nil, fmt.Errorf("failed to get credentials for %q: %w", hostname, err)
 	}
-	if cred == auth.EmptyCredential && oci.Port != "" {
+	if cred == remotecredentials.EmptyCredential && oci.Port != "" {
 		// because ORAS stores docker credentials including its port if defined, we'll try
 		// once more including the port with the hostname. (For ghcr.io no port is there, but we
 		// default the port to 443 so trying it with that in the first time would fail that's why
@@ -136,7 +144,7 @@ func ResolveV1DockerConfigCredentials(ctx context.Context, dockerConfig v1.Docke
 			return nil, fmt.Errorf("failed to get credentials for %q with port: %w", hostname, err)
 		}
 	}
-	if cred == auth.EmptyCredential {
+	if cred == remotecredentials.EmptyCredential {
 		logger.DebugContext(ctx, "no credentials found")
 		return nil, nil
 	}
@@ -180,9 +188,8 @@ func getStore(ctx context.Context, dockerConfig v1.DockerConfig) (remotecredenti
 // and attempts to use the native host credential store if available.
 func createDefaultStore(ctx context.Context) (remotecredentials.Store, error) {
 	slog.DebugContext(ctx, "attempting to load docker config from default locations or native host store")
-	store, err := remotecredentials.NewStoreFromDocker(remotecredentials.StoreOptions{
-		DetectDefaultNativeStore: true,
-	})
+	// The platform-default native credentials store is detected unless disabled.
+	store, err := remotecredentials.NewStoreFromDocker(remotecredentials.StoreOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create default docker config store: %w", err)
 	}
@@ -219,7 +226,7 @@ func createFileBasedStore(ctx context.Context, configPath string) (remotecredent
 	// Create and return the store
 	// For file-based stores, if the file does not exist,
 	// it counts as an empty store and will not fail here!
-	store, err := remotecredentials.NewStore(expandedPath, remotecredentials.StoreOptions{})
+	store, err := remotecredentials.NewStore(expandedPath, remotecredentials.StoreOptions{IgnoreDefaultNativeStore: true})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create file-based config store: %w", err)
 	}
@@ -227,14 +234,15 @@ func createFileBasedStore(ctx context.Context, configPath string) (remotecredent
 }
 
 // expandConfigPath handles shell expansion for the config file path.
-// Currently supports basic home directory expansion (~).
+// Currently supports basic home directory expansion of a leading "~"; a "~"
+// elsewhere is literal (e.g. Windows 8.3 short names such as RUNNER~1).
 func expandConfigPath(path string) (string, error) {
-	if idx := strings.Index(path, "~"); idx != -1 {
-		dirname, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("failed to get user home directory: %w", err)
-		}
-		return strings.ReplaceAll(path, "~", dirname), nil
+	if path != "~" && !strings.HasPrefix(path, "~/") && !strings.HasPrefix(path, "~"+string(filepath.Separator)) {
+		return path, nil
 	}
-	return path, nil
+	dirname, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get user home directory: %w", err)
+	}
+	return filepath.Join(dirname, path[1:]), nil
 }

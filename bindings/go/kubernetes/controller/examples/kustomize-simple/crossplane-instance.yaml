@@ -1,0 +1,6 @@
+apiVersion: examples.ocm.software/v1alpha1
+kind: KustomizeSimpleCrossplane
+metadata:
+  name: kustomize-simple-crossplane
+spec:
+  prefix: kustomize-simple-crossplane

@@ -77,7 +77,7 @@ func Test_Integration_Transfer_GitHub(t *testing.T) {
 	r.NoError(err, "should be able to start target registry container")
 	cfgPath := internal.CreateOCMConfigForGitHub(t, targetRegistry)
 
-	repoProvider := provider.NewComponentVersionRepositoryProvider()
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithHTTPConfig(loadHTTPConfig(t, cfgPath)))
 	ocmconf, err := configuration.GetConfigFromPath(cfgPath)
 	r.NoError(err)
 	credconf, err := runtime.LookupCredentialConfig(ocmconf)

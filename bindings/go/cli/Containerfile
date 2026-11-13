@@ -27,6 +27,8 @@ USER 65532:65532
 # cosign's trust-root cache would go to /.sigstore under HOME=/, which the
 # user cannot create; keep it in the writable /tmp instead.
 ENV TUF_ROOT=/tmp/.sigstore/root
+# A CLI, not a service, and scratch has nothing a health check could run.
+HEALTHCHECK NONE
 ENTRYPOINT ["/ocm"]
 
 # Static cosign linked against the Go Cryptographic Module (GOFIPS140=certified,
@@ -34,7 +36,7 @@ ENTRYPOINT ["/ocm"]
 # https://github.com/open-component-model/cosign. Same release as COSIGN_VERSION in
 # bindings/go/sigstore/signing/handler/internal/.env (Renovate group "OCM cosign";
 # pin_sync_test.go there fails if they diverge).
-FROM ghcr.io/open-component-model/cosign:v3.1.4-ocm.6@sha256:275824e5d82a53f28571406ad2bbe93484fd7f3d78e566eb04aefcc43cb0681c AS cosign
+FROM ghcr.io/open-component-model/cosign:v3.1.4-ocm.8@sha256:4836eafa62dfde1ac5c2151d639ce5a9467312ba790b0a4552c46e4e4d404335 AS cosign
 
 FROM scratch AS full
 # scratch defines no PATH; ocm looks up cosign on PATH.
@@ -49,4 +51,5 @@ COPY --from=slim /ocm /ocm
 USER 65532:65532
 # Cosign trust-root cache as in slim.
 ENV TUF_ROOT=/tmp/.sigstore/root
+HEALTHCHECK NONE
 ENTRYPOINT ["/ocm"]

@@ -17,10 +17,10 @@ import (
 	git "github.com/go-git/go-git/v6"
 	godigest "github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3"
+	orasoci "github.com/oras-project/oras-go/v3/content/oci"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v4/pkg/chart/v2/loader"
-	"oras.land/oras-go/v2"
-	orasoci "oras.land/oras-go/v2/content/oci"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/compression"
@@ -32,7 +32,6 @@ import (
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
-	"ocm.software/open-component-model/bindings/go/git/gittest"
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	gitaccessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	helmblob "ocm.software/open-component-model/bindings/go/helm/blob"
@@ -41,6 +40,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
 // Test_Integration_DownloadUploadedGitResource verifies the full lifecycle of a Git
@@ -107,7 +107,7 @@ func Test_Integration_DownloadUploadedGitResource(t *testing.T) {
 	assertGitArchiveAtFirstCommit(t, archive)
 
 	// A Git/v1 access rejects local paths, so the access reads the same fixture over HTTP.
-	remoteURL := gittest.Serve(t, gitPath)
+	remoteURL := testgit.Serve(t, gitPath)
 	tempFolder := t.TempDir()
 	gitRepo := gitrepository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
 	source, err := gitRepo.ProcessResourceDigest(t.Context(), &descriptor.Resource{Access: &gitaccessv1.Git{
@@ -165,7 +165,8 @@ configurations:
       properties:
         username: %[3]q
         password: %[4]q
-`, registry.Host, registry.Port, registry.User, registry.Password)
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`, registry.Host, registry.Port, registry.User, registry.Password)
 	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
@@ -639,6 +640,13 @@ func Test_Integration_DownloadResource_HelmAccess(t *testing.T) {
 		"--skip-reference-digest-processing",
 	})
 	r.NoError(addCMD.ExecuteContext(ctx), "add component-version should succeed")
+	// The chart server runs without TLS, and an http:// URL alone no longer selects plain HTTP.
+	cfgPath := filepath.Join(tempDir, "ocmconfig.yaml")
+	r.NoError(os.WriteFile(cfgPath, []byte(`type: generic.config.ocm.software/v1
+configurations:
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true
+`), os.ModePerm))
 
 	output := filepath.Join(t.TempDir(), "downloaded-chart")
 	downloadCMD := cmd.New()
@@ -649,6 +657,7 @@ func Test_Integration_DownloadResource_HelmAccess(t *testing.T) {
 		"--identity", "name=mychart,version=0.1.0",
 		"--output", output,
 		"--extraction-policy", "disable",
+		"--config", cfgPath,
 	})
 	r.NoError(downloadCMD.ExecuteContext(ctx), "download resource with helm access should succeed")
 
