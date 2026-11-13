@@ -181,6 +181,39 @@ it doesn't have credentials for. Use `Always` when namespaces MUST NOT share reg
 will verify access, before serving a cached blob.
 {{</callout>}}
 
+## Configuration Access
+
+The controller reads OCM configuration with its own identity, which can read every namespace. So that an object
+cannot read another team's credentials through the controller, every namespaced kind (`Repository`, `Component`,
+`Resource`, `NamespacedDeployer`, `Discovery`, `Replication`) has a service account field in its spec that sits in its own
+namespace:
+
+```yaml
+spec:
+  serviceAccountName: my-team-reader
+  ocmConfig:
+    - kind: Secret
+      name: registry-credentials
+```
+
+Before it reads anything, the controller sends a
+[SubjectAccessReview](https://kubernetes.io/docs/reference/access-authn-authz/authorization/#checking-api-access)
+asking whether that service account can `get` each referenced `Secret`, `ConfigMap`, `Repository`, `Component` or
+`Resource`. It checks the object's own `ocmConfig` and everything it inherits through propagation. Therefore a `Component`
+that inherits a `Repository`'s `Secret` needs `get` on that `Secret` as well. If any review fails, the object is not
+ready with reason `GetConfigurationFailed`.
+
+- **No service account set:** the `default` service account of the namespace is used. Note: The default service account
+  on a fresh cluster, usually, has no permissions.
+- **The access review doesn't change anything:** the controller never acts as the service account to read configuration.
+  It only _asks_ the API server "can this service account read this object"?
+- **`NamespacedDeployer`:** its service account also applies and prunes, and needs `list` and `watch` on every kind it
+  deploys, because the drift watches run with the controller's identity as well.
+- **`Deployer`:** it is cluster-scoped and has no service account, so its configuration is not reviewed.
+
+Reviews run on every reconcile, but the controller does not watch RBAC. A new `Role` or `RoleBinding` takes effect on
+the next retry, which backs off up to 5 minutes. Grant access before you create the object to avoid the wait.
+
 ## Additional Status Fields
 
 The `Resource` object supports `additionalStatusFields`, a map of field names to [CEL](https://github.com/google/cel-spec) expressions evaluated against the resource descriptor:
