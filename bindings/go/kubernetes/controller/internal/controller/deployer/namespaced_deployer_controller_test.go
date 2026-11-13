@@ -447,7 +447,7 @@ metadata:
 		Expect(errors.IsNotFound(err)).To(BeTrue())
 	})
 
-	It("reads ocm configuration from another namespace only if its service account may", func(ctx SpecContext) {
+	It("reads foreign ocm configuration only if allowed", func(ctx SpecContext) {
 		createServiceAccount(ctx, namespace.GetName(), true)
 		other := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace.GetName() + "-config"}}
 		Expect(k8sClient.Create(ctx, other)).To(Succeed())
@@ -472,7 +472,7 @@ metadata:
 		By("passing the review once the service account may get it")
 		serviceaccounttest.GrantOCMConfigReads(ctx, k8sClient, other.GetName(), namespace.GetName(), namespacedDeployerSA)
 		test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, deployer, v1alpha1.GetConfigurationFailedReason,
-			`secrets "foreign-credentials" not found`)
+			`Secret "foreign-credentials" not found`)
 	})
 
 	It("does not watch deployed objects its service account may not watch", func(ctx SpecContext) {

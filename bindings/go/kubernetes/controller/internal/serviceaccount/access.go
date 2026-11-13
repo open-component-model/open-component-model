@@ -29,7 +29,7 @@ func Name(name string) string {
 	return name
 }
 
-// Username of the service account in a given namespace.
+// Username defines the user for the service account to check.
 func Username(namespace, name string) string {
 	return fmt.Sprintf("system:serviceaccount:%s:%s", namespace, name)
 }
@@ -49,8 +49,8 @@ type Subject interface {
 type Authorizer struct {
 	// reader reads service accounts uncached to avoid a cluster-wide informer for them.
 	reader client.Reader
-	// reviews creates the SubjectAccessReviews. Unlike a SelfSubjectAccessReview the subject is defined so
-	// no impersonation is necessary.
+	// reviews creates the SubjectAccessReviews. Unlike a SelfSubjectAccessReview the subject is given so
+	// no impersonation is needed.
 	reviews client.Writer
 }
 
@@ -100,18 +100,20 @@ func (a *Authorizer) For(ctx context.Context, namespace, name string) (*Access, 
 }
 
 // EffectiveConfig returns the effective OCM configuration of obj, see ocm.GetEffectiveConfig. The references in the
-// spec are authorized before they are read, the resolved ones after, as they include what parent and the referenced
-// OCM objects propagate.
+// spec are authorized before they are read, then the resolved ones because they include parents.
 func (a *Access) EffectiveConfig(ctx context.Context, c client.Client, obj v1alpha1.ConfigRefProvider, parent v1alpha1.ConfigRefProvider) ([]v1alpha1.OCMConfiguration, error) {
+	// authorize the referenced ones first
 	if err := a.AuthorizeConfigs(ctx, obj.GetSpecifiedOCMConfig()); err != nil {
 		return nil, fmt.Errorf("failed to authorize ocm config: %w", err)
 	}
 
+	// get all the possible propagated configs
 	configs, err := ocm.GetEffectiveConfig(ctx, c, obj, parent)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get effective config: %w", err)
 	}
 
+	// check those too
 	if err := a.AuthorizeConfigs(ctx, configs); err != nil {
 		return nil, fmt.Errorf("failed to authorize effective ocm config: %w", err)
 	}
@@ -137,7 +139,7 @@ func (a *Access) AuthorizeWatch(ctx context.Context, resource schema.GroupResour
 	return nil
 }
 
-// AuthorizeConfigs returns a Forbidden error for every referenced object the service account may not get. An empty
+// AuthorizeConfigs returns a Forbidden error for every referenced object the service account can not get. An empty
 // namespace in a reference means the namespace of the service account.
 func (a *Access) AuthorizeConfigs(ctx context.Context, configs []v1alpha1.OCMConfiguration) error {
 	var errs []error
@@ -160,6 +162,7 @@ func (a *Access) AuthorizeConfigs(ctx context.Context, configs []v1alpha1.OCMCon
 	return errors.Join(errs...)
 }
 
+// reference constructs the reference to check based on the object in the config, giving the right namespace/name/verb.
 func (a *Access) reference(config v1alpha1.OCMConfiguration) (reference, error) {
 	ref := reference{verb: "get", namespace: config.Namespace, name: config.Name}
 	if ref.namespace == "" {
@@ -184,6 +187,10 @@ func (a *Access) reference(config v1alpha1.OCMConfiguration) (reference, error) 
 	return ref, nil
 }
 
+// authorize checks using SubjectAccessReview if the given reference actually can get the object.
+// This, ensures, that the fetching entity CAN actually access the given reference. Doing this, avoids having to
+// impersonate the caller. We aren't using SelfSubjectAccessReview because Self is always the controller, therefore
+// it would always return true.
 func (a *Access) authorize(ctx context.Context, ref reference) (bool, error) {
 	if allowed, ok := a.allowed[ref]; ok {
 		return allowed, nil
