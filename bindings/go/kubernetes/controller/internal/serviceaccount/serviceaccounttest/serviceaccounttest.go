@@ -1,4 +1,5 @@
-package test
+// Package serviceaccounttest provides service account fixtures for controller tests.
+package serviceaccounttest
 
 import (
 	"context"

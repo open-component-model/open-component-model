@@ -23,6 +23,7 @@ import (
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/serviceaccount"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/serviceaccount/serviceaccounttest"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
 	signingv1alpha1 "ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 )
@@ -56,8 +57,8 @@ var _ = Describe("Component Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
-			test.CreateServiceAccount(ctx, k8sClient, namespace.GetName(), serviceaccount.DefaultName)
-			test.GrantOCMConfigReads(ctx, k8sClient, namespace.GetName(), namespace.GetName(), serviceaccount.DefaultName)
+			serviceaccounttest.CreateServiceAccount(ctx, k8sClient, namespace.GetName(), serviceaccount.DefaultName)
+			serviceaccounttest.GrantOCMConfigReads(ctx, k8sClient, namespace.GetName(), namespace.GetName(), serviceaccount.DefaultName)
 		})
 
 		AfterEach(func(ctx SpecContext) {
@@ -1308,8 +1309,8 @@ var _ = Describe("Component Controller", func() {
 				},
 			}
 			Expect(k8sClient.Create(ctx, namespace)).To(Succeed())
-			test.CreateServiceAccount(ctx, k8sClient, namespace.GetName(), serviceaccount.DefaultName)
-			test.GrantOCMConfigReads(ctx, k8sClient, namespace.GetName(), namespace.GetName(), serviceaccount.DefaultName)
+			serviceaccounttest.CreateServiceAccount(ctx, k8sClient, namespace.GetName(), serviceaccount.DefaultName)
+			serviceaccounttest.GrantOCMConfigReads(ctx, k8sClient, namespace.GetName(), namespace.GetName(), serviceaccount.DefaultName)
 
 			configs, secrets = createTestConfigsAndSecrets(ctx, namespace.GetName())
 

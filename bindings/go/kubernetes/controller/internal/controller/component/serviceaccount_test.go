@@ -14,6 +14,7 @@ import (
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/serviceaccount"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/serviceaccount/serviceaccounttest"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
 )
 
@@ -72,8 +73,8 @@ var _ = Describe("Component service account", func() {
 
 	Context("without a service account", func() {
 		BeforeEach(func(ctx SpecContext) {
-			test.CreateServiceAccount(ctx, k8sClient, namespace, serviceaccount.DefaultName)
-			test.GrantOCMConfigReads(ctx, k8sClient, namespace, namespace, serviceaccount.DefaultName)
+			serviceaccounttest.CreateServiceAccount(ctx, k8sClient, namespace, serviceaccount.DefaultName)
+			serviceaccounttest.GrantOCMConfigReads(ctx, k8sClient, namespace, namespace, serviceaccount.DefaultName)
 		})
 
 		It("authorizes a Secret in its own namespace as the default service account", func(ctx SpecContext) {
@@ -91,7 +92,7 @@ var _ = Describe("Component service account", func() {
 
 			test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, component, v1alpha1.GetConfigurationFailedReason, forbiddenForeign)
 
-			test.GrantOCMConfigReads(ctx, k8sClient, other, namespace, serviceaccount.DefaultName)
+			serviceaccounttest.GrantOCMConfigReads(ctx, k8sClient, other, namespace, serviceaccount.DefaultName)
 			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{"Status.Component.Version": Version1})
 		})
 
@@ -124,7 +125,7 @@ var _ = Describe("Component service account", func() {
 
 	Context("with a service account", func() {
 		It("denies a Secret in another namespace until it may get it", func(ctx SpecContext) {
-			test.CreateServiceAccount(ctx, k8sClient, namespace, reader)
+			serviceaccounttest.CreateServiceAccount(ctx, k8sClient, namespace, reader)
 			component := newComponent(ctx, func(c *v1alpha1.Component) {
 				c.Spec.ServiceAccountName = reader
 				c.Spec.OCMConfig = []v1alpha1.OCMConfiguration{test.SecretOCMConfiguration(foreign)}
@@ -132,12 +133,12 @@ var _ = Describe("Component service account", func() {
 
 			test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, component, v1alpha1.GetConfigurationFailedReason, forbiddenForeign)
 
-			test.GrantOCMConfigReads(ctx, k8sClient, other, namespace, reader)
+			serviceaccounttest.GrantOCMConfigReads(ctx, k8sClient, other, namespace, reader)
 			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{"Status.Component.Version": Version1})
 		})
 
 		It("denies a Secret in its own namespace it may not get", func(ctx SpecContext) {
-			test.CreateServiceAccount(ctx, k8sClient, namespace, reader)
+			serviceaccounttest.CreateServiceAccount(ctx, k8sClient, namespace, reader)
 			component := newComponent(ctx, func(c *v1alpha1.Component) {
 				c.Spec.ServiceAccountName = reader
 				c.Spec.OCMConfig = []v1alpha1.OCMConfiguration{test.SecretOCMConfiguration(local)}

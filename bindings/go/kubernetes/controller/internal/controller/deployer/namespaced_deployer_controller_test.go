@@ -30,6 +30,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/applyset"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/serviceaccount"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/serviceaccount/serviceaccounttest"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
@@ -469,7 +470,7 @@ metadata:
 			`secrets "foreign-credentials" is forbidden`)
 
 		By("passing the review once the service account may get it")
-		test.GrantOCMConfigReads(ctx, k8sClient, other.GetName(), namespace.GetName(), namespacedDeployerSA)
+		serviceaccounttest.GrantOCMConfigReads(ctx, k8sClient, other.GetName(), namespace.GetName(), namespacedDeployerSA)
 		test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, deployer, v1alpha1.GetConfigurationFailedReason,
 			`secrets "foreign-credentials" not found`)
 	})
