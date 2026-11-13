@@ -1,5 +1,11 @@
 version: '3'
 
+# Point every curl (this Taskfile and the upstream scaffolding scripts it runs) at
+# hack/.curlrc, which retries transient network failures. This replaces a developer's own
+# ~/.curlrc during these tasks (CI runners have none).
+env:
+  CURL_HOME: '{{.TASKFILE_DIR}}/hack'
+
 vars:
   INTEGRATION_TEST_IDENTIFIER: 'Integration'
   COSIGN_VERSION:
