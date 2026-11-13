@@ -131,7 +131,7 @@ Resolved for the `HelmChartRepository`y of
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: HelmChartRepository
+          type: HelmChartRepository/v1
           hostname: nexus.example.com
         credentials:
           - type: HelmHTTPCredentials/v1

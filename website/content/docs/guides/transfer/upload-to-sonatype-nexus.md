@@ -66,7 +66,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: HTTP
+          type: HTTP/v1
           hostname: nexus.example.com
           scheme: https
         credentials:
@@ -105,7 +105,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: HTTP
+          type: HTTP/v1
           hostname: nexus.example.com
           scheme: https
         credentials:
@@ -187,7 +187,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: HTTP
+          type: HTTP/v1
           hostname: nexus.example.com
           scheme: https
         credentials:
@@ -280,7 +280,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: HTTP
+          type: HTTP/v1
           hostname: nexus.example.com
           scheme: https
         credentials:
@@ -350,7 +350,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: HTTP
+          type: HTTP/v1
           hostname: nexus.example.com
           scheme: https
         credentials:

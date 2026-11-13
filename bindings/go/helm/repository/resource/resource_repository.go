@@ -18,7 +18,9 @@ import (
 	helmdownload "ocm.software/open-component-model/bindings/go/helm/internal/download"
 	helmaccess "ocm.software/open-component-model/bindings/go/helm/spec/access"
 	"ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
+	helmcreds "ocm.software/open-component-model/bindings/go/helm/spec/credentials"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
+	helmidentity "ocm.software/open-component-model/bindings/go/helm/spec/identity"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -246,4 +248,16 @@ func (r *ResourceRepository) convertAccess(resource *descriptor.Resource) (*v1.H
 		return nil, fmt.Errorf("error converting access to helm spec: %w", err)
 	}
 	return &helm, nil
+}
+
+// GetCredentialTypeScheme returns the credential payload types this repository consumes
+// (HelmHTTPCredentials/v1 for HTTP repos, OCICredentials/v1 for OCI repos).
+func (r *ResourceRepository) GetCredentialTypeScheme() *runtime.Scheme {
+	return helmcreds.Scheme
+}
+
+// GetConsumerIdentityTypeScheme returns the consumer identity types this repository
+// resolves credentials for (HelmChartRepository/v1 and its unversioned alias).
+func (r *ResourceRepository) GetConsumerIdentityTypeScheme() *runtime.Scheme {
+	return helmidentity.Scheme
 }

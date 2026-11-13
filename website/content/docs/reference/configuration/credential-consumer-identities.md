@@ -82,7 +82,7 @@ Used when OCM accesses an OCI registry — pushing, pulling, or resolving compon
 
 | Attribute  | Required | Description                                                                                                                         |
 |------------|----------|-------------------------------------------------------------------------------------------------------------------------------------|
-| `type`     | Yes      | Must be `OCIRegistry`                                                                                                               |
+| `type`     | Yes      | Must be `OCIRegistry/v1`                                                                                                            |
 | `hostname` | Yes      | Registry hostname (e.g. `ghcr.io`, `registry.example.com`)                                                                          |
 | `path`     | No       | Repository path. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname.               |
 | `scheme`   | No       | URL scheme (`https`, `http`, `oci`). `oci` and `https` are equivalent. If omitted or empty on the request side, matches any scheme. |
@@ -117,7 +117,7 @@ For detailed matching examples and edge cases, see [Tutorial: Understand Credent
 
 ```yaml
 - identity:
-    type: OCIRegistry
+    type: OCIRegistry/v1
     hostname: ghcr.io
   credentials:
     - type: OCICredentials/v1
@@ -129,7 +129,7 @@ For detailed matching examples and edge cases, see [Tutorial: Understand Credent
 
 ```yaml
 - identity:
-    type: OCIRegistry
+    type: OCIRegistry/v1
     hostname: ghcr.io
     path: my-org/*
   credentials:
@@ -142,7 +142,7 @@ For detailed matching examples and edge cases, see [Tutorial: Understand Credent
 
 ```yaml
 - identity:
-    type: OCIRegistry
+    type: OCIRegistry/v1
     hostname: registry.internal
     scheme: https
     port: "8443"
@@ -163,7 +163,7 @@ identity is derived from the Helm repository URL using the same URL-based attrib
 
 | Attribute  | Required | Description                                                                    |
 |------------|----------|--------------------------------------------------------------------------------|
-| `type`     | Yes      | Must be `HelmChartRepository`                                                  |
+| `type`     | Yes      | Must be `HelmChartRepository/v1`                                               |
 | `hostname` | Yes      | Repository hostname (e.g. `charts.example.com`, `registry.example.com`)        |
 | `path`     | No       | Repository path (e.g. `stable`). If omitted, matches any path on the hostname. |
 | `scheme`   | No       | URL scheme (`https`, `http`, `oci`). If omitted, matches any scheme.           |
@@ -182,7 +182,7 @@ identity is derived from the Helm repository URL using the same URL-based attrib
 
 ```yaml
 - identity:
-    type: HelmChartRepository
+    type: HelmChartRepository/v1
     hostname: charts.example.com
     path: stable
   credentials:
@@ -195,7 +195,7 @@ identity is derived from the Helm repository URL using the same URL-based attrib
 
 ```yaml
 - identity:
-    type: HelmChartRepository
+    type: HelmChartRepository/v1
     hostname: registry.example.com
     scheme: oci
   credentials:
@@ -219,7 +219,7 @@ Used when OCM fetches a resource over plain HTTP or HTTPS through the
 
 | Attribute  | Required | Description                                                                                                                            |
 |------------|----------|----------------------------------------------------------------------------------------------------------------------------------------|
-| `type`     | Yes      | Must be `HTTP`                                                                                                                         |
+| `type`     | Yes      | Must be `HTTP/v1`                                                                                                                      |
 | `hostname` | Yes      | Server hostname (e.g. `downloads.example.com`)                                                                                         |
 | `path`     | No       | URL path without the leading `/`. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname. |
 | `scheme`   | No       | URL scheme (`https`, `http`). If omitted, matches any scheme. If set, must match exactly.                                              |
@@ -234,7 +234,7 @@ Used when OCM fetches a resource over plain HTTP or HTTPS through the
 | `scheme`   | `https`                    |
 | `path`     | `myapp/1.0.0/myapp.tar.gz` |
 
-The derived `type` is the canonical `Wget`. A consumer entry written as `HTTP` (or any other accepted alias) still matches it.
+The derived `type` is the canonical `Wget`. A consumer entry written as `HTTP/v1` (or any other accepted alias) still matches it.
 
 The URL carries no explicit port, so no `port` attribute is derived. Default ports stay implicit in the identity and
 are applied by the URL matcher instead, so this identity matches a consumer entry with `port: "443"` as well as one
@@ -265,10 +265,8 @@ The same three chained checks as [`OCIRegistry`](#ociregistry) apply: path glob,
 default-port handling), then exact equality on the remaining attributes.
 
 {{< callout context="caution" >}}
-Consumer entries are canonicalized to the unversioned spelling before matching, so `type: HTTP` matches the `Wget`
-lookup identity. The aliases `HTTP/v1`, `http`, `http/v1`, `Wget`, and `Wget/v1` (the latter two are the legacy name of the
-[access type]({{< relref "input-and-access-types.md#wgetv1-access" >}})) also resolve, because the wget consumer-identity
-type is registered in the credential graph's identity scheme. The lowercase `wget`
+Prefer `type: HTTP/v1`. The aliases `HTTP` (unversioned, deprecated), `http`, `http/v1`, `Wget`, and `Wget/v1` (the latter two are the legacy name of the
+[access type]({{< relref "input-and-access-types.md#wgetv1-access" >}})) also resolve. The lowercase `wget`
 spelling used by OCM v1 never matches. A non-matching entry fails silently: no credentials are resolved and the
 request goes out unauthenticated, so the symptom is a `401` from the server rather than a configuration error.
 {{< /callout >}}
@@ -279,7 +277,7 @@ request goes out unauthenticated, so the symptom is a `401` from the server rath
 
 ```yaml
 - identity:
-    type: HTTP
+    type: HTTP/v1
     hostname: downloads.example.com
   credentials:
     - type: HTTPCredentials/v1
@@ -291,7 +289,7 @@ request goes out unauthenticated, so the symptom is a `401` from the server rath
 
 ```yaml
 - identity:
-    type: HTTP
+    type: HTTP/v1
     hostname: api.example.com
     scheme: https
     path: artifacts/*
@@ -304,7 +302,7 @@ request goes out unauthenticated, so the symptom is a `401` from the server rath
 
 ```yaml
 - identity:
-    type: HTTP
+    type: HTTP/v1
     hostname: artifacts.internal
     scheme: https
     port: "8443"
@@ -356,7 +354,7 @@ access or input specifications.
 
 | Attribute  | Required | Description                                                                                                                                           |
 |------------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `type`     | Yes      | Must be `S3`                                                                                                                                          |
+| `type`     | Yes      | Must be `S3/v1`                                                                                                                                       |
 | `path`     | No       | Object location as `<bucketName>/<objectKey>`. Glob patterns are allowed. `*` matches one path segment. If you omit it, the entry matches any object. |
 | `hostname` | No       | Host of the `endpoint`, for example `minio.internal`. OCM derives it only for an S3-compatible store. **Do not set it for AWS S3.**                   |
 | `scheme`   | No       | Scheme of the `endpoint`: `https` or `http`. If you omit it, the entry matches any scheme. If you set it, it must match exactly.                      |
@@ -417,7 +415,7 @@ Two results of this are specific to S3:
   bucket, use `**` (`acme-artifacts/**`), or omit `path` and scope the entry another way.
 
 {{< callout context="caution" >}}
-Write the identity type as `type: S3`. OCM matches the type as an exact string, and the type is **unversioned**.
+Write the identity type as `type: S3/v1`. The versioned form is preferred; `S3` (unversioned) still works but is deprecated.
 `S3/v2` (the name of the
 [access and input type]({{< relref "input-and-access-types.md#s3v2-access" >}})) does not match.
 
@@ -432,7 +430,7 @@ identity configuration error.
 
 ```yaml
 - identity:
-    type: S3
+    type: S3/v1
     path: public-bucket/path/to/object
   credentials:
     - type: S3Credentials/v1
@@ -443,7 +441,7 @@ identity configuration error.
 
 ```yaml
 - identity:
-    type: S3
+    type: S3/v1
   credentials:
     - type: S3Credentials/v1
       accessKeyId: <access-key-id>
@@ -454,7 +452,7 @@ identity configuration error.
 
 ```yaml
 - identity:
-    type: S3
+    type: S3/v1
     path: acme-artifacts/datasets/reference/1.0.0/reference.parquet
   credentials:
     - type: S3Credentials/v1
@@ -467,7 +465,7 @@ identity configuration error.
 
 ```yaml
 - identity:
-    type: S3
+    type: S3/v1
     scheme: https
     hostname: minio.internal
     port: "9000"
@@ -490,7 +488,7 @@ The identity type is `S3` in OCM v1 and in OCM v2, but three other things change
 ```yaml
 # OCM v1
 - identity:
-    type: S3
+    type: S3/v1
     pathprefix: acme-artifacts/datasets
   credentials:
     - type: Credentials
@@ -502,7 +500,7 @@ The identity type is `S3` in OCM v1 and in OCM v2, but three other things change
 ```yaml
 # OCM v2
 - identity:
-    type: S3
+    type: S3/v1
     path: acme-artifacts/datasets/**
   credentials:
     - type: S3Credentials/v1
@@ -589,7 +587,7 @@ for supported types and their schemas.
 
 | Attribute  | Required | Description                                                                                                                        |
 |------------|----------|------------------------------------------------------------------------------------------------------------------------------------|
-| `type`     | Yes      | Must be `Git`                                                                                                                      |
+| `type`     | Yes      | Must be `Git/v1`                                                                                                                   |
 | `hostname` | Yes      | Server hostname (e.g. `gitlab.com`)                                                                                                |
 | `path`     | No       | Repository path without the leading `/`. Supports glob patterns (`*` matches one path segment). If omitted, matches any path.      |
 | `scheme`   | No       | Transport: `https`, `http`, `ssh` or `git`. If omitted, matches any transport. If set, must match exactly.                         |
@@ -633,7 +631,7 @@ server answers with an authentication error.
 
 ```yaml
 - identity:
-    type: Git
+    type: Git/v1
     hostname: gitlab.com
     scheme: https
     path: example-group/*
@@ -647,7 +645,7 @@ server answers with an authentication error.
 
 ```yaml
 - identity:
-    type: Git
+    type: Git/v1
     hostname: git.example.com
     scheme: ssh
     port: "22"
@@ -842,7 +840,7 @@ configurations:
     consumers:
       # OCI registry — hostname catch-all
       - identity:
-          type: OCIRegistry
+          type: OCIRegistry/v1
           hostname: ghcr.io
         credentials:
           - type: OCICredentials/v1

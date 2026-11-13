@@ -231,7 +231,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: HTTP
+          type: HTTP/v1
           hostname: downloads.example.com
           scheme: https
         credentials:
@@ -507,7 +507,7 @@ Identity matching has been updated.
 
 | Field             | OCM v1                             | OCM v2             | What to do                                                                               |
 |-------------------|------------------------------------|--------------------|------------------------------------------------------------------------------------------|
-| Consumer identity | `type: wget`                       | `type: HTTP`       | Rename the type (`Wget` also works).                                                     |
+| Consumer identity | `type: wget`                       | `type: HTTP/v1`    | Rename the type (`Wget` also works).                                                     |
 | Identity path     | `pathprefix`, longest-prefix match | `path`, glob match | Rename the attribute. `*` matches one path segment, `**` any depth; omit `path` for all. |
 
 Further matching changes:
@@ -548,7 +548,7 @@ needs an explicit `mediaType`.
 
 ### `401 Unauthorized` right after migrating from OCM v1
 
-**Why:** Two identity attributes were renamed. `type: wget` MUST become `type: HTTP` (the legacy `Wget` spelling also
+**Why:** Two identity attributes were renamed. `type: wget` MUST become `type: HTTP/v1` (the legacy `Wget` spelling also
 works), and `pathprefix` is replaced by `path`. OCM v2 still converts `pathprefix` into `path` patterns.
 
 **Fix:** Rename the type and replace `pathprefix` with `path`. Omitting `path` matches every path on the host. See

@@ -18,6 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/git/spec/access"
 	accessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	gitcreds "ocm.software/open-component-model/bindings/go/git/spec/credentials"
+	gitidentity "ocm.software/open-component-model/bindings/go/git/spec/identity"
 	identityv1 "ocm.software/open-component-model/bindings/go/git/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/repository/integrity"
@@ -92,6 +93,12 @@ func (r *ResourceRepository) downloadOptions(tempDir string) download.Options {
 
 func (r *ResourceRepository) GetCredentialTypeScheme() *runtime.Scheme {
 	return gitcreds.Scheme
+}
+
+// GetConsumerIdentityTypeScheme returns the consumer identity types this repository
+// resolves credentials for (Git/v1 and its unversioned alias).
+func (r *ResourceRepository) GetConsumerIdentityTypeScheme() *runtime.Scheme {
+	return gitidentity.Scheme
 }
 
 func (r *ResourceRepository) GetResourceRepositoryScheme() *runtime.Scheme {

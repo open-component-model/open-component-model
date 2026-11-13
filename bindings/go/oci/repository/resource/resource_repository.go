@@ -23,6 +23,7 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ocicreds "ocm.software/open-component-model/bindings/go/oci/spec/credentials"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
+	ociidentity "ocm.software/open-component-model/bindings/go/oci/spec/identity"
 	credidentityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
@@ -363,6 +364,12 @@ func (p *ResourceRepository) UploadResourceStream(ctx context.Context, resource 
 // credential repository configuration types (DockerConfig) instead of payload types.
 func (p *ResourceRepository) GetCredentialTypeScheme() *runtime.Scheme {
 	return ocicreds.CredentialTypeScheme
+}
+
+// GetConsumerIdentityTypeScheme returns the consumer identity types this repository
+// resolves credentials for (OCIRegistry/v1 and its unversioned alias).
+func (p *ResourceRepository) GetConsumerIdentityTypeScheme() *runtime.Scheme {
+	return ociidentity.Scheme
 }
 
 // credentialFunc returns credentials for requests to host. oras matches on the

@@ -21,6 +21,7 @@ import (
 	accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
 	v2 "ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
 	s3creds "ocm.software/open-component-model/bindings/go/s3/spec/credentials"
+	s3identity "ocm.software/open-component-model/bindings/go/s3/spec/identity"
 	identityv1 "ocm.software/open-component-model/bindings/go/s3/spec/identity/v1"
 )
 
@@ -238,4 +239,10 @@ func pinningVersion(versionID string) string {
 
 func (r *ResourceRepository) GetCredentialTypeScheme() *runtime.Scheme {
 	return s3creds.Scheme
+}
+
+// GetConsumerIdentityTypeScheme returns the consumer identity types this repository
+// resolves credentials for (S3/v1 and its unversioned alias).
+func (r *ResourceRepository) GetConsumerIdentityTypeScheme() *runtime.Scheme {
+	return s3identity.Scheme
 }

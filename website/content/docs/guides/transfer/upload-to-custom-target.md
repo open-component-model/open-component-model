@@ -158,7 +158,7 @@ identity, independently of the source resource:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: HTTP
+          type: HTTP/v1
           hostname: mytarget.example.com
         credentials:
           - type: Credentials/v1
@@ -264,7 +264,7 @@ field fails the transfer deliberately rather than producing a partial URL.
 
 **Cause:** No credentials matched the target host.
 
-**Fix:** Add a `credentials.config.ocm.software` consumer with `type: HTTP` and the
+**Fix:** Add a `credentials.config.ocm.software` consumer with `type: HTTP/v1` and the
 target `hostname`, as in Step 2.
 
 ### Problem: The transfer succeeds but nothing is uploaded

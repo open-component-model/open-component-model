@@ -136,7 +136,7 @@ of `<url>/artifactory/<repository>`:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: HelmChartRepository
+          type: HelmChartRepository/v1
           hostname: myorg.jfrog.io
         credentials:
           - type: HelmHTTPCredentials/v1
