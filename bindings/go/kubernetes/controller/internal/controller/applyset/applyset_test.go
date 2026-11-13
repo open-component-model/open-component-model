@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
-	goruntime "runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -1317,9 +1316,8 @@ func TestPrune_TerminatingObjectIsPendingWithoutDelete(t *testing.T) {
 	r.Zero(deletes)
 }
 
-// TestApply_ConflictDetection_DoesNotTransferObjectContents covers the controller being OOM-killed when many
-// deployers share a namespace (ocm-project#1412). Conflict detection reads only the labels, namespace and name of
-// every ApplySet member of the applied kinds, so the list must not carry the members' contents.
+// TestApply_ConflictDetection_DoesNotTransferObjectContents covers the OOM when many deployers share a namespace
+// (ocm-project#1412): the check reads only metadata, so the list must not carry the members' contents.
 func TestApply_ConflictDetection_DoesNotTransferObjectContents(t *testing.T) {
 	r := require.New(t)
 
@@ -1395,16 +1393,12 @@ func TestApply_ConflictDetection_DoesNotTransferObjectContents(t *testing.T) {
 		ParentNamespace: "default",
 	}, parent)
 
-	var before, after goruntime.MemStats
-	goruntime.ReadMemStats(&before)
 	result, err := applier.Apply(t.Context(), []Resource{{ID: "cm1", Object: newConfigMap("cm1", "default")}}, ApplyMode{})
-	goruntime.ReadMemStats(&after)
 	r.NoError(err)
 	r.Len(result.Applied, 1)
 	r.NoError(result.Applied[0].Error)
 
-	t.Logf("conflict detection read %d bytes, Apply allocated %d bytes for %d members of %d bytes each",
-		listBytes, after.TotalAlloc-before.TotalAlloc, members, payloadSize)
+	t.Logf("conflict detection read %d bytes for %d members of %d bytes each", listBytes, members, payloadSize)
 
 	r.Len(listAccept, 1)
 	r.Contains(listAccept[0], "as=PartialObjectMetadataList", "conflict detection must request metadata only")
@@ -1434,8 +1428,7 @@ func configMapListResponse(accept string, items []corev1.ConfigMap) ([]byte, err
 	return json.Marshal(list)
 }
 
-// TestApply_ConflictDetection_UsesReader covers conflict detection reading the members through Config.Reader, which
-// the controller points at a reader that does not cache the applied kinds.
+// TestApply_ConflictDetection_UsesReader covers conflict detection reading the members through Config.Reader.
 func TestApply_ConflictDetection_UsesReader(t *testing.T) {
 	r := require.New(t)
 

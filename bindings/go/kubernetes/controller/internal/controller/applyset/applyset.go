@@ -155,9 +155,9 @@ func (m Metadata) PruneScope() *PruneScope {
 // Config for creating an ApplySet.
 type Config struct {
 	Client client.Client
-	// Reader lists the ApplySet members for conflict detection. It must read live, not through a cache: the lists
-	// cover whichever kinds are applied, and a cache would need an informer per kind, which requires the watch
-	// permission and keeps every object of that kind in memory. Defaults to Client.
+	// Reader lists the ApplySet members for conflict detection. It must read live: a cache needs an informer per
+	// applied kind, which requires the watch permission and holds every object of that kind in memory. Avoiding
+	// that memory is the point, so do not trade the list calls back for a cache. Defaults to Client.
 	Reader          client.Reader
 	RESTMapper      meta.RESTMapper
 	Log             logr.Logger
@@ -476,8 +476,8 @@ func (a *ApplySet) detectConflicts(ctx context.Context, entries []applyEntry) (m
 	eg, egCtx := errgroup.WithContext(ctx)
 	for task := range tasks {
 		eg.Go(func() error {
-			// The list covers every ApplySet member of the kind, which is far more objects than this ApplySet applies
-			// when many parents share a namespace, and the check below reads nothing but their metadata.
+			// Covers every ApplySet member of the kind, not just this ApplySet's, and the check below reads
+			// nothing but their metadata.
 			list := &metav1.PartialObjectMetadataList{}
 			list.SetGroupVersionKind(task.gvk.GroupVersion().WithKind(task.gvk.Kind + "List"))
 
