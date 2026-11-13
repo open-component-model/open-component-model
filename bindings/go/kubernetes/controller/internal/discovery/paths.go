@@ -1,23 +1,21 @@
 package discovery
 
 import (
-	"maps"
 	"slices"
-	"strconv"
 	"strings"
 
-	"cel.dev/cel-go/common/types"
-
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // referencePaths returns, for every component reachable from root in byKey,
 // the shortest component reference path from root, usable verbatim as a
 // Resource's spec.resource.byReference.referencePath. Root maps to an empty,
-// non-nil path. Among equally short paths the lexicographically smallest
-// sequence of runtime.Identity.String() values wins. A root missing from byKey
-// yields nil.
+// non-nil path. Only references that an identity selects on their own (see
+// ocm.AddressableIdentities) are followed. Among equally short paths the
+// lexicographically smallest sequence of runtime.Identity.String() values
+// wins. A root missing from byKey yields nil.
 //
 // The search is a breadth-first search processed one complete layer at a time,
 // so every component in a layer is reached by a path of the same length. The
@@ -70,10 +68,9 @@ func referencePaths(root ComponentKey, byKey map[ComponentKey]*descriptor.Descri
 			for i := range refs {
 				ids[i] = refs[i].ToIdentity()
 			}
-			// versionNeeded must see the component's complete reference list,
-			// never a candidate subset, or an element can lose a version it
-			// needs to be told apart from a sibling.
-			needed := versionNeeded(ids)
+			// Judged against the component's complete reference list, never a
+			// candidate subset, which is what the Resource controller matches.
+			elements := ocm.AddressableIdentities(ids)
 			for i := range refs {
 				child := ComponentKey{Name: refs[i].Component, Version: refs[i].Version}
 				if _, done := paths[child]; done {
@@ -82,7 +79,12 @@ func referencePaths(root ComponentKey, byKey map[ComponentKey]*descriptor.Descri
 				if d, ok := byKey[child]; !ok || d == nil {
 					continue
 				}
-				element := versionlessIdentity(ids[i], needed)
+				// No identity selects this reference alone, so no hop leads
+				// through it.
+				element := elements[i]
+				if element == nil {
+					continue
+				}
 				candidates = append(candidates, hop{
 					parent:     entry.component,
 					parentRank: entry.rank,
@@ -128,123 +130,64 @@ func referencePaths(root ComponentKey, byKey map[ComponentKey]*descriptor.Descri
 	return paths
 }
 
-// versionNeeded returns the versionless forms (see identityKey) that occur
-// more than once in ids. An element whose versionless identity is in the
-// result needs its version to be told apart from the others. ids must be all
-// elements the Resource controller matches against, not a filtered subset, or
-// an element can lose a version it needs.
-func versionNeeded(ids []runtime.Identity) map[string]bool {
-	counts := make(map[string]int, len(ids))
-	for _, id := range ids {
-		counts[identityKey(withoutVersion(id))]++
-	}
-	needed := map[string]bool{}
-	for s, n := range counts {
-		if n > 1 {
-			needed[s] = true
-		}
-	}
-	return needed
-}
-
-// versionlessIdentity returns id without its version attribute, unless needed
-// (see versionNeeded) says the version is required to tell it apart. This
-// matches how the Resource controller matches identities
-// (ocm.IdentityFuncIgnoreVersion): a versionless identity follows whatever
-// version the element currently has, so it keeps working after the root
-// component moves to a new version.
-func versionlessIdentity(id runtime.Identity, needed map[string]bool) runtime.Identity {
-	stripped := withoutVersion(id)
-	if needed[identityKey(stripped)] {
-		if id == nil {
-			return runtime.Identity{}
-		}
-		return id.Clone()
-	}
-	return stripped
-}
-
-// identityKey encodes id so that two identities share a key exactly when they
-// are equal. runtime.Identity.String joins key=value pairs with commas, so
-// values containing "," or "=" can make different identities collide.
-func identityKey(id runtime.Identity) string {
-	var b strings.Builder
-	for _, k := range slices.Sorted(maps.Keys(id)) {
-		// Quoting escapes the separators, so the encoding is unambiguous.
-		b.WriteString(strconv.Quote(k))
-		b.WriteByte('=')
-		b.WriteString(strconv.Quote(id[k]))
-		b.WriteByte(',')
-	}
-	return b.String()
-}
-
-func withoutVersion(id runtime.Identity) runtime.Identity {
-	s := id.Clone()
-	if s == nil {
-		s = runtime.Identity{}
-	}
-	delete(s, descriptor.IdentityAttributeVersion)
-	return s
-}
-
 // bindings provides the referencePath and resourceIdentity bindings of the
-// per-element extraction modes. They are bound lazily: CEL only calls a lazy
-// binding when an expression reads the variable, so a Discovery whose
-// expressions do not use them pays nothing. Each value is computed once.
+// per-element extraction modes. A binding that no expression reads is never
+// computed. An element without a value leaves its binding unset, so an
+// expression reading it is a missing access and its field is omitted.
 type bindings struct {
-	filtered *Filtered
-	paths    map[ComponentKey][]runtime.Identity // computed on first use
+	filtered           *Filtered
+	paths              map[ComponentKey][]runtime.Identity // nil unless referencePath is read
+	resourceIdentities bool                                // whether resourceIdentity is read
 }
 
-// referencePath returns the lazy referencePath binding of d, or nil when the
-// graph has no root, which leaves the binding unset: expressions reading it are
-// a missing access and their field is omitted.
-func (b *bindings) referencePath(d *descriptor.Descriptor) func() any {
-	if _, ok := b.filtered.unfiltered[b.filtered.root]; !ok {
+func newBindings(filtered *Filtered, reads map[string]bool) *bindings {
+	b := &bindings{filtered: filtered, resourceIdentities: reads[bindingResourceIdentity]}
+	if reads[bindingReferencePath] {
+		b.paths = referencePaths(filtered.root, filtered.unfiltered)
+	}
+	return b
+}
+
+// referencePath returns the reference path of d, or false when it is not read
+// or no path from the root addresses d.
+func (b *bindings) referencePath(d *descriptor.Descriptor) ([]runtime.Identity, bool) {
+	path, ok := b.paths[ComponentKey{Name: d.Component.Name, Version: d.Component.Version}]
+	return path, ok
+}
+
+// resourceIdentity returns the resourceIdentity binding of each resource of d,
+// nil where it is not read or no identity selects the resource alone. That is
+// judged against all resources of the component, which is what the Resource
+// controller matches against, not only those a resource selector kept.
+func (b *bindings) resourceIdentity(d *descriptor.Descriptor) []runtime.Identity {
+	if !b.resourceIdentities {
 		return nil
 	}
-	key := ComponentKey{Name: d.Component.Name, Version: d.Component.Version}
-	return func() any {
-		if b.paths == nil {
-			b.paths = referencePaths(b.filtered.root, b.filtered.unfiltered)
-		}
-		path, ok := b.paths[key]
-		if !ok {
-			return types.NewErr("component %s is not reachable from the root component %s", key, b.filtered.root)
-		}
-		return path
+	all := d.Component.Resources
+	if orig, ok := b.filtered.unfiltered[ComponentKey{Name: d.Component.Name, Version: d.Component.Version}]; ok {
+		all = orig.Component.Resources
 	}
-}
+	ids := make([]runtime.Identity, len(all))
+	for k := range all {
+		ids[k] = all[k].ToIdentity()
+	}
+	addressable := ocm.AddressableIdentities(ids)
 
-// resourceIdentity returns a function that yields the lazy resourceIdentity
-// binding of the j-th of the n v2 resources of d. Whether a version is needed
-// is judged against all resources of the component, which is what the
-// Resource controller matches against, not only those a resource selector
-// kept.
-func (b *bindings) resourceIdentity(d *descriptor.Descriptor, n int) func(j int) func() any {
-	var needed map[string]bool
-	return func(j int) func() any {
-		return func() any {
-			// The v2 resource list is a conversion of the runtime one, so both
-			// share order and length. Pairing by index is only safe while that
-			// holds; refuse to guess otherwise.
-			if n != len(d.Component.Resources) {
-				return types.NewErr("component %s has %d v2 resources but %d runtime resources",
-					d.Component.String(), n, len(d.Component.Resources))
-			}
-			if needed == nil {
-				all := d.Component.Resources
-				if orig, ok := b.filtered.unfiltered[ComponentKey{Name: d.Component.Name, Version: d.Component.Version}]; ok {
-					all = orig.Component.Resources
-				}
-				ids := make([]runtime.Identity, len(all))
-				for k := range all {
-					ids[k] = all[k].ToIdentity()
-				}
-				needed = versionNeeded(ids)
-			}
-			return versionlessIdentity(d.Component.Resources[j].ToIdentity(), needed)
+	// A resource selector keeps resources in order, so the kept ones are a
+	// subsequence of all. Equal identities are all unaddressable, so pairing
+	// one with the wrong twin changes nothing.
+	out := make([]runtime.Identity, len(d.Component.Resources))
+	k := 0
+	for j := range d.Component.Resources {
+		id := d.Component.Resources[j].ToIdentity()
+		for k < len(ids) && !ids[k].Equal(id) {
+			k++
 		}
+		if k == len(ids) {
+			break
+		}
+		out[j] = addressable[k]
+		k++
 	}
+	return out
 }

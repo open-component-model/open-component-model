@@ -140,6 +140,13 @@ new version; one that keeps its `version` is pinned to it and stops resolving
 once that version is gone. Raw mode and `expression` mode do not have these
 bindings.
 
+An element that no identity selects on its own, such as one of two references
+or resources with equal identities, or a resource without `version` next to a
+same-named one with it, gets no binding: like any missing access, the field is
+omitted from its record. A `Resource` would resolve such an identity to the
+first match, which need not be the element the record describes. A component
+reachable only through such a reference has no `referencePath`.
+
 The detour through a `Resource` matters because Discovery publishes whatever the
 repository returns when it walks the graph. If a nested component version is
 overwritten in the repository, a `Discovery` that walks it afterwards stays
@@ -298,8 +305,9 @@ On failure the controller **retains the last successful payload**, even if it
 belongs to the previous output mode, and updates only the conditions:
 
 - **`ResolutionFailed`** (`Ready=False`): The graph could not be resolved —
-  repository, auth or network failure, or an unavailable component version.
-  **Retried with backoff**, since the cause is usually transient and a failure
+  repository, auth or network failure, an unavailable component version, or a
+  repository that returns another component version than the one requested,
+  such as a tag that holds a different version. **Retried with backoff**, since the cause is usually transient and a failure
   below the root produces no watch event to recover from.
 - **`SelectorFailed`** (`Ready=False`, `Stalled=True`): Selector compilation,
   evaluation or type error, including exhausting the CEL cost budget on a very

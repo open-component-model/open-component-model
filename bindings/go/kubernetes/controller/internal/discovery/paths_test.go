@@ -195,42 +195,6 @@ func TestReferencePathsWithoutRoot(t *testing.T) {
 	}
 }
 
-func TestVersionlessIdentity(t *testing.T) {
-	r := require.New(t)
-	in := []runtime.Identity{
-		{"name": "a", "version": "1.0.0"},
-		{"name": "b", "version": "1.0.0"},
-		{"name": "b", "version": "2.0.0"},
-		{"name": "b", "version": "1.0.0", "arch": "arm64"},
-		nil,
-	}
-	needed := versionNeeded(in)
-	var out []runtime.Identity
-	for _, id := range in {
-		out = append(out, versionlessIdentity(id, needed))
-	}
-	r.Equal([]runtime.Identity{
-		{"name": "a"},
-		{"name": "b", "version": "1.0.0"},
-		{"name": "b", "version": "2.0.0"},
-		{"name": "b", "arch": "arm64"},
-		{},
-	}, out)
-	r.Equal(runtime.Identity{"name": "a", "version": "1.0.0"}, in[0], "the input must not be modified")
-
-	// These differ, but runtime.Identity.String renders both as
-	// "aa=x,bb=y,name=image". They must not count as duplicates.
-	colliding := []runtime.Identity{
-		{"name": "image", "aa": "x,bb=y", "version": "1.0.0"},
-		{"name": "image", "aa": "x", "bb": "y", "version": "1.0.0"},
-	}
-	r.Equal(colliding[0].String(), colliding[1].String(), "precondition: String collides")
-	needed = versionNeeded(colliding)
-	for _, id := range colliding {
-		r.NotContains(versionlessIdentity(id, needed), "version", "unique identity %v must not keep its version", id)
-	}
-}
-
 // projectGraph compiles spec and runs Filter and Project over a graph rooted
 // at the first descriptor.
 func projectGraph(t *testing.T, spec *v1alpha1.DiscoverySpec, descriptors ...*descriptor.Descriptor) *Payload {
@@ -380,6 +344,9 @@ func TestProjectedRecordResolvesLikeResourceController(t *testing.T) {
 		// subset must not make a needed version look unnecessary.
 		selector    *v1alpha1.Selector
 		wantRecords int // 0 means one record per resource
+		// wantOmitted counts records without resourceIdentity because no
+		// identity selects their resource alone.
+		wantOmitted int
 	}{
 		{
 			name: "resources that differ only in extra identity",
@@ -401,6 +368,15 @@ func TestProjectedRecordResolvesLikeResourceController(t *testing.T) {
 			},
 			selector:    &v1alpha1.Selector{MatchIdentity: map[string]string{"name": "chart", "version": "2.0.0"}},
 			wantRecords: 1,
+		},
+		{
+			// A resource without a version has no version attribute in its
+			// identity, so its full identity also matches a versioned sibling.
+			name: "resource without version next to a versioned sibling",
+			descriptors: []*descriptor.Descriptor{
+				newDescriptor("root", "1.0.0", withResources(versioned("chart", ""), versioned("chart", "1.0.0"))),
+			},
+			wantOmitted: 1,
 		},
 		{
 			name:        "resource selector keeps one version in a nested component",
@@ -432,6 +408,7 @@ func TestProjectedRecordResolvesLikeResourceController(t *testing.T) {
 			}, tt.descriptors...)
 			r.Len(p.Extracted, want)
 
+			omitted := 0
 			for _, record := range p.Extracted {
 				var ref v1alpha1.ResourceReference
 				r.NoError(json.Unmarshal([]byte(mustJSON(t, record)), &ref))
@@ -451,6 +428,10 @@ func TestProjectedRecordResolvesLikeResourceController(t *testing.T) {
 				}
 				r.Equal(record["component"], current.Component.Name+":"+current.Component.Version,
 					"the path must lead to the record's component")
+				if _, ok := record["resource"]; !ok {
+					omitted++
+					continue
+				}
 
 				var matched []*descriptor.Resource
 				for j := range current.Component.Resources {
@@ -468,36 +449,108 @@ func TestProjectedRecordResolvesLikeResourceController(t *testing.T) {
 					}
 				}
 			}
+			r.Equal(tt.wantOmitted, omitted, "records without resourceIdentity")
 		})
 	}
 }
 
-// TestBindingsAreLazy pins that the bindings are only computed when an
-// expression reads them. An unreachable component has no reference path:
-// reading it is an extraction error, not reading it must not fail.
-func TestBindingsAreLazy(t *testing.T) {
-	r := require.New(t)
-	descriptors := []*descriptor.Descriptor{
-		newDescriptor("root", "1.0.0", withResources(newResource("cfg"))),
-		newDescriptor("unreachable", "1.0.0", withResources(newResource("image"))),
+// TestBindingsOnlyWhenRead pins that a binding is only computed when an
+// expression reads it.
+func TestBindingsOnlyWhenRead(t *testing.T) {
+	tests := []struct {
+		name      string
+		extract   *v1alpha1.Extract
+		wantReads map[string]bool
+	}{
+		{
+			name:      "neither binding",
+			extract:   &v1alpha1.Extract{ByResources: map[string]string{"n": `resource.name`}},
+			wantReads: map[string]bool{},
+		},
+		{
+			name:      "referencePath in a nested expression",
+			extract:   &v1alpha1.Extract{ByComponents: map[string]string{"n": `size(referencePath) > 0 ? "nested" : "root"`}},
+			wantReads: map[string]bool{bindingReferencePath: true},
+		},
+		{
+			name: "both bindings in different fields",
+			extract: &v1alpha1.Extract{ByResources: map[string]string{
+				"p": `referencePath`,
+				"r": `resourceIdentity.name`,
+			}},
+			wantReads: map[string]bool{bindingReferencePath: true, bindingResourceIdentity: true},
+		},
 	}
-	graph := Graph{Root: ComponentKey{Name: "root", Version: "1.0.0"}, Descriptors: descriptors}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			q, err := Compile(t.Context(), specWithExtract(tt.extract))
+			r.NoError(err)
+			for _, binding := range []string{bindingReferencePath, bindingResourceIdentity} {
+				r.Equal(tt.wantReads[binding], q.extract.reads[binding], binding)
+			}
+		})
+	}
+}
 
-	unused, err := Compile(t.Context(), specWithExtract(&v1alpha1.Extract{ByResources: map[string]string{"n": `resource.name`}}))
-	r.NoError(err)
-	f, err := unused.Filter(t.Context(), graph)
-	r.NoError(err)
-	_, err = unused.Project(t.Context(), f)
-	r.NoError(err, "an unread binding must not be computed")
+// TestUnaddressableElementsOmitBindings pins that an element no identity
+// addresses on its own gets no binding: the field is omitted, the record is
+// kept, and the rest of the Discovery is unaffected.
+func TestUnaddressableElementsOmitBindings(t *testing.T) {
+	spec := specWithExtract(&v1alpha1.Extract{ByResources: map[string]string{
+		"component": `component.name`,
+		"resource":  `resource.name`,
+		"path":      `referencePath`,
+		"identity":  `resourceIdentity`,
+	}})
 
-	used, err := Compile(t.Context(), specWithExtract(&v1alpha1.Extract{ByResources: map[string]string{"p": `referencePath`}}))
-	r.NoError(err)
-	f, err = used.Filter(t.Context(), graph)
-	r.NoError(err)
-	_, err = used.Project(t.Context(), f)
-	var extractErr *ExtractError
-	r.ErrorAs(err, &extractErr)
-	r.ErrorContains(err, "not reachable from the root component")
+	t.Run("component unreachable from the root", func(t *testing.T) {
+		r := require.New(t)
+		p := projectGraph(t, spec,
+			newDescriptor("root", "1.0.0", withResources(newResource("cfg"))),
+			newDescriptor("unreachable", "1.0.0", withResources(newResource("image"))),
+		)
+		r.JSONEq(`[
+			{"component":"root","resource":"cfg","path":[],"identity":{"name":"cfg"}},
+			{"component":"unreachable","resource":"image","identity":{"name":"image"}}
+		]`, mustJSON(t, p.Extracted))
+	})
+
+	t.Run("references with equal identities", func(t *testing.T) {
+		r := require.New(t)
+		// Both references are x@1.0.0; the Resource controller would resolve
+		// either one to compA. Neither component gets a path through them,
+		// compB keeps one through its unambiguous second reference.
+		p := projectGraph(t, spec,
+			newDescriptor("root", "1.0.0", withReferences(
+				newReference("x", "compA", "1.0.0"),
+				newReference("x", "compB", "1.0.0"),
+				newReference("y", "compB", "1.0.0"),
+			)),
+			newDescriptor("compA", "1.0.0", withResources(newResource("ra"))),
+			newDescriptor("compB", "1.0.0", withResources(newResource("rb"))),
+		)
+		r.JSONEq(`[
+			{"component":"compA","resource":"ra","identity":{"name":"ra"}},
+			{"component":"compB","resource":"rb","path":[{"name":"y"}],"identity":{"name":"rb"}}
+		]`, mustJSON(t, p.Extracted))
+	})
+
+	t.Run("resources with equal identities", func(t *testing.T) {
+		r := require.New(t)
+		p := projectGraph(t, spec,
+			newDescriptor("root", "1.0.0", withResources(
+				newResource("twin", withResourceLabels(stringLabel("n", "1"))),
+				newResource("twin", withResourceLabels(stringLabel("n", "2"))),
+				newResource("single"),
+			)),
+		)
+		r.JSONEq(`[
+			{"component":"root","resource":"twin","path":[]},
+			{"component":"root","resource":"twin","path":[]},
+			{"component":"root","resource":"single","path":[],"identity":{"name":"single"}}
+		]`, mustJSON(t, p.Extracted))
+	})
 }
 
 // collidingReferenceGraph builds a diamond whose two first-hop reference
@@ -529,8 +582,10 @@ func TestReferencePathsCollidingIdentityStrings(t *testing.T) {
 	// Precondition: the two first-hop versionless elements really do collide on
 	// String() yet are unequal maps. If this ever stops holding the fixture no
 	// longer exercises the collision and the test is meaningless.
-	left := withoutVersion(collidingReferenceGraph()[0].Component.References[0].ToIdentity())
-	right := withoutVersion(collidingReferenceGraph()[0].Component.References[1].ToIdentity())
+	left := collidingReferenceGraph()[0].Component.References[0].ToIdentity()
+	right := collidingReferenceGraph()[0].Component.References[1].ToIdentity()
+	delete(left, descriptor.IdentityAttributeVersion)
+	delete(right, descriptor.IdentityAttributeVersion)
 	require.Equal(t, left.String(), right.String(), "precondition: the first-hop elements must collide on String()")
 	require.NotEqual(t, left, right, "precondition: the first-hop elements must be different identities")
 

@@ -85,7 +85,7 @@ func (q *Query) Project(ctx context.Context, filtered *Filtered) (*Payload, erro
 	// Every projector returns an allocated slice, so the selected output stays
 	// non-nil even when empty. The default keeps a future mode from shipping as
 	// a silent empty result.
-	b := &bindings{filtered: filtered}
+	b := newBindings(filtered, q.extract.reads)
 	switch q.extract.mode {
 	case extractByResources:
 		payload.Extracted, err = q.projectPerResource(ctx, descriptors, b)
@@ -181,17 +181,20 @@ func (q *Query) projectPerResource(ctx context.Context, descriptors []*runtime.U
 			return nil, fmt.Errorf("failed to project resources of descriptor %d: %w", i, err)
 		}
 		d := b.filtered.Descriptors[i]
-		list := resources(comp)
-		path := b.referencePath(d)
-		identity := b.resourceIdentity(d, len(list))
-		for j, resource := range list {
+		path, hasPath := b.referencePath(d)
+		// The v2 resource list converts the runtime one element by element
+		// (descriptor.ConvertToV2Resources), so both share order and length.
+		identities := b.resourceIdentity(d)
+		for j, resource := range resources(comp) {
 			activation := map[string]any{
-				"component":             comp,
-				"resource":              resource,
-				bindingResourceIdentity: identity(j),
+				"component": comp,
+				"resource":  resource,
 			}
-			if path != nil {
+			if hasPath {
 				activation[bindingReferencePath] = path
+			}
+			if j < len(identities) && identities[j] != nil {
+				activation[bindingResourceIdentity] = identities[j]
 			}
 			record, err := q.evalFields(ctx, activation)
 			if err != nil {
@@ -216,7 +219,7 @@ func (q *Query) projectPerComponent(ctx context.Context, descriptors []*runtime.
 			return nil, fmt.Errorf("failed to project descriptor %d: %w", i, err)
 		}
 		activation := map[string]any{"component": comp}
-		if path := b.referencePath(b.filtered.Descriptors[i]); path != nil {
+		if path, ok := b.referencePath(b.filtered.Descriptors[i]); ok {
 			activation[bindingReferencePath] = path
 		}
 		record, err := q.evalFields(ctx, activation)
