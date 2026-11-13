@@ -1,3 +1,9 @@
+// Read by deps (https://github.com/jakobmoellerdev/deps) in Renovate
+// compatibility mode, see .github/workflows/deps.yml: deps translates this file
+// in memory on every run. Renovate itself no longer runs on this repository,
+// the file name and the Renovate schema stay. `deps plan --renovate --config
+// .github/renovate.json5` shows the effect of a change locally, and the deps
+// workflow dry-runs it on every pull request that touches this file.
 {
   $schema: 'https://docs.renovatebot.com/renovate-schema.json',
   extends: [
