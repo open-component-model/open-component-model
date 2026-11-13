@@ -17,3 +17,9 @@ components:
         input:
           type: file
           path: ./rgd.yaml
+      - name: crossplane-xrd
+        type: blob
+        version: "1.0.0"
+        input:
+          type: file
+          path: ./crossplane-composition.yaml
