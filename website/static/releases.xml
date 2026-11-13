@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>OCM Releases</title>
+    <link>https://github.com/open-component-model/open-component-model/releases</link>
+    <description>Release candidates and final releases of Open Component Model.</description>
+    <language>en</language>
+    <atom:link href="https://ocm.software/releases.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>OCM v0.23.0 released</title>
+      <link>https://github.com/open-component-model/open-component-model/releases/tag/v0.23.0</link>
+      <guid isPermaLink="true">https://github.com/open-component-model/open-component-model/releases/tag/v0.23.0</guid>
+      <pubDate>Fri, 06 Nov 2026 14:35:03 GMT</pubDate>
+      <description>OCM v0.23.0 is available. Release notes and downloads: https://github.com/open-component-model/open-component-model/releases/tag/v0.23.0</description>
+      <content:encoded><![CDATA[<blockquote>
+<p>Promoted from <code>v0.23.0-rc.2</code> on 2026-11-06</p>
+</blockquote>
+<h2>[0.23.0] - 2026-11-06</h2>
+<h3>🚀 Features</h3>
+<ul>
+<li><em>(ci)</em> Harden images against the DISA GPOS SRG and the CIS Docker Benchmark (#3978)</li>
+<li><em>(transfer)</em> Transfer unpinned Git resources by value with a drift warning (#4040)</li>
+<li><em>(cli)</em> Select default verifier from signature algorithm (#4045)</li>
+<li><em>(transfer)</em> Add unmatchedResourcePolicy to the transfer config (#4009)</li>
+<li>Add performance suite (#3791)</li>
+<li><em>(ctf)</em> Stream blobs of unknown digest or size into a CTF via staged files (#4057)</li>
+<li><em>(controllers)</em> [<strong>breaking</strong>] Use OCI cache instead of resolution service (#3829)</li>
+<li><em>(wget)</em> [<strong>breaking</strong>] Stream downloads instead of buffering to a temp file (#3939)</li>
+<li><em>(signing)</em> [<strong>breaking</strong>] Default new signatures to jsonNormalisation/v4alpha3 (#4006)</li>
+<li><em>(blob)</em> Add Remove to filesystem.Blob (#4102)</li>
+<li><em>(controller)</em> [<strong>breaking</strong>] Verify resource digests without downloading where possible (#4109)</li>
+</ul>
+<h3>🐛 Bug Fixes</h3>
+<ul>
+<li><em>(transfer)</em> Upload legacy OCI artifact sets (#4037)</li>
+<li><em>(sigstore)</em> Wait for knative webhook before patching config-network (#4039)</li>
+<li><em>(sigstore)</em> Retry knative config-network patch until the webhook answers (#4046)</li>
+<li><em>(http)</em> Make transfers survive HTTP/2 connection loss (#4007)</li>
+<li>Stop reacting to our own create event from the deployer (#4048)</li>
+<li>Render godoc structure in schema descriptions (#4035)</li>
+<li><em>(cli)</em> [<strong>breaking</strong>] Replace existing component versions by default (#4036)</li>
+<li>Resolve data races surfaced by go test -race (#4088)</li>
+<li><em>(ctf)</em> Recognize docker artifact set media types (#4089)</li>
+<li><em>(descriptor)</em> Omit unset component reference digest (#4096)</li>
+<li><em>(blob)</em> [<strong>breaking</strong>] Stop holding an os.Root in read-only OS path blobs (#4087)</li>
+<li><em>(oci)</em> Avoid copying extracted tar and write end-of-archive marker (#4083)</li>
+<li><em>(oci)</em> Copy nested-manifest local blobs directly between stores (#4079)</li>
+<li><em>(blob)</em> Stream single-file path blobs from disk without leaking the file (#4077)</li>
+<li><em>(ctf)</em> Don't hold the archive lock while streaming blobs (#4105)</li>
+<li><em>(ctf)</em> Make blob staging optional and safe against concurrent publishes (#4108)</li>
+<li><em>(repository)</em> [<strong>breaking</strong>] Bind every downloaded resource to its descriptor digest (#4085)</li>
+<li><em>(s3)</em> [<strong>breaking</strong>] Stream downloads instead of leaving temporary files (#4113)</li>
+<li><em>(oci)</em> Join in-flight resolver in refcache Always concurrency test (#4114)</li>
+<li><em>(oci)</em> Accept resources excluded from signature on upload (#4164 + #4081) (#4168)</li>
+</ul>
+<h3>📦 Dependencies</h3>
+<ul>
+<li><em>(deps)</em> Update module github.com/onsi/gomega to v1.44.0 (#4031)</li>
+<li><em>(deps)</em> Update go-openapi packages (#4024)</li>
+<li><em>(deps)</em> Update module github.com/klauspost/compress to v1.20.1 (#4026)</li>
+<li><em>(deps)</em> Update digest pins (#4022)</li>
+<li><em>(deps)</em> Update module github.com/ebitengine/purego to v0.11.1 (#4025)</li>
+<li><em>(deps)</em> Update module github.com/pb33f/ordered-map/v2 to v2.3.2 (#4027)</li>
+<li><em>(deps)</em> Update kubernetes dependencies to v0.37.1 (#4029)</li>
+<li><em>(deps)</em> Update ocm cosign (#4020)</li>
+<li><em>(deps)</em> Update aws-sdk-go-v2 monorepo (#4028)</li>
+<li><em>(deps)</em> Update ghcr.io/open-component-model/kubernetes/controller:latest docker digest to 31080f0 (#4023)</li>
+<li><em>(deps)</em> Update registry docker tag to v3.1.1 (#4062)</li>
+<li><em>(deps)</em> Update module github.com/go-jose/go-jose/v4 to v4.1.6 [security] (#4073)</li>
+<li><em>(deps)</em> Update ocm cosign (#4092)</li>
+</ul>
+<h3>⚡ Performance</h3>
+<ul>
+<li><em>(oci)</em> Read legacy artifact sets as OCI layouts without conversion (#4044)</li>
+<li><em>(blob)</em> [<strong>breaking</strong>] Use pooled copy buffers and gzip writers on blob paths (#4058)</li>
+<li><em>(oci)</em> Stream OCI image layers lazily instead of loading them into memory (#4080)</li>
+<li><em>(blob)</em> Keep io.ReaderAt on direct blob readers for tar extraction (#4084)</li>
+<li><em>(blob)</em> Keep io.WriterTo for byte-backed direct blobs (#4082)</li>
+<li><em>(oci)</em> Hash a local resource blob once before upload (#4099)</li>
+<li><em>(oci)</em> [<strong>breaking</strong>] Pool chunked push buffers and keep chunked push behind the cache (#4068)</li>
+</ul>
+<h3>🚜 Refactor</h3>
+<ul>
+<li><em>(oci)</em> [<strong>breaking</strong>] Make DescriptorBlob lazy (#4049)</li>
+</ul>
+<h3>⚙️ Miscellaneous Tasks</h3>
+<ul>
+<li><em>(ci)</em> Fail link checks on PRs for findings outside the diff (#4038)</li>
+<li><em>(fix)</em> Stop returning early on a config change (#4050)</li>
+<li>[<strong>breaking</strong>] Deprecate component sources (#4047)</li>
+<li>Slight logical adjustment and documenting the rate limiting and concurrency settings (#4093)</li>
+</ul>
+<h3>📚 Documentation</h3>
+<ul>
+<li>Clarify that all built-in access types work natively with ocm download (#4052)</li>
+</ul>
+<h2>Get This Release</h2>
+<h3>Install the OCM CLI</h3>
+<pre><code>curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=0.23.0 bash
+</code></pre>
+<p>For alternative installation options, see the <a href="https://ocm.software/docs/getting-started/install-the-ocm-cli/">installation guide</a>.</p>
+<p>You can also run the OCM CLI in a container without installing it:</p>
+<pre><code>docker run --rm -t ghcr.io/open-component-model/cli:0.23.0 --help
+</code></pre>
+<p>See the <a href="https://ocm.software/docs/how-to/how-to-use-the-ocm-cli-container-image/">container image guide</a> for more details.</p>
+<h3>Deploy the OCM Controller</h3>
+<p>Install into a Kubernetes cluster via Helm:</p>
+<pre><code>helm install ocm-k8s-toolkit oci://ghcr.io/open-component-model/kubernetes/controller/chart \
+--version 0.23.0 \
+--namespace ocm-k8s-toolkit-system \
+--create-namespace
+</code></pre>
+<p>See the <a href="https://ocm.software/docs/getting-started/set-up-controller-environments/">controller setup guide</a> for full configuration options.</p>
+<h3>OCM Component Distribution <em>(for existing OCM users)</em></h3>
+<p>Every OCM release is published as OCM component versions to <code>ghcr.io/open-component-model</code> - the same distribution mechanism OCM enables for your own software. Components in this release:</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>ocm.software/ocm:0.23.0</code></td>
+<td>Product wrapper referencing CLI + controller</td>
+</tr>
+<tr>
+<td><code>ocm.software/cli:0.23.0</code></td>
+<td>CLI binaries and OCI image</td>
+</tr>
+<tr>
+<td><code>ocm.software/kubernetes/controller:0.23.0</code></td>
+<td>Controller image and Helm chart</td>
+</tr>
+</tbody></table>
+<p>Inspect the full product component:</p>
+<pre><code>ocm get component-version ghcr.io/open-component-model//ocm.software/ocm:0.23.0 -o yaml
+</code></pre>
+<p>Download a CLI binary directly via OCM (requires OCM CLI already installed; replace <code>os</code> and <code>architecture</code> as needed — e.g. <code>linux</code>/<code>amd64</code>, <code>darwin</code>/<code>arm64</code>):</p>
+<pre><code>ocm download resource ghcr.io/open-component-model//ocm.software/cli:0.23.0 \
+--identity os=linux,architecture=amd64
+</code></pre>
+<h3>Community &amp; Contributors</h3>
+<p>This release we had a total of <strong>7</strong> contributors!
+If you want to engage with us, check our <a href="https://ocm.software/community/">community page</a>!</p>]]></content:encoded>
+    </item>
+  </channel>
+</rss>
