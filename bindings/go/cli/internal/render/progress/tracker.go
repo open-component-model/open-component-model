@@ -93,39 +93,37 @@ func WithConcurrency[T any](runners int) OperationOption[T] {
 	}
 }
 
-// nonTextLogRendererKey marks a context as carrying a log renderer other than
-// plain text.
-type nonTextLogRendererKey struct{}
+// requestedLogFormatKey marks a context as carrying a log format the user asked
+// for explicitly.
+type requestedLogFormatKey struct{}
 
-// WithNonTextLogRenderer returns a context that tells [NewTracker] the log
-// records are rendered by something other than a plain-text renderer. While the
-// interactive visualizer runs it buffers records and re-renders them as text, so
-// any other renderer is only delivered as the user asked for it with the
-// interactive visualizer off.
-func WithNonTextLogRenderer(ctx context.Context) context.Context {
-	return context.WithValue(ctx, nonTextLogRendererKey{}, true)
+// WithRequestedLogFormat returns a context that tells [NewTracker] the user
+// asked for a specific log format. The user then wants the log records
+// themselves, while the interactive visualizer buffers records and shows only
+// what fits beside its animation, so the tracker falls back to logging.
+func WithRequestedLogFormat(ctx context.Context) context.Context {
+	return context.WithValue(ctx, requestedLogFormatKey{}, true)
 }
 
-func nonTextLogRenderer(ctx context.Context) bool {
+func logFormatRequested(ctx context.Context) bool {
 	if ctx == nil {
 		return false
 	}
-	marked, _ := ctx.Value(nonTextLogRendererKey{}).(bool)
+	marked, _ := ctx.Value(requestedLogFormatKey{}).(bool)
 	return marked
 }
 
 // useTerminalVisualizer reports whether the interactive terminal visualizer
-// should be used. The two axes are whether the output is interactive and which
-// log renderer the records go through:
+// should be used:
 //
-//	interactive, text renderer      -> interactive visualizer, records re-rendered as text above it
-//	non-interactive, text renderer  -> slog fallback, text records
-//	any other renderer              -> slog fallback, that renderer's records
+//	interactive, no log format requested  -> interactive visualizer
+//	non-interactive                       -> slog fallback
+//	log format requested                  -> slog fallback, records in that format
 //
-// isTTY carries the first axis, [WithNonTextLogRenderer] the second. A factory
-// must be present for there to be an interactive visualizer at all.
+// isTTY carries interactivity, [WithRequestedLogFormat] the requested format. A
+// factory must be present for there to be an interactive visualizer at all.
 func useTerminalVisualizer(ctx context.Context, hasFactory, isTTY bool) bool {
-	return hasFactory && isTTY && !nonTextLogRenderer(ctx)
+	return hasFactory && isTTY && !logFormatRequested(ctx)
 }
 
 // Tracker manages progress rendering for CLI operations.
@@ -144,7 +142,7 @@ type Tracker[T any] struct {
 // NewTracker creates a tracker for the given output writer.
 // The factory creates terminal visualizers; in non-terminal mode it is ignored.
 // If factory is nil, the tracker always uses [SlogVisualizer].
-// A context carrying [WithNonTextLogRenderer] also disables the terminal
+// A context carrying [WithRequestedLogFormat] also disables the terminal
 // visualizer, regardless of whether out is a TTY.
 func NewTracker[T any](ctx context.Context, out io.Writer, factory ...VisualizerFactory[T]) *Tracker[T] {
 	var f VisualizerFactory[T]
