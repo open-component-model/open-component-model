@@ -13,6 +13,7 @@ import (
 	"github.com/oras-project/oras-go/v3/registry/remote/properties"
 	"github.com/stretchr/testify/require"
 
+	typesv1 "ocm.software/open-component-model/bindings/go/configuration/types/v1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	ocicache "ocm.software/open-component-model/bindings/go/oci/cache"
 	ocicachev1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/cache/v1alpha1"
@@ -109,7 +110,7 @@ func TestNewBlobCache(t *testing.T) {
 		repo := memoryRepository{memory.New()}
 		desc := pushDescriptor(t, repo, 16)
 
-		bc, err := setup.NewBlobCache(t.TempDir(), &ocicachev1alpha1.Config{TTL: ocicachev1alpha1.NewDuration(50 * time.Millisecond)})
+		bc, err := setup.NewBlobCache(t.TempDir(), &ocicachev1alpha1.Config{TTL: typesv1.NewDuration(50 * time.Millisecond)})
 		r.NoError(err)
 
 		rc, err := bc.Fetch(t.Context(), repo, desc)

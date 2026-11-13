@@ -6,6 +6,7 @@
 package v1alpha1
 
 import (
+	v1 "ocm.software/open-component-model/bindings/go/configuration/types/v1"
 	runtime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -20,7 +21,7 @@ func (in *Config) DeepCopyInto(out *Config) {
 	}
 	if in.TTL != nil {
 		in, out := &in.TTL, &out.TTL
-		*out = new(Duration)
+		*out = new(v1.Duration)
 		**out = **in
 	}
 	if in.MaxBlobSize != nil {

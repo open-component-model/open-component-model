@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	typesv1 "ocm.software/open-component-model/bindings/go/configuration/types/v1"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 	ocicachev1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/cache/v1alpha1"
 )
@@ -14,7 +15,7 @@ func TestWithOCICacheConfig(t *testing.T) {
 	always := &ocicachev1alpha1.Config{RemotePolicy: ocicachev1alpha1.RemotePolicyAlways}
 	all := &ocicachev1alpha1.Config{
 		RemotePolicy: ocicachev1alpha1.RemotePolicyAlways,
-		TTL:          ocicachev1alpha1.NewDuration(time.Hour),
+		TTL:          typesv1.NewDuration(time.Hour),
 		MaxBlobSize:  new(int64(1024)),
 		MaxTotalSize: new(int64(4096)),
 	}
