@@ -6,6 +6,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -87,7 +88,7 @@ var marshalFuncs = map[string]struct{}{
 }
 
 // optionsExceptions are the call sites that deliberately marshal without [JSONOptions],
-// keyed by "<path>:<function>". Adding an entry needs a reason in the code.
+// keyed by "<slash-separated path>:<function>". Adding an entry needs a reason in the code.
 var optionsExceptions = map[string]string{
 	"runtime/unstructured.go:MarshalEncode": "MarshalJSONTo writes into the caller's encoder and inherits the options it was created with",
 }
@@ -106,24 +107,31 @@ func TestMarshalCallsPassJSONOptions(t *testing.T) {
 	root, err := filepath.Abs("..")
 	r.NoError(err)
 
+	// Walking an fs.FS keeps the paths slash-separated on every OS, so the exception
+	// keys below match on Windows too.
+	mod := os.DirFS(root)
 	fset := token.NewFileSet()
 	var offenders []string
 
-	r.NoError(filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	r.NoError(fs.WalkDir(mod, ".", func(name string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() {
-			if name := d.Name(); name == "testdata" || name == "tmp" || strings.HasPrefix(name, ".") && name != "." {
+			if base := d.Name(); base == "testdata" || base == "tmp" || strings.HasPrefix(base, ".") && base != "." {
 				return fs.SkipDir
 			}
 			return nil
 		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
 			return nil
 		}
 
-		file, err := parser.ParseFile(fset, path, nil, 0)
+		src, err := fs.ReadFile(mod, name)
+		if err != nil {
+			return err
+		}
+		file, err := parser.ParseFile(fset, name, src, 0)
 		if err != nil {
 			return err
 		}
@@ -132,11 +140,6 @@ func TestMarshalCallsPassJSONOptions(t *testing.T) {
 		alias := jsonV2Alias(file)
 		if alias == "" {
 			return nil
-		}
-
-		rel, err := filepath.Rel(root, path)
-		if err != nil {
-			return err
 		}
 
 		ast.Inspect(file, func(n ast.Node) bool {
@@ -155,7 +158,7 @@ func TestMarshalCallsPassJSONOptions(t *testing.T) {
 			if _, ok := marshalFuncs[sel.Sel.Name]; !ok {
 				return true
 			}
-			if _, ok := optionsExceptions[rel+":"+sel.Sel.Name]; ok {
+			if _, ok := optionsExceptions[name+":"+sel.Sel.Name]; ok {
 				return true
 			}
 			if !passesJSONOptions(call) {
