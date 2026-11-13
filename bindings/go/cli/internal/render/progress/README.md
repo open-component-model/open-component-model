@@ -85,6 +85,11 @@ detects this automatically:
   `inFlight` count (and `runners` when set via `WithConcurrency`)
 - slog output is not intercepted — logs flow to their original destination
 
+The same fallback is used on a terminal when the caller passes a context from
+`WithNonTextLogRenderer`, because the terminal visualizer re-renders the records
+it buffers as text and cannot reproduce another renderer's output. The CLI marks
+the context that way for every `--logformat` other than `text`.
+
 ## Visualizer Implementations
 
 The `bar` subpackage provides an ANSI terminal visualizer:
