@@ -1,11 +1,5 @@
 version: '3'
 
-# Point every curl (this Taskfile and the upstream scaffolding scripts it runs) at
-# hack/.curlrc, which retries transient network failures. This replaces a developer's own
-# ~/.curlrc during these tasks (CI runners have none).
-env:
-  CURL_HOME: '{{.TASKFILE_DIR}}/hack'
-
 vars:
   INTEGRATION_TEST_IDENTIFIER: 'Integration'
   COSIGN_VERSION:
@@ -67,6 +61,12 @@ tasks:
 
   scaffolding:setup:
     desc: "Create kind cluster and deploy sigstore scaffolding (~5 min, skips if already running)"
+    # Point curl at hack/.curlrc to retry transient github.com failures in this task and the
+    # upstream scaffolding scripts it runs. Scoped to this task, not Taskfile-wide, so it does
+    # not set CURL_HOME for unrelated root tasks or the exec command. Replaces a developer's
+    # own ~/.curlrc here (CI runners have none).
+    env:
+      CURL_HOME: '{{.TASKFILE_DIR}}/hack'
     run: once
     deps: [scaffolding:hosts]
     requires:
@@ -93,7 +93,7 @@ tasks:
           fi
       - |
         curl -fLo /tmp/setup-kind.sh "{{.SCAFFOLDING_URL}}/setup-kind.sh"
-        # Patch setup-kind.sh with two fixes (remove once upstream fixes the script):
+        # Patch setup-kind.sh with four fixes (remove once upstream fixes the script):
         # 1. It patches configmap/config-network (validated by the Knative webhook) once,
         #    before Knative is up, so on a slow cluster the webhook call fails with
         #    "connection refused". A rollout wait is not enough: the pod reports Ready before
@@ -102,12 +102,19 @@ tasks:
         # 2. Drop the worker node. The two-node cluster is the main CI flake: `kind create
         #    --wait` gates only the control-plane, so the worker's CNI can still be coming up
         #    when Knative installs and the rollout stalls. The stack needs only one node.
+        # 3. Fetch the metallb manifest with curl so the curlrc retries it. Upstream runs
+        #    `kubectl apply -f <url>`, which uses kubectl's own client and ignores the curlrc.
+        #    pipefail (set in this script) still propagates a curl failure after its retries.
+        # 4. Bump the knative and metallb rollout waits from 5m to 10m. Slow image pulls can
+        #    push readiness past 5m on a loaded CI runner, which fails the whole setup.
         tmp=$(mktemp) && sed \
           -e 's@^kubectl patch configmap/config-network@while ! kubectl patch configmap/config-network@' \
           -e 's@\(ingress\.class":"kourier.*\)$@\1; do echo Waiting for webhook to be up.; sleep 2; done@' \
           -e '/^- role: worker/,/^  image:/d' \
+          -e 's@^kubectl apply -f \(https://raw\.githubusercontent\.com/metallb/[^ ]*\)@curl -fsSL "\1" | kubectl apply -f -@' \
+          -e 's@rollout status --timeout 5m@rollout status --timeout 10m@g' \
           /tmp/setup-kind.sh > "$tmp" && mv "$tmp" /tmp/setup-kind.sh
-        grep -q '^while ! kubectl patch configmap/config-network' /tmp/setup-kind.sh && grep -q 'ingress\.class.*; do echo Waiting for webhook' /tmp/setup-kind.sh && ! grep -q '^- role: worker' /tmp/setup-kind.sh || { echo "setup-kind.sh patches did not apply; upstream script changed" >&2; exit 1; }
+        grep -q '^while ! kubectl patch configmap/config-network' /tmp/setup-kind.sh && grep -q 'ingress\.class.*; do echo Waiting for webhook' /tmp/setup-kind.sh && ! grep -q '^- role: worker' /tmp/setup-kind.sh && grep -q '^curl -fsSL "https://raw.githubusercontent.com/metallb/.*| kubectl apply -f -' /tmp/setup-kind.sh && grep -q 'rollout status --timeout 10m' /tmp/setup-kind.sh || { echo "setup-kind.sh patches did not apply; upstream script changed" >&2; exit 1; }
         chmod u+x /tmp/setup-kind.sh
         cd /tmp && ./setup-kind.sh
       - |
@@ -123,11 +130,22 @@ tasks:
         # 2. rekor-system has no provisioning Job on tiles; `wait jobs --all` errors "no matching
         #    resources". Guard with a no-job check (upstream added this guard only for fulcio).
         # 3. Same guard for ctlog-system.
+        # 4. Fetch the trillian, tsa and tuf manifests with curl so the curlrc retries them.
+        #    Upstream applies these github release YAMLs with `kubectl apply -f "${VAR}"`, whose
+        #    URL kubectl fetches with its own client. rekor, fulcio and ctlog already go through
+        #    curl (fetch_manifest). pipefail (set in this script) propagates a curl failure.
+        # 5. Bump every ksvc readiness wait to 10m. Slow image pulls can push a service past its
+        #    2m or 5m wait on a loaded CI runner, which fails the whole setup.
         tmp=$(mktemp) && sed \
           -e 's@kubectl apply -f "${REKOR}"@kubectl apply -f "${REKOR}" || true@' \
           -e 's@kubectl wait --timeout 5m -n rekor-system --for=condition=Complete jobs --all@kubectl -n rekor-system get job 2>\&1 | grep '"'"'No resources found'"'"' || kubectl wait --timeout 5m -n rekor-system --for=condition=Complete jobs --all@' \
           -e 's@kubectl wait --timeout 5m -n ctlog-system --for=condition=Complete jobs --all@kubectl -n ctlog-system get job 2>\&1 | grep '"'"'No resources found'"'"' || kubectl wait --timeout 5m -n ctlog-system --for=condition=Complete jobs --all@' \
+          -e 's@kubectl apply -f "${TRILLIAN}"@curl -fsSL "${TRILLIAN}" | kubectl apply -f -@' \
+          -e 's@kubectl apply -f "${TSA}"@curl -fsSL "${TSA}" | kubectl apply -f -@' \
+          -e 's@kubectl apply -f "${TUF}"@curl -fsSL "${TUF}" | kubectl apply -f -@' \
+          -e '/--for=condition=Ready ksvc/ s@--timeout [0-9]*m@--timeout 10m@' \
           /tmp/setup-scaffolding-from-release.sh > "$tmp" && mv "$tmp" /tmp/setup-scaffolding-from-release.sh
+        grep -q 'curl -fsSL "${TRILLIAN}" | kubectl apply -f -' /tmp/setup-scaffolding-from-release.sh && grep -q 'curl -fsSL "${TSA}" | kubectl apply -f -' /tmp/setup-scaffolding-from-release.sh && grep -q 'curl -fsSL "${TUF}" | kubectl apply -f -' /tmp/setup-scaffolding-from-release.sh && ! grep -E 'kubectl wait --timeout [0-9]+m -n [a-z-]+ --for=condition=Ready ksvc' /tmp/setup-scaffolding-from-release.sh | grep -qv -- '--timeout 10m' || { echo "setup-scaffolding patches did not apply; upstream script changed" >&2; exit 1; }
         chmod u+x /tmp/setup-scaffolding-from-release.sh
         cd /tmp && ./setup-scaffolding-from-release.sh --release-version {{.SCAFFOLDING_VERSION}}
       - |
@@ -190,6 +208,9 @@ tasks:
     desc: "Install OCM's FIPS cosign build at the version pinned in signing/handler/internal/.env"
     # Both setup and scaffolding:env depend on this. Parallel runs race on cosign_checksums.txt.
     run: once
+    # CURL_HOME points curl at hack/.curlrc to retry the transient github.com cosign download.
+    env:
+      CURL_HOME: '{{.TASKFILE_DIR}}/hack'
     requires:
       vars: [COSIGN_VERSION, COSIGN_CHECKSUMS_SHA256]
     vars:
