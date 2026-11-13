@@ -35,7 +35,7 @@ type S3 struct {
 	// Endpoint extends the v1 format to support S3-compatible stores.
 	Endpoint string `json:"endpoint,omitempty"`
 	// UsePathStyle enables bucket addressing in the path rather than the host.
-	UsePathStyle bool `json:"usePathStyle,omitempty"`
+	UsePathStyle bool `json:"usePathStyle,omitzero"`
 }
 
 // Validate verifies that the required fields of the S3 access are set.

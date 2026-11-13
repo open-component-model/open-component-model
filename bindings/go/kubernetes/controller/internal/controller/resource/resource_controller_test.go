@@ -2,7 +2,7 @@ package resource
 
 import (
 	"crypto"
-	"encoding/json"
+	"encoding/json/v2"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -1346,7 +1346,7 @@ var _ = Describe("Resource Controller", func() {
 			repoSpec := &ctfv1.Repository{Type: runtime.Type{Version: "v1", Name: "ctf"}, FilePath: ctfPath, AccessMode: ctfv1.AccessModeReadWrite}
 			repo, err := ocirepository.NewFromCTFRepoV1(ctx, repoSpec)
 			Expect(err).NotTo(HaveOccurred())
-			specData, err := json.Marshal(repoSpec)
+			specData, err := json.Marshal(repoSpec, runtime.JSONOptions)
 			Expect(err).NotTo(HaveOccurred())
 
 			desc := &descruntime.Descriptor{
@@ -2191,7 +2191,7 @@ var _ = Describe("Resource Controller Error Handling", func() {
 })
 
 func mustMarshalJSON(v any) []byte {
-	raw, err := json.Marshal(v)
+	raw, err := json.Marshal(v, runtime.JSONOptions)
 	Expect(err).ToNot(HaveOccurred())
 	return raw
 }

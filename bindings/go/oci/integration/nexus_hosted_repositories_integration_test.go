@@ -21,6 +21,7 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const (
@@ -150,7 +151,8 @@ func newDockerArtifactSet(t *testing.T, rootMediaType string) *dockerArtifactSet
 		Architecture: "amd64",
 		OS:           "linux",
 		RootFS:       ociImageSpecV1.RootFS{Type: "layers", DiffIDs: []digest.Digest{digest.FromBytes(uncompressed.Bytes())}},
-	})
+	}, runtime.JSONOptions)
+
 	r.NoError(err)
 	config := newDockerImageContent(dockerConfigMediaType, configData)
 
@@ -159,7 +161,8 @@ func newDockerArtifactSet(t *testing.T, rootMediaType string) *dockerArtifactSet
 		MediaType: dockerManifestMediaType,
 		Config:    config.desc,
 		Layers:    []ociImageSpecV1.Descriptor{layer.desc},
-	})
+	}, runtime.JSONOptions)
+
 	r.NoError(err)
 	manifest := newDockerImageContent(dockerManifestMediaType, manifestData)
 
@@ -175,7 +178,8 @@ func newDockerArtifactSet(t *testing.T, rootMediaType string) *dockerArtifactSet
 			Versioned: specs.Versioned{SchemaVersion: 2},
 			MediaType: rootMediaType,
 			Manifests: []ociImageSpecV1.Descriptor{entry},
-		})
+		}, runtime.JSONOptions)
+
 		r.NoError(err)
 		root := newDockerImageContent(rootMediaType, rootData)
 		set.root = root.desc
@@ -187,7 +191,8 @@ func newDockerArtifactSet(t *testing.T, rootMediaType string) *dockerArtifactSet
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		MediaType: ociImageSpecV1.MediaTypeImageIndex,
 		Manifests: []ociImageSpecV1.Descriptor{set.root},
-	})
+	}, runtime.JSONOptions)
+
 	r.NoError(err)
 
 	var archive bytes.Buffer

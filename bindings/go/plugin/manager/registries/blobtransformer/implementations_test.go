@@ -2,7 +2,7 @@ package blobtransformer
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -48,12 +48,12 @@ func TestTransformBlob(t *testing.T) {
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == TransformBlob && r.Method == http.MethodPost {
-			_ = json.NewEncoder(w).Encode(&v1.TransformBlobResponse{
+			_ = json.MarshalWrite(w, &v1.TransformBlobResponse{
 				Location: types.Location{
 					LocationType: types.LocationTypeLocalFile,
 					Value:        "/dummy/local-file",
 				},
-			})
+			}, runtime.JSONOptions)
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
@@ -105,7 +105,7 @@ func TestGetIdentity(t *testing.T) {
 	}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == Identity && r.Method == http.MethodPost {
-			_ = json.NewEncoder(w).Encode(&v1.GetIdentityResponse{Identity: map[string]string{"id": "mock"}})
+			_ = json.MarshalWrite(w, &v1.GetIdentityResponse{Identity: map[string]string{"id": "mock"}}, runtime.JSONOptions)
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)

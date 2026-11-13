@@ -3,14 +3,14 @@ package componentversionrepository
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
+	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/ocmrepository/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -47,10 +47,7 @@ func GetComponentVersionHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 			return
 		}
 
-		if err := json.NewEncoder(writer).Encode(descV2); err != nil {
-			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
-			return
-		}
+		plugins.WriteJSON(writer, descV2)
 	}
 }
 
@@ -77,10 +74,7 @@ func ListComponentVersionsHandlerFunc[T runtime.Typed](f func(ctx context.Contex
 			return
 		}
 
-		if err := json.NewEncoder(writer).Encode(versions); err != nil {
-			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
-			return
-		}
+		plugins.WriteJSON(writer, versions)
 	}
 }
 
@@ -146,10 +140,7 @@ func GetLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, re
 			return
 		}
 
-		if err := json.NewEncoder(writer).Encode(response); err != nil {
-			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
-			return
-		}
+		plugins.WriteJSON(writer, response)
 	}
 }
 
@@ -193,10 +184,7 @@ func GetLocalSourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, requ
 			return
 		}
 
-		if err := json.NewEncoder(writer).Encode(response); err != nil {
-			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
-			return
-		}
+		plugins.WriteJSON(writer, response)
 	}
 }
 
@@ -212,10 +200,7 @@ func GetIdentityHandlerFunc[T runtime.Typed](f func(ctx context.Context, typ *v1
 			return
 		}
 
-		if err := json.NewEncoder(writer).Encode(response); err != nil {
-			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
-			return
-		}
+		plugins.WriteJSON(writer, response)
 	}
 }
 
@@ -254,10 +239,7 @@ func AddLocalResourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, re
 			return
 		}
 
-		if err := json.NewEncoder(writer).Encode(resourceV2[0]); err != nil {
-			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
-			return
-		}
+		plugins.WriteJSON(writer, resourceV2[0])
 	}
 }
 
@@ -296,9 +278,6 @@ func AddLocalSourceHandlerFunc[T runtime.Typed](f func(ctx context.Context, requ
 			return
 		}
 
-		if err := json.NewEncoder(writer).Encode(resourceV2[0]); err != nil {
-			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
-			return
-		}
+		plugins.WriteJSON(writer, resourceV2[0])
 	}
 }

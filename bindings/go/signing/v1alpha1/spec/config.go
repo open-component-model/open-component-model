@@ -65,13 +65,13 @@ type Config struct {
 	// credentials - keys are always resolved from the credentials
 	// configuration. If nil, consumers fall back to the default
 	// (RSASSA-PSS with Plain encoding).
-	Signer *runtime.Raw `json:"signer,omitempty"`
+	Signer *runtime.Raw `json:"signer,omitzero"`
 
 	// Verifier is the verifier specification used when verifying a component
 	// version (using `ocm verify component-version`). Its runtime
 	// type selects the verification handler plugin. If nil, consumers fall back
 	// to the default (RSASSA-PSS).
-	Verifier *runtime.Raw `json:"verifier,omitempty"`
+	Verifier *runtime.Raw `json:"verifier,omitzero"`
 }
 
 // Validate rejects a non-matching [Config.Type] and signer/verifier

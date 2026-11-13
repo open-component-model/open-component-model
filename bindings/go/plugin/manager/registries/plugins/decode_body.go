@@ -1,7 +1,7 @@
 package plugins
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 )
@@ -10,7 +10,7 @@ import (
 // and returns the result.
 func DecodeJSONRequestBody[T any](writer http.ResponseWriter, request *http.Request) (*T, error) {
 	pRequest := new(T)
-	if err := json.NewDecoder(request.Body).Decode(pRequest); err != nil {
+	if err := json.UnmarshalRead(request.Body, pRequest); err != nil {
 		return nil, fmt.Errorf("failed to decode request: %w", err)
 	}
 	return pRequest, nil

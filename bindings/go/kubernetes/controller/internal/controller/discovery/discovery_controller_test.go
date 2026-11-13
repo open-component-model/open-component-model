@@ -3,7 +3,8 @@ package discovery
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -215,7 +216,7 @@ func TestReconcile_PublishesRawAndExtractedPayloads(t *testing.T) {
 	r.NoError(repo.AddComponentVersion(t.Context(), root))
 	r.NoError(repo.AddComponentVersion(t.Context(), child))
 	repoSpec.AccessMode = ctf.AccessModeReadOnly
-	rawSpec, err := json.Marshal(repoSpec)
+	rawSpec, err := json.Marshal(repoSpec, ocmruntime.JSONOptions)
 	r.NoError(err)
 
 	component := readyComponent("component", "default")
@@ -342,10 +343,10 @@ func TestSetPayloadRejectsOversizedPayload(t *testing.T) {
 	rec, _ := newReconciler(t)
 
 	big := bytes.Repeat([]byte("a"), maxPayloadBytes/2)
-	oversized := &internaldiscovery.Payload{Components: []json.RawMessage{
-		json.RawMessage(fmt.Sprintf("%q", big)),
-		json.RawMessage(fmt.Sprintf("%q", big)),
-		json.RawMessage(fmt.Sprintf("%q", big)),
+	oversized := &internaldiscovery.Payload{Components: []jsontext.Value{
+		jsontext.Value(fmt.Sprintf("%q", big)),
+		jsontext.Value(fmt.Sprintf("%q", big)),
+		jsontext.Value(fmt.Sprintf("%q", big)),
 	}}
 
 	discovery := &v1alpha1.Discovery{}
@@ -367,7 +368,7 @@ func TestSetPayloadRejectsOversizedPayload(t *testing.T) {
 	r.Nil(discovery.Status.Extracted)
 
 	// A payload under the limit is written.
-	small := &internaldiscovery.Payload{Components: []json.RawMessage{json.RawMessage(`{"ok":true}`)}}
+	small := &internaldiscovery.Payload{Components: []jsontext.Value{jsontext.Value(`{"ok":true}`)}}
 	discovery = &v1alpha1.Discovery{}
 	r.NoError(rec.setPayload(discovery, small))
 	r.Len(discovery.Status.Components, 1)

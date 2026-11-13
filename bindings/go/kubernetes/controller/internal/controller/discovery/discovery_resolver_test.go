@@ -1,7 +1,8 @@
 package discovery
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,6 +15,7 @@ import (
 	desc "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // ctfRepo builds a read-write CTF repository at a fresh temp dir, adds the
@@ -44,15 +46,15 @@ func makeRef(name, component, version string) desc.Reference {
 
 // resolverSpec is a single path matcher entry in the resolvers.config.
 type resolverSpecEntry struct {
-	Repository           json.RawMessage `json:"repository"`
-	ComponentNamePattern string          `json:"componentNamePattern,omitempty"`
+	Repository           jsontext.Value `json:"repository"`
+	ComponentNamePattern string         `json:"componentNamePattern,omitempty"`
 }
 
 // fallbackSpecEntry is a single deprecated fallback resolver entry.
 type fallbackSpecEntry struct {
-	Repository json.RawMessage `json:"repository"`
-	Prefix     string          `json:"prefix,omitempty"`
-	Priority   int             `json:"priority,omitempty"`
+	Repository jsontext.Value `json:"repository"`
+	Prefix     string         `json:"prefix,omitempty"`
+	Priority   int            `json:"priority,omitzero"`
 }
 
 // pathMatcherOCMConfig builds an .ocmconfig JSON with a single resolvers.config
@@ -92,7 +94,7 @@ func marshalOCMConfig(t *testing.T, configurations ...map[string]any) string {
 		"type":           "generic.config.ocm.software/v1",
 		"configurations": configurations,
 	}
-	raw, err := json.Marshal(generic)
+	raw, err := json.Marshal(generic, runtime.JSONOptions)
 	require.NoError(t, err)
 	return string(raw)
 }

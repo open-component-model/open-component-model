@@ -21,7 +21,7 @@ type AddOCIArtifact struct {
 	Type   runtime.Type          `json:"type"`
 	ID     string                `json:"id"`
 	Spec   *AddOCIArtifactSpec   `json:"spec"`
-	Output *AddOCIArtifactOutput `json:"output,omitempty"`
+	Output *AddOCIArtifactOutput `json:"output,omitzero"`
 }
 
 // AddOCIArtifactSpec is the input specification for the

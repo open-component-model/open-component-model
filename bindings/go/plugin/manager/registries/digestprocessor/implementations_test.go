@@ -2,7 +2,7 @@ package digestprocessor
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -30,7 +30,7 @@ func TestProcessResourceDigest(t *testing.T) {
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == ProcessResourceDigest {
-						err := json.NewEncoder(w).Encode(&v1.ProcessResourceDigestResponse{})
+						err := json.MarshalWrite(w, &v1.ProcessResourceDigestResponse{}, runtime.JSONOptions)
 						assert.NoError(t, err)
 						return
 					}
@@ -148,7 +148,7 @@ func TestGetIdentity(t *testing.T) {
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == Identity {
-						err := json.NewEncoder(w).Encode(&v1.GetIdentityResponse{})
+						err := json.MarshalWrite(w, &v1.GetIdentityResponse{}, runtime.JSONOptions)
 						assert.NoError(t, err)
 						return
 					}

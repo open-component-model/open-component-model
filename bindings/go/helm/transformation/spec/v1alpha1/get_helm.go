@@ -21,7 +21,7 @@ type GetHelmChart struct {
 	Type   runtime.Type        `json:"type"`
 	ID     string              `json:"id"`
 	Spec   *GetHelmChartSpec   `json:"spec"`
-	Output *GetHelmChartOutput `json:"output,omitempty"`
+	Output *GetHelmChartOutput `json:"output,omitzero"`
 }
 
 // GetHelmChartOutput is the output specification of the GetHelmChart transformation.
@@ -34,7 +34,7 @@ type GetHelmChartOutput struct {
 	// ChartFile is the file access specification for the downloaded helm chart
 	ChartFile v1alpha1.File `json:"chartFile"`
 	// ProvFile is the file access specification for the downloaded prov file, if it exists
-	ProvFile *v1alpha1.File `json:"provFile,omitempty"`
+	ProvFile *v1alpha1.File `json:"provFile,omitzero"`
 	// Resource is the resource descriptor from the component
 	Resource *v2.Resource `json:"resource"`
 }

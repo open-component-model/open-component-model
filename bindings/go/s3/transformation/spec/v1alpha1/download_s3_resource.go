@@ -21,7 +21,7 @@ type DownloadS3Resource struct {
 	Type   runtime.Type              `json:"type"`
 	ID     string                    `json:"id"`
 	Spec   *DownloadS3ResourceSpec   `json:"spec"`
-	Output *DownloadS3ResourceOutput `json:"output,omitempty"`
+	Output *DownloadS3ResourceOutput `json:"output,omitzero"`
 }
 
 // DownloadS3ResourceOutput is the output specification of the DownloadS3Resource transformation.
