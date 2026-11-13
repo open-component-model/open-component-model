@@ -22,13 +22,15 @@ vars:
   SIGSTORE_BIN_DIR: '{{.TASKFILE_DIR}}/tmp/bin'
   SIGSTORE_BRIDGE_PORT: '8080'
   SCAFFOLDING_URL: 'https://github.com/sigstore/scaffolding/releases/download/{{.SCAFFOLDING_VERSION}}'
+  SIGSTORE_SETUP_HELPERS: '{{.TASKFILE_DIR}}/hack/setup-helpers.sh'
 
   # sslip.io is a free public DNS service that maps hostnames like <svc>.<ns>.<ip>.sslip.io
   # to the embedded IP address. Sigstore scaffolding (and other projects like Knative, Rancher, Coolify) use it
   # to give each in-cluster service a unique hostname routable via a single ingress IP.
-  # On Linux, Docker host-network mode resolves sslip.io natively via public DNS.
   # On macOS, /etc/hosts must map these to 127.0.0.1 because kubectl port-forward
   # bypasses real DNS resolution. The scaffolding:hosts task automates this.
+  # On Linux, scaffolding:hosts:linux maps them to the real Kourier ingress IP in a managed
+  # /etc/hosts block instead of relying on sslip.io public DNS, which has failed in CI.
   SSLIP_HOSTS: |
     127.0.0.1 fulcio.fulcio-system.172.18.255.1.sslip.io
     127.0.0.1 rekor.rekor-system.172.18.255.1.sslip.io
@@ -53,17 +55,46 @@ tasks:
           grep -qF "$line" /etc/hosts || echo "$line" | sudo tee -a /etc/hosts
         done
 
-  scaffolding:hosts:clean:
-    desc: "Remove sslip.io entries from /etc/hosts (optional, requires sudo)"
-    platforms: [darwin]
+  scaffolding:hosts:linux:
+    # Map the scaffolding service hostnames to the real Kourier ingress IP in a managed
+    # /etc/hosts block. On Linux the sslip.io names would otherwise resolve through public
+    # DNS, which failed in CI and broke cosign initialize against the TUF mirror.
+    internal: true
+    platforms: [linux]
     cmds:
       - |
-        echo "Removing sslip.io scaffolding entries from /etc/hosts..."
-        # Avoid `sed -i` — its in-place flag differs between BSD sed (macOS default) and GNU sed
-        # (Homebrew gnubin). Write to a tmp file, then `cp` (not `mv`) back to preserve the
-        # original root:wheel ownership and permissions of /etc/hosts.
-        tmp=$(mktemp) && sudo sed '/\.172\.18\.255\.1\.sslip\.io/d' /etc/hosts > "$tmp" && sudo cp "$tmp" /etc/hosts && rm "$tmp"
-        tmp=$(mktemp) && sudo sed '/registry\.local/d' /etc/hosts > "$tmp" && sudo cp "$tmp" /etc/hosts && rm "$tmp"
+        set -euo pipefail
+        ip=$(kubectl -n kourier-system get service kourier -ojsonpath='{.status.loadBalancer.ingress[0].ip}')
+        hosts=""
+        for svc in fulcio/fulcio-system rekor/rekor-system ctlog/ctlog-system tsa/tsa-system tuf/tuf-system gettoken/default; do
+          url=$(kubectl -n "${svc#*/}" get ksvc "${svc%/*}" -ojsonpath='{.status.url}')
+          host=${url#*://}; host=${host%%/*}; host=${host%%:*}
+          [ -n "$host" ] && [ "$host" != "$url" ] || { echo "sigstore setup: incomplete ingress mapping (${svc})" >&2; exit 1; }
+          hosts="$hosts $host"
+        done
+        [ -n "$ip" ] || { echo "sigstore setup: incomplete ingress mapping (kourier ip)" >&2; exit 1; }
+        # shellcheck disable=SC2086 # word splitting of the hostname list is intended
+        sudo bash -c '. "$0"; write_scaffolding_hosts /etc/hosts "$@"' '{{.SIGSTORE_SETUP_HELPERS}}' "$ip" $hosts
+        # -s files: without it getent also queries DNS, where sslip.io returns the same IP.
+        for host in $hosts; do
+          got=$(getent -s files hosts "$host" | awk 'NR==1{print $1}')
+          [ "$got" = "$ip" ] || { echo "sigstore setup: hosts mapping not effective for $host (got '${got}')" >&2; exit 1; }
+        done
+        echo "sigstore setup: mapped$hosts to $ip"
+
+  scaffolding:hosts:clean:
+    desc: "Remove scaffolding entries from /etc/hosts (requires sudo)"
+    cmds:
+      - platforms: [darwin]
+        cmd: |
+          echo "Removing sslip.io scaffolding entries from /etc/hosts..."
+          # Avoid `sed -i`: its in-place flag differs between BSD sed (macOS default) and GNU sed
+          # (Homebrew gnubin). Write to a tmp file, then `cp` (not `mv`) back to preserve the
+          # original root:wheel ownership and permissions of /etc/hosts.
+          tmp=$(mktemp) && sudo sed '/\.172\.18\.255\.1\.sslip\.io/d' /etc/hosts > "$tmp" && sudo cp "$tmp" /etc/hosts && rm "$tmp"
+          tmp=$(mktemp) && sudo sed '/registry\.local/d' /etc/hosts > "$tmp" && sudo cp "$tmp" /etc/hosts && rm "$tmp"
+      - platforms: [linux]
+        cmd: sudo bash -c '. "$0"; remove_scaffolding_hosts /etc/hosts' '{{.SIGSTORE_SETUP_HELPERS}}'
 
   scaffolding:setup:
     desc: "Create kind cluster and deploy sigstore scaffolding (~5 min, skips if already running)"
@@ -153,6 +184,8 @@ tasks:
     desc: "Extract sigstore env vars from running cluster into the SIGSTORE_ENV_FILE"
     deps: [scaffolding:setup, scaffolding:bridge, cosign:install]
     cmds:
+      # On Linux map the scaffolding hostnames before extraction runs, a no-op on macOS.
+      - task: scaffolding:hosts:linux
       - mkdir -p "{{.TASKFILE_DIR}}/tmp" "{{.SIGSTORE_ENV_DIR}}"
       - cmd: PATH="{{.SIGSTORE_BIN_DIR}}:$PATH" SIGSTORE_ENV_DIR="{{.SIGSTORE_ENV_DIR}}" SIGSTORE_BRIDGE_PORT={{.SIGSTORE_BRIDGE_PORT}} bash {{.TASKFILE_DIR}}/hack/extract-sigstore-env.sh > {{.SIGSTORE_ENV_FILE}}
         platforms: [darwin]
