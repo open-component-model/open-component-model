@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -157,6 +158,12 @@ type bearerAuthTransport struct {
 }
 
 func (t *bearerAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Attach the token only to the GitHub API host. The http.Client strips sensitive headers
+	// on cross-host redirects for the original request, but this transport adds the header
+	// afterwards, so a redirect to another host would otherwise leak the token.
+	if !strings.EqualFold(req.URL.Host, "api.github.com") {
+		return t.base.RoundTrip(req)
+	}
 	r := req.Clone(req.Context())
 	r.Header.Set("Authorization", "Bearer "+t.token)
 	return t.base.RoundTrip(r)
