@@ -2,9 +2,11 @@ package integration
 
 import (
 	"bytes"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -23,6 +25,7 @@ func Test_Integration_VersionCheck_FetchesLatestFromGitHub(t *testing.T) {
 	result := versioncheck.Check(t.Context(), versioncheck.Options{
 		CurrentVersion: "0.0.1",
 		CacheDir:       t.TempDir(),
+		HTTPClient:     githubAPIClient(),
 	})
 
 	r.NotNil(result, "version check should succeed against real GitHub API")
@@ -40,6 +43,7 @@ func Test_Integration_VersionCheck_CurrentVersionIsLatest(t *testing.T) {
 	result := versioncheck.Check(t.Context(), versioncheck.Options{
 		CurrentVersion: "999.999.999",
 		CacheDir:       t.TempDir(),
+		HTTPClient:     githubAPIClient(),
 	})
 
 	r.NotNil(result)
@@ -95,6 +99,7 @@ func Test_Integration_VersionCheck_CachesResult(t *testing.T) {
 	result1 := versioncheck.Check(t.Context(), versioncheck.Options{
 		CurrentVersion: "0.0.1",
 		CacheDir:       cacheDir,
+		HTTPClient:     githubAPIClient(),
 	})
 	r.NotNil(result1)
 
@@ -108,6 +113,7 @@ func Test_Integration_VersionCheck_CachesResult(t *testing.T) {
 	result2 := versioncheck.Check(t.Context(), versioncheck.Options{
 		CurrentVersion: "0.0.1",
 		CacheDir:       cacheDir,
+		HTTPClient:     githubAPIClient(),
 	})
 	r.NotNil(result2)
 	r.Equal(result1.LatestVersion, result2.LatestVersion, "second call should use cache")
@@ -115,6 +121,13 @@ func Test_Integration_VersionCheck_CachesResult(t *testing.T) {
 	cache2, err := versioncheck.ReadCache(cacheDir)
 	r.NoError(err)
 	r.Equal(firstCheckedAt, cache2.CheckedAt, "cache timestamp should not change on cache hit")
+}
+
+// githubAPIClient returns an HTTP client with a long timeout for the live GitHub API.
+// The production default (versioncheck.DefaultHTTPTimeout) is short for CLI responsiveness.
+// On a slow CI runner that default is too short, so these tests fail.
+func githubAPIClient() *http.Client {
+	return &http.Client{Timeout: 30 * time.Second}
 }
 
 func writeEmptyConfig(t *testing.T) string {

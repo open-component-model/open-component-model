@@ -1,0 +1,9 @@
+apiVersion: examples.ocm.software/v1alpha1
+kind: HelmConfigurationLocalizationCrossplane
+metadata:
+  name: helm-configuration-localization-crossplane
+spec:
+  prefix: helm-configuration-localization-crossplane
+  podinfo:
+    message: "helm-configuration-localization"
+    releaseName: "helm-configuration-localization-crossplane"

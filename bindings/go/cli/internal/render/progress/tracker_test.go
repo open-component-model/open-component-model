@@ -90,15 +90,16 @@ func TestTracker_NonTerminal_NoSlogRedirect(t *testing.T) {
 	assert.Equal(t, originalLogger, slog.Default())
 }
 
-func TestForceNonInteractive_Helper(t *testing.T) {
+func TestNonTextLogRenderer_Helper(t *testing.T) {
 	var nilCtx context.Context
-	assert.False(t, forceNonInteractive(context.Background()))
-	assert.False(t, forceNonInteractive(nilCtx))
-	assert.True(t, forceNonInteractive(WithForceNonInteractive(context.Background())))
+	assert.False(t, nonTextLogRenderer(context.Background()))
+	assert.False(t, nonTextLogRenderer(nilCtx))
+	assert.True(t, nonTextLogRenderer(WithNonTextLogRenderer(context.Background())))
 }
 
 func TestUseTerminalVisualizer(t *testing.T) {
-	forced := WithForceNonInteractive(context.Background())
+	text := context.Background()
+	nonText := WithNonTextLogRenderer(context.Background())
 	tests := []struct {
 		name       string
 		ctx        context.Context
@@ -106,10 +107,11 @@ func TestUseTerminalVisualizer(t *testing.T) {
 		isTTY      bool
 		want       bool
 	}{
-		{"tty with factory", context.Background(), true, true, true},
-		{"no factory", context.Background(), false, true, false},
-		{"not a tty", context.Background(), true, false, false},
-		{"forced non-interactive overrides tty", forced, true, true, false},
+		{name: "interactive with a text renderer animates", ctx: text, hasFactory: true, isTTY: true, want: true},
+		{name: "non-interactive with a text renderer falls back", ctx: text, hasFactory: true, isTTY: false, want: false},
+		{name: "interactive with another renderer falls back", ctx: nonText, hasFactory: true, isTTY: true, want: false},
+		{name: "non-interactive with another renderer falls back", ctx: nonText, hasFactory: true, isTTY: false, want: false},
+		{name: "no factory to animate with", ctx: text, hasFactory: false, isTTY: true, want: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
