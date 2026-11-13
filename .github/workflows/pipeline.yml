@@ -39,6 +39,8 @@ on:
       - '.github/benchmarks/**'
       - '.github/trivy-checks/*.rego'
       - '!.github/trivy-checks/*_test.rego'
+      - '.github/scripts/bsi-report.js'
+      - '.github/scripts/image-metadata.js'
   workflow_call:
     inputs:
       ref:
