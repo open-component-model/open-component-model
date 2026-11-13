@@ -17,11 +17,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 )
 
-// DefaultName is the service account used when an object names none. It exists in every namespace and has no
-// permissions unless an operator grants them.
+// DefaultName is the name of the default service account in a namespace.
 const DefaultName = "default"
 
-// Name returns the given service account name, or DefaultName if it is empty.
+// Name return name or DefaultName.
 func Name(name string) string {
 	if name == "" {
 		return DefaultName
@@ -30,7 +29,7 @@ func Name(name string) string {
 	return name
 }
 
-// Username returns the user name the API server authenticates the service account as.
+// Username of the service account in a given namespace.
 func Username(namespace, name string) string {
 	return fmt.Sprintf("system:serviceaccount:%s:%s", namespace, name)
 }
@@ -50,8 +49,8 @@ type Subject interface {
 type Authorizer struct {
 	// reader reads service accounts uncached to avoid a cluster-wide informer for them.
 	reader client.Reader
-	// reviews creates the SubjectAccessReviews. Unlike a SelfSubjectAccessReview it names the subject, so the
-	// controller needs no impersonation grant.
+	// reviews creates the SubjectAccessReviews. Unlike a SelfSubjectAccessReview the subject is defined so
+	// no impersonation is necessary.
 	reviews client.Writer
 }
 

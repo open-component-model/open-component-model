@@ -355,6 +355,26 @@ type ignoreCreate struct{ handler.EventHandler }
 func (ignoreCreate) Create(context.Context, event.CreateEvent, workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 }
 
+// watchedObjects returns the objects to watch for drift. A NamespacedDeployer watches them in the namespace they were
+// applied to, as an object without one would otherwise open a cluster-wide informer.
+func (r *Reconciler) watchedObjects(ctx context.Context, deployer deliveryv1alpha1.DeployerObject, objs []*unstructured.Unstructured) ([]*unstructured.Unstructured, error) {
+	if !r.Namespaced {
+		return objs, nil
+	}
+
+	watched := make([]*unstructured.Unstructured, 0, len(objs))
+	for _, obj := range objs {
+		// The objects come from the shared download cache.
+		obj := obj.DeepCopy()
+		if _, err := r.defaultObj(ctx, obj, r.defaultNamespace(deployer)); err != nil {
+			return nil, fmt.Errorf("failed to default object %s/%s: %w", obj.GetNamespace(), obj.GetName(), err)
+		}
+		watched = append(watched, obj)
+	}
+
+	return watched, nil
+}
+
 // authorizeWatches returns a Forbidden error if the service account of a NamespacedDeployer may not list and watch
 // the deployed objects. The controller watches them for drift with its own identity, which must not see more than
 // the service account could.

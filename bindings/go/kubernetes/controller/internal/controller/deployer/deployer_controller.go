@@ -437,14 +437,21 @@ func (r *Reconciler) reconcileDeployment(ctx context.Context, deployer deliveryv
 		return ctrl.Result{}, fmt.Errorf("failed to apply resources: %w", err)
 	}
 
-	if err = r.authorizeWatches(ctx, access, objs); err != nil {
+	watched, err := r.watchedObjects(ctx, deployer, objs)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceNotSynced, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to determine watched resources: %w", err)
+	}
+
+	if err = r.authorizeWatches(ctx, access, watched); err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceNotSynced, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to authorize resource watches: %w", err)
 	}
 
 	// Track the applied objects for the dynamic informer manager
-	if err = r.trackConcurrently(ctx, deployer, objs); err != nil {
+	if err = r.trackConcurrently(ctx, deployer, watched); err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceNotSynced, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to sync deployed resources: %w", err)

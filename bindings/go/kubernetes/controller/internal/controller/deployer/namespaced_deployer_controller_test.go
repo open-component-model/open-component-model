@@ -106,7 +106,7 @@ metadata:
 `)
 
 		deployer := createNamespacedDeployer(ctx, namespace.GetName(), resourceObj.GetName(), nil)
-		test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, deployer, v1alpha1.ApplyFailed, namespacedDeployerSA)
+		test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, deployer, v1alpha1.GetConfigurationFailedReason, namespacedDeployerSA)
 	})
 
 	It("applies cluster-scoped and cross-namespace objects", func(ctx SpecContext) {
