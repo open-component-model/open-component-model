@@ -10,26 +10,26 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/flags/log"
 )
 
-func TestNonTextLogRenderer(t *testing.T) {
+func TestLogFormatRequested(t *testing.T) {
 	tests := []struct {
 		name string
 		args []string
 		want bool
 	}{
 		{
-			name: "no flag renders text",
+			name: "no flag keeps the progress display",
 			args: nil,
 			want: false,
 		},
 		{
-			// text is the default format, so requesting it explicitly must
-			// behave exactly like omitting the flag.
-			name: "explicit text renders text",
+			// text is the default format, but passing it still asks for log
+			// records instead of the progress display.
+			name: "explicit text requests log records",
 			args: []string{"--" + log.FormatFlagName, log.FormatText},
-			want: false,
+			want: true,
 		},
 		{
-			name: "json is another renderer",
+			name: "explicit json requests log records",
 			args: []string{"--" + log.FormatFlagName, log.FormatJSON},
 			want: true,
 		},
@@ -46,17 +46,7 @@ func TestNonTextLogRenderer(t *testing.T) {
 			cmd.SetArgs(tt.args)
 			r.NoError(cmd.Execute())
 
-			nonText, err := nonTextLogRenderer(cmd)
-			r.NoError(err)
-			r.Equal(tt.want, nonText)
+			r.Equal(tt.want, logFormatRequested(cmd))
 		})
 	}
-}
-
-func TestNonTextLogRenderer_UnregisteredFlag(t *testing.T) {
-	r := require.New(t)
-
-	nonText, err := nonTextLogRenderer(&cobra.Command{Use: "ocm"})
-	r.Error(err)
-	r.False(nonText)
 }
