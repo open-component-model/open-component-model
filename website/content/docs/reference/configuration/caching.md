@@ -105,12 +105,12 @@ writable volume. If the cache directory cannot be created, the controller does n
 
 Each cache applies these limits:
 
-| Limit              | Default                              | Field ([Configuration](#configuration)) | Applies to                  | Behaviour                                                                                                                                          |
-|--------------------|--------------------------------------|-----------------------------------------|-----------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
-| Maximum entries    | `100000` (blob), `10000` (reference) | `reference.maxEntries`                  | Blob cache, reference cache | When the limit is reached, the least recently used entry is removed. The reference cache counts the tags and digests of all repositories together. |
-| Time to live       | `10m`                                | `blob.ttl`, `reference.ttl`             | Blob cache, reference cache | Entries older than this are removed.                                                                                                               |
-| Maximum blob size  | `20 MiB`                             | `blob.maxBlobSize`                      | Blob cache                  | Larger blobs are downloaded as usual but not cached.                                                                                               |
-| Maximum total size | No limit (CLI), `1 GiB` (controller) | `blob.maxTotalSize`                     | Blob cache                  | When the limit is exceeded, least recently used entries are removed until the cache fits.                                                          |
+| Limit              | Default  | Field ([Configuration](#configuration)) | Applies to                  | Behaviour                                                                                                                                                                                             |
+|--------------------|----------|-----------------------------------------|-----------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Maximum entries    | `10000`  | `reference.maxEntries`                  | Reference cache             | When the limit is reached, the least recently used entry is removed. The tags and digests of all repositories count together.                                                                         |
+| Time to live       | `10m`    | `blob.ttl`, `reference.ttl`             | Blob cache, reference cache | Entries older than this are removed.                                                                                                                                                                  |
+| Maximum blob size  | `20 MiB` | `blob.maxBlobSize`                      | Blob cache                  | Larger blobs are downloaded as usual but not cached.                                                                                                                                                  |
+| Maximum total size | `1 GiB`  | `blob.maxTotalSize`                     | Blob cache                  | When the limit is exceeded, least recently used entries are removed until the cache fits. Each blob counts at least 4 KiB, one filesystem block, so the limit also bounds the number of cached blobs. |
 
 When the blob cache removes an entry, it also deletes the file. When the reference cache is loaded from disk,
 entries resolved longer than the time to live ago are not loaded. When the blob cache is loaded from disk, every valid
@@ -191,12 +191,12 @@ All fields are optional. An omitted field keeps its default.
 
 Fields of `blob`:
 
-| Field          | Type                                                             | Default                                          | Description                                                                                                                                 |
-|----------------|------------------------------------------------------------------|--------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------|
-| `enabled`      | boolean                                                          | `true`                                           | `false` turns off the blob cache: every blob is downloaded from the registry and no cache directory is created.                             |
-| `ttl`          | duration string such as `30s` or `1h30m`, or integer nanoseconds | `10m`                                            | Time to live of the entries. With `IfNotPresent`, how long a cached blob is returned without contacting the registry. Must be positive.     |
-| `maxBlobSize`  | integer, bytes                                                   | `20971520` (20 MiB)                              | The largest blob the blob cache stores. Larger blobs are fetched as usual but not cached. Must be positive.                                 |
-| `maxTotalSize` | integer, bytes                                                   | No limit (CLI), `1073741824` (1 GiB, controller) | The bytes the blob cache keeps on disk. When exceeded, the least recently used blobs are removed. `0` means no limit. Must not be negative. |
+| Field          | Type                                                             | Default              | Description                                                                                                                                                                       |
+|----------------|------------------------------------------------------------------|----------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `enabled`      | boolean                                                          | `true`               | `false` turns off the blob cache: every blob is downloaded from the registry and no cache directory is created.                                                                   |
+| `ttl`          | duration string such as `30s` or `1h30m`, or integer nanoseconds | `10m`                | Time to live of the entries. With `IfNotPresent`, how long a cached blob is returned without contacting the registry. Must be positive.                                           |
+| `maxBlobSize`  | integer, bytes                                                   | `20971520` (20 MiB)  | The largest blob the blob cache stores. Larger blobs are fetched as usual but not cached. Must be positive.                                                                       |
+| `maxTotalSize` | integer, bytes                                                   | `1073741824` (1 GiB) | The bytes the blob cache keeps on disk. When exceeded, the least recently used blobs are removed. Each blob counts at least 4096 bytes. `0` means no limit. Must not be negative. |
 
 Fields of `reference`:
 

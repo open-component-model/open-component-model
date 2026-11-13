@@ -77,12 +77,8 @@ func WithReferenceCache(rc *ocicache.ReferenceCache) PluginOption {
 	}
 }
 
-// MaxBlobCacheSize bounds the disk use of the blob cache of [NewBlobCache] unless the
-// configuration sets blob.maxTotalSize.
-const MaxBlobCacheSize = 1 << 30
-
 // NewBlobCache creates the blob cache to pass to [WithBlobCache]. The blob cache is on by default.
-// A nil cfg uses the cache defaults and [MaxBlobCacheSize]; the limits cfg sets replace them.
+// A nil cfg uses the cache defaults and [ocicache.DefaultMaxTotalSize]; the limits cfg sets replace them.
 // A cfg that turns the blob cache off returns a nil cache, which [WithBlobCache] treats as no caching.
 func NewBlobCache(tempDir string, cfg *ocicachev1alpha1.Config) (*ocicache.BlobCache, error) {
 	if !cfg.BlobEnabled(true) {
@@ -90,7 +86,7 @@ func NewBlobCache(tempDir string, cfg *ocicachev1alpha1.Config) (*ocicache.BlobC
 	}
 	opts := ocicache.Options{
 		Dir:          filepath.Join(tempDirOrDefault(tempDir), "ocm-oci-cas"),
-		MaxTotalSize: MaxBlobCacheSize,
+		MaxTotalSize: ocicache.DefaultMaxTotalSize,
 	}
 	if cfg != nil {
 		opts.RemotePolicy = ocicache.RemotePolicy(cfg.RemotePolicy)

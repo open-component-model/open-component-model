@@ -34,7 +34,6 @@ func TestOptions_DefaultLimitsPerCache(t *testing.T) {
 
 	blobs, err := NewBlobCache(Options{Dir: t.TempDir()})
 	r.NoError(err)
-	r.Equal(DefaultBlobMaxEntries, blobs.opts.MaxEntries)
 	r.EqualValues(DefaultMaxBlobSize, blobs.MaxBlobSize())
 
 	refs, err := NewReferenceCache(Options{Dir: t.TempDir()})
@@ -43,13 +42,13 @@ func TestOptions_DefaultLimitsPerCache(t *testing.T) {
 }
 
 func TestOptions_ExplicitAlwaysAccepted(t *testing.T) {
-	opts, err := Options{Dir: t.TempDir(), RemotePolicy: RemotePolicyAlways}.applyDefaults(DefaultBlobMaxEntries)
+	opts, err := Options{Dir: t.TempDir(), RemotePolicy: RemotePolicyAlways}.applyDefaults(0)
 	require.NoError(t, err)
 	assert.Equal(t, RemotePolicyAlways, opts.RemotePolicy)
 }
 
 func TestOptions_InvalidPolicyRejected(t *testing.T) {
-	_, err := Options{Dir: t.TempDir(), RemotePolicy: "Never"}.applyDefaults(DefaultBlobMaxEntries)
+	_, err := Options{Dir: t.TempDir(), RemotePolicy: "Never"}.applyDefaults(0)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported RemotePolicy")
 }

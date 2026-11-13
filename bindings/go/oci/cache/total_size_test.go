@@ -15,6 +15,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// k is what a small blob counts against MaxTotalSize.
+const k = MinBlobCharge
+
 func populateBytes(t *testing.T, c *BlobCache, data []byte) digest.Digest {
 	t.Helper()
 	dgst := digest.FromBytes(data)
@@ -32,7 +35,7 @@ func requireEvicted(t *testing.T, c *BlobCache, dgst digest.Digest) {
 
 func TestCache_MaxTotalSize_EvictsLeastRecentlyUsed(t *testing.T) {
 	r := require.New(t)
-	c := newTestCache(t, Options{MaxTotalSize: 10})
+	c := newTestCache(t, Options{MaxTotalSize: 2*k + k/2})
 
 	d1 := populateBytes(t, c, []byte("aaaa"))
 	d2 := populateBytes(t, c, []byte("bbbb"))
@@ -45,7 +48,7 @@ func TestCache_MaxTotalSize_EvictsLeastRecentlyUsed(t *testing.T) {
 	requireEvicted(t, c, d2)
 	r.True(c.Has(d1))
 	r.True(c.Has(d3))
-	r.EqualValues(8, c.totalSize())
+	r.EqualValues(2*k, c.totalSize())
 }
 
 func TestCache_MaxTotalSize_ZeroMeansNoLimit(t *testing.T) {
@@ -54,35 +57,35 @@ func TestCache_MaxTotalSize_ZeroMeansNoLimit(t *testing.T) {
 	for _, b := range []string{"aaaa", "bbbb", "cccc"} {
 		r.True(c.Has(populateBytes(t, c, []byte(b))))
 	}
-	r.EqualValues(12, c.totalSize())
+	r.EqualValues(3*k, c.totalSize())
 }
 
 func TestCache_MaxTotalSize_BlobAboveLimitIsNotCached(t *testing.T) {
 	r := require.New(t)
-	c := newTestCache(t, Options{MaxTotalSize: 4})
+	c := newTestCache(t, Options{MaxTotalSize: k})
 	d1 := populateBytes(t, c, []byte("aaaa"))
 
-	data := []byte("0123456789")
+	data := bytes.Repeat([]byte("x"), k+1)
 	dgst := digest.FromBytes(data)
 	inserted, err := c.populate(t.Context(), dgst, int64(len(data)), bytes.NewReader(data))
 	r.NoError(err)
 	r.False(inserted)
 	requireEvicted(t, c, dgst)
 	r.True(c.Has(d1), "a blob that can never fit must not evict others")
-	r.EqualValues(4, c.totalSize())
+	r.EqualValues(k, c.totalSize())
 }
 
 func TestCache_MaxTotalSize_RepopulateCountsOnce(t *testing.T) {
 	r := require.New(t)
-	c := newTestCache(t, Options{MaxTotalSize: 10})
+	c := newTestCache(t, Options{MaxTotalSize: 2*k + k/2})
 	d1 := populateBytes(t, c, []byte("aaaa"))
 	populateBytes(t, c, []byte("aaaa"))
-	r.EqualValues(4, c.totalSize())
+	r.EqualValues(k, c.totalSize())
 
 	d2 := populateBytes(t, c, []byte("bbbb"))
 	r.True(c.Has(d1))
 	r.True(c.Has(d2))
-	r.EqualValues(8, c.totalSize())
+	r.EqualValues(2*k, c.totalSize())
 }
 
 func TestCache_MaxTotalSize_ReseedTrimsOldestFirst(t *testing.T) {
@@ -99,12 +102,12 @@ func TestCache_MaxTotalSize_ReseedTrimsOldestFirst(t *testing.T) {
 		r.NoError(os.Chtimes(pathFor(c1.opts.Dir, d), mtime, mtime))
 	}
 
-	c2 := newTestCache(t, Options{Dir: dir, MaxTotalSize: 8})
+	c2 := newTestCache(t, Options{Dir: dir, MaxTotalSize: 2 * k})
 
 	requireEvicted(t, c2, d2)
 	r.True(c2.Has(d3))
 	r.True(c2.Has(d1))
-	r.EqualValues(8, c2.totalSize())
+	r.EqualValues(2*k, c2.totalSize())
 }
 
 func TestCache_MaxTotalSize_ReseedCountsEntries(t *testing.T) {
@@ -114,18 +117,18 @@ func TestCache_MaxTotalSize_ReseedCountsEntries(t *testing.T) {
 	populateBytes(t, c1, []byte("aaaa"))
 	populateBytes(t, c1, []byte("bbbb"))
 
-	c2 := newTestCache(t, Options{Dir: dir, MaxTotalSize: 10})
-	r.EqualValues(8, c2.totalSize())
+	c2 := newTestCache(t, Options{Dir: dir, MaxTotalSize: 2*k + k/2})
+	r.EqualValues(2*k, c2.totalSize())
 	d3 := populateBytes(t, c2, []byte("cccc"))
 	r.True(c2.Has(d3))
-	r.EqualValues(8, c2.totalSize(), "reseeded entries count against the limit")
+	r.EqualValues(2*k, c2.totalSize(), "reseeded entries count against the limit")
 }
 
 func TestCache_MaxTotalSize_TTLExpiryLowersTotal(t *testing.T) {
 	r := require.New(t)
-	c := newTestCache(t, Options{TTL: 50 * time.Millisecond, MaxTotalSize: 10})
+	c := newTestCache(t, Options{TTL: 50 * time.Millisecond, MaxTotalSize: 2 * k})
 	populateBytes(t, c, []byte("aaaa"))
-	r.EqualValues(4, c.totalSize())
+	r.EqualValues(k, c.totalSize())
 
 	r.Eventually(func() bool { return c.totalSize() == 0 }, 2*time.Second, 10*time.Millisecond)
 }
@@ -146,7 +149,23 @@ func TestCache_MaxTotalSize_ConcurrentPopulateCountsOnce(t *testing.T) {
 	wg.Wait()
 
 	r.True(c.Has(dgst))
-	r.EqualValues(len(data), c.totalSize())
+	r.EqualValues(k, c.totalSize())
+}
+
+func TestCache_MaxTotalSize_ChargesAtLeastOneBlock(t *testing.T) {
+	r := require.New(t)
+	c := newTestCache(t, Options{MaxTotalSize: 4 * k})
+	populateBytes(t, c, []byte("a"))
+	r.EqualValues(k, c.totalSize(), "a small blob counts one block")
+	populateBytes(t, c, bytes.Repeat([]byte("b"), 2*k))
+	r.EqualValues(3*k, c.totalSize(), "a larger blob counts its size")
+
+	// Blobs of one byte each: the limit, not their bytes, decides how many stay.
+	for i := range 10 {
+		populateBytes(t, c, []byte{byte('c' + i)})
+	}
+	r.Equal(4, c.lru.Len(), "the limit bounds the number of entries")
+	r.EqualValues(4*k, c.totalSize())
 }
 
 func TestCache_Fetch_BlobAboveMaxTotalSizeFallsThrough(t *testing.T) {

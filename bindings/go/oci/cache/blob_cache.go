@@ -71,7 +71,7 @@ type BlobCache struct {
 	// its digest is already present and total counts each entry once.
 	// onEvict runs under the lock of lru and must not take it.
 	insertMu sync.Mutex
-	// total is the sum of the sizes of the entries in lru.
+	// total is the sum of the charges of the entries in lru, see [charge].
 	total atomic.Int64
 
 	// served records which repository served which blob, as the qualified
@@ -98,7 +98,7 @@ type BlobCache struct {
 // [RemotePolicyAlways] it also records what each repository served, in
 // a [ReferenceCache] of its own under `<Options.Dir>/served/`.
 func NewBlobCache(opts Options) (*BlobCache, error) {
-	opts, err := opts.applyDefaults(DefaultBlobMaxEntries)
+	opts, err := opts.applyDefaults(0)
 	if err != nil {
 		return nil, err
 	}
@@ -112,12 +112,13 @@ func NewBlobCache(opts Options) (*BlobCache, error) {
 	}
 
 	c := &BlobCache{opts: opts, logger: slog.Default().With(slog.String("dir", opts.Dir))}
-	c.lru = expirable.NewLRU(opts.MaxEntries, c.onEvict, opts.TTL)
+	// No entry limit: MaxTotalSize bounds the entries, see [MinBlobCharge].
+	c.lru = expirable.NewLRU(0, c.onEvict, opts.TTL)
 	if opts.RemotePolicy == RemotePolicyAlways {
 		c.served, err = NewReferenceCache(Options{
 			Dir:        filepath.Join(root, servedSubdir),
-			MaxEntries: opts.MaxEntries,
-			TTL:        noExpiry, // a hit also needs the blob, so the blob's lifetime decides
+			MaxEntries: int(opts.MaxTotalSize / MinBlobCharge), // as many as blobs fit, 0 is the default
+			TTL:        noExpiry,                               // a hit also needs the blob, so the blob's lifetime decides
 		})
 		if err != nil {
 			return nil, fmt.Errorf("blobcache: %w", err)
@@ -243,7 +244,13 @@ func (c *BlobCache) populate(ctx context.Context, dgst digest.Digest, size int64
 // [Options.MaxBlobSize] and [Options.MaxTotalSize].
 func (c *BlobCache) tooLarge(size int64) bool {
 	return (c.opts.MaxBlobSize > 0 && size > c.opts.MaxBlobSize) ||
-		(c.opts.MaxTotalSize > 0 && size > c.opts.MaxTotalSize)
+		(c.opts.MaxTotalSize > 0 && charge(size) > c.opts.MaxTotalSize)
+}
+
+// charge is what a blob of size counts against [Options.MaxTotalSize]: its size, but at
+// least [MinBlobCharge].
+func charge(size int64) int64 {
+	return max(size, MinBlobCharge)
 }
 
 // commit moves the temp file tmp into place as e and inserts it. An
@@ -261,13 +268,13 @@ func (c *BlobCache) commit(dgst digest.Digest, tmp string, e blobEntry) error {
 	return nil
 }
 
-// insert adds e to the LRU and its size to the total. dgst must not be
+// insert adds e to the LRU and its charge to the total. dgst must not be
 // in the LRU: insert is called under insertMu after a Remove, or while
 // seeding, where every digest is read from disk once.
 func (c *BlobCache) insert(dgst digest.Digest, e blobEntry) {
 	// Added before the entry, so an eviction of it never takes the
 	// total below zero.
-	c.total.Add(e.size)
+	c.total.Add(charge(e.size))
 	c.lru.Add(dgst, e)
 }
 
@@ -284,7 +291,7 @@ func (c *BlobCache) trim() {
 	}
 }
 
-// totalSize returns the bytes of all cached entries.
+// totalSize returns the bytes all cached entries count against [Options.MaxTotalSize].
 func (c *BlobCache) totalSize() int64 {
 	return c.total.Load()
 }
@@ -472,7 +479,7 @@ func (c *BlobCache) verifyRemoteAccess(ctx context.Context, upstream content.Rea
 // for the evicted entry. Errors are logged at WARN — eviction must
 // not block.
 func (c *BlobCache) onEvict(dgst digest.Digest, e blobEntry) {
-	c.total.Add(-e.size)
+	c.total.Add(-charge(e.size))
 	if err := removeQuiet(e.path); err != nil {
 		c.logger.Warn("blobcache: evict file remove failed",
 			slog.String("digest", dgst.String()),

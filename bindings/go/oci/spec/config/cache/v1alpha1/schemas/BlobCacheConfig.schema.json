@@ -18,7 +18,7 @@
     },
     "maxTotalSize": {
       "type": "integer",
-      "description": "MaxTotalSize bounds the bytes the blob cache keeps on disk. When it is exceeded, the\nleast recently used blobs are removed. 0 means no limit. Must not be negative.\nDefaults to no limit in the CLI and to 1073741824 (1 GiB) in the controller.",
+      "description": "MaxTotalSize bounds the bytes the blob cache keeps on disk. When it is exceeded, the\nleast recently used blobs are removed. Each blob counts at least 4096 bytes, one\nfilesystem block. 0 means no limit. Must not be negative. Defaults to 1073741824 (1 GiB).",
       "minimum": 0,
       "maximum": 9223372036854776000
     },

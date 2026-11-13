@@ -58,8 +58,9 @@ type Options struct {
 	// the same Dir can be shared.
 	Dir string
 
-	// MaxEntries bounds the LRU. A value of 0 uses the cache's default:
-	// [DefaultBlobMaxEntries] or [DefaultReferenceMaxEntries].
+	// MaxEntries bounds the [ReferenceCache]. A value of 0 uses
+	// [DefaultReferenceMaxEntries]. Ignored by [BlobCache], which
+	// [Options.MaxTotalSize] bounds.
 	MaxEntries int
 
 	// TTL is the maximum age of a cache entry. A value of 0 uses the default
@@ -75,8 +76,10 @@ type Options struct {
 	// MaxTotalSize bounds the bytes the [BlobCache] keeps on disk. When
 	// an entry takes the total above it, least recently used entries are
 	// evicted until the cache fits, also when reseeding from disk. A
-	// blob larger than the limit is not cached. A value of 0 disables
-	// the limit. Ignored by [ReferenceCache].
+	// blob larger than the limit is not cached. Each blob counts at least
+	// [MinBlobCharge], so the limit also bounds the number of entries and
+	// the memory they take. A value of 0 disables the limit, for entries
+	// too. Ignored by [ReferenceCache].
 	MaxTotalSize int64
 
 	// Accept reports whether a blob should be cached by the
@@ -95,9 +98,13 @@ type Options struct {
 const noExpiry time.Duration = -1
 
 const (
-	// DefaultBlobMaxEntries is the [BlobCache] entry limit. With [DefaultAccept], a
-	// component version takes about three entries (manifest, config, descriptor).
-	DefaultBlobMaxEntries = 100_000
+	// DefaultMaxTotalSize is the [Options.MaxTotalSize] the OCM CLI and controller use
+	// unless configured otherwise.
+	DefaultMaxTotalSize = 1 << 30
+	// MinBlobCharge is the least a blob counts against [Options.MaxTotalSize]: one
+	// filesystem block, which a small file takes on disk anyway. It keeps the number of
+	// entries, and the memory each takes, bounded by the limit.
+	MinBlobCharge = 4 << 10
 	// DefaultReferenceMaxEntries is the [ReferenceCache] entry limit.
 	DefaultReferenceMaxEntries = 10_000
 	// DefaultMaxBlobSize is the per-blob size cap of the [BlobCache].
@@ -105,8 +112,8 @@ const (
 )
 
 // Defaults returns an [Options] populated with sane caching limits:
-//   - [DefaultBlobMaxEntries] or [DefaultReferenceMaxEntries] entries,
-//     depending on the cache (MaxEntries is left zero)
+//   - [DefaultReferenceMaxEntries] entries for the [ReferenceCache]
+//     (MaxEntries is left zero)
 //   - 10 minute TTL
 //   - [DefaultMaxBlobSize] per-blob size cap
 //   - [DefaultAccept] media-type filter
@@ -123,7 +130,8 @@ func Defaults() *Options {
 }
 
 // applyDefaults validates required fields and fills zero-valued
-// fields from [Defaults], using maxEntries for MaxEntries.
+// fields from [Defaults], using maxEntries for MaxEntries. A cache
+// that ignores MaxEntries passes 0.
 func (o Options) applyDefaults(maxEntries int) (Options, error) {
 	if o.Dir == "" {
 		return Options{}, errors.New("cache: Options.Dir is required")

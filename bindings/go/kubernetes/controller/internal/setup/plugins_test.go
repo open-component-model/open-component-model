@@ -83,9 +83,10 @@ func TestNewBlobCache(t *testing.T) {
 	t.Run("maxTotalSize evicts the least recently used blob", func(t *testing.T) {
 		r := require.New(t)
 		repo := memoryRepository{memory.New()}
+		// Each blob counts at least ocicache.MinBlobCharge, so two small blobs do not fit into one charge.
 		first, second := pushDescriptor(t, repo, 16), pushDescriptor(t, repo, 17)
 
-		bc, err := setup.NewBlobCache(t.TempDir(), &ocicachev1alpha1.Config{Blob: &ocicachev1alpha1.BlobCacheConfig{MaxTotalSize: new(int64(17))}})
+		bc, err := setup.NewBlobCache(t.TempDir(), &ocicachev1alpha1.Config{Blob: &ocicachev1alpha1.BlobCacheConfig{MaxTotalSize: new(int64(ocicache.MinBlobCharge))}})
 		r.NoError(err)
 
 		fetchAll(t, bc, repo, first, second)

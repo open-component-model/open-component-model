@@ -82,8 +82,8 @@ type BlobCacheConfig struct {
 	MaxBlobSize *int64 `json:"maxBlobSize,omitempty"`
 
 	// MaxTotalSize bounds the bytes the blob cache keeps on disk. When it is exceeded, the
-	// least recently used blobs are removed. 0 means no limit. Must not be negative.
-	// Defaults to no limit in the CLI and to 1073741824 (1 GiB) in the controller.
+	// least recently used blobs are removed. Each blob counts at least 4096 bytes, one
+	// filesystem block. 0 means no limit. Must not be negative. Defaults to 1073741824 (1 GiB).
 	// +ocm:jsonschema-gen:minimum=0
 	MaxTotalSize *int64 `json:"maxTotalSize,omitempty"`
 }
