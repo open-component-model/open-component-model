@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/rest"
 	toolscache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
@@ -63,7 +64,7 @@ var _ manager.Runnable = &InformerManager{}
 // - A controller-runtime cache for metadata-only informers.
 // - Buffered channels for registration/unregistration requests.
 // - A synchronized workqueue bound to reconcile.Request processing.
-// - A concurrent map of active informer tasks.
+// - A map of active informer tasks, one per child GVK, each with the parents watching it.
 // - Calls to prometheus metrics for operations and active watches.
 type InformerManager struct {
 	// Number of worker goroutines processing register / unregister events.
@@ -81,8 +82,11 @@ type InformerManager struct {
 	// The workqueue receiving reconcile.Requests emitted by informer events.
 	queue workqueue.TypedRateLimitingInterface[ctrl.Request]
 
-	// Concurrent map of active informer tasks keyed by (parent GVK, child GVK, namespace).
-	tasks sync.Map // map[watchTaskKey]*watchTask
+	// Protects tasks.
+	tasksMu sync.RWMutex
+	// Active informer tasks keyed by child GVK. The cache runs one cluster-wide informer per GVK, so a task is shared
+	// by every parent watching that GVK, in any namespace.
+	tasks map[schema.GroupVersionKind]*watchTask
 
 	// Handler invoked with Create/Update/Delete event notifications.
 	handler handler.EventHandler
@@ -98,10 +102,11 @@ type InformerManager struct {
 	mapper meta.RESTMapper
 }
 
-// watchTask holds the informer and its registration handle.
+// watchTask holds the informer, its registration handle, and the parents watching it.
 type watchTask struct {
 	informer     cache.Informer
 	registration toolscache.ResourceEventHandlerRegistration
+	parents      sets.Set[client.ObjectKey]
 }
 
 // Options configures the InformerManager.
@@ -161,6 +166,7 @@ func NewInformerManager(opts *Options) (*InformerManager, error) {
 
 	mgr := &InformerManager{
 		cache:           metadataCache,
+		tasks:           make(map[schema.GroupVersionKind]*watchTask),
 		register:        make(chan Event, opts.RegisterChannelBufferSize),
 		unregister:      make(chan Event, opts.UnregisterChannelBufferSize),
 		handler:         opts.Handler,
@@ -228,16 +234,26 @@ func (mgr *InformerManager) Start(ctx context.Context) error {
 
 // --- Public State Helpers ---
 
+// IsStopped reports whether parent no longer watches the GVK of obj. The informer itself may still run for other
+// parents.
 func (mgr *InformerManager) IsStopped(parent, obj client.Object) bool {
-	_, task, ok := mgr.getTask(parent, obj)
+	mgr.tasksMu.RLock()
+	defer mgr.tasksMu.RUnlock()
 
-	return ok && task.informer.IsStopped()
+	task, ok := mgr.tasks[obj.GetObjectKind().GroupVersionKind()]
+
+	return !ok || !task.parents.Has(client.ObjectKeyFromObject(parent))
 }
 
+// HasSynced reports whether parent watches the GVK of obj and the informer has synced.
 func (mgr *InformerManager) HasSynced(parent, obj client.Object) bool {
-	_, task, ok := mgr.getTask(parent, obj)
+	mgr.tasksMu.RLock()
+	defer mgr.tasksMu.RUnlock()
 
-	return ok && task.informer.HasSynced() && task.registration.HasSynced()
+	task, ok := mgr.tasks[obj.GetObjectKind().GroupVersionKind()]
+
+	return ok && task.parents.Has(client.ObjectKeyFromObject(parent)) &&
+		task.informer.HasSynced() && task.registration.HasSynced()
 }
 
 // --- Register / Unregister ---
@@ -287,19 +303,19 @@ func (mgr *InformerManager) SetQueue(queue workqueue.TypedRateLimitingInterface[
 	return nil
 }
 
+// ActiveForParent returns an object per GVK that parent watches.
 func (mgr *InformerManager) ActiveForParent(parent client.Object) []client.Object {
+	mgr.tasksMu.RLock()
+	defer mgr.tasksMu.RUnlock()
+
 	var active []client.Object
-	mgr.tasks.Range(func(k, _ any) bool {
-		key := k.(watchTaskKey) //nolint:forcetypeassert // we know the type is a watchTaskKey
-		if key.parent == parent.GetObjectKind().GroupVersionKind() {
+	for gvk, task := range mgr.tasks {
+		if task.parents.Has(client.ObjectKeyFromObject(parent)) {
 			obj := &v1.PartialObjectMetadata{}
-			obj.SetGroupVersionKind(key.gvk)
-			obj.SetNamespace(key.namespace)
+			obj.SetGroupVersionKind(gvk)
 			active = append(active, obj)
 		}
-
-		return true // continue iterating
-	})
+	}
 
 	return active
 }
@@ -307,14 +323,19 @@ func (mgr *InformerManager) ActiveForParent(parent client.Object) []client.Objec
 func (mgr *InformerManager) Register(ctx context.Context, parent, obj client.Object) error {
 	logger := ctrl.LoggerFrom(ctx)
 
-	key := key(parent, obj)
-	if _, ok := mgr.tasks.Load(key); ok {
-		logger.Info("watch is already active", "gvk", key.gvk, "namespace", key.namespace)
+	mgr.tasksMu.Lock()
+	defer mgr.tasksMu.Unlock()
 
-		return nil // already registered
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	if task, ok := mgr.tasks[gvk]; ok {
+		logger.Info("watch is already active", "gvk", gvk)
+		task.parents.Insert(client.ObjectKeyFromObject(parent))
+
+		return nil
 	}
 
-	inf, err := mgr.cache.GetInformer(ctx, obj)
+	// HasSynced reports the sync, so do not block the other workers while holding the lock.
+	inf, err := mgr.cache.GetInformer(ctx, obj, cache.BlockUntilSynced(false))
 	if err != nil {
 		return fmt.Errorf("failed to get informer for %s: %w", obj.GetName(), err)
 	}
@@ -364,75 +385,52 @@ func (mgr *InformerManager) Register(ctx context.Context, parent, obj client.Obj
 		return fmt.Errorf("failed to add event handler for %s: %w", obj.GetName(), err)
 	}
 
-	t := &watchTask{informer: inf, registration: reg}
-	mgr.tasks.Store(key, t)
+	mgr.tasks[gvk] = &watchTask{informer: inf, registration: reg, parents: sets.New(client.ObjectKeyFromObject(parent))}
 	activeTasks.WithLabelValues(mgr.metricsLabel).Inc()
-	registerTotal.WithLabelValues(mgr.metricsLabel, key.gvk.Group, key.gvk.Version, key.gvk.Kind, key.namespace).Inc()
+	registerTotal.WithLabelValues(mgr.metricsLabel, gvk.Group, gvk.Version, gvk.Kind, obj.GetNamespace()).Inc()
 
 	return nil
 }
 
+// Unregister removes parent from the watchers of the GVK of obj and stops the informer once no parent watches it.
 func (mgr *InformerManager) Unregister(ctx context.Context, parent, obj client.Object) error {
-	key, task, ok := mgr.getTask(parent, obj)
+	mgr.tasksMu.Lock()
+	defer mgr.tasksMu.Unlock()
+
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	task, ok := mgr.tasks[gvk]
 	if !ok {
 		return nil
 	}
 
-	if err := mgr.stopTask(ctx, key, task); err != nil {
+	task.parents.Delete(client.ObjectKeyFromObject(parent))
+	if task.parents.Len() > 0 {
+		ctrl.LoggerFrom(ctx).Info("other parents still watch the GVK, not stopping the informer", "gvk", gvk, "parents", task.parents.Len())
+
+		return nil
+	}
+
+	if err := mgr.stopTask(ctx, gvk, task); err != nil {
 		return fmt.Errorf("failed to stop task for %s: %w", obj.GetName(), err)
 	}
 
-	unregisterTotal.WithLabelValues(mgr.metricsLabel, key.gvk.Group, key.gvk.Version, key.gvk.Kind, key.namespace).Inc()
+	unregisterTotal.WithLabelValues(mgr.metricsLabel, gvk.Group, gvk.Version, gvk.Kind, obj.GetNamespace()).Inc()
 
 	return nil
 }
 
 // --- Private Helpers ---
 
-// watchTaskKey uniquely identifies a dynamic watch by parent GVK, resource GVK, and namespace.
-type watchTaskKey struct {
-	// parent is the GVK of the parent object that owns this watch.
-	parent schema.GroupVersionKind
-	// gvk is the GVK of the child object being watched.
-	gvk schema.GroupVersionKind
-	// namespace is an optional namespace for the child object for a namespaced watch.
-	namespace string
-}
-
-// key generates a watchTaskKey for the given parent and child object.
-func key(parent, obj client.Object) watchTaskKey {
-	return watchTaskKey{
-		parent:    parent.GetObjectKind().GroupVersionKind(),
-		gvk:       obj.GetObjectKind().GroupVersionKind(),
-		namespace: obj.GetNamespace(),
-	}
-}
-
-func (mgr *InformerManager) getTask(parent, obj client.Object) (watchTaskKey, *watchTask, bool) {
-	k := key(parent, obj)
-	t, ok := mgr.tasks.Load(k)
-	if !ok {
-		return watchTaskKey{}, nil, false
-	}
-
-	task, ok := t.(*watchTask)
-	if !ok {
-		return watchTaskKey{}, nil, false
-	}
-
-	return k, task, true
-}
-
 func (mgr *InformerManager) GracefulShutdown(ctx context.Context, timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	var err error
-	mgr.tasks.Range(func(k, v any) bool {
-		err = errors.Join(err, mgr.stopTask(ctx, k.(watchTaskKey), v.(*watchTask))) //nolint:forcetypeassert // we know the type
-
-		return true
-	})
+	mgr.tasksMu.Lock()
+	for gvk, task := range mgr.tasks {
+		err = errors.Join(err, mgr.stopTask(ctx, gvk, task))
+	}
+	mgr.tasksMu.Unlock()
 
 	mgr.queueMu.Lock()
 	defer mgr.queueMu.Unlock()
@@ -446,36 +444,20 @@ func (mgr *InformerManager) GracefulShutdown(ctx context.Context, timeout time.D
 	return err
 }
 
-func (mgr *InformerManager) stopTask(ctx context.Context, k watchTaskKey, t *watchTask) error {
-	logger := ctrl.LoggerFrom(ctx).WithValues("gvk", k.gvk, "namespace", k.namespace)
-
-	isLastWatch := true
-	mgr.tasks.Range(func(ek, _ any) bool {
-		existing := ek.(watchTaskKey) //nolint:forcetypeassert // we know the type is watchTaskKey
-		if existing.gvk == k.gvk && existing.namespace == k.namespace && existing.parent != k.parent {
-			isLastWatch = false
-		}
-
-		return true // continue iterating
-	})
-	if !isLastWatch {
-		logger.Info("Found another active watch task for the same GVK and namespace but differing Parent, not stopping yet")
-
-		return nil
-	}
-
-	logger.Info("Stopping dynamic watch task as this was the last watch for the GVK and namespace")
+// stopTask stops the informer of gvk. The caller must hold tasksMu.
+func (mgr *InformerManager) stopTask(ctx context.Context, gvk schema.GroupVersionKind, t *watchTask) error {
+	ctrl.LoggerFrom(ctx).Info("Stopping dynamic watch task as no parent watches the GVK anymore", "gvk", gvk)
 
 	if err := t.informer.RemoveEventHandler(t.registration); err != nil {
-		return fmt.Errorf("failed to remove event handler for %s: %w", k.gvk, err)
+		return fmt.Errorf("failed to remove event handler for %s: %w", gvk, err)
 	}
 
 	obj := &unstructured.Unstructured{}
-	obj.SetGroupVersionKind(k.gvk)
+	obj.SetGroupVersionKind(gvk)
 	if err := mgr.cache.RemoveInformer(ctx, obj); err != nil {
-		return fmt.Errorf("failed to remove informer for %s: %w", k.gvk, err)
+		return fmt.Errorf("failed to remove informer for %s: %w", gvk, err)
 	}
-	mgr.tasks.Delete(k)
+	delete(mgr.tasks, gvk)
 	activeTasks.WithLabelValues(mgr.metricsLabel).Dec()
 
 	return nil
