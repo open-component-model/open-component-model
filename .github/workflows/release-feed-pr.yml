@@ -1,0 +1,125 @@
+name: Release Feed PR
+
+# Dispatched after each RC and final release. Publication waits for the PR to merge.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Canonical release tag to add (e.g. v0.24.0-rc.1)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-feed-pr
+  cancel-in-progress: false
+  # Each queued run owns a distinct release; do not replace a pending dispatch.
+  queue: max
+
+jobs:
+  open_pr:
+    name: Open release feed PR
+    runs-on: ubuntu-26.04-arm
+    permissions:
+      contents: read
+      pull-requests: read
+    environment:
+      name: automation
+      deployment: false
+
+    steps:
+      - name: Validate tag format
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]] \
+            || { echo "::error::tag must be vX.Y.Z or vX.Y.Z-rc.N"; exit 1; }
+
+      # Capture pending entries before checking out main, so a concurrent PR merge
+      # cannot put them in neither the pending snapshot nor the checked-out main.
+      - name: Read pending release feed
+        id: pending
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Read by commit: merging deletes the branch, but the commit stays reachable.
+          PENDING_SHA=$(gh api --method GET "repos/$GH_REPO/pulls" \
+            -f state=open -f base=main \
+            -f head="$GITHUB_REPOSITORY_OWNER:automation/release-feed" \
+            --jq '.[0].head.sha // empty')
+          if [ -n "$PENDING_SHA" ]; then
+            gh api --header 'Accept: application/vnd.github.raw+json' \
+              "repos/$GH_REPO/contents/website/static/releases.xml?ref=$PENDING_SHA" \
+              > "$RUNNER_TEMP/pending-releases.xml"
+            echo "path=$RUNNER_TEMP/pending-releases.xml" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .github/scripts/package.json
+
+      - name: Install workflow dependencies
+        working-directory: .github/scripts
+        run: npm ci
+
+      - name: Add release to feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ inputs.tag }}
+          PENDING_FEED: ${{ steps.pending.outputs.path }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GH_REPO/releases/tags/$TAG" > "$RUNNER_TEMP/release.json"
+          pending_args=()
+          if [ -n "$PENDING_FEED" ]; then
+            pending_args=(--pending "$PENDING_FEED")
+          fi
+          node .github/scripts/update-release-feed.js \
+            --release "$RUNNER_TEMP/release.json" \
+            --feed website/static/releases.xml \
+            "${pending_args[@]}"
+
+      - name: Get OCMBot installation token
+        id: generate_token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.OCMBOT_APP_ID }}
+          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          base: main
+          token: ${{ steps.generate_token.outputs.token }}
+          title: "chore(website): update release feed"
+          commit-message: "chore(website): update release feed"
+          add-paths: website/static/releases.xml
+          # Avoid website/**: pushes there deploy before the PR has been reviewed.
+          branch: automation/release-feed
+          delete-branch: true
+          sign-commits: true
+          body: |
+            Adds the dispatched release `${{ inputs.tag }}` if it is missing,
+            retaining published entries and releases already in this pending PR.
+            No historical releases are imported automatically.
+
+            Review and merge to publish https://ocm.software/releases.xml through
+            the normal website deployment. Groups.io can then discover new items.
+            This workflow does not publish the website or send email.
