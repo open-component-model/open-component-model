@@ -47,8 +47,8 @@ type PluginOptions struct {
 	TempDir string
 	// BlobCache is the OCI blob cache shared by every plugin manager of the process.
 	BlobCache *ocicache.BlobCache
-	// ReferenceCaches are the OCI reference caches shared by every plugin manager of the process.
-	ReferenceCaches *provider.ReferenceCaches
+	// ReferenceCache is the OCI reference cache shared by every plugin manager of the process.
+	ReferenceCache *ocicache.ReferenceCache
 }
 
 // PluginOption configures [NewPluginManager].
@@ -69,11 +69,11 @@ func WithBlobCache(bc *ocicache.BlobCache) PluginOption {
 	}
 }
 
-// WithReferenceCaches shares the OCI reference caches between plugin managers. Without it, reference
-// caching is disabled, because each cache owns its directory.
-func WithReferenceCaches(rc *provider.ReferenceCaches) PluginOption {
+// WithReferenceCache shares the OCI reference cache between plugin managers. Without it, reference
+// caching is disabled, because the cache owns its directory.
+func WithReferenceCache(rc *ocicache.ReferenceCache) PluginOption {
 	return func(o *PluginOptions) {
-		o.ReferenceCaches = rc
+		o.ReferenceCache = rc
 	}
 }
 
@@ -109,12 +109,13 @@ func NewBlobCache(tempDir string, cfg *ocicachev1alpha1.Config) (*ocicache.BlobC
 	return ocicache.NewBlobCache(opts)
 }
 
-// NewReferenceCaches creates the reference caches to pass to [WithReferenceCaches]. The reference
+// NewReferenceCache creates the reference cache to pass to [WithReferenceCache]. The reference
 // cache is off by default: a cached tag hides a tag moved in the registry until the entry expires.
-// It returns nil unless cfg turns the reference cache on, and under remotePolicy Always.
-func NewReferenceCaches(tempDir string, cfg *ocicachev1alpha1.Config) *provider.ReferenceCaches {
-	if !cfg.ReferenceEnabled(false) {
-		return nil
+// It returns a nil cache unless cfg turns the reference cache on, and under remotePolicy Always,
+// which has the registry authorize every resolve.
+func NewReferenceCache(tempDir string, cfg *ocicachev1alpha1.Config) (*ocicache.ReferenceCache, error) {
+	if !cfg.ReferenceEnabled(false) || cfg.RemotePolicy == ocicachev1alpha1.RemotePolicyAlways {
+		return nil, nil
 	}
 	opts := ocicache.Options{
 		Dir:          filepath.Join(tempDirOrDefault(tempDir), "ocm-oci-refcache"),
@@ -123,7 +124,7 @@ func NewReferenceCaches(tempDir string, cfg *ocicachev1alpha1.Config) *provider.
 	if cfg.Reference.TTL != nil {
 		opts.TTL = time.Duration(*cfg.Reference.TTL)
 	}
-	return provider.NewReferenceCaches(tempDir, opts)
+	return ocicache.NewReferenceCache(opts)
 }
 
 func tempDirOrDefault(tempDir string) string {
@@ -165,8 +166,8 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 	if options.BlobCache != nil {
 		providerOpts = append(providerOpts, provider.WithBlobCache(options.BlobCache))
 	}
-	if options.ReferenceCaches != nil {
-		providerOpts = append(providerOpts, provider.WithReferenceCaches(options.ReferenceCaches))
+	if options.ReferenceCache != nil {
+		providerOpts = append(providerOpts, provider.WithReferenceCache(options.ReferenceCache))
 	}
 	repositoryProvider := provider.NewComponentVersionRepositoryProvider(providerOpts...)
 

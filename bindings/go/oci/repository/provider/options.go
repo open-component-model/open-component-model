@@ -58,9 +58,9 @@ type Options struct {
 	// BlobCacheOptions, so callers that create many providers can share one.
 	BlobCache *cache.BlobCache
 
-	// ReferenceCaches, when non-nil, is used instead of building reference caches from
-	// ReferenceCacheOptions, so callers that create many providers can share them.
-	ReferenceCaches *ReferenceCaches
+	// ReferenceCache, when non-nil, is used instead of building a reference cache from
+	// ReferenceCacheOptions, so callers that create many providers can share one.
+	ReferenceCache *cache.ReferenceCache
 }
 
 type Option func(*Options)
@@ -114,7 +114,7 @@ func WithBlobCacheOptions(opts *cache.Options) Option {
 // WithOCICacheConfig applies cfg to the blob and the reference cache. The options of
 // [WithBlobCacheOptions] and [WithReferenceCacheOptions] are the defaults it applies to;
 // a cache without options is off unless cfg enables it. cfg only turns off a cache set with
-// [WithBlobCache] or [WithReferenceCaches]. Under remotePolicy Always the provider uses no
+// [WithBlobCache] or [WithReferenceCache]. Under remotePolicy Always the provider uses no
 // reference cache, whatever cfg enables.
 func WithOCICacheConfig(cfg *ocicachev1alpha1.Config) Option {
 	return func(o *Options) {
@@ -130,11 +130,11 @@ func WithBlobCache(bc *cache.BlobCache) Option {
 	}
 }
 
-// WithReferenceCaches makes the provider use rc instead of building its own reference caches.
-// It takes precedence over [WithReferenceCacheOptions].
-func WithReferenceCaches(rc *ReferenceCaches) Option {
+// WithReferenceCache makes the provider use rc instead of building its own reference cache.
+// It takes precedence over [WithReferenceCacheOptions]. The caller owns rc.
+func WithReferenceCache(rc *cache.ReferenceCache) Option {
 	return func(o *Options) {
-		o.ReferenceCaches = rc
+		o.ReferenceCache = rc
 	}
 }
 
@@ -176,18 +176,22 @@ func applyBlobCacheConfig(opts *cache.Options, cfg *ocicachev1alpha1.Config) *ca
 	return applied
 }
 
-// applyReferenceCacheConfig is [applyBlobCacheConfig] for the reference cache.
+// applyReferenceCacheConfig is [applyBlobCacheConfig] for the reference cache. Under
+// [cache.RemotePolicyAlways] it returns nil: such a reference cache would serve nothing,
+// see [cache.ReferenceCache.Resolve].
 func applyReferenceCacheConfig(opts *cache.Options, cfg *ocicachev1alpha1.Config) *cache.Options {
 	applied, ok := enabledCopy(opts, cfg.ReferenceEnabled(opts != nil))
 	if !ok {
 		return nil
 	}
-	if cfg == nil {
-		return applied
+	if cfg != nil {
+		applyRemotePolicy(applied, cfg)
+		if r := cfg.Reference; r != nil && r.TTL != nil {
+			applied.TTL = time.Duration(*r.TTL)
+		}
 	}
-	applyRemotePolicy(applied, cfg)
-	if r := cfg.Reference; r != nil && r.TTL != nil {
-		applied.TTL = time.Duration(*r.TTL)
+	if applied.RemotePolicy == cache.RemotePolicyAlways {
+		return nil
 	}
 	return applied
 }

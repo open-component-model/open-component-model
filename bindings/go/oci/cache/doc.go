@@ -27,19 +27,15 @@
 //
 // Credential scoping:
 //
-//   - [ScopeKey] returns a short, filesystem-safe hash of the
-//     (registry identity, credential) pair. Callers that share a
-//     cache directory across multiple credential sets should compose
-//     [Options.Dir] with the [ScopeKey] so tag→descriptor mappings
-//     resolved under one credential cannot leak into another. The
-//     content-addressed [BlobCache] does not need this scoping
-//     because blobs are identified by digest, but the tag-mutable
-//     [ReferenceCache] does — see the provider package for the
-//     canonical wiring. As a consequence, under
+//   - Neither cache keys on credentials: a [BlobCache] entry is
+//     identified by its digest, a [ReferenceCache] entry by registry,
+//     repository and reference. One instance of each can therefore
+//     serve every repository of a process. As a consequence, under
 //     [RemotePolicyIfNotPresent] whoever knows a digest gets a cached
-//     blob. Under [RemotePolicyAlways] a [BlobCache] hit additionally
-//     requires that the caller's repository served the blob before
-//     and still allows access to it.
+//     blob, and whoever names a cached tag gets its descriptor. Under
+//     [RemotePolicyAlways] a [BlobCache] hit additionally requires
+//     that the caller's repository served the blob before and still
+//     allows access to it, and a [ReferenceCache] serves nothing.
 //
 // Scope and intent:
 //

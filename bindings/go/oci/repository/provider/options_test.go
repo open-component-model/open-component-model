@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -96,12 +97,7 @@ func TestWithOCICacheConfig(t *testing.T) {
 			r := require.New(t)
 			prov := NewComponentVersionRepositoryProvider(tc.opts...)
 			r.Equal(tc.wantBlob, prov.blobCacheOpts)
-			if tc.wantRef == nil {
-				r.Nil(prov.referenceCaches)
-			} else {
-				r.NotNil(prov.referenceCaches)
-				r.Equal(*tc.wantRef, prov.referenceCaches.opts)
-			}
+			r.Equal(tc.wantRef, prov.referenceCacheOpts)
 		})
 	}
 
@@ -113,16 +109,28 @@ func TestWithOCICacheConfig(t *testing.T) {
 		r.Nil(prov.sharedBlobCache())
 	})
 
-	t.Run("shared reference caches are used unless turned off", func(t *testing.T) {
+	t.Run("a shared reference cache is used unless turned off", func(t *testing.T) {
 		r := require.New(t)
-		rc := NewReferenceCaches(t.TempDir(), cache.Options{})
-		r.Same(rc, NewComponentVersionRepositoryProvider(WithReferenceCaches(rc)).referenceCaches)
-		r.Nil(NewComponentVersionRepositoryProvider(WithReferenceCaches(rc), WithOCICacheConfig(enabled(true, false))).referenceCaches)
-		r.Nil(NewComponentVersionRepositoryProvider(WithReferenceCaches(rc), WithOCICacheConfig(always)).referenceCaches)
+		rc, err := cache.NewReferenceCache(cache.Options{Dir: t.TempDir()})
+		r.NoError(err)
+		r.Same(rc, NewComponentVersionRepositoryProvider(WithReferenceCache(rc)).sharedReferenceCache())
+		r.Nil(NewComponentVersionRepositoryProvider(WithReferenceCache(rc), WithOCICacheConfig(enabled(true, false))).sharedReferenceCache())
+		r.Nil(NewComponentVersionRepositoryProvider(WithReferenceCache(rc), WithOCICacheConfig(always)).sharedReferenceCache())
 	})
 
-	t.Run("no reference caches under Always", func(t *testing.T) {
-		require.Nil(t, NewReferenceCaches(t.TempDir(), cache.Options{RemotePolicy: cache.RemotePolicyAlways}))
+	t.Run("no reference cache for Always options", func(t *testing.T) {
+		prov := NewComponentVersionRepositoryProvider(WithReferenceCacheOptions(&cache.Options{RemotePolicy: cache.RemotePolicyAlways}))
+		require.Nil(t, prov.sharedReferenceCache())
+	})
+
+	t.Run("one reference cache serves every repository", func(t *testing.T) {
+		r := require.New(t)
+		dir := t.TempDir()
+		prov := NewComponentVersionRepositoryProvider(WithTempDir(dir), WithReferenceCacheOptions(&cache.Options{}))
+		first := prov.sharedReferenceCache()
+		r.NotNil(first)
+		r.Same(first, prov.sharedReferenceCache())
+		r.DirExists(filepath.Join(dir, "ocm-oci-refcache", "refs"))
 	})
 
 	t.Run("shared options are not mutated", func(t *testing.T) {
