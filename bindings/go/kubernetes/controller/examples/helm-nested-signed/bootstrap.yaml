@@ -13,7 +13,7 @@ spec:
     - kind: ConfigMap
       name: ocm-plain-http
 ---
-# The Component reads its OCM config with the permissions of the default service account, the NamespacedDeployer
+# The Component reads its OCM config with the permissions of the default service account, each NamespacedDeployer
 # the propagated config with those of its own.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -39,6 +39,9 @@ subjects:
     namespace: default
   - kind: ServiceAccount
     name: helm-nested-signed-deployer
+    namespace: default
+  - kind: ServiceAccount
+    name: helm-nested-signed-crossplane-deployer
     namespace: default
 ---
 apiVersion: delivery.ocm.software/v1alpha1

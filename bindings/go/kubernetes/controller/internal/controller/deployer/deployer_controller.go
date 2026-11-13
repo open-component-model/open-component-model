@@ -444,7 +444,7 @@ func (r *Reconciler) reconcileDeployment(ctx context.Context, deployer deliveryv
 		return ctrl.Result{}, fmt.Errorf("failed to determine watched resources: %w", err)
 	}
 
-	if err = r.authorizeWatches(ctx, deployer, access, watched); err != nil {
+	if err = r.authorizeWatches(ctx, access, watched); err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceNotSynced, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to authorize resource watches: %w", err)

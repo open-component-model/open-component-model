@@ -377,16 +377,13 @@ func (r *Reconciler) watchedObjects(ctx context.Context, deployer deliveryv1alph
 
 // authorizeWatches returns a Forbidden error if the service account of a NamespacedDeployer may not list and watch
 // the deployed objects. The controller watches them for drift with its own identity, which must not see more than
-// the service account could. A watch that already runs is not reviewed again, as only opening one is gated.
-func (r *Reconciler) authorizeWatches(ctx context.Context, deployer deliveryv1alpha1.DeployerObject, access *serviceaccount.Access, objs []*unstructured.Unstructured) error {
+// the service account could.
+func (r *Reconciler) authorizeWatches(ctx context.Context, access *serviceaccount.Access, objs []*unstructured.Unstructured) error {
 	if !r.Namespaced {
 		return nil
 	}
 
 	for _, obj := range objs {
-		if r.resourceWatchHasSynced(deployer, obj) {
-			continue
-		}
 		gvk := obj.GroupVersionKind()
 		mapping, err := r.resourceRESTMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 		if err != nil {
