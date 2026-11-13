@@ -424,9 +424,9 @@ type sigstoreBundle struct {
 // signed timestamp that can be used instead of wall-clock time to validate
 // the Fulcio leaf certificate.
 //
-// Returns false if the field is absent, null, an empty object, or its
-// rfc3161Timestamps array is empty — conditions under which cosign rejects
-// --use-signed-timestamps.
+// Returns false if the field is absent, null, an empty object, its
+// rfc3161Timestamps array is empty, or every entry in the array is a JSON null
+// — all conditions under which cosign rejects --use-signed-timestamps.
 func bundleHasSignedTimestamp(bundleJSON []byte) bool {
 	var bundle struct {
 		VerificationMaterial struct {
@@ -439,7 +439,20 @@ func bundleHasSignedTimestamp(bundleJSON []byte) bool {
 		return false
 	}
 	tvd := bundle.VerificationMaterial.TimestampVerificationData
-	return tvd != nil && len(tvd.RFC3161Timestamps) > 0
+	if tvd == nil {
+		return false
+	}
+	// A JSON array element can decode as the literal bytes `null` when the
+	// source JSON contains a null entry (e.g. [null]). Such an entry carries
+	// no timestamp; count only non-null entries to avoid passing
+	// --use-signed-timestamps to cosign when the bundle carries no real data.
+	count := 0
+	for _, entry := range tvd.RFC3161Timestamps {
+		if !bytes.Equal(entry, []byte("null")) {
+			count++
+		}
+	}
+	return count > 0
 }
 
 // extractCertInfoFromBundleJSON extracts the OIDC issuer and signer identity from
