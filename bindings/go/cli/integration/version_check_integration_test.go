@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -124,20 +125,27 @@ func Test_Integration_VersionCheck_CachesResult(t *testing.T) {
 	r.Equal(firstCheckedAt, cache2.CheckedAt, "cache timestamp should not change on cache hit")
 }
 
-// githubAPIClient returns an HTTP client for the live GitHub API used by these tests.
-// It differs from the production default for two reasons:
+// githubAPIClient returns a shared HTTP client for the live GitHub API used by these tests,
+// built once via sync.Once. It differs from the production default for two reasons:
 //   - Timeout: the production default (versioncheck.DefaultHTTPTimeout) is short for CLI
 //     responsiveness, which is too short on a slow CI runner, so the tests time out.
 //   - Auth: when GITHUB_TOKEN or GH_TOKEN is set (CI sets it), the client authenticates.
 //     The unauthenticated GitHub API limit (60 requests/hour/IP) is shared across jobs on
 //     GitHub-hosted runners and otherwise returns 403. Without a token the client stays
 //     unauthenticated, so local runs are unchanged.
+var (
+	githubClientOnce sync.Once
+	githubClient     *http.Client
+)
+
 func githubAPIClient() *http.Client {
-	c := &http.Client{Timeout: 30 * time.Second}
-	if token := githubToken(); token != "" {
-		c.Transport = &bearerAuthTransport{token: token, base: http.DefaultTransport}
-	}
-	return c
+	githubClientOnce.Do(func() {
+		githubClient = &http.Client{Timeout: 30 * time.Second}
+		if token := githubToken(); token != "" {
+			githubClient.Transport = &bearerAuthTransport{token: token, base: http.DefaultTransport}
+		}
+	})
+	return githubClient
 }
 
 // githubToken returns the first non-empty GitHub token from the environment, or "".
