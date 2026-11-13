@@ -15,10 +15,20 @@ func TestWithOCICacheConfig(t *testing.T) {
 	always := &ocicachev1alpha1.Config{RemotePolicy: ocicachev1alpha1.RemotePolicyAlways}
 	all := &ocicachev1alpha1.Config{
 		RemotePolicy: ocicachev1alpha1.RemotePolicyAlways,
-		TTL:          typesv1.NewDuration(time.Hour),
-		MaxBlobSize:  new(int64(1024)),
-		MaxTotalSize: new(int64(4096)),
+		Blob: &ocicachev1alpha1.BlobCacheConfig{
+			TTL:          typesv1.NewDuration(time.Hour),
+			MaxBlobSize:  new(int64(1024)),
+			MaxTotalSize: new(int64(4096)),
+		},
+		Reference: &ocicachev1alpha1.ReferenceCacheConfig{TTL: typesv1.NewDuration(time.Minute)},
 	}
+	enabled := func(blob, ref bool) *ocicachev1alpha1.Config {
+		return &ocicachev1alpha1.Config{
+			Blob:      &ocicachev1alpha1.BlobCacheConfig{Enabled: new(blob)},
+			Reference: &ocicachev1alpha1.ReferenceCacheConfig{Enabled: new(ref)},
+		}
+	}
+	bothCaches := []Option{WithBlobCacheOptions(&cache.Options{}), WithReferenceCacheOptions(&cache.Options{})}
 
 	tests := []struct {
 		name     string
@@ -28,15 +38,15 @@ func TestWithOCICacheConfig(t *testing.T) {
 	}{
 		{
 			name:     "policy applied to both caches",
-			opts:     []Option{WithBlobCacheOptions(&cache.Options{}), WithReferenceCacheOptions(&cache.Options{}), WithOCICacheConfig(always)},
+			opts:     append(bothCaches, WithOCICacheConfig(always)),
 			wantBlob: &cache.Options{RemotePolicy: cache.RemotePolicyAlways},
 			wantRef:  &cache.Options{RemotePolicy: cache.RemotePolicyAlways},
 		},
 		{
-			name:     "all fields applied to both caches",
-			opts:     []Option{WithBlobCacheOptions(&cache.Options{}), WithReferenceCacheOptions(&cache.Options{}), WithOCICacheConfig(all)},
+			name:     "each section applies to its cache",
+			opts:     append(bothCaches, WithOCICacheConfig(all)),
 			wantBlob: &cache.Options{RemotePolicy: cache.RemotePolicyAlways, TTL: time.Hour, MaxBlobSize: 1024, MaxTotalSize: 4096},
-			wantRef:  &cache.Options{RemotePolicy: cache.RemotePolicyAlways, TTL: time.Hour, MaxBlobSize: 1024, MaxTotalSize: 4096},
+			wantRef:  &cache.Options{RemotePolicy: cache.RemotePolicyAlways, TTL: time.Minute},
 		},
 		{
 			name: "unset fields keep the options",
@@ -45,25 +55,33 @@ func TestWithOCICacheConfig(t *testing.T) {
 				WithOCICacheConfig(&ocicachev1alpha1.Config{}),
 			},
 			wantBlob: &cache.Options{RemotePolicy: cache.RemotePolicyAlways, TTL: time.Minute, MaxBlobSize: 1},
-			wantRef:  nil,
 		},
 		{
-			name:     "empty policy keeps the options",
-			opts:     []Option{WithBlobCacheOptions(&cache.Options{RemotePolicy: cache.RemotePolicyAlways}), WithOCICacheConfig(&ocicachev1alpha1.Config{})},
-			wantBlob: &cache.Options{RemotePolicy: cache.RemotePolicyAlways},
-			wantRef:  nil,
+			name:     "no config keeps the options",
+			opts:     bothCaches,
+			wantBlob: &cache.Options{},
+			wantRef:  &cache.Options{},
 		},
 		{
-			name:     "enabled false disables both caches",
-			opts:     []Option{WithBlobCacheOptions(&cache.Options{}), WithReferenceCacheOptions(&cache.Options{}), WithOCICacheConfig(&ocicachev1alpha1.Config{Enabled: new(false)})},
+			name:     "a cache without options stays off",
+			opts:     []Option{WithOCICacheConfig(all)},
 			wantBlob: nil,
 			wantRef:  nil,
 		},
 		{
-			name:     "config does not enable disabled caches",
-			opts:     []Option{WithOCICacheConfig(always)},
-			wantBlob: nil,
-			wantRef:  nil,
+			name: "enabled false turns each cache off",
+			opts: append(bothCaches, WithOCICacheConfig(enabled(false, false))),
+		},
+		{
+			name:    "enabled turns the caches off independently",
+			opts:    append(bothCaches, WithOCICacheConfig(enabled(false, true))),
+			wantRef: &cache.Options{},
+		},
+		{
+			name:     "enabled true turns a cache without options on",
+			opts:     []Option{WithOCICacheConfig(enabled(true, true))},
+			wantBlob: &cache.Options{},
+			wantRef:  &cache.Options{},
 		},
 	}
 	for _, tc := range tests {
@@ -71,16 +89,28 @@ func TestWithOCICacheConfig(t *testing.T) {
 			r := require.New(t)
 			prov := NewComponentVersionRepositoryProvider(tc.opts...)
 			r.Equal(tc.wantBlob, prov.blobCacheOpts)
-			r.Equal(tc.wantRef, prov.referenceCacheOpts)
+			if tc.wantRef == nil {
+				r.Nil(prov.referenceCaches)
+			} else {
+				r.NotNil(prov.referenceCaches)
+				r.Equal(*tc.wantRef, prov.referenceCaches.opts)
+			}
 		})
 	}
 
-	t.Run("enabled false drops a shared blob cache", func(t *testing.T) {
+	t.Run("blob enabled false drops a shared blob cache", func(t *testing.T) {
 		r := require.New(t)
 		bc, err := cache.NewBlobCache(cache.Options{Dir: t.TempDir()})
 		r.NoError(err)
-		prov := NewComponentVersionRepositoryProvider(WithBlobCache(bc), WithOCICacheConfig(&ocicachev1alpha1.Config{Enabled: new(false)}))
+		prov := NewComponentVersionRepositoryProvider(WithBlobCache(bc), WithOCICacheConfig(enabled(false, true)))
 		r.Nil(prov.sharedBlobCache())
+	})
+
+	t.Run("shared reference caches are used unless turned off", func(t *testing.T) {
+		r := require.New(t)
+		rc := NewReferenceCaches(t.TempDir(), cache.Options{})
+		r.Same(rc, NewComponentVersionRepositoryProvider(WithReferenceCaches(rc)).referenceCaches)
+		r.Nil(NewComponentVersionRepositoryProvider(WithReferenceCaches(rc), WithOCICacheConfig(enabled(true, false))).referenceCaches)
 	})
 
 	t.Run("shared options are not mutated", func(t *testing.T) {

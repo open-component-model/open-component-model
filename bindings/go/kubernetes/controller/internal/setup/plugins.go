@@ -47,6 +47,8 @@ type PluginOptions struct {
 	TempDir string
 	// BlobCache is the OCI blob cache shared by every plugin manager of the process.
 	BlobCache *ocicache.BlobCache
+	// ReferenceCaches are the OCI reference caches shared by every plugin manager of the process.
+	ReferenceCaches *provider.ReferenceCaches
 }
 
 // PluginOption configures [NewPluginManager].
@@ -59,7 +61,7 @@ func WithTempDir(dir string) PluginOption {
 	}
 }
 
-// WithBlobCache shares the OCI blob cache between plugin managers. Without it, OCI caching is disabled,
+// WithBlobCache shares the OCI blob cache between plugin managers. Without it, blob caching is disabled,
 // because the cache owns its directory and per-request plugin managers must not each build their own.
 func WithBlobCache(bc *ocicache.BlobCache) PluginOption {
 	return func(o *PluginOptions) {
@@ -67,38 +69,68 @@ func WithBlobCache(bc *ocicache.BlobCache) PluginOption {
 	}
 }
 
+// WithReferenceCaches shares the OCI reference caches between plugin managers. Without it, reference
+// caching is disabled, because each cache owns its directory.
+func WithReferenceCaches(rc *provider.ReferenceCaches) PluginOption {
+	return func(o *PluginOptions) {
+		o.ReferenceCaches = rc
+	}
+}
+
 // MaxBlobCacheSize bounds the disk use of the blob cache of [NewBlobCache] unless the
-// configuration sets maxTotalSize.
+// configuration sets blob.maxTotalSize.
 const MaxBlobCacheSize = 1 << 30
 
-// NewBlobCache creates the blob cache to pass to [WithBlobCache]. There is no reference cache:
-// it never serves tag lookups from cache, and those are what the controller resolves.
+// NewBlobCache creates the blob cache to pass to [WithBlobCache]. The blob cache is on by default.
 // A nil cfg uses the cache defaults and [MaxBlobCacheSize]; the limits cfg sets replace them.
-// A cfg that disables the caches returns a nil cache, which [WithBlobCache] treats as no caching.
+// A cfg that turns the blob cache off returns a nil cache, which [WithBlobCache] treats as no caching.
 func NewBlobCache(tempDir string, cfg *ocicachev1alpha1.Config) (*ocicache.BlobCache, error) {
-	if !cfg.IsEnabled() {
+	if !cfg.BlobEnabled(true) {
 		return nil, nil
 	}
-	if tempDir == "" {
-		tempDir = os.TempDir()
-	}
 	opts := ocicache.Options{
-		Dir:          filepath.Join(tempDir, "ocm-oci-cas"),
+		Dir:          filepath.Join(tempDirOrDefault(tempDir), "ocm-oci-cas"),
 		MaxTotalSize: MaxBlobCacheSize,
 	}
 	if cfg != nil {
 		opts.RemotePolicy = ocicache.RemotePolicy(cfg.RemotePolicy)
-		if cfg.TTL != nil {
-			opts.TTL = time.Duration(*cfg.TTL)
-		}
-		if cfg.MaxBlobSize != nil {
-			opts.MaxBlobSize = *cfg.MaxBlobSize
-		}
-		if cfg.MaxTotalSize != nil {
-			opts.MaxTotalSize = *cfg.MaxTotalSize
+		if b := cfg.Blob; b != nil {
+			if b.TTL != nil {
+				opts.TTL = time.Duration(*b.TTL)
+			}
+			if b.MaxBlobSize != nil {
+				opts.MaxBlobSize = *b.MaxBlobSize
+			}
+			if b.MaxTotalSize != nil {
+				opts.MaxTotalSize = *b.MaxTotalSize
+			}
 		}
 	}
 	return ocicache.NewBlobCache(opts)
+}
+
+// NewReferenceCaches creates the reference caches to pass to [WithReferenceCaches]. The reference
+// cache is off by default: a cached tag hides a tag moved in the registry until the entry expires.
+// It returns nil unless cfg turns the reference cache on.
+func NewReferenceCaches(tempDir string, cfg *ocicachev1alpha1.Config) *provider.ReferenceCaches {
+	if !cfg.ReferenceEnabled(false) {
+		return nil
+	}
+	opts := ocicache.Options{
+		Dir:          filepath.Join(tempDirOrDefault(tempDir), "ocm-oci-refcache"),
+		RemotePolicy: ocicache.RemotePolicy(cfg.RemotePolicy),
+	}
+	if cfg.Reference.TTL != nil {
+		opts.TTL = time.Duration(*cfg.Reference.TTL)
+	}
+	return provider.NewReferenceCaches(tempDir, opts)
+}
+
+func tempDirOrDefault(tempDir string) string {
+	if tempDir == "" {
+		return os.TempDir()
+	}
+	return tempDir
 }
 
 // NewPluginManager build a per-request plugin manager.
@@ -132,6 +164,9 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 	}
 	if options.BlobCache != nil {
 		providerOpts = append(providerOpts, provider.WithBlobCache(options.BlobCache))
+	}
+	if options.ReferenceCaches != nil {
+		providerOpts = append(providerOpts, provider.WithReferenceCaches(options.ReferenceCaches))
 	}
 	repositoryProvider := provider.NewComponentVersionRepositoryProvider(providerOpts...)
 

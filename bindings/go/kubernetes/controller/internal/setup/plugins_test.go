@@ -66,7 +66,7 @@ func TestNewBlobCache(t *testing.T) {
 		small := pushDescriptor(t, repo, 16)
 		large := pushDescriptor(t, repo, 17)
 
-		bc, err := setup.NewBlobCache(t.TempDir(), &ocicachev1alpha1.Config{MaxBlobSize: new(int64(16))})
+		bc, err := setup.NewBlobCache(t.TempDir(), &ocicachev1alpha1.Config{Blob: &ocicachev1alpha1.BlobCacheConfig{MaxBlobSize: new(int64(16))}})
 		r.NoError(err)
 
 		for _, desc := range []ociImageSpecV1.Descriptor{small, large} {
@@ -85,7 +85,7 @@ func TestNewBlobCache(t *testing.T) {
 		repo := memoryRepository{memory.New()}
 		first, second := pushDescriptor(t, repo, 16), pushDescriptor(t, repo, 17)
 
-		bc, err := setup.NewBlobCache(t.TempDir(), &ocicachev1alpha1.Config{MaxTotalSize: new(int64(17))})
+		bc, err := setup.NewBlobCache(t.TempDir(), &ocicachev1alpha1.Config{Blob: &ocicachev1alpha1.BlobCacheConfig{MaxTotalSize: new(int64(17))}})
 		r.NoError(err)
 
 		fetchAll(t, bc, repo, first, second)
@@ -98,7 +98,7 @@ func TestNewBlobCache(t *testing.T) {
 		repo := memoryRepository{memory.New()}
 		desc := pushDescriptor(t, repo, 16)
 
-		bc, err := setup.NewBlobCache(t.TempDir(), &ocicachev1alpha1.Config{MaxTotalSize: new(int64(0))})
+		bc, err := setup.NewBlobCache(t.TempDir(), &ocicachev1alpha1.Config{Blob: &ocicachev1alpha1.BlobCacheConfig{MaxTotalSize: new(int64(0))}})
 		r.NoError(err)
 
 		fetchAll(t, bc, repo, desc)
@@ -110,7 +110,7 @@ func TestNewBlobCache(t *testing.T) {
 		repo := memoryRepository{memory.New()}
 		desc := pushDescriptor(t, repo, 16)
 
-		bc, err := setup.NewBlobCache(t.TempDir(), &ocicachev1alpha1.Config{TTL: typesv1.NewDuration(50 * time.Millisecond)})
+		bc, err := setup.NewBlobCache(t.TempDir(), &ocicachev1alpha1.Config{Blob: &ocicachev1alpha1.BlobCacheConfig{TTL: typesv1.NewDuration(50 * time.Millisecond)}})
 		r.NoError(err)
 
 		rc, err := bc.Fetch(t.Context(), repo, desc)
@@ -122,10 +122,17 @@ func TestNewBlobCache(t *testing.T) {
 	})
 }
 
+func TestNewReferenceCaches(t *testing.T) {
+	r := require.New(t)
+	r.Nil(setup.NewReferenceCaches(t.TempDir(), nil), "the reference cache is off by default")
+	r.Nil(setup.NewReferenceCaches(t.TempDir(), &ocicachev1alpha1.Config{Blob: &ocicachev1alpha1.BlobCacheConfig{Enabled: new(true)}}))
+	r.NotNil(setup.NewReferenceCaches(t.TempDir(), &ocicachev1alpha1.Config{Reference: &ocicachev1alpha1.ReferenceCacheConfig{Enabled: new(true)}}))
+}
+
 func TestNewBlobCache_Disabled(t *testing.T) {
 	r := require.New(t)
 	dir := t.TempDir()
-	bc, err := setup.NewBlobCache(dir, &ocicachev1alpha1.Config{Enabled: new(false)})
+	bc, err := setup.NewBlobCache(dir, &ocicachev1alpha1.Config{Blob: &ocicachev1alpha1.BlobCacheConfig{Enabled: new(false)}})
 	r.NoError(err)
 	r.Nil(bc)
 	r.NoDirExists(filepath.Join(dir, "ocm-oci-cas"))
