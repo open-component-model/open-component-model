@@ -155,9 +155,8 @@ func (m Metadata) PruneScope() *PruneScope {
 // Config for creating an ApplySet.
 type Config struct {
 	Client client.Client
-	// Reader lists the ApplySet members for conflict detection. It must read live: a cache needs an informer per
-	// applied kind, which requires the watch permission and holds every object of that kind in memory. Avoiding
-	// that memory is the point, so do not trade the list calls back for a cache. Defaults to Client.
+	// Reader lists the ApplySet members for conflict detection. A general cache would hold every object of each
+	// applied kind, so pass NewMemberCache or a live reader. Defaults to Client.
 	Reader          client.Reader
 	RESTMapper      meta.RESTMapper
 	Log             logr.Logger

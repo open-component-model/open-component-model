@@ -21,6 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/rest"
+	crcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -505,26 +506,27 @@ metadata:
 		}).WithTimeout(test.DefaultKubernetesOperationTimeout).WithContext(ctx).Should(BeTrue())
 	})
 
-	It("detects a conflict with the list permission of its service account alone", func(ctx SpecContext) {
-		result, err := applyConflictingConfigMap(ctx, namespace.GetName(), []string{"get", "list", "create", "patch"})
+	It("detects a conflict from the ApplySet member cache without the list permission of its service account", func(ctx SpecContext) {
+		members := startApplySetMemberCache(ctx)
+		Expect(k8sClient.Create(ctx, &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "nd-unrelated-cm", Namespace: namespace.GetName()},
+		})).To(Succeed())
+
+		result, err := applyConflictingConfigMap(ctx, namespace.GetName(), members)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.Applied).To(HaveLen(1))
 		Expect(result.Applied[0].Error).To(MatchError(applyset.ErrApplySetConflict))
 
+		By("caching the members alone, reduced to their name and part-of label")
+		list := &metav1.PartialObjectMetadataList{}
+		list.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("ConfigMapList"))
+		Expect(members.List(ctx, list, client.InNamespace(namespace.GetName()))).To(Succeed())
+		Expect(list.Items).To(HaveLen(1))
+		Expect(list.Items[0].GetName()).To(Equal("nd-conflict-cm"))
+		Expect(list.Items[0].GetLabels()).To(Equal(map[string]string{applyset.ApplysetPartOfLabel: "applyset-other-v1"}))
+		Expect(list.Items[0].GetManagedFields()).To(BeEmpty())
+
 		By("leaving the other ApplySet's member untouched")
-		cm := &corev1.ConfigMap{}
-		Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace.GetName(), Name: "nd-conflict-cm"}, cm)).To(Succeed())
-		Expect(cm.GetLabels()).To(HaveKeyWithValue(applyset.ApplysetPartOfLabel, "applyset-other-v1"))
-	})
-
-	It("rejects the apply when its service account cannot list", func(ctx SpecContext) {
-		_, err := applyConflictingConfigMap(ctx, namespace.GetName(), []string{"get", "create", "patch"})
-
-		// Naming the service account proves the list ran as the deployer, not as the controller.
-		Expect(err).To(MatchError(ContainSubstring(
-			fmt.Sprintf(`User "system:serviceaccount:%s:nd-conflict-sa" cannot list resource "configmaps"`, namespace.GetName()))))
-
-		By("not applying past the failed conflict detection")
 		cm := &corev1.ConfigMap{}
 		Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace.GetName(), Name: "nd-conflict-cm"}, cm)).To(Succeed())
 		Expect(cm.GetLabels()).To(HaveKeyWithValue(applyset.ApplysetPartOfLabel, "applyset-other-v1"))
@@ -541,9 +543,32 @@ metadata:
 	})
 })
 
-// applyConflictingConfigMap applies a ConfigMap owned by another ApplySet as a service account holding verbs on
-// ConfigMaps and nothing else. The ApplySet comes from createApplySet, so its reader selection is on the path.
-func applyConflictingConfigMap(ctx SpecContext, namespace string, verbs []string) (*applyset.ApplyResult, error) {
+// startApplySetMemberCache starts a member cache like the one the manager runs and stops it with the spec.
+func startApplySetMemberCache(ctx SpecContext) client.Reader {
+	GinkgoHelper()
+
+	members, err := applyset.NewMemberCache(k8sManager.GetConfig(), crcache.Options{
+		HTTPClient: k8sManager.GetHTTPClient(),
+		Scheme:     k8sManager.GetScheme(),
+		Mapper:     k8sManager.GetRESTMapper(),
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	cacheCtx, cancel := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() { done <- members.Start(cacheCtx) }()
+	DeferCleanup(func() {
+		cancel()
+		Expect(<-done).To(Succeed())
+	})
+	Expect(members.WaitForCacheSync(ctx)).To(BeTrue())
+
+	return members
+}
+
+// applyConflictingConfigMap applies a ConfigMap owned by another ApplySet through createApplySet, as a service
+// account that may not list ConfigMaps.
+func applyConflictingConfigMap(ctx SpecContext, namespace string, members client.Reader) (*applyset.ApplyResult, error) {
 	GinkgoHelper()
 
 	const sa = "nd-conflict-sa"
@@ -553,7 +578,7 @@ func applyConflictingConfigMap(ctx SpecContext, namespace string, verbs []string
 
 	role := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{Name: sa, Namespace: namespace},
-		Rules:      []rbacv1.PolicyRule{{APIGroups: []string{""}, Resources: []string{"configmaps"}, Verbs: verbs}},
+		Rules:      []rbacv1.PolicyRule{{APIGroups: []string{""}, Resources: []string{"configmaps"}, Verbs: []string{"get", "create", "patch"}}},
 	}
 	Expect(k8sClient.Create(ctx, role)).To(Succeed())
 	Expect(k8sClient.Create(ctx, &rbacv1.RoleBinding{
@@ -566,7 +591,7 @@ func applyConflictingConfigMap(ctx SpecContext, namespace string, verbs []string
 	Expect(k8sClient.Create(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
 		Name:      "nd-conflict-cm",
 		Namespace: namespace,
-		Labels:    map[string]string{applyset.ApplysetPartOfLabel: "applyset-other-v1"},
+		Labels:    map[string]string{applyset.ApplysetPartOfLabel: "applyset-other-v1", "app": "other"},
 	}})).To(Succeed())
 
 	cfg := rest.CopyConfig(k8sManager.GetConfig())
@@ -586,7 +611,7 @@ func applyConflictingConfigMap(ctx SpecContext, namespace string, verbs []string
 
 	reconciler := &Reconciler{
 		Namespaced:         true,
-		apiReader:          k8sManager.GetAPIReader(),
+		ApplySetMembers:    members,
 		resourceRESTMapper: k8sManager.GetRESTMapper(),
 	}
 

@@ -379,6 +379,11 @@ func main() {
 	downloadCache := cache.NewMemoryDigestObjectCache[string, []*unstructured.Unstructured]("deployer_download_cache", deployerDownloadCacheSize, func(k string, v []*unstructured.Unstructured) {
 		setupLog.Info("evicting deployment objects from cache", "key", k, "count", len(v))
 	})
+	applySetMembers, err := deployer.NewApplySetMemberCache(mgr)
+	if err != nil {
+		setupLog.Error(err, "unable to create the ApplySet member cache")
+		os.Exit(1)
+	}
 	for _, d := range []struct {
 		kind       string
 		rateLimit  ocm.RateLimit
@@ -401,6 +406,7 @@ func main() {
 				RateLimit:        d.rateLimit,
 			},
 			Namespaced:           d.namespaced,
+			ApplySetMembers:      applySetMembers,
 			DownloadCache:        downloadCache,
 			Resolver:             resolver,
 			MaxResourceSizeBytes: maxResourceSizeBytes,

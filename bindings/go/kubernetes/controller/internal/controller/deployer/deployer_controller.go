@@ -24,6 +24,7 @@ import (
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
+	crcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -84,6 +85,9 @@ type Reconciler struct {
 
 	// apiReader reads service accounts uncached to avoid a cluster-wide informer for them.
 	apiReader client.Reader
+	// ApplySetMembers lists the ApplySet members for conflict detection. SetupWithManager creates one if it is nil;
+	// share one between the reconcilers so that every applied kind has a single informer.
+	ApplySetMembers client.Reader
 	// restConfig is the base config impersonated clients are derived from.
 	restConfig *rest.Config
 
@@ -131,6 +135,11 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 
 	r.apiReader = mgr.GetAPIReader()
 	r.restConfig = mgr.GetConfig()
+	if r.ApplySetMembers == nil {
+		if r.ApplySetMembers, err = NewApplySetMemberCache(mgr); err != nil {
+			return err
+		}
+	}
 
 	// Build index for deployers that reference a resource to get notified about resource changes.
 	const fieldName = ".spec.resourceRef"
@@ -870,17 +879,27 @@ func buildResourceCacheKey(
 	return key
 }
 
-func (r *Reconciler) createApplySet(c client.Client, deployer deliveryv1alpha1.DeployerObject, logger logr.Logger) *applyset.ApplySet {
-	// A NamespacedDeployer's impersonating client is uncached and carries the identity the conflict check needs.
-	// A Deployer applies with the manager's cached client, so it lists through the uncached API reader instead.
-	reader := client.Reader(c)
-	if !r.Namespaced {
-		reader = r.apiReader
+// NewApplySetMemberCache creates the cache conflict detection lists the ApplySet members from and adds it to mgr.
+func NewApplySetMemberCache(mgr ctrl.Manager) (client.Reader, error) {
+	members, err := applyset.NewMemberCache(mgr.GetConfig(), crcache.Options{
+		HTTPClient: mgr.GetHTTPClient(),
+		Scheme:     mgr.GetScheme(),
+		Mapper:     mgr.GetRESTMapper(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create the ApplySet member cache: %w", err)
+	}
+	if err := mgr.Add(members); err != nil {
+		return nil, fmt.Errorf("failed to add the ApplySet member cache to the manager: %w", err)
 	}
 
+	return members, nil
+}
+
+func (r *Reconciler) createApplySet(c client.Client, deployer deliveryv1alpha1.DeployerObject, logger logr.Logger) *applyset.ApplySet {
 	cfg := applyset.Config{
 		Client:          c,
-		Reader:          reader,
+		Reader:          r.ApplySetMembers,
 		RESTMapper:      r.resourceRESTMapper,
 		Log:             logger,
 		ParentNamespace: deployer.GetNamespace(),
