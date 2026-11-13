@@ -8,7 +8,8 @@ package replay_test
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"os"
 	"testing"
 
@@ -70,7 +71,7 @@ func TestRecordFixtures(t *testing.T) {
 		OIDCIssuer:             env["SIGSTORE_OIDC_ISSUER"],
 		OIDCIdentity:           env["SIGSTORE_OIDC_IDENTITY"],
 	}
-	metaBytes, err := json.MarshalIndent(m, "", "  ")
+	metaBytes, err := json.Marshal(m, runtime.JSONOptions, jsontext.WithIndent("  "))
 	r.NoError(err)
 	r.NoError(os.WriteFile(metaFile, append(metaBytes, '\n'), 0o644))
 

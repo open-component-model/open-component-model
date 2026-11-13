@@ -13,7 +13,8 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"log"
 	"os"
 	"testing"
@@ -79,8 +80,8 @@ type bundleJSON struct {
 		Certificate *struct {
 			RawBytes string `json:"rawBytes"`
 		} `json:"certificate"`
-		TlogEntries               []json.RawMessage `json:"tlogEntries"`
-		TimestampVerificationData json.RawMessage   `json:"timestampVerificationData,omitempty"`
+		TlogEntries               []jsontext.Value `json:"tlogEntries"`
+		TimestampVerificationData jsontext.Value   `json:"timestampVerificationData,omitzero"`
 	} `json:"verificationMaterial"`
 	MessageSignature *struct {
 		Signature string `json:"signature"`

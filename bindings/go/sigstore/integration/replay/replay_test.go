@@ -7,7 +7,7 @@ package replay_test
 // (sigstore/integration) needs the cluster.
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"os"
 	"path/filepath"
 	"testing"
