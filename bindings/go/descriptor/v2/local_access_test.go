@@ -167,21 +167,22 @@ func TestLocalBlob_UnmarshalJSON_LegacyLocalOciBlob(t *testing.T) {
 		wantLocalReference string
 	}{
 		{
-			name:               "versioned legacy type maps digest",
+			name:               "versioned legacy type maps digest and normalises the type",
 			data:               `{"type":"localOciBlob/v1","digest":"sha256:abc123"}`,
-			wantType:           runtime.NewVersionedType(descriptorv2.LegacyLocalOciBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion),
+			wantType:           runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion),
 			wantLocalReference: "sha256:abc123",
 		},
 		{
-			name:               "unversioned legacy type maps digest",
+			name:               "unversioned legacy type maps digest and normalises the type",
 			data:               `{"type":"localOciBlob","digest":"sha256:abc123"}`,
-			wantType:           runtime.NewUnversionedType(descriptorv2.LegacyLocalOciBlobAccessType),
+			wantType:           runtime.NewVersionedType(descriptorv2.LocalBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion),
 			wantLocalReference: "sha256:abc123",
 		},
 		{
-			name:               "localReference wins over digest",
-			data:               `{"type":"localOciBlob/v1","localReference":"sha256:abc123","digest":"sha256:def456"}`,
-			wantType:           runtime.NewVersionedType(descriptorv2.LegacyLocalOciBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion),
+			name:     "localReference wins over digest",
+			data:     `{"type":"localOciBlob/v1","localReference":"sha256:abc123","digest":"sha256:def456"}`,
+			wantType: runtime.NewVersionedType(descriptorv2.LegacyLocalOciBlobAccessType, descriptorv2.LocalBlobAccessTypeVersion),
+			// keeps its spelling: nothing was mapped, so the stored access is already resolvable
 			wantLocalReference: "sha256:abc123",
 		},
 		{
@@ -216,5 +217,6 @@ func TestLocalBlob_MarshalJSON_DropsLegacyDigest(t *testing.T) {
 	data, err := json.Marshal(blob)
 	r.NoError(err)
 	r.NotContains(string(data), "digest")
+	r.NotContains(string(data), descriptorv2.LegacyLocalOciBlobAccessType)
 	r.Contains(string(data), `"localReference":"sha256:abc123"`)
 }

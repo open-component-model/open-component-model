@@ -51,6 +51,10 @@ type LocalBlob struct {
 // A [LegacyLocalOciBlobAccessType] access is decoded as a LocalBlob: OCM v1 wrote the
 // repository local blob reference in "digest" there and no media type at all, so without
 // the mapping LocalReference would stay empty and the blob could not be resolved.
+//
+// Its type is normalised to [LocalBlobAccessType], unlike the [LegacyLocalBlobAccessType]
+// alias, which keeps its spelling: localOciBlob declares a different field set, so writing
+// that type together with a localReference would produce an access no reader can resolve.
 func (a *LocalBlob) UnmarshalJSON(data []byte) error {
 	// localBlob sheds the methods of LocalBlob so json does not call back into this one.
 	type localBlob LocalBlob
@@ -71,6 +75,7 @@ func (a *LocalBlob) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("decoding legacy %s access failed: %w", LegacyLocalOciBlobAccessType, err)
 	}
 	a.LocalReference = legacy.Digest
+	a.Type = runtime.NewVersionedType(LocalBlobAccessType, LocalBlobAccessTypeVersion)
 
 	return nil
 }
