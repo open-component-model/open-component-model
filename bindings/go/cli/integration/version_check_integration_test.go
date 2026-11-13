@@ -123,11 +123,43 @@ func Test_Integration_VersionCheck_CachesResult(t *testing.T) {
 	r.Equal(firstCheckedAt, cache2.CheckedAt, "cache timestamp should not change on cache hit")
 }
 
-// githubAPIClient returns an HTTP client with a long timeout for the live GitHub API.
-// The production default (versioncheck.DefaultHTTPTimeout) is short for CLI responsiveness.
-// On a slow CI runner that default is too short, so these tests fail.
+// githubAPIClient returns an HTTP client for the live GitHub API used by these tests.
+// It differs from the production default for two reasons:
+//   - Timeout: the production default (versioncheck.DefaultHTTPTimeout) is short for CLI
+//     responsiveness, which is too short on a slow CI runner, so the tests time out.
+//   - Auth: when GITHUB_TOKEN or GH_TOKEN is set (CI sets it), the client authenticates.
+//     The unauthenticated GitHub API limit (60 requests/hour/IP) is shared across jobs on
+//     GitHub-hosted runners and otherwise returns 403. Without a token the client stays
+//     unauthenticated, so local runs are unchanged.
 func githubAPIClient() *http.Client {
-	return &http.Client{Timeout: 30 * time.Second}
+	c := &http.Client{Timeout: 30 * time.Second}
+	if token := githubToken(); token != "" {
+		c.Transport = &bearerAuthTransport{token: token, base: http.DefaultTransport}
+	}
+	return c
+}
+
+// githubToken returns the first non-empty GitHub token from the environment, or "".
+func githubToken() string {
+	for _, key := range []string{"GITHUB_TOKEN", "GH_TOKEN"} {
+		if v := os.Getenv(key); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// bearerAuthTransport adds a GitHub bearer token to each request without mutating the
+// caller's request (the RoundTripper contract).
+type bearerAuthTransport struct {
+	token string
+	base  http.RoundTripper
+}
+
+func (t *bearerAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	r := req.Clone(req.Context())
+	r.Header.Set("Authorization", "Bearer "+t.token)
+	return t.base.RoundTrip(r)
 }
 
 func writeEmptyConfig(t *testing.T) string {
