@@ -721,7 +721,7 @@ func TestHandler_Verify(t *testing.T) {
 			cfgSetup: func(cfg *v1alpha1.VerifyConfig) {
 				cfg.PrivateInfrastructure = true
 			},
-			creds:      &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/path/to/private_trusted_root.json"},
+			creds:      &trustedrootv1.TrustedRoot{TrustedRootJSONFile: absPath("/path/to/private_trusted_root.json")},
 			bundleJSON: fakeBundleJSONWithTimestamp,
 			assertMock: func(t *testing.T, mock *execRecorder) {
 				t.Helper()
@@ -739,7 +739,7 @@ func TestHandler_Verify(t *testing.T) {
 			cfgSetup: func(cfg *v1alpha1.VerifyConfig) {
 				cfg.PrivateInfrastructure = true
 			},
-			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/path/to/private_trusted_root.json"},
+			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: absPath("/path/to/private_trusted_root.json")},
 			// Default bundle (fakeBundleJSON) has no timestampVerificationData.
 			assertArgs: func(t *testing.T, args []string) {
 				t.Helper()
