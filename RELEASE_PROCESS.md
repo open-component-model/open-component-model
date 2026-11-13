@@ -84,13 +84,17 @@ flowchart TD
     Promote --> WebsiteDocs[create_website_update_pr<br/>open docs PR to main<br/>pin Hugo module imports to website/v0.X.Y]
     PubCompFinal --> End([Final release live])
     WebsiteDocs --> End
+    PubCompRC --> NotifyMailRC[create_release_feed_pr_rc<br/>dispatch release-feed-pr on main]
+    PubCompRC --> NotifyZulipRC[notify_release_rc<br/>dispatch release-zulip-notification on main]
+    PubCompFinal --> NotifyMailF[create_release_feed_pr<br/>dispatch release-feed-pr on main]
+    PubCompFinal --> NotifyZulipF[notify_release<br/>dispatch release-zulip-notification on main]
 
     classDef rc fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e
     classDef final fill:#dcfce7,stroke:#16a34a,color:#14532d
     classDef gate fill:#fef3c7,stroke:#d97706,color:#78350f
 
-    class Prepare,TagRC,Pipeline,ReleaseRC,PubCompRC,BuildCLI,BuildCtl,Conf,PubCLI,PubCtl rc
-    class Verify,Promote,PubCompFinal,WebsiteDocs final
+    class Prepare,TagRC,Pipeline,ReleaseRC,PubCompRC,BuildCLI,BuildCtl,Conf,PubCLI,PubCtl,NotifyMailRC,NotifyZulipRC rc
+    class Verify,Promote,PubCompFinal,WebsiteDocs,NotifyMailF,NotifyZulipF final
     class Gate gate
 ```
 
@@ -110,6 +114,28 @@ The website integrates into the same workflow run, after `promote_and_release_fi
 * When more than 10 minors would be live, the oldest is retired (entry removed from `hugo.yaml`, imports removed from `module.yaml`). Retirement logic lives in `website/scripts/register-docs-version.js`.
 
 There is no `website/v0.X.Y-rc.N` tag. The website has no RC artifacts to validate (it's a docs site, not a binary or image), so the RC variant would have no consumer.
+
+### Release notifications
+
+After each RC and final publication, `notify_release_rc` / `notify_release` announce to Zulip.
+Independently, `create_release_feed_pr_rc` / `create_release_feed_pr` dispatch
+`release-feed-pr.yml`, which adds the release to `website/static/releases.xml` and opens
+or updates a pull request from `automation/release-feed`.
+
+**Review and merge that feed PR to publish it.** The normal website deployment then serves
+`https://ocm.software/releases.xml`, which Groups.io polls to post releases to the
+[ocm-announcements](https://lists.neonephos.org/g/ocm-announcements) mailing list.
+
+To recover a missed run, or for a release branch without the dispatcher jobs, run the
+workflow manually, then review and merge the resulting PR:
+
+```bash
+gh workflow run release-feed-pr.yml \
+  --repo open-component-model/open-component-model --ref main -f tag=v0.24.0-rc.1
+```
+
+List owners manage the mailing-list integration under Admin → Preferences → Integrations.
+To pause delivery, enable moderation there; do not reset the feed history.
 
 ## OCM components produced
 

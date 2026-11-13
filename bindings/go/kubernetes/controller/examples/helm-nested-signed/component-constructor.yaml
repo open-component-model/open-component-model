@@ -23,6 +23,12 @@ components:
     provider:
       name: ocm.software
     resources:
+      - name: crossplane-xrd
+        type: blob
+        version: "1.0.0"
+        input:
+          type: file
+          path: ./crossplane-composition.yaml
       - name: kro-rgd
         type: blob
         version: "1.0.0"

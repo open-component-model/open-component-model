@@ -16,6 +16,12 @@ components:
         access:
           type: ociRegistry
           imageReference: "ghcr.io/stefanprodan/podinfo:6.9.1@sha256:262578cde928d5c9eba3bce079976444f624c13ed0afb741d90d5423877496cb"
+      - name: crossplane-xrd
+        type: blob
+        version: "1.0.0"
+        input:
+          type: file
+          path: ./crossplane-composition.yaml
       - name: kro-rgd
         type: blob
         version: "1.0.0"
