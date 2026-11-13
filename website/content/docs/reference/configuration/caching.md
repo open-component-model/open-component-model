@@ -26,7 +26,7 @@ between runs of the CLI and restarts of the controller.
 | Cache           | Key                                     | Content                                         | Scope                                                    |
 |-----------------|-----------------------------------------|-------------------------------------------------|----------------------------------------------------------|
 | Blob cache      | Blob digest                             | Manifests, indexes, and component descriptors   | Shared by all registries and repositories in the process |
-| Reference cache | Registry, repository, and tag or digest | The descriptor that a tag or digest resolves to | One cache per repository                                 |
+| Reference cache | Registry, repository, and tag or digest | The descriptor that a tag or digest resolves to | Shared by all registries and repositories in the process |
 
 The blob cache stores content by digest, and a digest always identifies the same bytes. That makes it safe to share
 the blob cache between repositories and credentials. OCM checks every fetched blob against its digest before it
@@ -36,9 +36,8 @@ The reference cache saves the registry request that resolves a tag, so repeated 
 do not run into registry rate limits. A tag moved to a new digest in the registry therefore stays stale until its
 entry expires, see [Moved Tags](#moved-tags).
 
-The reference cache has one instance per repository location (`hostname[:port]/path`). Credentials are not part of
-the key, so rotating short-lived tokens does not make the cache useless. The `Always` [remote policy](#remote-policy),
-which has the registry authorize every access, turns off the reference cache.
+Credentials are not part of either key, so rotating short-lived tokens does not make the caches useless. The `Always`
+[remote policy](#remote-policy), which has the registry authorize every access, turns off the reference cache.
 
 The controller uses only the blob cache unless the [configuration](#configuration-in-the-controller) turns on the
 reference cache. One instance of each serves every namespace.
@@ -50,14 +49,13 @@ Resource layers, such as the image layers of an OCI image resource, are **not** 
 
 Both caches are stored under the OCM temporary folder:
 
-| Cache           | Directory                                                                      |
-|-----------------|--------------------------------------------------------------------------------|
-| Blob cache      | `<tempFolder>/ocm-oci-cas/blobs/<algorithm>/<hex>`                             |
-| Reference cache | `<tempFolder>/ocm-oci-refcache/<repository-key>/refs/<sha256(namespace)>.json` |
+| Cache           | Directory                                                     |
+|-----------------|---------------------------------------------------------------|
+| Blob cache      | `<tempFolder>/ocm-oci-cas/blobs/<algorithm>/<hex>`            |
+| Reference cache | `<tempFolder>/ocm-oci-refcache/refs/<sha256(namespace)>.json` |
 
-`<repository-key>` is the first 16 hex characters of the SHA-256 of `hostname[:port]/path`. `namespace` is
-`<registry>/<repository>`. Each reference cache file stores the resolved descriptors of one namespace together
-with the time each descriptor was resolved.
+`namespace` is `<registry>/<repository>`. Each reference cache file stores the resolved descriptors of one OCI
+repository together with the time each descriptor was resolved, so a resolve rewrites only the file of its repository.
 
 The directory names do not change between runs. Every OCM process that uses the same temporary folder reads and
 writes the same cache.
@@ -107,14 +105,14 @@ writable volume. If the cache directory cannot be created, the controller does n
 
 Each cache applies these limits:
 
-| Limit              | Default                                   | Field ([Configuration](#configuration)) | Applies to                       | Behaviour                                                                                 |
-|--------------------|-------------------------------------------|-----------------------------------------|----------------------------------|-------------------------------------------------------------------------------------------|
-| Maximum entries    | `100000` (blob), `10000` (each reference) | Not configurable                        | Blob cache, each reference cache | When the limit is reached, the least recently used entry is removed.                      |
-| Time to live       | `10m`                                     | `blob.ttl`, `reference.ttl`             | Blob cache, each reference cache | Entries older than this are removed.                                                      |
-| Maximum blob size  | `20 MiB`                                  | `blob.maxBlobSize`                      | Blob cache                       | Larger blobs are downloaded as usual but not cached.                                      |
-| Maximum total size | No limit (CLI), `1 GiB` (controller)      | `blob.maxTotalSize`                     | Blob cache                       | When the limit is exceeded, least recently used entries are removed until the cache fits. |
+| Limit              | Default                              | Field ([Configuration](#configuration)) | Applies to                  | Behaviour                                                                                 |
+|--------------------|--------------------------------------|-----------------------------------------|-----------------------------|-------------------------------------------------------------------------------------------|
+| Maximum entries    | `100000` (blob), `10000` (reference) | Not configurable                        | Blob cache, reference cache | When the limit is reached, the least recently used entry is removed.                      |
+| Time to live       | `10m`                                | `blob.ttl`, `reference.ttl`             | Blob cache, reference cache | Entries older than this are removed.                                                      |
+| Maximum blob size  | `20 MiB`                             | `blob.maxBlobSize`                      | Blob cache                  | Larger blobs are downloaded as usual but not cached.                                      |
+| Maximum total size | No limit (CLI), `1 GiB` (controller) | `blob.maxTotalSize`                     | Blob cache                  | When the limit is exceeded, least recently used entries are removed until the cache fits. |
 
-When the blob cache removes an entry, it also deletes the file. When a reference cache is loaded from disk,
+When the blob cache removes an entry, it also deletes the file. When the reference cache is loaded from disk,
 entries resolved longer than the time to live ago are not loaded. When the blob cache is loaded from disk, every valid
 file is loaded and gets a new time to live, because content addressed by digest cannot become stale. If the files
 exceed the maximum total size, the least recently written ones are removed.
@@ -222,7 +220,7 @@ The schema below defines the full structure of the `oci.cache.config.ocm.softwar
 
 ### Configuration in the CLI
 
-Add the configuration type to the OCM configuration file. The `reference` section applies to every reference cache.
+Add the configuration type to the OCM configuration file.
 
 ### Configuration in the Controller
 

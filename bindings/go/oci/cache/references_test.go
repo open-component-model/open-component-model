@@ -525,3 +525,31 @@ func TestReferenceCache_Add_RewritesEvictedNamespaceSnapshot(t *testing.T) {
 	r.True(ok)
 	assert.Equal(t, descB, gotB)
 }
+
+func TestReferenceCache_Add_EvictedReferenceAddedAgainIsPersisted(t *testing.T) {
+	r := require.New(t)
+	dir := filepath.Join(t.TempDir(), "refcache")
+
+	refV1, err := properties.NewReference("ghcr.io/a/repo:v1")
+	r.NoError(err)
+	refV2, err := properties.NewReference("ghcr.io/a/repo:v2")
+	r.NoError(err)
+	desc := ociImageSpecV1.Descriptor{
+		MediaType: ociImageSpecV1.MediaTypeImageManifest,
+		Digest:    digest.FromBytes([]byte("a")),
+		Size:      1,
+	}
+
+	c1, err := NewReferenceCache(Options{Dir: dir, MaxEntries: 1})
+	r.NoError(err)
+	c1.Add(refV1, desc)
+	c1.Add(refV2, desc) // evicts v1, the snapshot of the repository drops it
+	c1.Add(refV1, desc) // evicts v2
+
+	c2, err := NewReferenceCache(Options{Dir: dir, MaxEntries: 2})
+	r.NoError(err)
+	_, ok := c2.Lookup(refV1)
+	r.True(ok, "a reference added again after its eviction must be persisted")
+	_, ok = c2.Lookup(refV2)
+	r.False(ok)
+}

@@ -122,15 +122,32 @@ func TestNewBlobCache(t *testing.T) {
 	})
 }
 
-func TestNewReferenceCaches(t *testing.T) {
-	r := require.New(t)
-	r.Nil(setup.NewReferenceCaches(t.TempDir(), nil), "the reference cache is off by default")
-	r.Nil(setup.NewReferenceCaches(t.TempDir(), &ocicachev1alpha1.Config{Blob: &ocicachev1alpha1.BlobCacheConfig{Enabled: new(true)}}))
-	r.NotNil(setup.NewReferenceCaches(t.TempDir(), &ocicachev1alpha1.Config{Reference: &ocicachev1alpha1.ReferenceCacheConfig{Enabled: new(true)}}))
-	r.Nil(setup.NewReferenceCaches(t.TempDir(), &ocicachev1alpha1.Config{
-		RemotePolicy: ocicachev1alpha1.RemotePolicyAlways,
-		Reference:    &ocicachev1alpha1.ReferenceCacheConfig{Enabled: new(true)},
-	}), "Always leaves no reference cache")
+func TestNewReferenceCache(t *testing.T) {
+	newCache := func(cfg *ocicachev1alpha1.Config) (*ocicache.ReferenceCache, string) {
+		t.Helper()
+		dir := t.TempDir()
+		rc, err := setup.NewReferenceCache(dir, cfg)
+		require.NoError(t, err)
+		return rc, filepath.Join(dir, "ocm-oci-refcache")
+	}
+	on := &ocicachev1alpha1.ReferenceCacheConfig{Enabled: new(true)}
+
+	t.Run("off by default", func(t *testing.T) {
+		rc, dir := newCache(nil)
+		require.Nil(t, rc)
+		require.NoDirExists(t, dir)
+		rc, _ = newCache(&ocicachev1alpha1.Config{Blob: &ocicachev1alpha1.BlobCacheConfig{Enabled: new(true)}})
+		require.Nil(t, rc)
+	})
+	t.Run("on if enabled", func(t *testing.T) {
+		rc, dir := newCache(&ocicachev1alpha1.Config{Reference: on})
+		require.NotNil(t, rc)
+		require.DirExists(t, dir)
+	})
+	t.Run("off under Always", func(t *testing.T) {
+		rc, _ := newCache(&ocicachev1alpha1.Config{RemotePolicy: ocicachev1alpha1.RemotePolicyAlways, Reference: on})
+		require.Nil(t, rc)
+	})
 }
 
 func TestNewBlobCache_Disabled(t *testing.T) {

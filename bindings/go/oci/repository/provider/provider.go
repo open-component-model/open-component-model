@@ -88,11 +88,15 @@ type CachingComponentVersionRepositoryProvider struct {
 	// layer blobs (see open-component-model#2833 discussion).
 	blobCacheOpts *cache.Options
 
-	// referenceCaches, when non-nil, holds the reference cache of each repository scope.
-	// Tag resolution IS access-controlled (a private registry won't return a
-	// descriptor for a tag you can't read), so each repository gets its own
-	// reference cache.
-	referenceCaches *ReferenceCaches
+	// referenceCacheOpts, when non-nil, enables a shared reference cache. All
+	// repositories share one ReferenceCache: its keys hold the registry and the
+	// repository, and credentials are not part of them anyway. Only
+	// [cache.RemotePolicyAlways] enforces access, and it leaves no reference cache.
+	referenceCacheOpts *cache.Options
+
+	// sharedReferenceCache is the single process-wide ReferenceCache.
+	// Initialised lazily on first use via [sync.OnceValue].
+	sharedReferenceCache func() *cache.ReferenceCache
 
 	// sharedBlobCache is the single process-wide BlobCache shared across all
 	// credential scopes. Initialised lazily on first use via [sync.OnceValue].
@@ -125,15 +129,14 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 			ocmhttp.WithConfig(options.HTTPConfig),
 			ocmhttp.WithUserAgent(options.UserAgent),
 		),
-		httpConfig:    options.HTTPConfig,
-		tempDir:       options.TempDir,
-		blobCacheOpts: applyBlobCacheConfig(options.BlobCacheOptions, options.CacheConfig),
+		httpConfig:         options.HTTPConfig,
+		tempDir:            options.TempDir,
+		blobCacheOpts:      applyBlobCacheConfig(options.BlobCacheOptions, options.CacheConfig),
+		referenceCacheOpts: applyReferenceCacheConfig(options.ReferenceCacheOptions, options.CacheConfig),
 	}
-	if opts := applyReferenceCacheConfig(options.ReferenceCacheOptions, options.CacheConfig); opts != nil {
-		prov.referenceCaches = NewReferenceCaches(options.TempDir, *opts)
-	}
-	if options.ReferenceCaches != nil && options.CacheConfig.ReferenceEnabled(true) && !checksRemote(options.CacheConfig) {
-		prov.referenceCaches = options.ReferenceCaches
+	prov.sharedReferenceCache = sync.OnceValue(prov.newSharedReferenceCache)
+	if options.ReferenceCache != nil && options.CacheConfig.ReferenceEnabled(true) && !checksRemote(options.CacheConfig) {
+		prov.sharedReferenceCache = func() *cache.ReferenceCache { return options.ReferenceCache }
 	}
 	// Wire the shared blob cache constructor now that prov exists so the
 	// closure can read its final field values. sync.OnceValue guarantees
@@ -218,7 +221,7 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 		if bc := b.getOrCreateBlobCache(); bc != nil {
 			resolverOpts = append(resolverOpts, urlresolver.WithBlobCache(bc))
 		}
-		if rc := b.referenceCaches.get(identity); rc != nil {
+		if rc := b.sharedReferenceCache(); rc != nil {
 			resolverOpts = append(resolverOpts, urlresolver.WithReferenceCache(rc))
 		}
 
@@ -290,6 +293,30 @@ func (b *CachingComponentVersionRepositoryProvider) newSharedBlobCache() *cache.
 	c, err := cache.NewBlobCache(opts)
 	if err != nil {
 		slog.Warn("provider: failed to initialise shared blob cache, continuing without caching",
+			slog.String("err", err.Error()))
+		return nil
+	}
+	return c
+}
+
+// newSharedReferenceCache is the once-only constructor for the process-wide
+// reference cache; wired through [sync.OnceValue] in
+// [NewComponentVersionRepositoryProvider].
+func (b *CachingComponentVersionRepositoryProvider) newSharedReferenceCache() *cache.ReferenceCache {
+	if b.referenceCacheOpts == nil {
+		return nil
+	}
+	opts := *b.referenceCacheOpts
+	if opts.Dir == "" {
+		base := b.tempDir
+		if base == "" {
+			base = os.TempDir()
+		}
+		opts.Dir = filepath.Join(base, "ocm-oci-refcache")
+	}
+	c, err := cache.NewReferenceCache(opts)
+	if err != nil {
+		slog.Warn("provider: failed to initialise shared reference cache, continuing without caching",
 			slog.String("err", err.Error()))
 		return nil
 	}
