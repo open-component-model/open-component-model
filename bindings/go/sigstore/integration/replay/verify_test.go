@@ -225,3 +225,20 @@ func Test_Replay_VerifyWithExplicitTrustedRoot(t *testing.T) {
 		r.ErrorContains(err, "issuer")
 	})
 }
+
+// Test_Replay_PrivateInfrastructure moved offline once #4237 landed. PrivateInfrastructure
+// adds --insecure-ignore-tlog, which used to make cosign validate the short-lived Fulcio leaf
+// certificate against wall-clock time, so an aged recorded bundle failed as soon as its leaf
+// expired. The handler now also passes --use-signed-timestamps when the bundle carries an
+// RFC3161 signed timestamp, so cosign validates the leaf against the time in the bundle's
+// signed timestamp instead. The recorded fixture is a Rekor v2 entry with such a timestamp,
+// so this case now verifies offline against the committed trusted root.
+func Test_Replay_PrivateInfrastructure(t *testing.T) {
+	h := newHandler(t)
+	signed := recordedSignature(t, "private-infrastructure-test")
+	cfg := verifyConfig(t, func(c *v1alpha1.VerifyConfig) {
+		c.PrivateInfrastructure = true
+	})
+
+	require.New(t).NoError(h.Verify(t.Context(), signed, cfg, trustedRoot(t)))
+}
