@@ -10,7 +10,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/log"
@@ -84,7 +86,7 @@ func (c *registryCalls) downloads() int {
 
 // revalidations counts the cheap existence checks a cache is still allowed
 // to make on a warm re-read: HEADs against manifests and blobs. Resolving a
-// mutable tag costs one of these and cannot be cached away.
+// tag costs one of these unless the reference cache serves it.
 func (c *registryCalls) revalidations() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -138,10 +140,16 @@ func startProxiedRegistry(t *testing.T, ctx context.Context) (string, *registryC
 // is where the on-disk blob and reference caches are rooted; reusing it across
 // providers emulates a second process run.
 func cachingProvider(cacheDir string, policy cache.RemotePolicy) *provider.CachingComponentVersionRepositoryProvider {
+	return cachingProviderWithReferenceTTL(cacheDir, policy, 0)
+}
+
+// cachingProviderWithReferenceTTL is [cachingProvider] with the reference cache ttl set to refTTL;
+// 0 keeps the default.
+func cachingProviderWithReferenceTTL(cacheDir string, policy cache.RemotePolicy, refTTL time.Duration) *provider.CachingComponentVersionRepositoryProvider {
 	return provider.NewComponentVersionRepositoryProvider(
 		provider.WithTempDir(cacheDir), provider.WithHTTPConfig(plainHTTPConfig()),
 		provider.WithBlobCacheOptions(&cache.Options{RemotePolicy: policy}),
-		provider.WithReferenceCacheOptions(&cache.Options{RemotePolicy: policy}),
+		provider.WithReferenceCacheOptions(&cache.Options{RemotePolicy: policy, TTL: refTTL}),
 	)
 }
 
@@ -166,12 +174,20 @@ func cacheTestDescriptor(name, version, marker string) *descriptor.Descriptor {
 
 func markerOf(t *testing.T, desc *descriptor.Descriptor) string {
 	t.Helper()
+	m := marker(desc)
+	if m == "" {
+		t.Fatalf("descriptor %s:%s has no marker label", desc.Component.Name, desc.Component.Version)
+	}
+	return m
+}
+
+// marker returns the marker label of desc, or "" if it has none.
+func marker(desc *descriptor.Descriptor) string {
 	for _, l := range desc.Component.Labels {
 		if l.Name == "marker" {
 			return strings.Trim(string(l.Value), `"`)
 		}
 	}
-	t.Fatalf("descriptor %s:%s has no marker label", desc.Component.Name, desc.Component.Version)
 	return ""
 }
 
@@ -233,7 +249,7 @@ func Test_Integration_OCICache_ReReadAvoidsRegistry(t *testing.T) {
 		t.Logf("cached: first read %d downloads, second read %d downloads / %d revalidations (%v)",
 			first, calls.downloads(), calls.revalidations(), calls.dump())
 		r.Zero(calls.downloads(), "a warm cache must not re-download content")
-		r.LessOrEqual(calls.revalidations(), 1, "a warm cache should cost at most one tag revalidation")
+		r.Zero(calls.revalidations(), "a warm cache must resolve the tag from the reference cache")
 	})
 
 	t.Run("IfNotPresent: a fresh provider reuses the on-disk cache", func(t *testing.T) {
@@ -251,12 +267,13 @@ func Test_Integration_OCICache_ReReadAvoidsRegistry(t *testing.T) {
 		t.Logf("fresh provider, warm disk cache: %d downloads / %d revalidations (%v)",
 			calls.downloads(), calls.revalidations(), calls.dump())
 		r.Zero(calls.downloads(), "a warm on-disk cache must survive process restart")
-		r.LessOrEqual(calls.revalidations(), 1, "a warm on-disk cache should cost at most one tag revalidation")
+		r.Zero(calls.revalidations(), "a warm on-disk cache must resolve the tag from the reference cache")
 	})
 
-	t.Run("IfNotPresent: a moved tag is not served stale", func(t *testing.T) {
+	t.Run("IfNotPresent: a moved tag is stale until the reference cache entry expires", func(t *testing.T) {
 		r := require.New(t)
-		prov := cachingProvider(cacheDir, cache.RemotePolicyIfNotPresent)
+		const refTTL = time.Second
+		prov := cachingProviderWithReferenceTTL(t.TempDir(), cache.RemotePolicyIfNotPresent, refTTL)
 		repo := repoFor(t, ctx, prov, baseURL)
 
 		// Warm the cache.
@@ -268,12 +285,16 @@ func Test_Integration_OCICache_ReReadAvoidsRegistry(t *testing.T) {
 		// content, moving the tag to a new manifest digest.
 		r.NoError(seedRepo.AddComponentVersion(ctx, cacheTestDescriptor(component, version, "republished")))
 
-		calls.reset()
 		got, err = repo.GetComponentVersion(ctx, component, version)
 		r.NoError(err)
-		t.Logf("after retag: %d downloads / %d revalidations (%v)",
-			calls.downloads(), calls.revalidations(), calls.dump())
-		r.Equal("republished", markerOf(t, got), "cache served content from before the tag moved")
+		r.Equal("original", markerOf(t, got), "the reference cache serves the old digest until the entry expires")
+
+		r.EventuallyWithT(func(ct *assert.CollectT) {
+			got, err := repo.GetComponentVersion(ctx, component, version)
+			if assert.NoError(ct, err) {
+				assert.Equal(ct, "republished", marker(got), "an expired entry must resolve the moved tag")
+			}
+		}, 10*refTTL, refTTL/4)
 	})
 }
 

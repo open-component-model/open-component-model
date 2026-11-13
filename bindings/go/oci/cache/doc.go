@@ -51,7 +51,12 @@
 //     in memory, so admitted blobs must stay small.
 //
 //   - [ReferenceCache] is unconditional within its namespace: every
-//     successful upstream resolve is recorded.
+//     successful upstream resolve is recorded. Under
+//     [RemotePolicyIfNotPresent] it serves tags from the cache, so a tag
+//     re-pointed upstream stays stale for up to [Options.TTL]. OCM
+//     component versions are tags that are not meant to change, which
+//     makes this trade-off acceptable; [CachedStore.Tag] refreshes the
+//     mapping for tags the process writes itself.
 //
 // Lifecycle and isolation:
 //
