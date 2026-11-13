@@ -3,7 +3,8 @@ package utf8_test
 import (
 	"bytes"
 	"compress/gzip"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"io"
 	"testing"
 
@@ -80,15 +81,15 @@ func TestGetV1UTF8Blob(t *testing.T) {
 			name: "multiple content types specified - text and JSON",
 			utf8: v1.UTF8{
 				Text: "test",
-				JSON: json.RawMessage(`{"test": "value"}`),
+				JSON: jsontext.Value(`{"test": "value"}`),
 			},
 			wantErr: true,
 		},
 		{
 			name: "multiple content types specified - JSON and YAML",
 			utf8: v1.UTF8{
-				JSON: json.RawMessage(`{"test": "value"}`),
-				YAML: json.RawMessage(`test: value`),
+				JSON: jsontext.Value(`{"test": "value"}`),
+				YAML: jsontext.Value(`test: value`),
 			},
 			wantErr: true,
 		},
@@ -96,7 +97,7 @@ func TestGetV1UTF8Blob(t *testing.T) {
 			name: "multiple content types specified - text and YAML",
 			utf8: v1.UTF8{
 				Text: "test",
-				YAML: json.RawMessage(`test: value`),
+				YAML: jsontext.Value(`test: value`),
 			},
 			wantErr: true,
 		},
@@ -104,36 +105,36 @@ func TestGetV1UTF8Blob(t *testing.T) {
 			name: "multiple content types specified - all three",
 			utf8: v1.UTF8{
 				Text: "test",
-				JSON: json.RawMessage(`{"test": "value"}`),
-				YAML: json.RawMessage(`test: value`),
+				JSON: jsontext.Value(`{"test": "value"}`),
+				YAML: jsontext.Value(`test: value`),
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid JSON input",
 			utf8: v1.UTF8{
-				JSON: json.RawMessage(`{"invalid": json`),
+				JSON: jsontext.Value(`{"invalid": json`),
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid formatted JSON input",
 			utf8: v1.UTF8{
-				FormattedJSON: json.RawMessage(`{"invalid": json`),
+				FormattedJSON: jsontext.Value(`{"invalid": json`),
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid YAML input",
 			utf8: v1.UTF8{
-				YAML: json.RawMessage(`invalid: yaml: :`),
+				YAML: jsontext.Value(`invalid: yaml: :`),
 			},
 			wantErr: true,
 		},
 		{
 			name: "valid JSON input",
 			utf8: v1.UTF8{
-				JSON: json.RawMessage(`{"name": "test", "value": 42, "active": true}`),
+				JSON: jsontext.Value(`{"name": "test", "value": 42, "active": true}`),
 			},
 			check: func(t *testing.T, b blob.ReadOnlyBlob) {
 				t.Helper()
@@ -156,7 +157,7 @@ func TestGetV1UTF8Blob(t *testing.T) {
 		{
 			name: "valid JSON input with compression",
 			utf8: v1.UTF8{
-				JSON:     json.RawMessage(`{"name": "test", "value": 42, "active": true}`),
+				JSON:     jsontext.Value(`{"name": "test", "value": 42, "active": true}`),
 				Compress: true,
 			},
 			check: func(t *testing.T, b blob.ReadOnlyBlob) {
@@ -181,7 +182,7 @@ func TestGetV1UTF8Blob(t *testing.T) {
 		{
 			name: "valid formatted JSON input",
 			utf8: v1.UTF8{
-				FormattedJSON: json.RawMessage(`{"name": "test", "value": 42, "active": true}`),
+				FormattedJSON: jsontext.Value(`{"name": "test", "value": 42, "active": true}`),
 			},
 			check: func(t *testing.T, b blob.ReadOnlyBlob) {
 				t.Helper()
@@ -208,7 +209,7 @@ func TestGetV1UTF8Blob(t *testing.T) {
 		{
 			name: "valid formatted JSON input with compression",
 			utf8: v1.UTF8{
-				FormattedJSON: json.RawMessage(`{"name": "test", "value": 42, "active": true}`),
+				FormattedJSON: jsontext.Value(`{"name": "test", "value": 42, "active": true}`),
 				Compress:      true,
 			},
 			check: func(t *testing.T, b blob.ReadOnlyBlob) {
@@ -238,7 +239,7 @@ func TestGetV1UTF8Blob(t *testing.T) {
 		{
 			name: "valid YAML input",
 			utf8: v1.UTF8{
-				YAML: json.RawMessage(`{"test": "value"}`),
+				YAML: jsontext.Value(`{"test": "value"}`),
 			},
 			check: func(t *testing.T, b blob.ReadOnlyBlob) {
 				t.Helper()
@@ -262,7 +263,7 @@ func TestGetV1UTF8Blob(t *testing.T) {
 		{
 			name: "valid YAML input with compression",
 			utf8: v1.UTF8{
-				YAML:     json.RawMessage(`{"test": "value"}`),
+				YAML:     jsontext.Value(`{"test": "value"}`),
 				Compress: true,
 			},
 			check: func(t *testing.T, b blob.ReadOnlyBlob) {
@@ -285,7 +286,7 @@ func TestGetV1UTF8Blob(t *testing.T) {
 		{
 			name: "complex JSON object",
 			utf8: v1.UTF8{
-				JSON: json.RawMessage(`{
+				JSON: jsontext.Value(`{
 					"string": "hello world",
 					"number": 123.45,
 					"boolean": true,
@@ -342,7 +343,7 @@ func TestGetV1UTF8Blob(t *testing.T) {
 		{
 			name: "empty JSON object",
 			utf8: v1.UTF8{
-				JSON: json.RawMessage(`{}`),
+				JSON: jsontext.Value(`{}`),
 			},
 			check: func(t *testing.T, b blob.ReadOnlyBlob) {
 				t.Helper()
@@ -361,7 +362,7 @@ func TestGetV1UTF8Blob(t *testing.T) {
 		{
 			name: "JSON array",
 			utf8: v1.UTF8{
-				JSON: json.RawMessage(`[1, 2, 3, "four", true, null]`),
+				JSON: jsontext.Value(`[1, 2, 3, "four", true, null]`),
 			},
 			check: func(t *testing.T, b blob.ReadOnlyBlob) {
 				t.Helper()
@@ -396,6 +397,23 @@ func TestGetV1UTF8Blob(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The marshaled bytes are the resource content, so their digest - and any signature over
+// it - must stay what encoding/json v1 produced, which escaped <, > and & as well as the
+// line terminators U+2028 and U+2029.
+func TestGetV1UTF8Blob_JSONEscapesLikeV1(t *testing.T) {
+	b, err := utf8.GetV1UTF8Blob(v1.UTF8{JSON: jsontext.Value("{\"q\":\"a<b>&c\u2028d\u2029e\"}")})
+	require.NoError(t, err)
+
+	reader, err := b.ReadCloser()
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, reader.Close()) })
+	data, err := io.ReadAll(reader)
+	require.NoError(t, err)
+
+	// The exact bytes are the point here, not JSON equality.
+	assert.Equal(t, `{"q":"a\u003cb\u003e\u0026c\u2028d\u2029e"}`, string(data)) //nolint:testifylint // encoded-compare: the escaping is what is under test
 }
 
 func TestScheme_ResolvesAllUTF8InputAliases(t *testing.T) {

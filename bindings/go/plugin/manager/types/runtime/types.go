@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"encoding/json/jsontext"
 	"errors"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -17,10 +18,10 @@ type PluginSpec struct {
 	SupportedConfigTypes []runtime.Type
 }
 
-func (spec *PluginSpec) MarshalJSON() ([]byte, error) {
-	return nil, errors.New("marshalling runtime plugin spec is unsupported, convert to spec plugin spec")
+func (spec *PluginSpec) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return errors.New("marshalling runtime plugin spec is unsupported, convert to spec plugin spec")
 }
 
-func (spec *PluginSpec) UnmarshalJSON(data []byte) error {
+func (spec *PluginSpec) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	return errors.New("unmarshalling runtime plugin spec is unsupported, convert from spec plugin spec")
 }

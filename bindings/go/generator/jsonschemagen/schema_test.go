@@ -1,7 +1,7 @@
 package jsonschemagen_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"go/ast"
 	"go/token"
 	"go/types"
@@ -12,12 +12,13 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/generator/jsonschemagen"
 	"ocm.software/open-component-model/bindings/go/generator/universe"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestSchemaOrBoolMarshalJSONWithBoolTrue(t *testing.T) {
 	sb := jsonschemagen.SchemaOrBool{Bool: jsonschemagen.Ptr(true)}
 
-	data, err := json.Marshal(sb)
+	data, err := json.Marshal(sb, runtime.JSONOptions)
 
 	require.NoError(t, err)
 	require.Equal(t, []byte("true"), data)
@@ -26,7 +27,7 @@ func TestSchemaOrBoolMarshalJSONWithBoolTrue(t *testing.T) {
 func TestSchemaOrBoolMarshalJSONWithBoolFalse(t *testing.T) {
 	sb := jsonschemagen.SchemaOrBool{Bool: jsonschemagen.Ptr(false)}
 
-	data, err := json.Marshal(sb)
+	data, err := json.Marshal(sb, runtime.JSONOptions)
 
 	require.NoError(t, err)
 	require.Equal(t, []byte("false"), data)
@@ -36,7 +37,7 @@ func TestSchemaOrBoolMarshalJSONWithSchema(t *testing.T) {
 	schema := &jsonschemagen.JSONSchemaDraft202012{Type: "string"}
 	sb := jsonschemagen.SchemaOrBool{Schema: schema}
 
-	data, err := json.Marshal(sb)
+	data, err := json.Marshal(sb, runtime.JSONOptions)
 
 	require.NoError(t, err)
 	require.JSONEq(t, `{"type":"string"}`, string(data))

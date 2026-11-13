@@ -1,7 +1,9 @@
 package entry_test
 
 import (
-	"encoding/json"
+	// jsonv1 is imported for json.Number only; encoding/json/v2 has no
+	// replacement for it (see the engine's number handling).
+	jsonv1 "encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -79,7 +81,7 @@ func TestNormalise(t *testing.T) {
 			// OCM v1 (float64): OCM v1 would emit 12345678901234567000 and
 			// 0.00001 respectively.
 			name:     "json.Number: big int verbatim, fractional re-spelled",
-			input:    []any{json.Number("12345678901234567890"), json.Number("0.00001"), json.Number("42")},
+			input:    []any{jsonv1.Number("12345678901234567890"), jsonv1.Number("0.00001"), jsonv1.Number("42")},
 			expected: `[12345678901234567890,1e-05,42]`,
 		},
 	}

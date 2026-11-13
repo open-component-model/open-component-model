@@ -7,7 +7,8 @@ import (
 	"encoding/asn1"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -431,7 +432,7 @@ func bundleHasSignedTimestamp(bundleJSON []byte) bool {
 	var bundle struct {
 		VerificationMaterial struct {
 			TimestampVerificationData *struct {
-				RFC3161Timestamps []json.RawMessage `json:"rfc3161Timestamps"`
+				RFC3161Timestamps []jsontext.Value `json:"rfc3161Timestamps"`
 			} `json:"timestampVerificationData"`
 		} `json:"verificationMaterial"`
 	}

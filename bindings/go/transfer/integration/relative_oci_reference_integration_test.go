@@ -2,7 +2,7 @@ package integration_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"testing"
@@ -199,7 +199,7 @@ func Test_Integration_TransferRelativeOCIReference(t *testing.T) {
 			"relativeOciReference must become an OCIImage after a transfer with an OCI uploader")
 
 		var ociImage ociaccessv1.OCIImage
-		rawAccess, err := json.Marshal(gotAccess)
+		rawAccess, err := json.Marshal(gotAccess, runtime.JSONOptions)
 		r.NoError(err)
 		r.NoError(json.Unmarshal(rawAccess, &ociImage))
 		r.Contains(ociImage.ImageReference, targetAddr,

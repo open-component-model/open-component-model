@@ -3,7 +3,8 @@ package plugin
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"log/slog"
@@ -277,7 +278,7 @@ func encodePluginInfo(res *descriptor.Resource, source, outputPath, format strin
 
 	switch format {
 	case "json":
-		data, err = json.MarshalIndent(info, "", "  ")
+		data, err = json.Marshal(info, ocmruntime.JSONOptions, jsontext.WithIndent("  "))
 		if err != nil {
 			return nil, 0, fmt.Errorf("marshaling plugin info as JSON failed: %w", err)
 		}

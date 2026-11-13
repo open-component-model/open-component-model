@@ -1,7 +1,7 @@
 package input_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -21,7 +21,7 @@ import (
 
 func wgetInputResource(t *testing.T, spec map[string]any) *constructorruntime.Resource {
 	t.Helper()
-	raw, err := json.Marshal(spec)
+	raw, err := json.Marshal(spec, runtime.JSONOptions)
 	require.NoError(t, err)
 
 	r := &constructorruntime.Resource{}

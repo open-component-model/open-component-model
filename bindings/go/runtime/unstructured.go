@@ -1,7 +1,11 @@
 package runtime
 
 import (
-	"encoding/json"
+	// encoding/json/v2 has no Number type; encoding/json.Number implements json.MarshalerTo
+	// and json.UnmarshalerFrom and is the type v2 round-trips arbitrary-precision numbers through.
+	jsonv1 "encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 )
 
@@ -28,8 +32,8 @@ func UnstructuredFromMixedData(data map[string]any) (*Unstructured, error) {
 }
 
 var _ interface {
-	json.Marshaler
-	json.Unmarshaler
+	json.MarshalerTo
+	json.UnmarshalerFrom
 	Typed
 } = &Unstructured{}
 
@@ -72,12 +76,12 @@ func Get[T any](u *Unstructured, key string) (T, bool) {
 	return t, ok
 }
 
-func (u *Unstructured) MarshalJSON() ([]byte, error) {
-	return json.Marshal(u.Data)
+func (u *Unstructured) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return json.MarshalEncode(enc, u.Data)
 }
 
-func (u *Unstructured) UnmarshalJSON(data []byte) error {
-	return json.Unmarshal(data, &u.Data)
+func (u *Unstructured) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	return json.UnmarshalDecode(dec, &u.Data)
 }
 
 func (u *Unstructured) DeepCopy() *Unstructured {
@@ -94,7 +98,7 @@ func (u *Unstructured) DeepCopy() *Unstructured {
 // (as handled by DeepCopyJSONValue).
 func isJSONNative(x any) bool {
 	switch v := x.(type) {
-	case string, int64, int32, int, bool, float64, float32, nil, json.Number:
+	case string, int64, int32, int, bool, float64, float32, nil, jsonv1.Number:
 		return true
 	case map[string]any:
 		for _, val := range v {
@@ -137,7 +141,7 @@ func normalizeJSONValue(x any) (any, error) {
 		}
 		return out, nil
 	default:
-		data, err := json.Marshal(v)
+		data, err := json.Marshal(v, JSONOptions)
 		if err != nil {
 			return nil, fmt.Errorf("unstructured normalize: cannot marshal: %w", err)
 		}

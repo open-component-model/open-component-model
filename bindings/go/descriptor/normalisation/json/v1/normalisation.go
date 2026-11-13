@@ -1,8 +1,7 @@
 package v1
 
 import (
-	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"strings"
 	"time"
@@ -70,7 +69,7 @@ func (algo) Normalise(cd *descruntime.Descriptor) ([]byte, error) {
 // normalise through the same representation. Expanding Label.Value
 // (json.RawMessage) also falls out of this for free.
 //
-// Numbers are decoded with UseNumber so integer label values keep full
+// Numbers are decoded with [runtime.PreserveJSONNumbers] so integer label values keep full
 // precision (cc-utils serialises them via Python json.dumps, which never loses
 // precision); the entry engine then re-spells them to match Python. The one
 // value this cannot recover is an integral float such as 1.0: YAMLToJSON in the
@@ -85,10 +84,8 @@ func toMap(desc *v2.Descriptor) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.UseNumber()
 	var m map[string]any
-	if err := dec.Decode(&m); err != nil {
+	if err := json.Unmarshal(data, &m, runtime.PreserveJSONNumbers); err != nil {
 		return nil, err
 	}
 	return m, nil
@@ -373,7 +370,7 @@ func resourceIdentity(res map[string]any) (string, error) {
 			ei[k] = v
 		}
 	}
-	b, err := json.Marshal(map[string]any{"name": res["name"], "extraIdentity": ei})
+	b, err := json.Marshal(map[string]any{"name": res["name"], "extraIdentity": ei}, runtime.JSONOptions)
 	if err != nil {
 		return "", fmt.Errorf("encoding resource identity: %w", err)
 	}

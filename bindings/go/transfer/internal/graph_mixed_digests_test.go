@@ -2,7 +2,7 @@ package internal
 
 import (
 	"crypto"
-	"encoding/json"
+	"encoding/json/v2"
 	"log/slog"
 	"strings"
 	"testing"
@@ -75,12 +75,12 @@ func TestBuildGraphDefinition_VerifiesMixedReferenceDigests(t *testing.T) {
 		}
 		v2desc, err := descriptor.ConvertToV2(runtime.NewScheme(), parent)
 		r.NoError(err)
-		want, err := json.Marshal(v2desc.Component.References)
+		want, err := json.Marshal(v2desc.Component.References, runtime.JSONOptions)
 		r.NoError(err)
 		for _, data := range tgd.Environment.Data {
 			component := data.(map[string]any)["component"].(map[string]any)
 			if component["name"] == "ocm.software/parent" {
-				got, err := json.Marshal(component["componentReferences"])
+				got, err := json.Marshal(component["componentReferences"], runtime.JSONOptions)
 				r.NoError(err)
 				r.JSONEq(string(want), string(got), "reference digests must be transferred unchanged")
 			}

@@ -7,7 +7,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -177,7 +177,7 @@ func fetchJSON(ctx context.Context, store orascontent.Fetcher, desc ocispec.Desc
 		return err
 	}
 	defer func() { _ = rc.Close() }()
-	return json.NewDecoder(rc).Decode(v)
+	return json.UnmarshalRead(rc, v)
 }
 
 // descriptorBlob is an in-memory OCI blob that keeps the size and digest of its descriptor.

@@ -108,7 +108,7 @@ type VerifyConfig struct {
 	// transparency-log lookup; signature, certificate chain, identity, and SCT
 	// checks are unchanged. Must be paired with a trusted-root credential.
 	// Maps to cosign --insecure-ignore-tlog.
-	PrivateInfrastructure bool `json:"privateInfrastructure,omitempty"`
+	PrivateInfrastructure bool `json:"privateInfrastructure,omitzero"`
 
 	// CertificateOIDCIssuer is the exact OIDC issuer URL the signing certificate
 	// must have been issued for. Required unless CertificateOIDCIssuerRegexp is set.

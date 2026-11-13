@@ -1,7 +1,8 @@
 package discovery
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"strconv"
 	"testing"
 
@@ -23,11 +24,11 @@ func mustConvertV2(t *testing.T, d *descriptor.Descriptor) *v2.Descriptor {
 }
 
 func stringLabel(name, value string) descriptor.Label {
-	return descriptor.Label{Name: name, Value: json.RawMessage(strconv.Quote(value))}
+	return descriptor.Label{Name: name, Value: jsontext.Value(strconv.Quote(value))}
 }
 
 func structuredLabel(name string, value any) descriptor.Label {
-	raw, err := json.Marshal(value)
+	raw, err := json.Marshal(value, runtime.JSONOptions)
 	if err != nil {
 		panic(err)
 	}
