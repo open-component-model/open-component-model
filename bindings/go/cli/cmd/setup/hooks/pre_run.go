@@ -32,12 +32,12 @@ func PreRunEWithConfig(cmd *cobra.Command, cfg Config) error {
 		return fmt.Errorf("get logger: %w", err)
 	}
 	slog.SetDefault(logger)
-	suppress, err := suppressInteractiveProgress(cmd)
+	nonText, err := nonTextLogRenderer(cmd)
 	if err != nil {
 		return err
 	}
-	if suppress {
-		cmd.SetContext(progress.WithForceNonInteractive(cmd.Context()))
+	if nonText {
+		cmd.SetContext(progress.WithNonTextLogRenderer(cmd.Context()))
 	}
 	slog.DebugContext(cmd.Context(), "FIPS 140-3 mode",
 		slog.Bool("enabled", fips140.Enabled()), slog.String("module", fips140.Version()))
@@ -74,15 +74,14 @@ func PreRunEWithConfig(cmd *cobra.Command, cfg Config) error {
 	return nil
 }
 
-// suppressInteractiveProgress reports whether the requested log format rules out
-// the interactive progress tracker. The tracker buffers log records and renders
-// them as text above its animated bar, so a text request is still honoured while
-// it runs; a machine-readable format is only delivered with the tracker off.
-// The decision follows the requested format, not whether the flag was passed:
-// --logformat text asks for the default format and must behave like omitting it.
-// This does not affect the live render mode of get/add, which animates data on
-// stdout.
-func suppressInteractiveProgress(cmd *cobra.Command) (bool, error) {
+// nonTextLogRenderer reports whether the log records are rendered by something
+// other than a plain-text renderer. Whether the output is interactive is not
+// part of this decision: the progress package owns the stream it renders on and
+// detects that itself. The requested format alone decides, not whether the flag
+// was passed, because --logformat text asks for the default renderer and must
+// behave like omitting the flag. Only progress rendering is affected, not the
+// live render mode of get/add, which animates data on stdout.
+func nonTextLogRenderer(cmd *cobra.Command) (bool, error) {
 	format, err := enum.Get(cmd.Flags(), log.FormatFlagName)
 	if err != nil {
 		return false, fmt.Errorf("get log format: %w", err)

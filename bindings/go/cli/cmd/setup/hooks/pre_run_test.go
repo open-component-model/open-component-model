@@ -10,26 +10,26 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/flags/log"
 )
 
-func TestSuppressInteractiveProgress(t *testing.T) {
+func TestNonTextLogRenderer(t *testing.T) {
 	tests := []struct {
 		name string
 		args []string
 		want bool
 	}{
 		{
-			name: "no flag keeps the interactive progress tracker",
+			name: "no flag renders text",
 			args: nil,
 			want: false,
 		},
 		{
 			// text is the default format, so requesting it explicitly must
 			// behave exactly like omitting the flag.
-			name: "explicit text keeps the interactive progress tracker",
+			name: "explicit text renders text",
 			args: []string{"--" + log.FormatFlagName, log.FormatText},
 			want: false,
 		},
 		{
-			name: "json suppresses the interactive progress tracker",
+			name: "json is another renderer",
 			args: []string{"--" + log.FormatFlagName, log.FormatJSON},
 			want: true,
 		},
@@ -46,17 +46,17 @@ func TestSuppressInteractiveProgress(t *testing.T) {
 			cmd.SetArgs(tt.args)
 			r.NoError(cmd.Execute())
 
-			suppress, err := suppressInteractiveProgress(cmd)
+			nonText, err := nonTextLogRenderer(cmd)
 			r.NoError(err)
-			r.Equal(tt.want, suppress)
+			r.Equal(tt.want, nonText)
 		})
 	}
 }
 
-func TestSuppressInteractiveProgress_UnregisteredFlag(t *testing.T) {
+func TestNonTextLogRenderer_UnregisteredFlag(t *testing.T) {
 	r := require.New(t)
 
-	suppress, err := suppressInteractiveProgress(&cobra.Command{Use: "ocm"})
+	nonText, err := nonTextLogRenderer(&cobra.Command{Use: "ocm"})
 	r.Error(err)
-	r.False(suppress)
+	r.False(nonText)
 }
