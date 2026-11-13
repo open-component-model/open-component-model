@@ -16,6 +16,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// writeAtomic writes r to the final path of dgst in one step, through
+// [writeTemp] and [commitTemp].
+func writeAtomic(dir string, dgst digest.Digest, maxSize int64, r io.Reader) (string, int64, error) {
+	tmpName, final, n, err := writeTemp(dir, dgst, maxSize, r)
+	if err != nil {
+		return "", 0, err
+	}
+	if err := commitTemp(tmpName, final, n); err != nil {
+		return "", 0, err
+	}
+	return final, n, nil
+}
+
 func TestWriteAtomic_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	data := []byte("hello world")

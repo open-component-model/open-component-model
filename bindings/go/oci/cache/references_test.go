@@ -70,12 +70,12 @@ func TestReferenceCache_Resolve_HitAfterFirstCall(t *testing.T) {
 	assert.EqualValues(t, 1, calls.Load(), "second Resolve must hit reference cache")
 }
 
-// TestReferenceCache_Resolve_TagResolvesUpstreamEveryTime pins the
-// mutability contract: a tag can be re-pointed upstream at any moment,
-// so every Resolve of a tag must ask the registry what it currently
-// points at, and the answer must be the current one.
-func TestReferenceCache_Resolve_TagResolvesUpstreamEveryTime(t *testing.T) {
-	c := newTestRefCache(t, Options{})
+// TestReferenceCache_Resolve_MovedTagIsStaleUntilTTL pins the staleness
+// contract: a tag re-pointed upstream keeps resolving to the cached
+// descriptor until the entry expires, then to the current one.
+func TestReferenceCache_Resolve_MovedTagIsStaleUntilTTL(t *testing.T) {
+	const ttl = 50 * time.Millisecond
+	c := newTestRefCache(t, Options{TTL: ttl})
 
 	first := ociImageSpecV1.Descriptor{
 		MediaType: ociImageSpecV1.MediaTypeImageManifest,
@@ -106,8 +106,14 @@ func TestReferenceCache_Resolve_TagResolvesUpstreamEveryTime(t *testing.T) {
 	// The tag now points somewhere else upstream.
 	got2, err := c.Resolve(t.Context(), upstream, ref)
 	require.NoError(t, err)
-	assert.Equal(t, second, got2, "a moved tag must not be served from cache")
-	assert.EqualValues(t, 2, calls.Load())
+	assert.Equal(t, first, got2, "a moved tag is served from cache until the entry expires")
+	assert.EqualValues(t, 1, calls.Load())
+
+	assert.EventuallyWithT(t, func(ct *assert.CollectT) {
+		got3, err := c.Resolve(t.Context(), upstream, ref)
+		assert.NoError(ct, err)
+		assert.Equal(ct, second, got3, "an expired entry must be resolved upstream again")
+	}, 5*time.Second, ttl)
 }
 
 func TestReferenceCache_Invalidate_RemovesEntryAndSurvivesRestart(t *testing.T) {
@@ -518,4 +524,32 @@ func TestReferenceCache_Add_RewritesEvictedNamespaceSnapshot(t *testing.T) {
 	gotB, ok := c2.Lookup(refB)
 	r.True(ok)
 	assert.Equal(t, descB, gotB)
+}
+
+func TestReferenceCache_Add_EvictedReferenceAddedAgainIsPersisted(t *testing.T) {
+	r := require.New(t)
+	dir := filepath.Join(t.TempDir(), "refcache")
+
+	refV1, err := properties.NewReference("ghcr.io/a/repo:v1")
+	r.NoError(err)
+	refV2, err := properties.NewReference("ghcr.io/a/repo:v2")
+	r.NoError(err)
+	desc := ociImageSpecV1.Descriptor{
+		MediaType: ociImageSpecV1.MediaTypeImageManifest,
+		Digest:    digest.FromBytes([]byte("a")),
+		Size:      1,
+	}
+
+	c1, err := NewReferenceCache(Options{Dir: dir, MaxEntries: 1})
+	r.NoError(err)
+	c1.Add(refV1, desc)
+	c1.Add(refV2, desc) // evicts v1, the snapshot of the repository drops it
+	c1.Add(refV1, desc) // evicts v2
+
+	c2, err := NewReferenceCache(Options{Dir: dir, MaxEntries: 2})
+	r.NoError(err)
+	_, ok := c2.Lookup(refV1)
+	r.True(ok, "a reference added again after its eviction must be persisted")
+	_, ok = c2.Lookup(refV2)
+	r.False(ok)
 }

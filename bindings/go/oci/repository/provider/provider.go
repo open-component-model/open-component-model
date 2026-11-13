@@ -11,7 +11,6 @@ import (
 	"sync"
 
 	"github.com/oras-project/oras-go/v3/registry/remote/auth"
-	"golang.org/x/sync/singleflight"
 
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -89,28 +88,19 @@ type CachingComponentVersionRepositoryProvider struct {
 	// layer blobs (see open-component-model#2833 discussion).
 	blobCacheOpts *cache.Options
 
-	// referenceCacheOpts, when non-nil, enables per-scope reference caches.
-	// Tag resolution IS access-controlled (a private registry won't return a
-	// descriptor for a tag you can't read), so each credential scope gets its
-	// own ReferenceCache to prevent one scope from reading tag mappings
-	// resolved under a different credential set.
+	// referenceCacheOpts, when non-nil, enables a shared reference cache. All
+	// repositories share one ReferenceCache: its keys hold the registry and the
+	// repository, and credentials are not part of them anyway. Only
+	// [cache.RemotePolicyAlways] enforces access, and it leaves no reference cache.
 	referenceCacheOpts *cache.Options
+
+	// sharedReferenceCache is the single process-wide ReferenceCache.
+	// Initialised lazily on first use via [sync.OnceValue].
+	sharedReferenceCache func() *cache.ReferenceCache
 
 	// sharedBlobCache is the single process-wide BlobCache shared across all
 	// credential scopes. Initialised lazily on first use via [sync.OnceValue].
 	sharedBlobCache func() *cache.BlobCache
-
-	// referenceCaches stores one *cache.ReferenceCache per credential scope key.
-	referenceCaches sync.Map // string → *cache.ReferenceCache
-
-	// referenceCacheInit serialises the constructor calls per scope
-	// key so a burst of first-use callers for the same scope does not
-	// each build (and discard) their own [cache.ReferenceCache]. The
-	// winner is published into referenceCaches; every other caller
-	// finds it there via Load without re-running the (expensive)
-	// on-disk reseed. Mirrors the pattern used by storeCache.loadOrStore
-	// (see open-component-model/ocm-project#694).
-	referenceCacheInit singleflight.Group
 }
 
 var _ repository.ComponentVersionRepositoryProvider = (*CachingComponentVersionRepositoryProvider)(nil)
@@ -141,14 +131,18 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 		),
 		httpConfig:         options.HTTPConfig,
 		tempDir:            options.TempDir,
-		blobCacheOpts:      applyCacheConfig(options.BlobCacheOptions, options.CacheConfig),
-		referenceCacheOpts: applyCacheConfig(options.ReferenceCacheOptions, options.CacheConfig),
+		blobCacheOpts:      applyBlobCacheConfig(options.BlobCacheOptions, options.CacheConfig),
+		referenceCacheOpts: applyReferenceCacheConfig(options.ReferenceCacheOptions, options.CacheConfig),
+	}
+	prov.sharedReferenceCache = sync.OnceValue(prov.newSharedReferenceCache)
+	if options.ReferenceCache != nil && options.CacheConfig.ReferenceEnabled(true) && !checksRemote(options.CacheConfig) {
+		prov.sharedReferenceCache = func() *cache.ReferenceCache { return options.ReferenceCache }
 	}
 	// Wire the shared blob cache constructor now that prov exists so the
 	// closure can read its final field values. sync.OnceValue guarantees
 	// the constructor runs at most once across all callers.
 	prov.sharedBlobCache = sync.OnceValue(prov.newSharedBlobCache)
-	if options.BlobCache != nil {
+	if options.BlobCache != nil && options.CacheConfig.BlobEnabled(true) {
 		prov.sharedBlobCache = func() *cache.BlobCache { return options.BlobCache }
 	}
 	return prov
@@ -227,10 +221,8 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 		if bc := b.getOrCreateBlobCache(); bc != nil {
 			resolverOpts = append(resolverOpts, urlresolver.WithBlobCache(bc))
 		}
-		if b.referenceCacheOpts != nil {
-			if rc := b.getOrCreateReferenceCache(identity); rc != nil {
-				resolverOpts = append(resolverOpts, urlresolver.WithReferenceCache(rc))
-			}
+		if rc := b.sharedReferenceCache(); rc != nil {
+			resolverOpts = append(resolverOpts, urlresolver.WithReferenceCache(rc))
 		}
 
 		header := http.Header{"User-Agent": {b.creator}}
@@ -307,57 +299,28 @@ func (b *CachingComponentVersionRepositoryProvider) newSharedBlobCache() *cache.
 	return c
 }
 
-// getOrCreateReferenceCache returns the ReferenceCache for the given repository
-// scope, creating and persisting it on first use. The scope is based solely on
-// repository identity (host[:port]/path); credentials are excluded because
-// short-lived tokens would create new scopes and kill cache reuse. Use
-// [RemotePolicyAlways] to require remote authorisation on every cache hit.
-//
-// Concurrent first-use callers for the same scope are collapsed via
-// [singleflight.Group] so exactly one [cache.NewReferenceCache] runs.
-func (b *CachingComponentVersionRepositoryProvider) getOrCreateReferenceCache(
-	identity *v1.OCIRegistryIdentity,
-) *cache.ReferenceCache {
-	scope := cache.RepositoryKey(identity)
-	if v, ok := b.referenceCaches.Load(scope); ok {
-		return v.(*cache.ReferenceCache)
+// newSharedReferenceCache is the once-only constructor for the process-wide
+// reference cache; wired through [sync.OnceValue] in
+// [NewComponentVersionRepositoryProvider].
+func (b *CachingComponentVersionRepositoryProvider) newSharedReferenceCache() *cache.ReferenceCache {
+	if b.referenceCacheOpts == nil {
+		return nil
 	}
-
-	v, err, _ := b.referenceCacheInit.Do(scope, func() (any, error) {
-		// Re-check under the singleflight so the leader picks up any
-		// concurrently-published cache instead of building another.
-		if existing, ok := b.referenceCaches.Load(scope); ok {
-			return existing, nil
+	opts := *b.referenceCacheOpts
+	if opts.Dir == "" {
+		base := b.tempDir
+		if base == "" {
+			base = os.TempDir()
 		}
-
-		opts := *b.referenceCacheOpts
-		if opts.Dir == "" {
-			base := b.tempDir
-			if base == "" {
-				base = os.TempDir()
-			}
-			opts.Dir = filepath.Join(base, "ocm-oci-refcache", scope)
-		} else {
-			opts.Dir = filepath.Join(opts.Dir, scope)
-		}
-
-		c, err := cache.NewReferenceCache(opts)
-		if err != nil {
-			return nil, err
-		}
-		b.referenceCaches.Store(scope, c)
-		return c, nil
-	})
+		opts.Dir = filepath.Join(base, "ocm-oci-refcache")
+	}
+	c, err := cache.NewReferenceCache(opts)
 	if err != nil {
-		slog.Warn("provider: failed to initialise reference cache for scope, continuing without caching",
-			slog.String("scope", scope),
+		slog.Warn("provider: failed to initialise shared reference cache, continuing without caching",
 			slog.String("err", err.Error()))
 		return nil
 	}
-	if v == nil {
-		return nil
-	}
-	return v.(*cache.ReferenceCache)
+	return c
 }
 
 // getConvertedTypedSpec is a helper function that converts any runtime.Typed specification

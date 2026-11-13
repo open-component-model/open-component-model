@@ -83,8 +83,16 @@ type ReferenceCache struct {
 	lru    *expirable.LRU[referenceKey, referenceEntry]
 
 	// mu serialises per-namespace snapshot rewrites so concurrent Add
-	// calls for the same namespace do not interleave file writes.
+	// calls for the same namespace do not interleave file writes. It
+	// also guards index.
 	mu sync.Mutex
+
+	// index holds the references of each namespace, so writing the
+	// snapshot of a namespace does not walk the whole LRU. It may still
+	// hold references the LRU evicted; [ReferenceCache.snapshotNamespace]
+	// drops them. Adding to the LRU and to index happens under mu, so a
+	// reference missing from the LRU under mu is evicted, not in flight.
+	index map[string]map[string]struct{}
 
 	// evictedRefsMu protects namespacesWithEvictedRefs.
 	//
@@ -135,6 +143,7 @@ func NewReferenceCache(opts Options) (*ReferenceCache, error) {
 		opts:                      opts,
 		logger:                    slog.Default().With(slog.String("dir", opts.Dir)),
 		namespacesWithEvictedRefs: make(map[string]struct{}),
+		index:                     make(map[string]map[string]struct{}),
 	}
 	c.lru = expirable.NewLRU(
 		opts.MaxEntries,
@@ -185,7 +194,9 @@ func NewReferenceCache(opts Options) (*ReferenceCache, error) {
 func (c *ReferenceCache) Add(ref properties.Reference, desc ociImageSpecV1.Descriptor) {
 	k := c.buildKey(ref)
 
-	c.lru.Add(k, referenceEntry{Descriptor: desc, SavedAt: time.Now()})
+	c.mu.Lock()
+	c.addLocked(k, referenceEntry{Descriptor: desc, SavedAt: time.Now()})
+	c.mu.Unlock()
 
 	// Collect namespaces dirtied by capacity eviction triggered above,
 	// then always include the current namespace.
@@ -233,8 +244,13 @@ func (c *ReferenceCache) Lookup(ref properties.Reference) (ociImageSpecV1.Descri
 // Resolve consults the reference cache before delegating to upstream.
 // On miss it calls upstream.Resolve and, on success, records the
 // (namespace, reference) → descriptor mapping (in-memory + on disk).
+// Under [RemotePolicyIfNotPresent] a hit is served without asking
+// upstream, for tags too: a tag re-pointed upstream resolves to the
+// cached descriptor until the entry expires after [Options.TTL].
 // Errors are returned unchanged and not cached. Under
-// [RemotePolicyAlways] concurrent calls are not collapsed: every caller
+// [RemotePolicyAlways] a cached descriptor would skip the registry's
+// access check, so Resolve passes every call through to upstream and
+// records nothing: concurrent calls are not collapsed, every caller
 // resolves against its own upstream.
 //
 // See [ReferenceCache.Add] for the namespace contract. A nil receiver
@@ -244,33 +260,21 @@ func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, ref pro
 	if c == nil {
 		return upstream.Resolve(ctx, ref.GetReference())
 	}
-	k := c.buildKey(ref)
-	servableFromCache := c.opts.RemotePolicy == RemotePolicyIfNotPresent && ref.ValidateDigest() == nil
-	if servableFromCache {
-		if v, ok := c.lru.Get(k); ok {
-			c.logger.DebugContext(ctx, "refcache: hit",
-				slog.String("namespace", k.namespace),
-				slog.String("reference", k.reference),
-				slog.String("digest", v.Descriptor.Digest.String()))
-			return v.Descriptor, nil
-		}
-	}
 	if c.opts.RemotePolicy == RemotePolicyAlways {
-		// make sure we aren't sharing credentials here
-		desc, err := upstream.Resolve(ctx, ref.GetReference())
-		if err != nil {
-			return ociImageSpecV1.Descriptor{}, err
-		}
-		c.Add(ref, desc)
-		return desc, nil
+		return upstream.Resolve(ctx, ref.GetReference())
 	}
-	// Collapse concurrent misses (or calls that must reach upstream) for
-	// the same key into one upstream round-trip.
+	k := c.buildKey(ref)
+	if v, ok := c.lru.Get(k); ok {
+		c.logger.DebugContext(ctx, "refcache: hit",
+			slog.String("namespace", k.namespace),
+			slog.String("reference", k.reference),
+			slog.String("digest", v.Descriptor.Digest.String()))
+		return v.Descriptor, nil
+	}
+	// Collapse concurrent misses for the same key into one upstream round-trip.
 	v, err, _ := c.sf.Do(k.namespace+"\x00"+ref.GetReference(), func() (any, error) {
-		if servableFromCache {
-			if v, ok := c.lru.Get(k); ok {
-				return v.Descriptor, nil
-			}
+		if v, ok := c.lru.Get(k); ok {
+			return v.Descriptor, nil
 		}
 		desc, err := upstream.Resolve(ctx, ref.GetReference())
 		if err != nil {
@@ -323,23 +327,37 @@ func (c *ReferenceCache) pathForNamespace(namespace string) string {
 	return filepath.Join(c.opts.Dir, hex.EncodeToString(sum[:])+referenceFileExt)
 }
 
+// addLocked adds entry to the LRU and to the index. Callers must hold c.mu.
+func (c *ReferenceCache) addLocked(k referenceKey, entry referenceEntry) {
+	refs, ok := c.index[k.namespace]
+	if !ok {
+		refs = make(map[string]struct{})
+		c.index[k.namespace] = refs
+	}
+	refs[k.reference] = struct{}{}
+	c.lru.Add(k, entry)
+}
+
 // snapshotNamespace materialises the LRU entries for a single
-// namespace into a referenceFileSnapshot. It iterates Keys+Peek so it
-// can run while other goroutines hold the LRU; expirable.LRU is
-// internally locked. Callers must hold c.mu when writing the returned
-// snapshot to disk so concurrent writers cannot persist a stale copy.
+// namespace into a referenceFileSnapshot. It only visits the references
+// the index holds for namespace and drops those the LRU no longer has.
+// Callers must hold c.mu, so concurrent writers cannot persist a stale
+// copy.
 func (c *ReferenceCache) snapshotNamespace(namespace string) referenceFileSnapshot {
 	out := referenceFileSnapshot{
 		Namespace:  namespace,
 		References: make(map[string]referenceEntry),
 	}
-	for _, k := range c.lru.Keys() {
-		if k.namespace != namespace {
-			continue
+	refs := c.index[namespace]
+	for ref := range refs {
+		if v, ok := c.lru.Peek(referenceKey{namespace: namespace, reference: ref}); ok {
+			out.References[ref] = v
+		} else {
+			delete(refs, ref)
 		}
-		if v, ok := c.lru.Peek(k); ok {
-			out.References[k.reference] = v
-		}
+	}
+	if len(refs) == 0 {
+		delete(c.index, namespace)
 	}
 	return out
 }
@@ -438,7 +456,9 @@ func (c *ReferenceCache) load() (loaded int, err error) {
 			if entry.SavedAt.IsZero() {
 				entry.SavedAt = now
 			}
-			c.lru.Add(referenceKey{namespace: snap.Namespace, reference: ref}, entry)
+			c.mu.Lock()
+			c.addLocked(referenceKey{namespace: snap.Namespace, reference: ref}, entry)
+			c.mu.Unlock()
 			loaded++
 		}
 	}

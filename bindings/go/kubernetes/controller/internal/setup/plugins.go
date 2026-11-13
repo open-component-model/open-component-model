@@ -7,6 +7,9 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
+
+	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 
 	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
@@ -46,6 +49,8 @@ type PluginOptions struct {
 	TempDir string
 	// BlobCache is the OCI blob cache shared by every plugin manager of the process.
 	BlobCache *ocicache.BlobCache
+	// ReferenceCache is the OCI reference cache shared by every plugin manager of the process.
+	ReferenceCache *ocicache.ReferenceCache
 }
 
 // PluginOption configures [NewPluginManager].
@@ -58,7 +63,7 @@ func WithTempDir(dir string) PluginOption {
 	}
 }
 
-// WithBlobCache shares the OCI blob cache between plugin managers. Without it, OCI caching is disabled,
+// WithBlobCache shares the OCI blob cache between plugin managers. Without it, blob caching is disabled,
 // because the cache owns its directory and per-request plugin managers must not each build their own.
 func WithBlobCache(bc *ocicache.BlobCache) PluginOption {
 	return func(o *PluginOptions) {
@@ -66,18 +71,89 @@ func WithBlobCache(bc *ocicache.BlobCache) PluginOption {
 	}
 }
 
-// NewBlobCache creates the blob cache to pass to [WithBlobCache]. There is no reference cache:
-// it never serves tag lookups from cache, and those are what the controller resolves.
-// A nil cfg uses the cache defaults.
-func NewBlobCache(tempDir string, cfg *ocicachev1alpha1.Config) (*ocicache.BlobCache, error) {
-	if tempDir == "" {
-		tempDir = os.TempDir()
+// WithReferenceCache shares the OCI reference cache between plugin managers. Without it, reference
+// caching is disabled, because the cache owns its directory.
+func WithReferenceCache(rc *ocicache.ReferenceCache) PluginOption {
+	return func(o *PluginOptions) {
+		o.ReferenceCache = rc
 	}
-	opts := ocicache.Options{Dir: filepath.Join(tempDir, "ocm-oci-cas")}
+}
+
+// MaxBlobCacheSize bounds the disk use of the blob cache of [NewBlobCache] unless the
+// configuration sets blob.maxTotalSize.
+const MaxBlobCacheSize = 1 << 30
+
+// NewBlobCache creates the blob cache to pass to [WithBlobCache]. The blob cache is on by default.
+// A nil cfg uses the cache defaults and [MaxBlobCacheSize]; the limits cfg sets replace them.
+//
+// Besides manifests and descriptors, the cache admits blobs of known size up to maxLayerSize,
+// so a Deployer that reads the same local resource again is served from disk. maxLayerSize is
+// the download limit of the Deployer; 0 means no limit, which caps layers at
+// [ocicache.DefaultMaxBlobSize]. A blob.maxBlobSize in cfg caps layers too. A miss buffers the
+// blob in memory, so the cap must stay small.
+//
+// A cfg that turns the blob cache off returns a nil cache, which [WithBlobCache] treats as no caching.
+func NewBlobCache(tempDir string, cfg *ocicachev1alpha1.Config, maxLayerSize int64) (*ocicache.BlobCache, error) {
+	if maxLayerSize < 0 {
+		return nil, fmt.Errorf("max layer size must not be negative, got %d", maxLayerSize)
+	}
+	if !cfg.BlobEnabled(true) {
+		return nil, nil
+	}
+	if maxLayerSize == 0 {
+		maxLayerSize = ocicache.DefaultMaxBlobSize
+	}
+	opts := ocicache.Options{
+		Dir: filepath.Join(tempDirOrDefault(tempDir), "ocm-oci-cas"),
+		Accept: func(desc ociImageSpecV1.Descriptor) bool {
+			return ocicache.DefaultAccept(desc) || (desc.Size > 0 && desc.Size <= maxLayerSize)
+		},
+		MaxBlobSize:  max(ocicache.DefaultMaxBlobSize, maxLayerSize),
+		MaxTotalSize: MaxBlobCacheSize,
+	}
 	if cfg != nil {
 		opts.RemotePolicy = ocicache.RemotePolicy(cfg.RemotePolicy)
+		if b := cfg.Blob; b != nil {
+			if b.TTL != nil {
+				opts.TTL = time.Duration(*b.TTL)
+			}
+			if b.MaxBlobSize != nil {
+				opts.MaxBlobSize = *b.MaxBlobSize
+			}
+			if b.MaxTotalSize != nil {
+				opts.MaxTotalSize = *b.MaxTotalSize
+			}
+		}
 	}
 	return ocicache.NewBlobCache(opts)
+}
+
+// NewReferenceCache creates the reference cache to pass to [WithReferenceCache]. The reference
+// cache is off by default: a cached tag hides a tag moved in the registry until the entry expires.
+// It returns a nil cache unless cfg turns the reference cache on, and under remotePolicy Always,
+// which has the registry authorize every resolve.
+func NewReferenceCache(tempDir string, cfg *ocicachev1alpha1.Config) (*ocicache.ReferenceCache, error) {
+	if !cfg.ReferenceEnabled(false) || cfg.RemotePolicy == ocicachev1alpha1.RemotePolicyAlways {
+		return nil, nil
+	}
+	opts := ocicache.Options{
+		Dir:          filepath.Join(tempDirOrDefault(tempDir), "ocm-oci-refcache"),
+		RemotePolicy: ocicache.RemotePolicy(cfg.RemotePolicy),
+	}
+	if cfg.Reference.TTL != nil {
+		opts.TTL = time.Duration(*cfg.Reference.TTL)
+	}
+	if cfg.Reference.MaxEntries != nil {
+		opts.MaxEntries = *cfg.Reference.MaxEntries
+	}
+	return ocicache.NewReferenceCache(opts)
+}
+
+func tempDirOrDefault(tempDir string) string {
+	if tempDir == "" {
+		return os.TempDir()
+	}
+	return tempDir
 }
 
 // NewPluginManager build a per-request plugin manager.
@@ -111,6 +187,9 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 	}
 	if options.BlobCache != nil {
 		providerOpts = append(providerOpts, provider.WithBlobCache(options.BlobCache))
+	}
+	if options.ReferenceCache != nil {
+		providerOpts = append(providerOpts, provider.WithReferenceCache(options.ReferenceCache))
 	}
 	repositoryProvider := provider.NewComponentVersionRepositoryProvider(providerOpts...)
 

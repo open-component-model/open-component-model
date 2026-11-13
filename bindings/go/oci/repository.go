@@ -1129,7 +1129,7 @@ func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, refere
 		return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("failed to resolve reference %q: %w", reference, err)
 	}
 	slogcontext.Log(ctx, slog.LevelDebug, "fetching descriptor", log.DescriptorLogAttr(base))
-	manifestRaw, err := fetchVerified(ctx, store, ociImageSpecV1.Descriptor{
+	manifestRaw, err := content.FetchAll(ctx, store, ociImageSpecV1.Descriptor{
 		MediaType: base.MediaType,
 		Digest:    base.Digest,
 		Size:      base.Size,
@@ -1151,7 +1151,7 @@ func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, refere
 			return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("index manifest is not an OCI image manifest")
 		}
 		slogcontext.Log(ctx, slog.LevelDebug, "fetching first manifest from index", log.DescriptorLogAttr(descriptorManifest))
-		indexManifestRaw, err := fetchVerified(ctx, store, descriptorManifest)
+		indexManifestRaw, err := content.FetchAll(ctx, store, descriptorManifest)
 		if err != nil {
 			return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("failed to fetch manifest: %w", err)
 		}

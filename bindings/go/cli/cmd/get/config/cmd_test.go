@@ -13,6 +13,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/cmd/get/config"
 	"ocm.software/open-component-model/bindings/go/cli/cmd/internal/test"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	typesv1 "ocm.software/open-component-model/bindings/go/configuration/types/v1"
 	versioningv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/versioning/v1alpha1/spec"
 	ocicachev1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/cache/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -93,6 +94,25 @@ func TestGetEffectiveConfig_OCICache(t *testing.T) {
 			expect: &ocicachev1alpha1.Config{
 				Type:         runtime.NewVersionedType(ocicachev1alpha1.ConfigType, ocicachev1alpha1.Version),
 				RemotePolicy: ocicachev1alpha1.RemotePolicyAlways,
+			},
+		},
+		{
+			name: "merged per cache section",
+			entries: []string{
+				`{"type":"oci.cache.config.ocm.software/v1alpha1","remotePolicy":"Always","blob":{"ttl":"1h","maxBlobSize":1024},"reference":{"ttl":"1m"}}`,
+				`{"type":"oci.cache.config.ocm.software/v1alpha1","blob":{"ttl":"30s"},"reference":{"enabled":false}}`,
+			},
+			expect: &ocicachev1alpha1.Config{
+				Type:         runtime.NewVersionedType(ocicachev1alpha1.ConfigType, ocicachev1alpha1.Version),
+				RemotePolicy: ocicachev1alpha1.RemotePolicyAlways,
+				Blob: &ocicachev1alpha1.BlobCacheConfig{
+					TTL:         typesv1.NewDuration(30 * time.Second),
+					MaxBlobSize: new(int64(1024)),
+				},
+				Reference: &ocicachev1alpha1.ReferenceCacheConfig{
+					Enabled: new(false),
+					TTL:     typesv1.NewDuration(time.Minute),
+				},
 			},
 		},
 	}

@@ -288,14 +288,30 @@ func main() {
 
 	// Plugins use object config so they need to be request based.
 	pluginLogger := slog.New(logr.ToSlogHandler(setupLog))
-	// The blob cache owns its directory on disk, so the per-request plugin managers share one instance.
-	blobCache, err := setup.NewBlobCache("", ociCacheConfig)
+	// The caches own their directories on disk, so the per-request plugin managers share one instance.
+	// The blob cache also caches local resources up to the deployer download limit, which the Deployer reads on
+	// every reconcile.
+	blobCache, err := setup.NewBlobCache("", ociCacheConfig, maxResourceSizeBytes)
 	if err != nil {
 		setupLog.Error(err, "failed to create OCI blob cache")
 		os.Exit(1)
 	}
+	if blobCache == nil {
+		setupLog.Info("OCI blob caching is disabled by configuration")
+	}
+	referenceCache, err := setup.NewReferenceCache("", ociCacheConfig)
+	if err != nil {
+		setupLog.Error(err, "failed to create OCI reference cache")
+		os.Exit(1)
+	}
+	switch {
+	case referenceCache != nil:
+		setupLog.Info("OCI reference caching is enabled by configuration: a moved tag resolves to its old digest until the cache entry expires")
+	case ociCacheConfig.ReferenceEnabled(false):
+		setupLog.Info("OCI reference caching is off: remotePolicy Always resolves every tag against the registry")
+	}
 	newPluginManager := func(ctx context.Context, cfg *genericv1.Config) (*manager.PluginManager, error) {
-		return setup.NewPluginManager(ctx, cfg, pluginLogger, setup.WithBlobCache(blobCache))
+		return setup.NewPluginManager(ctx, cfg, pluginLogger, setup.WithBlobCache(blobCache), setup.WithReferenceCache(referenceCache))
 	}
 
 	if _, err := newPluginManager(ctx, nil); err != nil {

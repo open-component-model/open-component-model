@@ -138,7 +138,7 @@ If objects were orphaned, check the deployer's events and delete them by hand.
 
 Downloaded resource blobs are cached by digest in an LRU cache. If the digest has not changed between reconciliations, the Deployer skips re-downloading and re-applying. This reduces both network traffic and unnecessary applies.
 
-There is also another cache during the component resolution that caches the component descriptor. But that happens before this part is even reached.
+Reads that reach the component version repository go through the controller's OCI blob cache. It holds the manifests and component descriptors of resolved component versions, and local blob resources up to the download limit (`--deployer-download-max-resource-size`). See [Caching]({{< relref "docs/reference/configuration/caching.md" >}}).
 
 ## Labels and Annotations
 

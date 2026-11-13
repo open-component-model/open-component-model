@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"strings"
 
@@ -208,7 +206,7 @@ func getDescriptorFromStore(ctx context.Context, store spec.Store, reference str
 	}
 
 	slogcontext.Log(ctx, slog.LevelDebug, "fetching descriptor manifest config", log.DescriptorLogAttr(manifest.Config))
-	componentConfigRaw, err := fetchVerified(ctx, store, manifest.Config)
+	componentConfigRaw, err := content.FetchAll(ctx, store, manifest.Config)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get component config: %w", err)
 	}
@@ -223,7 +221,7 @@ func getDescriptorFromStore(ctx context.Context, store spec.Store, reference str
 	// Read component descriptor
 	descriptorLayer := *cfg.ComponentDescriptorLayer
 	slogcontext.Log(ctx, slog.LevelDebug, "fetching component descriptor layer", log.DescriptorLogAttr(descriptorLayer))
-	descriptorRaw, err := fetchVerified(ctx, store, descriptorLayer)
+	descriptorRaw, err := content.FetchAll(ctx, store, descriptorLayer)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to fetch descriptor layer: %w", err)
 	}
@@ -234,32 +232,4 @@ func getDescriptorFromStore(ctx context.Context, store spec.Store, reference str
 	}
 
 	return desc, &manifest, index, nil
-}
-
-// fetchVerified reads desc from fetcher and checks the content against the digest of desc (and its
-// size, if known), so that an artifact whose digest is trusted vouches for everything read through it.
-func fetchVerified(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]byte, error) {
-	if err := desc.Digest.Validate(); err != nil {
-		return nil, fmt.Errorf("invalid digest %q of %s: %w", desc.Digest, desc.MediaType, err)
-	}
-	rc, err := fetcher.Fetch(ctx, desc)
-	if err != nil {
-		return nil, err
-	}
-	var r io.Reader = rc
-	if desc.Size > 0 {
-		// one byte more than expected detects oversized content without reading all of it
-		r = io.LimitReader(rc, desc.Size+1)
-	}
-	data, err := io.ReadAll(r)
-	if err = errors.Join(err, rc.Close()); err != nil {
-		return nil, fmt.Errorf("failed to read %s: %w", desc.Digest, err)
-	}
-	if desc.Size > 0 && int64(len(data)) != desc.Size {
-		return nil, fmt.Errorf("size mismatch for %s: expected %d bytes, got %d", desc.Digest, desc.Size, len(data))
-	}
-	if actual := desc.Digest.Algorithm().FromBytes(data); actual != desc.Digest {
-		return nil, fmt.Errorf("digest mismatch: expected %s, got %s", desc.Digest, actual)
-	}
-	return data, nil
 }
