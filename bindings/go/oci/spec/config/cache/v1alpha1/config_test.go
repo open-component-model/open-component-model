@@ -146,17 +146,17 @@ func TestLookupConfig_Sections(t *testing.T) {
 		{name: "leaves both sections unset when omitted", entries: []string{"remotePolicy: Always"}},
 		{
 			name:    "parses every field",
-			entries: []string{"blob:\n  enabled: false\n  ttl: 24h\n  maxBlobSize: 1024\n  maxTotalSize: 4096\nreference:\n  enabled: true\n  ttl: 1m"},
+			entries: []string{"blob:\n  enabled: false\n  ttl: 24h\n  maxBlobSize: 1024\n  maxTotalSize: 4096\nreference:\n  enabled: true\n  ttl: 1m\n  maxEntries: 500"},
 			wantBlob: &cachespec.BlobCacheConfig{
 				Enabled: new(false), TTL: dur(24 * time.Hour), MaxBlobSize: new(int64(1024)), MaxTotalSize: new(int64(4096)),
 			},
-			wantReference: &cachespec.ReferenceCacheConfig{Enabled: new(true), TTL: dur(time.Minute)},
+			wantReference: &cachespec.ReferenceCacheConfig{Enabled: new(true), TTL: dur(time.Minute), MaxEntries: new(500)},
 		},
 		{
 			name:          "last set value wins per field",
-			entries:       []string{"blob:\n  ttl: 1m\n  maxBlobSize: 100\nreference:\n  ttl: 1m", "blob:\n  ttl: 2m", "reference:\n  enabled: false"},
+			entries:       []string{"blob:\n  ttl: 1m\n  maxBlobSize: 100\nreference:\n  ttl: 1m\n  maxEntries: 5", "blob:\n  ttl: 2m", "reference:\n  enabled: false\n  maxEntries: 7"},
 			wantBlob:      &cachespec.BlobCacheConfig{TTL: dur(2 * time.Minute), MaxBlobSize: new(int64(100))},
-			wantReference: &cachespec.ReferenceCacheConfig{Enabled: new(false), TTL: dur(time.Minute)},
+			wantReference: &cachespec.ReferenceCacheConfig{Enabled: new(false), TTL: dur(time.Minute), MaxEntries: new(7)},
 		},
 		{
 			name:     "accepts zero maxTotalSize as no limit",
@@ -172,6 +172,7 @@ func TestLookupConfig_Sections(t *testing.T) {
 		{name: "rejects a zero blob ttl", entries: []string{"blob:\n  ttl: 0s"}, wantErr: "invalid blob.ttl 0s, must be positive"},
 		{name: "rejects a negative reference ttl", entries: []string{"reference:\n  ttl: -5m"}, wantErr: "invalid reference.ttl -5m0s, must be positive"},
 		{name: "rejects a zero maxBlobSize", entries: []string{"blob:\n  maxBlobSize: 0"}, wantErr: "invalid blob.maxBlobSize 0, must be positive"},
+		{name: "rejects a zero maxEntries", entries: []string{"reference:\n  maxEntries: 0"}, wantErr: "invalid reference.maxEntries 0, must be positive"},
 		{name: "rejects a negative maxTotalSize", entries: []string{"blob:\n  maxTotalSize: -1"}, wantErr: "invalid blob.maxTotalSize -1, must not be negative"},
 		{name: "rejects a non-numeric maxBlobSize", entries: []string{"blob:\n  maxBlobSize: big"}, wantErr: "failed to decode oci cache config"},
 		{

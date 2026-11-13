@@ -94,6 +94,11 @@ func (in *ReferenceCacheConfig) DeepCopyInto(out *ReferenceCacheConfig) {
 		*out = new(v1.Duration)
 		**out = **in
 	}
+	if in.MaxEntries != nil {
+		in, out := &in.MaxEntries, &out.MaxEntries
+		*out = new(int)
+		**out = **in
+	}
 	return
 }
 

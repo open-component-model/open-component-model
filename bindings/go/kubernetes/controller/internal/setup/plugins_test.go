@@ -144,6 +144,18 @@ func TestNewReferenceCache(t *testing.T) {
 		require.NotNil(t, rc)
 		require.DirExists(t, dir)
 	})
+	t.Run("maxEntries limits the tags of all repositories together", func(t *testing.T) {
+		rc, _ := newCache(&ocicachev1alpha1.Config{Reference: &ocicachev1alpha1.ReferenceCacheConfig{Enabled: new(true), MaxEntries: new(1)}})
+		require.NotNil(t, rc)
+		a := properties.Reference{Registry: "registry.example", Repository: "a", Tag: "v1"}
+		b := properties.Reference{Registry: "registry.example", Repository: "b", Tag: "v1"}
+		rc.Add(a, ociImageSpecV1.Descriptor{Digest: digest.FromString("a")})
+		rc.Add(b, ociImageSpecV1.Descriptor{Digest: digest.FromString("b")})
+		_, ok := rc.Lookup(a)
+		require.False(t, ok, "the tag of repository a must make room for the tag of repository b")
+		_, ok = rc.Lookup(b)
+		require.True(t, ok)
+	})
 	t.Run("off under Always", func(t *testing.T) {
 		rc, _ := newCache(&ocicachev1alpha1.Config{RemotePolicy: ocicachev1alpha1.RemotePolicyAlways, Reference: on})
 		require.Nil(t, rc)

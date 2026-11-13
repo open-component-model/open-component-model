@@ -105,12 +105,12 @@ writable volume. If the cache directory cannot be created, the controller does n
 
 Each cache applies these limits:
 
-| Limit              | Default                              | Field ([Configuration](#configuration)) | Applies to                  | Behaviour                                                                                 |
-|--------------------|--------------------------------------|-----------------------------------------|-----------------------------|-------------------------------------------------------------------------------------------|
-| Maximum entries    | `100000` (blob), `10000` (reference) | Not configurable                        | Blob cache, reference cache | When the limit is reached, the least recently used entry is removed.                      |
-| Time to live       | `10m`                                | `blob.ttl`, `reference.ttl`             | Blob cache, reference cache | Entries older than this are removed.                                                      |
-| Maximum blob size  | `20 MiB`                             | `blob.maxBlobSize`                      | Blob cache                  | Larger blobs are downloaded as usual but not cached.                                      |
-| Maximum total size | No limit (CLI), `1 GiB` (controller) | `blob.maxTotalSize`                     | Blob cache                  | When the limit is exceeded, least recently used entries are removed until the cache fits. |
+| Limit              | Default                              | Field ([Configuration](#configuration)) | Applies to                  | Behaviour                                                                                                                                          |
+|--------------------|--------------------------------------|-----------------------------------------|-----------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------|
+| Maximum entries    | `100000` (blob), `10000` (reference) | `reference.maxEntries`                  | Blob cache, reference cache | When the limit is reached, the least recently used entry is removed. The reference cache counts the tags and digests of all repositories together. |
+| Time to live       | `10m`                                | `blob.ttl`, `reference.ttl`             | Blob cache, reference cache | Entries older than this are removed.                                                                                                               |
+| Maximum blob size  | `20 MiB`                             | `blob.maxBlobSize`                      | Blob cache                  | Larger blobs are downloaded as usual but not cached.                                                                                               |
+| Maximum total size | No limit (CLI), `1 GiB` (controller) | `blob.maxTotalSize`                     | Blob cache                  | When the limit is exceeded, least recently used entries are removed until the cache fits.                                                          |
 
 When the blob cache removes an entry, it also deletes the file. When the reference cache is loaded from disk,
 entries resolved longer than the time to live ago are not loaded. When the blob cache is loaded from disk, every valid
@@ -178,6 +178,7 @@ configurations:
       maxTotalSize: 5368709120 # 5 GiB
     reference:
       ttl: 1m
+      maxEntries: 1000
 ```
 
 All fields are optional. An omitted field keeps its default.
@@ -199,15 +200,17 @@ Fields of `blob`:
 
 Fields of `reference`:
 
-| Field     | Type                                                             | Default                            | Description                                                                                                                                   |
-|-----------|------------------------------------------------------------------|------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
-| `enabled` | boolean                                                          | `true` (CLI), `false` (controller) | `false` turns off the reference cache: every tag and digest is resolved against the registry. `remotePolicy: Always` turns it off regardless. |
-| `ttl`     | duration string such as `30s` or `1h30m`, or integer nanoseconds | `10m`                              | Time to live of the entries: how long a [moved tag](#moved-tags) stays stale. Must be positive.                                               |
+| Field        | Type                                                             | Default                            | Description                                                                                                                                              |
+|--------------|------------------------------------------------------------------|------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `enabled`    | boolean                                                          | `true` (CLI), `false` (controller) | `false` turns off the reference cache: every tag and digest is resolved against the registry. `remotePolicy: Always` turns it off regardless.            |
+| `ttl`        | duration string such as `30s` or `1h30m`, or integer nanoseconds | `10m`                              | Time to live of the entries: how long a [moved tag](#moved-tags) stays stale. Must be positive.                                                          |
+| `maxEntries` | integer                                                          | `10000`                            | The tags and digests the reference cache keeps, for all repositories together. When reached, the least recently used entry is removed. Must be positive. |
 
-An unknown `remotePolicy`, a `ttl` that is not a positive duration, a `maxBlobSize` that is not positive, or a
-negative `maxTotalSize` makes the CLI and the controller fail at startup, even if a later entry overrides it. To use a
-default, omit the field. If the configuration file contains more than one `oci.cache.config.ocm.software/v1alpha1`
-entry, the last value set for each field wins. `ocm get config` shows the merged entry.
+An unknown `remotePolicy`, a `ttl` that is not a positive duration, a `maxBlobSize` or `maxEntries` that is not
+positive, or a negative `maxTotalSize` makes the CLI and the controller fail at startup, even if a later entry
+overrides it. To use a default, omit the field. If the configuration file contains more than one
+`oci.cache.config.ocm.software/v1alpha1` entry, the last value set for each field wins. `ocm get config` shows the
+merged entry.
 
 The schema below defines the full structure of the `oci.cache.config.ocm.software/v1alpha1` type as specified by
 [JSON Schema 2020-12](https://json-schema.org/draft/2020-12/schema).
