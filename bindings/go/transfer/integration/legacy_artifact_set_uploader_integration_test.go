@@ -4,7 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/opencontainers/image-spec/specs-go"
@@ -423,7 +423,7 @@ func legacyOCIIndexArtifactSet(t *testing.T, manifestType, indexType string) ([]
 		MediaType: manifestType,
 		Config:    config,
 		Layers:    []ocispecv1.Descriptor{layer},
-	})
+	}, runtime.JSONOptions)
 	r.NoError(err)
 	manifest := content.NewDescriptorFromBytes(manifestType, manifestData)
 
@@ -431,7 +431,7 @@ func legacyOCIIndexArtifactSet(t *testing.T, manifestType, indexType string) ([]
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		MediaType: indexType,
 		Manifests: []ocispecv1.Descriptor{manifest},
-	})
+	}, runtime.JSONOptions)
 	r.NoError(err)
 	root := content.NewDescriptorFromBytes(indexType, indexData)
 	root.Annotations = map[string]string{ocispecv1.AnnotationRefName: "v1.0.5"}
@@ -440,7 +440,7 @@ func legacyOCIIndexArtifactSet(t *testing.T, manifestType, indexType string) ([]
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		MediaType: ocispecv1.MediaTypeImageIndex,
 		Manifests: []ocispecv1.Descriptor{root},
-	})
+	}, runtime.JSONOptions)
 	r.NoError(err)
 
 	var archive bytes.Buffer

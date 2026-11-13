@@ -1,7 +1,7 @@
 package discovery
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"os"
 	"testing"
 
@@ -36,7 +36,7 @@ func ctfRepoAt(t *testing.T, dir string, descs ...*desc.Descriptor) []byte {
 		r.NoError(repo.AddComponentVersion(t.Context(), d))
 	}
 	spec.AccessMode = ctf.AccessModeReadOnly
-	raw, err := json.Marshal(spec)
+	raw, err := json.Marshal(spec, ocmruntime.JSONOptions)
 	r.NoError(err)
 
 	return raw

@@ -1,7 +1,7 @@
 package runtime_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -89,7 +89,7 @@ func TestJSONMarshalling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.expected, func(t *testing.T) {
-			data, err := json.Marshal(tt.typ)
+			data, err := json.Marshal(tt.typ, runtime.JSONOptions)
 			require.NoError(t, err)
 			assert.JSONEq(t, tt.expected, string(data))
 		})

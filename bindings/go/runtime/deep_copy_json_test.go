@@ -17,7 +17,7 @@ limitations under the License.
 package runtime_test
 
 import (
-	"encoding/json"
+	jsonv1 "encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -37,7 +37,7 @@ func TestDeepCopyJSON(t *testing.T) {
 		},
 		"e": "estr",
 		"f": true,
-		"g": json.Number("123"),
+		"g": jsonv1.Number("123"),
 	}
 	deepCopy := runtime.DeepCopyJSON(src)
 	assert.Equal(t, src, deepCopy)

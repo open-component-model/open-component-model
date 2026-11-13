@@ -2,7 +2,7 @@ package integration_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"os"
 	"testing"
@@ -21,6 +21,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/ctf"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func Test_Integration_CTF_Untag(t *testing.T) {
@@ -127,7 +128,7 @@ func Test_Integration_RemoteRegistry_Untag(t *testing.T) {
 		Config:    configDesc,
 		Layers:    []ociImageSpecV1.Descriptor{},
 	}
-	manifestData, err := json.Marshal(manifest)
+	manifestData, err := json.Marshal(manifest, runtime.JSONOptions)
 	r.NoError(err)
 	manifestDesc := ociImageSpecV1.Descriptor{
 		MediaType: ociImageSpecV1.MediaTypeImageManifest,

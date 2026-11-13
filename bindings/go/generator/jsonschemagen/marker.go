@@ -1,7 +1,7 @@
 package jsonschemagen
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"go/ast"
 	"io"
@@ -336,7 +336,7 @@ func ApplyFileMarkers(base *JSONSchemaDraft202012, schema string, path string) {
 	defer func() {
 		_ = source.Close()
 	}()
-	if err := json.NewDecoder(source).Decode(base); err != nil {
+	if err := json.UnmarshalRead(source, base); err != nil {
 		panic(err)
 	}
 }

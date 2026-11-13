@@ -2,7 +2,8 @@ package list
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"sort"
@@ -22,6 +23,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/dag/sync"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const (
@@ -147,9 +149,7 @@ func ListPlugins(cmd *cobra.Command, _ []string) error {
 			var info PluginInfo
 			for _, l := range r.Labels {
 				if l.Name == PluginInfoKey {
-					dec := json.NewDecoder(strings.NewReader(string(l.Value)))
-					dec.DisallowUnknownFields()
-					if err := dec.Decode(&info); err != nil {
+					if err := json.Unmarshal(l.Value, &info, json.RejectUnknownMembers(true)); err != nil {
 						return fmt.Errorf("decoding plugin info label failed: %w", err)
 					}
 
@@ -253,16 +253,15 @@ func convertVerticesToPluginInfos(vertices []*dag.Vertex[string]) []PluginInfo {
 
 func SerializeVerticesToJSON(writer io.Writer, vertices []*dag.Vertex[string]) error {
 	plugins := convertVerticesToPluginInfos(vertices)
-	encoder := json.NewEncoder(writer)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(plugins)
+	encoder := jsontext.NewEncoder(writer, jsontext.WithIndent("  "))
+	return json.MarshalEncode(encoder, plugins, runtime.JSONOptions)
 }
 
 func SerializeVerticesToNDJSON(writer io.Writer, vertices []*dag.Vertex[string]) error {
 	plugins := convertVerticesToPluginInfos(vertices)
-	encoder := json.NewEncoder(writer)
+	encoder := jsontext.NewEncoder(writer)
 	for _, plugin := range plugins {
-		if err := encoder.Encode(plugin); err != nil {
+		if err := json.MarshalEncode(encoder, plugin, runtime.JSONOptions); err != nil {
 			return err
 		}
 	}

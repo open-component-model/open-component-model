@@ -2,7 +2,7 @@ package remotestore
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -547,7 +547,7 @@ func parseErrorResponse(resp *http.Response) error {
 	var body struct {
 		Errors errcode.Errors `json:"errors"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err == nil {
+	if err := json.UnmarshalRead(resp.Body, &body); err == nil {
 		errResp.Errors = body.Errors
 	}
 	return errResp

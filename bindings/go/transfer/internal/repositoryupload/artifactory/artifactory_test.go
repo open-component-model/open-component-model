@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -54,7 +54,7 @@ func helmChartLayout(t *testing.T, chart []byte) []byte {
 		MediaType: ocispec.MediaTypeImageManifest,
 		Config:    push(registry.ConfigMediaType, []byte(`{"name":"mychart","version":"0.1.0","apiVersion":"v2"}`)),
 		Layers:    []ocispec.Descriptor{push(registry.ChartLayerMediaType, chart)},
-	})
+	}, runtime.JSONOptions)
 	r.NoError(err)
 	b, err := ocitar.CopyToOCILayoutInMemory(t.Context(), store, push(ocispec.MediaTypeImageManifest, manifest), ocitar.CopyToOCILayoutOptions{})
 	r.NoError(err)

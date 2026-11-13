@@ -1,12 +1,15 @@
 package v1
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
 	"slices"
 	"sync"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const (
@@ -68,13 +71,17 @@ type ArtifactMetadata struct {
 }
 
 // DecodeIndex reads an Index from the provided reader.
+//
+// Unknown members are rejected, as they always were. Everything else decodes with the
+// leniency of encoding/json v1, which wrote and read every artifact-index.json so far:
+// member names match case-insensitively, a duplicate member takes its last value, and
+// data after the index value is ignored. Tightening any of these would make an archive
+// that opens today unopenable.
 func DecodeIndex(data io.Reader) (Index, error) {
 	var d index
 
-	decoder := json.NewDecoder(data)
-	decoder.DisallowUnknownFields()
-
-	if err := decoder.Decode(&d); err != nil {
+	dec := jsontext.NewDecoder(data, jsontext.AllowDuplicateNames(true))
+	if err := json.UnmarshalDecode(dec, &d, json.RejectUnknownMembers(true), runtime.JSONDecodeOptions); err != nil {
 		return nil, err
 	}
 
@@ -87,7 +94,7 @@ func DecodeIndex(data io.Reader) (Index, error) {
 
 // Encode serializes the Index to a byte slice.
 func Encode(d Index) ([]byte, error) {
-	return json.Marshal(d)
+	return json.Marshal(d, runtime.JSONOptions)
 }
 
 // NewIndex creates a new Index instance defaulted to SchemaVersion.

@@ -1,7 +1,7 @@
 package v1_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"math"
 	"testing"
 	"time"
@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	typesv1 "ocm.software/open-component-model/bindings/go/configuration/types/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestDuration_MarshalJSON(t *testing.T) {
@@ -47,7 +48,7 @@ func TestDuration_MarshalJSON(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
-			got, err := tt.duration.MarshalJSON()
+			got, err := json.Marshal(tt.duration, runtime.JSONOptions)
 			r.NoError(err)
 			r.JSONEq(tt.want, string(got))
 		})
@@ -127,7 +128,7 @@ func TestDuration_UnmarshalJSON(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
 			var d typesv1.Duration
-			err := d.UnmarshalJSON([]byte(tt.input))
+			err := json.Unmarshal([]byte(tt.input), &d)
 			if tt.wantErr {
 				r.Error(err)
 				return
@@ -153,11 +154,11 @@ func TestDuration_RoundTrip(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
-			data, err := tt.duration.MarshalJSON()
+			data, err := json.Marshal(tt.duration, runtime.JSONOptions)
 			r.NoError(err)
 
 			var got typesv1.Duration
-			err = got.UnmarshalJSON(data)
+			err = json.Unmarshal(data, &got)
 			r.NoError(err)
 			r.Equal(tt.duration, got)
 		})

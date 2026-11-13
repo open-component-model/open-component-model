@@ -2,7 +2,7 @@ package signinghandler
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -50,7 +50,7 @@ func TestPluginFlow(t *testing.T) {
 		Type:       osutil.ConnectionType(t.Context()),
 		PluginType: v1.SigningHandlerPluginType,
 	}
-	serialized, err := json.Marshal(config)
+	serialized, err := json.Marshal(config, runtime.JSONOptions)
 	require.NoError(t, err)
 
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))
@@ -94,7 +94,7 @@ func TestShutdown(t *testing.T) {
 	dummytype.MustAddToScheme(scheme)
 	registry := NewSigningRegistry(ctx)
 	config := mtypes.Config{ID: "test-plugin-signinghandler", Type: osutil.ConnectionType(t.Context()), PluginType: v1.SigningHandlerPluginType}
-	serialized, err := json.Marshal(config)
+	serialized, err := json.Marshal(config, runtime.JSONOptions)
 	require.NoError(t, err)
 
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))

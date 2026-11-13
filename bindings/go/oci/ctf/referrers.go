@@ -2,10 +2,9 @@ package ctf
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"log/slog"
 
@@ -19,6 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/direct"
 	v1 "ocm.software/open-component-model/bindings/go/ctf/index/v1"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 var _ registry.ReferrerLister = (*repository)(nil)
@@ -110,13 +110,8 @@ func (s *repository) referrersFromArtifactIndex(ctx context.Context, idx v1.Inde
 		err = errors.Join(err, rc.Close())
 	}()
 
-	raw, err := io.ReadAll(rc)
-	if err != nil {
-		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("unable to read referrers index %q for referrers tag %q: %w", desc.Digest, referrersTag, err)
-	}
-
 	var refIdx ociImageSpecV1.Index
-	if err := json.Unmarshal(raw, &refIdx); err != nil {
+	if err := json.UnmarshalRead(rc, &refIdx); err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to decode referrers index from referrers tag %q: %w", referrersTag, err)
 	}
 	return desc, refIdx.Manifests, nil
@@ -294,7 +289,7 @@ func generateIndex(manifests []ociImageSpecV1.Descriptor) (ociImageSpecV1.Descri
 		MediaType: ociImageSpecV1.MediaTypeImageIndex,
 		Manifests: manifests,
 	}
-	indexJSON, err := json.Marshal(index)
+	indexJSON, err := json.Marshal(index, runtime.JSONOptions)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to marshal referrers index: %w", err)
 	}

@@ -2,7 +2,7 @@ package digestprocessor
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -95,7 +95,7 @@ func TestRegisterInputProcessor(t *testing.T) {
 			rawPluginSpec, err := pluginruntime.ConvertToSpec(&builder.PluginSpec)
 			r.NoError(err)
 			// Validate registered types
-			content, err := json.Marshal(rawPluginSpec)
+			content, err := json.Marshal(rawPluginSpec, runtime.JSONOptions)
 			r.NoError(err)
 			if tt.expectedTypes > 0 {
 				r.Contains(string(content), `"capabilities"`)

@@ -2,7 +2,7 @@ package componentlister
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -43,7 +43,7 @@ func TestRegisterComponentLister(t *testing.T) {
 	rawPluginSpec, err := pluginruntime.ConvertToSpec(&builder.PluginSpec)
 	r.NoError(err)
 	// Validate registered types
-	content, err := json.Marshal(rawPluginSpec)
+	content, err := json.Marshal(rawPluginSpec, runtime.JSONOptions)
 	r.NoError(err)
 	r.Contains(string(content), "componentLister")
 

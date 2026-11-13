@@ -2,7 +2,7 @@ package validate
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -52,7 +52,7 @@ func ComponentVersionDescriptor(
 			return "", fmt.Errorf("failed to fetch descriptor for reference %q: %w", ref, err)
 		}
 		var manifest ociImageSpecV1.Manifest
-		if err := json.NewDecoder(data).Decode(&manifest); err != nil {
+		if err := json.UnmarshalRead(data, &manifest); err != nil {
 			return "", errors.Join(fmt.Errorf("failed to decode manifest for reference %q: %w", ref, err), data.Close())
 		}
 		manifestAnnotations = manifest.Annotations
@@ -70,7 +70,7 @@ func ComponentVersionDescriptor(
 			return "", fmt.Errorf("failed to fetch descriptor for reference %q: %w", ref, err)
 		}
 		var index ociImageSpecV1.Index
-		if err := json.NewDecoder(data).Decode(&index); err != nil {
+		if err := json.UnmarshalRead(data, &index); err != nil {
 			return "", errors.Join(fmt.Errorf("failed to decode index for reference %q: %w", ref, err), data.Close())
 		}
 		manifestAnnotations = index.Annotations

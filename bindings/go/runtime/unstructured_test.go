@@ -1,7 +1,8 @@
 package runtime_test
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -45,7 +46,7 @@ var (
 			Version:  "2.0.0",
 			Type:     "ociImage",
 			Relation: "external",
-			Access:   json.RawMessage(`{"type":"ociArtifact","imageReference":"ghcr.io/test/image:v2.0.0"}`),
+			Access:   jsontext.Value(`{"type":"ociArtifact","imageReference":"ghcr.io/test/image:v2.0.0"}`),
 			Digest: &testDigest{
 				HashAlgorithm:          "SHA-256",
 				NormalisationAlgorithm: "ociArtifactDigest/v1",
@@ -134,12 +135,12 @@ func TestUnstructured(t *testing.T) {
 			t.Log("TestUnstructured:", tc.name)
 			if tc.un != nil {
 				un := tc.un()
-				data, err := un.MarshalJSON()
+				data, err := json.Marshal(un, runtime.JSONOptions)
 				tc.assertError(t, err)
 				tc.assertResult(t, data)
 			} else {
 				un := runtime.NewUnstructured()
-				tc.assertError(t, un.UnmarshalJSON(tc.data))
+				tc.assertError(t, json.Unmarshal(tc.data, &un))
 			}
 		})
 	}
@@ -217,7 +218,7 @@ func TestUnstructured_GetType(t *testing.T) {
 			name: "type field from JSON unmarshal is string",
 			data: func() map[string]any {
 				un := runtime.NewUnstructured()
-				err := un.UnmarshalJSON([]byte(`{"type":"OCIImage/v1","imageReference":"ghcr.io/example/image:v1"}`))
+				err := json.Unmarshal([]byte(`{"type":"OCIImage/v1","imageReference":"ghcr.io/example/image:v1"}`), &un)
 				if err != nil {
 					panic(err)
 				}
@@ -229,7 +230,7 @@ func TestUnstructured_GetType(t *testing.T) {
 			name: "type field from JSON unmarshal is unversioned string",
 			data: func() map[string]any {
 				un := runtime.NewUnstructured()
-				err := un.UnmarshalJSON([]byte(`{"type":"helm","repository":"https://charts.example.com"}`))
+				err := json.Unmarshal([]byte(`{"type":"helm","repository":"https://charts.example.com"}`), &un)
 				if err != nil {
 					panic(err)
 				}
@@ -257,8 +258,8 @@ type testDigest struct {
 }
 
 type testLabel struct {
-	Name  string          `json:"name"`
-	Value json.RawMessage `json:"value"`
+	Name  string         `json:"name"`
+	Value jsontext.Value `json:"value"`
 }
 
 type testResource struct {
@@ -268,8 +269,8 @@ type testResource struct {
 	ExtraIdentity map[string]string `json:"extraIdentity,omitempty"`
 	Type          string            `json:"type"`
 	Relation      string            `json:"relation"`
-	Access        json.RawMessage   `json:"access"`
-	Digest        *testDigest       `json:"digest,omitempty"`
+	Access        jsontext.Value    `json:"access"`
+	Digest        *testDigest       `json:"digest,omitzero"`
 }
 
 func TestUnstructuredFromMixedData_NumericTypes(t *testing.T) {
@@ -308,14 +309,14 @@ func TestUnstructured_DeepCopyWithStructValues(t *testing.T) {
 		Name:    "test-resource",
 		Version: "1.0.0",
 		Labels: []testLabel{
-			{Name: "env", Value: json.RawMessage(`"production"`)},
+			{Name: "env", Value: jsontext.Value(`"production"`)},
 		},
 		ExtraIdentity: map[string]string{
 			"platform": "linux/amd64",
 		},
 		Type:     "ociImage",
 		Relation: "external",
-		Access:   json.RawMessage(`{"imageReference":"ghcr.io/test/image:v1.0.0","type":"ociArtifact"}`),
+		Access:   jsontext.Value(`{"imageReference":"ghcr.io/test/image:v1.0.0","type":"ociArtifact"}`),
 		Digest: &testDigest{
 			HashAlgorithm:          "SHA-256",
 			NormalisationAlgorithm: "ociArtifactDigest/v1",
@@ -340,10 +341,10 @@ func TestUnstructured_DeepCopyWithStructValues(t *testing.T) {
 	require.True(t, ok, "expected map[string]any, got %T", copied.Data["resource"])
 
 	// Verify content matches the original struct's JSON representation.
-	originalJSON, err := json.Marshal(resource)
+	originalJSON, err := json.Marshal(resource, runtime.JSONOptions)
 	require.NoError(t, err)
 
-	copiedJSON, err := json.Marshal(copiedResource)
+	copiedJSON, err := json.Marshal(copiedResource, runtime.JSONOptions)
 	require.NoError(t, err)
 
 	assert.JSONEq(t, string(originalJSON), string(copiedJSON))
@@ -359,7 +360,7 @@ func deepCopyFullMarshal(u *runtime.Unstructured) *runtime.Unstructured {
 	if u == nil {
 		return nil
 	}
-	data, err := json.Marshal(u.Data)
+	data, err := json.Marshal(u.Data, runtime.JSONOptions)
 	if err != nil {
 		panic("deep copy: " + err.Error())
 	}

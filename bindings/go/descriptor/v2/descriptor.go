@@ -2,7 +2,8 @@ package v2
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"maps"
@@ -109,7 +110,7 @@ type Resource struct {
 	// Access defines the type of access this resource requires.
 	Access *runtime.Raw `json:"access"`
 	// Digest is the optional digest of the referenced resource.
-	Digest *Digest `json:"digest,omitempty"`
+	Digest *Digest `json:"digest,omitzero"`
 }
 
 // A Source is an artifact which describes the sources that were used to generate one or more of the resources.
@@ -326,7 +327,7 @@ type Signature struct {
 	// Timestamp optionally holds an RFC 3161 timestamp token proving when the signature was created.
 	// If present, it can be used to verify that the signature was created while the signing
 	// certificate was still valid, even if it has since expired.
-	Timestamp *TimestampSpec `json:"timestamp,omitempty"`
+	Timestamp *TimestampSpec `json:"timestamp,omitzero"`
 }
 
 // TimestampSpec provides an RFC 3161 timestamp token and the parsed generation time.
@@ -368,7 +369,10 @@ type SignatureInfo struct {
 	// It provides consumers with the necessary context to decode and interpret the signature.
 	MediaType string `json:"mediaType"`
 
-	// Issuer optionally identifies the signer of the signature.
+	// Issuer optionally identifies the signer of the signature. For X.509
+	// signatures it holds the subject of the signing certificate, which is what
+	// the specification and OCM v1 record there; verification also accepts the
+	// distinguished name of the authority that issued that certificate.
 	// Values can be:
 	//   - an RFC2253 Distinguished Name (DN) string,
 	//   - or a free-form string identifier for the signing authority.
@@ -386,9 +390,9 @@ type Label struct {
 	// Name is the unique name of the label.
 	Name string `json:"name"`
 	// Value is the json/yaml data of the label
-	Value json.RawMessage `json:"value"`
+	Value jsontext.Value `json:"value"`
 	// Signing describes whether the label should be included into the signature
-	Signing bool `json:"signing,omitempty"`
+	Signing bool `json:"signing,omitzero"`
 	// Version is the optional specification version of the attribute value
 	Version string `json:"version,omitempty"`
 }
@@ -432,18 +436,18 @@ func (in *Label) SetValue(value interface{}) error {
 	return nil
 }
 
-// MustAsRawMessage converts any given value to a json.RawMessage.
+// MustAsRawMessage converts any given value to a raw JSON value.
 // It panics if the conversion fails, so it should only be used when the conversion is guaranteed to succeed.
-func MustAsRawMessage(value interface{}) json.RawMessage {
+func MustAsRawMessage(value interface{}) jsontext.Value {
 	msg, err := AsRawMessage(value)
 	if err != nil {
-		panic(fmt.Sprintf("cannot convert value %T to json.RawMessage: %v", value, err))
+		panic(fmt.Sprintf("cannot convert value %T to raw json: %v", value, err))
 	}
 	return msg
 }
 
-// AsRawMessage converts any given value to a json.RawMessage.
-func AsRawMessage(value interface{}) (json.RawMessage, error) {
+// AsRawMessage converts any given value to a raw JSON value.
+func AsRawMessage(value interface{}) (jsontext.Value, error) {
 	if value == nil {
 		return nil, nil
 	}
@@ -474,39 +478,41 @@ type Timestamp struct {
 	Time `json:",inline"`
 }
 
-// MarshalJSON implements the json.Marshaler interface.
+// MarshalJSONTo implements the json.MarshalerTo interface.
 // The time is a quoted string in RFC 3339 format, with sub-second precision added if present.
-func (t *Timestamp) MarshalJSON() ([]byte, error) {
+func (t *Timestamp) MarshalJSONTo(enc *jsontext.Encoder) error {
 	if y := t.Year(); y < 0 || y >= 10000 {
 		// RFC 3339 is clear that years are 4 digits exactly.
 		// See golang.org/issue/4556#c15 for more discussion.
-		return nil, errors.New("Time.MarshalJSON: year outside of range [0,9999]")
+		return errors.New("Time.MarshalJSON: year outside of range [0,9999]")
 	}
 
-	b := make([]byte, 0, len(time.RFC3339)+2)
-	b = append(b, '"')
-	b = t.AppendFormat(b, time.RFC3339)
-	b = append(b, '"')
-	return b, nil
+	return enc.WriteToken(jsontext.String(t.Format(time.RFC3339)))
 }
 
-// UnmarshalJSON implements the json.Unmarshaler interface.
+// UnmarshalJSONFrom implements the json.UnmarshalerFrom interface.
 // The time is expected to be a quoted string in RFC 3339 format.
-func (t *Timestamp) UnmarshalJSON(data []byte) error {
+func (t *Timestamp) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	// Ignore null, like in the main JSON package.
-	if string(data) == "null" {
-		return nil
+	if dec.PeekKind() == 'n' {
+		_, err := dec.ReadToken()
+		return err
+	}
+
+	var str string
+	if err := json.UnmarshalDecode(dec, &str); err != nil {
+		return err
 	}
 
 	// Fractional seconds are handled implicitly by Parse.
-	tt, err := time.Parse(`"`+time.RFC3339+`"`, string(data))
+	tt, err := time.Parse(time.RFC3339, str)
 	if err != nil {
 		return err
 	}
 	*t = Timestamp{
 		NewTime(tt.UTC().Round(time.Second)),
 	}
-	return err
+	return nil
 }
 
 // NestedDigest defines digest information for a component embedded within a Descriptor.
@@ -515,7 +521,7 @@ func (t *Timestamp) UnmarshalJSON(data []byte) error {
 type NestedDigest struct {
 	Name            string           `json:"name"`
 	Version         string           `json:"version"`
-	Digest          *Digest          `json:"digest,omitempty"`
+	Digest          *Digest          `json:"digest,omitzero"`
 	ResourceDigests []ResourceDigest `json:"resourceDigests,omitempty"`
 }
 

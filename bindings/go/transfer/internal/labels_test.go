@@ -1,7 +1,7 @@
 package internal
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -43,7 +43,7 @@ func TestTargetKind(t *testing.T) {
 	r.Equal("CTF", targetKind(testCTFRepo("./out")))
 
 	// Raw specs must resolve to the concrete type before the short name is decided.
-	data, err := json.Marshal(testOCIRepo("ghcr.io/t"))
+	data, err := json.Marshal(testOCIRepo("ghcr.io/t"), runtime.JSONOptions)
 	r.NoError(err)
 	raw := &runtime.Raw{Type: runtime.Type{Name: oci.Type, Version: oci.Version}, Data: data}
 	r.Equal("OCI", targetKind(raw))

@@ -53,7 +53,7 @@ type option struct {
 
 	// AlwaysDownloadProv indicates whether to always download the provenance file for the chart.
 	// In cases where a Keyring is present in the credentials, Helm will attempt to download the provenance file to verify the chart's integrity.
-	AlwaysDownloadProv bool `json:"alwaysDownloadProv,omitempty"`
+	AlwaysDownloadProv bool `json:"alwaysDownloadProv,omitzero"`
 
 	// HTTPConfig is the HTTP client configuration (timeouts, per-host overrides) used for
 	// chart downloads and OCI registry access. When nil, the default Helm client is used.
