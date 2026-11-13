@@ -461,12 +461,14 @@ func (a *ApplySet) detectConflicts(ctx context.Context, entries []applyEntry) (m
 		namespace string
 	}
 	tasks := sets.New[listTask]()
+	applied := sets.New[conflictKey]()
 	for _, e := range entries {
 		ns := ""
 		if e.mapping.Scope.Name() == meta.RESTScopeNameNamespace {
 			ns = a.resolveNamespace(e.resource.Object.GetNamespace())
 		}
 		tasks.Insert(listTask{gvk: e.resource.Object.GroupVersionKind(), namespace: ns})
+		applied.Insert(conflictKey{gvk: e.resource.Object.GroupVersionKind(), namespace: ns, name: e.resource.Object.GetName()})
 	}
 
 	conflicts := make(map[conflictKey]string)
@@ -497,13 +499,10 @@ func (a *ApplySet) detectConflicts(ctx context.Context, entries []applyEntry) (m
 			mu.Lock()
 			defer mu.Unlock()
 			for i := range list.Items {
+				key := conflictKey{gvk: task.gvk, namespace: list.Items[i].GetNamespace(), name: list.Items[i].GetName()}
 				ownerID := list.Items[i].GetLabels()[ApplysetPartOfLabel]
-				if ownerID != "" && ownerID != a.applySetID {
-					conflicts[conflictKey{
-						gvk:       task.gvk,
-						namespace: list.Items[i].GetNamespace(),
-						name:      list.Items[i].GetName(),
-					}] = ownerID
+				if applied.Has(key) && ownerID != "" && ownerID != a.applySetID {
+					conflicts[key] = ownerID
 				}
 			}
 			return nil
@@ -514,7 +513,38 @@ func (a *ApplySet) detectConflicts(ctx context.Context, entries []applyEntry) (m
 		return nil, err
 	}
 
+	if err := a.confirmConflicts(ctx, conflicts); err != nil {
+		return nil, err
+	}
+
 	return conflicts, nil
+}
+
+// confirmConflicts re-reads every conflicting object with Client. Reader may be a stale cache that reads as
+// another identity, so a conflict stands only for an object the applying identity can read that still belongs to
+// another ApplySet. Unstructured gets bypass a cached Client, so this never starts an informer.
+func (a *ApplySet) confirmConflicts(ctx context.Context, conflicts map[conflictKey]string) error {
+	for key := range conflicts {
+		live := &unstructured.Unstructured{}
+		live.SetGroupVersionKind(key.gvk)
+		err := a.client.Get(ctx, client.ObjectKey{Namespace: key.namespace, Name: key.name}, live)
+		if apierrors.IsNotFound(err) {
+			delete(conflicts, key)
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("confirm conflict with %v %s/%s: %w", key.gvk, key.namespace, key.name, err)
+		}
+
+		ownerID := live.GetLabels()[ApplysetPartOfLabel]
+		if ownerID == "" || ownerID == a.applySetID {
+			delete(conflicts, key)
+			continue
+		}
+		conflicts[key] = ownerID
+	}
+
+	return nil
 }
 
 func (a *ApplySet) resolvedNamespace(mapping *meta.RESTMapping, obj *unstructured.Unstructured) (string, bool) {

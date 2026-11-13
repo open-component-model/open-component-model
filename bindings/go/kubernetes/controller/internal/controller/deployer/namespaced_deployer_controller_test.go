@@ -507,12 +507,12 @@ metadata:
 	})
 
 	It("detects a conflict from the ApplySet member cache without the list permission of its service account", func(ctx SpecContext) {
-		members := startApplySetMemberCache(ctx)
+		members := startApplySetMemberCache(ctx, k8sManager.GetConfig(), applySetMemberSyncTimeout)
 		Expect(k8sClient.Create(ctx, &corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{Name: "nd-unrelated-cm", Namespace: namespace.GetName()},
 		})).To(Succeed())
 
-		result, err := applyConflictingConfigMap(ctx, namespace.GetName(), members)
+		result, err := applyConflictingConfigMap(ctx, namespace.GetName(), members, []string{"get", "create", "patch"})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(result.Applied).To(HaveLen(1))
 		Expect(result.Applied[0].Error).To(MatchError(applyset.ErrApplySetConflict))
@@ -532,6 +532,30 @@ metadata:
 		Expect(cm.GetLabels()).To(HaveKeyWithValue(applyset.ApplysetPartOfLabel, "applyset-other-v1"))
 	})
 
+	It("rejects the apply when its service account cannot read the conflicting object", func(ctx SpecContext) {
+		members := startApplySetMemberCache(ctx, k8sManager.GetConfig(), applySetMemberSyncTimeout)
+
+		_, err := applyConflictingConfigMap(ctx, namespace.GetName(), members, []string{"create", "patch"})
+
+		// The controller's cache found the member, so naming the service account shows the conflict was confirmed
+		// as the deployer.
+		Expect(err).To(MatchError(ContainSubstring(
+			fmt.Sprintf(`User "system:serviceaccount:%s:nd-conflict-sa" cannot get resource "configmaps"`, namespace.GetName()))))
+	})
+
+	It("bounds a member list when the cache may not watch the kind", func(ctx SpecContext) {
+		cfg := rest.CopyConfig(k8sManager.GetConfig())
+		cfg.Impersonate = rest.ImpersonationConfig{UserName: "nd-member-cache-without-rbac"}
+		members := startApplySetMemberCache(ctx, cfg, 2*time.Second)
+
+		list := &metav1.PartialObjectMetadataList{}
+		list.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("ConfigMapList"))
+		start := time.Now()
+		err := members.List(ctx, list, client.InNamespace(namespace.GetName()))
+		Expect(err).To(MatchError(ContainSubstring("needs list and watch on the kind")))
+		Expect(time.Since(start)).To(BeNumerically("<", 10*time.Second))
+	}, SpecTimeout(30*time.Second))
+
 	It("requires a resource name", func(ctx SpecContext) {
 		deployer := &v1alpha1.NamespacedDeployer{
 			ObjectMeta: metav1.ObjectMeta{Name: "nd-no-resource", Namespace: namespace.GetName()},
@@ -543,14 +567,14 @@ metadata:
 	})
 })
 
-// startApplySetMemberCache starts a member cache like the one the manager runs and stops it with the spec.
-func startApplySetMemberCache(ctx SpecContext) client.Reader {
+// startApplySetMemberCache starts a member cache reading as cfg and stops it with the spec. It builds its HTTP client
+// from cfg, as the manager's carries the controller's credentials and ignores cfg.Impersonate.
+func startApplySetMemberCache(ctx SpecContext, cfg *rest.Config, syncTimeout time.Duration) client.Reader {
 	GinkgoHelper()
 
-	members, err := applyset.NewMemberCache(k8sManager.GetConfig(), crcache.Options{
-		HTTPClient: k8sManager.GetHTTPClient(),
-		Scheme:     k8sManager.GetScheme(),
-		Mapper:     k8sManager.GetRESTMapper(),
+	members, err := applyset.NewMemberCache(cfg, syncTimeout, crcache.Options{
+		Scheme: k8sManager.GetScheme(),
+		Mapper: k8sManager.GetRESTMapper(),
 	})
 	Expect(err).NotTo(HaveOccurred())
 
@@ -567,8 +591,8 @@ func startApplySetMemberCache(ctx SpecContext) client.Reader {
 }
 
 // applyConflictingConfigMap applies a ConfigMap owned by another ApplySet through createApplySet, as a service
-// account that may not list ConfigMaps.
-func applyConflictingConfigMap(ctx SpecContext, namespace string, members client.Reader) (*applyset.ApplyResult, error) {
+// account holding verbs on ConfigMaps and nothing else.
+func applyConflictingConfigMap(ctx SpecContext, namespace string, members client.Reader, verbs []string) (*applyset.ApplyResult, error) {
 	GinkgoHelper()
 
 	const sa = "nd-conflict-sa"
@@ -578,7 +602,7 @@ func applyConflictingConfigMap(ctx SpecContext, namespace string, members client
 
 	role := &rbacv1.Role{
 		ObjectMeta: metav1.ObjectMeta{Name: sa, Namespace: namespace},
-		Rules:      []rbacv1.PolicyRule{{APIGroups: []string{""}, Resources: []string{"configmaps"}, Verbs: []string{"get", "create", "patch"}}},
+		Rules:      []rbacv1.PolicyRule{{APIGroups: []string{""}, Resources: []string{"configmaps"}, Verbs: verbs}},
 	}
 	Expect(k8sClient.Create(ctx, role)).To(Succeed())
 	Expect(k8sClient.Create(ctx, &rbacv1.RoleBinding{

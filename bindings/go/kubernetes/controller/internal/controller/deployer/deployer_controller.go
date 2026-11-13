@@ -71,6 +71,10 @@ const (
 	// namespacedDeployerManager is the managed-by label value of objects deployed by a NamespacedDeployer.
 	// Its own value keeps each kind's informers from caching the other kind's objects.
 	namespacedDeployerManager = "namespaceddeployer.delivery.ocm.software"
+
+	// applySetMemberSyncTimeout bounds the conflict check's first list of a kind, which waits for the member cache
+	// to sync that kind.
+	applySetMemberSyncTimeout = 30 * time.Second
 )
 
 var ErrComponentVersionDrift = errors.New("component version drift: resource status has not yet caught up with component")
@@ -881,13 +885,13 @@ func buildResourceCacheKey(
 
 // NewApplySetMemberCache creates the cache conflict detection lists the ApplySet members from and adds it to mgr.
 func NewApplySetMemberCache(mgr ctrl.Manager) (client.Reader, error) {
-	members, err := applyset.NewMemberCache(mgr.GetConfig(), crcache.Options{
+	members, err := applyset.NewMemberCache(mgr.GetConfig(), applySetMemberSyncTimeout, crcache.Options{
 		HTTPClient: mgr.GetHTTPClient(),
 		Scheme:     mgr.GetScheme(),
 		Mapper:     mgr.GetRESTMapper(),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create the ApplySet member cache: %w", err)
+		return nil, err
 	}
 	if err := mgr.Add(members); err != nil {
 		return nil, fmt.Errorf("failed to add the ApplySet member cache to the manager: %w", err)

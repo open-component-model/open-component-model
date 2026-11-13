@@ -15,6 +15,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -1428,34 +1429,81 @@ func configMapListResponse(accept string, items []corev1.ConfigMap) ([]byte, err
 	return json.Marshal(list)
 }
 
-// TestApply_ConflictDetection_UsesReader covers conflict detection reading the members through Config.Reader.
-func TestApply_ConflictDetection_UsesReader(t *testing.T) {
-	r := require.New(t)
-
+// TestApply_ConflictDetection_ConfirmsReaderHitsWithClient covers conflict detection listing the members through
+// Config.Reader, which may be a stale cache reading as another identity, and reporting only what Client confirms.
+func TestApply_ConflictDetection_ConfirmsReaderHitsWithClient(t *testing.T) {
 	parentGVK := schema.GroupVersionKind{Group: "delivery.ocm.software", Version: "v1alpha1", Kind: "TestKind"}
 	parent := newTestParent(parentGVK)
-	owner := &testParent{
+	other := &testParent{
 		ObjectMeta: metav1.ObjectMeta{Name: "other-instance", Namespace: "default", UID: types.UID("other-parent-uid")},
 		gvk:        parentGVK,
 	}
+	member := func(ownerID string) *unstructured.Unstructured {
+		cm := newConfigMap("cm1", "default")
+		cm.SetLabels(map[string]string{ApplysetPartOfLabel: ownerID})
+		return cm
+	}
 
-	existing := newConfigMap("cm1", "default")
-	existing.SetLabels(map[string]string{ApplysetPartOfLabel: ID(owner)})
-	existing.SetUID(types.UID("existing-uid"))
+	tests := []struct {
+		name      string
+		live      []client.Object
+		getErr    error
+		wantOwner string
+		wantErr   bool
+	}{
+		{name: "the member still belongs to another ApplySet", live: []client.Object{member(ID(other))}, wantOwner: ID(other)},
+		{name: "the member was deleted after the reader saw it"},
+		{name: "the member belongs to this ApplySet by now", live: []client.Object{member(ID(parent))}},
+		{
+			name:    "the applying identity may not read the member",
+			live:    []client.Object{member(ID(other))},
+			getErr:  apierrors.NewForbidden(schema.GroupResource{Resource: "configmaps"}, "cm1", errors.New("denied")),
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
 
-	applier := New(Config{
-		Client:          newFakeClient(),
-		Reader:          newFakeClient(existing),
-		RESTMapper:      newTestRESTMapper(),
-		Log:             logr.Discard(),
-		ParentNamespace: "default",
-	}, parent)
+			scheme := runtime.NewScheme()
+			r.NoError(corev1.AddToScheme(scheme))
+			liveClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.live...).
+				WithInterceptorFuncs(interceptor.Funcs{
+					List: func(context.Context, client.WithWatch, client.ObjectList, ...client.ListOption) error {
+						return errors.New("conflict detection must list through Reader")
+					},
+					Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+						if tt.getErr != nil {
+							return tt.getErr
+						}
+						return c.Get(ctx, key, obj, opts...)
+					},
+				}).
+				Build()
 
-	result, err := applier.Apply(t.Context(), []Resource{{ID: "cm1", Object: newConfigMap("cm1", "default")}}, ApplyMode{})
-	r.NoError(err)
-	r.Len(result.Applied, 1)
+			applier := New(Config{
+				Client:          liveClient,
+				Reader:          newFakeClient(member(ID(other))),
+				RESTMapper:      newTestRESTMapper(),
+				Log:             logr.Discard(),
+				ParentNamespace: "default",
+			}, parent)
 
-	var conflictErr *ApplySetConflictError
-	r.ErrorAs(result.Applied[0].Error, &conflictErr)
-	r.Equal(ID(owner), conflictErr.CurrentApplySetID)
+			result, err := applier.Apply(t.Context(), []Resource{{ID: "cm1", Object: newConfigMap("cm1", "default")}}, ApplyMode{})
+			if tt.wantErr {
+				r.True(apierrors.IsForbidden(err), "a member the applying identity may not read fails the apply: %v", err)
+				return
+			}
+			r.NoError(err)
+			r.Len(result.Applied, 1)
+			if tt.wantOwner == "" {
+				r.NoError(result.Applied[0].Error)
+				return
+			}
+
+			var conflictErr *ApplySetConflictError
+			r.ErrorAs(result.Applied[0].Error, &conflictErr)
+			r.Equal(tt.wantOwner, conflictErr.CurrentApplySetID)
+		})
+	}
 }
