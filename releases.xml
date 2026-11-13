@@ -7,6 +7,114 @@
     <language>en</language>
     <atom:link href="https://ocm.software/releases.xml" rel="self" type="application/rss+xml"/>
     <item>
+      <title>OCM v0.24.0 released</title>
+      <link>https://github.com/open-component-model/open-component-model/releases/tag/v0.24.0</link>
+      <guid isPermaLink="true">https://github.com/open-component-model/open-component-model/releases/tag/v0.24.0</guid>
+      <pubDate>Fri, 13 Nov 2026 12:53:15 GMT</pubDate>
+      <description>OCM v0.24.0 is available. Release notes and downloads: https://github.com/open-component-model/open-component-model/releases/tag/v0.24.0</description>
+      <content:encoded><![CDATA[<blockquote>
+<p>Promoted from <code>v0.24.0-rc.2</code> on 2026-11-13</p>
+</blockquote>
+<h2>[0.24.0] - 2026-11-13</h2>
+<h3>🚀 Features</h3>
+<ul>
+<li><em>(git)</em> Warn when uploading a tag into a branchless repository (#4106)</li>
+<li><em>(perf)</em> Add trigger to the performance suite run (#4140)</li>
+<li><em>(config)</em> Add configurable RemotePolicy (#4147)</li>
+</ul>
+<h3>🐛 Bug Fixes</h3>
+<ul>
+<li><em>(ctf)</em> Handle OCM v1 storage compatibility (#3962)</li>
+<li><em>(oci)</em> Accept resources excluded from signature on upload (#4164)</li>
+<li><em>(git)</em> [<strong>breaking</strong>] Disallow local file references in git access (#4151)</li>
+<li><em>(oci)</em> [<strong>breaking</strong>] Bind RemotePolicyAlways cache hits to the repository (#4169)</li>
+<li><em>(controller)</em> Don't key deployer cache on excluded digests (#4175)</li>
+</ul>
+<h3>📦 Dependencies</h3>
+<ul>
+<li><em>(deps)</em> Update module github.com/shirou/gopsutil/v4 to v4.26.9 (#4123)</li>
+<li><em>(deps)</em> Update module github.com/moby/moby/api to v1.56.1 (#4120)</li>
+<li><em>(deps)</em> Update module github.com/go-git/go-billy/v6 to v6.0.0-beta.1 (#4119)</li>
+<li><em>(deps)</em> Update module github.com/pb33f/go-yaml to v0.1.1 (#4122)</li>
+<li><em>(deps)</em> Update module sigs.k8s.io/kustomize/api to v0.21.2 (#4125)</li>
+<li><em>(deps)</em> Update module github.com/docker/cli to v29.8.2+incompatible (#4129)</li>
+<li><em>(deps)</em> Update module go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp to v0.72.0 (#4133)</li>
+<li><em>(deps)</em> Update module sigs.k8s.io/release-utils to v0.12.5 (#4131)</li>
+<li><em>(deps)</em> Update module github.com/pjbgf/sha1cd to v0.7.0 (#4132)</li>
+<li><em>(deps)</em> Update module github.com/aws/aws-sdk-go-v2/service/s3 to v1.114.0 (#4135)</li>
+<li><em>(deps)</em> Update module github.com/prometheus/common to v0.72.0 (#4136)</li>
+<li><em>(deps)</em> Update module github.com/moby/moby/client to v0.6.1 (#4121)</li>
+<li><em>(deps)</em> Update module go.opentelemetry.io/proto/otlp to v1.11.1 (#4124)</li>
+<li><em>(deps)</em> Update ghcr.io/open-component-model/kubernetes/controller:latest docker digest to 8dc6df0 (#4117)</li>
+<li><em>(deps)</em> Update module sigs.k8s.io/controller-runtime to v0.25.2 (#4130)</li>
+<li><em>(deps)</em> Update digest pins (#4116)</li>
+<li><em>(deps)</em> Update dependency sigstore/scaffolding to v0.7.38 (#4170)</li>
+<li><em>(deps)</em> Bump klauspost/compress and Go toolchain for CVEs (#4217) (#4225)</li>
+</ul>
+<h3>⚡ Performance</h3>
+<ul>
+<li><em>(oci)</em> Hash pushed blobs only where nothing else verifies them (#4081)</li>
+</ul>
+<h3>🧪 Testing</h3>
+<ul>
+<li><em>(oci)</em> Verify legacy docker images on Nexus hosted repositories (#4154)</li>
+</ul>
+<h3>⚙️ Miscellaneous Tasks</h3>
+<ul>
+<li>Refactor <code>Repository</code> to <code>CachedStore</code> (#3918)</li>
+<li><em>(tests)</em> Bump kro and use aggregation rbac mode (#4172)</li>
+</ul>
+<h2>Get This Release</h2>
+<h3>Install the OCM CLI</h3>
+<pre><code>curl -sfL https://ocm.software/install-cli.sh | OCM_VERSION=0.24.0 bash
+</code></pre>
+<p>For alternative installation options, see the <a href="https://ocm.software/docs/getting-started/install-the-ocm-cli/">installation guide</a>.</p>
+<p>You can also run the OCM CLI in a container without installing it:</p>
+<pre><code>docker run --rm -t ghcr.io/open-component-model/cli:0.24.0 --help
+</code></pre>
+<p>See the <a href="https://ocm.software/docs/how-to/how-to-use-the-ocm-cli-container-image/">container image guide</a> for more details.</p>
+<h3>Deploy the OCM Controller</h3>
+<p>Install into a Kubernetes cluster via Helm:</p>
+<pre><code>helm install ocm-k8s-toolkit oci://ghcr.io/open-component-model/kubernetes/controller/chart \
+--version 0.24.0 \
+--namespace ocm-k8s-toolkit-system \
+--create-namespace
+</code></pre>
+<p>See the <a href="https://ocm.software/docs/getting-started/set-up-controller-environments/">controller setup guide</a> for full configuration options.</p>
+<h3>OCM Component Distribution <em>(for existing OCM users)</em></h3>
+<p>Every OCM release is published as OCM component versions to <code>ghcr.io/open-component-model</code> - the same distribution mechanism OCM enables for your own software. Components in this release:</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>ocm.software/ocm:0.24.0</code></td>
+<td>Product wrapper referencing CLI + controller</td>
+</tr>
+<tr>
+<td><code>ocm.software/cli:0.24.0</code></td>
+<td>CLI binaries and OCI image</td>
+</tr>
+<tr>
+<td><code>ocm.software/kubernetes/controller:0.24.0</code></td>
+<td>Controller image and Helm chart</td>
+</tr>
+</tbody></table>
+<p>Inspect the full product component:</p>
+<pre><code>ocm get component-version ghcr.io/open-component-model//ocm.software/ocm:0.24.0 -o yaml
+</code></pre>
+<p>Download a CLI binary directly via OCM (requires OCM CLI already installed; replace <code>os</code> and <code>architecture</code> as needed — e.g. <code>linux</code>/<code>amd64</code>, <code>darwin</code>/<code>arm64</code>):</p>
+<pre><code>ocm download resource ghcr.io/open-component-model//ocm.software/cli:0.24.0 \
+--identity os=linux,architecture=amd64
+</code></pre>
+<h3>Community &amp; Contributors</h3>
+<p>This release we had a total of <strong>7</strong> contributors!
+If you want to engage with us, check our <a href="https://ocm.software/community/">community page</a>!</p>]]></content:encoded>
+    </item>
+    <item>
       <title>OCM v0.23.0 released</title>
       <link>https://github.com/open-component-model/open-component-model/releases/tag/v0.23.0</link>
       <guid isPermaLink="true">https://github.com/open-component-model/open-component-model/releases/tag/v0.23.0</guid>
