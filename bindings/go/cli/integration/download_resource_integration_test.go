@@ -256,7 +256,7 @@ configurations:
 				true),
 		}
 
-		name, version := "ocm.software/test-component", "v1.0.0"
+		name, version := "ocm.software/test-component-image-layout", "v1.0.0"
 
 		uploadComponentVersion(t, repo, name, version, localResource)
 

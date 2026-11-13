@@ -19,8 +19,6 @@ import (
 	"github.com/oras-project/oras-go/v3/registry/remote/properties"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	identityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 )
 
 // ---- Options validation ----
@@ -414,10 +412,10 @@ func TestReferenceCache_IfNotPresent_HitAvoidsUpstream(t *testing.T) {
 	assert.EqualValues(t, 1, resolves.Load(), "IfNotPresent must not call upstream on a digest hit")
 }
 
-// TestReferenceCache_IfNotPresent_TagAlwaysResolvesUpstream pins that
-// the IfNotPresent shortcut governs authorisation, not freshness: a tag
-// is mutable, so it is resolved upstream even when a mapping is cached.
-func TestReferenceCache_IfNotPresent_TagAlwaysResolvesUpstream(t *testing.T) {
+// TestReferenceCache_IfNotPresent_TagHitSkipsUpstream pins that a cached
+// tag is served without asking the registry; Options.TTL bounds how long
+// a moved tag stays stale.
+func TestReferenceCache_IfNotPresent_TagHitSkipsUpstream(t *testing.T) {
 	c := newTestRefCache(t, Options{RemotePolicy: RemotePolicyIfNotPresent})
 
 	desc := ociImageSpecV1.Descriptor{MediaType: ociImageSpecV1.MediaTypeImageManifest, Size: 1}
@@ -436,7 +434,7 @@ func TestReferenceCache_IfNotPresent_TagAlwaysResolvesUpstream(t *testing.T) {
 	_, err = c.Resolve(t.Context(), up, ref)
 	require.NoError(t, err)
 
-	assert.EqualValues(t, 2, resolves.Load(), "a tag must be resolved upstream on every call")
+	assert.EqualValues(t, 1, resolves.Load(), "IfNotPresent must not call upstream on a tag hit")
 }
 
 func TestReferenceCache_Always_AlwaysCallsUpstream(t *testing.T) {
@@ -459,6 +457,8 @@ func TestReferenceCache_Always_AlwaysCallsUpstream(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.EqualValues(t, 2, resolves.Load(), "Always must call upstream on every resolve")
+	_, ok := c.Lookup(ref)
+	assert.False(t, ok, "Always must not record a descriptor it never serves")
 }
 
 func TestReferenceCache_Always_ConcurrentCallersResolveIndependently(t *testing.T) {
@@ -504,26 +504,4 @@ func TestReferenceCache_Always_ConcurrentCallersResolveIndependently(t *testing.
 	// which must finish before the TempDir cleanup removes the directory.
 	close(release)
 	r.NoError(<-allowedErr)
-}
-
-// ---- Provider scope ----
-
-func TestProviderScope_SameIdentityProducesSameKey(t *testing.T) {
-	id := &identityv1.OCIRegistryIdentity{Hostname: "ghcr.io", Path: "owner/repo"}
-	first := RepositoryKey(id)
-	second := RepositoryKey(id)
-	assert.Equal(t, first, second)
-}
-
-func TestProviderScope_DifferentRepositoryPathDifferentKey(t *testing.T) {
-	id1 := &identityv1.OCIRegistryIdentity{Hostname: "ghcr.io", Path: "owner/repo"}
-	id2 := &identityv1.OCIRegistryIdentity{Hostname: "ghcr.io", Path: "owner/other"}
-	assert.NotEqual(t, RepositoryKey(id1), RepositoryKey(id2))
-}
-
-func TestProviderScope_ReferenceCacheDirDeterministic(t *testing.T) {
-	base := filepath.Join(t.TempDir(), "refcache")
-	id := &identityv1.OCIRegistryIdentity{Hostname: "ghcr.io", Path: "owner/repo"}
-	scope := RepositoryKey(id)
-	assert.Equal(t, filepath.Join(base, scope), filepath.Join(base, RepositoryKey(id)))
 }

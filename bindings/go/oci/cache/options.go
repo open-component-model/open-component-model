@@ -28,6 +28,8 @@ const (
 	// verify the caller is authorised. Mirrors Kubernetes imagePullPolicy:Always.
 	// A [BlobCache] only counts a hit if the caller's repository served the
 	// blob before, so a registry that claims to hold a digest gains nothing.
+	// A [ReferenceCache] serves no hits: resolving a reference is the
+	// access check itself.
 	RemotePolicyAlways RemotePolicy = "Always"
 )
 
@@ -45,7 +47,7 @@ const (
 // [NewBlobCache] / [NewReferenceCache] when a caller passes a
 // partially-populated Options.
 //
-// MaxBlobSize and Accept are blob-specific and ignored by
+// MaxBlobSize, MaxTotalSize and Accept are blob-specific and ignored by
 // [ReferenceCache].
 type Options struct {
 	// Dir is the absolute directory the cache owns — required. Both
@@ -70,6 +72,13 @@ type Options struct {
 	// A value of 0 disables the cap. Ignored by [ReferenceCache].
 	MaxBlobSize int64
 
+	// MaxTotalSize bounds the bytes the [BlobCache] keeps on disk. When
+	// an entry takes the total above it, least recently used entries are
+	// evicted until the cache fits, also when reseeding from disk. A
+	// blob larger than the limit is not cached. A value of 0 disables
+	// the limit. Ignored by [ReferenceCache].
+	MaxTotalSize int64
+
 	// Accept reports whether a blob should be cached by the
 	// [BlobCache]. The full descriptor is passed (not just the media
 	// type) so callers can filter on annotations, artifact type, or
@@ -86,8 +95,8 @@ type Options struct {
 const noExpiry time.Duration = -1
 
 const (
-	// DefaultBlobMaxEntries is the [BlobCache] entry limit. A component version takes
-	// about three entries (manifest, config, descriptor).
+	// DefaultBlobMaxEntries is the [BlobCache] entry limit. With [DefaultAccept], a
+	// component version takes about three entries (manifest, config, descriptor).
 	DefaultBlobMaxEntries = 100_000
 	// DefaultReferenceMaxEntries is the [ReferenceCache] entry limit.
 	DefaultReferenceMaxEntries = 10_000
@@ -128,6 +137,9 @@ func (o Options) applyDefaults(maxEntries int) (Options, error) {
 	}
 	if o.MaxBlobSize == 0 {
 		o.MaxBlobSize = d.MaxBlobSize
+	}
+	if o.MaxTotalSize < 0 {
+		return Options{}, errors.New("cache: Options.MaxTotalSize must not be negative")
 	}
 	if o.Accept == nil {
 		o.Accept = d.Accept

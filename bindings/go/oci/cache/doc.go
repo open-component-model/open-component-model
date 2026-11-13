@@ -22,35 +22,39 @@
 //
 // Both caches share an [Options] struct so a caller can configure
 // limits once and instantiate either or both. The blob-only fields
-// ([Options.MaxBlobSize] and [Options.Accept]) are ignored by
-// [ReferenceCache].
+// ([Options.MaxBlobSize], [Options.MaxTotalSize] and [Options.Accept])
+// are ignored by [ReferenceCache].
 //
 // Credential scoping:
 //
-//   - [ScopeKey] returns a short, filesystem-safe hash of the
-//     (registry identity, credential) pair. Callers that share a
-//     cache directory across multiple credential sets should compose
-//     [Options.Dir] with the [ScopeKey] so tag→descriptor mappings
-//     resolved under one credential cannot leak into another. The
-//     content-addressed [BlobCache] does not need this scoping
-//     because blobs are identified by digest, but the tag-mutable
-//     [ReferenceCache] does — see the provider package for the
-//     canonical wiring. As a consequence, under
+//   - Neither cache keys on credentials: a [BlobCache] entry is
+//     identified by its digest, a [ReferenceCache] entry by registry,
+//     repository and reference. One instance of each can therefore
+//     serve every repository of a process. As a consequence, under
 //     [RemotePolicyIfNotPresent] whoever knows a digest gets a cached
-//     blob. Under [RemotePolicyAlways] a [BlobCache] hit additionally
-//     requires that the caller's repository served the blob before
-//     and still allows access to it.
+//     blob, and whoever names a cached tag gets its descriptor. Under
+//     [RemotePolicyAlways] a [BlobCache] hit additionally requires
+//     that the caller's repository served the blob before and still
+//     allows access to it, and a [ReferenceCache] serves nothing.
 //
 // Scope and intent:
 //
-//   - [BlobCache] is intentionally narrow: by default it only caches
-//     OCI/Docker manifests and OCM component-descriptor blobs
-//     (configurable via [Options.Accept]). Layer blobs and arbitrary
-//     octet streams are not cached so disk usage stays bounded by
-//     descriptor metadata size.
+//   - [BlobCache] is narrow by default: [DefaultAccept] only admits
+//     OCI/Docker manifests and OCM component-descriptor blobs, so disk
+//     usage stays bounded by descriptor metadata size. A caller may
+//     admit layers through [Options.Accept], with a size cap and
+//     [Options.MaxTotalSize] to bound the disk use. A miss is buffered
+//     in memory, so admitted blobs must stay small.
 //
 //   - [ReferenceCache] is unconditional within its namespace: every
-//     successful upstream resolve is recorded.
+//     successful upstream resolve is recorded. Under
+//     [RemotePolicyAlways] it records and serves nothing, because a
+//     cached descriptor would skip the registry's access check. Under
+//     [RemotePolicyIfNotPresent] it serves tags from the cache, so a tag
+//     re-pointed upstream stays stale for up to [Options.TTL]. OCM
+//     component versions are tags that are not meant to change, which
+//     makes this trade-off acceptable; [CachedStore.Tag] refreshes the
+//     mapping for tags the process writes itself.
 //
 // Lifecycle and isolation:
 //
@@ -63,9 +67,9 @@
 //     path so a future run with the same Dir reuses the existing
 //     content. Neither cache provides a Close method; both reseed
 //     their LRUs from the on-disk state on construction.
-//   - Eviction (LRU overflow or TTL expiry) deletes the on-disk file
-//     for blobs and rewrites/removes the per-namespace snapshot for
-//     references.
+//   - Eviction (LRU overflow, [Options.MaxTotalSize] or TTL expiry)
+//     deletes the on-disk file for blobs and rewrites/removes the
+//     per-namespace snapshot for references.
 //   - All public methods are safe for concurrent use. Under
 //     [RemotePolicyIfNotPresent], concurrent
 //     [BlobCache.Fetch] calls for the same digest are collapsed via

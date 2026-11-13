@@ -7,7 +7,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/opencontainers/go-digest"
 )
@@ -18,31 +20,24 @@ func pathFor(dir string, dgst digest.Digest) string {
 	return filepath.Join(dir, dgst.Algorithm().String(), dgst.Encoded())
 }
 
-// writeAtomic streams r into a fresh temp file under dir, fsyncs it,
-// and renames it into pathFor(dir, dgst). It returns the final path
-// and the number of bytes copied.
+// writeTemp streams r into a fresh, fsynced temp file next to
+// pathFor(dir, dgst) and returns its path, the final path and the number
+// of bytes copied. [commitTemp] renames it into place, so a caller can do
+// that under its own lock.
 //
 // If maxSize > 0 and the copied byte count exceeds maxSize, the temp
-// file is removed and an error is returned. The destination file is
-// never created in that case. The LimitReader stops the copy at
-// maxSize+1 so oversize is detectable without draining unbounded
-// upstream data; when called from [BlobCache.Fetch] the bytes are
-// already in memory and this check is redundant but cheap, but the
-// bound also protects any direct caller that streams straight from
-// upstream.
-//
-// Concurrent writers for the same digest race on the rename; the last
-// rename wins. Both yield identical content, so the LRU bookkeeping is
-// expected to dedupe via singleflight before reaching writeAtomic.
-func writeAtomic(dir string, dgst digest.Digest, maxSize int64, r io.Reader) (string, int64, error) {
+// file is removed and an error is returned. The LimitReader stops the
+// copy at maxSize+1 so oversize is detectable without draining unbounded
+// upstream data.
+func writeTemp(dir string, dgst digest.Digest, maxSize int64, r io.Reader) (tmpName, final string, n int64, err error) {
 	if err := dgst.Validate(); err != nil {
-		return "", 0, fmt.Errorf("invalid digest: %w", err)
+		return "", "", 0, fmt.Errorf("invalid digest: %w", err)
 	}
 
-	final := pathFor(dir, dgst)
+	final = pathFor(dir, dgst)
 	algoDir := filepath.Dir(final)
 	if err := os.MkdirAll(algoDir, 0o700); err != nil {
-		return "", 0, fmt.Errorf("create algo dir: %w", err)
+		return "", "", 0, fmt.Errorf("create algo dir: %w", err)
 	}
 
 	// Create the temp file inside the algorithm subdirectory (next to
@@ -52,9 +47,9 @@ func writeAtomic(dir string, dgst digest.Digest, maxSize int64, r io.Reader) (st
 	// for them so they are reclaimed on the next startup.
 	tmp, err := os.CreateTemp(algoDir, ".incoming-*")
 	if err != nil {
-		return "", 0, fmt.Errorf("create temp file: %w", err)
+		return "", "", 0, fmt.Errorf("create temp file: %w", err)
 	}
-	tmpName := tmp.Name()
+	tmpName = tmp.Name()
 	cleanup := func() {
 		_ = tmp.Close()
 		_ = os.Remove(tmpName)
@@ -65,24 +60,31 @@ func writeAtomic(dir string, dgst digest.Digest, maxSize int64, r io.Reader) (st
 		// without reading unbounded amounts.
 		r = io.LimitReader(r, maxSize+1)
 	}
-	n, err := io.Copy(tmp, r)
+	n, err = io.Copy(tmp, r)
 	if err != nil {
 		cleanup()
-		return "", 0, fmt.Errorf("copy to temp file: %w", err)
+		return "", "", 0, fmt.Errorf("copy to temp file: %w", err)
 	}
 	if maxSize > 0 && n > maxSize {
 		cleanup()
-		return "", 0, fmt.Errorf("blob exceeds max size %d", maxSize)
+		return "", "", 0, fmt.Errorf("blob exceeds max size %d", maxSize)
 	}
 
 	if err := tmp.Sync(); err != nil {
 		cleanup()
-		return "", 0, fmt.Errorf("sync temp file: %w", err)
+		return "", "", 0, fmt.Errorf("sync temp file: %w", err)
 	}
 	if err := tmp.Close(); err != nil {
 		_ = os.Remove(tmpName)
-		return "", 0, fmt.Errorf("close temp file: %w", err)
+		return "", "", 0, fmt.Errorf("close temp file: %w", err)
 	}
+	return tmpName, final, n, nil
+}
+
+// commitTemp renames a temp file written by [writeTemp] to its final
+// path, removing the temp file if that fails. n is the size writeTemp
+// copied.
+func commitTemp(tmpName, final string, n int64) error {
 	if err := os.Rename(tmpName, final); err != nil {
 		_ = os.Remove(tmpName)
 		// The destination is keyed by digest and only ever created by a rename of a
@@ -90,11 +92,11 @@ func writeAtomic(dir string, dgst digest.Digest, maxSize int64, r io.Reader) (st
 		// Windows refuses to replace a file that is open or concurrently being
 		// replaced, which a racing populate or reader of the same digest triggers.
 		if fi, statErr := os.Stat(final); statErr == nil && fi.Size() == n {
-			return final, n, nil
+			return nil
 		}
-		return "", 0, fmt.Errorf("rename temp file: %w", err)
+		return fmt.Errorf("rename temp file: %w", err)
 	}
-	return final, n, nil
+	return nil
 }
 
 // removeQuiet removes path and silently ignores fs.ErrNotExist. Other
@@ -119,7 +121,8 @@ func ensureDir(dir string) error {
 // the canonical pathFor layout (dir/<algorithm>/<hex>). Files with
 // unparseable names or that fail [digest.Validate] are removed so the
 // cache does not carry over corruption from a previous run. The
-// returned entries are not sorted.
+// returned entries are sorted by modification time, oldest first, so
+// a reseed restores the recency order of the previous run.
 func scanExisting(dir string) ([]existingEntry, error) {
 	algoDirs, err := os.ReadDir(dir)
 	if err != nil {
@@ -161,18 +164,21 @@ func scanExisting(dir string) ([]existingEntry, error) {
 				continue
 			}
 			out = append(out, existingEntry{
-				digest: dgst,
-				path:   filepath.Join(algoPath, name),
-				size:   info.Size(),
+				digest:  dgst,
+				path:    filepath.Join(algoPath, name),
+				size:    info.Size(),
+				modTime: info.ModTime(),
 			})
 		}
 	}
+	slices.SortFunc(out, func(a, b existingEntry) int { return a.modTime.Compare(b.modTime) })
 	return out, nil
 }
 
 // existingEntry describes a file discovered by [scanExisting].
 type existingEntry struct {
-	digest digest.Digest
-	path   string
-	size   int64
+	digest  digest.Digest
+	path    string
+	size    int64
+	modTime time.Time
 }
