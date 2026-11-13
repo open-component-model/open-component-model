@@ -14,6 +14,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	typesv1 "ocm.software/open-component-model/bindings/go/configuration/types/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
@@ -36,8 +37,6 @@ func Test_Provider_Smoke(t *testing.T) {
 
 	t.Run("access provider concurrently", func(t *testing.T) {
 		t.Parallel()
-		r := require.New(t)
-
 		desc := descriptor.Descriptor{}
 		desc.Meta.Version = "v2"
 		desc.Component.Name = "github.com/ocm/test-component"
@@ -46,6 +45,7 @@ func Test_Provider_Smoke(t *testing.T) {
 
 		t.Run("different versions", func(t *testing.T) {
 			t.Parallel()
+			r := require.New(t)
 
 			retrievedDescs := make([]*descriptor.Descriptor, 10)
 			retrievedVersions := make([][]string, 10)
@@ -85,6 +85,7 @@ func Test_Provider_Smoke(t *testing.T) {
 		})
 		t.Run("same version", func(t *testing.T) {
 			t.Parallel()
+			r := require.New(t)
 
 			retrievedDescs := make([]*descriptor.Descriptor, 10)
 			retrievedVersions := make([][]string, 10)
@@ -175,7 +176,7 @@ func TestWithHTTPConfig_CustomConfigIsUsed(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	timeout := httpv1alpha1.NewTimeout(5 * time.Second)
+	timeout := typesv1.NewDuration(5 * time.Second)
 	cfg := &httpv1alpha1.Config{TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: timeout}}
 	cfg.PlainHTTP = new(true) // the httptest server has no TLS
 	host := strings.TrimPrefix(srv.URL, "http://")
@@ -225,7 +226,7 @@ func TestWithHTTPConfig_ShortTimeoutCausesError(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	timeout := httpv1alpha1.NewTimeout(10 * time.Millisecond)
+	timeout := typesv1.NewDuration(10 * time.Millisecond)
 	cfg := &httpv1alpha1.Config{TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: timeout}}
 	cfg.PlainHTTP = new(true) // the httptest server has no TLS
 	host := strings.TrimPrefix(srv.URL, "http://")

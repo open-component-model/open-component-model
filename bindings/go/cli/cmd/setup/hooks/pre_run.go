@@ -11,6 +11,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/cmd/version"
 	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 	"ocm.software/open-component-model/bindings/go/cli/internal/flags/log"
+	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress"
 )
 
 // PreRunE is the default PreRun hook with no extra options.
@@ -30,6 +31,13 @@ func PreRunEWithConfig(cmd *cobra.Command, cfg Config) error {
 		return fmt.Errorf("get logger: %w", err)
 	}
 	slog.SetDefault(logger)
+	// An explicit --logformat signals that the user wants machine-readable logs,
+	// so suppress the interactive progress tracker: its animated bar shares the
+	// log stream and would otherwise replace the requested log records. This does
+	// not affect the live render mode of get/add, which animates data on stdout.
+	if cmd.Flags().Changed(log.FormatFlagName) {
+		cmd.SetContext(progress.WithForceNonInteractive(cmd.Context()))
+	}
 	slog.DebugContext(cmd.Context(), "FIPS 140-3 mode",
 		slog.Bool("enabled", fips140.Enabled()), slog.String("module", fips140.Version()))
 

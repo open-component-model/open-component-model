@@ -1,10 +1,8 @@
 package spec
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
-	"time"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -41,18 +39,6 @@ type Config struct {
 	// to resolve relative paths for file operations.
 	// If not defined, the current working directory is used as a default for file operations.
 	WorkingDirectory *string `json:"workingDirectory,omitempty"`
-}
-
-type Duration time.Duration
-
-func (d Duration) MarshalJSON() ([]byte, error) {
-	return json.Marshal(time.Duration(d).String())
-}
-
-func (d *Duration) UnmarshalJSON(b []byte) error {
-	var v interface{}
-
-	return json.Unmarshal(b, &v)
 }
 
 // LookupConfig creates a new filesystem configuration from a central V1 config.

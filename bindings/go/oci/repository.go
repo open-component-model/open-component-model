@@ -16,12 +16,12 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3"
+	"github.com/oras-project/oras-go/v3/content"
+	"github.com/oras-project/oras-go/v3/errdef"
+	"github.com/oras-project/oras-go/v3/registry"
 	slogcontext "github.com/veqryn/slog-context"
 	"golang.org/x/sync/errgroup"
-	"oras.land/oras-go/v2"
-	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/errdef"
-	"oras.land/oras-go/v2/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -389,13 +389,13 @@ func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descript
 	}
 
 	var pinnedDigest digest.Digest
-	if dig, err := resolved.Digest(); err == nil {
+	if dig, err := resolved.GetDigest(); err == nil {
 		pinnedDigest = dig
 	}
 
 	var desc ociImageSpecV1.Descriptor
 	if pinnedDigest.String() == "" {
-		if desc, err = src.Resolve(ctx, resolved.ReferenceOrTag()); err != nil {
+		if desc, err = src.Resolve(ctx, resolved.GetReference()); err != nil {
 			return nil, fmt.Errorf("failed to resolve reference to process digest %q: %w", typed.ImageReference, err)
 		}
 	} else {
@@ -421,7 +421,7 @@ func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descript
 		return nil, fmt.Errorf("expected pinned digest %q (derived from %q) but got %q", pinnedDigest, resolved, desc.Digest)
 	}
 
-	resolved.Reference.Reference = desc.Digest.String()
+	resolved.Digest = desc.Digest.String()
 
 	// in any case, after successful processing, we can pin the access
 	typed.ImageReference = resolved.String()
@@ -862,7 +862,7 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to parse target access image reference %q: %w", access.ImageReference, err)
 	}
-	if pinned, err := ref.Digest(); err == nil && pinned != main.Digest {
+	if pinned, err := ref.GetDigest(); err == nil && pinned != main.Digest {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("target access digest mismatch: expected %s, got %s", pinned, main.Digest)
 	}
 
@@ -880,8 +880,8 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 	}
 
 	// if we don't have a pinned access we can pin it now.
-	if ref.Reference.Reference == "" {
-		ref.Reference.Reference = main.Digest.String()
+	if ref.GetReference() == "" {
+		ref.Digest = main.Digest.String()
 		access.ImageReference = ref.String()
 	}
 
@@ -938,7 +938,7 @@ func (repo *Repository) resolveOwnershipSubject(ctx context.Context, component, 
 		if err != nil {
 			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to parse image reference %q: %w", typed.ImageReference, err)
 		}
-		subject, err := store.Resolve(ctx, ref.ReferenceOrTag())
+		subject, err := store.Resolve(ctx, ref.GetReference())
 		if err != nil {
 			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to resolve subject %q for ownership referrer: %w", typed.ImageReference, err)
 		}
@@ -1321,7 +1321,7 @@ func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed
 			return nil, fmt.Errorf("error parsing image reference %q: %w", typed.ImageReference, err)
 		}
 
-		reference := resolved.ReferenceOrTag()
+		reference := resolved.GetReference()
 
 		desc, err := src.Resolve(ctx, reference)
 		if err != nil {
@@ -1372,7 +1372,7 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse target access image reference %q: %w", access.ImageReference, err)
 	}
-	if pinned, err := ref.Digest(); err == nil && pinned != rs.Root().Digest {
+	if pinned, err := ref.GetDigest(); err == nil && pinned != rs.Root().Digest {
 		return nil, fmt.Errorf("target access digest mismatch: expected %s, got %s", pinned, rs.Root().Digest)
 	}
 
@@ -1411,8 +1411,8 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 	}
 
 	// if we don't have a pinned access we can pin it now.
-	if ref.Reference.Reference == "" {
-		ref.Reference.Reference = rs.Root().Digest.String()
+	if ref.GetReference() == "" {
+		ref.Digest = rs.Root().Digest.String()
 	}
 
 	access.ImageReference = ref.String()

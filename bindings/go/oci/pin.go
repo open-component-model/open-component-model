@@ -7,7 +7,7 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2/errdef"
+	"github.com/oras-project/oras-go/v3/errdef"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
@@ -165,7 +165,7 @@ func withDigest(reference, dgst string) (string, error) {
 		return "", fmt.Errorf("invalid reference %q: %w", reference, err)
 	}
 	ref.Tag = ""
-	ref.Reference.Reference = dgst
+	ref.Digest = dgst
 	return ref.String(), nil
 }
 

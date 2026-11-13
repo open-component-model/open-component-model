@@ -2,14 +2,9 @@ package input
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"os"
-	"os/exec"
 	"slices"
 	"sync"
-
-	"golang.org/x/sync/errgroup"
 
 	"ocm.software/open-component-model/bindings/go/constructor"
 	inputv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
@@ -234,43 +229,20 @@ func (r *RepositoryRegistry) RegisterInternalSourceInputPlugin(
 
 // constructedPlugin only contains EXTERNAL plugins that have been started and need to be shut down.
 type constructedPlugin struct {
-	Plugin inputv1.InputPluginContract
-	cmd    *exec.Cmd
+	Plugin  inputv1.InputPluginContract
+	process plugins.Process
 }
 
-// Shutdown will loop through all _STARTED_ plugins and will send an Interrupt signal to them.
-// All plugins should handle interrupt signals gracefully. For Go, this is done automatically by
-// the plugin SDK.
+// Shutdown shuts down all _STARTED_ plugins.
 func (r *RepositoryRegistry) Shutdown(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	eg, ctx := errgroup.WithContext(ctx)
+	processes := make([]plugins.Process, 0, len(r.constructedPlugins))
 	for _, p := range r.constructedPlugins {
-		eg.Go(func() error {
-			// The plugins should handle the Interrupt signal for shutdowns.
-			if err := p.cmd.Process.Signal(os.Interrupt); err != nil && !errors.Is(err, os.ErrProcessDone) {
-				return fmt.Errorf("failed to send interrupt signal to plugin: %w", errors.Join(err, p.cmd.Process.Kill()))
-			}
-
-			shutdownSig := make(chan error, 1)
-			defer func() {
-				close(shutdownSig)
-			}()
-			go func() {
-				_, err := p.cmd.Process.Wait()
-				shutdownSig <- err
-			}()
-
-			select {
-			case err := <-shutdownSig:
-				return err
-			case <-ctx.Done():
-				return errors.Join(ctx.Err(), p.cmd.Process.Kill())
-			}
-		})
+		processes = append(processes, p.process)
 	}
 
-	return eg.Wait()
+	return plugins.ShutdownAll(ctx, processes)
 }
 
 func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *types.Plugin) (inputv1.InputPluginContract, error) {
@@ -288,8 +260,8 @@ func startAndReturnPlugin(ctx context.Context, r *RepositoryRegistry, plugin *ty
 
 	repoPlugin := NewConstructionRepositoryPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, r.capabilities[plugin.ID])
 	r.constructedPlugins[plugin.ID] = &constructedPlugin{
-		Plugin: repoPlugin,
-		cmd:    plugin.Cmd,
+		Plugin:  repoPlugin,
+		process: plugins.NewProcess(plugin, client, loc),
 	}
 
 	// wrap the untyped internal plugin into a typed representation.
