@@ -1492,7 +1492,7 @@ func TestBundleHasSignedTimestamp(t *testing.T) {
 		},
 		{
 			name:  "one rfc3161 entry returns true",
-			input: `{"verificationMaterial":{"timestampVerificationData":{"rfc3161Timestamps":[{"signedTimestamp":"dGVzdA=="}]}}}`,
+			input: `{"verificationMaterial":{"timestampVerificationData":{"rfc3161Timestamps":[{}]}}}`,
 			want:  true,
 		},
 		{
