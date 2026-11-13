@@ -97,16 +97,22 @@ func TestGetEffectiveConfig_OCICache(t *testing.T) {
 			},
 		},
 		{
-			name: "merged with ttl and maxBlobSize",
+			name: "merged per cache section",
 			entries: []string{
-				`{"type":"oci.cache.config.ocm.software/v1alpha1","remotePolicy":"Always","ttl":"1h","maxBlobSize":1024}`,
-				`{"type":"oci.cache.config.ocm.software/v1alpha1","ttl":"30s"}`,
+				`{"type":"oci.cache.config.ocm.software/v1alpha1","remotePolicy":"Always","blob":{"ttl":"1h","maxBlobSize":1024},"reference":{"ttl":"1m"}}`,
+				`{"type":"oci.cache.config.ocm.software/v1alpha1","blob":{"ttl":"30s"},"reference":{"enabled":false}}`,
 			},
 			expect: &ocicachev1alpha1.Config{
 				Type:         runtime.NewVersionedType(ocicachev1alpha1.ConfigType, ocicachev1alpha1.Version),
 				RemotePolicy: ocicachev1alpha1.RemotePolicyAlways,
-				TTL:          typesv1.NewDuration(30 * time.Second),
-				MaxBlobSize:  new(int64(1024)),
+				Blob: &ocicachev1alpha1.BlobCacheConfig{
+					TTL:         typesv1.NewDuration(30 * time.Second),
+					MaxBlobSize: new(int64(1024)),
+				},
+				Reference: &ocicachev1alpha1.ReferenceCacheConfig{
+					Enabled: new(false),
+					TTL:     typesv1.NewDuration(time.Minute),
+				},
 			},
 		},
 	}
