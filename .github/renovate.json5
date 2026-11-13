@@ -387,6 +387,17 @@
       ],
       minimumReleaseAge: null,
     },
+    {
+      // The aquasecurity org's GitHub IP allow list answers 403 to credentialed
+      // requests from hosted runners on the releases API (see .env). The tags
+      // API that resolves this pin is unaffected, but both the release-age gate
+      // and the abandonment check need a release timestamp from the blocked
+      // API, so neither applies here: without this, every run ends in an error.
+      // Trivy is a CI scanner, not a shipped dependency: a fresh patch is wanted.
+      matchPackageNames: ['aquasecurity/trivy'],
+      minimumReleaseAge: null,
+      abandonmentThreshold: null,
+    },
   ],
   customDatasources: {
     envtest: {
