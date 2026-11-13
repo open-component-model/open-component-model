@@ -103,7 +103,11 @@ func ConvertFromV2Provider(provider string) (Provider, error) {
 		return Provider{}, nil
 	}
 	if strings.HasPrefix(strings.TrimSpace(provider), "{") {
-		if !jsontext.Value(provider).IsValid() {
+		// AllowDuplicateNames and AllowInvalidUTF8 keep the acceptance set of
+		// encoding/json v1's json.Valid, which only checked RFC 8259 syntax: descriptors
+		// written by OCM v1 can carry either, and the decode below still resolves them
+		// the way v1 did (last member wins, invalid bytes become U+FFFD).
+		if !jsontext.Value(provider).IsValid(jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true)) {
 			return Provider{}, fmt.Errorf("invalid JSON format")
 		}
 		type providerStruct struct {
@@ -111,7 +115,7 @@ func ConvertFromV2Provider(provider string) (Provider, error) {
 			Labels []v2.Label `json:"labels,omitempty"`
 		}
 		var id providerStruct
-		if err := json.Unmarshal([]byte(provider), &id); err != nil {
+		if err := json.Unmarshal([]byte(provider), &id, jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true)); err != nil {
 			return Provider{}, fmt.Errorf("could not unmarshal provider string: %w", err)
 		}
 		return Provider{

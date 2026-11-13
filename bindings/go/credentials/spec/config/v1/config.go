@@ -91,7 +91,7 @@ func (a *Consumer) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 		Credentials      []*runtime.Raw     `json:"credentials"`
 	}
 	var consumer ConsumerWithSingleIdentity
-	if err := json.Unmarshal(data, &consumer); err != nil {
+	if err := json.Unmarshal(data, &consumer, dec.Options()); err != nil {
 		return err
 	}
 	if consumer.Identity != nil {

@@ -95,7 +95,7 @@ func (sb *SchemaOrBool) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	}
 
 	var sch JSONSchemaDraft202012
-	if err := json.Unmarshal(data, &sch); err != nil {
+	if err := json.Unmarshal(data, &sch, dec.Options()); err != nil {
 		return err
 	}
 	sb.Schema = &sch

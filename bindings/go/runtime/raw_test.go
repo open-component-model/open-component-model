@@ -58,3 +58,13 @@ func TestRaw_String(t *testing.T) {
 
 	require.Equal(t, "some raw data", raw.String())
 }
+
+// The type member is extracted with a nested unmarshal, which must keep the options the
+// outer decoder was given: a .ocmconfig read through sigs.k8s.io/yaml keeps the author's
+// spelling, and losing the type here makes every dispatch on it silently skip the entry.
+func TestRaw_UnmarshalJSONFrom_KeepsDecodeOptions(t *testing.T) {
+	var raw Raw
+	require.NoError(t, json.Unmarshal([]byte(`{"Type":"example/v1","foo":"bar"}`), &raw, JSONDecodeOptions))
+
+	require.Equal(t, NewVersionedType("example", "v1"), raw.GetType())
+}

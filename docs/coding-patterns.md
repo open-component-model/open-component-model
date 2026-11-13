@@ -417,8 +417,11 @@ func (t *Type) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 ```
 
 `jsontext.Decoder.ReadValue` borrows the decoder's buffer - `Clone()` it if it outlives the
-next read. Types that accept several input shapes read the value once and try each shape on
-those bytes:
+next read. A nested `json.Unmarshal` on those bytes starts a fresh top-level call and does
+**not** inherit the options the outer decoder was created with, so pass `dec.Options()`:
+without it a document read with `runtime.JSONDecodeOptions` loses its case-insensitive
+matching inside the method and members silently go missing. Types that accept several input
+shapes read the value once and try each shape on those bytes:
 
 ```go
 func (c *Spec) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
@@ -427,12 +430,12 @@ func (c *Spec) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
         return err
     }
     var items []Item
-    if err := json.Unmarshal(data, &items); err == nil {
+    if err := json.Unmarshal(data, &items, dec.Options()); err == nil {
         c.Items = items
         return nil
     }
     var single Item
-    if err := json.Unmarshal(data, &single); err == nil {
+    if err := json.Unmarshal(data, &single, dec.Options()); err == nil {
         c.Items = []Item{single}
         return nil
     }

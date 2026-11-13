@@ -213,6 +213,16 @@ func TestConvertFromV2Provider(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			// A descriptor written by OCM v1 can carry a duplicate member, which
+			// encoding/json v1 resolved last-wins. Rejecting it would make the
+			// stored descriptor unreadable.
+			name:     "json provider with a duplicate member",
+			provider: `{"name": "first", "name": "second"}`,
+			want: descriptorRuntime.Provider{
+				Name: "second",
+			},
+		},
+		{
 			name:     "invalid json",
 			provider: `{invalid json}`,
 			want:     descriptorRuntime.Provider{},

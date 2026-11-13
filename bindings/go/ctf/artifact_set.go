@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"fmt"
@@ -500,7 +501,12 @@ func decodeIndexFromFS(fs fs.FS, name string) (*ociimagespec.Index, error) {
 		return nil, fmt.Errorf("unable to open %s: %w", name, err)
 	}
 	defer rawidx.Close()
-	if err := json.UnmarshalRead(rawidx, &idx); err != nil {
+	// The index decodes with the leniency of encoding/json v1, which wrote and read every
+	// index.json so far: duplicate members take their last value, invalid UTF-8 is
+	// tolerated and data after the index value is ignored. Tightening any of these would
+	// make an archive that opens today unopenable.
+	dec := jsontext.NewDecoder(rawidx, jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true))
+	if err := json.UnmarshalDecode(dec, &idx, runtime.JSONDecodeOptions); err != nil {
 		return nil, fmt.Errorf("unable to decode %s: %w", name, err)
 	}
 	return &idx, err

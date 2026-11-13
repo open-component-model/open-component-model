@@ -54,7 +54,7 @@ func (u *Raw) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	t := &struct {
 		Type Type `json:"type"`
 	}{}
-	if err := json.Unmarshal(data, t); err != nil {
+	if err := json.Unmarshal(data, t, dec.Options()); err != nil {
 		return fmt.Errorf("could not unmarshal data into raw: %w", err)
 	}
 	u.Type = t.Type
