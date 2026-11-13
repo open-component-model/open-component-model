@@ -124,6 +124,9 @@ func NewReferenceCache(tempDir string, cfg *ocicachev1alpha1.Config) (*ocicache.
 	if cfg.Reference.TTL != nil {
 		opts.TTL = time.Duration(*cfg.Reference.TTL)
 	}
+	if cfg.Reference.MaxEntries != nil {
+		opts.MaxEntries = *cfg.Reference.MaxEntries
+	}
 	return ocicache.NewReferenceCache(opts)
 }
 

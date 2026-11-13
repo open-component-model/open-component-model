@@ -21,7 +21,7 @@ func TestWithOCICacheConfig(t *testing.T) {
 			MaxBlobSize:  new(int64(1024)),
 			MaxTotalSize: new(int64(4096)),
 		},
-		Reference: &ocicachev1alpha1.ReferenceCacheConfig{TTL: typesv1.NewDuration(time.Minute)},
+		Reference: &ocicachev1alpha1.ReferenceCacheConfig{TTL: typesv1.NewDuration(time.Minute), MaxEntries: new(500)},
 	}
 	enabled := func(blob, ref bool) *ocicachev1alpha1.Config {
 		return &ocicachev1alpha1.Config{
@@ -54,7 +54,7 @@ func TestWithOCICacheConfig(t *testing.T) {
 			name:     "each section applies to its cache",
 			opts:     append(bothCaches, WithOCICacheConfig(all)),
 			wantBlob: &cache.Options{RemotePolicy: cache.RemotePolicyIfNotPresent, TTL: time.Hour, MaxBlobSize: 1024, MaxTotalSize: 4096},
-			wantRef:  &cache.Options{RemotePolicy: cache.RemotePolicyIfNotPresent, TTL: time.Minute},
+			wantRef:  &cache.Options{RemotePolicy: cache.RemotePolicyIfNotPresent, TTL: time.Minute, MaxEntries: 500},
 		},
 		{
 			name: "unset fields keep the options",

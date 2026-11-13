@@ -102,6 +102,12 @@ type ReferenceCacheConfig struct {
 	// digest until the entry expires. Must be positive.
 	// Defaults to 10m. See [typesv1.Duration] for the accepted forms.
 	TTL *typesv1.Duration `json:"ttl,omitempty"`
+
+	// MaxEntries is the number of tags and digests the reference cache keeps, for all
+	// repositories together. When it is reached, the least recently used entry is removed.
+	// Must be positive. Defaults to 10000.
+	// +ocm:jsonschema-gen:minimum=1
+	MaxEntries *int `json:"maxEntries,omitempty"`
 }
 
 // BlobEnabled reports whether the blob cache is on. def applies when c or the field is unset.
@@ -121,8 +127,8 @@ func (c *Config) ReferenceEnabled(def bool) bool {
 	return *c.Reference.Enabled
 }
 
-// Validate rejects a RemotePolicy that is neither empty nor a known policy, a TTL or
-// MaxBlobSize that is set but not positive, and a negative MaxTotalSize.
+// Validate rejects a RemotePolicy that is neither empty nor a known policy, a TTL,
+// MaxBlobSize or MaxEntries that is set but not positive, and a negative MaxTotalSize.
 func (c *Config) Validate() error {
 	var errs []error
 	switch c.RemotePolicy {
@@ -142,6 +148,9 @@ func (c *Config) Validate() error {
 	}
 	if r := c.Reference; r != nil {
 		errs = append(errs, validateTTL("reference.ttl", r.TTL))
+		if r.MaxEntries != nil && *r.MaxEntries <= 0 {
+			errs = append(errs, fmt.Errorf("invalid reference.maxEntries %d, must be positive", *r.MaxEntries))
+		}
 	}
 	return errors.Join(errs...)
 }
@@ -223,6 +232,9 @@ func Merge(configs ...*Config) *Config {
 			}
 			if r.TTL != nil {
 				merged.Reference.TTL = r.TTL
+			}
+			if r.MaxEntries != nil {
+				merged.Reference.MaxEntries = r.MaxEntries
 			}
 		}
 	}

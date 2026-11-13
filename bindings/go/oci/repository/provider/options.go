@@ -186,8 +186,13 @@ func applyReferenceCacheConfig(opts *cache.Options, cfg *ocicachev1alpha1.Config
 	}
 	if cfg != nil {
 		applyRemotePolicy(applied, cfg)
-		if r := cfg.Reference; r != nil && r.TTL != nil {
-			applied.TTL = time.Duration(*r.TTL)
+		if r := cfg.Reference; r != nil {
+			if r.TTL != nil {
+				applied.TTL = time.Duration(*r.TTL)
+			}
+			if r.MaxEntries != nil {
+				applied.MaxEntries = *r.MaxEntries
+			}
 		}
 	}
 	if applied.RemotePolicy == cache.RemotePolicyAlways {

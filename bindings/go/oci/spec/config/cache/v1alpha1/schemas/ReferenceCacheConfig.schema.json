@@ -10,6 +10,12 @@
       "type": "boolean",
       "description": "Enabled turns the reference cache on or off. Defaults to true in the CLI and to false\nin the controller. The Always remote policy turns it off regardless."
     },
+    "maxEntries": {
+      "type": "integer",
+      "description": "MaxEntries is the number of tags and digests the reference cache keeps, for all\nrepositories together. When it is reached, the least recently used entry is removed.\nMust be positive. Defaults to 10000.",
+      "minimum": 1,
+      "maximum": 9223372036854776000
+    },
     "ttl": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.configuration.types.v1.Duration",
       "description": "TTL is the maximum age of an entry. A tag moved in the registry resolves to its old\ndigest until the entry expires. Must be positive.\nDefaults to 10m. See [typesv1.Duration] for the accepted forms."
