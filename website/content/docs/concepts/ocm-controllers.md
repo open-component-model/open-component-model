@@ -206,7 +206,7 @@ ready with reason `GetConfigurationFailed`.
 - **No service account set:** the `default` service account of the namespace is used. Note: The default service account
   on a fresh cluster, usually, has no permissions.
 - **The access review doesn't change anything:** the controller never acts as the service account to read configuration.
-  It only _asks_ the API server "can this service account read this object"?
+  It only `asks` the API server "can this service account read this object"?
 - **`NamespacedDeployer`:** its service account also applies and prunes, and needs `list` and `watch` on every kind it
   deploys, because the drift watches run with the controller's identity as well.
 - **`Deployer`:** it is cluster-scoped and has no service account, so its configuration is not reviewed.

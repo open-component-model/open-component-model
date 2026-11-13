@@ -61,7 +61,8 @@ Every pod in the namespace that names no service account runs as `default`, so p
 kubectl create serviceaccount ocm-reader -n my-team
 ```
 
-Set it on every object in the namespace that reads configuration:
+Set it on every object in the namespace that reads configuration, except `NamespacedDeployer` objects.
+A `NamespacedDeployer` keeps its existing service account. Grant that account `get` on the configuration objects it reads.:
 
 ```yaml
 spec:
