@@ -66,9 +66,9 @@ jobs:
           # branches with the checkout's credentials. Zizmor flags this; accepted.
 
       - name: Run
-        uses: jakobmoellerdev/deps@5e70c611edd8622d98ac166ccd9cecb168bd552c # v0.15.0
+        uses: jakobmoellerdev/deps@a98b4b8956a81c5908d6af8ed7b088e95d8bde8c # v0.15.1
         with:
-          version: v0.15.0
+          version: v0.15.1
           token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
           # Pull requests only check that the config still resolves and what it would do.
           dry-run: ${{ (github.event_name == 'pull_request' || inputs.dryRun) && 'true' || 'false' }}
