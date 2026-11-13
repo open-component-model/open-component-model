@@ -17,5 +17,7 @@ func MustAddToScheme(scheme *runtime.Scheme) {
 		runtime.NewUnversionedType(LocalBlobAccessType),
 		runtime.NewVersionedType(LegacyLocalBlobAccessType, LocalBlobAccessTypeVersion),
 		runtime.NewUnversionedType(LegacyLocalBlobAccessType),
+		runtime.NewVersionedType(LegacyLocalOciBlobAccessType, LocalBlobAccessTypeVersion),
+		runtime.NewUnversionedType(LegacyLocalOciBlobAccessType),
 	)
 }
