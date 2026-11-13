@@ -37,15 +37,15 @@ export async function checkImage(blob, index, platform) {
     let image;
     /** @type {Descriptor[]} */
     const attestations = [];
-    /** @param {Manifest} node */
-    const walk = async (node) => {
+    /** @param {Manifest} node @param {number} depth - index nesting left to follow */
+    const walk = async (node, depth) => {
         for (const d of node.manifests ?? []) {
             if (d.annotations?.["vnd.docker.reference.type"] === "attestation-manifest") attestations.push(d);
             else if (d.platform?.os === platform.os && d.platform?.architecture === platform.architecture) image ??= d;
-            else if (!d.platform) await walk(await blob(d.digest));
+            else if (!d.platform && depth > 0) await walk(await blob(d.digest), depth - 1);
         }
     };
-    await walk(index);
+    await walk(index, 2);
     const name = `${platform.os}/${platform.architecture}`;
     if (!image) {
         return [
@@ -112,7 +112,11 @@ export default async function imageMetadataAction({ core }) {
     const checks = await checkImage(blob, await readMember(archive, "index.json"), { os: "linux", architecture });
     await writeFile(output, `${JSON.stringify(checks, null, 2)}\n`);
 
-    for (const c of checks) (c.result === "pass" ? core.info : core.error)(`${c.id}: ${c.detail}`);
+    for (const c of checks) {
+        const line = `${c.id}: ${c.detail}`;
+        if (c.result === "pass") core.info(line);
+        else core.error(line);
+    }
     if (title && process.env.GITHUB_STEP_SUMMARY) {
         await core.summary.addHeading(`🏷️ Image metadata: ${title}`, 3)
             .addTable([

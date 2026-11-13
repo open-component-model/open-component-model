@@ -27,7 +27,7 @@ export const LEVELS = /** @type {const} */ (["basic", "standard", "elevated"]);
  * so a mapped code must be one of these to be counted as passed when absent.
  */
 export const DOCKLE_CHECKS = new Set([
-    "CIS-DI-0001", "CIS-DI-0002", "CIS-DI-0003", "CIS-DI-0004", "CIS-DI-0005",
+    "CIS-DI-0001", "CIS-DI-0005",
     "CIS-DI-0006", "CIS-DI-0007", "CIS-DI-0008", "CIS-DI-0009", "CIS-DI-0010",
     "DKL-DI-0001", "DKL-DI-0002", "DKL-DI-0003", "DKL-DI-0004", "DKL-DI-0005", "DKL-DI-0006",
     "DKL-LI-0001", "DKL-LI-0002", "DKL-LI-0003",

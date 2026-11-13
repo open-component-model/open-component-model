@@ -239,7 +239,10 @@ jobs:
           rc=0
           docker run --rm -v "$PWD/tmp/image.tar:/image.tar:ro" -v "$PWD:/out" "$DOCKLE_IMAGE" \
             --exit-code 1 --exit-level warn --format json --output /out/dockle.json --input /image.tar || rc=$?
-          jq -r '.details[]? | "\(.level) \(.code): \((.alerts // []) | join("; "))"' dockle.json
+          # dockle writes no report when it fails before the scan; rc stays its exit status.
+          if [[ -f dockle.json ]]; then
+            jq -r '.details[]? | "\(.level) \(.code): \((.alerts // []) | join("; "))"' dockle.json || true
+          fi
           exit "$rc"
 
       - name: Upload reports
