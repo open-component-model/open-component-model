@@ -1,7 +1,7 @@
 package discovery
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"slices"
 	"testing"
 
@@ -212,7 +212,7 @@ func projectGraph(t *testing.T, spec *v1alpha1.DiscoverySpec, descriptors ...*de
 
 func mustJSON(t *testing.T, v any) string {
 	t.Helper()
-	raw, err := json.Marshal(v)
+	raw, err := json.Marshal(v, runtime.JSONOptions)
 	require.NoError(t, err)
 	return string(raw)
 }
@@ -411,7 +411,7 @@ func TestProjectedRecordResolvesLikeResourceController(t *testing.T) {
 			omitted := 0
 			for _, record := range p.Extracted {
 				var ref v1alpha1.ResourceReference
-				r.NoError(json.Unmarshal([]byte(mustJSON(t, record)), &ref))
+				r.NoError(json.Unmarshal([]byte(mustJSON(t, record)), &ref, runtime.JSONOptions))
 
 				current := tt.descriptors[0]
 				for _, hop := range ref.ReferencePath {
