@@ -32,6 +32,10 @@ All content lives under the `content` directory and is organized by section.
 | `content/docs/reference`       | Reference and CLI documentation (mounted via module imports) |
 | `content/docs/tutorials`       | Step-by-step tutorials                                       |
 | `content/community`            | Community information                                        |
+| `static/images/adopters/`      | Adopter logos shown in the *Adopted by* marquee              |
+
+For adding new adopter logos or checking their trademark attribution (which the
+site footer links to), see [static/images/adopters/README.md](static/images/adopters/README.md).
 
 Versioned snapshot folders live under `content_versioned/`:
 

@@ -51,4 +51,59 @@ benefits:
     title: "Committed to Open Source"
     description: "We champion open innovation — in OCM and across the community."
     link: "benefits.md#committed-to-open-source"
+
+# Adopters with `Permission: granted (explicit)` or `granted (implicit)` per
+# `website/static/images/adopters/README.md`. A commented-out entry means the
+# trademark owner's written OK is still pending; the logo file stays in
+# `static/images/adopters/` but is not rendered. Uncomment once consent is on
+# file.
+adopters:
+  # - name: "BWI"                # Permission: requested (pending)
+  #   logo_light: "images/adopters/bwi-color.svg"
+  #   logo_dark:  "images/adopters/bwi-color.svg"
+  #   url: "https://www.bwi.de"
+  - name: "EverBright"
+    logo_light: "images/adopters/everbright-light.svg"
+    logo_dark:  "images/adopters/everbright-dark.svg"
+    url: "https://everbright-it.de"
+  - name: "Gardener"
+    logo_light: "images/adopters/gardener-color.svg"
+    logo_dark:  "images/adopters/gardener-color.svg"
+    url: "https://gardener.cloud"
+  - name: "IronCore"
+    logo_light: "images/adopters/ironcore-light.svg"
+    logo_dark:  "images/adopters/ironcore-dark.svg"
+    url: "https://ironcore.dev"
+  - name: "Konfidence"
+    logo_light: "images/adopters/konfidence-dark.svg"
+    logo_dark:  "images/adopters/konfidence-dark.svg"
+    url: "https://konfidence.cloud"
+  - name: "Kyma"
+    logo_light: "images/adopters/kyma-light.svg"
+    logo_dark:  "images/adopters/kyma-dark.svg"
+    url: "https://kyma-project.io"
+  - name: "OpenControlPlane"
+    logo_light: "images/adopters/ocp-light.svg"
+    logo_dark:  "images/adopters/ocp-dark.svg"
+    url: "https://open-control-plane.io"
+  - name: "Platform Mesh"
+    logo_light: "images/adopters/platform-mesh-color.svg"
+    logo_dark:  "images/adopters/platform-mesh-dark.svg"
+    url: "https://platform-mesh.io"
+  - name: "SAP"
+    logo_light: "images/adopters/sap-color.svg"
+    logo_dark:  "images/adopters/sap-color.svg"
+    url: "https://sap.com"
+  - name: "SAP NS2"
+    logo_light: "images/adopters/sap-ns2.png"
+    logo_dark:  "images/adopters/sap-ns2.png"
+    url: "https://sapns2.com"
+  # - name: "STACKIT"            # Permission: requested (pending)
+  #   logo_light: "images/adopters/stackit-light.svg"
+  #   logo_dark:  "images/adopters/stackit-dark.svg"
+  #   url: "https://stackit.de"
+  # - name: "T-Systems"          # Permission: requested (pending)
+  #   logo_light: "images/adopters/t-systems-light.svg"
+  #   logo_dark:  "images/adopters/t-systems-dark.svg"
+  #   url: "https://www.t-systems.com"
 ---
