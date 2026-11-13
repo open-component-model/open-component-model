@@ -414,10 +414,10 @@ func TestReferenceCache_IfNotPresent_HitAvoidsUpstream(t *testing.T) {
 	assert.EqualValues(t, 1, resolves.Load(), "IfNotPresent must not call upstream on a digest hit")
 }
 
-// TestReferenceCache_IfNotPresent_TagAlwaysResolvesUpstream pins that
-// the IfNotPresent shortcut governs authorisation, not freshness: a tag
-// is mutable, so it is resolved upstream even when a mapping is cached.
-func TestReferenceCache_IfNotPresent_TagAlwaysResolvesUpstream(t *testing.T) {
+// TestReferenceCache_IfNotPresent_TagHitSkipsUpstream pins that a cached
+// tag is served without asking the registry; Options.TTL bounds how long
+// a moved tag stays stale.
+func TestReferenceCache_IfNotPresent_TagHitSkipsUpstream(t *testing.T) {
 	c := newTestRefCache(t, Options{RemotePolicy: RemotePolicyIfNotPresent})
 
 	desc := ociImageSpecV1.Descriptor{MediaType: ociImageSpecV1.MediaTypeImageManifest, Size: 1}
@@ -436,7 +436,7 @@ func TestReferenceCache_IfNotPresent_TagAlwaysResolvesUpstream(t *testing.T) {
 	_, err = c.Resolve(t.Context(), up, ref)
 	require.NoError(t, err)
 
-	assert.EqualValues(t, 2, resolves.Load(), "a tag must be resolved upstream on every call")
+	assert.EqualValues(t, 1, resolves.Load(), "IfNotPresent must not call upstream on a tag hit")
 }
 
 func TestReferenceCache_Always_AlwaysCallsUpstream(t *testing.T) {

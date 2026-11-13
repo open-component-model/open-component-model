@@ -233,6 +233,9 @@ func (c *ReferenceCache) Lookup(ref properties.Reference) (ociImageSpecV1.Descri
 // Resolve consults the reference cache before delegating to upstream.
 // On miss it calls upstream.Resolve and, on success, records the
 // (namespace, reference) → descriptor mapping (in-memory + on disk).
+// Under [RemotePolicyIfNotPresent] a hit is served without asking
+// upstream, for tags too: a tag re-pointed upstream resolves to the
+// cached descriptor until the entry expires after [Options.TTL].
 // Errors are returned unchanged and not cached. Under
 // [RemotePolicyAlways] concurrent calls are not collapsed: every caller
 // resolves against its own upstream.
@@ -245,7 +248,7 @@ func (c *ReferenceCache) Resolve(ctx context.Context, upstream Resolver, ref pro
 		return upstream.Resolve(ctx, ref.GetReference())
 	}
 	k := c.buildKey(ref)
-	servableFromCache := c.opts.RemotePolicy == RemotePolicyIfNotPresent && ref.ValidateDigest() == nil
+	servableFromCache := c.opts.RemotePolicy == RemotePolicyIfNotPresent
 	if servableFromCache {
 		if v, ok := c.lru.Get(k); ok {
 			c.logger.DebugContext(ctx, "refcache: hit",
