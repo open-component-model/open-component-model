@@ -164,16 +164,16 @@ configurations:
 
 All fields are optional. An omitted field keeps its default.
 
-| Field          | Type                                               | Default                                          | Description                                                                                                                                 |
-|----------------|----------------------------------------------------|--------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------|
-| `enabled`      | boolean                                            | `true`                                           | `false` turns off the blob cache and every reference cache: every read goes to the registry and no cache directory is created.              |
-| `remotePolicy` | `IfNotPresent` or `Always`                         | `IfNotPresent`                                   | [Remote policy](#remote-policy) of the blob cache and every reference cache.                                                                |
-| `ttl`          | duration string, for example `30s`, `10m`, `1h30m` | `10m`                                            | Time to live of the entries of the blob cache and every reference cache. Must be positive.                                                  |
-| `maxBlobSize`  | integer, bytes                                     | `20971520` (20 MiB)                              | The largest blob the blob cache stores. Larger blobs are fetched as usual but not cached. Must be positive.                                 |
-| `maxTotalSize` | integer, bytes                                     | No limit (CLI), `1073741824` (1 GiB, controller) | The bytes the blob cache keeps on disk. When exceeded, the least recently used blobs are removed. `0` means no limit. Must not be negative. |
+| Field          | Type                                                             | Default                                          | Description                                                                                                                                 |
+|----------------|------------------------------------------------------------------|--------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------|
+| `enabled`      | boolean                                                          | `true`                                           | `false` turns off the blob cache and every reference cache: every read goes to the registry and no cache directory is created.              |
+| `remotePolicy` | `IfNotPresent` or `Always`                                       | `IfNotPresent`                                   | [Remote policy](#remote-policy) of the blob cache and every reference cache.                                                                |
+| `ttl`          | duration string such as `30s` or `1h30m`, or integer nanoseconds | `10m`                                            | Time to live of the entries of the blob cache and every reference cache. Must be positive.                                                  |
+| `maxBlobSize`  | integer, bytes                                                   | `20971520` (20 MiB)                              | The largest blob the blob cache stores. Larger blobs are fetched as usual but not cached. Must be positive.                                 |
+| `maxTotalSize` | integer, bytes                                                   | No limit (CLI), `1073741824` (1 GiB, controller) | The bytes the blob cache keeps on disk. When exceeded, the least recently used blobs are removed. `0` means no limit. Must not be negative. |
 
-An unknown `remotePolicy`, a `ttl` that is not a positive duration string (numbers are rejected), a `maxBlobSize`
-that is not positive, or a negative `maxTotalSize` makes the CLI and the controller fail at startup, even if a later
+An unknown `remotePolicy`, a `ttl` that is not a positive duration, a `maxBlobSize` that is
+not positive, or a negative `maxTotalSize` makes the CLI and the controller fail at startup, even if a later
 entry overrides it. To use a default, omit the field. If the configuration file contains more than one
 `oci.cache.config.ocm.software/v1alpha1` entry, the last value set for each field wins. `ocm get config` shows the
 merged entry.

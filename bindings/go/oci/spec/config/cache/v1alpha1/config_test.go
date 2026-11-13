@@ -1,7 +1,6 @@
 package v1alpha1_test
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -159,7 +158,7 @@ func TestLookupConfig_TTLAndMaxBlobSize(t *testing.T) {
 			wantMaxBlobSize: new(int64(100)),
 		},
 		{name: "rejects a malformed ttl", entries: []string{"ttl: soon"}, wantErr: `invalid duration "soon"`},
-		{name: "rejects a numeric ttl", entries: []string{"ttl: 1000000000"}, wantErr: "duration must be a string"},
+		{name: "parses a number as nanoseconds", entries: []string{"ttl: 1000000000"}, wantTTL: new(time.Second)},
 		{name: "rejects a zero ttl", entries: []string{"ttl: 0s"}, wantErr: "invalid ttl 0s, must be positive"},
 		{name: "rejects a negative ttl", entries: []string{"ttl: -5m"}, wantErr: "invalid ttl -5m0s, must be positive"},
 		{name: "rejects a zero maxBlobSize", entries: []string{"maxBlobSize: 0"}, wantErr: "invalid maxBlobSize 0, must be positive"},
@@ -268,16 +267,4 @@ func TestLookupConfig_Enabled(t *testing.T) {
 			r.Equal(tt.want == nil || *tt.want, cfg.IsEnabled())
 		})
 	}
-}
-
-func TestDuration_JSON(t *testing.T) {
-	r := require.New(t)
-
-	data, err := json.Marshal(cachespec.NewDuration(90 * time.Minute))
-	r.NoError(err)
-	r.JSONEq(`"1h30m0s"`, string(data))
-
-	var decoded cachespec.Duration
-	r.NoError(json.Unmarshal(data, &decoded))
-	r.Equal(90*time.Minute, time.Duration(decoded))
 }
