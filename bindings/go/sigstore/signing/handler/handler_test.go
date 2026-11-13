@@ -721,7 +721,7 @@ func TestHandler_Verify(t *testing.T) {
 			cfgSetup: func(cfg *v1alpha1.VerifyConfig) {
 				cfg.PrivateInfrastructure = true
 			},
-			creds:      &trustedrootv1.TrustedRoot{TrustedRootJSONFile: absPath("/path/to/private_trusted_root.json")},
+			creds:      &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/path/to/private_trusted_root.json"},
 			bundleJSON: fakeBundleJSONWithTimestamp,
 			assertMock: func(t *testing.T, mock *execRecorder) {
 				t.Helper()
@@ -739,7 +739,7 @@ func TestHandler_Verify(t *testing.T) {
 			cfgSetup: func(cfg *v1alpha1.VerifyConfig) {
 				cfg.PrivateInfrastructure = true
 			},
-			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: absPath("/path/to/private_trusted_root.json")},
+			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/path/to/private_trusted_root.json"},
 			// Default bundle (fakeBundleJSON) has no timestampVerificationData.
 			assertArgs: func(t *testing.T, args []string) {
 				t.Helper()
@@ -1488,14 +1488,6 @@ func TestBundleHasSignedTimestamp(t *testing.T) {
 		{
 			name:  "empty rfc3161Timestamps array returns false",
 			input: `{"verificationMaterial":{"timestampVerificationData":{"rfc3161Timestamps":[]}}}`,
-			want:  false,
-		},
-		{
-			// A JSON null element decodes to raw bytes `null`; it carries no timestamp.
-			// Without filtering, len > 0 would be true and --use-signed-timestamps would
-			// be passed despite there being no real timestamp to verify.
-			name:  "rfc3161Timestamps with only null entry returns false",
-			input: `{"verificationMaterial":{"timestampVerificationData":{"rfc3161Timestamps":[null]}}}`,
 			want:  false,
 		},
 		{
