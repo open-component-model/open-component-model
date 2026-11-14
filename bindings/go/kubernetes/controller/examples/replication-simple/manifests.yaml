@@ -8,6 +8,30 @@ metadata:
 data:
   .ocmconfig: "dHlwZTogZ2VuZXJpYy5jb25maWcub2NtLnNvZnR3YXJlL3YxCmNvbmZpZ3VyYXRpb25zOgogIC0gdHlwZTogY3JlZGVudGlhbHMuY29uZmlnLm9jbS5zb2Z0d2FyZQogICAgY29uc3VtZXJzOgogICAgICAtIGlkZW50aXR5OgogICAgICAgICAgdHlwZTogT0NJUmVnaXN0cnkKICAgICAgICAgIGhvc3RuYW1lOiBwcm90ZWN0ZWQtcmVnaXN0cnkxLWludGVybmFsLmRlZmF1bHQuc3ZjLmNsdXN0ZXIubG9jYWwKICAgICAgICAgIHNjaGVtZTogaHR0cAogICAgICAgICAgcG9ydDogIjUwMDIiCiAgICAgICAgY3JlZGVudGlhbHM6CiAgICAgICAgICAtIHR5cGU6IENyZWRlbnRpYWxzCiAgICAgICAgICAgIHByb3BlcnRpZXM6CiAgICAgICAgICAgICAgdXNlcm5hbWU6IGFkbWluCiAgICAgICAgICAgICAgcGFzc3dvcmQ6IGFkbWluCiAgICAgIC0gaWRlbnRpdHk6CiAgICAgICAgICB0eXBlOiBPQ0lSZXBvc2l0b3J5CiAgICAgICAgICBob3N0bmFtZTogcHJvdGVjdGVkLXJlZ2lzdHJ5MS1pbnRlcm5hbC5kZWZhdWx0LnN2Yy5jbHVzdGVyLmxvY2FsCiAgICAgICAgICBzY2hlbWU6IGh0dHAKICAgICAgICAgIHBvcnQ6ICI1MDAyIgogICAgICAgIGNyZWRlbnRpYWxzOgogICAgICAgICAgLSB0eXBlOiBDcmVkZW50aWFscwogICAgICAgICAgICBwcm9wZXJ0aWVzOgogICAgICAgICAgICAgIHVzZXJuYW1lOiBhZG1pbgogICAgICAgICAgICAgIHBhc3N3b3JkOiBhZG1pbgogIC0gdHlwZTogdHJhbnNmZXIuY29uZmlnLm9jbS5zb2Z0d2FyZS92MWFscGhhMQogICAgcmVjdXJzaXZlOiAtMQo="
 ---
+# The target Repository and the Replication read the credentials with the permissions of the default service account.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: replication-simple-credentials-reader
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["replication-simple-credentials"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: replication-simple-credentials-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: replication-simple-credentials-reader
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: default
+---
 # Source repository: the unauthenticated in-cluster registry the component is pushed to.
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Repository

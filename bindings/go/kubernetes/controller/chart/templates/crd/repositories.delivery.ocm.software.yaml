@@ -135,6 +135,11 @@ spec:
                   specification
                   https://github.com/open-component-model/ocm-spec/blob/main/doc/04-extensions/03-storage-backends/README.md.
                 x-kubernetes-preserve-unknown-fields: true
+              serviceAccountName:
+                description: |-
+                  ServiceAccountName is the name of the service account in the same namespace that must be allowed to get
+                  every Secret, ConfigMap and OCM object the effective OCM configuration references. If empty, the default service account of the namespace is used.
+                type: string
               suspend:
                 description: |-
                   Suspend tells the controller to suspend the reconciliation of this

@@ -24,6 +24,12 @@ type ReplicationSpec struct {
 	// +optional
 	OCMConfig []OCMConfiguration `json:"ocmConfig,omitempty"`
 
+	// ServiceAccountName is the name of the service account in the same namespace that must be allowed to get
+	// every Secret, ConfigMap and OCM object the effective OCM configuration references, including the configuration
+	// propagated from the Component and the configuration of the target Repository. If empty, the default service account of the namespace is used.
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
 	// Suspend tells the controller to suspend the reconciliation of this
 	// Replication.
 	// +optional
@@ -132,6 +138,11 @@ func (in *Replication) GetSpecifiedOCMConfig() []OCMConfiguration {
 
 func (in *Replication) GetEffectiveOCMConfig() []OCMConfiguration {
 	return in.Status.EffectiveOCMConfig
+}
+
+// GetServiceAccountName returns the service account named by the Replication, or empty if it names none.
+func (in *Replication) GetServiceAccountName() string {
+	return in.Spec.ServiceAccountName
 }
 
 // +kubebuilder:object:root=true

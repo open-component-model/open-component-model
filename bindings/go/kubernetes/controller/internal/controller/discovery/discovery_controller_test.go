@@ -28,6 +28,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	internaldiscovery "ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/discovery"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/serviceaccount/serviceaccounttest"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
@@ -61,6 +62,7 @@ func newReconciler(t *testing.T, objs ...client.Object) (*Reconciler, client.Cli
 			EventRecorder:    record.NewFakeRecorder(100),
 			NewPluginManager: test.StaticPluginManager(nil),
 		},
+		authorizer: serviceaccounttest.PermissiveAuthorizer(),
 	}
 	return r, fakeClient
 }

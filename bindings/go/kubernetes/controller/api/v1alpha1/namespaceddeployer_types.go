@@ -31,13 +31,15 @@ type NamespacedDeployerSpec struct {
 
 	// ServiceAccountName is the name of the service account in the same namespace that is impersonated
 	// to apply and prune the deployed objects. Its RBAC permissions define what the deployer may deploy.
+	// It must also be allowed to list and watch the deployed kinds, and to get every Secret, ConfigMap and
+	// OCM object the effective OCM configuration references.
 	// If empty, the default service account of the namespace is impersonated.
 	// +optional
 	ServiceAccountName string `json:"serviceAccountName,omitempty"`
 
 	// OCMConfig defines references to secrets, config maps or ocm api
 	// objects providing configuration data including credentials.
-	// All references must point to the namespace of the NamespacedDeployer.
+	// The service account in ServiceAccountName must be allowed to get every referenced object.
 	// +optional
 	OCMConfig []OCMConfiguration `json:"ocmConfig,omitempty"`
 

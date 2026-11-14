@@ -26,6 +26,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/serviceaccount"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/util"
@@ -55,11 +56,15 @@ type Reconciler struct {
 	// built with, so Replication accepts exactly the spec types Component
 	// resolution accepts.
 	RepositoryScheme *runtime.Scheme
+
+	authorizer *serviceaccount.Authorizer
 }
 
 var _ ocm.Reconciler = (*Reconciler)(nil)
 
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, concurrency int) error {
+	r.authorizer = serviceaccount.NewAuthorizer(mgr.GetAPIReader(), mgr.GetClient())
+
 	// Index replications by the component they reference so component changes can be mapped back.
 	if err := mgr.GetFieldIndexer().IndexField(ctx, &v1alpha1.Replication{}, componentRefIndex, func(obj client.Object) []string {
 		replication, ok := obj.(*v1alpha1.Replication)
@@ -226,7 +231,14 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		return ctrl.Result{}, fmt.Errorf("failed to get ready target repository: %w", err)
 	}
 
-	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), replication, component)
+	access, err := r.authorizer.For(ctx, replication.GetNamespace(), replication.GetServiceAccountName())
+	if err != nil {
+		status.MarkNotReady(r.GetEventRecorder(), replication, v1alpha1.GetConfigurationFailedReason, err.Error())
+
+		return ctrl.Result{}, err
+	}
+
+	configs, err := access.EffectiveConfig(ctx, r.GetClient(), replication, component)
 	if err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), replication, v1alpha1.GetConfigurationFailedReason, err.Error())
 
@@ -236,6 +248,11 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 	// The target repository's credentials might live on its own config and are not gathered by
 	// GetEffectiveConfig. We add them here explicitly so the credential graph can authenticate
 	// if additional ocmconfigs are defined by the targetRepositroy.
+	if err := access.AuthorizeConfigs(ctx, targetRepository.GetEffectiveOCMConfig()); err != nil {
+		status.MarkNotReady(r.GetEventRecorder(), replication, v1alpha1.GetConfigurationFailedReason, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to authorize target repository ocm config: %w", err)
+	}
 	configs = append(configs, targetRepository.GetEffectiveOCMConfig()...)
 
 	// The deferred status patch persists it, even if a later step fails.

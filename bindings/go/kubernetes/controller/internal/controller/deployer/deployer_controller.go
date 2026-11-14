@@ -43,6 +43,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/serviceaccount"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/util"
@@ -85,6 +86,8 @@ type Reconciler struct {
 
 	// apiReader reads service accounts uncached to avoid a cluster-wide informer for them.
 	apiReader client.Reader
+
+	authorizer *serviceaccount.Authorizer
 	// restConfig is the base config impersonated clients are derived from.
 	restConfig *rest.Config
 
@@ -132,6 +135,7 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 
 	r.apiReader = mgr.GetAPIReader()
 	r.restConfig = mgr.GetConfig()
+	r.authorizer = serviceaccount.NewAuthorizer(r.apiReader, mgr.GetClient())
 
 	// Build index for deployers that reference a resource to get notified about resource changes.
 	const fieldName = ".spec.resourceRef"
@@ -387,7 +391,14 @@ func (r *Reconciler) reconcileDeployment(ctx context.Context, deployer deliveryv
 		return ctrl.Result{}, err
 	}
 
-	cfg, err := r.resolveConfiguration(ctx, deployer, resource)
+	access, err := r.serviceAccountAccess(ctx, deployer)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetConfigurationFailedReason, err.Error())
+
+		return ctrl.Result{}, err
+	}
+
+	cfg, err := r.resolveConfiguration(ctx, deployer, resource, access)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -426,8 +437,21 @@ func (r *Reconciler) reconcileDeployment(ctx context.Context, deployer deliveryv
 		return ctrl.Result{}, fmt.Errorf("failed to apply resources: %w", err)
 	}
 
+	watched, err := r.watchedObjects(ctx, deployer, objs)
+	if err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceNotSynced, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to determine watched resources: %w", err)
+	}
+
+	if err = r.authorizeWatches(ctx, access, watched); err != nil {
+		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceNotSynced, err.Error())
+
+		return ctrl.Result{}, fmt.Errorf("failed to authorize resource watches: %w", err)
+	}
+
 	// Track the applied objects for the dynamic informer manager
-	if err = r.trackConcurrently(ctx, deployer, objs); err != nil {
+	if err = r.trackConcurrently(ctx, deployer, watched); err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceNotSynced, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to sync deployed resources: %w", err)
@@ -487,32 +511,27 @@ func (r *Reconciler) resolveResource(
 	return resource, nil
 }
 
-// resolveConfiguration loads the effective OCM configuration for the deployer.
-// Sets deployer.Status.EffectiveOCMConfig as a side effect.
+// resolveConfiguration loads the effective OCM configuration for the deployer, authorized against access unless it
+// is nil. Sets deployer.Status.EffectiveOCMConfig as a side effect.
 func (r *Reconciler) resolveConfiguration(
 	ctx context.Context,
 	deployer deliveryv1alpha1.DeployerObject,
 	resource *deliveryv1alpha1.Resource,
+	access *serviceaccount.Access,
 ) (*configuration.Configuration, error) {
-	if err := r.validateConfigNamespaces(deployer, deployer.GetSpecifiedOCMConfig()); err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetConfigurationFailedReason, err.Error())
-
-		return nil, err
+	var configs []deliveryv1alpha1.OCMConfiguration
+	var err error
+	if access != nil {
+		configs, err = access.EffectiveConfig(ctx, r.GetClient(), deployer, resource)
+	} else {
+		configs, err = ocm.GetEffectiveConfig(ctx, r.GetClient(), deployer, resource)
 	}
-
-	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), deployer, resource)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetConfigurationFailedReason, err.Error())
 
 		return nil, fmt.Errorf("failed to get effective config: %w", err)
 	}
 
-	// Configuration propagated from the Resource may still point to other namespaces.
-	if err := r.validateConfigNamespaces(deployer, configs); err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetConfigurationFailedReason, err.Error())
-
-		return nil, err
-	}
 	deployer.GetDeployerStatus().EffectiveOCMConfig = configs
 
 	cfg, err := configuration.LoadConfigurations(ctx, r.Client, deployer.GetNamespace(), configs)

@@ -31,6 +31,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/controller/resource"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/serviceaccount/serviceaccounttest"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
@@ -92,6 +93,7 @@ func startResourceController(t *testing.T) client.Client {
 		Metrics:                 metricserver.Options{BindAddress: "0"},
 	})
 	r.NoError(err)
+	r.NoError(serviceaccounttest.ProvisionDefaultServiceAccounts(mgr))
 
 	ctx, cancel := context.WithCancel(t.Context())
 

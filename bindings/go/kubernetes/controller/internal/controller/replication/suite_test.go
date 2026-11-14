@@ -24,6 +24,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/serviceaccount/serviceaccounttest"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
 	ocirepository "ocm.software/open-component-model/bindings/go/oci/spec/repository"
@@ -73,6 +74,7 @@ var _ = BeforeSuite(func() {
 		},
 	})
 	Expect(err).ToNot(HaveOccurred())
+	Expect(serviceaccounttest.ProvisionDefaultServiceAccounts(k8sManager)).To(Succeed())
 
 	ctx, cancel := context.WithCancel(context.Background())
 

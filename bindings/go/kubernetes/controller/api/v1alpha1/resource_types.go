@@ -38,6 +38,12 @@ type ResourceSpec struct {
 	// +optional
 	OCMConfig []OCMConfiguration `json:"ocmConfig,omitempty"`
 
+	// ServiceAccountName is the name of the service account in the same namespace that must be allowed to get
+	// every Secret, ConfigMap and OCM object the effective OCM configuration references, including the configuration
+	// propagated from the Component. If empty, the default service account of the namespace is used.
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
 	// VerificationPolicy controls when resource digest verification is performed.
 	// Always (default): verify the resource digest, downloading the content only if it cannot be
 	// checked against what it is addressed by; a resource that cannot be verified fails.
@@ -142,6 +148,11 @@ func (in *Resource) GetSpecifiedOCMConfig() []OCMConfiguration {
 
 func (in *Resource) GetEffectiveOCMConfig() []OCMConfiguration {
 	return in.Status.EffectiveOCMConfig
+}
+
+// GetServiceAccountName returns the service account named by the Resource, or empty if it names none.
+func (in *Resource) GetServiceAccountName() string {
+	return in.Spec.ServiceAccountName
 }
 
 // +kubebuilder:object:root=true

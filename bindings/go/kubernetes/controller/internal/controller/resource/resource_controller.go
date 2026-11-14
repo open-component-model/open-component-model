@@ -28,6 +28,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/serviceaccount"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/util"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/verification"
@@ -40,6 +41,8 @@ type Reconciler struct {
 
 	// Resolver provides repository resolution and verification for resource reconciliation.
 	Resolver *resolution.Resolver
+
+	authorizer *serviceaccount.Authorizer
 }
 
 var _ ocm.Reconciler = (*Reconciler)(nil)
@@ -47,6 +50,8 @@ var _ ocm.Reconciler = (*Reconciler)(nil)
 var deployerIndex = "Resource.spec.resourceRef"
 
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, concurrency int) error {
+	r.authorizer = serviceaccount.NewAuthorizer(mgr.GetAPIReader(), mgr.GetClient())
+
 	// Build index for resources that reference a component to make sure that we get notified when a component changes.
 	const fieldName = "spec.componentRef.name"
 	if err := mgr.GetFieldIndexer().IndexField(ctx, &v1alpha1.Resource{}, fieldName, func(obj client.Object) []string {
@@ -264,7 +269,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	}
 
 	logger.Info("reconciling resource")
-	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), resource, component)
+	configs, err := r.authorizer.EffectiveConfig(ctx, r.GetClient(), resource, component)
 	if err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), resource, v1alpha1.GetConfigurationFailedReason, err.Error())
 

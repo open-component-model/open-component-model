@@ -44,13 +44,16 @@ The controller offers two kinds with the same apply, prune and drift semantics:
 | Scope | Cluster | Namespaced |
 | Applies with | The controller's own permissions | The service account in `spec.serviceAccountName`, or the `default` service account of its namespace if empty |
 | Deploys | Anything the controller may manage | Anything its service account may manage |
-| Resource and OCM config references | Any namespace | Its own namespace only |
+| OCM config references | Not checked | Any namespace its service account may `get` |
 
 Use the `NamespacedDeployer`. Its service account's RBAC is the only limit on what a deployment can do: a `Role`
 keeps it in its namespace, a `Role` in another namespace extends it to that namespace, and a `ClusterRole` and
 `ClusterRoleBinding` allow cluster-scoped objects such as kro `ResourceGraphDefinitions`. The `NamespacedDeployer` is no security boundary beyond
-that RBAC: it stays in its namespace only if its service account does. Its `Resource` and OCM configuration
-references must always point to its own namespace, so teams cannot read other namespaces' credentials through it.
+that RBAC: it stays in its namespace only if its service account does. Its `Resource` lives in its own namespace.
+The controller reads OCM configuration only after the service account passes an access review for every referenced
+object, so teams cannot read other namespaces' credentials through it, see
+[Configuration Access]({{< relref "ocm-controllers.md#configuration-access" >}}). The same review asks for `list` and
+`watch` on every deployed kind before the drift watches start.
 Objects without a namespace default to the deployer's namespace.
 
 `spec.serviceAccountName` is optional. Without it, the `NamespacedDeployer` impersonates the `default` service account

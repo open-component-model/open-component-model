@@ -25,6 +25,7 @@ import (
 	internaldiscovery "ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/discovery"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/serviceaccount"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/util"
@@ -45,6 +46,8 @@ import (
 // repository spec.
 type Reconciler struct {
 	*ocm.BaseReconciler
+
+	authorizer *serviceaccount.Authorizer
 }
 
 var _ ocm.Reconciler = (*Reconciler)(nil)
@@ -54,6 +57,8 @@ const componentRefIndex = "spec.componentRef.name"
 
 // SetupWithManager sets up the Discovery controller with the Manager.
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, concurrency int) error {
+	r.authorizer = serviceaccount.NewAuthorizer(mgr.GetAPIReader(), mgr.GetClient())
+
 	// Build index for discoveries that reference a component to make sure that we
 	// get notified when a component changes.
 	if err := mgr.GetFieldIndexer().IndexField(ctx, &v1alpha1.Discovery{}, componentRefIndex, func(obj client.Object) []string {
@@ -174,7 +179,7 @@ func (r *Reconciler) reconcile(ctx context.Context, discovery *v1alpha1.Discover
 		return ctrl.Result{}, err
 	}
 
-	configs, err := ocm.GetEffectiveConfig(ctx, r.GetClient(), discovery, component)
+	configs, err := r.authorizer.EffectiveConfig(ctx, r.GetClient(), discovery, component)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, discovery, v1alpha1.GetConfigurationFailedReason, err.Error())
 

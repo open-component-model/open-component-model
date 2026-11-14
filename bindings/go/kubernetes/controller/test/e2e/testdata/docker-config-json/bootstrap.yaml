@@ -6,6 +6,30 @@ data:
   # Base64 encoded value of docker config for registry and basic auth
   .dockerconfigjson: "eyJhdXRocyI6eyJodHRwOi8vcHJvdGVjdGVkLXJlZ2lzdHJ5Mi1pbnRlcm5hbC5kZWZhdWx0LnN2Yy5jbHVzdGVyLmxvY2FsIjp7InVzZXJuYW1lIjoiYWRtaW4yIiwicGFzc3dvcmQiOiJhZG1pbjIiLCJhdXRoIjoiWVdSdGFXNHlPbUZrYldsdU1nPT0ifX19"
 ---
+# The Component reads its OCM config with the permissions of the default service account.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: docker-config-json-ocm-config-reader
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["docker-config-json"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: docker-config-json-ocm-config-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: docker-config-json-ocm-config-reader
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: default
+---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Repository
 metadata:

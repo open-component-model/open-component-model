@@ -137,10 +137,33 @@ func (w workload) deployerRBAC() []client.Object {
 	}
 }
 
+// ocmConfigReaderRBAC lets the default service account, which every other OCM object reads its configuration as,
+// and the deployer account get the plain HTTP ConfigMap and the signing Secret.
+func (w workload) ocmConfigReaderRBAC() []client.Object {
+	const name = "ocm-config-reader"
+	return []client.Object{
+		&rbacv1.Role{
+			ObjectMeta: w.meta(name),
+			Rules: []rbacv1.PolicyRule{
+				{APIGroups: []string{""}, Resources: []string{"configmaps"}, ResourceNames: []string{plainHTTPConfigName}, Verbs: []string{"get"}},
+				{APIGroups: []string{""}, Resources: []string{"secrets"}, ResourceNames: []string{signingSecretName}, Verbs: []string{"get"}},
+			},
+		},
+		&rbacv1.RoleBinding{
+			ObjectMeta: w.meta(name),
+			RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: name},
+			Subjects: []rbacv1.Subject{
+				{Kind: rbacv1.ServiceAccountKind, Name: "default", Namespace: w.namespace},
+				{Kind: rbacv1.ServiceAccountKind, Name: deployerAccount, Namespace: w.namespace},
+			},
+		},
+	}
+}
+
 // objectsToCreate returns everything the run applies, the plain HTTP ConfigMap, the signing Secret,
-// deployer RBAC and Repositories first.
+// RBAC and Repositories first.
 func (w workload) objectsToCreate() ([]client.Object, error) {
-	objs := make([]client.Object, 0, 2+3+w.repositories()+3*w.objects)
+	objs := make([]client.Object, 0, 2+5+w.repositories()+3*w.objects)
 	objs = append(objs, w.plainHTTPConfig())
 	if w.sign {
 		secret, err := w.signingSecret()
@@ -150,6 +173,7 @@ func (w workload) objectsToCreate() ([]client.Object, error) {
 		objs = append(objs, secret)
 	}
 	objs = append(objs, w.deployerRBAC()...)
+	objs = append(objs, w.ocmConfigReaderRBAC()...)
 	for i := range w.repositories() {
 		repo, err := w.repository(i)
 		if err != nil {

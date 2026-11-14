@@ -23,8 +23,9 @@ Replace a cluster-scoped `Deployer` with a `NamespacedDeployer` while the deploy
 ## Prerequisites
 
 - OCM Controllers with the `NamespacedDeployer` controller enabled (Helm value `manager.namespacedDeployer.enabled`, on by default)
-- The `NamespacedDeployer` lives in the namespace of the `Deployer`'s `Resource`. Its OCM configuration references
-  must point to that namespace as well, see [Kubernetes Deployer]({{< relref "docs/concepts/kubernetes-deployer.md" >}}).
+- The `NamespacedDeployer` lives in the namespace of the `Deployer`'s `Resource`. Its service account must be allowed
+  to `get` the OCM configuration it references or inherits, see
+  [Configuration Access]({{< relref "docs/concepts/ocm-controllers.md#configuration-access" >}}).
 
 {{< callout type="warning" >}}
 ⚠️ **Never delete an active `Deployer` before the hand-over.** Its finalizer prunes everything it deployed.
@@ -174,11 +175,12 @@ You should see: `No resources found`.
 
 **Fix:** Add the missing rule to the service account's `Role` or `ClusterRole`. The message names the kind and verb.
 
-### Symptom: `is outside of namespace`
+### Symptom: `GetConfigurationFailed` with `may not get it in namespace`
 
-**Cause:** An OCM configuration reference points to another namespace.
+**Cause:** The service account may not `get` a `Secret`, `ConfigMap` or OCM object that the `NamespacedDeployer`
+references or inherits. The `Deployer` read it with the controller's permissions.
 
-**Fix:** Copy the referenced `Secret` or `ConfigMap` into the `NamespacedDeployer`'s namespace and reference it there.
+**Fix:** Grant the service account `get` on the object named in the message, in the namespace named there.
 
 ### Symptom: the Deployer stays in `Terminating`
 

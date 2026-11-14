@@ -50,6 +50,12 @@ type ComponentSpec struct {
 	// +optional
 	OCMConfig []OCMConfiguration `json:"ocmConfig,omitempty"`
 
+	// ServiceAccountName is the name of the service account in the same namespace that must be allowed to get
+	// every Secret, ConfigMap and OCM object the effective OCM configuration references, including the configuration
+	// propagated from the Repository. If empty, the default service account of the namespace is used.
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
 	// Interval at which the repository will be checked for new component
 	// versions.
 	// +required
@@ -147,6 +153,11 @@ func (in *Component) GetSpecifiedOCMConfig() []OCMConfiguration {
 
 func (in *Component) GetEffectiveOCMConfig() []OCMConfiguration {
 	return in.Status.EffectiveOCMConfig
+}
+
+// GetServiceAccountName returns the service account named by the Component, or empty if it names none.
+func (in *Component) GetServiceAccountName() string {
+	return in.Spec.ServiceAccountName
 }
 
 // +kubebuilder:object:root=true

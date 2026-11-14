@@ -13,10 +13,10 @@ The OCM Kubernetes Controller Toolkit ships with the minimum RBAC permissions ne
 the objects your deployers create, such as kro `ResourceGraphDefinitions`. You grant those yourself, and who needs
 which verbs depends on the deployer kind:
 
-| Deployer kind        | Write verbs (`create`, `update`, `patch`, `delete`)  | Read verbs (`get`, `list`, `watch`) |
-|----------------------|------------------------------------------------------|-------------------------------------|
-| `NamespacedDeployer` | Its service account                                  | The controller's service account    |
-| `Deployer`           | The controller's service account                     | The controller's service account    |
+| Deployer kind        | Write verbs (`create`, `update`, `patch`, `delete`) | Read verbs (`get`, `list`, `watch`)                      |
+|----------------------|-----------------------------------------------------|----------------------------------------------------------|
+| `NamespacedDeployer` | Its service account                                 | Its service account and the controller's service account |
+| `Deployer`           | The controller's service account                    | The controller's service account                         |
 
 ## Prerequisites
 
@@ -116,6 +116,12 @@ Check the service account's access:
 kubectl auth can-i create deployments.apps -n my-team \
   --as=system:serviceaccount:my-team:my-deployer
 ```
+
+Keep `list` and `watch` in the service account's rules. Before it starts the drift watches, the controller checks
+with a `SubjectAccessReview` that the service account may `list` and `watch` every deployed kind in its target
+namespace, and reports `ResourceNotSynced` otherwise. If the `NamespacedDeployer` references OCM configuration, the
+service account also needs `get` on it, see
+[Configuration Access]({{< relref "/docs/concepts/ocm-controllers.md#configuration-access" >}}).
 
 The controller additionally needs read access to the same kinds, see the next section.
 
