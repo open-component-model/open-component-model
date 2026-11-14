@@ -871,12 +871,21 @@ func buildResourceCacheKey(
 }
 
 func (r *Reconciler) createApplySet(c client.Client, deployer deliveryv1alpha1.DeployerObject, logger logr.Logger) *applyset.ApplySet {
+	// A NamespacedDeployer's impersonating client is uncached and carries the identity the conflict check needs.
+	// A Deployer applies with the manager's cached client, so it lists through the uncached API reader instead.
+	reader := client.Reader(c)
+	if !r.Namespaced {
+		reader = r.apiReader
+	}
+
 	cfg := applyset.Config{
 		Client:          c,
+		Reader:          reader,
 		RESTMapper:      r.resourceRESTMapper,
 		Log:             logger,
 		ParentNamespace: deployer.GetNamespace(),
 	}
+
 	return applyset.New(cfg, deployer)
 }
 
