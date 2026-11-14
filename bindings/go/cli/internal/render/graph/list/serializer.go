@@ -2,7 +2,8 @@ package list
 
 import (
 	"cmp"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 
@@ -10,6 +11,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/cli/internal/render"
 	"ocm.software/open-component-model/bindings/go/dag"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // Serializer implements the ListSerializer interface for serializing
@@ -63,7 +65,7 @@ func (s Serializer[T]) Serialize(writer io.Writer, vertices []*dag.Vertex[T]) er
 	}
 	switch s.OutputFormat {
 	case render.OutputFormatJSON:
-		data, err := json.MarshalIndent(list, "", "  ")
+		data, err := json.Marshal(list, runtime.JSONOptions, jsontext.WithIndent("  "))
 		if err != nil {
 			return fmt.Errorf("marshalling vertices to JSON failed: %w", err)
 		}
@@ -73,9 +75,9 @@ func (s Serializer[T]) Serialize(writer io.Writer, vertices []*dag.Vertex[T]) er
 			return fmt.Errorf("writing JSON data to writer failed: %w", err)
 		}
 	case render.OutputFormatNDJSON:
-		encoder := json.NewEncoder(writer)
+		encoder := jsontext.NewEncoder(writer)
 		for _, v := range list {
-			if err := encoder.Encode(v); err != nil {
+			if err := json.MarshalEncode(encoder, v, runtime.JSONOptions); err != nil {
 				return fmt.Errorf("encoding component version descriptor failed: %w", err)
 			}
 		}

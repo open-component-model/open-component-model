@@ -2,13 +2,13 @@ package input
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 
-	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
+	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/input/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -40,7 +40,7 @@ func inputProcessorHandlerFunc[REQ, RES any](f func(ctx context.Context, r *REQ,
 		defer request.Body.Close()
 
 		result := new(REQ)
-		if err := json.NewDecoder(request.Body).Decode(result); err != nil {
+		if err := json.UnmarshalRead(request.Body, result); err != nil {
 			plugins.NewError(fmt.Errorf("failed to marshal request body: %w", err), http.StatusInternalServerError).Write(writer)
 			return
 		}
@@ -51,9 +51,12 @@ func inputProcessorHandlerFunc[REQ, RES any](f func(ctx context.Context, r *REQ,
 			return
 		}
 
-		if err := json.NewEncoder(writer).Encode(resp); err != nil {
+		data, err := plugins.MarshalJSON(resp)
+		if err != nil {
 			plugins.NewError(fmt.Errorf("failed to encode response: %w", err), http.StatusInternalServerError).Write(writer)
 			return
 		}
+		writer.Header().Set("Content-Type", "application/json")
+		writer.Write(data) //nolint:errcheck // the status is committed; a failed write leaves the client with a short body it will reject
 	}
 }

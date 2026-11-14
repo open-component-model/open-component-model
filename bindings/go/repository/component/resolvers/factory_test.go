@@ -2,7 +2,7 @@ package resolvers
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"sync"
 	"testing"
@@ -33,7 +33,7 @@ func newRecordingProvider() *recordingProvider {
 }
 
 func (p *recordingProvider) GetComponentVersionRepositoryCredentialConsumerIdentity(_ context.Context, spec runtime.Typed) (runtime.Identity, error) {
-	raw, err := json.Marshal(spec)
+	raw, err := json.Marshal(spec, runtime.JSONOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +44,7 @@ func (p *recordingProvider) GetComponentVersionRepository(_ context.Context, spe
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.specs = append(p.specs, spec)
-	raw, err := json.Marshal(spec)
+	raw, err := json.Marshal(spec, runtime.JSONOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -330,7 +330,7 @@ func TestNewFromConfig_CredentialsForRoutedRepository(t *testing.T) {
 		}
 	}
 	r.NotNil(routed, "configured repository must have been built")
-	raw, err := json.Marshal(routed)
+	raw, err := json.Marshal(routed, runtime.JSONOptions)
 	r.NoError(err)
 	r.Equal(cred, provider.credsFor[string(raw)], "credentials must be resolved for the routed repository")
 }

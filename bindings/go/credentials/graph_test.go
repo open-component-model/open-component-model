@@ -2,7 +2,7 @@ package credentials_test
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/url"
 	"strings"
@@ -28,7 +28,7 @@ func (p CredentialPlugin) GetConsumerIdentity(_ context.Context, typed runtime.T
 		return nil, fmt.Errorf("unsupported credential type %v", typed.GetType())
 	}
 
-	data, err := json.Marshal(typed)
+	data, err := json.Marshal(typed, runtime.JSONOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +302,7 @@ func GetGraph(tb testing.TB, yaml string) (credentials.Resolver, error) {
 			var vaultHost string
 			if id, ok := repoType.(runtime.Identity); ok {
 				vaultHost = id[runtime.IdentityAttributeHostname]
-			} else if data, err := json.Marshal(repoType); err == nil {
+			} else if data, err := json.Marshal(repoType, runtime.JSONOptions); err == nil {
 				var mm map[string]any
 				_ = json.Unmarshal(data, &mm)
 				if surl, ok := mm["serverURL"].(string); ok {

@@ -1,7 +1,7 @@
 package v1
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -26,13 +26,13 @@ type UTF8 struct {
 	// Text is an UTF-8 string, raw encoded.
 	Text string `json:"text,omitempty"`
 	// JSON is a JSON value, raw encoded via UTF-8 in compact form.
-	JSON json.RawMessage `json:"json,omitempty"`
+	JSON jsontext.Value `json:"json,omitzero"`
 	// FormattedJSON is a JSON value, raw encoded via UTF-8, with default indentation applied.
-	FormattedJSON json.RawMessage `json:"formattedJson,omitempty"`
+	FormattedJSON jsontext.Value `json:"formattedJson,omitzero"`
 	// YAML is a YAML value, raw encoded via UTF-8.
-	YAML json.RawMessage `json:"yaml,omitempty"`
+	YAML jsontext.Value `json:"yaml,omitzero"`
 	// Compress indicates whether the file should be compressed with gzip.
-	Compress bool `json:"compress,omitempty"`
+	Compress bool `json:"compress,omitzero"`
 }
 
 func (t *UTF8) Validate() error {

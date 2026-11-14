@@ -3,7 +3,7 @@ package chart
 import (
 	"archive/tar"
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"os"
@@ -40,7 +40,7 @@ func chartLayout(t *testing.T, configMediaType string, chart []byte) blob.ReadOn
 		MediaType: ocispec.MediaTypeImageManifest,
 		Config:    push(configMediaType, []byte(`{"name":"mychart","version":"0.1.0","apiVersion":"v2"}`)),
 		Layers:    []ocispec.Descriptor{push(registry.ChartLayerMediaType, chart), push(registry.ProvLayerMediaType, []byte("prov"))},
-	})
+	}, runtime.JSONOptions)
 	require.NoError(t, err)
 	b, err := ocitar.CopyToOCILayoutInMemory(ctx, store, push(ocispec.MediaTypeImageManifest, manifest), ocitar.CopyToOCILayoutOptions{})
 	require.NoError(t, err)

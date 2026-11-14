@@ -123,7 +123,7 @@ func TestConvertToWgetCredentials(t *testing.T) {
 				Data: []byte(`{"type":"WgetCredentials/v1","properties":{"username":"user","password":"pass"}}`),
 			},
 			wantErr:     true,
-			errContains: `unknown field "properties"`,
+			errContains: `unknown object member name "properties"`,
 		},
 		{
 			name: "Raw legacy Credentials/v1 with free-form properties converts via DirectCredentials",

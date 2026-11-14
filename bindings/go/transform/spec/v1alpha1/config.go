@@ -30,7 +30,7 @@ func (tgd *TransformationGraphDefinition) GetEnvironmentData() map[string]interf
 type GenericTransformation struct {
 	meta.TransformationMeta `json:",inline"`
 	Spec                    *runtime.Unstructured `json:"spec"`
-	Output                  *runtime.Unstructured `json:"output,omitempty"`
+	Output                  *runtime.Unstructured `json:"output,omitzero"`
 }
 
 func (t *GenericTransformation) AsRaw() *runtime.Raw {

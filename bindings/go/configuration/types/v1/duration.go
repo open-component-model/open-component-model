@@ -1,9 +1,10 @@
 package v1
 
 import (
-	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -21,37 +22,41 @@ func NewDuration(d time.Duration) *Duration {
 	return &v
 }
 
-func (d Duration) MarshalJSON() ([]byte, error) {
-	return json.Marshal(time.Duration(d).String())
+// MarshalJSONTo writes the duration as a Go duration string.
+func (d Duration) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return enc.WriteToken(jsontext.String(time.Duration(d).String()))
 }
 
-func (d *Duration) UnmarshalJSON(b []byte) error {
-	if bytes.Equal(b, []byte("null")) {
-		return nil
-	}
-	dec := json.NewDecoder(bytes.NewReader(b))
-	// Numbers are integer nanoseconds; decoding them as float64 would lose precision.
-	dec.UseNumber()
-	var v any
-	if err := dec.Decode(&v); err != nil {
+// UnmarshalJSONFrom reads a Go duration string or an integer number of
+// nanoseconds. A JSON null leaves the current value untouched.
+func (d *Duration) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	val, err := dec.ReadValue()
+	if err != nil {
 		return fmt.Errorf("failed to parse duration: %w", err)
 	}
-	switch value := v.(type) {
-	case json.Number:
-		ns, err := value.Int64()
-		if err != nil {
-			return fmt.Errorf("invalid duration %s: a number must be an integer of nanoseconds within int64: %w", value, err)
-		}
-		*d = Duration(ns)
+	switch val.Kind() {
+	case 'n':
 		return nil
-	case string:
-		parsed, err := time.ParseDuration(value)
+	case '"':
+		var str string
+		if err := json.Unmarshal(val, &str); err != nil {
+			return fmt.Errorf("failed to parse duration: %w", err)
+		}
+		parsed, err := time.ParseDuration(str)
 		if err != nil {
-			return fmt.Errorf("invalid duration %q: must be a duration like 30s, 5m or 1h30m, or a number of nanoseconds: %w", value, err)
+			return fmt.Errorf("invalid duration %q: must be a duration like 30s, 5m or 1h30m, or a number of nanoseconds: %w", str, err)
 		}
 		*d = Duration(parsed)
 		return nil
+	case '0':
+		// Nanoseconds are integers; decoding them as float64 would lose precision.
+		ns, err := strconv.ParseInt(string(val), 10, 64)
+		if err != nil {
+			return fmt.Errorf("invalid duration %s: a number must be an integer of nanoseconds within int64: %w", val, err)
+		}
+		*d = Duration(ns)
+		return nil
 	default:
-		return fmt.Errorf("duration must be a string like 30s or a number of nanoseconds, got %T", v)
+		return fmt.Errorf("duration must be a string like 30s or a number of nanoseconds, got %s", val)
 	}
 }

@@ -2,12 +2,12 @@ package resolution
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"hash/fnv"
 	"time"
 
-	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -184,13 +184,13 @@ func (r *Resolver) createResolver(ctx context.Context, spec runtime.Typed, cfg *
 // It canonicalizes the repository spec using JCS (RFC 8785) before hashing to ensure consistent keys
 // regardless of field ordering in the JSON representation.
 func buildRepoCacheKey(configHash []byte, repoSpec runtime.Typed) (string, error) {
-	repoJSON, err := json.Marshal(repoSpec)
+	repoJSON, err := json.Marshal(repoSpec, runtime.JSONOptions)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal repository spec: %w", err)
 	}
 
-	canonicalJSON, err := jsoncanonicalizer.Transform(repoJSON)
-	if err != nil {
+	canonicalJSON := jsontext.Value(repoJSON)
+	if err := canonicalJSON.Canonicalize(); err != nil {
 		return "", fmt.Errorf("failed to canonicalize repository spec: %w", err)
 	}
 

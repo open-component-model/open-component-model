@@ -103,7 +103,7 @@ type Resolver struct {
 	// Pointer because this is optional. To default the priority, we need to be
 	// able to distinguish between "not set" and "set to zero".
 	// +ocm:jsonschema-gen:minimum=0
-	Priority *int `json:"priority,omitempty"`
+	Priority *int `json:"priority,omitzero"`
 }
 
 // Lookup creates a new Config from a central V1 config.

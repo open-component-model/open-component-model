@@ -2,7 +2,7 @@ package digest_test
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"encoding/pem"
 	"fmt"
 	"net/http"
@@ -62,7 +62,7 @@ func helmAccessResource(t *testing.T, helmRepository, helmChart string) *descrun
 		"helmRepository": helmRepository,
 		"helmChart":      helmChart,
 	}
-	raw, err := json.Marshal(data)
+	raw, err := json.Marshal(data, runtime.JSONOptions)
 	require.NoError(t, err)
 
 	r := &descruntime.Resource{}

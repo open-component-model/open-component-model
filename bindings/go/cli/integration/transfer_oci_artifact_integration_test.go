@@ -5,7 +5,7 @@ import (
 	"context"
 	"crypto"
 	"crypto/x509"
-	"encoding/json"
+	"encoding/json/v2"
 	"encoding/pem"
 	"fmt"
 	"io"
@@ -948,7 +948,7 @@ func createSingleLayerOCIImage(t *testing.T, data []byte, ref ...string) ([]byte
 
 	r.NoError(w.Push(t.Context(), desc, bytes.NewReader(data)))
 
-	configRaw, err := json.Marshal(map[string]string{})
+	configRaw, err := json.Marshal(map[string]string{}, ocmruntime.JSONOptions)
 	r.NoError(err)
 	configDesc := ociImageSpecV1.Descriptor{
 		Digest:    digest.FromBytes(configRaw),
@@ -965,7 +965,7 @@ func createSingleLayerOCIImage(t *testing.T, data []byte, ref ...string) ([]byte
 			desc,
 		},
 	}
-	manifestRaw, err := json.Marshal(manifest)
+	manifestRaw, err := json.Marshal(manifest, ocmruntime.JSONOptions)
 	r.NoError(err)
 
 	manifestDesc := ociImageSpecV1.Descriptor{

@@ -1,8 +1,7 @@
 package runtime
 
 import (
-	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 )
 
@@ -14,14 +13,12 @@ import (
 //
 // The decoder reports the first unknown field it meets, not all of them.
 func DecodeStrict(from Typed, into Typed) error {
-	data, err := json.Marshal(from)
+	data, err := json.Marshal(from, JSONOptions)
 	if err != nil {
 		return fmt.Errorf("type %q cannot be encoded for strict decoding: %w", from.GetType(), err)
 	}
 
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(into); err != nil {
+	if err := json.Unmarshal(data, into, json.RejectUnknownMembers(true)); err != nil {
 		return fmt.Errorf("type %q has unknown or invalid fields: %w", from.GetType(), err)
 	}
 

@@ -2,7 +2,7 @@ package signinghandler
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -79,7 +79,7 @@ func TestGetSignerIdentity(t *testing.T) {
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == GetSignerIdentity {
-						_ = json.NewEncoder(w).Encode(&v1.IdentityResponse{Identity: map[string]string{"id": "signer"}})
+						_ = json.MarshalWrite(w, &v1.IdentityResponse{Identity: map[string]string{"id": "signer"}}, runtime.JSONOptions)
 						return
 					}
 					w.WriteHeader(http.StatusNotFound)
@@ -145,7 +145,7 @@ func TestGetVerifierIdentity(t *testing.T) {
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == GetVerifierIdentity {
-						_ = json.NewEncoder(w).Encode(&v1.IdentityResponse{Identity: map[string]string{"id": "verifier"}})
+						_ = json.MarshalWrite(w, &v1.IdentityResponse{Identity: map[string]string{"id": "verifier"}}, runtime.JSONOptions)
 						return
 					}
 					w.WriteHeader(http.StatusNotFound)
@@ -218,7 +218,7 @@ func TestSign(t *testing.T) {
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == Sign {
-						_ = json.NewEncoder(w).Encode(&v1.SignResponse{Signature: &v2.SignatureInfo{Algorithm: "rsa", Value: "sig", MediaType: "text/plain"}})
+						_ = json.MarshalWrite(w, &v1.SignResponse{Signature: &v2.SignatureInfo{Algorithm: "rsa", Value: "sig", MediaType: "text/plain"}}, runtime.JSONOptions)
 						return
 					}
 					w.WriteHeader(http.StatusNotFound)

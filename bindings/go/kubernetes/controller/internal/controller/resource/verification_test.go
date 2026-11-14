@@ -2,7 +2,7 @@ package resource
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"os"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -69,7 +69,7 @@ var _ = Describe("Resource Controller verification", func() {
 				Type:       runtime.Type{Name: "ctf", Version: "v1"},
 				FilePath:   ctfPath,
 				AccessMode: ctfv1.AccessModeReadOnly,
-			})
+			}, runtime.JSONOptions)
 			Expect(err).NotTo(HaveOccurred())
 
 			componentObj := test.MockComponent(ctx, "component-"+name, namespace.GetName(), &test.MockComponentOptions{

@@ -11,7 +11,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -64,7 +64,7 @@ func newAuthServer(t *testing.T, dir string, username, password string) *httptes
 
 func wgetResource(t *testing.T, spec map[string]any) *descruntime.Resource {
 	t.Helper()
-	raw, err := json.Marshal(spec)
+	raw, err := json.Marshal(spec, runtime.JSONOptions)
 	require.NoError(t, err)
 
 	r := &descruntime.Resource{}
@@ -282,7 +282,7 @@ func Test_Integration_WgetResourceRepository(t *testing.T) {
 			resp, _ := json.Marshal(map[string]string{
 				"method": req.Method,
 				"body":   string(body),
-			})
+			}, runtime.JSONOptions)
 			_, _ = w.Write(resp)
 		}))
 		t.Cleanup(echoSrv.Close)
@@ -506,7 +506,7 @@ func Test_Integration_WgetSchemeRegistration(t *testing.T) {
 			NoRedirect: true,
 		}
 
-		data, err := json.Marshal(original)
+		data, err := json.Marshal(original, runtime.JSONOptions)
 		r.NoError(err)
 
 		raw := &runtime.Raw{

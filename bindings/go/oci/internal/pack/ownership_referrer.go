@@ -2,11 +2,11 @@ package pack
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 
-	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -53,7 +53,7 @@ func OwnershipReferrer(ctx context.Context, subject ociImageSpecV1.Descriptor, a
 			annotations.ArtifactAnnotationKey:     artifactValue,
 		},
 	}
-	body, err := json.Marshal(manifest)
+	body, err := json.Marshal(manifest, runtime.JSONOptions)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to marshal ownership referrer manifest: %w", err)
 	}
@@ -83,12 +83,12 @@ func marshalArtifactAnnotation(identity runtime.Identity, kind annotations.Artif
 		Identity runtime.Identity         `json:"identity"`
 		Kind     annotations.ArtifactKind `json:"kind"`
 	}{Identity: identity, Kind: kind}
-	raw, err := json.Marshal(payload)
+	raw, err := json.Marshal(payload, runtime.JSONOptions)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal artifact annotation: %w", err)
 	}
-	canonical, err := jsoncanonicalizer.Transform(raw)
-	if err != nil {
+	canonical := jsontext.Value(raw)
+	if err := canonical.Canonicalize(); err != nil {
 		return "", fmt.Errorf("failed to canonicalize artifact annotation: %w", err)
 	}
 	return string(canonical), nil

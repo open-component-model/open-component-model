@@ -3,7 +3,7 @@ package cache
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"os"
@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	identityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // ---- Options validation ----
@@ -254,7 +255,7 @@ func TestBlobCache_Always_WhatARepositoryServedDoesNotExpireBeforeTheBlob(t *tes
 		entry.SavedAt = time.Now().Add(-2 * time.Hour)
 		snap.References[ref] = entry
 	}
-	rewritten, err := json.Marshal(snap)
+	rewritten, err := json.Marshal(snap, runtime.JSONOptions)
 	r.NoError(err)
 	r.NoError(os.WriteFile(snapshots[0], rewritten, 0o600))
 

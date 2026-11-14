@@ -17,7 +17,8 @@ limitations under the License.
 package v2
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"time"
 )
 
@@ -94,16 +95,18 @@ func (t Time) Rfc3339Copy() Time {
 	return Time{copied}
 }
 
-// UnmarshalJSON implements the json.Unmarshaller interface.
-func (t *Time) UnmarshalJSON(b []byte) error {
-	if len(b) == 4 && string(b) == "null" {
+// UnmarshalJSONFrom implements the json.UnmarshalerFrom interface.
+func (t *Time) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	if dec.PeekKind() == 'n' {
+		if _, err := dec.ReadToken(); err != nil {
+			return err
+		}
 		t.Time = time.Time{}
 		return nil
 	}
 
 	var str string
-	err := json.Unmarshal(b, &str)
-	if err != nil {
+	if err := json.UnmarshalDecode(dec, &str); err != nil {
 		return err
 	}
 
@@ -116,16 +119,12 @@ func (t *Time) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// MarshalJSON implements the json.Marshaler interface.
-func (t *Time) MarshalJSON() ([]byte, error) {
+// MarshalJSONTo implements the json.MarshalerTo interface.
+func (t *Time) MarshalJSONTo(enc *jsontext.Encoder) error {
 	if t.IsZero() {
 		// Encode unset/nil objects as JSON's "null".
-		return []byte("null"), nil
+		return enc.WriteToken(jsontext.Null)
 	}
-	buf := make([]byte, 0, len(time.RFC3339)+2)
-	buf = append(buf, '"')
 	// time cannot contain non escapable JSON characters
-	buf = t.UTC().AppendFormat(buf, time.RFC3339)
-	buf = append(buf, '"')
-	return buf, nil
+	return enc.WriteToken(jsontext.String(t.UTC().Format(time.RFC3339)))
 }

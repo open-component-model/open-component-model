@@ -1,7 +1,7 @@
 package v2_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,7 +32,7 @@ func TestLocalBlob_Struct(t *testing.T) {
 	}
 
 	// Test
-	jsonData, err := json.Marshal(blob)
+	jsonData, err := json.Marshal(blob, runtime.JSONOptions)
 
 	// Assert
 	require.NoError(t, err)

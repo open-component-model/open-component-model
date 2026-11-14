@@ -3,6 +3,7 @@ package deployer
 import (
 	"bytes"
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -533,7 +534,7 @@ func (r *Reconciler) createRepositoryResolver(
 	pm *manager.PluginManager,
 ) (resolvers.ComponentVersionRepositoryResolver, error) {
 	repoSpec := &ocmruntime.Raw{}
-	if err := repoSpec.UnmarshalJSON(resource.Status.Component.RepositorySpec.Raw); err != nil {
+	if err := json.Unmarshal(resource.Status.Component.RepositorySpec.Raw, repoSpec); err != nil {
 		status.MarkNotReady(r.GetEventRecorder(), deployer, deliveryv1alpha1.GetRepositoryFailedReason, err.Error())
 
 		return nil, fmt.Errorf("failed to decode repository spec: %w", err)

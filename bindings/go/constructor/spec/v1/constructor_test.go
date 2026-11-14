@@ -1,7 +1,7 @@
 package v1_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -413,7 +413,7 @@ func TestResource_Struct(t *testing.T) {
 		},
 	}
 
-	jsonData, err := json.Marshal(resource)
+	jsonData, err := json.Marshal(resource, runtime.JSONOptions)
 	require.NoError(t, err)
 	assert.Contains(t, string(jsonData), `"name":"test-resource"`)
 	assert.Contains(t, string(jsonData), `"version":"1.0.0"`)
@@ -439,7 +439,7 @@ func TestSource_Struct(t *testing.T) {
 		},
 	}
 
-	jsonData, err := json.Marshal(source)
+	jsonData, err := json.Marshal(source, runtime.JSONOptions)
 	require.NoError(t, err)
 	assert.Contains(t, string(jsonData), `"name":"test-source"`)
 	assert.Contains(t, string(jsonData), `"version":"1.0.0"`)
@@ -459,7 +459,7 @@ func TestReference_Struct(t *testing.T) {
 			Component: "referenced-component",
 		}
 
-		jsonData, err := json.Marshal(reference)
+		jsonData, err := json.Marshal(reference, runtime.JSONOptions)
 		require.NoError(t, err)
 		assert.Contains(t, string(jsonData), `"name":"test-reference"`)
 		assert.Contains(t, string(jsonData), `"version":"1.0.0"`)
@@ -483,7 +483,7 @@ func TestReference_Struct(t *testing.T) {
 			},
 		}
 
-		jsonData, err := json.Marshal(reference)
+		jsonData, err := json.Marshal(reference, runtime.JSONOptions)
 		require.NoError(t, err)
 		assert.Contains(t, string(jsonData), `"componentName":"referenced-component"`)
 		assert.Contains(t, string(jsonData), `"digest"`)
@@ -501,7 +501,7 @@ func TestProvider_Struct(t *testing.T) {
 		},
 	}
 
-	jsonData, err := json.Marshal(provider)
+	jsonData, err := json.Marshal(provider, runtime.JSONOptions)
 	require.NoError(t, err)
 	assert.Contains(t, string(jsonData), `"name":"test-provider"`)
 	assert.Contains(t, string(jsonData), `"name":"type","value":"infrastructure"`)
@@ -514,7 +514,7 @@ func TestLabel_Struct(t *testing.T) {
 		Signing: true,
 	}
 
-	jsonData, err := json.Marshal(label)
+	jsonData, err := json.Marshal(label, runtime.JSONOptions)
 	require.NoError(t, err)
 	assert.Contains(t, string(jsonData), `"name":"environment"`)
 	assert.Contains(t, string(jsonData), `"value":"production"`)

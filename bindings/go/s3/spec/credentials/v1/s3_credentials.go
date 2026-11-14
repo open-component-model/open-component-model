@@ -30,7 +30,7 @@ type S3Credentials struct {
 	Type runtime.Type `json:"type"`
 	// Anonymous disables request signing, even when AWS credentials are available.
 	// It defaults to false and cannot be combined with access keys or a session token.
-	Anonymous bool `json:"anonymous,omitempty"`
+	Anonymous bool `json:"anonymous,omitzero"`
 	// AccessKeyID is the access key ID.
 	AccessKeyID string `json:"accessKeyId,omitempty"`
 	// SecretAccessKey is the secret access key paired with AccessKeyID.
