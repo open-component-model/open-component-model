@@ -154,7 +154,10 @@ func (m Metadata) PruneScope() *PruneScope {
 
 // Config for creating an ApplySet.
 type Config struct {
-	Client          client.Client
+	Client client.Client
+	// Reader lists the ApplySet members for conflict detection. A general cache would hold every object of each
+	// applied kind, so pass NewMemberCache or a live reader. Defaults to Client.
+	Reader          client.Reader
 	RESTMapper      meta.RESTMapper
 	Log             logr.Logger
 	ParentNamespace string // fallback namespace for namespaced resources without namespace set
@@ -175,8 +178,14 @@ func New(cfg Config, parent interface {
 },
 ) *ApplySet {
 	applySetID := ID(parent)
+	reader := cfg.Reader
+	if reader == nil {
+		reader = cfg.Client
+	}
+
 	return &ApplySet{
 		client:            cfg.Client,
+		reader:            reader,
 		restMapper:        cfg.RESTMapper,
 		log:               cfg.Log,
 		applySetID:        applySetID,
@@ -189,6 +198,7 @@ func New(cfg Config, parent interface {
 // ApplySet implements Interface for server-side apply with membership tracking.
 type ApplySet struct {
 	client            client.Client
+	reader            client.Reader
 	restMapper        meta.RESTMapper
 	log               logr.Logger
 	applySetID        string
@@ -451,12 +461,14 @@ func (a *ApplySet) detectConflicts(ctx context.Context, entries []applyEntry) (m
 		namespace string
 	}
 	tasks := sets.New[listTask]()
+	applied := sets.New[conflictKey]()
 	for _, e := range entries {
 		ns := ""
 		if e.mapping.Scope.Name() == meta.RESTScopeNameNamespace {
 			ns = a.resolveNamespace(e.resource.Object.GetNamespace())
 		}
 		tasks.Insert(listTask{gvk: e.resource.Object.GroupVersionKind(), namespace: ns})
+		applied.Insert(conflictKey{gvk: e.resource.Object.GroupVersionKind(), namespace: ns, name: e.resource.Object.GetName()})
 	}
 
 	conflicts := make(map[conflictKey]string)
@@ -465,7 +477,9 @@ func (a *ApplySet) detectConflicts(ctx context.Context, entries []applyEntry) (m
 	eg, egCtx := errgroup.WithContext(ctx)
 	for task := range tasks {
 		eg.Go(func() error {
-			list := &unstructured.UnstructuredList{}
+			// Covers every ApplySet member of the kind, not just this ApplySet's, and the check below reads
+			// nothing but their metadata.
+			list := &metav1.PartialObjectMetadataList{}
 			list.SetGroupVersionKind(task.gvk.GroupVersion().WithKind(task.gvk.Kind + "List"))
 
 			listOpts := []client.ListOption{
@@ -475,7 +489,7 @@ func (a *ApplySet) detectConflicts(ctx context.Context, entries []applyEntry) (m
 				listOpts = append(listOpts, client.InNamespace(task.namespace))
 			}
 
-			if err := a.client.List(egCtx, list, listOpts...); err != nil {
+			if err := a.reader.List(egCtx, list, listOpts...); err != nil {
 				if task.namespace != "" {
 					return fmt.Errorf("conflict detection list %v in %s: %w", task.gvk, task.namespace, err)
 				}
@@ -485,13 +499,10 @@ func (a *ApplySet) detectConflicts(ctx context.Context, entries []applyEntry) (m
 			mu.Lock()
 			defer mu.Unlock()
 			for i := range list.Items {
+				key := conflictKey{gvk: task.gvk, namespace: list.Items[i].GetNamespace(), name: list.Items[i].GetName()}
 				ownerID := list.Items[i].GetLabels()[ApplysetPartOfLabel]
-				if ownerID != "" && ownerID != a.applySetID {
-					conflicts[conflictKey{
-						gvk:       task.gvk,
-						namespace: list.Items[i].GetNamespace(),
-						name:      list.Items[i].GetName(),
-					}] = ownerID
+				if applied.Has(key) && ownerID != "" && ownerID != a.applySetID {
+					conflicts[key] = ownerID
 				}
 			}
 			return nil
@@ -502,7 +513,38 @@ func (a *ApplySet) detectConflicts(ctx context.Context, entries []applyEntry) (m
 		return nil, err
 	}
 
+	if err := a.confirmConflicts(ctx, conflicts); err != nil {
+		return nil, err
+	}
+
 	return conflicts, nil
+}
+
+// confirmConflicts re-reads every conflicting object with Client. Reader may be a stale cache that reads as
+// another identity, so a conflict stands only for an object the applying identity can read that still belongs to
+// another ApplySet. Unstructured gets bypass a cached Client, so this never starts an informer.
+func (a *ApplySet) confirmConflicts(ctx context.Context, conflicts map[conflictKey]string) error {
+	for key := range conflicts {
+		live := &unstructured.Unstructured{}
+		live.SetGroupVersionKind(key.gvk)
+		err := a.client.Get(ctx, client.ObjectKey{Namespace: key.namespace, Name: key.name}, live)
+		if apierrors.IsNotFound(err) {
+			delete(conflicts, key)
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("confirm conflict with %v %s/%s: %w", key.gvk, key.namespace, key.name, err)
+		}
+
+		ownerID := live.GetLabels()[ApplysetPartOfLabel]
+		if ownerID == "" || ownerID == a.applySetID {
+			delete(conflicts, key)
+			continue
+		}
+		conflicts[key] = ownerID
+	}
+
+	return nil
 }
 
 func (a *ApplySet) resolvedNamespace(mapping *meta.RESTMapping, obj *unstructured.Unstructured) (string, bool) {

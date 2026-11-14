@@ -17,8 +17,11 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/client-go/rest"
+	crcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -503,6 +506,56 @@ metadata:
 		}).WithTimeout(test.DefaultKubernetesOperationTimeout).WithContext(ctx).Should(BeTrue())
 	})
 
+	It("detects a conflict from the ApplySet member cache without the list permission of its service account", func(ctx SpecContext) {
+		members := startApplySetMemberCache(ctx, k8sManager.GetConfig(), applySetMemberSyncTimeout)
+		Expect(k8sClient.Create(ctx, &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{Name: "nd-unrelated-cm", Namespace: namespace.GetName()},
+		})).To(Succeed())
+
+		result, err := applyConflictingConfigMap(ctx, namespace.GetName(), members, []string{"get", "create", "patch"})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Applied).To(HaveLen(1))
+		Expect(result.Applied[0].Error).To(MatchError(applyset.ErrApplySetConflict))
+
+		By("caching the members alone, reduced to their name and part-of label")
+		list := &metav1.PartialObjectMetadataList{}
+		list.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("ConfigMapList"))
+		Expect(members.List(ctx, list, client.InNamespace(namespace.GetName()))).To(Succeed())
+		Expect(list.Items).To(HaveLen(1))
+		Expect(list.Items[0].GetName()).To(Equal("nd-conflict-cm"))
+		Expect(list.Items[0].GetLabels()).To(Equal(map[string]string{applyset.ApplysetPartOfLabel: "applyset-other-v1"}))
+		Expect(list.Items[0].GetManagedFields()).To(BeEmpty())
+
+		By("leaving the other ApplySet's member untouched")
+		cm := &corev1.ConfigMap{}
+		Expect(k8sClient.Get(ctx, client.ObjectKey{Namespace: namespace.GetName(), Name: "nd-conflict-cm"}, cm)).To(Succeed())
+		Expect(cm.GetLabels()).To(HaveKeyWithValue(applyset.ApplysetPartOfLabel, "applyset-other-v1"))
+	})
+
+	It("rejects the apply when its service account cannot read the conflicting object", func(ctx SpecContext) {
+		members := startApplySetMemberCache(ctx, k8sManager.GetConfig(), applySetMemberSyncTimeout)
+
+		_, err := applyConflictingConfigMap(ctx, namespace.GetName(), members, []string{"create", "patch"})
+
+		// The controller's cache found the member, so naming the service account shows the conflict was confirmed
+		// as the deployer.
+		Expect(err).To(MatchError(ContainSubstring(
+			fmt.Sprintf(`User "system:serviceaccount:%s:nd-conflict-sa" cannot get resource "configmaps"`, namespace.GetName()))))
+	})
+
+	It("bounds a member list when the cache may not watch the kind", func(ctx SpecContext) {
+		cfg := rest.CopyConfig(k8sManager.GetConfig())
+		cfg.Impersonate = rest.ImpersonationConfig{UserName: "nd-member-cache-without-rbac"}
+		members := startApplySetMemberCache(ctx, cfg, 2*time.Second)
+
+		list := &metav1.PartialObjectMetadataList{}
+		list.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("ConfigMapList"))
+		start := time.Now()
+		err := members.List(ctx, list, client.InNamespace(namespace.GetName()))
+		Expect(err).To(MatchError(ContainSubstring("needs list and watch on the kind")))
+		Expect(time.Since(start)).To(BeNumerically("<", 10*time.Second))
+	}, SpecTimeout(30*time.Second))
+
 	It("requires a resource name", func(ctx SpecContext) {
 		deployer := &v1alpha1.NamespacedDeployer{
 			ObjectMeta: metav1.ObjectMeta{Name: "nd-no-resource", Namespace: namespace.GetName()},
@@ -513,6 +566,82 @@ metadata:
 		Expect(err.Error()).To(ContainSubstring("resourceRef.name must be set"))
 	})
 })
+
+// startApplySetMemberCache starts a member cache reading as cfg and stops it with the spec. It builds its HTTP client
+// from cfg, as the manager's carries the controller's credentials and ignores cfg.Impersonate.
+func startApplySetMemberCache(ctx SpecContext, cfg *rest.Config, syncTimeout time.Duration) client.Reader {
+	GinkgoHelper()
+
+	members, err := applyset.NewMemberCache(cfg, syncTimeout, crcache.Options{
+		Scheme: k8sManager.GetScheme(),
+		Mapper: k8sManager.GetRESTMapper(),
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	cacheCtx, cancel := context.WithCancel(ctx)
+	done := make(chan error, 1)
+	go func() { done <- members.Start(cacheCtx) }()
+	DeferCleanup(func() {
+		cancel()
+		Expect(<-done).To(Succeed())
+	})
+	Expect(members.WaitForCacheSync(ctx)).To(BeTrue())
+
+	return members
+}
+
+// applyConflictingConfigMap applies a ConfigMap owned by another ApplySet through createApplySet, as a service
+// account holding verbs on ConfigMaps and nothing else.
+func applyConflictingConfigMap(ctx SpecContext, namespace string, members client.Reader, verbs []string) (*applyset.ApplyResult, error) {
+	GinkgoHelper()
+
+	const sa = "nd-conflict-sa"
+	Expect(k8sClient.Create(ctx, &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{Name: sa, Namespace: namespace},
+	})).To(Succeed())
+
+	role := &rbacv1.Role{
+		ObjectMeta: metav1.ObjectMeta{Name: sa, Namespace: namespace},
+		Rules:      []rbacv1.PolicyRule{{APIGroups: []string{""}, Resources: []string{"configmaps"}, Verbs: verbs}},
+	}
+	Expect(k8sClient.Create(ctx, role)).To(Succeed())
+	Expect(k8sClient.Create(ctx, &rbacv1.RoleBinding{
+		ObjectMeta: metav1.ObjectMeta{Name: sa, Namespace: namespace},
+		RoleRef:    rbacv1.RoleRef{APIGroup: rbacv1.GroupName, Kind: "Role", Name: role.GetName()},
+		Subjects:   []rbacv1.Subject{{Kind: rbacv1.ServiceAccountKind, Name: sa, Namespace: namespace}},
+	})).To(Succeed())
+
+	By("labelling a ConfigMap as a member of another ApplySet")
+	Expect(k8sClient.Create(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{
+		Name:      "nd-conflict-cm",
+		Namespace: namespace,
+		Labels:    map[string]string{applyset.ApplysetPartOfLabel: "applyset-other-v1", "app": "other"},
+	}})).To(Succeed())
+
+	cfg := rest.CopyConfig(k8sManager.GetConfig())
+	cfg.Impersonate = rest.ImpersonationConfig{UserName: fmt.Sprintf("system:serviceaccount:%s:%s", namespace, sa)}
+	impersonated, err := client.New(cfg, client.Options{Scheme: k8sClient.Scheme(), Mapper: k8sManager.GetRESTMapper()})
+	Expect(err).NotTo(HaveOccurred())
+
+	deployer := &v1alpha1.NamespacedDeployer{
+		ObjectMeta: metav1.ObjectMeta{Name: "nd-conflict", Namespace: namespace},
+	}
+	deployer.SetGroupVersionKind(v1alpha1.GroupVersion.WithKind(v1alpha1.KindNamespacedDeployer))
+	object := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "v1",
+		"kind":       "ConfigMap",
+		"metadata":   map[string]any{"name": "nd-conflict-cm", "namespace": namespace},
+	}}
+
+	reconciler := &Reconciler{
+		Namespaced:         true,
+		ApplySetMembers:    members,
+		resourceRESTMapper: k8sManager.GetRESTMapper(),
+	}
+
+	return reconciler.createApplySet(impersonated, deployer, GinkgoLogr).
+		Apply(ctx, []applyset.Resource{{ID: "cm", Object: object}}, applyset.ApplyMode{})
+}
 
 // createServiceAccount creates the deployer service account and, if bind is set, grants it full access to
 // ConfigMaps in the namespace.

@@ -25,6 +25,7 @@ import (
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
+	crcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -71,6 +72,10 @@ const (
 	// namespacedDeployerManager is the managed-by label value of objects deployed by a NamespacedDeployer.
 	// Its own value keeps each kind's informers from caching the other kind's objects.
 	namespacedDeployerManager = "namespaceddeployer.delivery.ocm.software"
+
+	// applySetMemberSyncTimeout bounds the conflict check's first list of a kind, which waits for the member cache
+	// to sync that kind.
+	applySetMemberSyncTimeout = 30 * time.Second
 )
 
 var ErrComponentVersionDrift = errors.New("component version drift: resource status has not yet caught up with component")
@@ -85,6 +90,9 @@ type Reconciler struct {
 
 	// apiReader reads service accounts uncached to avoid a cluster-wide informer for them.
 	apiReader client.Reader
+	// ApplySetMembers lists the ApplySet members for conflict detection. SetupWithManager creates one if it is nil;
+	// share one between the reconcilers so that every applied kind has a single informer.
+	ApplySetMembers client.Reader
 	// restConfig is the base config impersonated clients are derived from.
 	restConfig *rest.Config
 
@@ -132,6 +140,11 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 
 	r.apiReader = mgr.GetAPIReader()
 	r.restConfig = mgr.GetConfig()
+	if r.ApplySetMembers == nil {
+		if r.ApplySetMembers, err = NewApplySetMemberCache(mgr); err != nil {
+			return err
+		}
+	}
 
 	// Build index for deployers that reference a resource to get notified about resource changes.
 	const fieldName = ".spec.resourceRef"
@@ -870,13 +883,32 @@ func buildResourceCacheKey(
 	return key
 }
 
+// NewApplySetMemberCache creates the cache conflict detection lists the ApplySet members from and adds it to mgr.
+func NewApplySetMemberCache(mgr ctrl.Manager) (client.Reader, error) {
+	members, err := applyset.NewMemberCache(mgr.GetConfig(), applySetMemberSyncTimeout, crcache.Options{
+		HTTPClient: mgr.GetHTTPClient(),
+		Scheme:     mgr.GetScheme(),
+		Mapper:     mgr.GetRESTMapper(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := mgr.Add(members); err != nil {
+		return nil, fmt.Errorf("failed to add the ApplySet member cache to the manager: %w", err)
+	}
+
+	return members, nil
+}
+
 func (r *Reconciler) createApplySet(c client.Client, deployer deliveryv1alpha1.DeployerObject, logger logr.Logger) *applyset.ApplySet {
 	cfg := applyset.Config{
 		Client:          c,
+		Reader:          r.ApplySetMembers,
 		RESTMapper:      r.resourceRESTMapper,
 		Log:             logger,
 		ParentNamespace: deployer.GetNamespace(),
 	}
+
 	return applyset.New(cfg, deployer)
 }
 
