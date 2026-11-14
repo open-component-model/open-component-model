@@ -128,15 +128,15 @@ gets the SHA-256 of the uploaded bytes (the OCI layout tar or chart .tgz).
 
 ## Credentials
 
-Resolved for the `HelmChartRepository` identity of
-`<url>/artifactory/api/helm/<repository>`, falling back to the `Wget` identity
+Resolved for the `HelmChartRepository`y of
+`<url>/artifactory/api/helm/<repository>`, falling back to the `HTTP/v1` identity
 of `<url>/artifactory/<repository>`:
 
 ```yaml
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: HelmChartRepository
+          type: HelmChartRepository/v1
           hostname: myorg.jfrog.io
         credentials:
           - type: HelmHTTPCredentials/v1

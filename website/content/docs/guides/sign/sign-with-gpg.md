@@ -206,7 +206,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: GPG/v1alpha1
+          type: GPG
           signature: default
         credentials:
           - type: GPGCredentials/v1alpha1
@@ -254,7 +254,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: GPG/v1alpha1
+          type: GPG
           signature: default
         credentials:
           - type: GPGCredentials/v1alpha1
@@ -367,7 +367,7 @@ Congratulations! You've successfully:
 
 ### Symptom: `Error: signing failed: private key not found in credentials`
 
-**Cause:** No matching `GPG/v1alpha1` consumer entry in `.ocmconfig`, either the consumer block is missing, the `signature:` name doesn't match `--signature`, or `privateKeyPGPFile` isn't set.
+**Cause:** No matching `GPG` consumer entry in `.ocmconfig`, either the consumer block is missing, the `signature:` name doesn't match `--signature`, or `privateKeyPGPFile` isn't set.
 
 **Fix:** Confirm the consumer block exists and the `signature:` value matches. Without `--signature`, OCM looks for `signature: default`. See [How-to: Configure Signing Credentials]({{< relref "docs/guides/sign/configure-signing-credentials.md" >}}).
 

@@ -124,14 +124,14 @@ extracted from an OCI artifact gets the SHA-256 of the uploaded bytes.
 
 ## Credentials
 
-Resolved for the `HelmChartRepository` identity of
-`<url>/repository/<repository>`, falling back to its `Wget` identity:
+Resolved for the `HelmChartRepository`y of
+`<url>/repository/<repository>`, falling back to its `HTTP/v1` identity:
 
 ```yaml
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: HelmChartRepository
+          type: HelmChartRepository/v1
           hostname: nexus.example.com
         credentials:
           - type: HelmHTTPCredentials/v1

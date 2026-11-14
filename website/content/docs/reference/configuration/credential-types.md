@@ -18,7 +18,7 @@ which fields are expected:
 ```yaml
 consumers:
   - identity:
-      type: OCIRegistry
+      type: OCIRegistry/v1
       hostname: registry.example.com
     credentials:
       - type: <credential-type>
@@ -27,22 +27,22 @@ consumers:
 
 OCM ships with the following built-in credential types:
 
-| Credential Type                                            | Used With                                | Purpose                                                         |
-| ---------------------------------------------------------- | ---------------------------------------- | --------------------------------------------------------------- |
-| [`OCICredentials/v1`](#ocicredentialsv1)                   | `OCIRegistry` consumers                  | OCI registry username/password and token auth                   |
-| [`HelmHTTPCredentials/v1`](#helmhttpcredentialsv1)         | `HelmChartRepository` consumers (HTTP/S) | Helm HTTP repository auth and TLS client certs                  |
-| [`WgetCredentials/v1`](#wgetcredentialsv1)                 | `Wget` consumers                         | HTTP/S Basic Auth, bearer token, and mutual TLS                 |
-| [`S3Credentials/v1`](#s3credentialsv1)                     | `S3` consumers                           | S3 access keys and temporary STS credentials                    |
-| [`GitHubCredentials/v1`](#githubcredentialsv1)             | `GitHubRepository` consumers             | GitHub and GitHub Enterprise REST API token auth                |
-| [`GitHTTPSCredentials/v1`](#githttpscredentialsv1)         | `Git` consumers                          | Git over HTTPS with a password or access token                  |
-| [`GitBearerCredentials/v1`](#gitbearercredentialsv1)       | `Git` consumers                          | Advanced: Git servers requiring Bearer authentication           |
-| [`GitSSHCredentials/v1`](#gitsshcredentialsv1)             | `Git` consumers                          | Git over SSH with a key or SSH agent                            |
-| [`RSACredentials/v1`](#rsacredentialsv1)                   | `RSA/v1alpha1` consumers                 | RSA signing and verification key material                       |
-| [`GPGCredentials/v1alpha1`](#gpgcredentialsv1alpha1)       | `GPG/v1alpha1` consumers                 | GPG signing and verification key material                       |
-| [`OIDCIdentityToken/v1alpha1`](#oidcidentitytokenv1alpha1) | `SigstoreSigner/v1alpha1` consumers      | OIDC token for Sigstore keyless signing via Fulcio              |
-| [`TrustedRoot/v1alpha1`](#trustedrootv1alpha1)             | `SigstoreVerifier/v1alpha1` consumers    | Sigstore trust material for private infrastructure verification |
-| [`TSACredentials/v1alpha1`](#tsacredentialsv1alpha1)       | `TSA/v1alpha1` consumers                 | RFC 3161 timestamp verification root CA certificates            |
-| [`DirectCredentials/v1`](#directcredentialsv1)             | Any consumer                             | Legacy untyped key-value fallback (also `Credentials/v1`)       |
+| Credential Type                                            | Used With                             | Purpose                                                         |
+| ---------------------------------------------------------- | ------------------------------------- | --------------------------------------------------------------- |
+| [`OCICredentials/v1`](#ocicredentialsv1)                   | `OCIRegistry/v1` consumers            | OCI registry username/password and token auth                   |
+| [`HelmHTTPCredentials/v1`](#helmhttpcredentialsv1)         | `HelmChartRepository/v1` consumers    | Helm HTTP repository auth and TLS client certs                  |
+| [`HTTPCredentials/v1`](#wgetcredentialsv1)                 | `HTTP/v1` consumers                   | HTTP/S Basic Auth, bearer token, and mutual TLS                 |
+| [`S3Credentials/v1`](#s3credentialsv1)                     | `S3/v1` consumers                     | S3 access keys and temporary STS credentials                    |
+| [`GitHubCredentials/v1`](#githubcredentialsv1)             | `GitHubRepository` consumers          | GitHub and GitHub Enterprise REST API token auth                |
+| [`GitHTTPSCredentials/v1`](#githttpscredentialsv1)         | `Git/v1` consumers                    | Git over HTTPS with a password or access token                  |
+| [`GitBearerCredentials/v1`](#gitbearercredentialsv1)       | `Git/v1` consumers                    | Advanced: Git servers requiring Bearer authentication           |
+| [`GitSSHCredentials/v1`](#gitsshcredentialsv1)             | `Git/v1` consumers                    | Git over SSH with a key or SSH agent                            |
+| [`RSACredentials/v1`](#rsacredentialsv1)                   | `RSA/v1alpha1` consumers              | RSA signing and verification key material                       |
+| [`GPGCredentials/v1alpha1`](#gpgcredentialsv1alpha1)       | `GPG` consumers                       | GPG signing and verification key material                       |
+| [`OIDCIdentityToken/v1alpha1`](#oidcidentitytokenv1alpha1) | `SigstoreSigner/v1alpha1` consumers   | OIDC token for Sigstore keyless signing via Fulcio              |
+| [`TrustedRoot/v1alpha1`](#trustedrootv1alpha1)             | `SigstoreVerifier/v1alpha1` consumers | Sigstore trust material for private infrastructure verification |
+| [`TSACredentials/v1alpha1`](#tsacredentialsv1alpha1)       | `TSA/v1alpha1` consumers              | RFC 3161 timestamp verification root CA certificates            |
+| [`DirectCredentials/v1`](#directcredentialsv1)             | Any consumer                          | Legacy untyped key-value fallback (also `Credentials/v1`)       |
 
 All typed credential types use flat top-level fields. `DirectCredentials/v1` uses a nested `properties:` map — it is the
 universal fallback and all existing `.ocmconfig` files using `Credentials/v1` continue to work unchanged.
@@ -83,7 +83,7 @@ ocm describe types credentials OCICredentials/v1 -o jsonschema
 ```yaml
 consumers:
   - identity:
-      type: OCIRegistry
+      type: OCIRegistry/v1
       hostname: registry.example.com
     credentials:
       - type: OCICredentials/v1
@@ -96,7 +96,7 @@ Token-based authentication:
 ```yaml
 consumers:
   - identity:
-      type: OCIRegistry
+      type: OCIRegistry/v1
       hostname: registry.example.com
     credentials:
       - type: OCICredentials/v1
@@ -121,7 +121,7 @@ Username/password:
 ```yaml
 consumers:
   - identity:
-      type: HelmChartRepository
+      type: HelmChartRepository/v1
       hostname: charts.example.com
       scheme: https
     credentials:
@@ -135,7 +135,7 @@ Mutual TLS:
 ```yaml
 consumers:
   - identity:
-      type: HelmChartRepository
+      type: HelmChartRepository/v1
       hostname: charts.internal
       scheme: https
     credentials:
@@ -155,6 +155,10 @@ use HTTP/S transport. For OCI-based Helm repositories, use `OCICredentials/v1` i
 
 {{< schema-renderer url="/schemas/bindings/go/credentials/wget/v1/WgetCredentials.schema.json" >}}
 
+This credential type is registered under two names: the preferred `HTTPCredentials/v1` and the
+legacy `WgetCredentials/v1`. Both carry the same fields and resolve identically; prefer
+`HTTPCredentials/v1` in new configurations.
+
 ### Example
 
 HTTP Basic Auth:
@@ -162,11 +166,11 @@ HTTP Basic Auth:
 ```yaml
 consumers:
   - identity:
-      type: Wget
+      type: HTTP/v1
       hostname: downloads.example.com
       scheme: https
     credentials:
-      - type: WgetCredentials/v1
+      - type: HTTPCredentials/v1
         username: my-user
         password: my-password
 ```
@@ -176,12 +180,12 @@ Bearer token:
 ```yaml
 consumers:
   - identity:
-      type: Wget
+      type: HTTP/v1
       hostname: api.example.com
       scheme: https
       path: artifacts/*
     credentials:
-      - type: WgetCredentials/v1
+      - type: HTTPCredentials/v1
         identityToken: eyJhbGciOi...
 ```
 
@@ -190,11 +194,11 @@ Mutual TLS with a private CA:
 ```yaml
 consumers:
   - identity:
-      type: Wget
+      type: HTTP/v1
       hostname: artifacts.internal
       scheme: https
     credentials:
-      - type: WgetCredentials/v1
+      - type: HTTPCredentials/v1
         certificate: |
           -----BEGIN CERTIFICATE-----
           MIIDdzCCAl+gAwIBAgIEbGVnYWw...
@@ -218,7 +222,7 @@ is set, and a client certificate has no effect on a plain `http://` URL.
 
 ### Used With
 
-[`Wget`]({{< relref "credential-consumer-identities.md#wget" >}}) consumer identities, covering both the
+[`HTTP`]({{< relref "credential-consumer-identities.md#wget" >}}) consumer identities, covering both the
 [`Wget/v1` access type]({{< relref "input-and-access-types.md#wgetv1-access" >}}) and the
 [`Wget/v1` input type]({{< relref "input-and-access-types.md#wgetv1-input" >}}).
 
@@ -245,7 +249,7 @@ Explicit anonymous access to a public object:
 ```yaml
 consumers:
   - identity:
-      type: S3
+      type: S3/v1
       path: public-bucket/path/to/object
     credentials:
       - type: S3Credentials/v1
@@ -257,7 +261,7 @@ Static access keys for every bucket the account owns (`anonymous: false` is opti
 ```yaml
 consumers:
   - identity:
-      type: S3
+      type: S3/v1
     credentials:
       - type: S3Credentials/v1
         anonymous: false
@@ -270,7 +274,7 @@ Temporary STS credentials, scoped to one object:
 ```yaml
 consumers:
   - identity:
-      type: S3
+      type: S3/v1
       path: acme-artifacts/datasets/reference/1.0.0/reference.parquet
     credentials:
       - type: S3Credentials/v1
@@ -284,7 +288,7 @@ A self-hosted MinIO, addressed by its endpoint:
 ```yaml
 consumers:
   - identity:
-      type: S3
+      type: S3/v1
       scheme: https
       hostname: minio.internal
       port: "9000"
@@ -492,7 +496,7 @@ consumers:
 ```yaml
 consumers:
   - identity:
-      type: GPG/v1alpha1
+      type: GPG
       algorithm: application/vnd.ocm.signature.gpg
       signature: default
     credentials:
@@ -504,7 +508,7 @@ consumers:
 
 ### Used With
 
-`GPG/v1alpha1` consumer identities (signing and verification with OpenPGP keys).
+`GPG` consumer identities (signing and verification with OpenPGP keys).
 
 ---
 
@@ -611,7 +615,7 @@ OCI registry with `Credentials/v1`:
 ```yaml
 consumers:
   - identity:
-      type: OCIRegistry
+      type: OCIRegistry/v1
       hostname: registry.example.com
     credentials:
       - type: Credentials/v1
