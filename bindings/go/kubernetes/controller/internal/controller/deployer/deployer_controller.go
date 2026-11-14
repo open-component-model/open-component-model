@@ -93,8 +93,8 @@ type Reconciler struct {
 	// stopResourceWatchChannel is used to unregister watches for resources that are referenced by the deployer.
 	// It is used by the dynamic informer manager to unregister watches when "undeploying" a resource.
 	resourceWatchChannel, stopResourceWatchChannel chan dynamic.Event
-	// resourceWatchHasSynced is used to check if a resource watch is already registered and synced.
-	resourceWatchHasSynced func(parent, obj client.Object) bool
+	// joinResourceWatch joins a running resource watch and reports whether it has synced.
+	joinResourceWatch func(parent, obj client.Object) bool
 	// resourceWatchIsStopped is used to check if a resource watch is stopped.
 	resourceWatchIsStopped func(parent, obj client.Object) bool
 	// resourceWatches is used to track the deployed objects and their resource watches.
@@ -232,8 +232,7 @@ func (r *Reconciler) setupDynamicResourceWatcherWithManager(mgr ctrl.Manager) (*
 	r.resourceWatchChannel = informerManager.RegisterChannel()
 	// this channel is used to unregister watches for resources that are referenced by the deployer.
 	r.stopResourceWatchChannel = informerManager.UnregisterChannel()
-	// The resourceWatchHasSynced function is used to check if a resource is already registered and synced once requested.
-	r.resourceWatchHasSynced = informerManager.HasSynced
+	r.joinResourceWatch = informerManager.JoinIfActive
 	// The resourceWatchIsStopped function is used to check if a resource watch is stopped. useful for cleanup purposes.
 	r.resourceWatchIsStopped = informerManager.IsStopped
 	r.resourceWatches = informerManager.ActiveForParent
@@ -1033,7 +1032,7 @@ func (r *Reconciler) trackConcurrently(ctx context.Context, deployer deliveryv1a
 func (r *Reconciler) track(ctx context.Context, deployer deliveryv1alpha1.DeployerObject, obj client.Object) error {
 	logger := log.FromContext(ctx)
 
-	if r.resourceWatchHasSynced(deployer, obj) {
+	if r.joinResourceWatch(deployer, obj) {
 		logger.Info("object is already registered and synced, skipping registration")
 	} else {
 		logger.Info("registering watch from deployer", "obj", obj.GetName())
