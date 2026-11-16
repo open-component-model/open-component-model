@@ -10,12 +10,15 @@ import (
 	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // Key is the key of the repository a [FakeRepository] serves.
@@ -229,7 +232,8 @@ func splitMatrixParams(escapedPath string) (string, map[string]string) {
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
-	if err := json.NewEncoder(w).Encode(v); err != nil {
+	// jsontext.Encoder writes the trailing newline json.Encoder used to append.
+	if err := json.MarshalEncode(jsontext.NewEncoder(w), v, runtime.JSONOptions); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }

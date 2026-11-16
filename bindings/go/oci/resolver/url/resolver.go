@@ -9,8 +9,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"oras.land/oras-go/v2/registry/remote"
-	"oras.land/oras-go/v2/registry/remote/errcode"
+	"github.com/oras-project/oras-go/v3/registry/remote"
+	"github.com/oras-project/oras-go/v3/registry/remote/errcode"
 
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -173,22 +173,23 @@ func (resolver *CachingResolver) StoreForReference(ctx context.Context, referenc
 		return nil, fmt.Errorf("cannot resolve %q: %w", reference, err)
 	}
 
-	repo := &remote.Repository{
-		Reference: ref.Reference,
-		// to remain fully compatible with all OCI repositories, we MUST skip referrers GC.
-		// this is because most "classic" OCI repositories such as Docker or GHCR that were
-		// developed before the referrers API ALSO do not provide delete support for manifests.
-		// see https://github.com/opencontainers/distribution-spec/blob/v1.1.1/spec.md#deleting-manifests
-		//
-		// This means that by default, we cannot delete referrers from the repository.
-		// This is a limitation of the OCI distribution spec implementors and not specific to this resolver.
-		SkipReferrersGC: true,
+	// The store addresses the repository; tag and digest are passed per call.
+	repo, err := remote.NewRepository(ref.Registry + "/" + ref.Repository)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create repository for %q: %w", reference, err)
 	}
-
-	repo.PlainHTTP = plainHTTP
+	// to remain fully compatible with all OCI repositories, we MUST skip referrers GC.
+	// this is because most "classic" OCI repositories such as Docker or GHCR that were
+	// developed before the referrers API ALSO do not provide delete support for manifests.
+	// see https://github.com/opencontainers/distribution-spec/blob/v1.1.1/spec.md#deleting-manifests
+	//
+	// This means that by default, we cannot delete referrers from the repository.
+	// This is a limitation of the OCI distribution spec implementors and not specific to this resolver.
+	repo.SkipReferrersGC = true
+	repo.Registry.PlainHTTP = plainHTTP
 
 	if resolver.baseClient != nil {
-		repo.Client = resolver.baseClient
+		repo.Registry.Client = resolver.baseClient
 	}
 
 	store := &remotestore.RemoteStore{

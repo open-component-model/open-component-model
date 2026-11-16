@@ -3,7 +3,8 @@ package list
 import (
 	"cmp"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 	graphutils "ocm.software/open-component-model/bindings/go/cli/internal/render/graph"
 	"ocm.software/open-component-model/bindings/go/dag"
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // Renderer renders a tree from a DirectedAcyclicGraph as a flat last in a
@@ -86,7 +88,7 @@ func New[T cmp.Ordered](ctx context.Context, graph *syncdag.SyncedDirectedAcycli
 			for _, vertex := range vertices {
 				list = append(list, fmt.Sprintf("%v", vertex.ID))
 			}
-			data, err := json.MarshalIndent(list, "", "  ")
+			data, err := json.Marshal(list, runtime.JSONOptions, jsontext.WithIndent("  "))
 			if err != nil {
 				return fmt.Errorf("encoding vertices as JSON failed: %w", err)
 			}

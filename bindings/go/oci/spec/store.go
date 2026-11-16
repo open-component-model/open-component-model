@@ -1,7 +1,7 @@
 package spec
 
 import (
-	"oras.land/oras-go/v2/content"
+	"github.com/oras-project/oras-go/v3/content"
 )
 
 // Store defines the interface for interacting with an OCI store.

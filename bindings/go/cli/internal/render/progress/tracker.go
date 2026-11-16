@@ -93,6 +93,41 @@ func WithConcurrency[T any](runners int) OperationOption[T] {
 	}
 }
 
+// nonTextLogRendererKey marks a context as carrying a log renderer other than
+// plain text.
+type nonTextLogRendererKey struct{}
+
+// WithNonTextLogRenderer returns a context that tells [NewTracker] the log
+// records are rendered by something other than a plain-text renderer. While the
+// interactive visualizer runs it buffers records and re-renders them as text, so
+// any other renderer is only delivered as the user asked for it with the
+// interactive visualizer off.
+func WithNonTextLogRenderer(ctx context.Context) context.Context {
+	return context.WithValue(ctx, nonTextLogRendererKey{}, true)
+}
+
+func nonTextLogRenderer(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	marked, _ := ctx.Value(nonTextLogRendererKey{}).(bool)
+	return marked
+}
+
+// useTerminalVisualizer reports whether the interactive terminal visualizer
+// should be used. The two axes are whether the output is interactive and which
+// log renderer the records go through:
+//
+//	interactive, text renderer      -> interactive visualizer, records re-rendered as text above it
+//	non-interactive, text renderer  -> slog fallback, text records
+//	any other renderer              -> slog fallback, that renderer's records
+//
+// isTTY carries the first axis, [WithNonTextLogRenderer] the second. A factory
+// must be present for there to be an interactive visualizer at all.
+func useTerminalVisualizer(ctx context.Context, hasFactory, isTTY bool) bool {
+	return hasFactory && isTTY && !nonTextLogRenderer(ctx)
+}
+
 // Tracker manages progress rendering for CLI operations.
 //
 // In terminal mode, it uses the injected factory and redirects slog to a buffer
@@ -109,14 +144,16 @@ type Tracker[T any] struct {
 // NewTracker creates a tracker for the given output writer.
 // The factory creates terminal visualizers; in non-terminal mode it is ignored.
 // If factory is nil, the tracker always uses [SlogVisualizer].
-func NewTracker[T any](_ context.Context, out io.Writer, factory ...VisualizerFactory[T]) *Tracker[T] {
+// A context carrying [WithNonTextLogRenderer] also disables the terminal
+// visualizer, regardless of whether out is a TTY.
+func NewTracker[T any](ctx context.Context, out io.Writer, factory ...VisualizerFactory[T]) *Tracker[T] {
 	var f VisualizerFactory[T]
 	if len(factory) > 0 {
 		f = factory[0]
 	}
 	return &Tracker[T]{
 		out:        out,
-		isTerminal: f != nil && isTerminal(out),
+		isTerminal: useTerminalVisualizer(ctx, f != nil, isTerminal(out)),
 		factory:    f,
 	}
 }

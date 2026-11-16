@@ -1,7 +1,7 @@
 package transformation_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"os"
 	"path/filepath"
@@ -133,7 +133,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 		helmAccessData, err := json.Marshal(map[string]string{
 			"helmRepository": "https://example.com",
 			"helmChart":      "mychart:0.1.0",
-		})
+		}, runtime.JSONOptions)
 		r.NoError(err)
 
 		spec := &v1alpha1.ConvertHelmToOCI{
@@ -208,7 +208,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 		helmAccessData, err := json.Marshal(map[string]string{
 			"helmRepository": "https://example.com",
 			"helmChart":      "mychart:0.1.0",
-		})
+		}, runtime.JSONOptions)
 		r.NoError(err)
 
 		spec := &v1alpha1.ConvertHelmToOCI{
@@ -304,7 +304,7 @@ func verifyOCILayout(t *testing.T, ociPath, expectedName, expectedVersion string
 	})
 
 	manifest := ociImageSpecV1.Manifest{}
-	r.NoError(json.NewDecoder(manifestRaw).Decode(&manifest))
+	r.NoError(json.UnmarshalRead(manifestRaw, &manifest))
 
 	// Verify config layer
 	assert.Equal(t, registry.ConfigMediaType, manifest.Config.MediaType)
@@ -316,7 +316,7 @@ func verifyOCILayout(t *testing.T, ociPath, expectedName, expectedVersion string
 		r.NoError(configRaw.Close())
 	})
 	var config map[string]string
-	r.NoError(json.NewDecoder(configRaw).Decode(&config))
+	r.NoError(json.UnmarshalRead(configRaw, &config))
 	assert.Equal(t, expectedName, config["name"])
 	assert.Equal(t, expectedVersion, config["version"])
 
@@ -357,7 +357,7 @@ func verifyProvenance(t *testing.T, ociPath, gpgKeyPath, keyID, chartFileName st
 	})
 
 	manifest := ociImageSpecV1.Manifest{}
-	r.NoError(json.NewDecoder(manifestRaw).Decode(&manifest))
+	r.NoError(json.UnmarshalRead(manifestRaw, &manifest))
 	r.Len(manifest.Layers, 2)
 
 	chartLayer, err := store.Fetch(ctx, manifest.Layers[0])

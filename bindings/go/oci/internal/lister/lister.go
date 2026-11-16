@@ -18,10 +18,10 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/content"
+	"github.com/oras-project/oras-go/v3/registry"
 	slogcontext "github.com/veqryn/slog-context"
 	"golang.org/x/sync/errgroup"
-	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/registry"
 
 	indexv1 "ocm.software/open-component-model/bindings/go/oci/spec/index/component/v1"
 )

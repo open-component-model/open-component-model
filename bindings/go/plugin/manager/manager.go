@@ -3,7 +3,7 @@ package manager
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -140,8 +140,9 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 		opt(defaultOpts)
 	}
 
+	idleTimeout := mtypes.Duration(defaultOpts.IdleTimeout)
 	conf := &mtypes.Config{
-		IdleTimeout: &defaultOpts.IdleTimeout,
+		IdleTimeout: &idleTimeout,
 	}
 
 	conf.Type = osutil.ConnectionType(ctx)
@@ -299,7 +300,7 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Con
 		plugin.Config.ConfigTypes = append(plugin.Config.ConfigTypes, filtered.Configurations...)
 	}
 
-	serialized, err := json.Marshal(plugin.Config)
+	serialized, err := json.Marshal(plugin.Config, runtime.JSONOptions)
 	if err != nil {
 		return err
 	}

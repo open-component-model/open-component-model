@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 
@@ -16,7 +17,7 @@ func CredentialsFromHeader(w http.ResponseWriter, h http.Header) (runtime.Typed,
 		return nil, true
 	}
 	raw := &runtime.Raw{}
-	if err := raw.UnmarshalJSON([]byte(authHeader)); err != nil {
+	if err := json.Unmarshal([]byte(authHeader), raw); err != nil {
 		NewError(fmt.Errorf("incorrect authentication header format: %w", err), http.StatusUnauthorized).Write(w)
 		return nil, false
 	}

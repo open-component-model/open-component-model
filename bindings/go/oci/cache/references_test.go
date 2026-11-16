@@ -2,7 +2,7 @@ package cache
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"os"
 	"path/filepath"
@@ -14,9 +14,11 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/registry/remote/properties"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2/registry"
+
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // resolverFn adapts a function to the upstream resolver interface
@@ -56,7 +58,7 @@ func TestReferenceCache_Resolve_HitAfterFirstCall(t *testing.T) {
 		return desc, nil
 	})
 
-	ref, err := registry.ParseReference("ghcr.io/owner/repo@" + desc.Digest.String())
+	ref, err := properties.NewReference("ghcr.io/owner/repo@" + desc.Digest.String())
 	require.NoError(t, err)
 
 	got, err := c.Resolve(t.Context(), upstream, ref)
@@ -96,7 +98,7 @@ func TestReferenceCache_Resolve_TagResolvesUpstreamEveryTime(t *testing.T) {
 		return second, nil
 	})
 
-	ref, err := registry.ParseReference("ghcr.io/owner/repo:v1")
+	ref, err := properties.NewReference("ghcr.io/owner/repo:v1")
 	require.NoError(t, err)
 
 	got, err := c.Resolve(t.Context(), upstream, ref)
@@ -121,7 +123,7 @@ func TestReferenceCache_Invalidate_RemovesEntryAndSurvivesRestart(t *testing.T) 
 	c1, err := NewReferenceCache(Options{Dir: dir})
 	require.NoError(t, err)
 
-	ref, err := registry.ParseReference("ghcr.io/ns:v1")
+	ref, err := properties.NewReference("ghcr.io/ns:v1")
 	require.NoError(t, err)
 
 	c1.Add(ref, desc)
@@ -141,14 +143,14 @@ func TestReferenceCache_Invalidate_RemovesEntryAndSurvivesRestart(t *testing.T) 
 
 func TestReferenceCache_Invalidate_UnknownEntryIsNoOp(t *testing.T) {
 	c := newTestRefCache(t, Options{})
-	ref, err := registry.ParseReference("ghcr.io/ns:never-added")
+	ref, err := properties.NewReference("ghcr.io/ns:never-added")
 	require.NoError(t, err)
 	c.Invalidate(ref)
 }
 
 func TestReferenceCache_Invalidate_NilReceiver(t *testing.T) {
 	var c *ReferenceCache
-	ref, err := registry.ParseReference("ghcr.io/ns:ref")
+	ref, err := properties.NewReference("ghcr.io/ns:ref")
 	require.NoError(t, err)
 	c.Invalidate(ref)
 }
@@ -164,7 +166,7 @@ func TestReferenceCache_Load_DropsExpiredEntries(t *testing.T) {
 	c1, err := NewReferenceCache(Options{Dir: dir, TTL: time.Hour})
 	require.NoError(t, err)
 
-	ref, err := registry.ParseReference("ghcr.io/ns:v1")
+	ref, err := properties.NewReference("ghcr.io/ns:v1")
 	require.NoError(t, err)
 
 	c1.Add(ref, desc)
@@ -179,7 +181,7 @@ func TestReferenceCache_Load_DropsExpiredEntries(t *testing.T) {
 	entry := snap.References["v1"]
 	entry.SavedAt = time.Now().Add(-2 * time.Hour)
 	snap.References["v1"] = entry
-	rewritten, err := json.Marshal(snap)
+	rewritten, err := json.Marshal(snap, ocmruntime.JSONOptions)
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(snapPath, rewritten, 0o600))
 
@@ -201,7 +203,7 @@ func TestReferenceCache_Load_KeepsFreshEntriesWithinTTL(t *testing.T) {
 	c1, err := NewReferenceCache(Options{Dir: dir, TTL: time.Hour})
 	require.NoError(t, err)
 
-	ref, err := registry.ParseReference("ghcr.io/ns:v1")
+	ref, err := properties.NewReference("ghcr.io/ns:v1")
 	require.NoError(t, err)
 
 	c1.Add(ref, desc)
@@ -231,7 +233,7 @@ func TestReferenceCache_Resolve_CollapsesConcurrentMisses(t *testing.T) {
 		return desc, nil
 	})
 
-	ref, err := registry.ParseReference("ghcr.io/ns:v1")
+	ref, err := properties.NewReference("ghcr.io/ns:v1")
 	require.NoError(t, err)
 
 	const N = 8
@@ -269,10 +271,10 @@ func TestReferenceCache_Resolve_NamespacesIsolateCollisions(t *testing.T) {
 		Size:      1,
 	}
 
-	refA, err := registry.ParseReference("ghcr.io/foo:v1")
+	refA, err := properties.NewReference("ghcr.io/foo:v1")
 	require.NoError(t, err)
 
-	refB, err := registry.ParseReference("ghcr.io/bar:v1")
+	refB, err := properties.NewReference("ghcr.io/bar:v1")
 	require.NoError(t, err)
 
 	c.Add(refA, descA)
@@ -287,7 +289,7 @@ func TestReferenceCache_Resolve_NamespacesIsolateCollisions(t *testing.T) {
 	assert.Equal(t, descB, gotB)
 
 	// And lookups in the wrong namespace miss.
-	refOther, err := registry.ParseReference("ghcr.io/other:v1")
+	refOther, err := properties.NewReference("ghcr.io/other:v1")
 	require.NoError(t, err)
 	_, hitMiss := c.Lookup(refOther)
 	assert.False(t, hitMiss)
@@ -300,7 +302,7 @@ func TestReferenceCache_Resolve_ErrorNotCached(t *testing.T) {
 		return ociImageSpecV1.Descriptor{}, errors.New("upstream boom")
 	})
 
-	ref, err := registry.ParseReference("ghcr.io/ns:ref-fail")
+	ref, err := properties.NewReference("ghcr.io/ns:ref-fail")
 	require.NoError(t, err)
 
 	_, err = c.Resolve(t.Context(), upstream, ref)
@@ -316,7 +318,7 @@ func TestReferenceCache_Resolve_NilReceiver_Passthrough(t *testing.T) {
 		return want, nil
 	})
 
-	ref, err := registry.ParseReference("ghcr.io/ns:x-y")
+	ref, err := properties.NewReference("ghcr.io/ns:x-y")
 	require.NoError(t, err)
 
 	got, err := c.Resolve(t.Context(), upstream, ref)
@@ -336,7 +338,7 @@ func TestReferenceCache_PersistsAcrossRestart(t *testing.T) {
 	c1, err := NewReferenceCache(Options{Dir: dir})
 	require.NoError(t, err)
 
-	ref, err := registry.ParseReference("ghcr.io/owner/repo:v1")
+	ref, err := properties.NewReference("ghcr.io/owner/repo:v1")
 	require.NoError(t, err)
 
 	c1.Add(ref, desc)
@@ -365,10 +367,10 @@ func TestReferenceCache_RoundtripsArbitraryChars(t *testing.T) {
 	}
 	// Tabs, newlines, quotes, unicode — all safe in a JSON snapshot.
 	weird := "tag\nwith\ttabs/\"quotes\"/€"
-	ref := registry.Reference{
+	ref := properties.Reference{
 		Registry:   "ghcr.io",
 		Repository: "ns",
-		Reference:  weird,
+		Tag:        weird,
 	}
 
 	c1, err := NewReferenceCache(Options{Dir: dir})
@@ -418,7 +420,7 @@ func TestReferenceCache_Add_LRUStaysConsistentWhenWriteFails(t *testing.T) {
 	require.NoError(t, os.RemoveAll(c.opts.Dir))
 	require.NoError(t, os.WriteFile(c.opts.Dir, nil, 0o600))
 
-	ref, err := registry.ParseReference("ghcr.io/ns:ref-fail")
+	ref, err := properties.NewReference("ghcr.io/ns:ref-fail")
 	require.NoError(t, err)
 
 	c.Add(ref, desc)
@@ -435,10 +437,10 @@ func TestReferenceCache_Add_ConcurrentWritersAllVisible(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range 4 {
 		wg.Go(func() {
-			ref := registry.Reference{
+			ref := properties.Reference{
 				Registry:   "ghcr.io",
 				Repository: "ns",
-				Reference:  string(rune('a' + i)),
+				Tag:        string(rune('a' + i)),
 			}
 			c.Add(ref, ociImageSpecV1.Descriptor{
 				Digest: digest.FromBytes([]byte{byte('a' + i)}),
@@ -448,10 +450,10 @@ func TestReferenceCache_Add_ConcurrentWritersAllVisible(t *testing.T) {
 	}
 	wg.Wait()
 	for i := range 4 {
-		ref := registry.Reference{
+		ref := properties.Reference{
 			Registry:   "ghcr.io",
 			Repository: "ns",
-			Reference:  string(rune('a' + i)),
+			Tag:        string(rune('a' + i)),
 		}
 		_, ok := c.Lookup(ref)
 		assert.True(t, ok)
@@ -484,9 +486,9 @@ func TestReferenceCache_Add_RewritesEvictedNamespaceSnapshot(t *testing.T) {
 	r := require.New(t)
 	dir := filepath.Join(t.TempDir(), "refcache")
 
-	refA, err := registry.ParseReference("ghcr.io/a/repo:v1")
+	refA, err := properties.NewReference("ghcr.io/a/repo:v1")
 	r.NoError(err)
-	refB, err := registry.ParseReference("ghcr.io/b/repo:v1")
+	refB, err := properties.NewReference("ghcr.io/b/repo:v1")
 	r.NoError(err)
 
 	descA := ociImageSpecV1.Descriptor{

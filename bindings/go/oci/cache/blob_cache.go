@@ -14,9 +14,9 @@ import (
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/content"
+	"github.com/oras-project/oras-go/v3/registry/remote/properties"
 	"golang.org/x/sync/singleflight"
-	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/registry"
 )
 
 const (
@@ -43,7 +43,7 @@ type blobEntry struct {
 // answers Exists. A [*remote.Repository] satisfies it.
 type ReadOnlyRepository interface {
 	content.ReadOnlyStorage
-	ParseReference(reference string) (registry.Reference, error)
+	ParseReference(reference string) (properties.Reference, error)
 }
 
 // BlobCache is a digest-keyed, disk-backed LRU+TTL cache for small
@@ -325,7 +325,8 @@ func (c *BlobCache) fetchAlways(ctx context.Context, upstream ReadOnlyRepository
 		return nil, fmt.Errorf("blobcache: identify repository of %s: %w", target.Digest, err)
 	}
 	// The record must be for this digest, whatever the implementation returns.
-	blobRef.Reference = target.Digest.String()
+	blobRef.Tag = ""
+	blobRef.Digest = target.Digest.String()
 
 	_, known := c.served.Lookup(blobRef)
 	if known {

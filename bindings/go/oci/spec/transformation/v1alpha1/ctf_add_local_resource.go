@@ -20,7 +20,7 @@ type CTFAddLocalResource struct {
 	Type   runtime.Type               `json:"type"`
 	ID     string                     `json:"id"`
 	Spec   *CTFAddLocalResourceSpec   `json:"spec"`
-	Output *CTFAddLocalResourceOutput `json:"output,omitempty"`
+	Output *CTFAddLocalResourceOutput `json:"output,omitzero"`
 }
 
 // CTFAddLocalResourceOutput is the output specification of the

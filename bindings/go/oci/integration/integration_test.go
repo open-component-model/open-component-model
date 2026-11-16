@@ -5,7 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/rand"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -23,18 +23,19 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/content"
+	orasoci "github.com/oras-project/oras-go/v3/content/oci"
+	"github.com/oras-project/oras-go/v3/errdef"
+	orasregistry "github.com/oras-project/oras-go/v3/registry"
+	"github.com/oras-project/oras-go/v3/registry/remote/auth"
+	orascreds "github.com/oras-project/oras-go/v3/registry/remote/credentials"
+	"github.com/oras-project/oras-go/v3/registry/remote/retry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/log"
 	"github.com/testcontainers/testcontainers-go/modules/registry"
 	"golang.org/x/crypto/bcrypt"
-	"oras.land/oras-go/v2/content"
-	orasoci "oras.land/oras-go/v2/content/oci"
-	"oras.land/oras-go/v2/errdef"
-	orasregistry "oras.land/oras-go/v2/registry"
-	"oras.land/oras-go/v2/registry/remote/auth"
-	"oras.land/oras-go/v2/registry/remote/retry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -648,7 +649,7 @@ func uploadDownloadBarebonesOCIImage(t *testing.T, repo *oci.Repository, from, t
 	})
 
 	var manifest ociImageSpecV1.Manifest
-	r.NoError(json.NewDecoder(dataStreamFromManifest).Decode(&manifest))
+	r.NoError(json.UnmarshalRead(dataStreamFromManifest, &manifest))
 
 	r.Len(manifest.Layers, 1)
 
@@ -775,7 +776,7 @@ func createAuthClient(address, username, password string) *auth.Client {
 		Header: http.Header{
 			"User-Agent": []string{userAgent},
 		},
-		Credential: auth.StaticCredential(url.Host, auth.Credential{
+		CredentialFunc: orascreds.StaticCredentialFunc(url.Host, orascreds.Credential{
 			Username: username,
 			Password: password,
 		}),
@@ -814,7 +815,7 @@ func createSingleLayerOCIImage(t *testing.T, data []byte, ref ...string) ([]byte
 
 	r.NoError(w.Push(t.Context(), desc, bytes.NewReader(data)))
 
-	configRaw, err := json.Marshal(map[string]string{})
+	configRaw, err := json.Marshal(map[string]string{}, ocmruntime.JSONOptions)
 	r.NoError(err)
 	configDesc := ociImageSpecV1.Descriptor{
 		Digest:    digest.FromBytes(configRaw),
@@ -831,7 +832,7 @@ func createSingleLayerOCIImage(t *testing.T, data []byte, ref ...string) ([]byte
 			desc,
 		},
 	}
-	manifestRaw, err := json.Marshal(manifest)
+	manifestRaw, err := json.Marshal(manifest, ocmruntime.JSONOptions)
 	r.NoError(err)
 
 	manifestDesc := ociImageSpecV1.Descriptor{
@@ -1540,7 +1541,7 @@ func Test_Integration_OCIRepository_ReferrerChainTransfer(t *testing.T) {
 	require.NoError(t, err)
 	srcRef, err := looseref.ParseReference(srcImageRef)
 	require.NoError(t, err)
-	baseDesc, err := srcStore.Resolve(ctx, srcRef.ReferenceOrTag())
+	baseDesc, err := srcStore.Resolve(ctx, srcRef.GetReference())
 	require.NoError(t, err)
 
 	chain := make([]ociImageSpecV1.Descriptor, 0, chainDepth)
@@ -1561,7 +1562,7 @@ func Test_Integration_OCIRepository_ReferrerChainTransfer(t *testing.T) {
 	require.Truef(t, ok, "dst store %T must implement content.ReadOnlyGraphStorage", dstStore)
 	dstRef, err := looseref.ParseReference(transferred)
 	require.NoError(t, err)
-	dstBase, err := dstStore.Resolve(ctx, dstRef.ReferenceOrTag())
+	dstBase, err := dstStore.Resolve(ctx, dstRef.GetReference())
 	require.NoError(t, err)
 	require.Equal(t, baseDesc.Digest, dstBase.Digest, "transferred base must keep its digest")
 
@@ -1592,7 +1593,7 @@ func pushChainLink(t *testing.T, ctx context.Context, store ocispec.Store, subje
 		Layers:       []ociImageSpecV1.Descriptor{empty},
 		Subject:      &subject,
 	}
-	body, err := json.Marshal(manifest)
+	body, err := json.Marshal(manifest, ocmruntime.JSONOptions)
 	r.NoError(err)
 	desc := ociImageSpecV1.Descriptor{
 		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
@@ -1710,7 +1711,7 @@ func addByValueOwnedResource(t *testing.T, ctx context.Context, resolver oci.Res
 	ref, err := looseref.ParseReference(resolver.ComponentVersionReference(ctx, component, version))
 	r.NoError(err)
 	ref.Tag = ""
-	ref.Reference.Reference = res.Access.(*v2.LocalBlob).LocalReference
+	ref.Digest = res.Access.(*v2.LocalBlob).LocalReference
 	return res, ref.String()
 }
 
@@ -1756,7 +1757,7 @@ func listOwnershipReferrers(t *testing.T, ctx context.Context, resolver oci.Reso
 	r.Truef(ok, "store %T must implement content.ReadOnlyGraphStorage for referrers discovery", store)
 	ref, err := looseref.ParseReference(reference)
 	r.NoError(err)
-	subject, err := store.Resolve(ctx, ref.ReferenceOrTag())
+	subject, err := store.Resolve(ctx, ref.GetReference())
 	r.NoError(err)
 	refs, err := orasregistry.Referrers(ctx, graphStore, subject, annotations.OwnershipArtifactType)
 	r.NoError(err)
@@ -1825,14 +1826,14 @@ func assertOwnershipReferrerAnnotations(t *testing.T, ctx context.Context, resol
 	r.NoError(err)
 	sref, err := looseref.ParseReference(subjectRef)
 	r.NoError(err)
-	subject, err := store.Resolve(ctx, sref.ReferenceOrTag())
+	subject, err := store.Resolve(ctx, sref.GetReference())
 	r.NoError(err)
 
 	rc, err := store.Fetch(ctx, ref)
 	r.NoError(err)
 	defer func() { r.NoError(rc.Close()) }()
 	var manifest ociImageSpecV1.Manifest
-	r.NoError(json.NewDecoder(rc).Decode(&manifest))
+	r.NoError(json.UnmarshalRead(rc, &manifest))
 	r.NotNil(manifest.Subject, "ownership referrer manifest must carry a subject")
 	assert.Equal(t, subject.Digest, manifest.Subject.Digest,
 		"referrer subject digest must match the resolved subject manifest digest")

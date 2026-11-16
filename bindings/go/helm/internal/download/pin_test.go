@@ -2,7 +2,7 @@ package download
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
@@ -19,6 +19,7 @@ import (
 	"helm.sh/helm/v4/pkg/registry"
 
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestPinOCIReference(t *testing.T) {
@@ -226,7 +227,7 @@ func newChartRegistry(t *testing.T, repo, tag string, tgz, prov []byte) (*httpte
 			Size:      int64(len(config)),
 		},
 		Layers: layers,
-	})
+	}, runtime.JSONOptions)
 	require.NoError(t, err)
 	manifestDigest := godigest.FromBytes(manifest)
 

@@ -1,7 +1,7 @@
 package v1
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"strings"
 	"testing"
 
@@ -126,7 +126,7 @@ func TestGit_JSON(t *testing.T) {
 		t.Run(typ.String(), func(t *testing.T) {
 			r := require.New(t)
 			input := Git{Type: typ, Repository: "https://example.com/repo.git"}
-			data, err := json.Marshal(input)
+			data, err := json.Marshal(input, runtime.JSONOptions)
 			r.NoError(err)
 			r.JSONEq(`{"type":"`+typ.String()+`","repository":"https://example.com/repo.git"}`, string(data))
 			var decoded Git

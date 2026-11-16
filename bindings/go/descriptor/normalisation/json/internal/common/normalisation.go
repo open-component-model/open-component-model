@@ -8,7 +8,7 @@
 package common
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/engine/jcs"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"

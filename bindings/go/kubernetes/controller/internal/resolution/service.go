@@ -2,14 +2,15 @@ package resolution
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"hash/fnv"
 	"time"
 
-	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"github.com/go-logr/logr"
 	"github.com/hashicorp/golang-lru/v2/expirable"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -81,7 +82,12 @@ func (r *Resolver) GetComponentVersion(ctx context.Context, opts *Options, verif
 		return nil, err
 	}
 
-	repo, err := resolved.resolver.GetComponentVersionRepositoryForComponent(ctx, component, version)
+	// Resolving the spec first gives the metric the repository that is actually used, at no extra cost for path matchers.
+	spec, err := resolved.resolver.GetRepositorySpecificationForComponent(ctx, component, version)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get repository specification for component %s:%s: %w", component, version, err)
+	}
+	repo, err := resolved.resolver.GetComponentVersionRepositoryForSpecification(ctx, spec)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get repository for component %s:%s: %w", component, version, err)
 	}
@@ -96,9 +102,14 @@ func (r *Resolver) GetComponentVersion(ctx context.Context, opts *Options, verif
 		digest:          verify.Digest,
 		signingRegistry: opts.PluginManager.SigningRegistry,
 	})
+	duration := time.Since(start)
+	state := verificationState(verify.Verifications, verify.Digest)
 	ResolutionDurationHistogram.
-		WithLabelValues(component, version, verificationState(verify.Verifications, verify.Digest)).
-		Observe(time.Since(start).Seconds())
+		WithLabelValues(state, repositoryLabel(spec), resultLabel(err)).
+		Observe(duration.Seconds())
+	// Per-version timing lives here because component and version are unbounded as metric labels.
+	log.FromContext(ctx).V(1).Info("resolved component version", "component", component, "version", version,
+		"verificationState", state, "duration", duration, "error", err)
 
 	return desc, err
 }
@@ -173,13 +184,13 @@ func (r *Resolver) createResolver(ctx context.Context, spec runtime.Typed, cfg *
 // It canonicalizes the repository spec using JCS (RFC 8785) before hashing to ensure consistent keys
 // regardless of field ordering in the JSON representation.
 func buildRepoCacheKey(configHash []byte, repoSpec runtime.Typed) (string, error) {
-	repoJSON, err := json.Marshal(repoSpec)
+	repoJSON, err := json.Marshal(repoSpec, runtime.JSONOptions)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal repository spec: %w", err)
 	}
 
-	canonicalJSON, err := jsoncanonicalizer.Transform(repoJSON)
-	if err != nil {
+	canonicalJSON := jsontext.Value(repoJSON)
+	if err := canonicalJSON.Canonicalize(); err != nil {
 		return "", fmt.Errorf("failed to canonicalize repository spec: %w", err)
 	}
 

@@ -2,18 +2,17 @@ package integration_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
-	"strings"
 	"testing"
 
 	godigest "github.com/opencontainers/go-digest"
 	ocispecv1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3"
+	"github.com/oras-project/oras-go/v3/content"
+	"github.com/oras-project/oras-go/v3/registry/remote"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2"
-	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/registry/remote"
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation"
@@ -91,10 +90,10 @@ func Test_Integration_TransferOCIArtifact_ExcludedFromSignature(t *testing.T) {
 				t.Helper()
 				r := require.New(t)
 				imageRef := pushTestOCIImage(t, creds.address, creds.username, creds.password, "test/image", "v1")
-				source, err := remote.NewRepository(strings.TrimPrefix(imageRef, "http://"))
+				source, err := remote.NewRepository(creds.address + "/test/image")
 				r.NoError(err)
-				source.PlainHTTP = true
-				source.Client = createAuthClient(creds.address, creds.username, creds.password)
+				source.Registry.PlainHTTP = true
+				source.Registry.Client = createAuthClient(creds.address, creds.username, creds.password)
 				root, err := source.Resolve(t.Context(), "v1")
 				r.NoError(err)
 				return descriptor.Resource{
@@ -185,7 +184,7 @@ func Test_Integration_TransferOCIArtifact_ExcludedFromSignature(t *testing.T) {
 			r.JSONEq(string(want), string(gotNormalised), "transfer must not change the normalised descriptor")
 
 			var access ociaccessv1.OCIImage
-			raw, err := json.Marshal(got.Component.Resources[0].Access)
+			raw, err := json.Marshal(got.Component.Resources[0].Access, runtime.JSONOptions)
 			r.NoError(err)
 			r.NoError(json.Unmarshal(raw, &access))
 			r.Contains(access.ImageReference, targetAddr, "the artifact must be uploaded to the target registry")

@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/oras-project/oras-go/v3/errdef"
 	slogcontext "github.com/veqryn/slog-context"
-	"oras.land/oras-go/v2/errdef"
 )
 
 // plusSubstitute is used to substitute the plus character ('+') in OCI tags.

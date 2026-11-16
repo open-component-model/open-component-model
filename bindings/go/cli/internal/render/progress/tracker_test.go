@@ -90,6 +90,36 @@ func TestTracker_NonTerminal_NoSlogRedirect(t *testing.T) {
 	assert.Equal(t, originalLogger, slog.Default())
 }
 
+func TestNonTextLogRenderer_Helper(t *testing.T) {
+	var nilCtx context.Context
+	assert.False(t, nonTextLogRenderer(context.Background()))
+	assert.False(t, nonTextLogRenderer(nilCtx))
+	assert.True(t, nonTextLogRenderer(WithNonTextLogRenderer(context.Background())))
+}
+
+func TestUseTerminalVisualizer(t *testing.T) {
+	text := context.Background()
+	nonText := WithNonTextLogRenderer(context.Background())
+	tests := []struct {
+		name       string
+		ctx        context.Context
+		hasFactory bool
+		isTTY      bool
+		want       bool
+	}{
+		{name: "interactive with a text renderer animates", ctx: text, hasFactory: true, isTTY: true, want: true},
+		{name: "non-interactive with a text renderer falls back", ctx: text, hasFactory: true, isTTY: false, want: false},
+		{name: "interactive with another renderer falls back", ctx: nonText, hasFactory: true, isTTY: true, want: false},
+		{name: "non-interactive with another renderer falls back", ctx: nonText, hasFactory: true, isTTY: false, want: false},
+		{name: "no factory to animate with", ctx: text, hasFactory: false, isTTY: true, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, useTerminalVisualizer(tt.ctx, tt.hasFactory, tt.isTTY))
+		})
+	}
+}
+
 func TestTracker_StopIsIdempotent(t *testing.T) {
 	originalLogger := slog.Default()
 	defer slog.SetDefault(originalLogger)

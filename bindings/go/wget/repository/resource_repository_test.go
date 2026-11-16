@@ -3,7 +3,7 @@ package repository_test
 import (
 	"crypto"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"net/http"
@@ -34,7 +34,7 @@ func wgetResource(t *testing.T, serverURL string, spec map[string]any) *descrunt
 	if spec["url"] == nil {
 		spec["url"] = serverURL + "/resource"
 	}
-	raw, err := json.Marshal(spec)
+	raw, err := json.Marshal(spec, runtime.JSONOptions)
 	require.NoError(t, err)
 
 	r := &descruntime.Resource{}
@@ -319,7 +319,7 @@ func TestGetResourceCredentialConsumerIdentity(t *testing.T) {
 	resource.Name = "test"
 	resource.Version = "1.0.0"
 	resource.Type = "blob"
-	raw, err := json.Marshal(map[string]any{"url": "https://example.com:443/path/file.tar.gz"})
+	raw, err := json.Marshal(map[string]any{"url": "https://example.com:443/path/file.tar.gz"}, runtime.JSONOptions)
 	r.NoError(err)
 	resource.Access = &runtime.Raw{
 		Type: runtime.NewVersionedType("wget", v1.Version),

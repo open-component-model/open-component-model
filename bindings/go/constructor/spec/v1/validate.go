@@ -2,7 +2,7 @@ package v1
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"sync"
 
@@ -10,6 +10,8 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"sigs.k8s.io/yaml"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // JSONSchema contains the embedded JSON schema for validating Open Component Model descriptors.
@@ -49,7 +51,7 @@ func Compile(data []byte) (*jsonschema.Schema, error) {
 // It marshals the descriptor to JSON and validates it against the schema.
 // Returns an error if validation fails or if there are issues with marshaling.
 func Validate(desc *ComponentConstructor) error {
-	raw, err := json.Marshal(desc)
+	raw, err := json.Marshal(desc, runtime.JSONOptions)
 	if err != nil {
 		return fmt.Errorf("failed to marshal descriptor: %w", err)
 	}

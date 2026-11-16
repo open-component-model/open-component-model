@@ -52,7 +52,7 @@ type S3 struct {
 
 	// UsePathStyle puts the bucket in the path (<endpoint>/<bucket>/<key>) instead of in
 	// the host. Most self-hosted S3-compatible stores need this. Defaults to false.
-	UsePathStyle bool `json:"usePathStyle,omitempty"`
+	UsePathStyle bool `json:"usePathStyle,omitzero"`
 }
 
 // Validate verifies that the required fields of the S3 input are set.

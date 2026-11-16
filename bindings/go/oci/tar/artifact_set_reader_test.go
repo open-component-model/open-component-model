@@ -4,16 +4,17 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/opencontainers/image-spec/specs-go"
 	v1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/content"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2/content"
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/ctf"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestReadOCILayout_ArtifactSet(t *testing.T) {
@@ -67,7 +68,8 @@ func legacyArtifactSet(t *testing.T) (archive []byte, manifest, layer v1.Descrip
 		MediaType: v1.MediaTypeImageManifest,
 		Config:    config,
 		Layers:    []v1.Descriptor{layer},
-	})
+	}, runtime.JSONOptions)
+
 	r.NoError(err)
 	manifest = content.NewDescriptorFromBytes(v1.MediaTypeImageManifest, manifestData)
 
@@ -76,7 +78,8 @@ func legacyArtifactSet(t *testing.T) (archive []byte, manifest, layer v1.Descrip
 	indexData, err := json.Marshal(v1.Index{
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		Manifests: []v1.Descriptor{tagged},
-	})
+	}, runtime.JSONOptions)
+
 	r.NoError(err)
 
 	var buf bytes.Buffer

@@ -9,12 +9,13 @@ import (
 	"time"
 
 	godigest "github.com/opencontainers/go-digest"
+	"github.com/oras-project/oras-go/v3/registry/remote/auth"
+	orascreds "github.com/oras-project/oras-go/v3/registry/remote/credentials"
+	"github.com/oras-project/oras-go/v3/registry/remote/retry"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/registry"
 	"golang.org/x/crypto/bcrypt"
-	"oras.land/oras-go/v2/registry/remote/auth"
-	"oras.land/oras-go/v2/registry/remote/retry"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
@@ -75,8 +76,8 @@ func generateHtpasswd(t *testing.T, username, password string) string {
 
 func createAuthClient(address, username, password string) *auth.Client {
 	return &auth.Client{
-		Client:     retry.DefaultClient,
-		Credential: auth.StaticCredential(address, auth.Credential{Username: username, Password: password}),
+		Client:         retry.DefaultClient,
+		CredentialFunc: orascreds.StaticCredentialFunc(address, orascreds.Credential{Username: username, Password: password}),
 	}
 }
 
