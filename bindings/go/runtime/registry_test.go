@@ -778,3 +778,27 @@ func TestRegistry_GetTypes_NeverListsDefaultAsItsOwnAlias(t *testing.T) {
 		})
 	}
 }
+
+// Decode takes a JSON document straight to the JSON decoder and everything else
+// through sigs.k8s.io/yaml. Both routes have to produce the same object, and a YAML
+// flow mapping - which starts with a brace but is not JSON - has to keep working.
+func TestRegistry_Decode_JSONAndYAMLAgree(t *testing.T) {
+	typ := NewVersionedType("test", "v1")
+	for name, doc := range map[string]string{
+		"json":             `{"type": "test/v1", "value": "foo"}`,
+		"json indented":    "\n  {\n  \"type\": \"test/v1\",\n  \"value\": \"foo\"\n}\n",
+		"json duplicate":   `{"type": "test/v1", "value": "bar", "value": "foo"}`,
+		"yaml flow":        `{type: test/v1, value: foo}`,
+		"yaml block":       "type: test/v1\nvalue: foo\n",
+		"yaml lenient key": "type: test/v1\nValue: foo\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			registry := NewScheme()
+			registry.MustRegisterWithAlias(&TestType{}, typ)
+
+			into := &TestType{}
+			require.NoError(t, registry.Decode(bytes.NewReader([]byte(doc)), into))
+			assert.Equal(t, &TestType{Type: typ, Value: "foo"}, into)
+		})
+	}
+}

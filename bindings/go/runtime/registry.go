@@ -337,13 +337,47 @@ func (r *Scheme) Decode(data io.Reader, into Typed) error {
 	if len(bytes) == 0 {
 		return fmt.Errorf("cannot decode empty input data")
 	}
-	if err := yaml.Unmarshal(bytes, into); err != nil {
+	if err := decodeDocument(bytes, into); err != nil {
 		return fmt.Errorf("failed to unmarshal raw: %w", err)
 	}
 	if !oldType.IsEmpty() && !oldType.Equal(into.GetType()) {
 		return fmt.Errorf("expected type %q after decoding but got %q", oldType, into.GetType())
 	}
 	return nil
+}
+
+// decodeDocument decodes a YAML or JSON document into obj.
+//
+// Specs reaching this path from the controller are CRD fields (RepositorySpec.Raw
+// and friends), which the API server stores as JSON. sigs.k8s.io/yaml would parse
+// them as YAML, rebuild the document as a JSON byte slice and only then decode -
+// three passes where one does. JSON is a subset of YAML, so for a document that
+// already is JSON the direct decode produces the same result; the options restore
+// the leniency the YAML detour had (see [JSONDecodeOptions] and duplicate members,
+// which sigs.k8s.io/yaml drops silently rather than rejecting).
+func decodeDocument(data []byte, obj any) error {
+	if isJSONObject(data) {
+		return json.Unmarshal(data, obj, JSONDecodeOptions, jsontext.AllowDuplicateNames(true))
+	}
+	return yaml.Unmarshal(data, obj)
+}
+
+// isJSONObject reports whether the document is a JSON object. The check is a full
+// syntax walk rather than a look at the first byte, because "{type: x}" is a YAML
+// flow mapping that no JSON decoder accepts - guessing from the brace would turn a
+// document sigs.k8s.io/yaml reads today into a decode error.
+func isJSONObject(data []byte) bool {
+	for _, b := range data {
+		switch b {
+		case ' ', '\t', '\r', '\n':
+			continue
+		case '{':
+			return jsontext.Value(data).IsValid(jsontext.AllowDuplicateNames(true))
+		default:
+			return false
+		}
+	}
+	return false
 }
 
 // DefaultType sets the type of the Typed object to its registered type.

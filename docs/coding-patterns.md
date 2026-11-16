@@ -380,6 +380,12 @@ err := json.Unmarshal(raw.Data, into, runtime.JSONDecodeOptions)
 member is not dropped without a word. Where unknown members must be an error, use
 `runtime.DecodeStrict`; `json.RejectUnknownMembers(true)` is the raw primitive.
 
+`runtime.Scheme.Decode` takes a document that already is JSON - every CRD spec the
+controller hands it - straight to the JSON decoder with those options and a tolerance for
+duplicate members, and only sends real YAML through `sigs.k8s.io/yaml`. The detour costs a
+YAML parse plus a full re-serialization, so skipping it is ~10x on that path. The check is a
+JSON syntax walk, not a look at the leading brace: `{type: x}` is a YAML flow mapping.
+
 ### Streaming
 
 Prefer the streaming entry points over an intermediate `[]byte`:
