@@ -88,6 +88,27 @@ and downloaded resource content.
 If the configuration file contains more than one `filesystem.config.ocm.software/v1alpha1` entry, the last value set
 for each field wins.
 
+#### Spooled Blobs
+
+An OCI registry needs the size and the digest of a blob before the upload starts. When OCM stores a resource whose
+content does not tell one of them up front, for example a `dir` input or a download from a server that announces no
+size, it **spools** the content to a file in the temporary folder to learn them, instead of holding it in memory. A
+CTF target does not need this.
+
+Each spooled blob is reported when spooling starts and when it is done:
+
+```text
+level=INFO msg="spooling blob to disk before upload" unknown=size directory=/var/cache/ocm resource="name=models,version=1.0.0"
+level=INFO msg="spooled blob to disk" unknown=size directory=/var/cache/ocm resource="name=models,version=1.0.0" size=33554432 duration=128.433696ms
+```
+
+`unknown` tells what was missing (`size`, `digest`, or `size and digest`). The space is freed as soon as the upload
+of that blob ends, so the folder needs room for the blobs that are uploaded at the same time, not for all of them.
+
+On Linux and macOS the file has no name while it is in use: it does not show up in a listing of the folder (`ls`,
+`du`), but its space counts as used (`df`), and it is freed even when OCM is interrupted or killed. On Windows the
+file is visible as `ocm-blob-*`, and a killed OCM process leaves it behind.
+
 ### Temporary Folder in the Controller
 
 The controller does not accept `filesystem.config.ocm.software` (see

@@ -7,6 +7,8 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"io"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 
@@ -823,7 +825,7 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 				AccessScheme:  runtime.NewScheme(),
 				BaseReference: "test-ref",
 			},
-			expectedError: "failed to create resource layer based on blob",
+			expectedError: "failed to spool blob",
 		},
 	}
 
@@ -1428,4 +1430,69 @@ func TestResourceLocalBlobOCILayer_SkipsExistingBlob(t *testing.T) {
 		r.False(store.pushed)
 		r.False(store.streamed64)
 	})
+}
+
+// sizelessBlob hides the size and digest of its content, like a streamed download.
+type sizelessBlob struct{ content []byte }
+
+func (b sizelessBlob) ReadCloser() (io.ReadCloser, error) {
+	return io.NopCloser(bytes.NewReader(b.content)), nil
+}
+
+// A store that cannot stream needs the size and digest of a blob up front. A blob that
+// knows neither is spooled to the configured temporary directory for the push only.
+func TestResourceLocalBlobOCILayer_SpoolsUnknownSizeToTempDir(t *testing.T) {
+	data := []byte("content of unknown size and digest")
+	const mediaType = "application/octet-stream"
+	newOpts := func(tempDir string) Options {
+		opts := Options{AccessScheme: runtime.NewScheme(), BaseReference: "test-ref", TempDir: tempDir}
+		v2.MustAddToScheme(opts.AccessScheme)
+		oci.MustAddToScheme(opts.AccessScheme)
+		return opts
+	}
+	push := func(t *testing.T, tempDir string) (ociImageSpecV1.Descriptor, error) {
+		t.Helper()
+		resourceBlob, err := resourceblob.NewArtifactBlob(&descriptor.Resource{}, sizelessBlob{data})
+		require.NoError(t, err)
+		return ResourceLocalBlobOCILayer(t.Context(), memory.New(), resourceBlob, &v2.LocalBlob{MediaType: mediaType}, newOpts(tempDir))
+	}
+
+	t.Run("the directory is created, used and left empty", func(t *testing.T) {
+		r := require.New(t)
+		tempDir := filepath.Join(t.TempDir(), "spool")
+		desc, err := push(t, tempDir)
+		r.NoError(err)
+		r.Equal(digest.FromBytes(data), desc.Digest)
+		r.Equal(int64(len(data)), desc.Size)
+		left, err := os.ReadDir(tempDir)
+		r.NoError(err, "the configured directory is where the blob was spooled")
+		r.Empty(left, "the spool file is removed after the push")
+	})
+
+	t.Run("an unusable directory fails the push", func(t *testing.T) {
+		r := require.New(t)
+		notADir := filepath.Join(t.TempDir(), "file")
+		r.NoError(os.WriteFile(notADir, nil, 0o600))
+		_, err := push(t, notADir)
+		r.ErrorContains(err, "failed to spool blob")
+	})
+}
+
+// A failed push must not leave the spooled blob behind.
+func TestResourceLocalBlobOCILayer_RemovesSpoolFileWhenPushFails(t *testing.T) {
+	r := require.New(t)
+	opts := Options{AccessScheme: runtime.NewScheme(), BaseReference: "test-ref", TempDir: t.TempDir()}
+	v2.MustAddToScheme(opts.AccessScheme)
+	oci.MustAddToScheme(opts.AccessScheme)
+	pushErr := errors.New("registry unavailable")
+	store := &countingStorage{Storage: memory.New(), pushErr: pushErr}
+	resourceBlob, err := resourceblob.NewArtifactBlob(&descriptor.Resource{}, sizelessBlob{[]byte("content")})
+	r.NoError(err)
+
+	_, err = ResourceLocalBlobOCILayer(t.Context(), store, resourceBlob, &v2.LocalBlob{MediaType: "application/octet-stream"}, opts)
+	r.ErrorIs(err, pushErr)
+	r.EqualValues(1, store.pushes.Load())
+	left, err := os.ReadDir(opts.TempDir)
+	r.NoError(err)
+	r.Empty(left)
 }
