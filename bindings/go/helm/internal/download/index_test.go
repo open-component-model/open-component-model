@@ -150,7 +150,7 @@ func TestChartVersionFromIndex(t *testing.T) {
 		require.ErrorContains(t, err, "(available: none)")
 	})
 
-	t.Run("the reported version list is bounded", func(t *testing.T) {
+	t.Run("the reported version list is bounded and counts the rest", func(t *testing.T) {
 		t.Parallel()
 		versions := make([]string, 0, maxReportedVersions+5)
 		for i := range cap(versions) {
@@ -160,6 +160,6 @@ func TestChartVersionFromIndex(t *testing.T) {
 		_, err := ChartVersionFromIndex(indexWith(versions...), "mychart", "9.9.9")
 		require.Error(t, err)
 		available := err.Error()[strings.Index(err.Error(), "(available: ")+len("(available: "):]
-		assert.Equal(t, strings.Join(versions[:maxReportedVersions], ", ")+", ...)", available)
+		assert.Equal(t, strings.Join(versions[:maxReportedVersions], ", ")+" and 5 more)", available)
 	})
 }
