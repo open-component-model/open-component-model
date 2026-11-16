@@ -87,6 +87,21 @@ function makeSetActive(panel) {
     };
 }
 
+// Reflect playback state on the title-bar control: "Stop" while playing (so the
+// reader can halt the animation, WCAG 2.2.2) and "Replay" once it is idle.
+function setReplayState(panel, playing) {
+    const button = panel.querySelector("[data-cli-replay]");
+    if (!button) {
+        return;
+    }
+    button.classList.toggle("is-playing", playing);
+    const label = button.querySelector("[data-cli-replay-label]");
+    if (label) {
+        label.textContent = playing ? "Stop" : "Replay";
+    }
+    button.setAttribute("aria-label", playing ? "Stop the demo" : "Replay the demo");
+}
+
 function treeLines(version) {
     const platforms = ["linux/amd64", "linux/arm64", "darwin/amd64", "darwin/arm64", "windows/amd64"];
     const rows = [
@@ -107,6 +122,7 @@ async function run(panel, term, config, state) {
     // interleave in the same terminal.
     const runId = (state.runId || 0) + 1;
     state.runId = runId;
+    setReplayState(panel, true);
     const cancelled = () => state.runId !== runId;
     const setActive = makeSetActive(panel);
     term.innerHTML = "";
@@ -195,6 +211,7 @@ async function run(panel, term, config, state) {
         return;
     }
     setActive(3); // invite the reader onward when the demo finishes
+    setReplayState(panel, false);
 }
 
 function wireCopyButtons(panel) {
@@ -237,8 +254,18 @@ function initPanel(panel) {
     const replay = panel.querySelector("[data-cli-replay]");
     if (replay) {
         replay.addEventListener("click", () => {
-            // run() bumps the run id, which cancels any invocation still playing.
-            run(panel, term, config, state);
+            if (replay.classList.contains("is-playing")) {
+                // Stop: bump the run id to cancel the active invocation and remove
+                // any blinking cursor, leaving the current output in place.
+                state.runId = (state.runId || 0) + 1;
+                for (const cursor of term.querySelectorAll(".cli-demo__cursor")) {
+                    cursor.remove();
+                }
+                setReplayState(panel, false);
+            } else {
+                // run() bumps the run id, which cancels any invocation still playing.
+                run(panel, term, config, state);
+            }
         });
     }
 

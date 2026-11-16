@@ -47,7 +47,7 @@
     --cli-cyan: #0c7a94;
     --cli-blue: #1c64b4;
     --cli-violet: #6741d9;
-    --cli-dim: #868e96;
+    --cli-dim: #6a7076;
     --cli-bar-fill: #37b24d;
     --cli-bar-todo: #ced4da;
     --cli-scroll: #c1c7cf;
@@ -73,7 +73,7 @@
     --cli-cyan: #5ad1f4;
     --cli-blue: #6ea8ff;
     --cli-violet: #c792ea;
-    --cli-dim: #6c727c;
+    --cli-dim: #868d98;
     --cli-bar-fill: #4ade80;
     --cli-bar-todo: #333842;
     --cli-scroll: #3a3f48;
@@ -130,6 +130,13 @@
     svg {
         width: 13px;
         height: 13px;
+    }
+
+    .cli-demo__replay-icon--stop { display: none; }
+
+    &.is-playing {
+        .cli-demo__replay-icon--replay { display: none; }
+        .cli-demo__replay-icon--stop { display: inline; }
     }
 }
 
