@@ -18,7 +18,7 @@ ocm plugin registry {get|list} [flags]
 ### Options
 
 ```
-  -h, --help   help for registry
+  -h, --help[=true|false]   help for registry
 ```
 
 ### Options inherited from parent commands

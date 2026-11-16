@@ -22,6 +22,7 @@ jobs:
       # pushes to main: windows runners are billed at a premium, so windows-only
       # breakage is caught at merge time rather than on every PR push.
       run_windows: ${{ steps.compute.outputs.run_windows }}
+      run_govulncheck: ${{ steps.compute.outputs.run_govulncheck }}
       dependency_list_changed: ${{ steps.filter.outputs.dependency_list }}
       lint_changed: ${{ steps.filter.outputs.lint }}
     steps:
@@ -42,6 +43,12 @@ jobs:
               - 'conformance/scenarios/sovereign/components/notes/**'
             ci:
               - '.github/workflows/ci.yml'
+            govulncheck:
+              - '.github/workflows/govulncheck.yml'
+            # Tool versions and build flags the jobs resolve at runtime; govulncheck
+            # reads GOVULNCHECK_VERSION and GOFIPS140 from here.
+            env:
+              - '.env'
             dependency_list:
               - 'golangci.yml'
               - 'tools.Taskfile.yml'
@@ -58,6 +65,8 @@ jobs:
           GO_CHANGED: ${{ steps.filter.outputs.go }}
           SHOULD_LINT: ${{ steps.filter.outputs.lint }}
           CI_CHANGED: ${{ steps.filter.outputs.ci }}
+          GOVULNCHECK_CHANGED: ${{ steps.filter.outputs.govulncheck }}
+          ENV_CHANGED: ${{ steps.filter.outputs.env }}
         with:
           script: |
             const isPush = context.eventName === 'push';
@@ -67,14 +76,21 @@ jobs:
 
             const runGo = isPush || ciChanged || goChanged;
             const runLint = runGo || shouldLint;
+            // The reusable workflow and the .env inputs it reads are only exercised
+            // by the PR that edits them.
+            const runGovulncheck = runGo
+              || process.env.GOVULNCHECK_CHANGED === 'true'
+              || process.env.ENV_CHANGED === 'true';
 
             core.setOutput('run_go', runGo);
             core.setOutput('run_lint', runLint);
             core.setOutput('run_windows', isPush);
+            core.setOutput('run_govulncheck', runGovulncheck);
             await core.summary
               .addRaw('### CI Scope\n\n')
               .addRaw(`**build/test bindings/go:** ${runGo}\n\n`)
               .addRaw(`**lint all Go modules:** ${runLint}\n\n`)
+              .addRaw(`**govulncheck:** ${runGovulncheck}\n\n`)
               .addRaw(`**native windows legs:** ${isPush}\n`)
               .write();
 
@@ -273,7 +289,7 @@ jobs:
           awk -v p="$pct" -v f="$floor" 'BEGIN{exit (p+0 < f+0)}' \
             || { echo "::error::integration coverage ${pct}% is below the ${floor}% floor"; exit 1; }
       - name: Publish integration test report
-        uses: mikepenz/action-junit-report@6ef3fdcfcd5f0b5d14df3e659ef19b8c6820f93d # v6.6.1
+        uses: mikepenz/action-junit-report@a16be3a69023e9bd7e748ede768b3282ea7b30ce # v6.7.1
         if: always()
         with:
           report_paths: '${{ github.workspace }}/bindings/go/output/junit*.xml'
@@ -351,7 +367,7 @@ jobs:
   govulncheck:
     name: "govulncheck"
     needs: changes
-    if: ${{ needs.changes.outputs.run_go == 'true' }}
+    if: ${{ needs.changes.outputs.run_govulncheck == 'true' }}
     uses: $/.github/workflows/govulncheck.yml
 
   generate:

@@ -47,9 +47,9 @@ ocm version --output text
 ### Options
 
 ```
-  -h, --help          help for version
-  -o, --output enum   output format of the version information
-                      (must be one of [gobuildinfo gobuildinfojson legacyjson text]) (default text)
+  -h, --help[=true|false]   help for version
+  -o, --output enum         output format of the version information
+                            (must be one of [gobuildinfo gobuildinfojson legacyjson text]) (default text)
 ```
 
 ### Options inherited from parent commands

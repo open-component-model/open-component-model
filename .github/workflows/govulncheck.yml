@@ -80,9 +80,10 @@ jobs:
           GOARCH: ${{ matrix.arch }}
         run: '"${RUNNER_TEMP}/bin/govulncheck" -format openvex ./... > "${GITHUB_WORKSPACE}/tmp/vex/govulncheck.openvex.json"'
 
-      # govulncheck names the product "Unknown Product" and path-escapes module purls,
-      # so Trivy would match nothing. Scoping each statement to its binary's main module
-      # keeps it from covering the same module in another binary of the image.
+      # govulncheck names the product "Unknown Product", path-escapes module purls and
+      # omits "statements" entirely when it finds nothing, so Trivy would match nothing.
+      # Scoping each statement to its binary's main module keeps it from covering the
+      # same module in another binary of the image.
       - name: Build OpenVEX
         id: vex
         env:
@@ -98,7 +99,7 @@ jobs:
               | if .status == "affected" then .action_statement //= "The vulnerable code is called; see the govulncheck report." end;
             ($ENV.COSIGN_REF | split("@")[1]) as $digest
             | $govulncheck[0] + {"@id": $ENV.ID, author: $ENV.GITHUB_REPOSITORY}
-            | .statements |= map(scope($ENV.OCM_PRODUCT))
+            | .statements = [(.statements // [])[] | scope($ENV.OCM_PRODUCT)]
             | .statements += [$attested[][].verificationResult.statement.predicate.statements[]?
                 | .products |= map(select(."@id" | split("@")[1] // "" | split("?")[0] | sub("%3A"; ":") == $digest))
                 | select(any(.products[]; .subcomponents | length > 0))
