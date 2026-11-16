@@ -45,6 +45,10 @@ jobs:
               - '.github/workflows/ci.yml'
             govulncheck:
               - '.github/workflows/govulncheck.yml'
+            # Tool versions and build flags the jobs resolve at runtime; govulncheck
+            # reads GOVULNCHECK_VERSION and GOFIPS140 from here.
+            env:
+              - '.env'
             dependency_list:
               - 'golangci.yml'
               - 'tools.Taskfile.yml'
@@ -62,6 +66,7 @@ jobs:
           SHOULD_LINT: ${{ steps.filter.outputs.lint }}
           CI_CHANGED: ${{ steps.filter.outputs.ci }}
           GOVULNCHECK_CHANGED: ${{ steps.filter.outputs.govulncheck }}
+          ENV_CHANGED: ${{ steps.filter.outputs.env }}
         with:
           script: |
             const isPush = context.eventName === 'push';
@@ -71,8 +76,11 @@ jobs:
 
             const runGo = isPush || ciChanged || goChanged;
             const runLint = runGo || shouldLint;
-            // The reusable workflow is only exercised by the PR that edits it.
-            const runGovulncheck = runGo || process.env.GOVULNCHECK_CHANGED === 'true';
+            // The reusable workflow and the .env inputs it reads are only exercised
+            // by the PR that edits them.
+            const runGovulncheck = runGo
+              || process.env.GOVULNCHECK_CHANGED === 'true'
+              || process.env.ENV_CHANGED === 'true';
 
             core.setOutput('run_go', runGo);
             core.setOutput('run_lint', runLint);
