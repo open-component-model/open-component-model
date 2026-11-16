@@ -18,7 +18,7 @@ ocm sign {component-version|component-versions|cv|cvs} [flags]
 ### Options
 
 ```
-  -h, --help   help for sign
+  -h, --help[=true|false]   help for sign
 ```
 
 ### Options inherited from parent commands

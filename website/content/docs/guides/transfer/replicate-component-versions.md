@@ -186,7 +186,7 @@ stringData:
       - type: credentials.config.ocm.software
         consumers:
           - identity:
-              type: OCIRegistry
+              type: OCIRegistry/v1
               hostname: ghcr.io
             credentials:
               - type: Credentials

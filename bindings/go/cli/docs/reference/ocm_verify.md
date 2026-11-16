@@ -18,7 +18,7 @@ ocm verify {component-version|component-versions|cv|cvs} [flags]
 ### Options
 
 ```
-  -h, --help   help for verify
+  -h, --help[=true|false]   help for verify
 ```
 
 ### Options inherited from parent commands

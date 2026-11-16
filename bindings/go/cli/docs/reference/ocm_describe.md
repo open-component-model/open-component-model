@@ -18,7 +18,7 @@ ocm describe [flags]
 ### Options
 
 ```
-  -h, --help   help for describe
+  -h, --help[=true|false]   help for describe
 ```
 
 ### Options inherited from parent commands

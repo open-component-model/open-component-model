@@ -103,21 +103,21 @@ func (r *Scheme) RegisterSchemeType(scheme *Scheme, typ Type) error {
 
 	// check if the type is registered as default type in the source scheme
 	// or get its default type if it's an alias
+	defaultType := typ
 	rt, exists := scheme.defaults.GetLeft(typ)
 	if !exists {
 		if aliasFor, ok := scheme.aliases[typ]; ok {
+			defaultType = aliasFor
 			rt, _ = scheme.defaults.GetLeft(aliasFor)
 		} else {
 			return fmt.Errorf("type %q is not registered in the scheme", typ)
 		}
 	}
 
-	// register the type in the new scheme
+	// register the type in the new scheme with the default type and all its aliases
 	return r.RegisterWithAlias(
-		// first the default type
 		scheme.instances[rt],
-		// then the default type and all its aliases
-		append([]Type{typ}, slices.Collect(scheme.AliasesIter(typ))...)...,
+		append([]Type{defaultType}, slices.Collect(scheme.AliasesIter(defaultType))...)...,
 	)
 }
 

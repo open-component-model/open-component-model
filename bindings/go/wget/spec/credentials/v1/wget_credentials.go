@@ -6,11 +6,18 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-var WgetCredentialsVersionedType = runtime.NewVersionedType(WgetCredentialsType, Version)
+var (
+	WgetCredentialsVersionedType = runtime.NewVersionedType(WgetCredentialsType, Version)
+	HTTPCredentialsVersionedType = runtime.NewVersionedType(HTTPCredentialsType, Version)
+)
 
-// MustRegisterCredentialType registers WgetCredentials/v1 (and its unversioned alias) in the given scheme.
+// MustRegisterCredentialType registers the wget credential type under its
+// preferred HTTP-first name (HTTPCredentials/v1) and its deprecated legacy
+// aliases (WgetCredentials/v1 and the unversioned WgetCredentials), which
+// remain accepted for backward compatibility, in the given scheme.
 func MustRegisterCredentialType(scheme *runtime.Scheme) {
 	scheme.MustRegisterWithAlias(&WgetCredentials{},
+		HTTPCredentialsVersionedType,
 		WgetCredentialsVersionedType,
 		runtime.NewUnversionedType(WgetCredentialsType),
 	)
@@ -31,8 +38,8 @@ func MustRegisterCredentialType(scheme *runtime.Scheme) {
 // +ocm:typegen=true
 // +ocm:jsonschema-gen=true
 type WgetCredentials struct {
-	// +ocm:jsonschema-gen:enum=WgetCredentials/v1
-	// +ocm:jsonschema-gen:enum:deprecated=WgetCredentials
+	// +ocm:jsonschema-gen:enum=HTTPCredentials/v1
+	// +ocm:jsonschema-gen:enum:deprecated=WgetCredentials/v1,WgetCredentials
 	Type runtime.Type `json:"type"`
 	// Username is the username for HTTP Basic Authentication. Used together with Password.
 	// Ignored if IdentityToken is set.
