@@ -18,6 +18,7 @@ import (
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/helm/digest"
+	"ocm.software/open-component-model/bindings/go/helm/spec/access"
 	"ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -260,6 +261,39 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 		_, err := p.ProcessResourceDigest(t.Context(), resource, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "not found in repository index")
+	})
+
+	// A requested version is matched verbatim: helm's own index lookup treats it as a SemVer
+	// constraint and falls back to the closest version, which would digest a chart nobody asked for.
+	t.Run("returns error for a version that is only a constraint match", func(t *testing.T) {
+		t.Parallel()
+		p := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig()))
+
+		for _, version := range []string{"1.0-287.87c9d32.master.309", "1.x", "^1.0.0"} {
+			_, err := p.ProcessResourceDigest(t.Context(), helmAccessResource(t, srv.URL, "mychart:"+version), nil)
+			require.Error(t, err, "version %q must not resolve", version)
+			assert.Contains(t, err.Error(), `version "`+version+`" not found in repository index (available: 1.0.0, 0.1.0)`)
+		}
+	})
+
+	// Without a version the index picks its newest chart; the digest is only reproducible if
+	// the access records which version that was.
+	t.Run("pins the version the index selects when the access has none", func(t *testing.T) {
+		t.Parallel()
+		p := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig()))
+		resource := helmAccessResource(t, srv.URL, "mychart")
+
+		result, err := p.ProcessResourceDigest(t.Context(), resource, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", result.Digest.Value)
+
+		pinned := v1.Helm{}
+		require.NoError(t, access.Scheme.Convert(result.Access, &pinned))
+		assert.Equal(t, "1.0.0", pinned.GetVersion())
+
+		original := v1.Helm{}
+		require.NoError(t, access.Scheme.Convert(resource.Access, &original))
+		assert.Empty(t, original.GetVersion(), "the input resource must not be mutated")
 	})
 
 	t.Run("returns error for empty helm repository", func(t *testing.T) {
