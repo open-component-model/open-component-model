@@ -2,8 +2,10 @@ package transformation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 
 	godigest "github.com/opencontainers/go-digest"
 
@@ -22,6 +24,9 @@ import (
 
 type ConvertHelmChartToOCI struct {
 	Scheme *runtime.Scheme
+	// TempDir is the directory content is buffered in when the spec sets no output path.
+	// Empty means the default temporary directory of the operating system.
+	TempDir string
 }
 
 func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
@@ -75,7 +80,11 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 		slog.DebugContext(ctx, "Created blob for prov file", "uri", transformation.Spec.ProvFile.URI)
 	}
 
-	outputPath, err := DetermineOutputPath(transformation.Spec.OutputPath, "oci")
+	bufferDir, err := filesystem.BufferDir(transformation.Spec.OutputPath, t.TempDir)
+	if err != nil {
+		return nil, fmt.Errorf("error getting OCI output path: %w", err)
+	}
+	outputPath, err := DetermineOutputPath(bufferDir, "oci")
 	if err != nil {
 		return nil, fmt.Errorf("error getting OCI output path: %w", err)
 	}
@@ -86,10 +95,16 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 		Version:   helmAccess.GetVersion(),
 		ChartBlob: chartSpec,
 		ProvBlob:  provSpec,
-	}, transformation.Spec.OutputPath)
+	}, bufferDir)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OCI layout from helm chart: %w", err)
 	}
+	// The layout is copied to outputPath below; its own temporary file is not needed after that.
+	defer func() {
+		if err := os.Remove(result.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			slog.WarnContext(ctx, "failed to remove temporary OCI layout file", "path", result.Path, "error", err)
+		}
+	}()
 
 	if result.Blob == nil {
 		return nil, fmt.Errorf("OCI layout blob is required but was not returned from OCI layout creation")
