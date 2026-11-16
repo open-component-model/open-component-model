@@ -1,7 +1,8 @@
 package runtime
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -11,7 +12,6 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/runtime/internal/bimap"
@@ -458,7 +458,7 @@ func (r *Scheme) convertFromRaw(from *Raw, into Typed, fromType Type) error {
 	}
 
 	// Raw → Typed: unmarshal the Raw.Data into the target.
-	if err := json.Unmarshal(from.Data, into); err != nil {
+	if err := json.Unmarshal(from.Data, into, JSONDecodeOptions); err != nil {
 		return fmt.Errorf("failed to unmarshal from raw: %w", err)
 	}
 	return nil
@@ -481,11 +481,11 @@ func (r *Scheme) convertFromUnstructured(from *Unstructured, into Typed, fromTyp
 	if !r.IsRegistered(fromType) && !r.allowUnknown {
 		return fmt.Errorf("cannot decode from unregistered type: %s", fromType)
 	}
-	data, err := json.Marshal(from.Data)
+	data, err := json.Marshal(from.Data, JSONOptions)
 	if err != nil {
 		return fmt.Errorf("failed to marshal from unstructured: %w", err)
 	}
-	if err := json.Unmarshal(data, into); err != nil {
+	if err := json.Unmarshal(data, into, JSONDecodeOptions); err != nil {
 		return fmt.Errorf("failed to unmarshal from unstructured: %w", err)
 	}
 	return nil
@@ -502,16 +502,16 @@ func (r *Scheme) convertFromTyped(from Typed, into Typed, fromType Type) error {
 		if !r.IsRegistered(fromType) && !r.allowUnknown {
 			return fmt.Errorf("cannot encode from unregistered type: %s", fromType)
 		}
-		data, err := json.Marshal(from)
+		data, err := json.Marshal(from, JSONOptions)
 		if err != nil {
 			return fmt.Errorf("failed to marshal into raw: %w", err)
 		}
-		canonicalData, err := jsoncanonicalizer.Transform(data)
-		if err != nil {
+		canonical := jsontext.Value(data)
+		if err := canonical.Canonicalize(); err != nil {
 			return fmt.Errorf("could not canonicalize data: %w", err)
 		}
 		rawInto.Type = fromType
-		rawInto.Data = canonicalData
+		rawInto.Data = canonical
 		return nil
 	}
 

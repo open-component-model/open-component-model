@@ -20,6 +20,8 @@ spec:
   ocmConfig:
     - kind: Secret
       name: docker-config-json
+    - kind: ConfigMap
+      name: ocm-plain-http
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Component
@@ -34,6 +36,8 @@ spec:
   ocmConfig:
     - kind: Secret
       name: docker-config-json
+    - kind: ConfigMap
+      name: ocm-plain-http
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Resource
@@ -49,6 +53,8 @@ spec:
   ocmConfig:
     - kind: Secret
       name: docker-config-json
+    - kind: ConfigMap
+      name: ocm-plain-http
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Deployer
@@ -61,4 +67,8 @@ spec:
   ocmConfig:
     - kind: Secret
       name: docker-config-json
+      namespace: default
+    # The Deployer is cluster-scoped, so its references need a namespace.
+    - kind: ConfigMap
+      name: ocm-plain-http
       namespace: default

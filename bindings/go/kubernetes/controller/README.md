@@ -56,10 +56,11 @@ Take a look at our [installation guide](https://ocm.software/docs/getting-starte
 ## Deployers
 
 The OCM Kubernetes Controller Toolkit is deployer-agnostic: the kro.run `ResourceGraphDefinition` (RGD) you write determines
-which tool reconciles the final workload. Both **FluxCD** and **ArgoCD** are supported and tested.
+which tool reconciles the final workload. **FluxCD**, **ArgoCD**, and **Crossplane** are supported and tested.
 
 See the working examples under [`examples/`](./examples/) — each `rgd.yaml` contains both a FluxCD and an
-ArgoCD deployer block side by side.
+ArgoCD deployer block side by side, and the `crossplane-composition.yaml`/`crossplane-instance.yaml` pair shows the
+same deployment driven by a Crossplane Composition.
 
 
 ## Discovery

@@ -1,4 +1,5 @@
-{{- if and (gt (int .Values.manager.replicas) 1) (not .Values.manager.leaderElection.enabled) }}
+{{- /* dig: a helm upgrade --reuse-values from a release without these keys must not fail */}}
+{{- if and (gt (int .Values.manager.replicas) 1) (not (dig "leaderElection" "enabled" true .Values.manager)) }}
 {{- fail "manager.replicas > 1 requires manager.leaderElection.enabled=true to prevent concurrent reconcilers from racing on the same resources" }}
 {{- end }}
 apiVersion: apps/v1
@@ -46,20 +47,21 @@ spec:
             {{- end }}
             containers:
                 - args:
+                    {{- /* dig: a helm upgrade --reuse-values from a release without these keys must not fail */}}
                     {{- /* Health probe */}}
-                    - --health-probe-bind-address={{ .Values.manager.healthProbe.bindAddress | default ":8081" }}
+                    - --health-probe-bind-address={{ dig "healthProbe" "bindAddress" ":8081" .Values.manager | default ":8081" }}
                     {{- /* Metrics */}}
-                    {{- if .Values.manager.metricsServer.bindAddress }}
-                    - --metrics-bind-address={{ .Values.manager.metricsServer.bindAddress }}
+                    {{- with dig "metricsServer" "bindAddress" "0" .Values.manager }}
+                    - --metrics-bind-address={{ . }}
                     {{- end }}
-                    {{- if .Values.manager.metricsServer.secure }}
+                    {{- if dig "metricsServer" "secure" false .Values.manager }}
                     - --metrics-secure
                     {{- end }}
-                    {{- if .Values.manager.metricsServer.enableHttp2 }}
+                    {{- if dig "metricsServer" "enableHttp2" false .Values.manager }}
                     - --enable-http2
                     {{- end }}
                     {{- /* Leader election */}}
-                    {{- if .Values.manager.leaderElection.enabled }}
+                    {{- if dig "leaderElection" "enabled" true .Values.manager }}
                     - --leader-elect
                     {{- end }}
                     {{- /* Concurrency */}}
@@ -155,7 +157,6 @@ spec:
                     - --ocm-config=/etc/ocm/config.yaml
                     {{- end }}
                     {{- /* Deployers */}}
-                    {{- /* dig: a helm upgrade --reuse-values from a release without these keys must not fail */}}
                     - --enable-deployer={{ dig "deployer" "enabled" true .Values.manager }}
                     - --enable-namespaced-deployer={{ dig "namespacedDeployer" "enabled" true .Values.manager }}
                     {{- /* Logging */}}
@@ -183,26 +184,32 @@ spec:
                   {{- end }}
                   livenessProbe:
                     httpGet:
-                        path: {{ .Values.manager.livenessProbe.path }}
-                        port: {{ .Values.manager.livenessProbe.port }}
-                    initialDelaySeconds: {{ .Values.manager.livenessProbe.initialDelaySeconds }}
-                    periodSeconds: {{ .Values.manager.livenessProbe.periodSeconds }}
+                        path: {{ dig "livenessProbe" "path" "/healthz" .Values.manager }}
+                        port: {{ dig "livenessProbe" "port" 8081 .Values.manager }}
+                    initialDelaySeconds: {{ dig "livenessProbe" "initialDelaySeconds" 15 .Values.manager }}
+                    periodSeconds: {{ dig "livenessProbe" "periodSeconds" 20 .Values.manager }}
                   name: manager
+                  {{- $metricsPort := include "ocm-k8s-toolkit.metricsPort" . }}
+                  {{- if or $metricsPort .Values.webhook.enable }}
                   ports:
-                    - containerPort: 9090
-                      name: http
+                    {{- if $metricsPort }}
+                    {{- /* monitoring/service.yaml targets this port by name. */}}
+                    - containerPort: {{ $metricsPort }}
+                      name: metrics
                       protocol: TCP
+                    {{- end }}
                     {{- if .Values.webhook.enable }}
                     - containerPort: 9443
                       name: webhook-server
                       protocol: TCP
                     {{- end }}
+                  {{- end }}
                   readinessProbe:
                     httpGet:
-                        path: {{ .Values.manager.readinessProbe.path }}
-                        port: {{ .Values.manager.readinessProbe.port }}
-                    initialDelaySeconds: {{ .Values.manager.readinessProbe.initialDelaySeconds }}
-                    periodSeconds: {{ .Values.manager.readinessProbe.periodSeconds }}
+                        path: {{ dig "readinessProbe" "path" "/readyz" .Values.manager }}
+                        port: {{ dig "readinessProbe" "port" 8081 .Values.manager }}
+                    initialDelaySeconds: {{ dig "readinessProbe" "initialDelaySeconds" 5 .Values.manager }}
+                    periodSeconds: {{ dig "readinessProbe" "periodSeconds" 10 .Values.manager }}
                   resources:
                     {{- if .Values.manager.resources }}
                     {{- toYaml .Values.manager.resources | nindent 20 }}

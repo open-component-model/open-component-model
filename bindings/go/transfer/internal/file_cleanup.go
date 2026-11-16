@@ -53,7 +53,7 @@ type FileCleanupTransformation struct {
 	Type   runtime.Type       `json:"type"`
 	ID     string             `json:"id"`
 	Spec   *FileCleanupSpec   `json:"spec"`
-	Output *FileCleanupOutput `json:"output,omitempty"`
+	Output *FileCleanupOutput `json:"output,omitzero"`
 }
 
 // FileCleanup is a transformer that removes temporary files from the local

@@ -31,14 +31,14 @@ type Dir struct {
 	// Compress indicates whether the resulting blob should be compressed with gzip.
 	// If set to true, the default media type gets a +gzip suffix. A declared
 	// MediaType is used as-is.
-	Compress bool `json:"compress,omitempty"`
+	Compress bool `json:"compress,omitzero"`
 
 	// PreserveDir defines that the directory specified in the Path field should be included in the resulting blob.
-	PreserveDir bool `json:"preserveDir,omitempty"`
+	PreserveDir bool `json:"preserveDir,omitzero"`
 
 	// FollowSymlinks will include the content of the encountered symbolic links to the resulting blob.
 	// Support for this option is not implemented yet. The field is included for compatibility with previous OCM version.
-	FollowSymlinks bool `json:"followSymlinks,omitempty"`
+	FollowSymlinks bool `json:"followSymlinks,omitzero"`
 
 	// ExcludeFiles is a list of file name patterns to exclude from addition to the resulting blob.
 	// Excluded files always override included files.
@@ -57,7 +57,7 @@ type Dir struct {
 	// to get fully byte-equivalent blobs despite different file modification time, permission bits, etc.,
 	// these attributes will be set to fixed values while creating the blob.
 	// Recommended when signing, so that rebuilding the component version yields the same digest.
-	Reproducible bool `json:"reproducible,omitempty"`
+	Reproducible bool `json:"reproducible,omitzero"`
 }
 
 func (t *Dir) String() string {

@@ -2,7 +2,7 @@ package signinghandler
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -16,6 +16,7 @@ import (
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
+	"ocm.software/open-component-model/bindings/go/plugin/internal/osutil"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/signing/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -36,7 +37,7 @@ func dummyCapability(schema []byte) v1.CapabilitySpec {
 
 func TestPluginFlow(t *testing.T) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
-	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin-signinghandler")
+	path := filepath.Join("..", "..", "..", "tmp", "testdata", mtypes.ExecutableName("test-plugin-signinghandler"))
 	_, err := os.Stat(path)
 	require.NoError(t, err, "test plugin not found, please build the plugin under tmp/testdata/test-plugin-signinghandler first")
 
@@ -46,10 +47,10 @@ func TestPluginFlow(t *testing.T) {
 	registry := NewSigningRegistry(ctx)
 	config := mtypes.Config{
 		ID:         "test-plugin-signinghandler",
-		Type:       mtypes.Socket,
+		Type:       osutil.ConnectionType(t.Context()),
 		PluginType: v1.SigningHandlerPluginType,
 	}
-	serialized, err := json.Marshal(config)
+	serialized, err := json.Marshal(config, runtime.JSONOptions)
 	require.NoError(t, err)
 
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))
@@ -58,8 +59,10 @@ func TestPluginFlow(t *testing.T) {
 	stderr, err := pluginCmd.StderrPipe()
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = os.Remove("/tmp/test-plugin-signinghandler-plugin.socket")
-		_ = pluginCmd.Process.Kill()
+		if pluginCmd.Process != nil {
+			_ = pluginCmd.Process.Kill()
+		}
+		_ = os.Remove(osutil.SocketPath("test-plugin-signinghandler"))
 	})
 	plugin := mtypes.Plugin{
 		ID:     "test-plugin-signinghandler",
@@ -83,15 +86,15 @@ func TestPluginFlow(t *testing.T) {
 
 func TestShutdown(t *testing.T) {
 	slog.SetLogLoggerLevel(slog.LevelDebug)
-	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin-signinghandler")
+	path := filepath.Join("..", "..", "..", "tmp", "testdata", mtypes.ExecutableName("test-plugin-signinghandler"))
 	_, err := os.Stat(path)
 	require.NoError(t, err, "test plugin not found, please build the plugin under tmp/testdata/test-plugin-signinghandler first")
 	ctx := context.Background()
 	scheme := runtime.NewScheme()
 	dummytype.MustAddToScheme(scheme)
 	registry := NewSigningRegistry(ctx)
-	config := mtypes.Config{ID: "test-plugin-signinghandler", Type: mtypes.Socket, PluginType: v1.SigningHandlerPluginType}
-	serialized, err := json.Marshal(config)
+	config := mtypes.Config{ID: "test-plugin-signinghandler", Type: osutil.ConnectionType(t.Context()), PluginType: v1.SigningHandlerPluginType}
+	serialized, err := json.Marshal(config, runtime.JSONOptions)
 	require.NoError(t, err)
 
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))
@@ -100,8 +103,10 @@ func TestShutdown(t *testing.T) {
 	stderr, err := pluginCmd.StderrPipe()
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		_ = os.Remove("/tmp/test-plugin-signinghandler-plugin.socket")
-		_ = pluginCmd.Process.Kill()
+		if pluginCmd.Process != nil {
+			_ = pluginCmd.Process.Kill()
+		}
+		_ = os.Remove(osutil.SocketPath("test-plugin-signinghandler"))
 	})
 	plugin := mtypes.Plugin{
 		ID:     "test-plugin-signinghandler",

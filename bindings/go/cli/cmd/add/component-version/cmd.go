@@ -209,7 +209,10 @@ add component-version --%[1]s localhost:5000/my-repo --%[2]s %[3]s.yaml
 Specifying repository types explicitly:
 
 add component-version --%[1]s ctf::./local/archive --%[2]s %[3]s.yaml
-add component-version --%[1]s oci::http://localhost:8080/my-repo --%[2]s %[3]s.yaml
+add component-version --%[1]s oci::localhost:8080/my-repo --%[2]s %[3]s.yaml
+
+A registry without TLS needs plainHTTP in the HTTP client configuration; an http:// prefix on the
+repository is deprecated and fails without it (see https://ocm.software/docs/changelog/migrate-from-http-prefixes/).
 
 Using environment variables in %[3]q files:
 

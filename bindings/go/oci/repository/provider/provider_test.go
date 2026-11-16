@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
+	typesv1 "ocm.software/open-component-model/bindings/go/configuration/types/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
@@ -34,8 +37,6 @@ func Test_Provider_Smoke(t *testing.T) {
 
 	t.Run("access provider concurrently", func(t *testing.T) {
 		t.Parallel()
-		r := require.New(t)
-
 		desc := descriptor.Descriptor{}
 		desc.Meta.Version = "v2"
 		desc.Component.Name = "github.com/ocm/test-component"
@@ -44,6 +45,7 @@ func Test_Provider_Smoke(t *testing.T) {
 
 		t.Run("different versions", func(t *testing.T) {
 			t.Parallel()
+			r := require.New(t)
 
 			retrievedDescs := make([]*descriptor.Descriptor, 10)
 			retrievedVersions := make([][]string, 10)
@@ -83,6 +85,7 @@ func Test_Provider_Smoke(t *testing.T) {
 		})
 		t.Run("same version", func(t *testing.T) {
 			t.Parallel()
+			r := require.New(t)
 
 			retrievedDescs := make([]*descriptor.Descriptor, 10)
 			retrievedVersions := make([][]string, 10)
@@ -173,15 +176,17 @@ func TestWithHTTPConfig_CustomConfigIsUsed(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	timeout := httpv1alpha1.NewTimeout(5 * time.Second)
+	timeout := typesv1.NewDuration(5 * time.Second)
 	cfg := &httpv1alpha1.Config{TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: timeout}}
+	cfg.PlainHTTP = new(true) // the httptest server has no TLS
+	host := strings.TrimPrefix(srv.URL, "http://")
 	prov := provider.NewComponentVersionRepositoryProvider(
 		provider.WithHTTPConfig(cfg),
 	)
 	require.NotNil(t, prov)
 
 	repoSpec := &ocirepospecv1.Repository{
-		BaseUrl: srv.URL,
+		BaseUrl: host,
 		SubPath: "test/repo",
 	}
 	repo, err := prov.GetComponentVersionRepository(t.Context(), repoSpec, nil)
@@ -221,14 +226,16 @@ func TestWithHTTPConfig_ShortTimeoutCausesError(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	timeout := httpv1alpha1.NewTimeout(10 * time.Millisecond)
+	timeout := typesv1.NewDuration(10 * time.Millisecond)
 	cfg := &httpv1alpha1.Config{TimeoutConfig: httpv1alpha1.TimeoutConfig{Timeout: timeout}}
+	cfg.PlainHTTP = new(true) // the httptest server has no TLS
+	host := strings.TrimPrefix(srv.URL, "http://")
 	prov := provider.NewComponentVersionRepositoryProvider(
 		provider.WithHTTPConfig(cfg),
 	)
 
 	repoSpec := &ocirepospecv1.Repository{
-		BaseUrl: srv.URL,
+		BaseUrl: host,
 		SubPath: "test/repo",
 	}
 	repo, err := prov.GetComponentVersionRepository(t.Context(), repoSpec, nil)
@@ -236,4 +243,45 @@ func TestWithHTTPConfig_ShortTimeoutCausesError(t *testing.T) {
 	// ListComponentVersions triggers HTTP traffic — should time out.
 	_, err = repo.ListComponentVersions(t.Context(), "example.org/component")
 	require.Error(t, err)
+}
+
+func TestWithHTTPConfig_PerHostPlainHTTP(t *testing.T) {
+	var serverHit atomic.Bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		serverHit.Store(true)
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(srv.Close)
+	host := strings.TrimPrefix(srv.URL, "http://")
+	perHost := &httpv1alpha1.Config{Hosts: map[string]*httpv1alpha1.HostConfig{
+		host: {ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: new(true)}},
+	}}
+
+	tests := []struct {
+		name      string
+		baseURL   string
+		cfg       *httpv1alpha1.Config
+		expectHit bool
+		wantErr   string
+	}{
+		{name: "without config the client speaks TLS to a plain server", baseURL: host, wantErr: "server gave HTTP response to HTTPS client"},
+		{name: "per-host plainHTTP reaches the registry", baseURL: host, cfg: perHost, expectHit: true},
+		{name: "http base URL without the host entry is rejected", baseURL: srv.URL, wantErr: "plain HTTP is not enabled"},
+		{name: "http base URL with the host entry reaches the registry", baseURL: srv.URL, cfg: perHost, expectHit: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			serverHit.Store(false)
+			prov := provider.NewComponentVersionRepositoryProvider(provider.WithHTTPConfig(tt.cfg))
+			repo, err := prov.GetComponentVersionRepository(t.Context(), &ocirepospecv1.Repository{BaseUrl: tt.baseURL}, nil)
+			r.NoError(err)
+			_, err = repo.ListComponentVersions(t.Context(), "example.org/component")
+			r.Equal(tt.expectHit, serverHit.Load())
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
+			}
+		})
+	}
 }

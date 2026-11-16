@@ -310,6 +310,8 @@ tasks:
 
   cluster:import:
     desc: Transfer CTF archive to air-gapped cluster
+    env:
+      OCM_CONFIG: './config/plain-http.yaml'
     cmd: |
       {{ .ocm }} transfer cv \
         --copy-resources \

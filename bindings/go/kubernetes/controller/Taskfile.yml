@@ -24,6 +24,8 @@ vars:
     sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "${YQ_VERSION:-v4.49.2}"'
   REGISTRY_IMAGE_VERSION:
     sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "$REGISTRY_IMAGE_VERSION"'
+  HELM_UNITTEST_VERSION:
+    sh: 'source {{.PROJECT_ROOT}}/.env && [ -f .env ] && source .env; echo "$HELM_UNITTEST_VERSION"'
 
   CONTAINER_TOOL: '{{.CONTAINER_TOOL | default "docker"}}'
   LOCALBIN: '{{.TASKFILE_DIR}}/bin'
@@ -126,7 +128,7 @@ tasks:
       - 'docker rm -f ocm-perf-registry 2>/dev/null || true'
 
   test/performance:
-    desc: "Run the controller performance benchmark against the 'ocm-perf' cluster. Pass flags via `--`, e.g. `task test/performance -- --scenarios=cold --objects=100 --repeats=1`. Omit to run the full matrix."
+    desc: "Run the controller performance benchmark against the 'ocm-perf' cluster. Pass flags via `--`, e.g. `task test/performance -- --objects=100 --repeats=1`. Omit to run every object count."
     cmds:
       - task: helm/install
         vars:
@@ -135,7 +137,7 @@ tasks:
       - 'go run ./test/performance {{.CLI_ARGS}}'
 
   test/performance/fresh:
-    desc: "Teardown, setup, and run the performance benchmark from scratch. Pass flags via `--`, e.g. `task test/performance/fresh -- --scenarios=cold`."
+    desc: "Teardown, setup, and run the performance benchmark from scratch. Pass flags via `--`, e.g. `task test/performance/fresh -- --objects=100`."
     cmds:
       - task: test/performance/setup/teardown
       - task: test/performance/setup/local
@@ -276,14 +278,20 @@ tasks:
     desc: "Lint the Helm chart"
     cmd: 'helm lint chart/'
 
+  helm/unittest:
+    desc: "Run the helm-unittest suites in chart/tests"
+    deps: [helm-unittest-plugin]
+    cmd: 'helm unittest -f "tests/**/*_test.yaml" chart/'
+
   helm/validate:
-    desc: "Validate the Helm chart (regenerate, then lint, template, and verify CRDs/RBAC/schema/docs are in sync)"
+    desc: "Validate the Helm chart (regenerate, then lint, unit-test, template, and verify CRDs/RBAC/schema/docs are in sync)"
     silent: true
     cmds:
       - task: helm/generate
       - task: helm/schema
       - task: helm/docs
       - task: helm/lint
+      - task: helm/unittest
       - task: helm/template
       - |
         status=$(git status --porcelain)
@@ -424,3 +432,42 @@ tasks:
       fi
     status:
       - helm plugin list | grep -q "schema"
+
+  helm-unittest-plugin:
+    internal: true
+    silent: true
+    desc: "Install the helm-unittest plugin if not present; fail if another version than the one pinned in .env is installed or its binary does not run"
+    # helm plugin list prints the version without the "v" prefix.
+    # Never replace another installed version: it belongs to the developer, not to this repo.
+    # When the install hook fails (it downloads the binary), Helm keeps the plugin registered
+    # without its binary, and a second install fails with "plugin already exists". So roll back
+    # our own failed install, and check that the binary runs, not only that the plugin is listed.
+    # The install hook checks the download with `sha256sum -c --status`. macOS ships a BSD
+    # sha256sum without --status, so on macOS a shim that calls `shasum -a 256` goes first on PATH.
+    cmd: |
+      installed=$(helm plugin list | awk '$1=="unittest"{print "v"$2}')
+      if [ -z "$installed" ]; then
+        shim=""
+        if [ "$(uname -s)" = "Darwin" ]; then
+          shim=$(mktemp -d)
+          printf '#!/bin/sh\nexec shasum -a 256 "$@"\n' > "$shim/sha256sum"
+          chmod +x "$shim/sha256sum"
+        fi
+        rc=0
+        PATH="${shim:+$shim:}$PATH" helm plugin install https://github.com/helm-unittest/helm-unittest.git --version {{.HELM_UNITTEST_VERSION}} --verify=false || rc=$?
+        if [ -n "$shim" ]; then rm -f "$shim/sha256sum"; rmdir "$shim"; fi
+        if [ "$rc" -ne 0 ]; then
+          helm plugin uninstall unittest >/dev/null 2>&1 || true
+          echo "ERROR: helm-unittest install failed; removed the partial install." >&2
+          exit 1
+        fi
+      elif [ "$installed" != "{{.HELM_UNITTEST_VERSION}}" ]; then
+        echo "ERROR: helm-unittest plugin $installed is installed, but .env pins {{.HELM_UNITTEST_VERSION}}. Run 'helm plugin uninstall unittest', then rerun this task." >&2
+        exit 1
+      elif ! helm unittest --help >/dev/null 2>&1; then
+        echo "ERROR: helm-unittest $installed is registered but its binary does not run (an earlier install hook failed?). Run 'helm plugin uninstall unittest', then rerun this task." >&2
+        exit 1
+      fi
+    status:
+      - helm plugin list | awk '$1=="unittest"{print "v"$2}' | grep -qx "{{.HELM_UNITTEST_VERSION}}"
+      - helm unittest --help >/dev/null 2>&1

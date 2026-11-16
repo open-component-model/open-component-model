@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 
-	"oras.land/oras-go/v2/registry/remote/auth"
+	"github.com/oras-project/oras-go/v3/registry/remote/auth"
+	remotecredentials "github.com/oras-project/oras-go/v3/registry/remote/credentials"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
@@ -65,6 +67,9 @@ type ResourceRepository struct {
 	filesystemConfig *filesystemv1alpha1.Config
 	userAgent        string
 	httpClient       *http.Client
+	// httpConfig is what httpClient was built from; the URL resolver reads
+	// its per-host plainHTTP entries.
+	httpConfig *httpv1alpha1.Config
 }
 
 // make sure that ResourceRepository implements the oci ResourceRepository interface
@@ -90,6 +95,7 @@ func NewResourceRepository(filesystemConfig *filesystemv1alpha1.Config, opts ...
 			ocmhttp.WithConfig(options.HTTPConfig),
 			ocmhttp.WithUserAgent(options.UserAgent),
 		),
+		httpConfig: options.HTTPConfig,
 	}
 }
 
@@ -194,7 +200,7 @@ func (p *ResourceRepository) UploadResource(ctx context.Context, resource *descr
 }
 
 func (p *ResourceRepository) getRepository(spec *ociv1.Repository, credentials *ocicredsv1.OCICredentials) (*oci.Repository, error) {
-	repo, err := createRepository(spec, credentials, p.filesystemConfig, p.userAgent, p.httpClient)
+	repo, err := createRepository(spec, credentials, p.filesystemConfig, p.userAgent, p.httpClient, p.httpConfig)
 	if err != nil {
 		return nil, fmt.Errorf("error creating repository: %w", err)
 	}
@@ -250,6 +256,7 @@ func createRepository(
 	filesystemConfig *filesystemv1alpha1.Config,
 	userAgent string,
 	httpClient *http.Client,
+	httpConfig *httpv1alpha1.Config,
 ) (*oci.Repository, error) {
 	url, err := runtime.ParseURLAndAllowNoScheme(spec.BaseUrl)
 	if err != nil {
@@ -257,15 +264,23 @@ func createRepository(
 	}
 	urlString := url.Host + url.Path
 
-	urlResolver, err := urlresolver.New(
+	header := http.Header{"User-Agent": {userAgent}}
+	resolverOpts := []urlresolver.Option{
 		urlresolver.WithBaseURL(urlString),
+		urlresolver.WithBaseURLScheme(url.Scheme),
 		urlresolver.WithBaseClient(&auth.Client{
-			Client: httpClient,
-			Header: map[string][]string{
-				"User-Agent": {userAgent},
-			},
-			Credential: auth.StaticCredential(url.Host, ocicredentials.MapCredentials(credentials)),
-		}))
+			Client:         httpClient,
+			Header:         header,
+			CredentialFunc: credentialFunc(url.Host, credentials),
+			// Keep the distribution spec token flow for basic credentials instead of
+			// attempting OAuth2 first, which not all registries implement.
+			TokenFetcher: auth.NewCompositeTokenFetcher(httpClient, header, "", true),
+		}),
+	}
+	if httpConfig != nil {
+		resolverOpts = append(resolverOpts, urlresolver.WithHTTPConfig(httpConfig))
+	}
+	urlResolver, err := urlresolver.New(resolverOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create URL resolver: %w", err)
 	}
@@ -348,4 +363,11 @@ func (p *ResourceRepository) UploadResourceStream(ctx context.Context, resource 
 // credential repository configuration types (DockerConfig) instead of payload types.
 func (p *ResourceRepository) GetCredentialTypeScheme() *runtime.Scheme {
 	return ocicreds.CredentialTypeScheme
+}
+
+// credentialFunc returns credentials for requests to host. oras matches on the
+// canonical, lower-cased registry name while host keeps the case written in the
+// base URL, so it is lower-cased here as host names are case-insensitive.
+func credentialFunc(host string, credentials *ocicredsv1.OCICredentials) remotecredentials.CredentialFunc {
+	return remotecredentials.StaticCredentialFunc(strings.ToLower(host), ocicredentials.MapCredentials(credentials))
 }

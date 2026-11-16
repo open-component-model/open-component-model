@@ -10,10 +10,11 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/oras-project/oras-go/v3/registry/remote/auth"
 	"golang.org/x/sync/singleflight"
-	"oras.land/oras-go/v2/registry/remote/auth"
 
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 	"ocm.software/open-component-model/bindings/go/oci/credentials"
@@ -60,6 +61,11 @@ type CachingComponentVersionRepositoryProvider struct {
 
 	// httpClient is the shared HTTP client used by all repositories provided.
 	httpClient *http.Client
+
+	// httpConfig is the configuration httpClient was built from. The URL
+	// resolver reads its per-host plainHTTP entries, which cannot be expressed
+	// in the client itself.
+	httpConfig *httpv1alpha1.Config
 
 	// tempDir is the shared default temporary filesystem directory for any
 	// temporary data created by the repositories provided by the provider
@@ -133,6 +139,7 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 			ocmhttp.WithConfig(options.HTTPConfig),
 			ocmhttp.WithUserAgent(options.UserAgent),
 		),
+		httpConfig:         options.HTTPConfig,
 		tempDir:            options.TempDir,
 		blobCacheOpts:      applyCacheConfig(options.BlobCacheOptions, options.CacheConfig),
 		referenceCacheOpts: applyCacheConfig(options.ReferenceCacheOptions, options.CacheConfig),
@@ -214,6 +221,9 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 		}
 
 		var resolverOpts []urlresolver.Option
+		if b.httpConfig != nil {
+			resolverOpts = append(resolverOpts, urlresolver.WithHTTPConfig(b.httpConfig))
+		}
 		if bc := b.getOrCreateBlobCache(); bc != nil {
 			resolverOpts = append(resolverOpts, urlresolver.WithBlobCache(bc))
 		}
@@ -223,13 +233,15 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 			}
 		}
 
+		header := http.Header{"User-Agent": {b.creator}}
 		resolver, err := ocirepository.NewResolver(ctx, &auth.Client{
-			Client:     b.httpClient,
-			Cache:      auth.NewCache(),
-			Credential: credentials.CredentialFunc(identity, ociCredentials),
-			Header: map[string][]string{
-				"User-Agent": {b.creator},
-			},
+			Client:         b.httpClient,
+			Cache:          auth.NewCache(),
+			CredentialFunc: credentials.CredentialFunc(identity, ociCredentials),
+			Header:         header,
+			// Keep the distribution spec token flow for basic credentials instead of
+			// attempting OAuth2 first, which not all registries implement.
+			TokenFetcher: auth.NewCompositeTokenFetcher(b.httpClient, header, "", true),
 		}, obj, resolverOpts...)
 		if err != nil {
 			return nil, fmt.Errorf("error creating oci repository resolver: %w", err)

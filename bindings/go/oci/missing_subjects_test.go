@@ -3,16 +3,18 @@ package oci
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
 	specs "github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3"
+	"github.com/oras-project/oras-go/v3/content/memory"
+	"github.com/oras-project/oras-go/v3/errdef"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2"
-	"oras.land/oras-go/v2/content/memory"
-	"oras.land/oras-go/v2/errdef"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func pushTestBlob(t *testing.T, store *memory.Store, mediaType string, data []byte) ociImageSpecV1.Descriptor {
@@ -30,7 +32,8 @@ func pushTestManifest(t *testing.T, store *memory.Store, layers []ociImageSpecV1
 		Config:    ociImageSpecV1.DescriptorEmptyJSON,
 		Layers:    layers,
 		Subject:   subject,
-	})
+	}, runtime.JSONOptions)
+
 	require.NoError(t, err)
 	return pushTestBlob(t, store, ociImageSpecV1.MediaTypeImageManifest, data)
 }
@@ -89,7 +92,8 @@ func TestCopySkipsMissingSubjects(t *testing.T) {
 					"mediaType": mediaTypeArtifactManifest,
 					"blobs":     layer(t, store),
 					"subject":   missingDescriptor("subject"),
-				})
+				}, runtime.JSONOptions)
+
 				require.NoError(t, err)
 				return store, pushTestBlob(t, store, mediaTypeArtifactManifest, data)
 			},

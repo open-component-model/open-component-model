@@ -19,34 +19,73 @@ export function loadResults(dir) {
 
 /**
  * @param {number[]} values
- * @returns {number}
+ * @returns {number} NaN for no values.
  */
 export function median(values) {
+  if (values.length === 0) {
+    return NaN;
+  }
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
 /**
+ * The phases of a result, in execution order. A base that predates phases has none:
+ * its pull request has to merge the base branch first.
+ *
  * @param {any} result
- * @param {string} name - Prometheus counter name.
- * @param {string} controller
- * @returns {number}
+ * @returns {any[]}
  */
-function counter(result, name, controller) {
-  return result.controllerCounters[`${name}{controller="${controller}"}`] ?? 0;
+function phasesOf(result) {
+  return result.phases ?? [];
 }
 
 /**
- * The controllers that reconciled anything in any of the results.
+ * @param {any} result
+ * @param {string} name
+ * @returns {any} The phase of that name; undefined when the result has none.
+ */
+function phaseOf(result, name) {
+  return phasesOf(result).find((phase) => phase.name === name);
+}
+
+/**
+ * The names of the phases of any of the results, in execution order.
  *
  * @param {any[]} results
  * @returns {string[]}
  */
-function activeControllers(results) {
+function phaseNames(results) {
   const names = new Set();
   for (const result of results) {
-    for (const [key, value] of Object.entries(result.controllerCounters)) {
+    for (const phase of phasesOf(result)) {
+      names.add(phase.name);
+    }
+  }
+  return [...names];
+}
+
+/**
+ * @param {any} phase
+ * @param {string} name - Prometheus counter name.
+ * @param {string} controller
+ * @returns {number}
+ */
+function counter(phase, name, controller) {
+  return phase.cost.controllerCounters?.[`${name}{controller="${controller}"}`] ?? 0;
+}
+
+/**
+ * The controllers that reconciled anything in any of the phases.
+ *
+ * @param {any[]} phases
+ * @returns {string[]}
+ */
+function activeControllers(phases) {
+  const names = new Set();
+  for (const phase of phases) {
+    for (const [key, value] of Object.entries(phase.cost.controllerCounters ?? {})) {
       const match = key.match(/^controller_runtime_reconcile_time_seconds_count\{controller="(.+)"\}$/);
       if (match && value > 0) {
         names.add(match[1]);
@@ -57,46 +96,115 @@ function activeControllers(results) {
 }
 
 /**
- * The compared rows. runnerDependent marks rows that vary with the runner's hardware.
- * Hand-picked sections of the result only. CPU is ignored as it can vary with the parallel runner.
+ * Registry requests by handler and method, summed over every other label.
  *
- * @param {string[]} controllers
- * @returns {{ label: string, value: (result: any) => number, runnerDependent?: boolean, rate?: boolean }[]}
+ * @param {any} phase
+ * @returns {Map<string, number> | undefined} keyed by "handler method"; undefined when the registry scrape failed.
  */
-function rows(controllers) {
+function registryRequests(phase) {
+  if (!phase.cost.registryCounters) {
+    return undefined;
+  }
+  const sums = new Map();
+  for (const [key, value] of Object.entries(phase.cost.registryCounters)) {
+    if (!key.startsWith("registry_http_requests_total{")) {
+      continue;
+    }
+    const handler = key.match(/[{,]handler="([^"]*)"/);
+    const method = key.match(/[{,]method="([^"]*)"/);
+    if (handler && method) {
+      const name = `${handler[1]} ${method[1]}`;
+      sums.set(name, (sums.get(name) ?? 0) + value);
+    }
+  }
+  return sums;
+}
+
+/**
+ * The handler and method pairs that any of the phases sent requests for.
+ *
+ * @param {any[]} phases
+ * @returns {string[]}
+ */
+function activeRegistryRequests(phases) {
+  const names = new Set();
+  for (const phase of phases) {
+    for (const [name, value] of registryRequests(phase) ?? []) {
+      if (value > 0) {
+        names.add(name);
+      }
+    }
+  }
+  return [...names].sort();
+}
+
+/**
+ * @typedef {{ label: string, value: (result: any) => number | undefined, runnerDependent?: boolean, rate?: boolean }} Row
+ */
+
+/**
+ * The compared rows of one phase. runnerDependent marks rows that vary with the runner's hardware.
+ * Hand-picked sections of the result only. CPU is ignored as it can vary with the parallel runner.
+ * A result without the phase has no value for any of them.
+ *
+ * @param {string} name - The phase.
+ * @param {any[]} results
+ * @returns {Row[]}
+ */
+function phaseRows(name, results) {
+  const phases = results.map((r) => phaseOf(r, name)).filter(Boolean);
+  const prefix = `${name.charAt(0).toUpperCase()}${name.slice(1)}:`;
+  /**
+   * @param {string} label
+   * @param {(phase: any) => number | undefined | null} value
+   * @param {{ runnerDependent?: boolean, rate?: boolean }} [opts]
+   * @returns {Row}
+   */
+  const row = (label, value, opts = {}) => ({
+    label: `${prefix} ${label}`,
+    value: (r) => {
+      const phase = phaseOf(r, name);
+      return phase ? (value(phase) ?? undefined) : undefined;
+    },
+    ...opts,
+  });
   return [
-    { label: "Pass rate (%)", value: (r) => (100 * r.outcome.ready) / r.outcome.expected, rate: true },
-    { label: "Total (s)", value: (r) => r.durations.total, runnerDependent: true },
-    { label: "Settled (s)", value: (r) => r.durations.settled, runnerDependent: true },
-    { label: "p50 (s)", value: (r) => r.durations.p50, runnerDependent: true },
-    { label: "p90 (s)", value: (r) => r.durations.p90, runnerDependent: true },
-    { label: "Peak working set (MiB)", value: (r) => r.usage.peakWorkingSetBytes / MiB },
-    { label: "Peak RSS (MiB)", value: (r) => r.usage.peakRSSBytes / MiB },
-    { label: "Registry requests", value: (r) => r.usage.registryRequests },
-    ...controllers.flatMap((c) => [
-      {
-        label: `${c}: reconciles`,
-        value: (/** @type {any} */ r) => counter(r, "controller_runtime_reconcile_time_seconds_count", c),
-      },
-      {
-        label: `${c}: reconcile time (s)`,
-        value: (/** @type {any} */ r) => counter(r, "controller_runtime_reconcile_time_seconds_sum", c),
+    row("pass rate (%)", (p) => (100 * p.outcome.ready) / p.outcome.expected, { rate: true }),
+    row("total (s)", (p) => p.durations.total, { runnerDependent: true }),
+    row("settled (s)", (p) => p.durations.settled, { runnerDependent: true }),
+    row("p50 (s)", (p) => p.durations.p50, { runnerDependent: true }),
+    row("p90 (s)", (p) => p.durations.p90, { runnerDependent: true }),
+    row("peak working set (MiB)", (p) => p.cost.peakWorkingSetBytes / MiB),
+    row("peak RSS (MiB)", (p) => p.cost.peakRSSBytes / MiB),
+    row("registry requests", (p) => p.cost.registryRequests),
+    ...activeRegistryRequests(phases).map((request) =>
+      row(`registry ${request}`, (p) => {
+        const requests = registryRequests(p);
+        return requests ? (requests.get(request) ?? 0) : undefined;
+      }),
+    ),
+    ...activeControllers(phases).flatMap((c) => [
+      row(`${c}: reconciles`, (p) => counter(p, "controller_runtime_reconcile_time_seconds_count", c)),
+      row(`${c}: reconcile time (s)`, (p) => counter(p, "controller_runtime_reconcile_time_seconds_sum", c), {
         runnerDependent: true,
-      },
-      {
-        label: `${c}: error rate (%)`,
-        value: (/** @type {any} */ r) => {
-          const reconciles = counter(r, "controller_runtime_reconcile_time_seconds_count", c);
-          return reconciles ? (100 * counter(r, "controller_runtime_reconcile_errors_total", c)) / reconciles : 0;
+      }),
+      row(
+        `${c}: error rate (%)`,
+        (p) => {
+          const reconciles = counter(p, "controller_runtime_reconcile_time_seconds_count", c);
+          return reconciles ? (100 * counter(p, "controller_runtime_reconcile_errors_total", c)) / reconciles : 0;
         },
-        rate: true,
-      },
+        { rate: true },
+      ),
     ]),
   ];
 }
 
 /** @param {number} value */
 function format(value) {
+  if (Number.isNaN(value)) {
+    return "n/a";
+  }
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
@@ -108,6 +216,9 @@ function format(value) {
  * @param {boolean} [rate]
  */
 function delta(base, pr, rate) {
+  if (Number.isNaN(base) || Number.isNaN(pr)) {
+    return "n/a";
+  }
   if (!rate && base === 0) {
     return pr === 0 ? "0%" : "n/a";
   }
@@ -120,6 +231,17 @@ function delta(base, pr, rate) {
 }
 
 /**
+ * The values of a row. A missing phase or a failed registry scrape (null) is no value, not 0.
+ *
+ * @param {any[]} results
+ * @param {Row} row
+ * @returns {number[]}
+ */
+function valuesOf(results, row) {
+  return /** @type {number[]} */ (results.map(row.value).filter((v) => v !== undefined && v !== null));
+}
+
+/**
  * Render the medians of both result sets as a markdown table.
  *
  * @param {any[]} base - Results of the base branch.
@@ -129,9 +251,10 @@ function delta(base, pr, rate) {
  */
 export function renderTable(base, pr, baseLabel) {
   const lines = [`| Metric | ${baseLabel} | PR | Δ |`, "|---|---:|---:|---:|"];
-  for (const row of rows(activeControllers([...base, ...pr]))) {
-    const a = median(base.map(row.value));
-    const b = median(pr.map(row.value));
+  const all = [...base, ...pr];
+  for (const row of phaseNames(all).flatMap((name) => phaseRows(name, all))) {
+    const a = median(valuesOf(base, row));
+    const b = median(valuesOf(pr, row));
     lines.push(`| ${row.label}${row.runnerDependent ? " \\*" : ""} | ${format(a)} | ${format(b)} | ${delta(a, b, row.rate)} |`);
   }
   lines.push("", "\\* Depends on the runner: both sides run on different machines.");

@@ -120,12 +120,12 @@ func Test_Integration_TransferWgetResource_LocalBlobUploader(t *testing.T) {
 	// 5. Build and execute the graph.
 	ctx := t.Context()
 	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
-	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig()))
 	// A wget resource is downloaded via the wget resource repository. In the CLI this is a dynamic
 	// registry dispatching by access type; here the transfer only involves a wget resource, so the
 	// wget repository is the concrete repo to provide (mirrors the OCI tests passing the OCI repo).
 	resourceRepo := wgetrepository.NewResourceRepository()
-	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
+	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver, transfer.WithHTTPConfig(plainHTTPConfig()))
 	graph, err := b.BuildAndCheck(tgd)
 	r.NoError(err)
 	r.NoError(graph.Process(ctx))

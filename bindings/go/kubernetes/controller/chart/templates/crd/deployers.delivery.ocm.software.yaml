@@ -33,15 +33,26 @@ spec:
   scope: Cluster
   versions:
   - additionalPrinterColumns:
+    - description: Namespace of the referenced Resource
+      jsonPath: .spec.resourceRef.namespace
+      name: Resource Namespace
+      type: string
+    - description: Referenced Resource
+      jsonPath: .spec.resourceRef.name
+      name: Resource Ref
+      type: string
     - description: Indicates if the Deployer is Ready
-      jsonPath: .status.conditions[?(@.type=="Ready")].message
+      jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: Ready
-      priority: 1
       type: string
     - description: Displays the Age of the Deployer
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
+    - description: Ready condition message
+      jsonPath: .status.conditions[?(@.type=="Ready")].message
+      name: Status
+      type: string
     deprecated: true
     deprecationWarning: Deployer applies with the controller's cluster-wide permissions
       and is discouraged. Use the NamespacedDeployer, which applies with the permissions

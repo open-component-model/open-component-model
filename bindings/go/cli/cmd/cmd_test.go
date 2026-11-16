@@ -6,7 +6,8 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"encoding/pem"
 	"fmt"
 	"math/big"
@@ -190,8 +191,8 @@ COMPONENT                   │ VERSION │ PROVIDER
 			if tt.args[len(tt.args)-1] == "--output=json" || tt.args[len(tt.args)-1] == "--output=ndjson" {
 				// Handle JSON output separately
 				var resultJSON any
-				decoder := json.NewDecoder(result)
-				r.NoError(decoder.Decode(&resultJSON), "failed to decode result JSON")
+				decoder := jsontext.NewDecoder(result)
+				r.NoError(json.UnmarshalDecode(decoder, &resultJSON), "failed to decode result JSON")
 
 				component := map[string]any{
 					"component": map[string]any{
@@ -556,17 +557,17 @@ COMPONENT           │ VERSION │ PROVIDER
 				}
 
 				var resultJSON any
-				decoder := json.NewDecoder(result)
+				decoder := jsontext.NewDecoder(result)
 				switch {
 				case slices.Contains(tt.args, "--output=json"):
-					r.NoError(decoder.Decode(&resultJSON), "failed to decode result JSON")
+					r.NoError(json.UnmarshalDecode(decoder, &resultJSON), "failed to decode result JSON")
 					r.EqualValues([]any{expectedRoot, expectedLeafA, expectedLeafB}, resultJSON)
 				case slices.Contains(tt.args, "--output=ndjson"):
-					r.NoError(decoder.Decode(&resultJSON))
+					r.NoError(json.UnmarshalDecode(decoder, &resultJSON))
 					r.EqualValues(expectedRoot, resultJSON)
-					r.NoError(decoder.Decode(&resultJSON))
+					r.NoError(json.UnmarshalDecode(decoder, &resultJSON))
 					r.EqualValues(expectedLeafA, resultJSON)
-					r.NoError(decoder.Decode(&resultJSON))
+					r.NoError(json.UnmarshalDecode(decoder, &resultJSON))
 					r.EqualValues(expectedLeafB, resultJSON)
 				}
 			}
@@ -1312,6 +1313,59 @@ components:
 	})
 }
 
+// Test_Add_Component_Version_Preserves_Source_Refs proves resource srcRefs from the
+// constructor reach the stored component version.
+func Test_Add_Component_Version_Preserves_Source_Refs(t *testing.T) {
+	r := require.New(t)
+	tmp := t.TempDir()
+
+	constructorYAML := `
+name: acme.org/srcrefs
+version: 1.0.0
+provider:
+  name: acme.org
+sources:
+  - name: src
+    type: blob
+    input:
+      type: utf8/v1
+      text: "source"
+resources:
+  - name: app
+    type: blob
+    relation: local
+    srcRefs:
+      - identitySelector:
+          name: src
+    input:
+      type: utf8/v1
+      text: "hello"
+`
+	constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+	r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+	archiveFilePath := filepath.Join(tmp, "transport-archive")
+
+	// The sources deprecation warning is written to stderr and is expected here.
+	_, err := test.OCM(t, test.WithArgs("add", "cv",
+		"--constructor", constructorYAMLFilePath,
+		"--repository", archiveFilePath,
+	), test.WithErrorOutput(new(bytes.Buffer)))
+	r.NoError(err, "could not construct component version")
+
+	fs, err := filesystem.NewFS(archiveFilePath, os.O_RDONLY)
+	r.NoError(err, "could not create test filesystem")
+	archive := ctf.NewFileSystemCTF(fs)
+	helperRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
+	r.NoError(err, "could not create helper test repository")
+
+	desc, err := helperRepo.GetComponentVersion(t.Context(), "acme.org/srcrefs", "1.0.0")
+	r.NoError(err, "could not retrieve component version from test repository")
+	r.Len(desc.Component.Resources, 1, "expected one resource in component version")
+	r.Len(desc.Component.Resources[0].SourceRefs, 1, "expected resource srcRefs to be preserved")
+	r.Equal("src", desc.Component.Resources[0].SourceRefs[0].IdentitySelector["name"], "expected srcRef identity selector to match")
+}
+
 // Test_Add_Component_Version_Formats tests the different output formats for the add cv command
 func Test_Add_Component_Version_Specification_Validation(t *testing.T) {
 	for _, tt := range []struct {
@@ -1529,8 +1583,8 @@ resources:
 			if tt.outputArg == "--output=json" || tt.outputArg == "--output=ndjson" {
 				// Handle JSON output separately
 				var resultJSON any
-				decoder := json.NewDecoder(result)
-				r.NoError(decoder.Decode(&resultJSON), "failed to decode result JSON")
+				decoder := jsontext.NewDecoder(result)
+				r.NoError(json.UnmarshalDecode(decoder, &resultJSON), "failed to decode result JSON")
 
 				component := map[string]any{
 					"component": map[string]any{

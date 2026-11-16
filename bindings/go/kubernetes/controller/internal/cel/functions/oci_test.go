@@ -1,7 +1,7 @@
 package functions_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"testing"
 
@@ -22,7 +22,12 @@ import (
 
 // componentInfoForRepository creates a ComponentInfo with a repository spec pointing to the given registry and optional subPath.
 func componentInfoForRepository(repository string, subPath string) *v1alpha1.ComponentInfo {
-	repoSpec := fmt.Sprintf(`{"type":"OCIRepository/v1","baseUrl":"https://%s","subPath":"%s"}`, repository, subPath)
+	return componentInfoForBaseURL("https://"+repository, subPath)
+}
+
+// componentInfoForBaseURL creates a ComponentInfo with a repository spec for the given base URL, with or without a scheme.
+func componentInfoForBaseURL(baseURL string, subPath string) *v1alpha1.ComponentInfo {
+	repoSpec := fmt.Sprintf(`{"type":"OCIRepository/v1","baseUrl":"%s","subPath":"%s"}`, baseURL, subPath)
 	return &v1alpha1.ComponentInfo{
 		RepositorySpec: &apiextensionsv1.JSON{Raw: []byte(repoSpec)},
 		Component:      "test-component",
@@ -66,6 +71,40 @@ func TestLocalBlobResolver(t *testing.T) {
 			expects: map[string]string{
 				"host":       "ghcr.io",
 				"registry":   "ghcr.io",
+				"repository": "component-descriptors/test-component",
+				"tag":        "",
+				"digest":     "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+				"reference":  "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+			},
+		},
+		{
+			name: "localBlob builds reference from scheme-less host:port with path",
+			input: typedToMap(t, &v2.LocalBlob{
+				Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+				LocalReference: "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+				MediaType:      "application/vnd.oci.image.manifest.v1+json",
+			}),
+			component: componentInfoForBaseURL("registry.local:5000/ocm", ""),
+			expects: map[string]string{
+				"host":       "registry.local:5000",
+				"registry":   "registry.local:5000",
+				"repository": "ocm/component-descriptors/test-component",
+				"tag":        "",
+				"digest":     "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+				"reference":  "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+			},
+		},
+		{
+			name: "localBlob builds reference from scheme-less host:port without path",
+			input: typedToMap(t, &v2.LocalBlob{
+				Type:           runtime.NewVersionedType(v2.LocalBlobAccessType, v2.LocalBlobAccessTypeVersion),
+				LocalReference: "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+				MediaType:      "application/vnd.oci.image.manifest.v1+json",
+			}),
+			component: componentInfoForBaseURL("localhost:5000", ""),
+			expects: map[string]string{
+				"host":       "localhost:5000",
+				"registry":   "localhost:5000",
 				"repository": "component-descriptors/test-component",
 				"tag":        "",
 				"digest":     "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
@@ -152,7 +191,7 @@ func assertCelMap(t *testing.T, val ref.Val, expects map[string]string) {
 // simulating how access specs arrive from component descriptors.
 func typedToMap(t *testing.T, typed any) map[string]any {
 	t.Helper()
-	data, err := json.Marshal(typed)
+	data, err := json.Marshal(typed, runtime.JSONOptions)
 	require.NoError(t, err)
 	var m map[string]any
 	require.NoError(t, json.Unmarshal(data, &m))

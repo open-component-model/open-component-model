@@ -345,38 +345,123 @@ var _ io.Closer = (*MyType)(nil)
 
 ## JSON Marshaling
 
-### Custom Marshal/Unmarshal for Backward Compatibility
+The module uses **`encoding/json/v2`** and **`encoding/json/jsontext`**; `encoding/json` is
+only imported (as `jsonv1`) for `json.Number`, which v2 has no replacement for. Since
+`encoding/json/v2` is named `json`, call sites read unchanged - only the import path differs.
 
-Types that need to accept multiple input formats use the type-alias trick to avoid infinite recursion:
+### Marshal options are mandatory
 
 ```go
-func (c *Consumer) UnmarshalJSON(data []byte) error {
-    type Alias Consumer
-    alias := &Alias{}
-    if err := json.Unmarshal(data, alias); err == nil {
-        *c = Consumer(*alias)
-        return nil
-    }
-    // try legacy format...
+data, err := json.Marshal(obj, runtime.JSONOptions)
+err := json.MarshalWrite(w, obj, runtime.JSONOptions)
+```
+
+`runtime.JSONOptions` pins the three v2 defaults the OCM wire format depends on:
+`Deterministic` (v2 marshals maps in random order), `FormatNilSliceAsNull` and
+`FormatNilMapAsNull` (v2 encodes nil as `[]`/`{}`). Descriptors are content-addressed and
+signed, so the produced bytes are part of the contract. A test walks the module and fails
+if a v2 marshal call omits them (`runtime/json_test.go`), because no golden file would
+catch it.
+
+Everything else uses v2 defaults, which are stricter than v1: member names match
+case-sensitively, duplicate members are rejected, invalid UTF-8 is rejected and `<`, `>`, `&`
+are not escaped. The one place where v1's escaping is part of stored bytes
+(`ConvertToV2Provider`) opts back in with `jsontext.EscapeForHTML(true)`.
+
+### Decoding user-authored documents
+
+```go
+err := json.Unmarshal(raw.Data, into, runtime.JSONDecodeOptions)
+```
+
+`.ocmconfig`, CRs and constructor files are read as YAML through `sigs.k8s.io/yaml`, i.e.
+`encoding/json` v1, so a non-canonical member spelling (`DockerConfigFile`) reaches a nested
+`Raw` verbatim. `runtime.JSONDecodeOptions` matches names case-insensitively there, so the
+member is not dropped without a word. Where unknown members must be an error, use
+`runtime.DecodeStrict`; `json.RejectUnknownMembers(true)` is the raw primitive.
+
+### Streaming
+
+Prefer the streaming entry points over an intermediate `[]byte`:
+
+```go
+err := json.UnmarshalRead(r, &v)                      // was json.NewDecoder(r).Decode(&v)
+err := json.MarshalWrite(w, v, runtime.JSONOptions)   // was json.NewEncoder(w).Encode(v)
+```
+
+`json.NewEncoder(w).Encode` appended a newline; `json.MarshalWrite` does not. For
+line-oriented output (NDJSON, CLI) use `jsontext.NewEncoder(w)` plus
+`json.MarshalEncode(enc, v, runtime.JSONOptions)`, which writes one newline per value.
+Token-level work (skipping, peeking, large documents) uses `jsontext.Decoder`;
+`oci/tar/layout_verifier.go` is the worked example.
+
+Not into an `http.ResponseWriter`, though: the first chunk commits the 200, so a failure
+half way through the value ships a truncated body with the error text appended to it.
+Plugin handlers write responses through `plugins.WriteJSON`, which marshals into a buffer
+and keeps a failed response an error-only 500.
+
+### Custom marshalers
+
+Types implement the streaming interfaces, which take precedence over the v1 method pair and
+avoid a round trip through `[]byte`:
+
+```go
+func (t Type) MarshalJSONTo(enc *jsontext.Encoder) error {
+    return enc.WriteToken(jsontext.String(t.String()))
+}
+
+func (t *Type) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+    if dec.PeekKind() == '{' { /* accept {"type": "..."} as well */ }
+    ...
 }
 ```
 
-Some types accept both array and single-object forms, trying each format and falling back:
+`jsontext.Decoder.ReadValue` borrows the decoder's buffer - `Clone()` it if it outlives the
+next read. A nested `json.Unmarshal` on those bytes starts a fresh top-level call and does
+**not** inherit the options the outer decoder was created with, so pass `dec.Options()`:
+without it a document read with `runtime.JSONDecodeOptions` loses its case-insensitive
+matching inside the method and members silently go missing. Types that accept several input
+shapes read the value once and try each shape on those bytes:
 
 ```go
-func (c *Spec) UnmarshalJSON(data []byte) error {
+func (c *Spec) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+    data, err := dec.ReadValue()
+    if err != nil {
+        return err
+    }
     var items []Item
-    if err := json.Unmarshal(data, &items); err == nil {
+    if err := json.Unmarshal(data, &items, dec.Options()); err == nil {
         c.Items = items
         return nil
     }
     var single Item
-    if err := json.Unmarshal(data, &single); err == nil {
+    if err := json.Unmarshal(data, &single, dec.Options()); err == nil {
         c.Items = []Item{single}
         return nil
     }
     return fmt.Errorf("unable to unmarshal spec")
 }
+```
+
+Go 1.27's `encoding/json` is implemented on top of v2 and honors `MarshalJSONTo`, so
+third-party code (sigs.k8s.io/yaml, apimachinery, oras) still serializes these types correctly.
+
+### Struct tags
+
+v2's `omitempty` omits a field whose *encoded* form is empty (`null`, `""`, `{}`, `[]`), not an
+empty Go value. Use `omitzero` for scalars, pointers and interfaces - `omitempty` on an `int`
+no longer omits `0`. Keep `omitempty` for strings, slices and maps, where both behave alike.
+The `format` tag option is not enabled in Go 1.27, so `time.Duration` needs a named type with
+`MarshalJSONTo`/`UnmarshalJSONFrom` rather than `format:nano`.
+
+### Canonicalization
+
+`jsontext.Value.Canonicalize()` implements RFC 8785 (JCS) and replaced the third-party
+canonicalizer:
+
+```go
+canonical := jsontext.Value(data)
+if err := canonical.Canonicalize(); err != nil { ... }
 ```
 
 ### Schema Embedding
@@ -394,12 +479,12 @@ Generated by `jsonschemagen` into `zz_generated.ocm_jsonschema.go` files.
 
 ## Receiver Conventions
 
-- **Pointer receivers** for methods that mutate state or implement `UnmarshalJSON`.
+- **Pointer receivers** for methods that mutate state or implement `UnmarshalJSONFrom`.
 - **Value receivers** for pure queries like `String()`, `IsZero()`, `Equal()`.
 
 ```go
 func (t Type) String() string     { /* value - no mutation */ }
-func (t *Type) UnmarshalJSON([]byte) error { /* pointer - mutates */ }
+func (t *Type) UnmarshalJSONFrom(*jsontext.Decoder) error { /* pointer - mutates */ }
 ```
 
 Most structs use pointer receivers throughout. Value receivers are reserved for small value types.
@@ -464,7 +549,7 @@ runtime.NewVersionedType("file", "v1")    // Type{Name: "file", Version: "v1"}
 runtime.NewUnversionedType("file")        // Type{Name: "file", Version: ""}
 ```
 
-`Type.String()` returns `"file"` (unversioned) or `"file/v1"` (versioned). JSON marshals to the same string representation. `UnmarshalJSON` accepts both `"file/v1"` and `{"type": "file/v1"}` as input.
+`Type.String()` returns `"file"` (unversioned) or `"file/v1"` (versioned). JSON marshals to the same string representation. `UnmarshalJSONFrom` accepts both `"file/v1"` and `{"type": "file/v1"}` as input.
 
 ### runtime.Typed Interface
 
@@ -585,7 +670,7 @@ Reads YAML/JSON from `io.Reader`, unmarshals into the target. If the target alre
 |------|----|-------------|
 | `*Raw` | `*Raw` | Deep copy |
 | `*Raw` | Typed struct | `json.Unmarshal(raw.Data, into)` |
-| Typed struct | `*Raw` | `json.Marshal(from)` → canonicalize → store in `Raw.Data` |
+| Typed struct | `*Raw` | `json.Marshal(from, runtime.JSONOptions)` → canonicalize → store in `Raw.Data` |
 | Typed struct | Typed struct | `DeepCopyTyped()` + reflection assignment |
 
 ### runtime.Raw
@@ -595,12 +680,12 @@ Wraps unknown or extensible types. Holds the Type and canonical JSON bytes witho
 ```go
 type Raw struct {
     Type `json:"type"`
-    Data []byte `json:"-"`
+    Data jsontext.Value `json:"-"`
 }
 ```
 
-- `UnmarshalJSON`: extracts `"type"`, stores full JSON in `Data` (canonicalized)
-- `MarshalJSON`: returns `Data` directly
+- `UnmarshalJSONFrom`: extracts `"type"`, stores the full JSON value in `Data` (canonicalized)
+- `MarshalJSONTo`: writes `Data` directly
 
 Use case — fields that can hold any typed object:
 
@@ -694,7 +779,7 @@ if err := scheme.Convert(cfg, out); err != nil {
     return err
 }
 
-output, err := json.Marshal(out)
+output, err := json.Marshal(out, runtime.JSONOptions)
 ```
 
 When the concrete type is unknown at compile time, use `NewObject` for dispatch:
@@ -804,9 +889,11 @@ import (
 
 | Area | Framework | Assertion Style |
 |------|-----------|----------------|
-| `bindings/go/` | testify | `require.New(t)` |
-| `bindings/go/cli/` | testify + `test.OCM()` helper | `require.New(t)` |
+| `bindings/go/` | testify | `require` for fail-fast/errors, `assert` in goroutines & `Eventually`/`CollectT` |
+| `bindings/go/cli/` | testify + `test.OCM()` helper | `require` for fail-fast/errors, `assert` where `FailNow` is unsafe |
 | `bindings/go/kubernetes/controller/` | Ginkgo v2 + Gomega | `Expect().To()` |
+
+`testifylint` (enabled in `golangci.yml`) is the source of truth for the `require`/`assert` split: `require-error` moves error checks in the main test goroutine to `require`, while `go-require` keeps `assert` in child goroutines and `Eventually`/`CollectT` callbacks, where `require`'s `FailNow` does not work. Follow the linter; do not convert `assert` to `require` wholesale.
 
 ### Ginkgo (Controller)
 

@@ -17,11 +17,13 @@ limitations under the License.
 package v2
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 	"time"
 
 	"sigs.k8s.io/yaml"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 type TimeHolder struct {
@@ -82,7 +84,7 @@ func TestTimeMarshalJSON(t *testing.T) {
 
 	for _, c := range cases {
 		input := TimeHolder{c.input}
-		result, err := json.Marshal(&input)
+		result, err := json.Marshal(&input, runtime.JSONOptions)
 		if err != nil {
 			t.Errorf("Failed to marshal input: '%v': %v", input, err)
 		}
@@ -124,7 +126,7 @@ func TestTimeMarshalJSONUnmarshalYAML(t *testing.T) {
 
 	for i, c := range cases {
 		input := TimeHolder{c.input}
-		jsonMarshalled, err := json.Marshal(&input)
+		jsonMarshalled, err := json.Marshal(&input, runtime.JSONOptions)
 		if err != nil {
 			t.Errorf("%d-1: Failed to marshal input: '%v': %v", i, input, err)
 		}

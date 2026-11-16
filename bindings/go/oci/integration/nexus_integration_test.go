@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oras-project/oras-go/v3/registry/remote/errcode"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/log"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"oras.land/oras-go/v2/registry/remote/errcode"
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"

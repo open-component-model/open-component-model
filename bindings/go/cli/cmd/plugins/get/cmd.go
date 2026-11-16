@@ -2,7 +2,7 @@ package get
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -172,9 +172,7 @@ func GetPlugin(cmd *cobra.Command, args []string) error {
 				}
 
 				slog.Debug("Found plugin in registry", "name", r.Name, "component", r.Component)
-				dec := json.NewDecoder(strings.NewReader(string(l.Value)))
-				dec.DisallowUnknownFields()
-				if err := dec.Decode(&info); err != nil {
+				if err := json.Unmarshal(l.Value, &info, json.RejectUnknownMembers(true)); err != nil {
 					return fmt.Errorf("decoding plugin info label failed: %w", err)
 				}
 

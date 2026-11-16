@@ -2,7 +2,12 @@ package entry
 
 import (
 	"bytes"
-	"encoding/json"
+	// jsonv1 is imported for json.Number only: encoding/json/v2 has no
+	// replacement for it, and the legacy cc-utils number spellings below depend
+	// on the raw number token being preserved. v2 marshals a jsonv1.Number
+	// verbatim, so the produced bytes are unchanged.
+	jsonv1 "encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"maps"
 	"math"
@@ -11,6 +16,8 @@ import (
 	"strings"
 	"unicode/utf16"
 	"unicode/utf8"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // Normalise serialises v into the list-of-single-key-maps form and marshals it
@@ -43,18 +50,16 @@ func Transform(v any) any {
 }
 
 // marshal encodes an already-transformed tree to compact JSON. HTML escaping
-// is disabled (cc-utils keeps &<> literal) but non-ASCII runes are escaped to
-// \uXXXX to match Python json.dumps' default (ensure_ascii=True); the trailing
-// newline json.Encoder appends is trimmed. Numbers are re-spelled to Python's
-// json.dumps form (see pythoniseNumbers) before encoding.
+// does not happen (cc-utils keeps &<> literal) but non-ASCII runes are escaped
+// to \uXXXX to match Python json.dumps' default (ensure_ascii=True). Numbers
+// are re-spelled to Python's json.dumps form (see pythoniseNumbers) before
+// encoding.
 func marshal(v any) ([]byte, error) {
-	buf := new(bytes.Buffer)
-	enc := json.NewEncoder(buf)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(pythoniseNumbers(v)); err != nil {
+	data, err := json.Marshal(pythoniseNumbers(v), runtime.JSONOptions)
+	if err != nil {
 		return nil, err
 	}
-	return escapeNonASCII(bytes.TrimRight(buf.Bytes(), "\n")), nil
+	return escapeNonASCII(data), nil
 }
 
 // pythoniseNumbers returns a copy of the tree with every number re-spelled to
@@ -88,7 +93,7 @@ func pythoniseNumbers(v any) any {
 			out[i] = pythoniseNumbers(val)
 		}
 		return out
-	case json.Number:
+	case jsonv1.Number:
 		s := string(t)
 		if !strings.ContainsAny(s, ".eE") {
 			return t // integer token: verbatim, full precision
@@ -97,12 +102,12 @@ func pythoniseNumbers(v any) any {
 		if err != nil {
 			return t
 		}
-		return json.Number(pythonFloatRepr(f))
+		return jsonv1.Number(pythonFloatRepr(f))
 	case float64:
 		if t == math.Trunc(t) && !math.IsInf(t, 0) {
 			return t
 		}
-		return json.Number(pythonFloatRepr(t))
+		return jsonv1.Number(pythonFloatRepr(t))
 	default:
 		return v
 	}

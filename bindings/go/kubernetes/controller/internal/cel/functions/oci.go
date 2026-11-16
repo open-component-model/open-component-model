@@ -6,7 +6,7 @@ package functions
 import (
 	"bytes"
 	"fmt"
-	"net/url"
+	"path"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
@@ -66,6 +66,8 @@ func LocalBlobResolver(component *v1alpha1.ComponentInfo) ocifunctions.Reference
 // buildImageReference constructs a full OCI reference for a localBlob access by joining
 // the repository's baseUrl, subPath, "component-descriptors", the component name,
 // and appending the localReference digest (e.g. "ghcr.io/org/component-descriptors/my-component@sha256:...").
+// The baseUrl may have no scheme; url.JoinPath would read "registry.local:5000/ocm" as
+// a scheme and drop the path, so the reference is built from the parsed host and path.
 func buildImageReference(localBlob *v2.LocalBlob, component *v1alpha1.ComponentInfo) (string, error) {
 	if localBlob.LocalReference == "" {
 		return "", fmt.Errorf("local blob reference is empty")
@@ -84,10 +86,11 @@ func buildImageReference(localBlob *v2.LocalBlob, component *v1alpha1.ComponentI
 		return "", fmt.Errorf("oci repository url is empty")
 	}
 
-	path, err := url.JoinPath(ociRepo.BaseUrl, ociRepo.SubPath, "component-descriptors", component.Component)
+	baseURL, err := runtime.ParseURLAndAllowNoScheme(ociRepo.BaseUrl)
 	if err != nil {
 		return "", fmt.Errorf("could not build path for oci image reference: %w", err)
 	}
+	path := path.Join(baseURL.Host, baseURL.Path, ociRepo.SubPath, "component-descriptors", component.Component)
 	path = fmt.Sprintf("%s@%s", path, localBlob.LocalReference)
 	return path, nil
 }

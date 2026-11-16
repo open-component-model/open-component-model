@@ -1,7 +1,7 @@
 package input_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -18,6 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/helm/input"
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
 	v1 "ocm.software/open-component-model/bindings/go/helm/spec/input/v1"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	ocicredsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 )
@@ -141,7 +142,7 @@ func TestGetV1HelmBlob_Success(t *testing.T) {
 				require.NoError(t, manifestRaw.Close())
 			})
 			manifest := ociImageSpecV1.Manifest{}
-			require.NoError(t, json.NewDecoder(manifestRaw).Decode(&manifest))
+			require.NoError(t, json.UnmarshalRead(manifestRaw, &manifest))
 
 			require.GreaterOrEqual(t, len(manifest.Layers), 1, "expected at least one layer")
 			require.Equal(t, registry.ChartLayerMediaType, manifest.Layers[0].MediaType, "expected first layer to be chart layer")
@@ -242,6 +243,7 @@ func TestGetV1HelmBlob_OCICredentialsBasicAuthFallback(t *testing.T) {
 	b, chart, err := input.GetV1HelmBlob(t.Context(), spec, t.TempDir(),
 		input.WithCredentials(&helmcredsv1.HelmHTTPCredentials{Username: expectedUser}),
 		input.WithOCICredentials(&ocicredsv1.OCICredentials{AccessToken: accessToken}),
+		input.WithHTTPConfig(&httpv1alpha1.Config{ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: new(true)}}),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, b)

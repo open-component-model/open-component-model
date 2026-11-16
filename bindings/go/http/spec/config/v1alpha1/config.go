@@ -1,12 +1,12 @@
 package v1alpha1
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/url"
 	"time"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	typesv1 "ocm.software/open-component-model/bindings/go/configuration/types/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -19,46 +19,7 @@ const (
 // configuration is provided. This allows response bodies of arbitrary size to
 // stream to completion; connection-phase timeouts remain independently
 // configurable.
-const DefaultTimeout = Timeout(0)
-
-// Timeout wraps time.Duration to support JSON/YAML marshaling
-// of human-readable duration strings (e.g. "30s", "5m", "1h").
-//
-// +ocm:jsonschema-gen=true
-// +ocm:jsonschema-gen:schema-from=schemas/Timeout.schema.json
-type Timeout time.Duration
-
-func (d Timeout) MarshalJSON() ([]byte, error) {
-	return json.Marshal(time.Duration(d).String())
-}
-
-func (d *Timeout) UnmarshalJSON(b []byte) error {
-	var v any
-	if err := json.Unmarshal(b, &v); err != nil {
-		return fmt.Errorf("failed to parse HTTP client timeout: %w", err)
-	}
-
-	switch value := v.(type) {
-	case float64:
-		*d = Timeout(time.Duration(value))
-		return nil
-	case string:
-		tmp, err := time.ParseDuration(value)
-		if err != nil {
-			return fmt.Errorf("invalid timeout value %q: must be a duration like 30s, 5m, or nanoseconds number: %w", value, err)
-		}
-		*d = Timeout(tmp)
-		return nil
-	default:
-		return fmt.Errorf("timeout must be a duration string or nanoseconds number, got %T", v)
-	}
-}
-
-// NewTimeout creates a pointer to a Timeout value.
-func NewTimeout(d time.Duration) *Timeout {
-	t := Timeout(d)
-	return &t
-}
+const DefaultTimeout = typesv1.Duration(0)
 
 var Scheme = runtime.NewScheme()
 
@@ -78,33 +39,33 @@ type TimeoutConfig struct {
 	// client. The timeout includes connection time, any redirects,
 	// and reading the response body. A timeout of zero means no
 	// timeout.
-	Timeout *Timeout `json:"timeout,omitempty"`
+	Timeout *typesv1.Duration `json:"timeout,omitzero"`
 
 	// TCPDialTimeout is the maximum amount of time a dial will wait
 	// for a TCP connect to complete. When dialing a host name with
 	// multiple IP addresses, the timeout may be divided between them.
 	// The operating system may impose its own earlier timeout.
-	TCPDialTimeout *Timeout `json:"tcpDialTimeout,omitempty"`
+	TCPDialTimeout *typesv1.Duration `json:"tcpDialTimeout,omitzero"`
 
 	// TCPKeepAlive specifies the interval between keep-alive probes
 	// for an active network connection. If negative, keep-alive
 	// probes are disabled.
-	TCPKeepAlive *Timeout `json:"tcpKeepAlive,omitempty"`
+	TCPKeepAlive *typesv1.Duration `json:"tcpKeepAlive,omitzero"`
 
 	// TLSHandshakeTimeout specifies the maximum amount of time to
 	// wait for a TLS handshake. Zero means no timeout.
-	TLSHandshakeTimeout *Timeout `json:"tlsHandshakeTimeout,omitempty"`
+	TLSHandshakeTimeout *typesv1.Duration `json:"tlsHandshakeTimeout,omitzero"`
 
 	// ResponseHeaderTimeout specifies the amount of time to wait for
 	// a server's response headers after fully writing the request
 	// (including its body, if any). This time does not include the
 	// time to read the response body.
-	ResponseHeaderTimeout *Timeout `json:"responseHeaderTimeout,omitempty"`
+	ResponseHeaderTimeout *typesv1.Duration `json:"responseHeaderTimeout,omitzero"`
 
 	// IdleConnTimeout is the maximum amount of time an idle
 	// (keep-alive) connection will remain idle before closing itself.
 	// Zero means no limit.
-	IdleConnTimeout *Timeout `json:"idleConnTimeout,omitempty"`
+	IdleConnTimeout *typesv1.Duration `json:"idleConnTimeout,omitzero"`
 }
 
 // Validate checks that timeout values are non-negative.
@@ -113,7 +74,7 @@ type TimeoutConfig struct {
 func (c *TimeoutConfig) Validate() error {
 	for _, check := range []struct {
 		name string
-		val  *Timeout
+		val  *typesv1.Duration
 	}{
 		{"timeout", c.Timeout},
 		{"tcpDialTimeout", c.TCPDialTimeout},
@@ -176,7 +137,7 @@ type TLSConfig struct {
 	// the global Config"; an explicit false on a host re-enables verification
 	// even when the global config sets true. See HostConfig for per-host merge
 	// semantics.
-	InsecureSkipVerify *bool `json:"insecureSkipVerify,omitempty"`
+	InsecureSkipVerify *bool `json:"insecureSkipVerify,omitzero"`
 
 	// RootCAsPEM is an inline PEM bundle of additional root CA certificates used
 	// to verify the server's TLS certificate. It is appended to the system trust
@@ -226,7 +187,22 @@ type ProtocolConfig struct {
 	// host over one TCP connection: a single connection loss or GOAWAY then
 	// affects all in-flight transfers at once. With HTTP/1.1 each concurrent
 	// request uses its own connection, at the cost of more TLS handshakes.
-	DisableHTTP2 *bool `json:"disableHTTP2,omitempty"`
+	DisableHTTP2 *bool `json:"disableHTTP2,omitzero"`
+
+	// PlainHTTP makes OCI registry clients use cleartext HTTP, also for https://
+	// references. Credentials go unencrypted: set it per host, never for a
+	// public registry. Helm charts follow it too: an oci:// chart uses the
+	// setting for its registry host, and a classic http:// repository URL is
+	// accepted only when its host is plainHTTP.
+	//
+	// Nil means HTTPS at the top level and "inherit" in a HostConfig; an
+	// explicit false on a host wins over a global true.
+	//
+	// This field alone decides the connection. A scheme prefix on a reference
+	// or base URL is deprecated and only checked against it: http:// on a host
+	// that is not plainHTTP is an error, https:// on a plainHTTP host warns
+	// about the downgrade. Set this field to true and drop the prefix.
+	PlainHTTP *bool `json:"plainHTTP,omitzero"`
 }
 
 // MergeProtocolConfig merges src into dst. Non-nil fields in src override dst.
@@ -235,8 +211,14 @@ func MergeProtocolConfig(dst, src *ProtocolConfig) ProtocolConfig {
 	if dst != nil {
 		out = *dst
 	}
-	if src != nil && src.DisableHTTP2 != nil {
+	if src == nil {
+		return out
+	}
+	if src.DisableHTTP2 != nil {
 		out.DisableHTTP2 = src.DisableHTTP2
+	}
+	if src.PlainHTTP != nil {
+		out.PlainHTTP = src.PlainHTTP
 	}
 	return out
 }
@@ -256,15 +238,15 @@ type RetryConfig struct {
 	// MaxRetries is the maximum number of retry attempts after the initial
 	// request. Zero means infinite retries. -1 disables retry entirely.
 	// Nil uses the library default (5).
-	MaxRetries *int `json:"maxRetries,omitempty"`
+	MaxRetries *int `json:"maxRetries,omitzero"`
 
 	// MinWait is the lower bound applied to the backoff duration between
 	// retry attempts. Nil uses the library default (200ms).
-	MinWait *Timeout `json:"minWait,omitempty"`
+	MinWait *typesv1.Duration `json:"minWait,omitzero"`
 
 	// MaxWait is the upper bound applied to the backoff duration between
 	// retry attempts. Nil uses the library default (3s).
-	MaxWait *Timeout `json:"maxWait,omitempty"`
+	MaxWait *typesv1.Duration `json:"maxWait,omitzero"`
 }
 
 // Validate checks that retry values are valid.
@@ -334,7 +316,7 @@ type HostConfig struct {
 
 	// Retry overrides the global retry policy for this host.
 	// Fields set here override the corresponding top-level retry value.
-	Retry *RetryConfig `json:"retry,omitempty"`
+	Retry *RetryConfig `json:"retry,omitzero"`
 }
 
 // Validate checks the per-host timeout and retry config for valid values.
@@ -374,7 +356,7 @@ type Config struct {
 	// Retry configures retry behavior for transient failures.
 	// Nil uses the library default policy (5 retries, exponential backoff
 	// with 200ms–3s bounds).
-	Retry *RetryConfig `json:"retry,omitempty"`
+	Retry *RetryConfig `json:"retry,omitzero"`
 
 	// Hosts maps hostname (or hostname:port) to per-host settings.
 	// Fields set here override the corresponding top-level value for that host.
@@ -498,7 +480,7 @@ func LookupConfig(cfg *genericv1.Config) (*Config, error) {
 	}
 
 	if merged.Timeout == nil {
-		merged.Timeout = NewTimeout(time.Duration(DefaultTimeout))
+		merged.Timeout = typesv1.NewDuration(time.Duration(DefaultTimeout))
 	}
 
 	return merged, nil

@@ -3,7 +3,7 @@ package integration_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -35,6 +35,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const waitTimeout = 2 * time.Minute
@@ -221,7 +222,7 @@ func waitForNotReady(t *testing.T, ctx context.Context, c client.Client, obj *v1
 // mustJSON marshals v, which the test builds and is always valid.
 func mustJSON(t *testing.T, v any) []byte {
 	t.Helper()
-	data, err := json.Marshal(v)
+	data, err := json.Marshal(v, runtime.JSONOptions)
 	require.NoError(t, err)
 	return data
 }

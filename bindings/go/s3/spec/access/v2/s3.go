@@ -1,7 +1,8 @@
 package v2
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"strings"
 
@@ -51,13 +52,25 @@ type S3 struct {
 	// UsePathStyle enables path-style addressing (<endpoint>/<bucket>/<key>, bucket in
 	// the path instead of the host). Required by most self-hosted S3-compatible stores.
 	// Defaults to false.
-	UsePathStyle bool `json:"usePathStyle,omitempty"`
+	UsePathStyle bool `json:"usePathStyle,omitzero"`
 }
 
-// UnmarshalJSON accepts legacy field names for compatibility with older S3 records.
+// UnmarshalJSONFrom accepts legacy field names for compatibility with older S3 records.
 // Marshaling and the schema retain only the v2 field names.
-func (t *S3) UnmarshalJSON(data []byte) error {
-	var fields map[string]json.RawMessage
+func (t *S3) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	if dec.PeekKind() == 'n' {
+		// A JSON null leaves the value untouched.
+		_, err := dec.ReadValue()
+		return err
+	}
+	data, err := dec.ReadValue()
+	if err != nil {
+		return err
+	}
+	// ReadValue borrows the decoder's buffer, which the next read invalidates.
+	data = data.Clone()
+
+	var fields map[string]jsontext.Value
 	if err := json.Unmarshal(data, &fields); err != nil {
 		return err
 	}
@@ -80,7 +93,7 @@ func (t *S3) UnmarshalJSON(data []byte) error {
 		Bucket string `json:"bucket"`
 		Key    string `json:"key"`
 	}{plain: plain(*t), Bucket: t.BucketName, Key: t.ObjectKey}
-	if err := json.Unmarshal(data, &decoded); err != nil {
+	if err := json.Unmarshal(data, &decoded, json.MatchCaseInsensitiveNames(true)); err != nil {
 		return err
 	}
 	if legacy {

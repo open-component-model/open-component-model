@@ -7,6 +7,22 @@
 # Prerequisites (applied before this file):
 #   - Namespace: sovereign-product
 #   - Secret: acme-signing-key (an .ocmconfig requesting verification of the "default" signature)
+# HTTP client configuration: the air-gapped registry serves plain HTTP, and the controller
+# talks plain HTTP only when the configuration says so. A Component that sets its own
+# ocmConfig does not inherit the Repository's, so it lists the ConfigMap next to the
+# signing key. Resources and Deployers inherit both from the Component.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ocm-plain-http
+  namespace: sovereign-product
+data:
+  .ocmconfig: |
+    type: generic.config.ocm.software/v1
+    configurations:
+      - type: http.config.ocm.software/v1alpha1
+        plainHTTP: true
+---
 # OCM Repository pointing to local air-gapped registry
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Repository
@@ -18,6 +34,10 @@ spec:
     baseUrl: http://registry:5000
     type: OCIRegistry
   interval: 10m
+  ocmConfig:
+    - apiVersion: v1
+      kind: ConfigMap
+      name: ocm-plain-http
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Component
@@ -34,6 +54,9 @@ spec:
     - apiVersion: v1
       kind: Secret
       name: acme-signing-key
+    - apiVersion: v1
+      kind: ConfigMap
+      name: ocm-plain-http
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Resource

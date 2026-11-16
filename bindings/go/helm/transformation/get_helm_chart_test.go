@@ -1,7 +1,7 @@
 package transformation_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,12 +13,14 @@ import (
 	"helm.sh/helm/v4/pkg/chart"
 	"helm.sh/helm/v4/pkg/chart/loader"
 
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	helmresource "ocm.software/open-component-model/bindings/go/helm/repository/resource"
 	"ocm.software/open-component-model/bindings/go/helm/spec/access"
 	"ocm.software/open-component-model/bindings/go/helm/transformation"
 	"ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -43,6 +45,12 @@ func newTestScheme() *runtime.Scheme {
 	return scheme
 }
 
+// plainHTTPConfig marks every host as plain HTTP, which the httptest servers
+// in this package are.
+func plainHTTPConfig() *httpv1alpha1.Config {
+	return &httpv1alpha1.Config{ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: new(true)}}
+}
+
 func TestGetHelmChart_Transform(t *testing.T) {
 	t.Parallel()
 
@@ -63,13 +71,13 @@ func TestGetHelmChart_Transform(t *testing.T) {
 
 			transform := &transformation.GetHelmChart{
 				Scheme:             scheme,
-				ResourceRepository: helmresource.NewResourceRepository(nil),
+				ResourceRepository: helmresource.NewResourceRepository(nil, helmresource.WithHTTPConfig(plainHTTPConfig())),
 			}
 
 			helmAccessData, err := json.Marshal(map[string]string{
 				"helmRepository": srv.URL,
 				"helmChart":      "mychart-0.1.0.tgz",
-			})
+			}, runtime.JSONOptions)
 			r.NoError(err)
 
 			spec := &v1alpha1.GetHelmChart{
@@ -105,7 +113,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 			r.NotNil(helmOutput.Output.Resource)
 
 			// Verify chart file was created
-			chartPath := strings.TrimPrefix(helmOutput.Output.ChartFile.URI, "file://")
+			chartPath := filePath(t, helmOutput.Output.ChartFile.URI)
 			assert.FileExists(t, chartPath)
 			t.Cleanup(func() {
 				_ = os.RemoveAll(chartPath)
@@ -132,13 +140,13 @@ func TestGetHelmChart_Transform(t *testing.T) {
 
 			transform := &transformation.GetHelmChart{
 				Scheme:             scheme,
-				ResourceRepository: helmresource.NewResourceRepository(nil),
+				ResourceRepository: helmresource.NewResourceRepository(nil, helmresource.WithHTTPConfig(plainHTTPConfig())),
 			}
 
 			helmAccessData, err := json.Marshal(map[string]string{
 				"helmRepository": srv.URL,
 				"helmChart":      "mychart-0.1.0.tgz",
-			})
+			}, runtime.JSONOptions)
 			r.NoError(err)
 
 			spec := &v1alpha1.GetHelmChart{
@@ -172,7 +180,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 			r.True(ok)
 			r.NotNil(helmOutput.Output)
 
-			chartPath := strings.TrimPrefix(helmOutput.Output.ChartFile.URI, "file://")
+			chartPath := filePath(t, helmOutput.Output.ChartFile.URI)
 			assert.FileExists(t, chartPath)
 			t.Cleanup(func() {
 				_ = os.RemoveAll(chartPath)
@@ -203,13 +211,13 @@ func TestGetHelmChart_Transform(t *testing.T) {
 
 			transform := &transformation.GetHelmChart{
 				Scheme:             scheme,
-				ResourceRepository: helmresource.NewResourceRepository(nil),
+				ResourceRepository: helmresource.NewResourceRepository(nil, helmresource.WithHTTPConfig(plainHTTPConfig())),
 			}
 
 			helmAccessData, err := json.Marshal(map[string]string{
 				"helmRepository": srv.URL,
 				"helmChart":      "mychart-0.1.0.tgz",
-			})
+			}, runtime.JSONOptions)
 			r.NoError(err)
 
 			spec := &v1alpha1.GetHelmChart{
@@ -245,7 +253,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 			r.NotNil(helmOutput.Output)
 
 			// Verify chart was saved under the specified output directory
-			chartPath := strings.TrimPrefix(helmOutput.Output.ChartFile.URI, "file://")
+			chartPath := filePath(t, helmOutput.Output.ChartFile.URI)
 			assert.FileExists(t, chartPath)
 			assert.True(t, strings.HasPrefix(chartPath, outputDir))
 		})
@@ -264,13 +272,13 @@ func TestGetHelmChart_Transform(t *testing.T) {
 
 		transform := &transformation.GetHelmChart{
 			Scheme:             scheme,
-			ResourceRepository: helmresource.NewResourceRepository(nil),
+			ResourceRepository: helmresource.NewResourceRepository(nil, helmresource.WithHTTPConfig(plainHTTPConfig())),
 		}
 
 		helmAccessData, err := json.Marshal(map[string]string{
 			"helmRepository": srv.URL,
 			"helmChart":      "mychart-0.1.0.tgz",
-		})
+		}, runtime.JSONOptions)
 		r.NoError(err)
 
 		spec := &v1alpha1.GetHelmChart{
@@ -306,7 +314,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 		r.NotNil(helmOutput.Output.Resource)
 
 		// Verify chart file was created
-		chartPath := strings.TrimPrefix(helmOutput.Output.ChartFile.URI, "file://")
+		chartPath := filePath(t, helmOutput.Output.ChartFile.URI)
 		assert.FileExists(t, chartPath)
 		t.Cleanup(func() {
 			_ = os.RemoveAll(chartPath)
@@ -332,7 +340,7 @@ func TestGetHelmChart_Transform(t *testing.T) {
 
 		transform := &transformation.GetHelmChart{
 			Scheme:             scheme,
-			ResourceRepository: helmresource.NewResourceRepository(nil),
+			ResourceRepository: helmresource.NewResourceRepository(nil, helmresource.WithHTTPConfig(plainHTTPConfig())),
 		}
 
 		spec := &v1alpha1.GetHelmChart{
@@ -356,14 +364,19 @@ func compareFiles(t *testing.T, original string, downloaded string) {
 	originalData, err := os.ReadFile(original)
 	r.NoError(err)
 
-	// read downloaded file
-	// strip file:// prefix from URI to get local file path
-	downloaded = strings.TrimPrefix(downloaded, "file://")
-	outputData, err := os.ReadFile(downloaded)
+	outputData, err := os.ReadFile(filePath(t, downloaded))
 	r.NoError(err)
 
 	// check contents are the same
 	assert.Equal(t, originalData, outputData, "downloaded content should match original")
+}
+
+// filePath returns the local path of the file URI a transformation outputs.
+func filePath(t *testing.T, uri string) string {
+	t.Helper()
+	path, err := filesystem.FilePathFromURI(uri)
+	require.NoError(t, err)
+	return path
 }
 
 func compareProvFiles(t *testing.T, helmOutput *v1alpha1.GetHelmChart) {

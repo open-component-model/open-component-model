@@ -5,7 +5,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -18,13 +19,14 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3"
+	"github.com/oras-project/oras-go/v3/content"
+	"github.com/oras-project/oras-go/v3/content/memory"
 	"github.com/stretchr/testify/require"
 	slogcontext "github.com/veqryn/slog-context"
-	"oras.land/oras-go/v2"
-	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/content/memory"
 
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 type tarEntry struct {
@@ -108,7 +110,8 @@ func TestLayoutVerifier_OCMLayout(t *testing.T) {
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		MediaType: ociImageSpecV1.MediaTypeImageIndex,
 		Manifests: []ociImageSpecV1.Descriptor{manifestOf("a"), manifestOf("b")},
-	})
+	}, runtime.JSONOptions)
+
 	require.NoError(t, err)
 	index := pushBytes(t, src, ociImageSpecV1.MediaTypeImageIndex, indexData)
 
@@ -135,7 +138,8 @@ func TestLayoutVerifier_RefusesTamperedLayouts(t *testing.T) {
 		MediaType: ociImageSpecV1.MediaTypeImageManifest,
 		Config:    config,
 		Layers:    []ociImageSpecV1.Descriptor{layer},
-	})
+	}, runtime.JSONOptions)
+
 	require.NoError(t, err)
 	manifest := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, manifestData)
 
@@ -144,7 +148,8 @@ func TestLayoutVerifier_RefusesTamperedLayouts(t *testing.T) {
 			Versioned:   specs.Versioned{SchemaVersion: 2},
 			Manifests:   []ociImageSpecV1.Descriptor{manifest},
 			Annotations: annotations,
-		})
+		}, runtime.JSONOptions)
+
 		require.NoError(t, err)
 		return tarEntry{name: ociImageSpecV1.ImageIndexFile, data: data}
 	}
@@ -245,7 +250,8 @@ func TestLayoutVerifier_WarnsAboutUntrackedContent(t *testing.T) {
 			MediaType: ociImageSpecV1.MediaTypeImageManifest,
 			Config:    config,
 			Layers:    []ociImageSpecV1.Descriptor{layer},
-		})
+		}, runtime.JSONOptions)
+
 		require.NoError(t, err)
 		return content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, data), data
 	}
@@ -256,7 +262,7 @@ func TestLayoutVerifier_WarnsAboutUntrackedContent(t *testing.T) {
 	main, mainData := manifestWith(layer)
 	other, otherData := manifestWith(otherLayer)
 	main.Annotations = map[string]string{ociImageSpecV1.AnnotationRefName: "main"}
-	indexData, err := json.Marshal(ociImageSpecV1.Index{Versioned: specs.Versioned{SchemaVersion: 2}, Manifests: []ociImageSpecV1.Descriptor{main, other}})
+	indexData, err := json.Marshal(ociImageSpecV1.Index{Versioned: specs.Versioned{SchemaVersion: 2}, Manifests: []ociImageSpecV1.Descriptor{main, other}}, runtime.JSONOptions)
 	require.NoError(t, err)
 	tracked := []tarEntry{
 		{name: ociImageSpecV1.ImageLayoutFile, data: []byte(`{"imageLayoutVersion":"1.0.0"}`)},
@@ -372,12 +378,13 @@ func TestLayoutVerifier_RefusesRootsConsumersWouldNotPick(t *testing.T) {
 			MediaType: ociImageSpecV1.MediaTypeImageManifest,
 			Config:    config,
 			Layers:    layers,
-		})
+		}, runtime.JSONOptions)
+
 		require.NoError(t, err)
 		return content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, data), data
 	}
 	indexOf := func(manifests ...ociImageSpecV1.Descriptor) tarEntry {
-		data, err := json.Marshal(ociImageSpecV1.Index{Versioned: specs.Versioned{SchemaVersion: 2}, Manifests: manifests})
+		data, err := json.Marshal(ociImageSpecV1.Index{Versioned: specs.Versioned{SchemaVersion: 2}, Manifests: manifests}, runtime.JSONOptions)
 		require.NoError(t, err)
 		return tarEntry{name: ociImageSpecV1.ImageIndexFile, data: data}
 	}
@@ -424,7 +431,8 @@ func TestLayoutVerifier_LargeManifests(t *testing.T) {
 			Config:      config,
 			Layers:      []ociImageSpecV1.Descriptor{layer},
 			Annotations: annotations,
-		})
+		}, runtime.JSONOptions)
+
 		require.NoError(t, err)
 		return data
 	}
@@ -435,7 +443,7 @@ func TestLayoutVerifier_LargeManifests(t *testing.T) {
 		}
 		return annotations
 	}
-	missingJSON, err := json.Marshal(missingLayer)
+	missingJSON, err := json.Marshal(missingLayer, runtime.JSONOptions)
 	require.NoError(t, err)
 	// withMember adds a member with raw as its value to the front of a manifest.
 	withMember := func(name, raw string) []byte {
@@ -485,9 +493,9 @@ func TestLayoutVerifier_LargeManifests(t *testing.T) {
 			manifest: func() []byte {
 				var m map[string]any
 				require.NoError(t, json.Unmarshal(manifestWith(nil), &m))
-				m["Layers"] = []json.RawMessage{missingJSON}
+				m["Layers"] = []jsontext.Value{missingJSON}
 				delete(m, "layers")
-				data, err := json.Marshal(m)
+				data, err := json.Marshal(m, runtime.JSONOptions)
 				require.NoError(t, err)
 				return data
 			},
@@ -498,7 +506,7 @@ func TestLayoutVerifier_LargeManifests(t *testing.T) {
 			r := require.New(t)
 			manifestData := tc.manifest()
 			manifest := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, manifestData)
-			indexData, err := json.Marshal(ociImageSpecV1.Index{Versioned: specs.Versioned{SchemaVersion: 2}, Manifests: []ociImageSpecV1.Descriptor{manifest}})
+			indexData, err := json.Marshal(ociImageSpecV1.Index{Versioned: specs.Versioned{SchemaVersion: 2}, Manifests: []ociImageSpecV1.Descriptor{manifest}}, runtime.JSONOptions)
 			r.NoError(err)
 			archive := gzippedTar(t,
 				blobEntry(layer, layerData), blobEntry(config, configData), blobEntry(manifest, manifestData),

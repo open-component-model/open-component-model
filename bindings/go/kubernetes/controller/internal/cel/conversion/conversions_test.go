@@ -1,13 +1,15 @@
 package conversion
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"cel.dev/cel-go/cel"
 	"cel.dev/cel-go/common/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestGoNativeType_EmptyList(t *testing.T) {
@@ -63,7 +65,7 @@ func TestGoNativeType_ListMap(t *testing.T) {
 	assert.EqualValues(t, 2, map2["b"])
 
 	// Check JSON marshalling
-	_, err = json.Marshal(native)
+	_, err = json.Marshal(native, runtime.JSONOptions)
 	assert.NoError(t, err, "Should be JSON marshallable")
 }
 
@@ -89,7 +91,7 @@ func TestGoNativeType_ComplexNested(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check JSON marshalling
-	_, err = json.Marshal(native)
+	_, err = json.Marshal(native, runtime.JSONOptions)
 	assert.NoError(t, err, "Should be JSON marshallable")
 }
 
@@ -115,7 +117,7 @@ func TestGoNativeType_Bytes(t *testing.T) {
 	assert.Equal(t, []byte("hello world"), bytes)
 
 	// Check JSON marshalling
-	marshalled, err := json.Marshal(native)
+	marshalled, err := json.Marshal(native, runtime.JSONOptions)
 	require.NoError(t, err, "Should be JSON marshallable")
 	assert.NotEmpty(t, marshalled)
 }
@@ -179,7 +181,7 @@ func TestGoNativeType_Duration(t *testing.T) {
 	assert.Equal(t, "1h30m0s", str)
 
 	// Check JSON marshalling
-	marshalled, err := json.Marshal(native)
+	marshalled, err := json.Marshal(native, runtime.JSONOptions)
 	require.NoError(t, err, "Should be JSON marshallable")
 	assert.NotEmpty(t, marshalled)
 }
@@ -207,7 +209,7 @@ func TestGoNativeType_Timestamp(t *testing.T) {
 	assert.Equal(t, "2024-01-15T10:30:00Z", str)
 
 	// Check JSON marshalling
-	marshalled, err := json.Marshal(native)
+	marshalled, err := json.Marshal(native, runtime.JSONOptions)
 	require.NoError(t, err, "Should be JSON marshallable")
 	assert.NotEmpty(t, marshalled)
 }

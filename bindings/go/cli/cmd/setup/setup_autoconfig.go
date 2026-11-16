@@ -1,7 +1,7 @@
 package setup
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"os"
@@ -157,12 +157,12 @@ func buildDockerConfigOCMConfig(dockerConfigPath string) (*genericv1.Config, err
 
 // toRaw converts a typed object into a runtime.Raw by round-tripping through JSON.
 func toRaw(obj runtime.Typed) (*runtime.Raw, error) {
-	data, err := json.Marshal(obj)
+	data, err := json.Marshal(obj, runtime.JSONOptions)
 	if err != nil {
 		return nil, err
 	}
 	raw := &runtime.Raw{}
-	if err := raw.UnmarshalJSON(data); err != nil {
+	if err := json.Unmarshal(data, raw); err != nil {
 		return nil, err
 	}
 	return raw, nil

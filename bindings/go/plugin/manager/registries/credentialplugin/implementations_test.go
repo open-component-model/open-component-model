@@ -1,7 +1,7 @@
 package credentialplugin
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -55,7 +55,7 @@ func TestGetConsumerIdentity(t *testing.T) {
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == GetConsumerIdentityEndpoint {
-						assert.NoError(t, json.NewEncoder(w).Encode(map[string]string{"id": "test-identity", "type": pluginDummyType.String()}))
+						assert.NoError(t, json.MarshalWrite(w, map[string]string{"id": "test-identity", "type": pluginDummyType.String()}, runtime.JSONOptions))
 						return
 					}
 					w.WriteHeader(http.StatusNotFound)
@@ -123,7 +123,7 @@ func TestResolve(t *testing.T) {
 			setupMock: func() *httptest.Server {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == ResolveEndpoint {
-						assert.NoError(t, json.NewEncoder(w).Encode(map[string]string{"resolved": "credentials", "token": "abc123"}))
+						assert.NoError(t, json.MarshalWrite(w, map[string]string{"resolved": "credentials", "token": "abc123"}, runtime.JSONOptions))
 						return
 					}
 					w.WriteHeader(http.StatusNotFound)
@@ -166,7 +166,7 @@ func TestResolve(t *testing.T) {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == ResolveEndpoint {
 						assert.Empty(t, r.Header.Get("Authorization"), "nil credentials must not set Authorization header")
-						assert.NoError(t, json.NewEncoder(w).Encode(map[string]string{"resolved": "credentials"}))
+						assert.NoError(t, json.MarshalWrite(w, map[string]string{"resolved": "credentials"}, runtime.JSONOptions))
 						return
 					}
 					w.WriteHeader(http.StatusNotFound)

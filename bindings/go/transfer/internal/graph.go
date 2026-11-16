@@ -2,7 +2,7 @@ package internal
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -570,7 +570,7 @@ func helmFileExpressions(id, resourceID string) []string {
 }
 
 func addDescriptorToEnvironment(v2desc *descriptorv2.Descriptor, id string, tgd *transformv1alpha1.TransformationGraphDefinition) error {
-	rawV2Desc, err := json.Marshal(v2desc)
+	rawV2Desc, err := json.Marshal(v2desc, runtime.JSONOptions)
 	if err != nil {
 		return fmt.Errorf("cannot marshal v2 descriptor: %w", err)
 	}

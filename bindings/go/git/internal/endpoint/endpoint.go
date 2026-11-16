@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/go-git/go-git/v6/plumbing/transport"
+
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 )
 
 // Endpoint is a parsed git repository URL with a lowercase protocol and host.
@@ -87,12 +89,13 @@ func Parse(repository string) (*Endpoint, error) {
 			return nil, fmt.Errorf("file repository path must not be empty")
 		}
 
+		ep.Path = localPath(ep.Path)
 		if !filepath.IsAbs(ep.Path) {
 			if ep.Path, err = filepath.Abs(ep.Path); err != nil {
 				return nil, fmt.Errorf("cannot resolve file repository path: %w", err)
 			}
 		}
-		ep.URL = "file://" + ep.Path
+		ep.URL = fileURL(ep.Path)
 	default:
 		return nil, fmt.Errorf("unsupported git transport %q", ep.Protocol)
 	}
@@ -118,6 +121,20 @@ var ErrLocalRepository = errors.New("git access must not reference a local git r
 // IsLocal reports whether the endpoint refers to a local repository, i.e. a
 // file:// URL or a plain local path, which a remote consumer cannot reach.
 func (ep *Endpoint) IsLocal() bool { return ep.Protocol == protocolFile }
+
+// localPath turns the path of a file URL or a plain path into an OS path. A file
+// URL carries a Windows drive as /C:/path, which is not a valid path on its own.
+func localPath(p string) string {
+	return filesystem.FilePathFromURLPath(p)
+}
+
+// fileURL renders an absolute OS path as a file URL. It does not go through
+// filesystem.URIFromFilePath: go-git takes everything after file:// verbatim as
+// the path, so an escaped path (a space as %20) would not resolve. On Windows the
+// drive is written as /C:/path, which go-git strips back to C:/path.
+func fileURL(path string) string {
+	return "file://" + filesystem.URLPathFromFilePath(path)
+}
 
 func Port(ep *Endpoint) string {
 	if ep.Port != 0 {

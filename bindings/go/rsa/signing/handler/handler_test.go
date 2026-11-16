@@ -228,7 +228,7 @@ func Test_RSA_Handler(t *testing.T) {
 									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: aPub,
 								}
 							},
-							wantErr: "issuer mismatch between \"CN=mismatch\" and \"CN=signer\"",
+							wantErr: "issuer mismatch: \"CN=mismatch\" matches neither the subject \"CN=signer\" nor the issuer \"CN=signer\"",
 						},
 						{
 							name: "pem_signature_with_mismatched_credentials_pub_fails",
@@ -359,6 +359,52 @@ func Test_RSA_Handler(t *testing.T) {
 										MediaType: si.MediaType,
 										Value:     si.Value,
 										Issuer:    c.interm.Subject.String(),
+									},
+								}
+							},
+							creds: func(t *testing.T) runtime.Typed {
+								t.Helper()
+								return &rsacredentialsv1.RSACredentials{
+									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: rootPEM,
+								}
+							},
+						},
+						{
+							// OCM v1 writes the Subject of the signing certificate into the
+							// signature Issuer field, so a v1 certificate-chain signature must
+							// verify even though the Subject differs from the leaf's X.509 Issuer.
+							name: "pem_signature_issuer_matches_leaf_subject_field",
+							build: func(t *testing.T) descruntime.Signature {
+								t.Helper()
+								c := buildChain(t)
+
+								dir := t.TempDir()
+								privPath := filepath.Join(dir, "leaf.key")
+								writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
+								// Root is NOT embedded — it will come from credentials.
+								embedded := writeCertsPEM(t, dir, "embedded.pem", c.leaf, c.interm)
+
+								cfg := v1alpha1.Config{
+									SignatureAlgorithm:      alg,
+									SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
+								}
+								si, err := h.Sign(t.Context(), d, &cfg, &rsacredentialsv1.RSACredentials{
+									Type:              rsacredentialsv1.VersionedType,
+									PrivateKeyPEMFile: privPath,
+									PublicKeyPEMFile:  embedded,
+								})
+								require.NoError(t, err)
+
+								rootPEM = writeCertsPEM(t, t.TempDir(), "root.pem", c.root)
+
+								require.NotEqual(t, c.leaf.Subject.String(), c.leaf.Issuer.String())
+								return descruntime.Signature{
+									Digest: d,
+									Signature: descruntime.SignatureInfo{
+										Algorithm: si.Algorithm,
+										MediaType: si.MediaType,
+										Value:     si.Value,
+										Issuer:    c.leaf.Subject.String(),
 									},
 								}
 							},

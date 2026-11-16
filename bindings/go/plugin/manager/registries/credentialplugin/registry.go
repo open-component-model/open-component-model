@@ -2,10 +2,7 @@ package credentialplugin
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"os"
-	"os/exec"
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -30,8 +27,8 @@ type Registry struct {
 }
 
 type constructedPlugin struct {
-	Plugin credentialpluginv1.CredentialPluginContract[runtime.Typed]
-	cmd    *exec.Cmd
+	Plugin  credentialpluginv1.CredentialPluginContract[runtime.Typed]
+	process plugins.Process
 }
 
 // NewRegistry creates a new credential plugin registry.
@@ -148,25 +145,23 @@ func startAndReturnPlugin(ctx context.Context, r *Registry, plugin *mtypes.Plugi
 
 	instance := NewCredentialPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, r.capabilities[plugin.ID])
 	r.constructedPlugins[plugin.ID] = &constructedPlugin{
-		Plugin: instance,
-		cmd:    plugin.Cmd,
+		Plugin:  instance,
+		process: plugins.NewProcess(plugin, client, loc),
 	}
 
 	return instance, nil
 }
 
-// Shutdown will loop through all _STARTED_ plugins and will send an Interrupt signal to them.
+// Shutdown shuts down all _STARTED_ plugins.
 func (r *Registry) Shutdown(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var errs error
+	processes := make([]plugins.Process, 0, len(r.constructedPlugins))
 	for _, p := range r.constructedPlugins {
-		if perr := p.cmd.Process.Signal(os.Interrupt); perr != nil && !errors.Is(perr, os.ErrProcessDone) {
-			errs = errors.Join(errs, perr)
-		}
+		processes = append(processes, p.process)
 	}
 
-	return errs
+	return plugins.ShutdownAll(ctx, processes)
 }
 
 // Scheme returns the registry's type scheme.

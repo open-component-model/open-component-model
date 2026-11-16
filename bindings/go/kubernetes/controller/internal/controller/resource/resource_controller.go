@@ -3,7 +3,7 @@ package resource
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"strings"
@@ -129,7 +129,9 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 
 				// Get list of resources that reference the component
 				list := &v1alpha1.ResourceList{}
-				if err := r.List(ctx, list, client.MatchingFields{fieldName: component.GetName()}); err != nil {
+				if err := r.List(ctx, list,
+					client.InNamespace(component.GetNamespace()),
+					client.MatchingFields{fieldName: component.GetName()}); err != nil {
 					return []reconcile.Request{}
 				}
 
@@ -386,7 +388,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	logger.V(1).Info("retrieved resource", "component", fmt.Sprintf("%s:%s", resourceDescriptor.Component.Name, resourceDescriptor.Component.Version),
 		"resource", matchedResource.Name, "duration", time.Since(startRetrievingResource))
 
-	resourceRepoSpecData, err := json.Marshal(resourceRepoSpec)
+	resourceRepoSpecData, err := json.Marshal(resourceRepoSpec, runtime.JSONOptions)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.MarshalFailedReason, err.Error())
 
@@ -436,7 +438,7 @@ func setResourceStatus(
 
 // buildResourceInfo constructs a ResourceInfo from a descriptor resource.
 func buildResourceInfo(res *descriptor.Resource) (*v1alpha1.ResourceInfo, error) {
-	raw, err := json.Marshal(res.Access)
+	raw, err := json.Marshal(res.Access, runtime.JSONOptions)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling access spec: %w", err)
 	}
@@ -461,7 +463,7 @@ func buildResourceInfo(res *descriptor.Resource) (*v1alpha1.ResourceInfo, error)
 func convertLabels(in []descriptor.Label) ([]v1alpha1.Label, error) {
 	out := make([]v1alpha1.Label, len(in))
 	for i, l := range in {
-		valueBytes, err := json.Marshal(l.Value)
+		valueBytes, err := json.Marshal(l.Value, runtime.JSONOptions)
 		if err != nil {
 			return nil, fmt.Errorf("marshaling label %q value: %w", l.Name, err)
 		}

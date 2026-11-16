@@ -8,6 +8,10 @@ spec:
     baseUrl: http://ocm-e2e-image-registry:5000
     type: OCIRegistry
   interval: 10m
+  ocmConfig:
+    # Allows plain HTTP to the registry above (created by test/e2e/hacks/setup.sh).
+    - kind: ConfigMap
+      name: ocm-plain-http
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Component
@@ -32,11 +36,90 @@ spec:
       resource:
         name: kro-rgd
 ---
+# The NamespacedDeployer applies the cluster-scoped ResourceGraphDefinition with the permissions of this
+# service account, so it needs a ClusterRole for ResourceGraphDefinitions.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: helm-simple-nested-status-deployer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: helm-simple-nested-status-deployer
+rules:
+  - apiGroups: ["kro.run"]
+    resources: ["resourcegraphdefinitions"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: helm-simple-nested-status-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: helm-simple-nested-status-deployer
+subjects:
+  - kind: ServiceAccount
+    name: helm-simple-nested-status-deployer
+    namespace: default
+---
 apiVersion: delivery.ocm.software/v1alpha1
-kind: Deployer
+kind: NamespacedDeployer
 metadata:
   name: helm-simple-nested-status-deployer
 spec:
   resourceRef:
     name: helm-simple-nested-status-resource-rgd
+  serviceAccountName: helm-simple-nested-status-deployer
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: Resource
+metadata:
+  name: helm-simple-nested-status-crossplane-resource-xrd
+spec:
+  componentRef:
+    name: helm-simple-nested-status-component
+  resource:
+    byReference:
+      resource:
+        name: crossplane-xrd
+---
+# The NamespacedDeployer applies the cluster-scoped Crossplane XRD and Composition with the
+# permissions of this service account, so it needs a ClusterRole for apiextensions.crossplane.io.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: helm-simple-nested-status-crossplane-deployer
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: helm-simple-nested-status-crossplane-deployer
+rules:
+  - apiGroups: ["apiextensions.crossplane.io"]
+    resources: ["compositeresourcedefinitions", "compositions"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: helm-simple-nested-status-crossplane-deployer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: helm-simple-nested-status-crossplane-deployer
+subjects:
+  - kind: ServiceAccount
+    name: helm-simple-nested-status-crossplane-deployer
     namespace: default
+---
+apiVersion: delivery.ocm.software/v1alpha1
+kind: NamespacedDeployer
+metadata:
+  name: helm-simple-nested-status-crossplane-deployer
+spec:
+  resourceRef:
+    name: helm-simple-nested-status-crossplane-resource-xrd
+  serviceAccountName: helm-simple-nested-status-crossplane-deployer

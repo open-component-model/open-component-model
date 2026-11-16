@@ -2,7 +2,7 @@ package componentversionrepository
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -114,7 +114,7 @@ func TestGetComponentVersion(t *testing.T) {
 	response := defaultDescriptor()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == DownloadComponentVersion && r.Method == http.MethodGet {
-			err := json.NewEncoder(w).Encode(response)
+			err := json.MarshalWrite(w, response, runtime.JSONOptions)
 			assert.NoError(t, err)
 			return
 		}
@@ -145,7 +145,7 @@ func TestListComponentVersions(t *testing.T) {
 	// Setup test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == ListComponentVersions && r.Method == http.MethodGet {
-			err := json.NewEncoder(w).Encode([]string{"v0.0.1", "v0.0.2"})
+			err := json.MarshalWrite(w, []string{"v0.0.1", "v0.0.2"}, runtime.JSONOptions)
 			assert.NoError(t, err)
 			return
 		}
@@ -177,7 +177,7 @@ func TestAddLocalResource(t *testing.T) {
 	resource := desc.Component.Resources[0]
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == UploadLocalResource && r.Method == http.MethodPost {
-			err := json.NewEncoder(w).Encode(resource)
+			err := json.MarshalWrite(w, resource, runtime.JSONOptions)
 			assert.NoError(t, err)
 			return
 		}
@@ -239,7 +239,7 @@ func TestGetLocalResource(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == DownloadLocalResource && r.Method == http.MethodGet {
 			assert.NoError(t, os.WriteFile(f.Name(), []byte(`test`), os.ModePerm))
-			assert.NoError(t, json.NewEncoder(w).Encode(response))
+			assert.NoError(t, json.MarshalWrite(w, response, runtime.JSONOptions))
 
 			return
 		}
@@ -304,7 +304,7 @@ func TestGetLocalSource(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == DownloadLocalSource && r.Method == http.MethodGet {
 			assert.NoError(t, os.WriteFile(f.Name(), []byte(`test`), os.ModePerm))
-			assert.NoError(t, json.NewEncoder(w).Encode(response))
+			assert.NoError(t, json.MarshalWrite(w, response, runtime.JSONOptions))
 
 			return
 		}

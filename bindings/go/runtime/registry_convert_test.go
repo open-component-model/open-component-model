@@ -1,7 +1,7 @@
 package runtime_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -338,7 +338,7 @@ func TestConvert_RawToUnstructured_RejectsTrailingData(t *testing.T) {
 		into := runtime.NewUnstructured()
 		err := scheme.Convert(&runtime.Raw{Type: typ, Data: []byte(data)}, &into)
 		require.Error(t, err, "input: %s", data)
-		assert.Contains(t, err.Error(), "unexpected data after top-level JSON value")
+		assert.Contains(t, err.Error(), "after top-level value")
 	}
 }
 

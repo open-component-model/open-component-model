@@ -33,15 +33,22 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - description: Referenced Resource
+      jsonPath: .spec.resourceRef.name
+      name: Resource Ref
+      type: string
     - description: Indicates if the NamespacedDeployer is Ready
-      jsonPath: .status.conditions[?(@.type=="Ready")].message
+      jsonPath: .status.conditions[?(@.type=="Ready")].status
       name: Ready
-      priority: 1
       type: string
     - description: Displays the Age of the NamespacedDeployer
       jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
+    - description: Ready condition message
+      jsonPath: .status.conditions[?(@.type=="Ready")].message
+      name: Status
+      type: string
     name: v1alpha1
     schema:
       openAPIV3Schema:

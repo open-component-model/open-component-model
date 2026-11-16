@@ -81,7 +81,7 @@ func TestIngestTypedCredentialStrictDecoding(t *testing.T) {
 		CredentialTypeSchemeProvider: staticCredentialTypeSchemeProvider{scheme: ingestTestScheme(t)},
 	})
 	r.Error(err)
-	r.Contains(err.Error(), `unknown field "properties"`)
+	r.Contains(err.Error(), `unknown object member name "properties"`)
 	r.Contains(err.Error(), ingestTestCredentialsType.String())
 	r.Contains(err.Error(), "localhost", "error should identify the consumer identity")
 }

@@ -96,14 +96,15 @@ configurations:
       properties:
         username: %[3]q
         password: %[4]q
-`, targetRegistry.Host, targetRegistry.Port, targetRegistry.User, targetRegistry.Password)
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`, targetRegistry.Host, targetRegistry.Port, targetRegistry.User, targetRegistry.Password)
 
 	tempdir := t.TempDir()
 	cfgPath := filepath.Join(tempdir, "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
 	// Set up repository provider and credential resolver to verify transfers
-	repoProvider := provider.NewComponentVersionRepositoryProvider()
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithHTTPConfig(loadHTTPConfig(t, cfgPath)))
 	ocmconf, err := configuration.GetConfigFromPath(cfgPath)
 	r.NoError(err)
 	credconf, err := runtime.LookupCredentialConfig(ocmconf)
@@ -485,14 +486,15 @@ configurations:
       properties:
         username: %[3]q
         password: %[4]q
-`, targetRegistry.Host, targetRegistry.Port, targetRegistry.User, targetRegistry.Password)
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`, targetRegistry.Host, targetRegistry.Port, targetRegistry.User, targetRegistry.Password)
 
 	tempdir := t.TempDir()
 	cfgPath := filepath.Join(tempdir, "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
 	// Set up repository provider and credential resolver to verify transfers
-	repoProvider := provider.NewComponentVersionRepositoryProvider()
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithHTTPConfig(loadHTTPConfig(t, cfgPath)))
 	ocmconf, err := configuration.GetConfigFromPath(cfgPath)
 	r.NoError(err)
 	credconf, err := runtime.LookupCredentialConfig(ocmconf)

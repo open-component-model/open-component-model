@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/url"
 	"strings"
-	"syscall"
 )
 
 // BodyReadError marks an error returned while reading an HTTP response body,
@@ -66,9 +65,7 @@ func isTransient(err error, fromRoundTrip bool) bool {
 		var opErr *net.OpError
 		return errors.As(err, &opErr) && opErr.Op == "dial" && opErr.Timeout()
 	}
-	if errors.Is(err, syscall.ECONNRESET) ||
-		errors.Is(err, syscall.ECONNABORTED) ||
-		errors.Is(err, syscall.EPIPE) {
+	if isConnectionError(err) {
 		return true
 	}
 	if errors.Is(err, io.ErrUnexpectedEOF) && (fromRoundTrip || fromNetwork(err)) {

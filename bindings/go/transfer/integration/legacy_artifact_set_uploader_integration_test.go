@@ -4,13 +4,13 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/opencontainers/image-spec/specs-go"
 	ocispecv1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/content"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2/content"
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/ctf"
@@ -143,9 +143,10 @@ func transferLegacyArtifactSetCTFToOCI(t *testing.T, legacyMediaType, manifestTy
 
 	credentials := newCredResolver(t, registryCreds{registryAddr, user, password})
 	builder := transfer.NewDefaultBuilder(
-		provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir())),
-		ociresource.NewResourceRepository(nil),
+		provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig())),
+		ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig())),
 		credentials,
+		transfer.WithHTTPConfig(plainHTTPConfig()),
 	)
 	graph, err := builder.BuildAndCheck(definition)
 	r.NoError(err)
@@ -267,9 +268,10 @@ func Test_Integration_TransferDockerArtifactSetLocalBlob_OCIToOCI(t *testing.T) 
 		registryCreds{targetAddr, targetUser, targetPwd},
 	)
 	builder := transfer.NewDefaultBuilder(
-		provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir())),
-		ociresource.NewResourceRepository(nil),
+		provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig())),
+		ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig())),
 		credentials,
+		transfer.WithHTTPConfig(plainHTTPConfig()),
 	)
 	graph, err := builder.BuildAndCheck(definition)
 	r.NoError(err)
@@ -380,9 +382,10 @@ func Test_Integration_TransferDockerArtifactSetLocalBlob_CTFToCTF(t *testing.T) 
 	r.True(localBlobToLocalBlob, "docker artifact-set local blob must be transferred as a local blob")
 
 	builder := transfer.NewDefaultBuilder(
-		provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir())),
-		ociresource.NewResourceRepository(nil),
+		provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig())),
+		ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig())),
 		nil,
+		transfer.WithHTTPConfig(plainHTTPConfig()),
 	)
 	graph, err := builder.BuildAndCheck(definition)
 	r.NoError(err)
@@ -420,7 +423,7 @@ func legacyOCIIndexArtifactSet(t *testing.T, manifestType, indexType string) ([]
 		MediaType: manifestType,
 		Config:    config,
 		Layers:    []ocispecv1.Descriptor{layer},
-	})
+	}, runtime.JSONOptions)
 	r.NoError(err)
 	manifest := content.NewDescriptorFromBytes(manifestType, manifestData)
 
@@ -428,7 +431,7 @@ func legacyOCIIndexArtifactSet(t *testing.T, manifestType, indexType string) ([]
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		MediaType: indexType,
 		Manifests: []ocispecv1.Descriptor{manifest},
-	})
+	}, runtime.JSONOptions)
 	r.NoError(err)
 	root := content.NewDescriptorFromBytes(indexType, indexData)
 	root.Annotations = map[string]string{ocispecv1.AnnotationRefName: "v1.0.5"}
@@ -437,7 +440,7 @@ func legacyOCIIndexArtifactSet(t *testing.T, manifestType, indexType string) ([]
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		MediaType: ocispecv1.MediaTypeImageIndex,
 		Manifests: []ocispecv1.Descriptor{root},
-	})
+	}, runtime.JSONOptions)
 	r.NoError(err)
 
 	var archive bytes.Buffer

@@ -142,18 +142,18 @@ repository.delivery.ocm.software/my-repository created
 </details>
 <br>
 
-Verify the resource is ready and can access your registry (due to the complex status field of OCM resources, to show the status, we need to use `custom-columns`)
+Verify the resource is ready and can access your registry:
 
 ```shell
-kubectl get repository my-repository -o 'custom-columns=NAME:.metadata.name,READY:.status.conditions[0].message,AGE:.metadata.creationTimestamp'
+kubectl get repository my-repository
 ```
 
 <details>
 <summary>You should see this output</summary>
 
 ```text
-NAME            READY                                    AGE
-my-repository   Successfully reconciled OCM repository   2026-02-25T15:45:49Z
+NAME            TYPE          READY   AGE   STATUS
+my-repository   OCIRegistry   True    45s   Successfully reconciled OCM repository
 ```
 </details>
 
@@ -199,18 +199,18 @@ component.delivery.ocm.software/my-component created
 </details>
 <br>
 
-Verify the resource is ready and can access your registry (due to the complex status field of OCM resources, to show the status, we need to use `custom-columns`)
+Verify the resource is ready and can access your registry:
 
 ```shell
-kubectl get component my-component -o 'custom-columns=NAME:.metadata.name,READY:.status.conditions[0].message,AGE:.metadata.creationTimestamp'
+kubectl get component my-component
 ```
 
 <details>
 <summary>You should see this output</summary>
 
 ```text
-NAME           READY                   AGE
-my-component   Applied version 1.0.0   2026-02-25T15:49:58Z
+NAME           COMPONENT                       VERSION   READY   AGE   STATUS
+my-component   <your-namespace>/my-component   1.0.0     True    30s   Applied version 1.0.0
 ```
 </details>
 

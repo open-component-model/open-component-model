@@ -1,0 +1,25 @@
+{{- if .Values.prometheus.enable }}
+{{- $port := include "ocm-k8s-toolkit.prometheusMetricsPort" . }}
+apiVersion: v1
+kind: Service
+metadata:
+    labels:
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
+        helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        control-plane: controller-manager
+    name: {{ include "ocm-k8s-toolkit.resourceName" (dict "suffix" "controller-manager-metrics-service" "context" $) }}
+    namespace: {{ .Release.Namespace }}
+spec:
+    ports:
+        - name: metrics
+          port: {{ $port }}
+          protocol: TCP
+          {{- /* By name, so the Deployment must declare the port; see manager/manager.yaml. */}}
+          targetPort: metrics
+    selector:
+        app.kubernetes.io/name: {{ include "ocm-k8s-toolkit.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        control-plane: controller-manager
+{{- end }}

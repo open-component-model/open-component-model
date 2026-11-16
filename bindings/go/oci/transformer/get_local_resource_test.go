@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -156,7 +157,8 @@ func TestGetLocalResource_Transform_OCI(t *testing.T) {
 	require.NotNil(t, transformed.Output.Resource)
 
 	// Verify file was created in the output directory
-	outputFile := strings.ReplaceAll(transformed.Output.File.URI, "file://", "")
+	outputFile, err := filesystem.FilePathFromURI(transformed.Output.File.URI)
+	require.NoError(t, err)
 	assert.FileExists(t, outputFile)
 	assert.True(t, strings.HasPrefix(outputFile, tempDir))
 
@@ -254,7 +256,8 @@ func TestGetLocalResource_Transform_CTF(t *testing.T) {
 	assert.Contains(t, outputPath, "resource-")
 
 	// Clean up temp file
-	tempPath := outputPath[7:] // Remove "file://" prefix
+	tempPath, err := filesystem.FilePathFromURI(outputPath)
+	require.NoError(t, err)
 	if _, err := os.Stat(tempPath); err == nil {
 		os.Remove(tempPath)
 	}

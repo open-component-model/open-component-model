@@ -2,13 +2,15 @@ package resource
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"cel.dev/cel-go/cel"
 	"cel.dev/cel-go/ext"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func newTestEnv(t *testing.T) *cel.Env {
@@ -58,7 +60,7 @@ func TestEvalCEL(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			raw, err := json.Marshal(result)
+			raw, err := json.Marshal(result, runtime.JSONOptions)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, string(raw))
 		})
