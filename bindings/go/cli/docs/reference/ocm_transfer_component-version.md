@@ -134,18 +134,18 @@ transfer component-version --transfer-spec spec.yaml
 ### Options
 
 ```
-      --concurrency-limit int   maximum number of transformation nodes processed in parallel; independent nodes run concurrently while dependency ordering is preserved. Increase it to speed up large graphs, decrease it to reduce load on the registry (default 4)
-      --constraint string       version constraint evaluated by each version's configured scheme; versions with no applicable scheme are retained (e.g. ">= 1.0.0, < 2.0.0"); only used when no version is specified in the reference
-      --copy-resources          deprecated: copy all resources in the component version
-      --dry-run                 build and validate the graph but do not execute
-  -h, --help                    help for component-version
-      --latest                  if set, only the latest version of the component is transferred; only used when no version is specified in the reference
-  -o, --output enum             output format of the component descriptors
-                                (must be one of [json ndjson yaml]) (default yaml)
-  -r, --recursive               recursively discover and transfer component versions
-      --transfer-spec string    path to a transfer specification file (use "-" for stdin). The input must hold exactly one transfer spec document; OCM configuration documents in the same stdin stream are rejected unless --config - is also given
-  -u, --upload-as enum          deprecated: define whether copied resources should be uploaded as OCI artifacts
-                                (must be one of [localBlob ociArtifact]) (default localBlob)
+      --concurrency-limit int         maximum number of transformation nodes processed in parallel; independent nodes run concurrently while dependency ordering is preserved. Increase it to speed up large graphs, decrease it to reduce load on the registry (default 4)
+      --constraint string             version constraint evaluated by each version's configured scheme; versions with no applicable scheme are retained (e.g. ">= 1.0.0, < 2.0.0"); only used when no version is specified in the reference
+      --copy-resources[=true|false]   deprecated: copy all resources in the component version
+      --dry-run[=true|false]          build and validate the graph but do not execute
+  -h, --help[=true|false]             help for component-version
+      --latest[=true|false]           if set, only the latest version of the component is transferred; only used when no version is specified in the reference
+  -o, --output enum                   output format of the component descriptors
+                                      (must be one of [json ndjson yaml]) (default yaml)
+  -r, --recursive[=true|false]        recursively discover and transfer component versions
+      --transfer-spec string          path to a transfer specification file (use "-" for stdin). The input must hold exactly one transfer spec document; OCM configuration documents in the same stdin stream are rejected unless --config - is also given
+  -u, --upload-as enum                deprecated: define whether copied resources should be uploaded as OCI artifacts
+                                      (must be one of [localBlob ociArtifact]) (default localBlob)
 ```
 
 ### Options inherited from parent commands

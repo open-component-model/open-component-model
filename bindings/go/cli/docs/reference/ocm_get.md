@@ -18,7 +18,7 @@ ocm get {component-version|component-versions|cv|cvs|config|cfg} [flags]
 ### Options
 
 ```
-  -h, --help   help for get
+  -h, --help[=true|false]   help for get
 ```
 
 ### Options inherited from parent commands
