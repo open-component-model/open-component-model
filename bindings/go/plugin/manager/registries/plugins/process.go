@@ -12,6 +12,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"ocm.software/open-component-model/bindings/go/plugin/internal/osutil"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 )
 
@@ -36,9 +37,10 @@ func NewProcess(plugin *types.Plugin, client *http.Client, location string) Proc
 	}
 }
 
-// Kill terminates the plugin process immediately.
+// Kill terminates the plugin process immediately. A plugin that exited on its own
+// is reported as os.ErrProcessDone.
 func (p Process) Kill() error {
-	return p.cmd.Process.Kill()
+	return osutil.Kill(p.cmd.Process)
 }
 
 // Wait waits for the plugin process to exit.
@@ -75,7 +77,8 @@ func (p Process) Shutdown(ctx context.Context) error {
 	case <-ctx.Done():
 	}
 
-	// On Windows, killing an already exited process causes access denied instead of os.ErrProcessDone.
+	// The plugin is still running: it has to go now. Killing it stays a success if it
+	// exited in the meantime, so the kill error only matters when it survives.
 	killErr := p.Kill()
 	select {
 	case <-exited:

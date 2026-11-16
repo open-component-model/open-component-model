@@ -34,3 +34,10 @@ func ProcessAlive(pid int) bool {
 	// in a shared socket directory. Only ESRCH states that no process holds this PID.
 	return err == nil || !errors.Is(err, syscall.ESRCH) && !errors.Is(err, os.ErrProcessDone)
 }
+
+// Kill terminates the process, reporting os.ErrProcessDone for a process that already exited.
+// Signals reach an exited child until it is reaped, so a kill that comes too late succeeds here
+// instead of reporting os.ErrProcessDone: callers have to treat both as a terminated process.
+func Kill(process *os.Process) error {
+	return process.Kill()
+}

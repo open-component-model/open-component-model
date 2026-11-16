@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -63,10 +64,11 @@ func TestPluginFlow(t *testing.T) {
 		if pluginCmd.Process == nil {
 			return
 		}
-		// ctx is cancelled before cleanup functions run, so exec.CommandContext has usually
-		// killed the plugin already. Killing an exited process reports os.ErrProcessDone on
-		// unix and access denied on windows; both mean the process is gone.
-		_ = pluginCmd.Process.Kill()
+		// ctx is cancelled before cleanup functions run, so exec.CommandContext races this
+		// kill for the same process: whoever loses kills a plugin that already exited.
+		if err := osutil.Kill(pluginCmd.Process); err != nil {
+			assert.ErrorIs(t, err, os.ErrProcessDone)
+		}
 		// A killed plugin cannot unlink its own socket, and on windows the file can still be
 		// held while the process goes away, so the leftovers are removed best effort.
 		_ = os.Remove(osutil.SocketPath(id))
