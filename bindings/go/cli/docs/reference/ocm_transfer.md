@@ -18,7 +18,7 @@ ocm transfer {component-version|component-versions|cv|cvs} [flags]
 ### Options
 
 ```
-  -h, --help   help for transfer
+  -h, --help[=true|false]   help for transfer
 ```
 
 ### Options inherited from parent commands

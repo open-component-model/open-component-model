@@ -26,10 +26,10 @@ ocm plugin registry list [flags]
 ### Options
 
 ```
-  -h, --help              help for list
-  -o, --output enum       output format of the plugin list
-                          (must be one of [json ndjson table wide yaml]) (default table)
-      --registry string   registry URL to list plugins from
+  -h, --help[=true|false]   help for list
+  -o, --output enum         output format of the plugin list
+                            (must be one of [json ndjson table wide yaml]) (default table)
+      --registry string     registry URL to list plugins from
 ```
 
 ### Options inherited from parent commands

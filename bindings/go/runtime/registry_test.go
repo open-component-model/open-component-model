@@ -528,6 +528,41 @@ func TestRegistry_RegisterSchemeType(t *testing.T) {
 		r.Error(err)
 		r.Contains(err.Error(), "already registered")
 	})
+
+	t.Run("registration via alias copies default and all aliases", func(t *testing.T) {
+		r := require.New(t)
+		// Create a source scheme with a default type and multiple aliases
+		src := NewScheme()
+		defaultType := NewVersionedType("Example", "v1")
+		alias1 := NewUnversionedType("Example")
+		alias2 := NewVersionedType("Alias", "v1")
+		src.MustRegisterWithAlias(&TestType{}, defaultType, alias1, alias2)
+
+		// Register via an alias (not the default type)
+		targetScheme := NewScheme()
+		err := targetScheme.RegisterSchemeType(src, alias2)
+		r.NoError(err)
+
+		// Verify the default type was registered
+		r.True(targetScheme.IsRegistered(defaultType), "default type should be registered")
+
+		// Verify all aliases were registered
+		r.True(targetScheme.IsRegistered(alias1), "alias1 should be registered")
+		r.True(targetScheme.IsRegistered(alias2), "alias2 should be registered")
+
+		// Verify we can create objects via any of the types
+		obj, err := targetScheme.NewObject(defaultType)
+		r.NoError(err)
+		r.IsType(&TestType{}, obj)
+
+		obj2, err := targetScheme.NewObject(alias1)
+		r.NoError(err)
+		r.IsType(&TestType{}, obj2)
+
+		obj3, err := targetScheme.NewObject(alias2)
+		r.NoError(err)
+		r.IsType(&TestType{}, obj3)
+	})
 }
 
 func TestScheme_GetTypes(t *testing.T) {
