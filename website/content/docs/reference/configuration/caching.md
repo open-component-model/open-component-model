@@ -267,8 +267,11 @@ startup error.
 {{< callout context="caution" title="IfNotPresent shares cached content across namespaces" icon="outline/alert-triangle" >}}
 The blob cache key is the digest, not the credentials. With `IfNotPresent`, a blob that one namespace fetched with its
 credentials is, potentially, read from the cache by another with the same digest, but no credentials.
+With `reference.enabled: true`, the other namespace does not even need the digest: the tag of a component version,
+its name and version, resolves from the cache without credentials as well. Turn on the reference cache only if all
+namespaces MAY read each other's component versions.
 On a cluster where namespaces MUST NOT read each other's blobs, use `Always`. Every cache hit is then checked against
-the registry with the credentials of the requesting object.
+the registry with the credentials of the requesting object, and the reference cache is off.
 {{< /callout >}}
 
 ## Clearing the Cache
