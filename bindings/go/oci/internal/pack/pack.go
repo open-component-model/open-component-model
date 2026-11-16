@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"os"
+	"time"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -129,10 +131,15 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 	if dig, _, err := layerDigestAndMediaType(b, layerOpts); err != nil {
 		return ociImageSpecV1.Descriptor{}, err
 	} else if b.Size() == blob.SizeUnknown || len(dig) == 0 {
+		// Spooling costs disk space the user did not ask for, so say when and where.
+		attrs := spoolLogAttrs(b, len(dig) == 0, opts.TempDir)
+		slog.InfoContext(ctx, "spooling blob to disk before upload", attrs...)
+		start := time.Now()
 		spooled, remove, err := b.Spool(opts.TempDir)
 		if err != nil {
 			return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to spool blob: %w", err)
 		}
+		slog.InfoContext(ctx, "spooled blob to disk", append(attrs, slog.Int64("size", spooled.Size()), slog.Duration("duration", time.Since(start)))...)
 		defer func() {
 			if err := remove(); err != nil {
 				slog.WarnContext(ctx, "failed to remove spooled blob", "error", err)
@@ -557,4 +564,24 @@ func resolveGlobalAccess(p policy.GlobalAccessPolicy, storage content.Storage) b
 	default:
 		return false
 	}
+}
+
+// spoolLogAttrs describes a blob that is spooled to disk: what is not known about it up
+// front, the directory it is spooled to, and the resource it belongs to.
+func spoolLogAttrs(b *ociblob.ArtifactBlob, digestUnknown bool, tempDir string) []any {
+	unknown := "size"
+	switch {
+	case digestUnknown && b.Size() == blob.SizeUnknown:
+		unknown = "size and digest"
+	case digestUnknown:
+		unknown = "digest"
+	}
+	if tempDir == "" {
+		tempDir = os.TempDir()
+	}
+	attrs := []any{slog.String("unknown", unknown), slog.String("directory", tempDir)}
+	if resource, ok := b.Artifact.(*descriptor.Resource); ok {
+		attrs = append(attrs, slog.Any("resource", resource.ToIdentity()))
+	}
+	return attrs
 }
