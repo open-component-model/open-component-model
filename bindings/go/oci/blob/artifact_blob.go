@@ -294,9 +294,12 @@ func (r *ArtifactBlob) Buffer() (result *ArtifactBlob, err error) {
 // Spool copies the blob into a temporary file in dir (the default temporary directory if
 // empty) and returns an ArtifactBlob over that file with a known size and digest. Unlike
 // Buffer it holds no content in memory. The content is verified against the byte digest of
-// an ordinary resource while it is copied. The caller must call remove once the returned
-// blob is no longer read.
-func (r *ArtifactBlob) Spool(dir string) (_ *ArtifactBlob, remove func() error, err error) {
+// an ordinary resource while it is copied. The caller must call release once the returned
+// blob is no longer read; it frees the disk space.
+//
+// Where the operating system allows it, the file is unlinked as soon as it is created, so
+// its space is freed even when the process is killed. It then never shows up in dir.
+func (r *ArtifactBlob) Spool(dir string) (_ *ArtifactBlob, release func() error, err error) {
 	expected, known, err := r.resourceByteDigest()
 	if err != nil {
 		return nil, nil, err
@@ -306,20 +309,29 @@ func (r *ArtifactBlob) Spool(dir string) (_ *ArtifactBlob, remove func() error, 
 		algorithm = digest.Digest(expected).Algorithm()
 	}
 
+	if dir != "" {
+		// Like the OCI caches, do not depend on someone else having created the folder.
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return nil, nil, fmt.Errorf("failed to create spool directory: %w", err)
+		}
+	}
 	file, err := os.CreateTemp(dir, "ocm-blob-*")
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create spool file: %w", err)
 	}
-	removeFile := func() error { return os.Remove(file.Name()) }
+	releaseFile := func() error { return releaseSpoolFile(file) }
 	defer func() {
 		if err != nil {
-			err = errors.Join(err, removeFile())
+			err = errors.Join(err, releaseFile())
 		}
 	}()
+	if err := detachSpoolFile(file); err != nil {
+		return nil, nil, fmt.Errorf("failed to unlink spool file: %w", err)
+	}
 
 	digester := algorithm.Digester()
 	size, err := copyAndClose(io.MultiWriter(file, digester.Hash()), r)
-	if err = errors.Join(err, file.Close()); err != nil {
+	if err != nil {
 		return nil, nil, fmt.Errorf("failed to spool blob to file: %w", err)
 	}
 	actual := digester.Digest().String()
@@ -328,11 +340,11 @@ func (r *ArtifactBlob) Spool(dir string) (_ *ArtifactBlob, remove func() error, 
 	}
 
 	return &ArtifactBlob{
-		ReadOnlyBlob: &spooledBlob{path: file.Name(), size: size, digest: actual},
+		ReadOnlyBlob: &spooledBlob{file: file, size: size, digest: actual},
 		Artifact:     r.Artifact,
 		mediaType:    r.mediaType,
 		ociLayout:    r.ociLayout,
-	}, removeFile, nil
+	}, releaseFile, nil
 }
 
 // copyAndClose copies src into dst. A source that verifies its content reports a mismatch
@@ -349,15 +361,18 @@ func copyAndClose(dst io.Writer, src blob.ReadOnlyBlob) (_ int64, err error) {
 }
 
 // spooledBlob is a file written by Spool, whose size and digest were recorded while writing.
+// It is read through the handle Spool opened, because the file may have no name any more.
 type spooledBlob struct {
-	path   string
+	file   *os.File
 	size   int64
 	digest string
 }
 
-func (b *spooledBlob) ReadCloser() (io.ReadCloser, error) { return os.Open(b.path) }
-func (b *spooledBlob) Size() int64                        { return b.size }
-func (b *spooledBlob) Digest() (string, bool)             { return b.digest, true }
+func (b *spooledBlob) ReadCloser() (io.ReadCloser, error) {
+	return io.NopCloser(io.NewSectionReader(b.file, 0, b.size)), nil
+}
+func (b *spooledBlob) Size() int64            { return b.size }
+func (b *spooledBlob) Digest() (string, bool) { return b.digest, true }
 
 // Interface implementations
 var (
