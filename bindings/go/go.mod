@@ -9,7 +9,7 @@ toolchain go1.27.4
 replace github.com/opencontainers/go-digest => github.com/opencontainers/go-digest v1.0.1-0.20261015205711-63db54280247
 
 require (
-	cel.dev/cel-go v0.32.0
+	cel.dev/cel-go v0.33.2
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/ProtonMail/go-crypto v1.5.2
 	github.com/Shopify/toxiproxy/v2 v2.13.0
