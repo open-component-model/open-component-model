@@ -49,6 +49,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/toxiproxy v0.44.0
 	github.com/veqryn/slog-context v0.9.0
 	go.yaml.in/yaml/v3 v3.0.5
+	go.yaml.in/yaml/v4 v4.0.0
 	golang.org/x/crypto v0.58.0
 	golang.org/x/net v0.62.0
 	golang.org/x/oauth2 v0.37.0
