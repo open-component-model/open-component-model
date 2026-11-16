@@ -70,7 +70,7 @@ For the current release, see the
 </span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>consumers</span><span class=p>:</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>      </span><span class=c># Hostname-only identity</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=nt>identities</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>OCIRegistry</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>OCIRegistry/v1</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>hostname</span><span class=p>:</span><span class=w> </span><span class=l>ghcr.io </span><span class=w> </span><span class=c># No path = matches all paths</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>credentials</span><span class=p>:</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>          </span>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>OCICredentials/v1</span><span class=w>
@@ -82,7 +82,7 @@ For the current release, see the
 </span></span></span><span class=line><span class=cl><span class=w>      </span><span class=c># ... other consumers</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>      </span><span class=c># Hostname + exact path identity</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=nt>identities</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>OCIRegistry</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>OCIRegistry/v1</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>hostname</span><span class=p>:</span><span class=w> </span><span class=l>ghcr.io</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>path</span><span class=p>:</span><span class=w> </span><span class=l>my-org/production </span><span class=w> </span><span class=c># Exact path match</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>credentials</span><span class=p>:</span><span class=w>
@@ -95,7 +95,7 @@ For the current release, see the
 </span></span></span><span class=line><span class=cl><span class=w>      </span><span class=c># ... other consumers</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>      </span><span class=c># Hostname + path glob identity</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=nt>identities</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>OCIRegistry</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>OCIRegistry/v1</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>hostname</span><span class=p>:</span><span class=w> </span><span class=l>ghcr.io</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>path</span><span class=p>:</span><span class=w> </span><span class=l>my-org/* </span><span class=w> </span><span class=c># Glob — matches one segment after my-org/</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>credentials</span><span class=p>:</span><span class=w>
@@ -121,7 +121,7 @@ wrong credentials, see <a href=#troubleshooting>Troubleshooting</a> below.</p></
 </span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>consumers</span><span class=p>:</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>      </span><span class=c># Path glob: matches ghcr.io/my-org/staging, ghcr.io/my-org/dev, etc.</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=nt>identities</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>OCIRegistry</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>OCIRegistry/v1</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>hostname</span><span class=p>:</span><span class=w> </span><span class=l>ghcr.io</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>path</span><span class=p>:</span><span class=w> </span><span class=l>my-org/*</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>credentials</span><span class=p>:</span><span class=w>
@@ -130,7 +130,7 @@ wrong credentials, see <a href=#troubleshooting>Troubleshooting</a> below.</p></
 </span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>password</span><span class=p>:</span><span class=w> </span><span class=l>ghp_org_token</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>      </span><span class=c># Exact path: matches only ghcr.io/my-org/production (takes precedence over glob)</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=nt>identities</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>OCIRegistry</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>OCIRegistry/v1</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>hostname</span><span class=p>:</span><span class=w> </span><span class=l>ghcr.io</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>path</span><span class=p>:</span><span class=w> </span><span class=l>my-org/production</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>credentials</span><span class=p>:</span><span class=w>
@@ -139,7 +139,7 @@ wrong credentials, see <a href=#troubleshooting>Troubleshooting</a> below.</p></
 </span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>password</span><span class=p>:</span><span class=w> </span><span class=l>ghp_production_token</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>      </span><span class=c># Hostname only: matches all other paths on ghcr.io</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=nt>identities</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>OCIRegistry</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>OCIRegistry/v1</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>            </span><span class=nt>hostname</span><span class=p>:</span><span class=w> </span><span class=l>ghcr.io</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>credentials</span><span class=p>:</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>          </span>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>OCICredentials/v1</span><span class=w>

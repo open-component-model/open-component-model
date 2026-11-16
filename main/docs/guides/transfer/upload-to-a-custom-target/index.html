@@ -129,11 +129,11 @@ OCM algorithm name (e.g. <code>SHA-256</code>). <code>contentDigestAlgorithm()</
 RFC 9530 field key (<code>sha-256</code>), and <code>base64.encode(hex.decode(...))</code> converts the hex
 digest to the base64 value RFC 9530 expects — see the
 <a href=/main/docs/reference/configuration/transfer-configuration/http-uploader/#templating-headers>Templating Headers reference</a>.</p></li><li><h3 id=configure-target-credentials>Configure target credentials<a href=#configure-target-credentials class=anchor aria-hidden=true>#</a></h3><p>If your upload endpoint requires authentication, add credentials for the target host.
-The uploader resolves credentials for the target URL using the <code>Wget</code> consumer
+The uploader resolves credentials for the target URL using the <code>HTTP/v1</code> consumer
 identity, independently of the source resource:</p><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=w>  </span>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>credentials.config.ocm.software</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>consumers</span><span class=p>:</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=nt>identity</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>Wget</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>HTTP/v1</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>hostname</span><span class=p>:</span><span class=w> </span><span class=l>mytarget.example.com</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>credentials</span><span class=p>:</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>          </span>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>Credentials/v1</span><span class=w>
@@ -168,7 +168,7 @@ resource, or is not valid CEL.</p><p><strong>Fix:</strong> Reference only docume
 <code>resource.access.&lt;field></code> (e.g. <code>resource.access.url</code>, and <code>url(...)</code> parts such
 as <code>url(resource.access.url).path</code>), <code>resource.extraIdentity.&lt;key></code>,
 <code>resource.digest.value</code> — and quote string literals (<code>"https://..."</code>). A missing
-field fails the transfer deliberately rather than producing a partial URL.</p><h3 id=problem-the-upload-returns-401403>Problem: The upload returns 401/403<a href=#problem-the-upload-returns-401403 class=anchor aria-hidden=true>#</a></h3><p><strong>Cause:</strong> No credentials matched the target host.</p><p><strong>Fix:</strong> Add a <code>credentials.config.ocm.software</code> consumer with <code>type: Wget</code> and the
+field fails the transfer deliberately rather than producing a partial URL.</p><h3 id=problem-the-upload-returns-401403>Problem: The upload returns 401/403<a href=#problem-the-upload-returns-401403 class=anchor aria-hidden=true>#</a></h3><p><strong>Cause:</strong> No credentials matched the target host.</p><p><strong>Fix:</strong> Add a <code>credentials.config.ocm.software</code> consumer with <code>type: HTTP/v1</code> and the
 target <code>hostname</code>, as in Step 2.</p><h3 id=problem-the-transfer-succeeds-but-nothing-is-uploaded>Problem: The transfer succeeds but nothing is uploaded<a href=#problem-the-transfer-succeeds-but-nothing-is-uploaded class=anchor aria-hidden=true>#</a></h3><p><strong>Symptom:</strong> The resource is stored as <code>LocalBlob/v1</code> in the target and the log
 warns <code>uploader selected no resource</code>.</p><p><strong>Cause:</strong> The <code>match</code> expression tests the access type the resource would get in
 the target (such as <code>LocalBlob</code>) instead of its access in the source component

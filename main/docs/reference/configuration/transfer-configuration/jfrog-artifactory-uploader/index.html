@@ -106,12 +106,12 @@ content the server already stores is not uploaded again. For SHA-256, Artifactor
 verifies bytes against an <code>X-Checksum-Sha256</code> header on deploy and deploys stored
 content by checksum; a SHA-512 digest is verified after the upload, and a
 mismatching file is deleted. Content extracted from an OCI artifact
-gets the SHA-256 of the uploaded bytes (the OCI layout tar or chart .tgz).</p><h2 id=credentials>Credentials<a href=#credentials class=anchor aria-hidden=true>#</a></h2><p>Resolved for the <code>HelmChartRepository</code> identity of
-<code>&lt;url>/artifactory/api/helm/&lt;repository></code>, falling back to the <code>Wget</code> identity
+gets the SHA-256 of the uploaded bytes (the OCI layout tar or chart .tgz).</p><h2 id=credentials>Credentials<a href=#credentials class=anchor aria-hidden=true>#</a></h2><p>Resolved for the <code>HelmChartRepository</code>y of
+<code>&lt;url>/artifactory/api/helm/&lt;repository></code>, falling back to the <code>HTTP/v1</code> identity
 of <code>&lt;url>/artifactory/&lt;repository></code>:</p><div class=expressive-code><figure class="frame not-content"><figcaption class=header><span class=title></span></figcaption><div class=highlight><pre tabindex=0 class=chroma><code class=language-yaml data-lang=yaml><span class=line><span class=cl><span class=w>  </span>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>credentials.config.ocm.software</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>    </span><span class=nt>consumers</span><span class=p>:</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>      </span>- <span class=nt>identity</span><span class=p>:</span><span class=w>
-</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>HelmChartRepository</span><span class=w>
+</span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>HelmChartRepository/v1</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>          </span><span class=nt>hostname</span><span class=p>:</span><span class=w> </span><span class=l>myorg.jfrog.io</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>        </span><span class=nt>credentials</span><span class=p>:</span><span class=w>
 </span></span></span><span class=line><span class=cl><span class=w>          </span>- <span class=nt>type</span><span class=p>:</span><span class=w> </span><span class=l>HelmHTTPCredentials/v1</span><span class=w>
