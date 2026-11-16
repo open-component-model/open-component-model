@@ -393,7 +393,7 @@ func TestCleanUpKeepsLockFileWhenSocketSurvives(t *testing.T) {
 	r.NoError(os.Mkdir(location, 0o755))
 	r.NoError(os.WriteFile(filepath.Join(location, "blocker"), nil, 0o600))
 	lockFile := location + ".lock"
-	r.NoError(os.WriteFile(lockFile, []byte("999999"), 0o644))
+	r.NoError(os.WriteFile(lockFile, []byte("1"), 0o644))
 
 	p := NewPlugin(t.Context(), slog.Default(), types.Config{
 		ID:         "test-plugin-undeletable",
@@ -401,7 +401,7 @@ func TestCleanUpKeepsLockFileWhenSocketSurvives(t *testing.T) {
 		PluginType: testPluginType,
 	}, os.Stdout)
 
-	r.ErrorContains(p.performCleanUp(location), "could not remove socket file")
+	r.ErrorContains(p.removeFiles(location, lockFile), "could not remove socket file")
 	r.FileExists(lockFile)
 }
 
