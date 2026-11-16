@@ -20,7 +20,7 @@ type CTFGetLocalResource struct {
 	Type   runtime.Type               `json:"type"`
 	ID     string                     `json:"id"`
 	Spec   *CTFGetLocalResourceSpec   `json:"spec"`
-	Output *CTFGetLocalResourceOutput `json:"output,omitempty"`
+	Output *CTFGetLocalResourceOutput `json:"output,omitzero"`
 }
 
 // CTFGetLocalResourceOutput is the output specification of the

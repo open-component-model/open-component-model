@@ -18,7 +18,7 @@ ocm plugin [flags]
 ### Options
 
 ```
-  -h, --help   help for plugin
+  -h, --help[=true|false]   help for plugin
 ```
 
 ### Options inherited from parent commands

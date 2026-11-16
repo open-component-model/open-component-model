@@ -71,6 +71,15 @@ func TestDecodeInputSpec(t *testing.T) {
 				URL: "https://example.com/file",
 			},
 		},
+		{
+			// OCM v1 wrote "URL"; the access spec accepts it, so the input spec must too.
+			name:    "legacy upper-case URL member",
+			rawType: runtime.NewVersionedType("wget", v1.Version),
+			json:    `{"type": "wget/v1", "URL": "https://example.com/file.tar.gz"}`,
+			want: v1.Wget{
+				URL: "https://example.com/file.tar.gz",
+			},
+		},
 	}
 
 	for _, tt := range tests {

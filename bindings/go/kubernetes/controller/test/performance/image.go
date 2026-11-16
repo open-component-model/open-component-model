@@ -5,13 +5,15 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/oras-project/oras-go/v3"
 	"github.com/oras-project/oras-go/v3/registry/remote"
+
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // pushImage pushes a minimal but valid single-layer image and returns its
@@ -37,7 +39,7 @@ func pushImage(ctx context.Context, client remote.Client, host string, plainHTTP
 	config, err := json.Marshal(ocispec.Image{
 		Platform: ocispec.Platform{Architecture: "amd64", OS: "linux"},
 		RootFS:   ocispec.RootFS{Type: "layers", DiffIDs: []digest.Digest{diffID}},
-	})
+	}, ocmruntime.JSONOptions)
 	if err != nil {
 		return "", err
 	}

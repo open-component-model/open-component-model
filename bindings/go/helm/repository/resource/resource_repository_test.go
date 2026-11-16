@@ -5,7 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"encoding/pem"
 	"errors"
 	"io"
@@ -49,7 +49,7 @@ func helmResource(t *testing.T, helmRepository, helmChart string) *descriptor.Re
 	if helmChart != "" {
 		data["helmChart"] = helmChart
 	}
-	raw, err := json.Marshal(data)
+	raw, err := json.Marshal(data, runtime.JSONOptions)
 	require.NoError(t, err)
 
 	return &descriptor.Resource{
@@ -413,7 +413,7 @@ func newChartRegistry(t *testing.T, repo, tag string, tgz []byte) (*httptest.Ser
 			Digest:    digest.FromBytes(tgz),
 			Size:      int64(len(tgz)),
 		}},
-	})
+	}, runtime.JSONOptions)
 	require.NoError(t, err)
 	manifestDigest := digest.FromBytes(manifest)
 

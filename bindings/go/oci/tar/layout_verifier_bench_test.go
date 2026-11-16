@@ -3,7 +3,7 @@ package tar
 import (
 	"archive/tar"
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"strings"
@@ -14,6 +14,8 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/oras-project/oras-go/v3/content"
 	"github.com/stretchr/testify/require"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // BenchmarkLayoutVerifier_LayerSize verifies an uncompressed layout holding one
@@ -66,13 +68,15 @@ func layoutWithLayer(b *testing.B, layerData []byte) ([]byte, digest.Digest) {
 		MediaType: ociImageSpecV1.MediaTypeImageManifest,
 		Config:    config,
 		Layers:    []ociImageSpecV1.Descriptor{layer},
-	})
+	}, runtime.JSONOptions)
+
 	r.NoError(err)
 	manifest := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, manifestData)
 	indexData, err := json.Marshal(ociImageSpecV1.Index{
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		Manifests: []ociImageSpecV1.Descriptor{manifest},
-	})
+	}, runtime.JSONOptions)
+
 	r.NoError(err)
 
 	var buf bytes.Buffer

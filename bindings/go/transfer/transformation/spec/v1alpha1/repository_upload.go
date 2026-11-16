@@ -25,7 +25,7 @@ type ArtifactoryUpload struct {
 	Type   runtime.Type            `json:"type"`
 	ID     string                  `json:"id"`
 	Spec   *RepositoryUploadSpec   `json:"spec"`
-	Output *RepositoryUploadOutput `json:"output,omitempty"`
+	Output *RepositoryUploadOutput `json:"output,omitzero"`
 }
 
 // NexusUpload uploads a resource into a hosted repository of a Sonatype Nexus Repository 3
@@ -43,7 +43,7 @@ type NexusUpload struct {
 	Type   runtime.Type            `json:"type"`
 	ID     string                  `json:"id"`
 	Spec   *RepositoryUploadSpec   `json:"spec"`
-	Output *RepositoryUploadOutput `json:"output,omitempty"`
+	Output *RepositoryUploadOutput `json:"output,omitzero"`
 }
 
 // RepositoryUploadSpec is the input specification of the ArtifactoryUpload and NexusUpload
@@ -74,7 +74,7 @@ type RepositoryUploadSpec struct {
 type RepositoryUploadComponentVersion struct {
 	// Repository is the specification of the repository holding the component version. It is
 	// set for local blob resources only, which are read from it.
-	Repository *runtime.Raw `json:"repository,omitempty"`
+	Repository *runtime.Raw `json:"repository,omitzero"`
 	// Component is the component name.
 	Component string `json:"component"`
 	// Version is the component version.

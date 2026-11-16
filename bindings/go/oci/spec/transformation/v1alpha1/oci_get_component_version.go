@@ -19,7 +19,7 @@ type OCIGetComponentVersion struct {
 	Type   runtime.Type                  `json:"type"`
 	ID     string                        `json:"id,omitempty"`
 	Spec   *OCIGetComponentVersionSpec   `json:"spec"`
-	Output *OCIGetComponentVersionOutput `json:"output,omitempty"`
+	Output *OCIGetComponentVersionOutput `json:"output,omitzero"`
 }
 
 // OCIGetComponentVersionOutput is the output specification of the

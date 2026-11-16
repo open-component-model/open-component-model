@@ -20,7 +20,7 @@ type TransferOCIArtifact struct {
 	Type   runtime.Type               `json:"type"`
 	ID     string                     `json:"id"`
 	Spec   *TransferOCIArtifactSpec   `json:"spec"`
-	Output *TransferOCIArtifactOutput `json:"output,omitempty"`
+	Output *TransferOCIArtifactOutput `json:"output,omitzero"`
 }
 
 // TransferOCIArtifactSpec is the input specification for the

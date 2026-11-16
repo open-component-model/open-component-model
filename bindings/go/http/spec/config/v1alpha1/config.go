@@ -39,33 +39,33 @@ type TimeoutConfig struct {
 	// client. The timeout includes connection time, any redirects,
 	// and reading the response body. A timeout of zero means no
 	// timeout.
-	Timeout *typesv1.Duration `json:"timeout,omitempty"`
+	Timeout *typesv1.Duration `json:"timeout,omitzero"`
 
 	// TCPDialTimeout is the maximum amount of time a dial will wait
 	// for a TCP connect to complete. When dialing a host name with
 	// multiple IP addresses, the timeout may be divided between them.
 	// The operating system may impose its own earlier timeout.
-	TCPDialTimeout *typesv1.Duration `json:"tcpDialTimeout,omitempty"`
+	TCPDialTimeout *typesv1.Duration `json:"tcpDialTimeout,omitzero"`
 
 	// TCPKeepAlive specifies the interval between keep-alive probes
 	// for an active network connection. If negative, keep-alive
 	// probes are disabled.
-	TCPKeepAlive *typesv1.Duration `json:"tcpKeepAlive,omitempty"`
+	TCPKeepAlive *typesv1.Duration `json:"tcpKeepAlive,omitzero"`
 
 	// TLSHandshakeTimeout specifies the maximum amount of time to
 	// wait for a TLS handshake. Zero means no timeout.
-	TLSHandshakeTimeout *typesv1.Duration `json:"tlsHandshakeTimeout,omitempty"`
+	TLSHandshakeTimeout *typesv1.Duration `json:"tlsHandshakeTimeout,omitzero"`
 
 	// ResponseHeaderTimeout specifies the amount of time to wait for
 	// a server's response headers after fully writing the request
 	// (including its body, if any). This time does not include the
 	// time to read the response body.
-	ResponseHeaderTimeout *typesv1.Duration `json:"responseHeaderTimeout,omitempty"`
+	ResponseHeaderTimeout *typesv1.Duration `json:"responseHeaderTimeout,omitzero"`
 
 	// IdleConnTimeout is the maximum amount of time an idle
 	// (keep-alive) connection will remain idle before closing itself.
 	// Zero means no limit.
-	IdleConnTimeout *typesv1.Duration `json:"idleConnTimeout,omitempty"`
+	IdleConnTimeout *typesv1.Duration `json:"idleConnTimeout,omitzero"`
 }
 
 // Validate checks that timeout values are non-negative.
@@ -137,7 +137,7 @@ type TLSConfig struct {
 	// the global Config"; an explicit false on a host re-enables verification
 	// even when the global config sets true. See HostConfig for per-host merge
 	// semantics.
-	InsecureSkipVerify *bool `json:"insecureSkipVerify,omitempty"`
+	InsecureSkipVerify *bool `json:"insecureSkipVerify,omitzero"`
 
 	// RootCAsPEM is an inline PEM bundle of additional root CA certificates used
 	// to verify the server's TLS certificate. It is appended to the system trust
@@ -187,7 +187,7 @@ type ProtocolConfig struct {
 	// host over one TCP connection: a single connection loss or GOAWAY then
 	// affects all in-flight transfers at once. With HTTP/1.1 each concurrent
 	// request uses its own connection, at the cost of more TLS handshakes.
-	DisableHTTP2 *bool `json:"disableHTTP2,omitempty"`
+	DisableHTTP2 *bool `json:"disableHTTP2,omitzero"`
 
 	// PlainHTTP makes OCI registry clients use cleartext HTTP, also for https://
 	// references. Credentials go unencrypted: set it per host, never for a
@@ -202,7 +202,7 @@ type ProtocolConfig struct {
 	// or base URL is deprecated and only checked against it: http:// on a host
 	// that is not plainHTTP is an error, https:// on a plainHTTP host warns
 	// about the downgrade. Set this field to true and drop the prefix.
-	PlainHTTP *bool `json:"plainHTTP,omitempty"`
+	PlainHTTP *bool `json:"plainHTTP,omitzero"`
 }
 
 // MergeProtocolConfig merges src into dst. Non-nil fields in src override dst.
@@ -238,15 +238,15 @@ type RetryConfig struct {
 	// MaxRetries is the maximum number of retry attempts after the initial
 	// request. Zero means infinite retries. -1 disables retry entirely.
 	// Nil uses the library default (5).
-	MaxRetries *int `json:"maxRetries,omitempty"`
+	MaxRetries *int `json:"maxRetries,omitzero"`
 
 	// MinWait is the lower bound applied to the backoff duration between
 	// retry attempts. Nil uses the library default (200ms).
-	MinWait *typesv1.Duration `json:"minWait,omitempty"`
+	MinWait *typesv1.Duration `json:"minWait,omitzero"`
 
 	// MaxWait is the upper bound applied to the backoff duration between
 	// retry attempts. Nil uses the library default (3s).
-	MaxWait *typesv1.Duration `json:"maxWait,omitempty"`
+	MaxWait *typesv1.Duration `json:"maxWait,omitzero"`
 }
 
 // Validate checks that retry values are valid.
@@ -316,7 +316,7 @@ type HostConfig struct {
 
 	// Retry overrides the global retry policy for this host.
 	// Fields set here override the corresponding top-level retry value.
-	Retry *RetryConfig `json:"retry,omitempty"`
+	Retry *RetryConfig `json:"retry,omitzero"`
 }
 
 // Validate checks the per-host timeout and retry config for valid values.
@@ -356,7 +356,7 @@ type Config struct {
 	// Retry configures retry behavior for transient failures.
 	// Nil uses the library default policy (5 retries, exponential backoff
 	// with 200ms–3s bounds).
-	Retry *RetryConfig `json:"retry,omitempty"`
+	Retry *RetryConfig `json:"retry,omitzero"`
 
 	// Hosts maps hostname (or hostname:port) to per-host settings.
 	// Fields set here override the corresponding top-level value for that host.

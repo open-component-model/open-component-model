@@ -1,7 +1,9 @@
 package runtime_test
 
 import (
-	"encoding/json"
+	jsonv1 "encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"maps"
 	"math"
 	"testing"
@@ -35,9 +37,9 @@ func mustToUnstructured(t *testing.T, from runtime.Typed) (*runtime.Scheme, map[
 // assertMatchesJSON asserts the map serializes identically to encoding/json marshaling from.
 func assertMatchesJSON(t *testing.T, from runtime.Typed, data map[string]any) {
 	t.Helper()
-	std, err := json.Marshal(from)
+	std, err := json.Marshal(from, runtime.JSONOptions)
 	require.NoError(t, err)
-	ours, err := json.Marshal(data)
+	ours, err := json.Marshal(data, runtime.JSONOptions)
 	require.NoError(t, err)
 	assert.JSONEq(t, string(std), string(ours))
 }
@@ -75,7 +77,7 @@ type resource struct {
 	Relation     string            `json:"relation,omitempty"`
 	CreationTime time.Time         `json:"creationTime,omitzero"`
 	Labels       []label           `json:"labels,omitempty"`
-	Digest       *digestSpec       `json:"digest,omitempty"`
+	Digest       *digestSpec       `json:"digest,omitzero"`
 	Access       ociImageLayer     `json:"access"`
 	Annotations  map[string]string `json:"annotations,omitempty"`
 	Size         int64             `json:"size"`
@@ -145,10 +147,10 @@ func TestResource_OmitBehavior(t *testing.T) {
 }
 
 // descResource mirrors the descriptor pattern more closely: inline-embedded metas and labels
-// whose Value is arbitrary json.RawMessage.
+// whose Value is an arbitrary jsontext.Value.
 type descLabel struct {
-	Name  string          `json:"name"`
-	Value json.RawMessage `json:"value"`
+	Name  string         `json:"name"`
+	Value jsontext.Value `json:"value"`
 }
 
 type descObjectMeta struct {
@@ -180,8 +182,8 @@ func TestDescResource_InlineAndRawMessage(t *testing.T) {
 		descElementMeta: descElementMeta{
 			descObjectMeta: descObjectMeta{Name: "nginx", Extra: map[string]string{"arch": "amd64"}},
 			Labels: []descLabel{
-				{Name: "sizes", Value: json.RawMessage(`{"a":9007199254740993}`)},
-				{Name: "scalar", Value: json.RawMessage(`"passed"`)},
+				{Name: "sizes", Value: jsontext.Value(`{"a":9007199254740993}`)},
+				{Name: "scalar", Value: jsontext.Value(`"passed"`)},
 			},
 		},
 		Size: bigSize,
@@ -193,7 +195,7 @@ func TestDescResource_InlineAndRawMessage(t *testing.T) {
 	assert.Equal(t, map[string]any{"arch": "amd64"}, data["extraIdentity"])
 	assert.NotContains(t, data, "descObjectMeta")
 
-	// A big integer inside a json.RawMessage survives, with the same concrete type a plain
+	// A big integer inside a jsontext.Value survives, with the same concrete type a plain
 	// int64 field yields, so consumers need only one numeric case.
 	sizes := data["labels"].([]any)[0].(map[string]any)["value"].(map[string]any)
 	assert.Equal(t, int64(9007199254740993), sizes["a"])
@@ -265,14 +267,14 @@ func TestMarshalers_ShadowZeroIsNull(t *testing.T) {
 
 type numHost struct {
 	typedBase
-	I   int             `json:"i"`
-	I64 int64           `json:"i64"`
-	U   uint            `json:"u"`
-	U64 uint64          `json:"u64"`
-	F32 float32         `json:"f32"`
-	F64 float64         `json:"f64"`
-	Num json.Number     `json:"num"`
-	Raw json.RawMessage `json:"raw,omitempty"`
+	I   int            `json:"i"`
+	I64 int64          `json:"i64"`
+	U   uint           `json:"u"`
+	U64 uint64         `json:"u64"`
+	F32 float32        `json:"f32"`
+	F64 float64        `json:"f64"`
+	Num jsonv1.Number  `json:"num"`
+	Raw jsontext.Value `json:"raw,omitzero"`
 }
 
 func (h *numHost) DeepCopyTyped() runtime.Typed { c := *h; return &c }
@@ -287,7 +289,7 @@ func TestNumbers(t *testing.T) {
 		}
 		assert.Equal(t, bigSize, data["i64"])     // >2^53 stays exact
 		assert.InDelta(t, 0.1, data["f32"], 1e-9) // 32-bit shortest, not widened
-		assert.Equal(t, bigSize, data["num"])     // json.Number field -> concrete int64
+		assert.Equal(t, bigSize, data["num"])     // jsonv1.Number field -> concrete int64
 		assertMatchesJSON(t, from, data)
 
 		back := &numHost{}
@@ -299,7 +301,7 @@ func TestNumbers(t *testing.T) {
 		const huge = uint64(1) << 63
 		from := &numHost{U64: huge}
 		s, data := mustToUnstructured(t, from)
-		assert.Equal(t, json.Number("9223372036854775808"), data["u64"])
+		assert.Equal(t, jsonv1.Number("9223372036854775808"), data["u64"])
 		assertMatchesJSON(t, from, data)
 
 		back := &numHost{}
@@ -308,24 +310,24 @@ func TestNumbers(t *testing.T) {
 	})
 
 	t.Run("marshaler output uses the same numeric types as plain fields", func(t *testing.T) {
-		from := &numHost{I64: bigSize, Raw: json.RawMessage(`{"n":42,"list":[7,1.5],"huge":18446744073709551616}`)}
+		from := &numHost{I64: bigSize, Raw: jsontext.Value(`{"n":42,"list":[7,1.5],"huge":18446744073709551616}`)}
 		_, data := mustToUnstructured(t, from)
 
 		raw := data["raw"].(map[string]any)
 		assert.Equal(t, int64(42), raw["n"])
 		assert.Equal(t, []any{int64(7), 1.5}, raw["list"])
-		// Integers beyond int64 keep the lossless json.Number form, as uint64 > MaxInt64 does.
-		assert.Equal(t, json.Number("18446744073709551616"), raw["huge"])
+		// Integers beyond int64 keep the lossless jsonv1.Number form, as uint64 > MaxInt64 does.
+		assert.Equal(t, jsonv1.Number("18446744073709551616"), raw["huge"])
 		assertMatchesJSON(t, from, data)
 	})
 
-	t.Run("malformed json.Number is rejected", func(t *testing.T) {
+	t.Run("malformed number is rejected", func(t *testing.T) {
 		s := runtime.NewScheme()
 		s.MustRegister(&numHost{}, "v1")
 		typ := s.MustTypeForPrototype(&numHost{})
-		// A json.Number field holds an arbitrary string; encoding/json rejects these at marshal
+		// A jsonv1.Number field holds an arbitrary string; the converter rejects these at marshal
 		// time, so the conversion must not put them into Unstructured.Data either.
-		for _, n := range []json.Number{"-", "1x", "abc"} {
+		for _, n := range []jsonv1.Number{"-", "1x", "abc"} {
 			u := runtime.NewUnstructured()
 			err := s.Convert(&numHost{typedBase: typedBase{Type: typ}, Num: n}, &u)
 			require.Error(t, err, "number: %q", n)
@@ -380,31 +382,21 @@ type base struct {
 	Only string `json:"only"`
 }
 
-type marker interface{ isMarker() }
-
-type markerImpl struct {
-	X string `json:"x"`
-}
-
-func (markerImpl) isMarker() {}
-
 type embedHost struct {
 	typedBase
-	base   `json:",inline"` // inlined
-	marker                  // unexported embedded interface -> ignored
-	Ptr    *base            `json:"ptr,omitempty"`
-	Name   string           `json:"name"` // shadows base.Name
+	base `json:",inline"` // inlined
+	Ptr  *base            `json:"ptr,omitzero"`
+	Name string           `json:"name"` // shadows base.Name
 }
 
 func (h *embedHost) DeepCopyTyped() runtime.Typed { c := *h; return &c }
 
 func TestEmbedding(t *testing.T) {
-	from := &embedHost{base: base{Name: "INNER", Only: "base"}, marker: markerImpl{X: "hidden"}, Name: "OUTER"}
+	from := &embedHost{base: base{Name: "INNER", Only: "base"}, Name: "OUTER"}
 	_, data := mustToUnstructured(t, from)
 
 	assert.Equal(t, "OUTER", data["name"]) // shallow field wins over embedded
 	assert.Equal(t, "base", data["only"])  // non-colliding embedded field promoted
-	assert.NotContains(t, data, "x")       // embedded interface not flattened
 	assert.NotContains(t, data, "ptr")     // omitempty nil pointer
 	assertMatchesJSON(t, from, data)
 
@@ -449,8 +441,8 @@ func (t *innerAccess) DeepCopyTyped() runtime.Typed { c := *t; return &c }
 
 type nestedHost struct {
 	typedBase
-	GlobalAccess runtime.Typed `json:"globalAccess,omitempty"`
-	RawAccess    *runtime.Raw  `json:"rawAccess,omitempty"`
+	GlobalAccess runtime.Typed `json:"globalAccess,omitzero"`
+	RawAccess    *runtime.Raw  `json:"rawAccess,omitzero"`
 }
 
 func (h *nestedHost) DeepCopyTyped() runtime.Typed { c := *h; return &c }
@@ -474,7 +466,7 @@ func TestNestedTypedAndRaw(t *testing.T) {
 
 type cyclicHost struct {
 	typedBase
-	Self *cyclicHost `json:"self,omitempty"`
+	Self *cyclicHost `json:"self,omitzero"`
 }
 
 func (h *cyclicHost) DeepCopyTyped() runtime.Typed { c := *h; return &c }

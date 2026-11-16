@@ -2,7 +2,8 @@ package runtime
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"maps"
 	"strings"
@@ -102,7 +103,11 @@ func ConvertFromV2Provider(provider string) (Provider, error) {
 		return Provider{}, nil
 	}
 	if strings.HasPrefix(strings.TrimSpace(provider), "{") {
-		if !json.Valid([]byte(provider)) {
+		// AllowDuplicateNames and AllowInvalidUTF8 keep the acceptance set of
+		// encoding/json v1's json.Valid, which only checked RFC 8259 syntax: descriptors
+		// written by OCM v1 can carry either, and the decode below still resolves them
+		// the way v1 did (last member wins, invalid bytes become U+FFFD).
+		if !jsontext.Value(provider).IsValid(jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true)) {
 			return Provider{}, fmt.Errorf("invalid JSON format")
 		}
 		type providerStruct struct {
@@ -110,7 +115,7 @@ func ConvertFromV2Provider(provider string) (Provider, error) {
 			Labels []v2.Label `json:"labels,omitempty"`
 		}
 		var id providerStruct
-		if err := json.Unmarshal([]byte(provider), &id); err != nil {
+		if err := json.Unmarshal([]byte(provider), &id, jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true)); err != nil {
 			return Provider{}, fmt.Errorf("could not unmarshal provider string: %w", err)
 		}
 		return Provider{
@@ -337,10 +342,14 @@ func ConvertToV2Provider(provider Provider) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("could not convert provider labels: %w", err)
 	}
+	// EscapeForHTML and EscapeForJS restore what encoding/json v1 escaped here: <, > and &
+	// plus the line terminators U+2028 and U+2029. This string is stored in the v2
+	// descriptor, so without them a provider label holding one of those characters changes
+	// bytes on a read/write cycle that modifies nothing.
 	providerJSON, err := json.Marshal(&providerStruct{
 		Name:   provider.Name,
 		Labels: labels,
-	})
+	}, runtime.JSONOptions, jsontext.EscapeForHTML(true), jsontext.EscapeForJS(true))
 	if err != nil {
 		return "", fmt.Errorf("could not marshal provider to JSON: %w", err)
 	}

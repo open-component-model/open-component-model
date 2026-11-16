@@ -2,7 +2,7 @@ package oci_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"os"
 	"testing"
 
@@ -35,7 +35,7 @@ func attestedImage(t *testing.T, store spec.Store, platform ociImageSpecV1.Platf
 	ctx := t.Context()
 
 	push := func(mediaType string, value any) ociImageSpecV1.Descriptor {
-		raw, err := json.Marshal(value)
+		raw, err := json.Marshal(value, runtime.JSONOptions)
 		require.NoError(t, err)
 		desc := content.NewDescriptorFromBytes(mediaType, raw)
 		require.NoError(t, store.Push(ctx, desc, bytes.NewReader(raw)))
@@ -106,7 +106,8 @@ func multiPlatformImage(t *testing.T) (*ocictf.Store, string) {
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		MediaType: ociImageSpecV1.MediaTypeImageIndex,
 		Manifests: []ociImageSpecV1.Descriptor{amd64Image, amd64Attestation, arm64Image, arm64Attestation},
-	})
+	}, runtime.JSONOptions)
+
 	require.NoError(t, err)
 
 	index := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageIndex, raw)
@@ -135,7 +136,8 @@ func localBlobComponentVersion(t *testing.T, component, version string, mediaTyp
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		MediaType: ociImageSpecV1.MediaTypeImageIndex,
 		Manifests: []ociImageSpecV1.Descriptor{amd64Image, amd64Attestation, arm64Image, arm64Attestation},
-	})
+	}, runtime.JSONOptions)
+
 	require.NoError(t, err)
 
 	index := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageIndex, raw)

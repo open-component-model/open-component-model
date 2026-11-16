@@ -2,7 +2,7 @@ package runtime
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"fmt"
 	"maps"
 
@@ -343,7 +343,7 @@ type Label struct {
 	// Name is the unique name of the label.
 	Name string `json:"-"`
 	// Value is the json/yaml data of the label
-	Value json.RawMessage `json:"-"`
+	Value jsontext.Value `json:"-"`
 	// Signing describes whether the label should be included into the signature
 	Signing bool `json:"-"`
 	// Version is the optional specification version of the attribute value
@@ -380,18 +380,18 @@ func (in *Label) SetValue(value interface{}) error {
 	return nil
 }
 
-// MustAsRawMessage converts any given value to a json.RawMessage.
+// MustAsRawMessage converts any given value to a jsontext.Value.
 // It panics if the conversion fails, so it should only be used when the conversion is guaranteed to succeed.
-func MustAsRawMessage(value interface{}) json.RawMessage {
+func MustAsRawMessage(value interface{}) jsontext.Value {
 	msg, err := AsRawMessage(value)
 	if err != nil {
-		panic(fmt.Sprintf("cannot convert value %T to json.RawMessage: %v", value, err))
+		panic(fmt.Sprintf("cannot convert value %T to raw message: %v", value, err))
 	}
 	return msg
 }
 
-// AsRawMessage converts any given value to a json.RawMessage.
-func AsRawMessage(value interface{}) (json.RawMessage, error) {
+// AsRawMessage converts any given value to a jsontext.Value.
+func AsRawMessage(value interface{}) (jsontext.Value, error) {
 	if value == nil {
 		return nil, nil
 	}

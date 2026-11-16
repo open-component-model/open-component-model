@@ -2,7 +2,7 @@ package resource
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"log/slog"
 	"os"
@@ -51,7 +51,7 @@ func TestPluginFlow(t *testing.T) {
 		Type:       osutil.ConnectionType(t.Context()),
 		PluginType: resourcev1.ResourceRepositoryPluginType,
 	}
-	serialized, err := json.Marshal(config)
+	serialized, err := json.Marshal(config, runtime.JSONOptions)
 	require.NoError(t, err)
 
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))

@@ -4,7 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"testing"
 
@@ -16,6 +16,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/ctf"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const artifactSetMediaType = "application/vnd.oci.image.manifest.v1" + ctf.SynthesizedBlobFormatSuffix
@@ -89,7 +90,7 @@ func TestNewArtifactSetFromBlob_IncompleteIndexEntry(t *testing.T) {
 		indexData, err := json.Marshal(ociimagespecv1.Index{
 			Versioned: specs.Versioned{SchemaVersion: 2},
 			Manifests: []ociimagespecv1.Descriptor{tc.entry},
-		})
+		}, runtime.JSONOptions)
 		r.NoError(err)
 
 		for _, format := range []ctf.ArtifactSetFormat{
@@ -152,7 +153,7 @@ func artifactSetArchive(t *testing.T, format ctf.ArtifactSetFormat) ([]byte, art
 		MediaType: ociimagespecv1.MediaTypeImageManifest,
 		Config:    config,
 		Layers:    []ociimagespecv1.Descriptor{layer},
-	})
+	}, runtime.JSONOptions)
 	r.NoError(err)
 	manifest := content.NewDescriptorFromBytes(ociimagespecv1.MediaTypeImageManifest, manifestData)
 
@@ -162,7 +163,7 @@ func artifactSetArchive(t *testing.T, format ctf.ArtifactSetFormat) ([]byte, art
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		MediaType: ociimagespecv1.MediaTypeImageIndex,
 		Manifests: []ociimagespecv1.Descriptor{tagged},
-	})
+	}, runtime.JSONOptions)
 	r.NoError(err)
 
 	data := map[string][]byte{}

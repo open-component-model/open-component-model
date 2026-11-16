@@ -1,7 +1,7 @@
 package ctf
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"ocm.software/open-component-model/bindings/go/ctf"

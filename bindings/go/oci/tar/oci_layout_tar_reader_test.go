@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"testing"
 
@@ -19,6 +19,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func createTestOCILayout(t *testing.T, testBlobData []byte) []byte {
@@ -304,7 +305,8 @@ func packIndex(t *testing.T, w *OCILayoutWriter, children ...v1.Descriptor) v1.D
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		MediaType: v1.MediaTypeImageIndex,
 		Manifests: children,
-	})
+	}, runtime.JSONOptions)
+
 	require.NoError(t, err)
 	desc := content.NewDescriptorFromBytes(v1.MediaTypeImageIndex, data)
 	require.NoError(t, w.Push(t.Context(), desc, bytes.NewReader(data)))

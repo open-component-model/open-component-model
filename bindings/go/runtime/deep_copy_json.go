@@ -17,7 +17,7 @@ limitations under the License.
 package runtime
 
 import (
-	"encoding/json"
+	jsonv1 "encoding/json"
 	"fmt"
 )
 
@@ -53,7 +53,7 @@ func DeepCopyJSONValue(x interface{}) interface{} {
 			clone[i] = DeepCopyJSONValue(v)
 		}
 		return clone
-	case string, int64, int32, int, bool, float64, float32, nil, json.Number:
+	case string, int64, int32, int, bool, float64, float32, nil, jsonv1.Number:
 		return x
 	default:
 		panic(fmt.Errorf("cannot deep copy %T", x))

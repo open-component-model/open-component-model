@@ -3,7 +3,8 @@ package componentversion
 import (
 	"context"
 	"crypto"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -522,7 +523,7 @@ func printSignature(cmd *cobra.Command, sig descruntime.Signature) error {
 	var b []byte
 	switch strings.ToLower(output) {
 	case render.OutputFormatJSON.String():
-		if b, err = json.MarshalIndent(v2sig, "", "  "); err != nil {
+		if b, err = json.Marshal(v2sig, runtime.JSONOptions, jsontext.WithIndent("  ")); err != nil {
 			return fmt.Errorf("marshalling signature to json failed: %w", err)
 		}
 		_, err = fmt.Fprintln(cmd.OutOrStdout(), string(b))
@@ -581,7 +582,7 @@ func setTSALabel(desc *descruntime.Descriptor, signatureName, tsaURL string) err
 	if err != nil {
 		return fmt.Errorf("sanitizing TSA URL label: %w", err)
 	}
-	tsaURLJSON, err := json.Marshal(sanitizedURL)
+	tsaURLJSON, err := json.Marshal(sanitizedURL, runtime.JSONOptions)
 	if err != nil {
 		return fmt.Errorf("marshalling TSA URL label: %w", err)
 	}

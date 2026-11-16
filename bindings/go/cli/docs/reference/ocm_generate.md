@@ -23,7 +23,7 @@ to quickly create a Cobra application.
 ### Options
 
 ```
-  -h, --help   help for generate
+  -h, --help[=true|false]   help for generate
 ```
 
 ### Options inherited from parent commands

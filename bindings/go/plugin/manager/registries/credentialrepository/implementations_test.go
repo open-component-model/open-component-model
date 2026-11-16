@@ -2,7 +2,7 @@ package credentialrepository
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -52,7 +52,7 @@ func TestConsumerIdentityForConfig(t *testing.T) {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == ConsumerIdentityForConfig {
 						identity := map[string]string{"id": "test-identity", "type": dummyType.String()}
-						err := json.NewEncoder(w).Encode(identity)
+						err := json.MarshalWrite(w, identity, runtime.JSONOptions)
 						assert.NoError(t, err)
 						return
 					}
@@ -136,7 +136,7 @@ func TestResolve(t *testing.T) {
 				return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					if r.URL.Path == Resolve {
 						resolved := map[string]string{"resolved": "credentials", "token": "abc123"}
-						err := json.NewEncoder(w).Encode(resolved)
+						err := json.MarshalWrite(w, resolved, runtime.JSONOptions)
 						assert.NoError(t, err)
 						return
 					}

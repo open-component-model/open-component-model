@@ -2,7 +2,8 @@ package v1
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"maps"
@@ -16,7 +17,14 @@ type ComponentConstructor struct {
 	Components []Component `json:"components"`
 }
 
-func (c *ComponentConstructor) UnmarshalJSON(data []byte) error {
+func (c *ComponentConstructor) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	data, err := dec.ReadValue()
+	if err != nil {
+		return fmt.Errorf("component constructor validation failed: %w", err)
+	}
+	// ReadValue borrows the decoder's buffer, which the next read invalidates.
+	data = data.Clone()
+
 	if err := ValidateRawJSON(data); err != nil {
 		return fmt.Errorf("component constructor validation failed: %w", err)
 	}
@@ -128,10 +136,10 @@ type Resource struct {
 	Relation ResourceRelation `json:"relation,omitempty"`
 	// Options bundles optional, construction-time directives for the resource
 	// It is omitted entirely when no options are set.
-	Options *ResourceOptions `json:"options,omitempty"`
+	Options *ResourceOptions `json:"options,omitzero"`
 	// Digest optionally pins the expected digest of the resource.
 	// If set, it is verified against the resource content during construction.
-	Digest *Digest `json:"digest,omitempty"`
+	Digest *Digest `json:"digest,omitzero"`
 
 	AccessOrInput `json:",inline"`
 }
@@ -168,8 +176,8 @@ type Source struct {
 // In a component constructor, there is only one access or input information.
 // +k8s:deepcopy-gen=true
 type AccessOrInput struct {
-	Access *runtime.Raw `json:"access,omitempty"`
-	Input  *runtime.Raw `json:"input,omitempty"`
+	Access *runtime.Raw `json:"access,omitzero"`
+	Input  *runtime.Raw `json:"input,omitzero"`
 }
 
 func (a *AccessOrInput) HasInput() bool {
@@ -210,7 +218,7 @@ type Reference struct {
 	// If provided, it is verified against the referenced component under its own
 	// normalisation and hash algorithms and kept, instead of computing one with the
 	// default normalisation. The verify-only jsonNormalisation/v1 is rejected.
-	Digest *Digest `json:"digest,omitempty"`
+	Digest *Digest `json:"digest,omitzero"`
 }
 
 // SourceRef defines a reference to a source.
@@ -354,9 +362,9 @@ type Label struct {
 	// Name is the unique name of the label.
 	Name string `json:"name"`
 	// Value is the json/yaml data of the label
-	Value json.RawMessage `json:"value"`
+	Value jsontext.Value `json:"value"`
 	// Signing describes whether the label should be included into the signature
-	Signing bool `json:"signing,omitempty"`
+	Signing bool `json:"signing,omitzero"`
 	// Version is the optional specification version of the attribute value
 	Version string `json:"version,omitempty"`
 }
@@ -391,18 +399,18 @@ func (in *Label) SetValue(value interface{}) error {
 	return nil
 }
 
-// MustAsRawMessage converts any given value to a json.RawMessage.
+// MustAsRawMessage converts any given value to a jsontext.Value.
 // It panics if the conversion fails, so it should only be used when the conversion is guaranteed to succeed.
-func MustAsRawMessage(value interface{}) json.RawMessage {
+func MustAsRawMessage(value interface{}) jsontext.Value {
 	msg, err := AsRawMessage(value)
 	if err != nil {
-		panic(fmt.Sprintf("cannot convert value %T to json.RawMessage: %v", value, err))
+		panic(fmt.Sprintf("cannot convert value %T to raw message: %v", value, err))
 	}
 	return msg
 }
 
-// AsRawMessage converts any given value to a json.RawMessage.
-func AsRawMessage(value interface{}) (json.RawMessage, error) {
+// AsRawMessage converts any given value to a jsontext.Value.
+func AsRawMessage(value interface{}) (jsontext.Value, error) {
 	if value == nil {
 		return nil, nil
 	}
