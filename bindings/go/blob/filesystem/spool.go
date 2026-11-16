@@ -100,7 +100,7 @@ func (f spoolFS) Open(name string) (fs.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	return sharedSpoolFile{SectionReader: io.NewSectionReader(f.file, 0, info.Size()), file: f.file}, nil
+	return sharedSpoolFile{SectionReader: io.NewSectionReader(f.file, 0, info.Size()), info: info}, nil
 }
 
 func (f spoolFS) Stat(name string) (fs.FileInfo, error) {
@@ -122,9 +122,10 @@ func (f spoolFS) Remove(name string) error {
 // them to tell that a request body can be sent again after a failed attempt.
 type sharedSpoolFile struct {
 	*io.SectionReader
-	file *os.File
+	// info describes the file as it was opened. A spool file does not change any more.
+	info fs.FileInfo
 }
 
-func (f sharedSpoolFile) Stat() (fs.FileInfo, error) { return f.file.Stat() }
+func (f sharedSpoolFile) Stat() (fs.FileInfo, error) { return f.info, nil }
 
 func (sharedSpoolFile) Close() error { return nil }
