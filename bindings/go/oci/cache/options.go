@@ -78,8 +78,9 @@ type Options struct {
 	// evicted until the cache fits, also when reseeding from disk. A
 	// blob larger than the limit is not cached. Each blob counts at least
 	// [MinBlobCharge], so the limit also bounds the number of entries and
-	// the memory they take. A value of 0 disables the limit, for entries
-	// too. Ignored by [ReferenceCache].
+	// the memory they take. A value of 0 uses [DefaultMaxTotalSize];
+	// [NoTotalSizeLimit] disables the limit, for entries too. Ignored by
+	// [ReferenceCache].
 	MaxTotalSize int64
 
 	// Accept reports whether a blob should be cached by the
@@ -98,9 +99,10 @@ type Options struct {
 const noExpiry time.Duration = -1
 
 const (
-	// DefaultMaxTotalSize is the [Options.MaxTotalSize] the OCM CLI and controller use
-	// unless configured otherwise.
+	// DefaultMaxTotalSize is the [Options.MaxTotalSize] used when it is 0.
 	DefaultMaxTotalSize = 1 << 30
+	// NoTotalSizeLimit as [Options.MaxTotalSize] disables the limit.
+	NoTotalSizeLimit = -1
 	// MinBlobCharge is the least a blob counts against [Options.MaxTotalSize]: one
 	// filesystem block, which a small file takes on disk anyway. It keeps the number of
 	// entries, and the memory each takes, bounded by the limit.
@@ -116,6 +118,7 @@ const (
 //     (MaxEntries is left zero)
 //   - 10 minute TTL
 //   - [DefaultMaxBlobSize] per-blob size cap
+//   - [DefaultMaxTotalSize] total size limit for the [BlobCache]
 //   - [DefaultAccept] media-type filter
 //   - [RemotePolicyIfNotPresent]
 //
@@ -124,6 +127,7 @@ func Defaults() *Options {
 	return &Options{
 		TTL:          10 * time.Minute,
 		MaxBlobSize:  DefaultMaxBlobSize,
+		MaxTotalSize: DefaultMaxTotalSize,
 		Accept:       DefaultAccept,
 		RemotePolicy: RemotePolicyIfNotPresent,
 	}
@@ -146,8 +150,11 @@ func (o Options) applyDefaults(maxEntries int) (Options, error) {
 	if o.MaxBlobSize == 0 {
 		o.MaxBlobSize = d.MaxBlobSize
 	}
-	if o.MaxTotalSize < 0 {
-		return Options{}, errors.New("cache: Options.MaxTotalSize must not be negative")
+	switch {
+	case o.MaxTotalSize == 0:
+		o.MaxTotalSize = d.MaxTotalSize
+	case o.MaxTotalSize < 0 && o.MaxTotalSize != NoTotalSizeLimit:
+		return Options{}, errors.New("cache: Options.MaxTotalSize must not be negative, except NoTotalSizeLimit")
 	}
 	if o.Accept == nil {
 		o.Accept = d.Accept

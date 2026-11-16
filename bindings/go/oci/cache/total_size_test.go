@@ -51,9 +51,21 @@ func TestCache_MaxTotalSize_EvictsLeastRecentlyUsed(t *testing.T) {
 	r.EqualValues(2*k, c.totalSize())
 }
 
-func TestCache_MaxTotalSize_ZeroMeansNoLimit(t *testing.T) {
+func TestCache_MaxTotalSize_ZeroUsesDefault(t *testing.T) {
+	opts, err := Options{Dir: t.TempDir()}.applyDefaults(0)
+	require.NoError(t, err)
+	assert.EqualValues(t, DefaultMaxTotalSize, opts.MaxTotalSize)
+}
+
+func TestCache_MaxTotalSize_OtherNegativeRejected(t *testing.T) {
+	_, err := Options{Dir: t.TempDir(), MaxTotalSize: NoTotalSizeLimit - 1}.applyDefaults(0)
+	require.ErrorContains(t, err, "MaxTotalSize")
+}
+
+func TestCache_MaxTotalSize_NoTotalSizeLimit(t *testing.T) {
 	r := require.New(t)
-	c := newTestCache(t, Options{})
+	c := newTestCache(t, Options{MaxTotalSize: NoTotalSizeLimit})
+	r.EqualValues(NoTotalSizeLimit, c.opts.MaxTotalSize)
 	for _, b := range []string{"aaaa", "bbbb", "cccc"} {
 		r.True(c.Has(populateBytes(t, c, []byte(b))))
 	}

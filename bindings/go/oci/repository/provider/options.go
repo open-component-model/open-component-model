@@ -154,11 +154,8 @@ func WithReferenceCacheOptions(opts *cache.Options) Option {
 // cache is off. opts are the defaults and are copied, so options shared between providers are
 // not mutated.
 func applyBlobCacheConfig(opts *cache.Options, cfg *ocicachev1alpha1.Config) *cache.Options {
-	applied, ok := enabledCopy(opts, cfg.BlobEnabled(opts != nil))
-	if !ok {
-		return nil
-	}
-	if cfg == nil {
+	applied := enabledCopy(opts, cfg.BlobEnabled(opts != nil))
+	if applied == nil || cfg == nil {
 		return applied
 	}
 	applyRemotePolicy(applied, cfg)
@@ -170,7 +167,7 @@ func applyBlobCacheConfig(opts *cache.Options, cfg *ocicachev1alpha1.Config) *ca
 			applied.MaxBlobSize = *b.MaxBlobSize
 		}
 		if b.MaxTotalSize != nil {
-			applied.MaxTotalSize = *b.MaxTotalSize
+			applied.MaxTotalSize = maxTotalSize(*b.MaxTotalSize)
 		}
 	}
 	return applied
@@ -180,8 +177,8 @@ func applyBlobCacheConfig(opts *cache.Options, cfg *ocicachev1alpha1.Config) *ca
 // [cache.RemotePolicyAlways] it returns nil: such a reference cache would serve nothing,
 // see [cache.ReferenceCache.Resolve].
 func applyReferenceCacheConfig(opts *cache.Options, cfg *ocicachev1alpha1.Config) *cache.Options {
-	applied, ok := enabledCopy(opts, cfg.ReferenceEnabled(opts != nil))
-	if !ok {
+	applied := enabledCopy(opts, cfg.ReferenceEnabled(opts != nil))
+	if applied == nil {
 		return nil
 	}
 	if cfg != nil {
@@ -201,16 +198,26 @@ func applyReferenceCacheConfig(opts *cache.Options, cfg *ocicachev1alpha1.Config
 	return applied
 }
 
-// enabledCopy returns a copy of opts, or the zero options if opts is nil, when enabled.
-func enabledCopy(opts *cache.Options, enabled bool) (*cache.Options, bool) {
+// enabledCopy returns a copy of opts, or the zero options if opts is nil, when enabled, and nil
+// otherwise.
+func enabledCopy(opts *cache.Options, enabled bool) *cache.Options {
 	if !enabled {
-		return nil, false
+		return nil
 	}
 	var applied cache.Options
 	if opts != nil {
 		applied = *opts
 	}
-	return &applied, true
+	return &applied
+}
+
+// maxTotalSize maps the configured blob.maxTotalSize to [cache.Options.MaxTotalSize]: 0 lifts
+// the limit in the config, but uses the default in the options.
+func maxTotalSize(configured int64) int64 {
+	if configured == 0 {
+		return cache.NoTotalSizeLimit
+	}
+	return configured
 }
 
 // checksRemote reports whether cfg requires remote authorisation on every access.

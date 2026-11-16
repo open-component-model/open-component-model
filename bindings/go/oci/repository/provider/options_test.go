@@ -57,6 +57,14 @@ func TestWithOCICacheConfig(t *testing.T) {
 			wantRef:  &cache.Options{RemotePolicy: cache.RemotePolicyIfNotPresent, TTL: time.Minute, MaxEntries: 500},
 		},
 		{
+			name: "maxTotalSize 0 lifts the limit",
+			opts: []Option{
+				WithBlobCacheOptions(&cache.Options{}),
+				WithOCICacheConfig(&ocicachev1alpha1.Config{Blob: &ocicachev1alpha1.BlobCacheConfig{MaxTotalSize: new(int64(0))}}),
+			},
+			wantBlob: &cache.Options{MaxTotalSize: cache.NoTotalSizeLimit},
+		},
+		{
 			name: "unset fields keep the options",
 			opts: []Option{
 				WithBlobCacheOptions(&cache.Options{RemotePolicy: cache.RemotePolicyAlways, TTL: time.Minute, MaxBlobSize: 1}),

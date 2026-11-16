@@ -41,7 +41,7 @@ func Register(
 		provider.WithTempDir(tempDir),
 		provider.WithUserAgent(creator),
 		provider.WithHTTPConfig(httpConfig),
-		provider.WithBlobCacheOptions(&cache.Options{MaxTotalSize: cache.DefaultMaxTotalSize}),
+		provider.WithBlobCacheOptions(&cache.Options{}),
 		provider.WithReferenceCacheOptions(&cache.Options{}),
 		provider.WithOCICacheConfig(cacheConfig),
 	)
