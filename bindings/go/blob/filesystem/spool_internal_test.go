@@ -2,6 +2,7 @@ package filesystem
 
 import (
 	"io"
+	"io/fs"
 	"strings"
 	"testing"
 
@@ -14,10 +15,9 @@ func (b stringBlob) ReadCloser() (io.ReadCloser, error) {
 	return io.NopCloser(strings.NewReader(string(b))), nil
 }
 
-// Where the operating system cannot open the spool file again, all readers share its one
-// handle. They must behave like files of their own all the same: independent positions,
-// rewindable, and closing one leaves the handle open for the others.
-func TestSpool_SharedHandleReaders(t *testing.T) {
+// The file system of a spooled blob holds exactly its one file: nothing else can be opened,
+// inspected or removed through it.
+func TestSpool_FileSystemHoldsOnlyTheSpoolFile(t *testing.T) {
 	r := require.New(t)
 	const content = "0123456789abcdefghij"
 	spooled, err := Spool(stringBlob(content), t.TempDir(), "")
@@ -25,33 +25,17 @@ func TestSpool_SharedHandleReaders(t *testing.T) {
 	files, ok := spooled.fileSystem.(spoolFS)
 	r.True(ok)
 
-	first, err := files.openShared()
-	r.NoError(err)
-	half := make([]byte, len(content)/2)
-	_, err = io.ReadFull(first, half)
-	r.NoError(err)
+	_, err = files.Open("other")
+	r.ErrorIs(err, fs.ErrNotExist)
+	_, err = files.Stat("other")
+	r.ErrorIs(err, fs.ErrNotExist)
+	r.ErrorIs(files.Remove("other"), fs.ErrNotExist)
 
-	second, err := files.openShared()
+	file, err := files.Open(files.name)
 	r.NoError(err)
-	all, err := io.ReadAll(second)
-	r.NoError(err)
-	r.Equal(content, string(all))
-	r.NoError(second.Close())
-
-	rest, err := io.ReadAll(first)
-	r.NoError(err)
-	r.Equal(content, string(half)+string(rest))
-
-	seeker, ok := first.(io.Seeker)
-	r.True(ok, "the reader cannot seek")
-	_, err = seeker.Seek(0, io.SeekStart)
-	r.NoError(err)
-	all, err = io.ReadAll(first)
-	r.NoError(err)
-	r.Equal(content, string(all))
-	info, err := first.Stat()
+	info, err := file.Stat()
 	r.NoError(err)
 	r.Equal(int64(len(content)), info.Size())
-	r.NoError(first.Close())
+	r.NoError(file.Close())
 	r.NoError(spooled.Remove())
 }

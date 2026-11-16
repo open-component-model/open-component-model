@@ -26,9 +26,8 @@ const spoolFilePrefix = "ocm-blob-"
 // as soon as it is created and never shows up in dir, on Windows it is deleted when it is
 // closed. [Blob.Remove] frees it earlier.
 //
-// Every reader of the blob has its own position and can be rewound. Where the operating
-// system can open the file again it is an *os.File of its own. Otherwise the readers share
-// the handle the blob was written with and fail once the blob is removed.
+// Every reader of the blob has its own position and can be rewound. The readers share the
+// handle the blob was written with, so they fail once the blob is removed.
 func Spool(content blob.ReadOnlyBlob, dir string, algorithm digest.Algorithm) (_ *Blob, err error) {
 	if algorithm == "" {
 		algorithm = digest.Canonical
@@ -94,15 +93,9 @@ func (f spoolFS) Open(name string) (fs.File, error) {
 	if name != f.name {
 		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
 	}
-	if reopened, err := reopenSpoolFile(f.file); err == nil {
-		return reopened, nil
-	}
-	return f.openShared()
-}
-
-// openShared returns a reader that goes through the handle of the file system instead of
-// one of its own. It is what Open falls back to where the file cannot be opened again.
-func (f spoolFS) openShared() (fs.File, error) {
+	// A file without a name cannot be opened a second time, and one that Windows deletes on
+	// close only by a handle that shares delete access. Every reader therefore goes through
+	// the one handle, at its own offset.
 	info, err := f.file.Stat()
 	if err != nil {
 		return nil, err
