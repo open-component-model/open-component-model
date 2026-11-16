@@ -131,18 +131,19 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 		),
 		httpConfig:         options.HTTPConfig,
 		tempDir:            options.TempDir,
-		blobCacheOpts:      applyBlobCacheConfig(options.BlobCacheOptions, options.CacheConfig),
-		referenceCacheOpts: applyReferenceCacheConfig(options.ReferenceCacheOptions, options.CacheConfig),
+		blobCacheOpts:      cache.BlobOptions(options.BlobCacheOptions, options.CacheConfig),
+		referenceCacheOpts: cache.ReferenceOptions(options.ReferenceCacheOptions, options.CacheConfig),
 	}
 	prov.sharedReferenceCache = sync.OnceValue(prov.newSharedReferenceCache)
-	if options.ReferenceCache != nil && options.CacheConfig.ReferenceEnabled(true) && !checksRemote(options.CacheConfig) {
+	// A shared cache is on unless the config turns it off, as if the caller had passed options.
+	if options.ReferenceCache != nil && cache.ReferenceOptions(&cache.Options{}, options.CacheConfig) != nil {
 		prov.sharedReferenceCache = func() *cache.ReferenceCache { return options.ReferenceCache }
 	}
 	// Wire the shared blob cache constructor now that prov exists so the
 	// closure can read its final field values. sync.OnceValue guarantees
 	// the constructor runs at most once across all callers.
 	prov.sharedBlobCache = sync.OnceValue(prov.newSharedBlobCache)
-	if options.BlobCache != nil && options.CacheConfig.BlobEnabled(true) {
+	if options.BlobCache != nil && cache.BlobOptions(&cache.Options{}, options.CacheConfig) != nil {
 		prov.sharedBlobCache = func() *cache.BlobCache { return options.BlobCache }
 	}
 	return prov

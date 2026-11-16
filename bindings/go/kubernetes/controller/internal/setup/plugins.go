@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"time"
 
 	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
@@ -81,28 +80,12 @@ func WithReferenceCache(rc *ocicache.ReferenceCache) PluginOption {
 // A nil cfg uses the cache defaults; the limits cfg sets replace them.
 // A cfg that turns the blob cache off returns a nil cache, which [WithBlobCache] treats as no caching.
 func NewBlobCache(tempDir string, cfg *ocicachev1alpha1.Config) (*ocicache.BlobCache, error) {
-	if !cfg.BlobEnabled(true) {
+	opts := ocicache.BlobOptions(&ocicache.Options{}, cfg)
+	if opts == nil {
 		return nil, nil
 	}
-	opts := ocicache.Options{Dir: filepath.Join(tempDirOrDefault(tempDir), "ocm-oci-cas")}
-	if cfg != nil {
-		opts.RemotePolicy = ocicache.RemotePolicy(cfg.RemotePolicy)
-		if b := cfg.Blob; b != nil {
-			if b.TTL != nil {
-				opts.TTL = time.Duration(*b.TTL)
-			}
-			if b.MaxBlobSize != nil {
-				opts.MaxBlobSize = *b.MaxBlobSize
-			}
-			if b.MaxTotalSize != nil {
-				opts.MaxTotalSize = *b.MaxTotalSize
-				if opts.MaxTotalSize == 0 {
-					opts.MaxTotalSize = ocicache.NoTotalSizeLimit // 0 lifts the limit in the config
-				}
-			}
-		}
-	}
-	return ocicache.NewBlobCache(opts)
+	opts.Dir = filepath.Join(tempDirOrDefault(tempDir), "ocm-oci-cas")
+	return ocicache.NewBlobCache(*opts)
 }
 
 // NewReferenceCache creates the reference cache to pass to [WithReferenceCache]. The reference
@@ -110,20 +93,12 @@ func NewBlobCache(tempDir string, cfg *ocicachev1alpha1.Config) (*ocicache.BlobC
 // It returns a nil cache unless cfg turns the reference cache on, and under remotePolicy Always,
 // which has the registry authorize every resolve.
 func NewReferenceCache(tempDir string, cfg *ocicachev1alpha1.Config) (*ocicache.ReferenceCache, error) {
-	if !cfg.ReferenceEnabled(false) || cfg.RemotePolicy == ocicachev1alpha1.RemotePolicyAlways {
+	opts := ocicache.ReferenceOptions(nil, cfg)
+	if opts == nil {
 		return nil, nil
 	}
-	opts := ocicache.Options{
-		Dir:          filepath.Join(tempDirOrDefault(tempDir), "ocm-oci-refcache"),
-		RemotePolicy: ocicache.RemotePolicy(cfg.RemotePolicy),
-	}
-	if cfg.Reference.TTL != nil {
-		opts.TTL = time.Duration(*cfg.Reference.TTL)
-	}
-	if cfg.Reference.MaxEntries != nil {
-		opts.MaxEntries = *cfg.Reference.MaxEntries
-	}
-	return ocicache.NewReferenceCache(opts)
+	opts.Dir = filepath.Join(tempDirOrDefault(tempDir), "ocm-oci-refcache")
+	return ocicache.NewReferenceCache(*opts)
 }
 
 func tempDirOrDefault(tempDir string) string {

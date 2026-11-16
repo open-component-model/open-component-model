@@ -1,8 +1,6 @@
 package provider
 
 import (
-	"time"
-
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 	ocicachev1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/cache/v1alpha1"
@@ -147,86 +145,5 @@ func WithReferenceCache(rc *cache.ReferenceCache) Option {
 func WithReferenceCacheOptions(opts *cache.Options) Option {
 	return func(o *Options) {
 		o.ReferenceCacheOptions = opts
-	}
-}
-
-// applyBlobCacheConfig returns the blob cache options with cfg applied, or nil if the blob
-// cache is off. opts are the defaults and are copied, so options shared between providers are
-// not mutated.
-func applyBlobCacheConfig(opts *cache.Options, cfg *ocicachev1alpha1.Config) *cache.Options {
-	applied := enabledCopy(opts, cfg.BlobEnabled(opts != nil))
-	if applied == nil || cfg == nil {
-		return applied
-	}
-	applyRemotePolicy(applied, cfg)
-	if b := cfg.Blob; b != nil {
-		if b.TTL != nil {
-			applied.TTL = time.Duration(*b.TTL)
-		}
-		if b.MaxBlobSize != nil {
-			applied.MaxBlobSize = *b.MaxBlobSize
-		}
-		if b.MaxTotalSize != nil {
-			applied.MaxTotalSize = maxTotalSize(*b.MaxTotalSize)
-		}
-	}
-	return applied
-}
-
-// applyReferenceCacheConfig is [applyBlobCacheConfig] for the reference cache. Under
-// [cache.RemotePolicyAlways] it returns nil: such a reference cache would serve nothing,
-// see [cache.ReferenceCache.Resolve].
-func applyReferenceCacheConfig(opts *cache.Options, cfg *ocicachev1alpha1.Config) *cache.Options {
-	applied := enabledCopy(opts, cfg.ReferenceEnabled(opts != nil))
-	if applied == nil {
-		return nil
-	}
-	if cfg != nil {
-		applyRemotePolicy(applied, cfg)
-		if r := cfg.Reference; r != nil {
-			if r.TTL != nil {
-				applied.TTL = time.Duration(*r.TTL)
-			}
-			if r.MaxEntries != nil {
-				applied.MaxEntries = *r.MaxEntries
-			}
-		}
-	}
-	if applied.RemotePolicy == cache.RemotePolicyAlways {
-		return nil
-	}
-	return applied
-}
-
-// enabledCopy returns a copy of opts, or the zero options if opts is nil, when enabled, and nil
-// otherwise.
-func enabledCopy(opts *cache.Options, enabled bool) *cache.Options {
-	if !enabled {
-		return nil
-	}
-	var applied cache.Options
-	if opts != nil {
-		applied = *opts
-	}
-	return &applied
-}
-
-// maxTotalSize maps the configured blob.maxTotalSize to [cache.Options.MaxTotalSize]: 0 lifts
-// the limit in the config, but uses the default in the options.
-func maxTotalSize(configured int64) int64 {
-	if configured == 0 {
-		return cache.NoTotalSizeLimit
-	}
-	return configured
-}
-
-// checksRemote reports whether cfg requires remote authorisation on every access.
-func checksRemote(cfg *ocicachev1alpha1.Config) bool {
-	return cfg != nil && cfg.RemotePolicy == ocicachev1alpha1.RemotePolicyAlways
-}
-
-func applyRemotePolicy(opts *cache.Options, cfg *ocicachev1alpha1.Config) {
-	if cfg.RemotePolicy != "" {
-		opts.RemotePolicy = cache.RemotePolicy(cfg.RemotePolicy)
 	}
 }
