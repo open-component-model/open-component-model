@@ -52,9 +52,9 @@ ocm get config [flags]
 ### Options
 
 ```
-  -h, --help          help for config
-  -o, --output enum   output format
-                      (must be one of [json ndjson yaml]) (default yaml)
+  -h, --help[=true|false]   help for config
+  -o, --output enum         output format
+                            (must be one of [json ndjson yaml]) (default yaml)
 ```
 
 ### Options inherited from parent commands
