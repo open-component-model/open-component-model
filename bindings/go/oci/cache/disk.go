@@ -122,7 +122,8 @@ func ensureDir(dir string) error {
 // unparseable names or that fail [digest.Validate] are removed so the
 // cache does not carry over corruption from a previous run. The
 // returned entries are sorted by modification time, oldest first, so
-// a reseed restores the recency order of the previous run.
+// a reseed evicts the least recently written entries first. Hits do not
+// touch the files, so the recency of reads is not restored.
 func scanExisting(dir string) ([]existingEntry, error) {
 	algoDirs, err := os.ReadDir(dir)
 	if err != nil {
