@@ -3,15 +3,15 @@ package jsonschemagen
 import (
 	"encoding/json/v2"
 	"errors"
+	"fmt"
 	"go/ast"
-	"io"
 	"maps"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 
 	"ocm.software/open-component-model/bindings/go/generator/universe"
 )
@@ -285,19 +285,20 @@ func ApplyExampleMarkers(s *JSONSchemaDraft202012, markers map[string]string, pa
 		if err != nil {
 			panic(err)
 		}
-		exampleData, err := io.ReadAll(example)
-		if err != nil {
-			panic(errors.Join(err, example.Close()))
-		}
 		var v any
 		switch strings.ToLower(filepath.Ext(p)) {
 		case ".yaml", ".yml":
-			err = yaml.Unmarshal(exampleData, &v)
+			var loader *yaml.Loader
+			if loader, err = yaml.NewLoader(example); err == nil {
+				err = loader.Load(&v)
+			}
 		default: // json
-			err = json.Unmarshal(exampleData, &v)
+			err = json.UnmarshalRead(example, &v)
 		}
 		if err := errors.Join(err, example.Close()); err != nil {
-			panic(err)
+			// An empty example file now fails here instead of contributing a null
+			// example, so the file has to be named in the message.
+			panic(fmt.Errorf("example %q of %q: %w", p, path, err))
 		}
 
 		s.Examples = append(s.Examples, v)

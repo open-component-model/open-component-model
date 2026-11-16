@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"io"
 	"sort"
@@ -11,7 +12,7 @@ import (
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v4"
 
 	"ocm.software/open-component-model/bindings/go/cli/cmd/download/shared"
 	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
@@ -270,9 +271,15 @@ func SerializeVerticesToNDJSON(writer io.Writer, vertices []*dag.Vertex[string])
 
 func SerializeVerticesToYAML(writer io.Writer, vertices []*dag.Vertex[string]) error {
 	plugins := convertVerticesToPluginInfos(vertices)
-	encoder := yaml.NewEncoder(writer)
-	defer encoder.Close()
-	return encoder.Encode(plugins)
+	// Every other YAML the CLI prints comes from sigs.k8s.io/yaml, which quotes like
+	// go-yaml v2/v3. QuoteLegacy keeps this output in that style; the rest of the v4
+	// defaults (two-space indent, compact sequences) already match it.
+	dumper, err := yaml.NewDumper(writer, yaml.WithQuotePreference(yaml.QuoteLegacy))
+	if err != nil {
+		return err
+	}
+	// Close flushes the rest of the stream, so its error has to reach the caller.
+	return errors.Join(dumper.Dump(plugins), dumper.Close())
 }
 
 func SerializeVerticesToTable(writer io.Writer, vertices []*dag.Vertex[string]) error {
