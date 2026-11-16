@@ -48,7 +48,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/registry v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/toxiproxy v0.44.0
 	github.com/veqryn/slog-context v0.9.0
-	go.yaml.in/yaml/v3 v3.0.5
+	go.yaml.in/yaml/v3 v3.0.6
 	golang.org/x/crypto v0.58.0
 	golang.org/x/net v0.62.0
 	golang.org/x/oauth2 v0.37.0
@@ -58,7 +58,7 @@ require (
 	golang.org/x/time v0.16.0
 	golang.org/x/tools v0.52.0
 	gopkg.in/yaml.v3 v3.0.1
-	helm.sh/helm/v4 v4.3.0
+	helm.sh/helm/v4 v4.3.1
 	k8s.io/api v0.37.1
 	k8s.io/apiextensions-apiserver v0.37.1
 	k8s.io/apimachinery v0.37.1
@@ -211,7 +211,7 @@ require (
 	k8s.io/cli-runtime v0.37.1 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad // indirect
-	oras.land/oras-go/v2 v2.6.2 // indirect
+	oras.land/oras-go/v2 v2.6.4 // indirect
 	sigs.k8s.io/json v0.0.0-20260909141634-11ed52e25bc5 // indirect
 	sigs.k8s.io/kustomize/api v0.21.2 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.21.2 // indirect
