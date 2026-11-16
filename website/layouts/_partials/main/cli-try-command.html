@@ -14,15 +14,16 @@
   {{- $major := int (index $parts 0) -}}
   {{- $minor := int (index $parts 1) -}}
   {{- if or (gt $major 0) (ge $minor 18) -}}
-    {{- /* Newest stable patch of this series; X.Y.0 is not always published. */ -}}
+    {{- /* 0.18 renamed --semver-constraint to --constraint; X.Y.0 is not always published. */ -}}
     {{- $flags = printf "--latest --constraint '~%s' -o widetree" $version -}}
   {{- else if eq $minor 17 -}}
-    {{- /* --constraint arrived in 0.18. */ -}}
-    {{- $flags = "--latest -o widetree" -}}
-  {{- else -}}
-    {{- /* widetree arrived in 0.17. */ -}}
-    {{- $flags = "--latest -o tree" -}}
+    {{- /* 0.16-0.17 expose the same capability as --semver-constraint; widetree arrived in 0.17. */ -}}
+    {{- $flags = printf "--latest --semver-constraint '~%s' -o widetree" $version -}}
+  {{- else if eq $minor 16 -}}
+    {{- /* Oldest series with the v2 CLI: widetree is not available yet, only plain tree. */ -}}
+    {{- $flags = printf "--latest --semver-constraint '~%s' -o tree" $version -}}
   {{- end -}}
+  {{- /* Below 0.16 there is no v2 `ocm get cv`, so $flags stays empty and $cmd becomes "". */ -}}
 {{- end -}}
 {{- $cmd := "" -}}
 {{- with $flags -}}

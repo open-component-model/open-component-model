@@ -190,7 +190,9 @@
 .lp-home .cli-demo--violet { color: var(--cli-violet); }
 .lp-home .cli-demo--dim { color: var(--cli-dim); }
 .lp-home .cli-demo--bold { font-weight: 700; }
-.lp-home .cli-demo__bar { color: var(--cli-bar-fill); letter-spacing: -1px; }
+/* progress indicator rendered inside the terminal body (distinct from the
+   title bar's .cli-demo__bar so it does not inherit its flex/padding/border) */
+.lp-home .cli-demo__progress { color: var(--cli-bar-fill); letter-spacing: -1px; }
 .lp-home .cli-demo__bar-todo { color: var(--cli-bar-todo); }
 
 /* --- integrated copyable command rows --- */
@@ -361,6 +363,11 @@
     &.is-copied {
         color: #1a9e4b;
         border-color: #1a9e4b;
+    }
+
+    &.is-copy-failed {
+        color: #d1453b;
+        border-color: #d1453b;
     }
 
     svg {

@@ -24,13 +24,16 @@ function scrollToBottom(term) {
 }
 
 // Type a shell command character by character behind a blinking cursor.
-async function typeCommand(term, text) {
+async function typeCommand(term, text, cancelled) {
     const line = appendLine(term, "cli-demo__line--cmd");
     line.innerHTML = "<span class=\"cli-demo__prompt\">$</span> ";
     const cursor = document.createElement("span");
     cursor.className = "cli-demo__cursor";
     line.appendChild(cursor);
     for (const char of text) {
+        if (cancelled && cancelled()) {
+            return;
+        }
         cursor.insertAdjacentText("beforebegin", char);
         scrollToBottom(term);
         await sleep(char === " " ? 12 : 18 + Math.random() * 26);
@@ -55,14 +58,17 @@ async function printBlank(term) {
 }
 
 // Animate a download-style progress bar that fills in place.
-async function printProgress(term, label) {
+async function printProgress(term, label, cancelled) {
     const line = appendLine(term, "cli-demo__line--in");
     for (let percent = 0; percent <= 100; percent += 4 + Math.floor(Math.random() * 7)) {
+        if (cancelled && cancelled()) {
+            return;
+        }
         const value = Math.min(percent, 100);
         const done = Math.round((value / 100) * WIDTH);
         const bar = `${"█".repeat(done)
         }<span class="cli-demo__bar-todo">${"░".repeat(WIDTH - done)}</span>`;
-        line.innerHTML = `${label}  <span class="cli-demo__bar">${bar}</span> `
+        line.innerHTML = `${label}  <span class="cli-demo__progress">${bar}</span> `
             + `<span class="cli-demo--cyan">${value}%</span>`;
         scrollToBottom(term);
         await sleep(55);
@@ -96,60 +102,119 @@ function treeLines(version) {
 }
 
 async function run(panel, term, config, state) {
-    if (state.running) {
-        return;
-    }
-    state.running = true;
+    // Each invocation claims a run id. If a later invocation (e.g. Replay)
+    // starts, this one sees a changed id and stops, so two transcripts never
+    // interleave in the same terminal.
+    const runId = (state.runId || 0) + 1;
+    state.runId = runId;
+    const cancelled = () => state.runId !== runId;
     const setActive = makeSetActive(panel);
     term.innerHTML = "";
     setActive(1);
 
     // Step 1: install the CLI.
-    await typeCommand(term, config.install);
+    await typeCommand(term, config.install, cancelled);
+    if (cancelled()) {
+        return;
+    }
     await printLine(term, "<span class=\"cli-demo--dim\">==&gt;</span> Detecting platform  <span class=\"cli-demo--cyan\">darwin/arm64</span>", 240);
+    if (cancelled()) {
+        return;
+    }
     await printLine(term, `<span class="cli-demo--dim">==&gt;</span> Resolving release  <span class="cli-demo--bold cli-demo--cyan">ocm.software/cli ${config.version}</span>`, 300);
-    await printProgress(term, `<span class="cli-demo--dim">==&gt;</span> Downloading ocm ${config.version}`);
+    if (cancelled()) {
+        return;
+    }
+    await printProgress(term, `<span class="cli-demo--dim">==&gt;</span> Downloading ocm ${config.version}`, cancelled);
+    if (cancelled()) {
+        return;
+    }
     await printLine(term, "<span class=\"cli-demo--dim\">==&gt;</span> Verifying GitHub artifact attestation", 180);
+    if (cancelled()) {
+        return;
+    }
     await printLine(term, "    <span class=\"cli-demo--green\">✓</span> provenance verified  <span class=\"cli-demo--dim\">(sigstore, keyless)</span>", 300);
+    if (cancelled()) {
+        return;
+    }
     await printLine(term, "<span class=\"cli-demo--dim\">==&gt;</span> Installing to <span class=\"cli-demo--cyan\">~/.local/bin/ocm</span>", 240);
+    if (cancelled()) {
+        return;
+    }
     await printLine(term, `<span class="cli-demo--green">✔</span> ocm ${config.version} installed and ready to go!`, 340);
+    if (cancelled()) {
+        return;
+    }
     await printBlank(term);
 
     if (config.path) {
-        await typeCommand(term, config.path);
+        await typeCommand(term, config.path, cancelled);
+        if (cancelled()) {
+            return;
+        }
     }
-    await typeCommand(term, "ocm version");
+    await typeCommand(term, "ocm version", cancelled);
+    if (cancelled()) {
+        return;
+    }
     await printLine(term, `<span class="cli-demo--bold">${config.version}</span>`, 480);
+    if (cancelled()) {
+        return;
+    }
     await printBlank(term);
 
     // Step 2: inspect the public CLI component.
     setActive(2);
-    await typeCommand(term, config.inspect);
+    await typeCommand(term, config.inspect, cancelled);
+    if (cancelled()) {
+        return;
+    }
     await printLine(term, "<span class=\"cli-demo--dim\">==&gt;</span> Fetching component descriptor  <span class=\"cli-demo--dim\">(no credentials needed)</span>", 420);
+    if (cancelled()) {
+        return;
+    }
     await printBlank(term);
     for (const row of treeLines(config.version)) {
         await printLine(term, row, 140);
+        if (cancelled()) {
+            return;
+        }
     }
     await printBlank(term);
     await printLine(term, "<span class=\"cli-demo--green\">✓</span> 1 component, 6 resources  <span class=\"cli-demo--dim\">— signed &amp; transportable anywhere</span>", 200);
+    if (cancelled()) {
+        return;
+    }
 
     const done = appendLine(term, "cli-demo__line--cmd");
     done.innerHTML = "<span class=\"cli-demo__prompt\">$</span> <span class=\"cli-demo__cursor\"></span>";
     scrollToBottom(term);
 
     await sleep(5000);
+    if (cancelled()) {
+        return;
+    }
     setActive(3); // invite the reader onward when the demo finishes
-    state.running = false;
 }
 
 function wireCopyButtons(panel) {
     for (const button of panel.querySelectorAll("[data-copy]")) {
-        button.addEventListener("click", () => {
+        button.addEventListener("click", async () => {
             const text = button.getAttribute("data-copy");
-            navigator.clipboard.writeText(text).then(() => {
-                button.classList.add("is-copied");
-                setTimeout(() => button.classList.remove("is-copied"), 1400);
-            });
+            const flash = (cls) => {
+                button.classList.add(cls);
+                setTimeout(() => button.classList.remove(cls), 1400);
+            };
+            try {
+                if (!navigator.clipboard || !navigator.clipboard.writeText) {
+                    throw new Error("Clipboard API unavailable");
+                }
+                await navigator.clipboard.writeText(text);
+                flash("is-copied");
+            } catch {
+                // Permission denied or no Clipboard API: tell the user to copy manually.
+                flash("is-copy-failed");
+            }
         });
     }
 }
@@ -165,14 +230,14 @@ function initPanel(panel) {
         path: panel.dataset.path || "",
         inspect: panel.dataset.inspect || ""
     };
-    const state = { running: false };
+    const state = { runId: 0 };
 
     wireCopyButtons(panel);
 
     const replay = panel.querySelector("[data-cli-replay]");
     if (replay) {
         replay.addEventListener("click", () => {
-            state.running = false;
+            // run() bumps the run id, which cancels any invocation still playing.
             run(panel, term, config, state);
         });
     }
