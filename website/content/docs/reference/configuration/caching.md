@@ -33,8 +33,8 @@ the blob cache between repositories and credentials. OCM checks every fetched bl
 writes the blob to disk.
 
 The reference cache saves the registry request that resolves a tag, so repeated reads of the same component version
-do not run into registry rate limits. A tag moved to a new digest in the registry therefore stays stale until its
-entry expires, see [Moved Tags](#moved-tags).
+do not run into registry rate limits. A tag moved or deleted in the registry therefore stays stale until its
+entry expires, see [Stale Tags](#stale-tags).
 
 Credentials are not part of either key, so rotating short-lived tokens does not make the caches useless. The `Always`
 [remote policy](#remote-policy), which has the registry authorize every access, turns off the reference cache.
@@ -149,18 +149,26 @@ shared machines, set `tempFolder` or `--temp-folder` to a directory that only yo
 
 With `Always`, OCM asks the registry to authorize every access, but does not download cached content again.
 
-### Moved Tags
+### Stale Tags
 
-OCM stores a component version under a tag. With `IfNotPresent`, a tag that another writer moves to a new digest, for
-example by publishing the same component version again with different content, still resolves to the cached digest
-until the reference cache entry expires after `reference.ttl`. Component versions are not meant to change after they
-are published, so this does not matter in normal use. Tags that the same OCM process writes are updated in the cache
-at once.
+OCM stores a component version under a tag. With `IfNotPresent`, a tag resolves to the cached digest until its
+reference cache entry expires after `reference.ttl`, also in later runs, because the cache is kept on disk. Until
+then, OCM does not see changes that another writer makes in the registry:
 
-If you publish component versions again, read them with one of these:
+- a tag moved to a new digest, for example a component version published again with different content, or an alias
+  such as `latest` that is moved on purpose;
+- a deleted component version, or a registry recreated at the same address, for example a local test registry. OCM
+  still reads the deleted component version from the cache.
 
-- a shorter `reference.ttl`, which bounds how long a moved tag stays stale;
-- `reference.enabled: false`, which resolves every tag against the registry.
+Component versions are not meant to change after they are published, so this does not matter in normal use. Tags
+that the same OCM process writes are updated in the cache at once. With `--loglevel debug`, OCM logs every tag served
+from the cache as `refcache: hit`.
+
+If tags change in your registry, read them with one of these:
+
+- a shorter `reference.ttl`, which bounds how long a tag stays stale;
+- `reference.enabled: false`, which resolves every tag against the registry;
+- a cleared cache, see [Clearing the Cache](#clearing-the-cache), to pick up a change once.
 
 ## Configuration
 
@@ -203,7 +211,7 @@ Fields of `reference`:
 | Field        | Type                                                             | Default                            | Description                                                                                                                                              |
 |--------------|------------------------------------------------------------------|------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `enabled`    | boolean                                                          | `true` (CLI), `false` (controller) | `false` turns off the reference cache: every tag and digest is resolved against the registry. `remotePolicy: Always` turns it off regardless.            |
-| `ttl`        | duration string such as `30s` or `1h30m`, or integer nanoseconds | `10m`                              | Time to live of the entries: how long a [moved tag](#moved-tags) stays stale. Must be positive.                                                          |
+| `ttl`        | duration string such as `30s` or `1h30m`, or integer nanoseconds | `10m`                              | Time to live of the entries: how long a [stale tag](#stale-tags) is served. Must be positive.                                                            |
 | `maxEntries` | integer                                                          | `10000`                            | The tags and digests the reference cache keeps, for all repositories together. When reached, the least recently used entry is removed. Must be positive. |
 
 An unknown `remotePolicy`, a `ttl` that is not a positive duration, a `maxBlobSize` or `maxEntries` that is not
@@ -252,7 +260,7 @@ its ephemeral storage: keep `blob.maxTotalSize` below an ephemeral-storage limit
 
 `reference.enabled: true` turns on the reference cache in the controller, unless `remotePolicy` is `Always`. It
 saves the registry request that resolves the tag of a component version on every reconciliation, but a
-[moved tag](#moved-tags) is then picked up only after `reference.ttl`.
+[moved or deleted tag](#stale-tags) is then picked up only after `reference.ttl`.
 `oci.cache.config.ocm.software` is the only type accepted here. Any other type, or an invalid field, results in a
 startup error.
 
@@ -265,9 +273,14 @@ the registry with the credentials of the requesting object.
 
 ## Clearing the Cache
 
-It is safe to delete `<tempFolder>/ocm-oci-cas` and `<tempFolder>/ocm-oci-refcache` at any time when no OCM process
-is running. OCM creates the directories again on the next run. If a cached file is missing while OCM is running, OCM
-treats the entry as a cache miss and downloads the content again.
+Delete `<tempFolder>/ocm-oci-cas` and `<tempFolder>/ocm-oci-refcache` to clear the caches, for example to pick up a
+[stale tag](#stale-tags) at once. OCM creates the directories again on the next run.
+
+{{< callout context="caution" title="Clear the cache only while no OCM process runs" icon="outline/alert-triangle" >}}
+You SHOULD delete the directories only while no OCM process uses them. A running process keeps its entries in memory
+and writes them back to disk, so a tag can stay stale after the deletion. If a cached file is missing while OCM is
+running, OCM treats the entry as a cache miss and downloads the content again.
+{{< /callout >}}
 
 ## Related Documentation
 
