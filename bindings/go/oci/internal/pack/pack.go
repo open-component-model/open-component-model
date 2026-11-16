@@ -111,13 +111,11 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 	}
 
 	// Stream the blob directly when the storage supports streaming push (chunked
-	// upload to a registry, or a staged file renamed into a CTF) and buffering
-	// would otherwise be required. Buffering happens (in PrepareArtifactBlobForOCI)
-	// whenever the size OR the digest is unknown, so we stream in either case:
-	// the digest and size are discovered/verified while streaming instead of by
-	// reading the whole blob into memory first. Blobs that already expose both a
-	// size and a digest need no buffer and take the regular push path (which
-	// still chunks large blobs by size).
+	// upload to a registry, or a staged file renamed into a CTF) and the size OR
+	// the digest is unknown: both are discovered/verified while streaming, so the
+	// blob does not have to be spooled to a file first. Blobs that already expose
+	// both a size and a digest take the regular push path (which still chunks
+	// large blobs by size).
 	if pusher, ok := storage.(remotestore.StreamingPusher); ok {
 		if layer, streamed, err := streamResourceLayer(ctx, pusher, b, layerOpts); err != nil {
 			return ociImageSpecV1.Descriptor{}, err
