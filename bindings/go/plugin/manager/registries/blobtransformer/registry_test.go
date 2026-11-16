@@ -3,7 +3,6 @@ package blobtransformer
 import (
 	"context"
 	"encoding/json/v2"
-	"errors"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -13,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -65,9 +63,13 @@ func TestPluginFlow(t *testing.T) {
 		if pluginCmd.Process == nil {
 			return
 		}
-		assert.NoError(t, pluginCmd.Process.Kill())
-		err := os.Remove(osutil.SocketPath(id))
-		assert.True(t, err == nil || errors.Is(err, os.ErrNotExist))
+		// ctx is cancelled before cleanup functions run, so exec.CommandContext has usually
+		// killed the plugin already. Killing an exited process reports os.ErrProcessDone on
+		// unix and access denied on windows; both mean the process is gone.
+		_ = pluginCmd.Process.Kill()
+		// A killed plugin cannot unlink its own socket, and on windows the file can still be
+		// held while the process goes away, so the leftovers are removed best effort.
+		_ = os.Remove(osutil.SocketPath(id))
 		_ = os.Remove(osutil.SocketPath(id) + ".lock")
 	})
 	pipe, err := pluginCmd.StdoutPipe()
