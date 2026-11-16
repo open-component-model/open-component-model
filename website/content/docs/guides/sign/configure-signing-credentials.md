@@ -136,7 +136,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: GPG/v1alpha1
+          type: GPG
           signature: default
         credentials:
           - type: GPGCredentials/v1alpha1
@@ -163,7 +163,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: GPG/v1alpha1
+          type: GPG
           signature: default
         credentials:
           - type: GPGCredentials/v1alpha1
