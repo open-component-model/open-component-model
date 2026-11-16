@@ -104,10 +104,12 @@ level=INFO msg="spooled blob to disk" unknown=size directory=/var/cache/ocm reso
 
 `unknown` tells what was missing (`size`, `digest`, or `size and digest`). The space is freed as soon as the upload
 of that blob ends, so the folder needs room for the blobs that are uploaded at the same time, not for all of them.
+When an upload fails with an error that OCM [retries]({{< relref "http-client.md" >}}), the blob is sent again from
+the spool file. Its source is not read a second time.
 
-On Linux and macOS the file has no name while it is in use: it does not show up in a listing of the folder (`ls`,
-`du`), but its space counts as used (`df`), and it is freed even when OCM is interrupted or killed. On Windows the
-file is visible as `ocm-blob-*`, and a killed OCM process leaves it behind.
+The operating system frees the file together with the last handle OCM holds on it, so it is gone even when OCM is
+interrupted or killed. On Linux and macOS the file has no name while it is in use: it does not show up in a listing of
+the folder (`ls`, `du`), but its space counts as used (`df`). On Windows it is visible as `ocm-blob-*` until then.
 
 ### Temporary Folder in the Controller
 

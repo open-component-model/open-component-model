@@ -3,14 +3,13 @@ package blob
 import (
 	"errors"
 	"fmt"
-	"io"
-	"os"
 	"sync"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory/cache"
 	"ocm.software/open-component-model/bindings/go/blob/verified"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -291,14 +290,11 @@ func (r *ArtifactBlob) Buffer() (result *ArtifactBlob, err error) {
 	}, nil
 }
 
-// Spool copies the blob into a temporary file in dir (the default temporary directory if
-// empty) and returns an ArtifactBlob over that file with a known size and digest. Unlike
-// Buffer it holds no content in memory. The content is verified against the byte digest of
-// an ordinary resource while it is copied. The caller must call release once the returned
-// blob is no longer read; it frees the disk space.
-//
-// Where the operating system allows it, the file is unlinked as soon as it is created, so
-// its space is freed even when the process is killed. It then never shows up in dir.
+// Spool copies the blob into a temporary file in dir with [filesystem.Spool] and returns an
+// ArtifactBlob over that file with a known size and digest. Unlike Buffer it holds no
+// content in memory. The content is verified against the byte digest of an ordinary
+// resource. The caller must call release once the returned blob is no longer read; it
+// frees the disk space.
 func (r *ArtifactBlob) Spool(dir string) (_ *ArtifactBlob, release func() error, err error) {
 	expected, known, err := r.resourceByteDigest()
 	if err != nil {
@@ -309,76 +305,21 @@ func (r *ArtifactBlob) Spool(dir string) (_ *ArtifactBlob, release func() error,
 		algorithm = digest.Digest(expected).Algorithm()
 	}
 
-	if dir != "" {
-		// Like the OCI caches, do not depend on someone else having created the folder.
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return nil, nil, fmt.Errorf("failed to create spool directory: %w", err)
-		}
-	}
-	file, err := os.CreateTemp(dir, "ocm-blob-*")
+	spooled, err := filesystem.Spool(r, dir, algorithm)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create spool file: %w", err)
+		return nil, nil, err
 	}
-	releaseFile := func() error { return releaseSpoolFile(file) }
-	defer func() {
-		if err != nil {
-			err = errors.Join(err, releaseFile())
-		}
-	}()
-	if err := detachSpoolFile(file); err != nil {
-		return nil, nil, fmt.Errorf("failed to unlink spool file: %w", err)
-	}
-
-	digester := algorithm.Digester()
-	size, err := copyAndClose(io.MultiWriter(file, digester.Hash()), r)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to spool blob to file: %w", err)
-	}
-	actual := digester.Digest().String()
-	if known && actual != expected {
-		return nil, nil, fmt.Errorf("resource blob digest mismatch: expected %s, got %s", expected, actual)
+	if actual, _ := spooled.Digest(); known && actual != expected {
+		return nil, nil, errors.Join(fmt.Errorf("resource blob digest mismatch: expected %s, got %s", expected, actual), spooled.Close())
 	}
 
 	return &ArtifactBlob{
-		ReadOnlyBlob: &spooledBlob{file: file, size: size, digest: actual},
+		ReadOnlyBlob: spooled,
 		Artifact:     r.Artifact,
 		mediaType:    r.mediaType,
 		ociLayout:    r.ociLayout,
-	}, releaseFile, nil
+	}, spooled.Close, nil
 }
-
-// copyAndClose copies src into dst. A source that verifies its content reports a mismatch
-// when it is closed, so the close error is part of the result.
-func copyAndClose(dst io.Writer, src blob.ReadOnlyBlob) (_ int64, err error) {
-	reader, err := src.ReadCloser()
-	if err != nil {
-		return 0, err
-	}
-	defer func() {
-		err = errors.Join(err, reader.Close())
-	}()
-	return blob.CopyReader(dst, reader)
-}
-
-// spooledBlob is a file written by Spool, whose size and digest were recorded while writing.
-// The file may have no name any more, so readers are derived from the handle Spool opened.
-type spooledBlob struct {
-	file   *os.File
-	size   int64
-	digest string
-}
-
-// ReadCloser returns a reader with its own position. Where the operating system can open
-// the file again it is a real file, which lets the kernel copy it to a socket. Otherwise it
-// reads through the shared handle at explicit offsets.
-func (b *spooledBlob) ReadCloser() (io.ReadCloser, error) {
-	if reopened, err := reopenSpoolFile(b.file); err == nil {
-		return reopened, nil
-	}
-	return io.NopCloser(io.NewSectionReader(b.file, 0, b.size)), nil
-}
-func (b *spooledBlob) Size() int64            { return b.size }
-func (b *spooledBlob) Digest() (string, bool) { return b.digest, true }
 
 // Interface implementations
 var (

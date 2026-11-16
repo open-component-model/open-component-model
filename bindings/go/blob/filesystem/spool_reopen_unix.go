@@ -1,6 +1,6 @@
-//go:build unix && !linux
+//go:build unix && !linux && !darwin
 
-package blob
+package filesystem
 
 import (
 	"errors"
@@ -8,7 +8,7 @@ import (
 )
 
 // reopenSpoolFile is not available: an unlinked file cannot be opened again here. On the
-// BSDs and macOS, opening /dev/fd/N duplicates the handle, which shares its read position.
+// BSDs, opening /dev/fd/N duplicates the handle, which shares its read position.
 func reopenSpoolFile(*os.File) (*os.File, error) {
 	return nil, errors.ErrUnsupported
 }
