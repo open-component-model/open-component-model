@@ -14,6 +14,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	s3accessspec "ocm.software/open-component-model/bindings/go/s3/spec/access"
 	s3accessv2 "ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
+	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 	wgetv1alpha1 "ocm.software/open-component-model/bindings/go/wget/transformation/spec/v1alpha1"
@@ -41,11 +42,11 @@ func TestProcessResource_PlainBlobSources(t *testing.T) {
 		wantTypes []runtime.Type
 		buffered  bool
 	}{
-		{"wget GET to OCI", wget(""), ociTarget, []runtime.Type{ociv1alpha1.TransferResourceToOCILocalBlobV1alpha1}, false},
-		{"wget lower-case get to CTF", wget("get"), ctfTarget, []runtime.Type{ociv1alpha1.TransferResourceToCTFLocalBlobV1alpha1}, false},
+		{"wget GET to OCI", wget(""), ociTarget, []runtime.Type{uploadv1alpha1.TransferWgetToOCILocalBlobV1alpha1}, false},
+		{"wget lower-case get to CTF", wget("get"), ctfTarget, []runtime.Type{uploadv1alpha1.TransferWgetToCTFLocalBlobV1alpha1}, false},
 		{"wget POST to OCI", wget("POST"), ociTarget, []runtime.Type{wgetv1alpha1.DownloadWgetResourceV1alpha1, ociv1alpha1.OCIAddLocalResourceV1alpha1}, true},
-		{"s3 to OCI", s3, ociTarget, []runtime.Type{ociv1alpha1.TransferResourceToOCILocalBlobV1alpha1}, false},
-		{"s3 to CTF", s3, ctfTarget, []runtime.Type{ociv1alpha1.TransferResourceToCTFLocalBlobV1alpha1}, false},
+		{"s3 to OCI", s3, ociTarget, []runtime.Type{uploadv1alpha1.TransferS3ToOCILocalBlobV1alpha1}, false},
+		{"s3 to CTF", s3, ctfTarget, []runtime.Type{uploadv1alpha1.TransferS3ToCTFLocalBlobV1alpha1}, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

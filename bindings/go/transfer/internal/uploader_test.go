@@ -295,7 +295,7 @@ func TestBuildGraphDefinition_LocalBlobUploader_StreamsWget(t *testing.T) {
 	var sawTransfer, sawDownloadWget, sawStreaming bool
 	for i := range tgd.Transformations {
 		switch tgd.Transformations[i].Type {
-		case ociv1alpha1.TransferResourceToOCILocalBlobV1alpha1:
+		case uploadv1alpha1.TransferWgetToOCILocalBlobV1alpha1:
 			sawTransfer = true
 		case wgetv1alpha1.DownloadWgetResourceV1alpha1:
 			sawDownloadWget = true

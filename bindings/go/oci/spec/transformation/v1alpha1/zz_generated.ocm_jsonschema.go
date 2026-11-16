@@ -168,12 +168,6 @@ var schemaTransferOCILocalBlobToOCILocalBlob []byte
 //go:embed schemas/TransferOCILocalBlobToOCILocalBlobSpec.schema.json
 var schemaTransferOCILocalBlobToOCILocalBlobSpec []byte
 
-//go:embed schemas/TransferResourceToCTFLocalBlob.schema.json
-var schemaTransferResourceToCTFLocalBlob []byte
-
-//go:embed schemas/TransferResourceToOCILocalBlob.schema.json
-var schemaTransferResourceToOCILocalBlob []byte
-
 // JSONSchema returns the JSON Schema for AddOCIArtifact.
 func (AddOCIArtifact) JSONSchema() []byte {
 	return schemaAddOCIArtifact
@@ -437,14 +431,4 @@ func (TransferOCILocalBlobToOCILocalBlob) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for TransferOCILocalBlobToOCILocalBlobSpec.
 func (TransferOCILocalBlobToOCILocalBlobSpec) JSONSchema() []byte {
 	return schemaTransferOCILocalBlobToOCILocalBlobSpec
-}
-
-// JSONSchema returns the JSON Schema for TransferResourceToCTFLocalBlob.
-func (TransferResourceToCTFLocalBlob) JSONSchema() []byte {
-	return schemaTransferResourceToCTFLocalBlob
-}
-
-// JSONSchema returns the JSON Schema for TransferResourceToOCILocalBlob.
-func (TransferResourceToOCILocalBlob) JSONSchema() []byte {
-	return schemaTransferResourceToOCILocalBlob
 }

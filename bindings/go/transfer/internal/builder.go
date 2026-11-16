@@ -193,6 +193,14 @@ func NewDefaultBuilder(
 		HTTPConfig:         httpConfig,
 	}
 
+	// Fused plain blob (wget, s3) to local blob transformer
+	transferToLocalBlob := &TransferToLocalBlob{
+		Scheme:             transformerScheme,
+		RepoProvider:       repoProvider,
+		ResourceRepository: resourceRepo,
+		CredentialProvider: credentialProvider,
+	}
+
 	// File cleanup transformer
 	transformerScheme.MustRegisterWithAlias(&FileCleanupTransformation{}, FileCleanupVersionedType)
 	fileCleanup := &FileCleanup{
@@ -221,8 +229,6 @@ func NewDefaultBuilder(
 		WithTransformer(&ociv1alpha1.TransferCTFLocalBlobToOCIArtifact{}, transferLocalBlobToOCIArtifact).
 		WithTransformer(&ociv1alpha1.TransferOCIArtifactToOCILocalBlob{}, transferOCIArtifactToLocalBlob).
 		WithTransformer(&ociv1alpha1.TransferOCIArtifactToCTFLocalBlob{}, transferOCIArtifactToLocalBlob).
-		WithTransformer(&ociv1alpha1.TransferResourceToOCILocalBlob{}, transferOCIArtifactToLocalBlob).
-		WithTransformer(&ociv1alpha1.TransferResourceToCTFLocalBlob{}, transferOCIArtifactToLocalBlob).
 		WithTransformer(&helmv1alpha1.GetHelmChart{}, getHelmChart).
 		WithTransformer(&helmv1alpha1.ConvertHelmToOCI{}, convertHelmToOCI).
 		WithTransformer(&wgetv1alpha1.DownloadWgetResource{}, downloadWget).
@@ -233,6 +239,10 @@ func NewDefaultBuilder(
 		WithTransformer(&wgetv1alpha1.HTTPStreaming{}, httpStreaming).
 		WithTransformer(&uploadv1alpha1.ArtifactoryUpload{}, &artifactory.Transformer{Uploader: repositoryUpload}).
 		WithTransformer(&uploadv1alpha1.NexusUpload{}, &nexus.Transformer{Uploader: repositoryUpload}).
+		WithTransformer(&uploadv1alpha1.TransferWgetToOCILocalBlob{}, transferToLocalBlob).
+		WithTransformer(&uploadv1alpha1.TransferWgetToCTFLocalBlob{}, transferToLocalBlob).
+		WithTransformer(&uploadv1alpha1.TransferS3ToOCILocalBlob{}, transferToLocalBlob).
+		WithTransformer(&uploadv1alpha1.TransferS3ToCTFLocalBlob{}, transferToLocalBlob).
 		WithTransformer(&FileCleanupTransformation{}, fileCleanup)
 }
 

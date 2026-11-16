@@ -20,8 +20,6 @@ const (
 	TransferCTFLocalBlobToOCIArtifactType  = "TransferCTFLocalBlobToOCIArtifact"
 	TransferOCIArtifactToOCILocalBlobType  = "TransferOCIArtifactToOCILocalBlob"
 	TransferOCIArtifactToCTFLocalBlobType  = "TransferOCIArtifactToCTFLocalBlob"
-	TransferResourceToOCILocalBlobType     = "TransferResourceToOCILocalBlob"
-	TransferResourceToCTFLocalBlobType     = "TransferResourceToCTFLocalBlob"
 )
 
 // OCILocalBlobSource identifies a local resource of a component version in an OCI repository.
@@ -327,36 +325,4 @@ type TransferOCIArtifactToCTFLocalBlobSpec struct {
 	Version string `json:"version"`
 	// TargetResource is the resource descriptor to add, with a local blob access.
 	TargetResource *v2.Resource `json:"targetResource"`
-}
-
-// TransferResourceToOCILocalBlob is a fused transformation that streams a resource whose
-// access yields a plain blob (such as Wget or S3) from its source into a component version
-// in a target OCI repository, where it is stored as a local blob. It replaces the
-// Download{Wget,S3}Resource + OCIAddLocalResource pair, which buffers the blob in a file.
-// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
-// +k8s:deepcopy-gen=true
-// +ocm:typegen=true
-// +ocm:jsonschema-gen=true
-type TransferResourceToOCILocalBlob struct {
-	// +ocm:jsonschema-gen:enum=TransferResourceToOCILocalBlob/v1alpha1
-	Type   runtime.Type                           `json:"type"`
-	ID     string                                 `json:"id"`
-	Spec   *TransferOCIArtifactToOCILocalBlobSpec `json:"spec"`
-	Output *TransferLocalBlobOutput               `json:"output,omitzero"`
-}
-
-// TransferResourceToCTFLocalBlob is a fused transformation that streams a resource whose
-// access yields a plain blob (such as Wget or S3) from its source into a component version
-// in a target CTF repository, where it is stored as a local blob. It replaces the
-// Download{Wget,S3}Resource + CTFAddLocalResource pair, which buffers the blob in a file.
-// +k8s:deepcopy-gen:interfaces=ocm.software/open-component-model/bindings/go/runtime.Typed
-// +k8s:deepcopy-gen=true
-// +ocm:typegen=true
-// +ocm:jsonschema-gen=true
-type TransferResourceToCTFLocalBlob struct {
-	// +ocm:jsonschema-gen:enum=TransferResourceToCTFLocalBlob/v1alpha1
-	Type   runtime.Type                           `json:"type"`
-	ID     string                                 `json:"id"`
-	Spec   *TransferOCIArtifactToCTFLocalBlobSpec `json:"spec"`
-	Output *TransferLocalBlobOutput               `json:"output,omitzero"`
 }

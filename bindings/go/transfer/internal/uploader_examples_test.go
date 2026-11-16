@@ -14,6 +14,7 @@ import (
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
 	wgetv1alpha1 "ocm.software/open-component-model/bindings/go/wget/transformation/spec/v1alpha1"
@@ -135,7 +136,8 @@ func uploaderOutcomes(t *testing.T, tgd *transformv1alpha1.TransformationGraphDe
 				ociv1alpha1.TransferOCILocalBlobToOCILocalBlobV1alpha1, ociv1alpha1.TransferOCILocalBlobToCTFLocalBlobV1alpha1,
 				ociv1alpha1.TransferCTFLocalBlobToOCILocalBlobV1alpha1, ociv1alpha1.TransferCTFLocalBlobToCTFLocalBlobV1alpha1,
 				ociv1alpha1.TransferOCIArtifactToOCILocalBlobV1alpha1, ociv1alpha1.TransferOCIArtifactToCTFLocalBlobV1alpha1,
-				ociv1alpha1.TransferResourceToOCILocalBlobV1alpha1, ociv1alpha1.TransferResourceToCTFLocalBlobV1alpha1:
+				uploadv1alpha1.TransferWgetToOCILocalBlobV1alpha1, uploadv1alpha1.TransferWgetToCTFLocalBlobV1alpha1,
+				uploadv1alpha1.TransferS3ToOCILocalBlobV1alpha1, uploadv1alpha1.TransferS3ToCTFLocalBlobV1alpha1:
 				outcome = "local blob"
 			case wgetv1alpha1.HTTPStreamingV1alpha1:
 				outcome = "http"

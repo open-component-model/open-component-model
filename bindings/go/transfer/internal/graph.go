@@ -5,7 +5,6 @@ import (
 	"encoding/json/v2"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"slices"
 	"strings"
 
@@ -455,8 +454,8 @@ func processResource(ctx context.Context, resource descriptorv2.Resource, access
 		// A wget resource is a plain blob without an OCI-artifact representation. A GET is
 		// streamed into the target; any other method may have side effects and is refused
 		// on a second read, so it is downloaded to a file once.
-		if acc.Verb == "" || strings.EqualFold(acc.Verb, http.MethodGet) {
-			if err := transferToLocalBlob(resource, id, val, tgd, toSpec, resourceTransformIDs, i, "", chooseTransferResourceToLocalBlobType); err != nil {
+		if isRepeatableWgetVerb(acc.Verb) {
+			if err := processPlainBlob(resource, acc, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
 				return nil, fmt.Errorf("cannot process wget resource: %w", err)
 			}
 			return nil, nil
@@ -468,7 +467,7 @@ func processResource(ctx context.Context, resource descriptorv2.Resource, access
 	case *s3v2.S3:
 		// An S3 resource is a plain blob without an OCI-artifact representation: stream it
 		// into the target as a local blob.
-		if err := transferToLocalBlob(resource, id, val, tgd, toSpec, resourceTransformIDs, i, "", chooseTransferResourceToLocalBlobType); err != nil {
+		if err := processPlainBlob(resource, acc, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
 			return nil, fmt.Errorf("cannot process s3 resource: %w", err)
 		}
 		return nil, nil
