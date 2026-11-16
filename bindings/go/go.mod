@@ -17,7 +17,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.33.9
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.9
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.3
-	github.com/aws/smithy-go v1.28.5
+	github.com/aws/smithy-go v1.28.9
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/digitorus/pkcs7 v0.0.0-20260914070511-d678ea5ea03f
 	github.com/digitorus/timestamp v0.0.0-20260914073129-b4b58b92aa51
