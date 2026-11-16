@@ -24,10 +24,13 @@ on:
 
 # Write-enabled runs (schedule, push, dispatch) queue in one group: two of them
 # would push the same branches and the loser fails its --force-with-lease. Each
-# pull request dry-run gets its own group, it writes nothing.
+# dry-run — every pull request, and a dispatch that asks for one — gets its own
+# group, it writes nothing and must not queue behind or cancel a real run.
 concurrency:
-  group: deps-${{ github.event_name == 'pull_request' && github.ref || 'write' }}
+  group: deps-${{ (github.event_name == 'pull_request' || inputs.dryRun) && format('dry-{0}', github.ref) || 'write' }}
   cancel-in-progress: false
+  # Without this GitHub keeps one pending run per group and cancels the older one.
+  queue: max
 
 permissions:
   contents: read
@@ -71,9 +74,9 @@ jobs:
           token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - name: Run
-        uses: jakobmoellerdev/deps@a98b4b8956a81c5908d6af8ed7b088e95d8bde8c # v0.15.1
+        uses: jakobmoellerdev/deps@0f5f80faae139c99a1b0347ef53976bc3a671bbf # v0.16.0
         with:
-          version: v0.15.1
+          version: v0.16.0
           token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
           # Pull requests only check that the config still resolves and what it would do.
           dry-run: ${{ (github.event_name == 'pull_request' || inputs.dryRun) && 'true' || 'false' }}
