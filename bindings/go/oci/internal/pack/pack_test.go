@@ -7,6 +7,7 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"io"
+	"os"
 	"sync/atomic"
 	"testing"
 
@@ -1428,4 +1429,54 @@ func TestResourceLocalBlobOCILayer_SkipsExistingBlob(t *testing.T) {
 		r.False(store.pushed)
 		r.False(store.streamed64)
 	})
+}
+
+// sizelessBlob hides the size and digest of its content, like a streamed download.
+type sizelessBlob struct{ content []byte }
+
+func (b sizelessBlob) ReadCloser() (io.ReadCloser, error) {
+	return io.NopCloser(bytes.NewReader(b.content)), nil
+}
+
+// spoolObservingStorage records the entries of dir at the time a blob is pushed.
+type spoolObservingStorage struct {
+	content.Storage
+	dir     string
+	entries []string
+}
+
+func (s *spoolObservingStorage) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, r io.Reader) error {
+	entries, err := os.ReadDir(s.dir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		s.entries = append(s.entries, entry.Name())
+	}
+	return s.Storage.Push(ctx, expected, r)
+}
+
+// A store that cannot stream needs the size and digest of a blob up front. A blob that
+// knows neither is spooled to the configured temporary directory for the push only.
+func TestResourceLocalBlobOCILayer_SpoolsUnknownSizeToTempDir(t *testing.T) {
+	r := require.New(t)
+	data := []byte("content of unknown size and digest")
+	const mediaType = "application/octet-stream"
+	opts := Options{AccessScheme: runtime.NewScheme(), BaseReference: "test-ref", TempDir: t.TempDir()}
+	v2.MustAddToScheme(opts.AccessScheme)
+	oci.MustAddToScheme(opts.AccessScheme)
+
+	store := &spoolObservingStorage{Storage: memory.New(), dir: opts.TempDir}
+	resourceBlob, err := resourceblob.NewArtifactBlob(&descriptor.Resource{}, sizelessBlob{data})
+	r.NoError(err)
+
+	desc, err := ResourceLocalBlobOCILayer(t.Context(), store, resourceBlob, &v2.LocalBlob{MediaType: mediaType}, opts)
+	r.NoError(err)
+	r.Equal(digest.FromBytes(data), desc.Digest)
+	r.Equal(int64(len(data)), desc.Size)
+	r.Len(store.entries, 1, "the blob is spooled to the configured directory while it is pushed")
+
+	left, err := os.ReadDir(opts.TempDir)
+	r.NoError(err)
+	r.Empty(left, "the spool file is removed after the push")
 }

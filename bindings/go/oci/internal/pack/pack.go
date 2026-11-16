@@ -55,6 +55,11 @@ type Options struct {
 	// The zero value is policy.GlobalAccessPolicyNever, which suppresses global access by default.
 	// Set policy.GlobalAccessPolicyAuto to auto-detect based on whether the storage backend is globally reachable.
 	GlobalAccessPolicy policy.GlobalAccessPolicy
+
+	// TempDir is the directory blobs of unknown size or digest are spooled to before they are
+	// pushed to a store that cannot take them as a stream. Empty means the default temporary
+	// directory of the operating system.
+	TempDir string
 }
 
 // ArtifactBlob packs a [ociblob.ArtifactBlob] into an OCI Storage
@@ -126,7 +131,7 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 	if dig, _, err := layerDigestAndMediaType(b, layerOpts); err != nil {
 		return ociImageSpecV1.Descriptor{}, err
 	} else if b.Size() == blob.SizeUnknown || len(dig) == 0 {
-		spooled, remove, err := b.Spool("")
+		spooled, remove, err := b.Spool(opts.TempDir)
 		if err != nil {
 			return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to spool blob: %w", err)
 		}
