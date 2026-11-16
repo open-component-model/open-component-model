@@ -20,7 +20,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
-	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -542,7 +541,8 @@ metadata:
 })
 
 // applyConflictingConfigMap applies a ConfigMap owned by another ApplySet as a service account holding verbs on
-// ConfigMaps and nothing else. The ApplySet comes from createApplySet, so its reader selection is on the path.
+// ConfigMaps and nothing else. The client and reader come from applyClient, so the identity of the conflict check is
+// the one the reconciler picks.
 func applyConflictingConfigMap(ctx SpecContext, namespace string, verbs []string) (*applyset.ApplyResult, error) {
 	GinkgoHelper()
 
@@ -569,13 +569,9 @@ func applyConflictingConfigMap(ctx SpecContext, namespace string, verbs []string
 		Labels:    map[string]string{applyset.ApplysetPartOfLabel: "applyset-other-v1"},
 	}})).To(Succeed())
 
-	cfg := rest.CopyConfig(k8sManager.GetConfig())
-	cfg.Impersonate = rest.ImpersonationConfig{UserName: fmt.Sprintf("system:serviceaccount:%s:%s", namespace, sa)}
-	impersonated, err := client.New(cfg, client.Options{Scheme: k8sClient.Scheme(), Mapper: k8sManager.GetRESTMapper()})
-	Expect(err).NotTo(HaveOccurred())
-
 	deployer := &v1alpha1.NamespacedDeployer{
 		ObjectMeta: metav1.ObjectMeta{Name: "nd-conflict", Namespace: namespace},
+		Spec:       v1alpha1.NamespacedDeployerSpec{ServiceAccountName: sa},
 	}
 	deployer.SetGroupVersionKind(v1alpha1.GroupVersion.WithKind(v1alpha1.KindNamespacedDeployer))
 	object := &unstructured.Unstructured{Object: map[string]any{
@@ -585,12 +581,16 @@ func applyConflictingConfigMap(ctx SpecContext, namespace string, verbs []string
 	}}
 
 	reconciler := &Reconciler{
+		BaseReconciler:     &ocm.BaseReconciler{Client: k8sClient, Scheme: k8sClient.Scheme()},
 		Namespaced:         true,
 		apiReader:          k8sManager.GetAPIReader(),
+		restConfig:         k8sManager.GetConfig(),
 		resourceRESTMapper: k8sManager.GetRESTMapper(),
 	}
+	c, reader, err := reconciler.applyClient(ctx, deployer)
+	Expect(err).NotTo(HaveOccurred())
 
-	return reconciler.createApplySet(impersonated, deployer, GinkgoLogr).
+	return reconciler.createApplySet(c, reader, deployer, GinkgoLogr).
 		Apply(ctx, []applyset.Resource{{ID: "cm", Object: object}}, applyset.ApplyMode{})
 }
 

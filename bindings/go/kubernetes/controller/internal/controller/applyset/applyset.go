@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"maps"
 	"sort"
@@ -157,7 +158,8 @@ type Config struct {
 	Client client.Client
 	// Reader lists the ApplySet members for conflict detection. It must read live: a cache needs an informer per
 	// applied kind, which requires the watch permission and holds every object of that kind in memory. Avoiding
-	// that memory is the point, so do not trade the list calls back for a cache. Defaults to Client.
+	// that memory is the point, so do not trade the list calls back for a cache. Required by Apply, and never
+	// defaulted to Client, which may be cached.
 	Reader          client.Reader
 	RESTMapper      meta.RESTMapper
 	Log             logr.Logger
@@ -179,14 +181,9 @@ func New(cfg Config, parent interface {
 },
 ) *ApplySet {
 	applySetID := ID(parent)
-	reader := cfg.Reader
-	if reader == nil {
-		reader = cfg.Client
-	}
-
 	return &ApplySet{
 		client:            cfg.Client,
-		reader:            reader,
+		reader:            cfg.Reader,
 		restMapper:        cfg.RESTMapper,
 		log:               cfg.Log,
 		applySetID:        applySetID,
@@ -246,6 +243,10 @@ func (a *ApplySet) Project(resources []Resource) (Metadata, error) {
 // Apply runs SSA on all resources.
 // Caller should call Prune separately after Apply succeeds, using Project() output for scope.
 func (a *ApplySet) Apply(ctx context.Context, resources []Resource, mode ApplyMode) (*ApplyResult, error) {
+	if a.reader == nil {
+		return nil, errors.New("apply needs a reader for conflict detection")
+	}
+
 	result := &ApplyResult{}
 
 	// Resources with resolved mappings, ready to apply

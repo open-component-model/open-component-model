@@ -2,7 +2,7 @@ package applyset
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"net/http"
@@ -26,6 +26,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // testParent is a minimal implementation of the parent interface for testing.
@@ -178,6 +180,7 @@ func TestApply_BasicSSA(t *testing.T) {
 
 			applier := New(Config{
 				Client:          fakeClient,
+				Reader:          fakeClient,
 				RESTMapper:      mapper,
 				Log:             logr.Discard(),
 				ParentNamespace: "default",
@@ -209,6 +212,7 @@ func TestApply_MembershipLabels(t *testing.T) {
 
 	applier := New(Config{
 		Client:          fakeClient,
+		Reader:          fakeClient,
 		RESTMapper:      mapper,
 		Log:             logr.Discard(),
 		ParentNamespace: "default",
@@ -271,6 +275,7 @@ func TestApply_ChangeDetection(t *testing.T) {
 
 			applier := New(Config{
 				Client:          fakeClient,
+				Reader:          fakeClient,
 				RESTMapper:      mapper,
 				Log:             logr.Discard(),
 				ParentNamespace: "default",
@@ -360,6 +365,7 @@ func TestPrune(t *testing.T) {
 
 			applier := New(Config{
 				Client:          fakeClient,
+				Reader:          fakeClient,
 				RESTMapper:      mapper,
 				Log:             logr.Discard(),
 				ParentNamespace: "default",
@@ -402,6 +408,7 @@ func TestProject(t *testing.T) {
 
 	applier := New(Config{
 		Client:          fakeClient,
+		Reader:          fakeClient,
 		RESTMapper:      mapper,
 		Log:             logr.Discard(),
 		ParentNamespace: "default",
@@ -516,6 +523,7 @@ func TestPrune_ParentAnnotationsContributeToPruneScope(t *testing.T) {
 
 	applier := New(Config{
 		Client:          fakeClient,
+		Reader:          fakeClient,
 		RESTMapper:      mapper,
 		Log:             logr.Discard(),
 		ParentNamespace: "default",
@@ -572,6 +580,7 @@ func TestProject_ReturnsUnionMetadata(t *testing.T) {
 
 	applier := New(Config{
 		Client:          fakeClient,
+		Reader:          fakeClient,
 		RESTMapper:      mapper,
 		Log:             logr.Discard(),
 		ParentNamespace: "default",
@@ -640,6 +649,7 @@ func TestPrune_ClusterScopedResource(t *testing.T) {
 
 	applier := New(Config{
 		Client:          fakeClient,
+		Reader:          fakeClient,
 		RESTMapper:      mapper,
 		Log:             logr.Discard(),
 		ParentNamespace: "default",
@@ -1048,6 +1058,7 @@ func TestApply_ConflictDetection(t *testing.T) {
 
 			applier := New(Config{
 				Client:          fakeClient,
+				Reader:          fakeClient,
 				RESTMapper:      mapper,
 				Log:             logr.Discard(),
 				ParentNamespace: "default",
@@ -1133,6 +1144,7 @@ func TestApply_ConflictDetection_ListFailure(t *testing.T) {
 
 	applier := New(Config{
 		Client:          fakeClient,
+		Reader:          fakeClient,
 		RESTMapper:      mapper,
 		Log:             logr.Discard(),
 		ParentNamespace: "default",
@@ -1185,6 +1197,7 @@ func TestApply_ConflictDetection_MultiGVK(t *testing.T) {
 
 	applier := New(Config{
 		Client:          fakeClient,
+		Reader:          fakeClient,
 		RESTMapper:      mapper,
 		Log:             logr.Discard(),
 		ParentNamespace: "default",
@@ -1264,6 +1277,7 @@ func TestPrune_PropagationPolicy(t *testing.T) {
 
 			applier := New(Config{
 				Client:          fakeClient,
+				Reader:          fakeClient,
 				RESTMapper:      newTestRESTMapper(),
 				Log:             logr.Discard(),
 				ParentNamespace: "default",
@@ -1304,6 +1318,7 @@ func TestPrune_TerminatingObjectIsPendingWithoutDelete(t *testing.T) {
 
 	applier := New(Config{
 		Client:          fakeClient,
+		Reader:          fakeClient,
 		RESTMapper:      newTestRESTMapper(),
 		Log:             logr.Discard(),
 		ParentNamespace: "default",
@@ -1365,7 +1380,7 @@ func TestApply_ConflictDetection_DoesNotTransferObjectContents(t *testing.T) {
 			body, err = json.Marshal(&corev1.ConfigMap{
 				TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"},
 				ObjectMeta: metav1.ObjectMeta{Name: "cm1", Namespace: "default", ResourceVersion: "1"},
-			})
+			}, ocmruntime.JSONOptions)
 		default:
 			http.Error(writer, "unexpected request "+request.Method+" "+request.URL.Path, http.StatusNotImplemented)
 
@@ -1388,6 +1403,7 @@ func TestApply_ConflictDetection_DoesNotTransferObjectContents(t *testing.T) {
 
 	applier := New(Config{
 		Client:          apiClient,
+		Reader:          apiClient,
 		RESTMapper:      newTestRESTMapper(),
 		Log:             logr.Discard(),
 		ParentNamespace: "default",
@@ -1411,7 +1427,7 @@ func configMapListResponse(accept string, items []corev1.ConfigMap) ([]byte, err
 		return json.Marshal(&corev1.ConfigMapList{
 			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMapList"},
 			Items:    items,
-		})
+		}, ocmruntime.JSONOptions)
 	}
 
 	list := &metav1.PartialObjectMetadataList{
@@ -1425,7 +1441,7 @@ func configMapListResponse(accept string, items []corev1.ConfigMap) ([]byte, err
 		})
 	}
 
-	return json.Marshal(list)
+	return json.Marshal(list, ocmruntime.JSONOptions)
 }
 
 // TestApply_ConflictDetection_UsesReader covers conflict detection reading the members through Config.Reader.
@@ -1458,4 +1474,19 @@ func TestApply_ConflictDetection_UsesReader(t *testing.T) {
 	var conflictErr *ApplySetConflictError
 	r.ErrorAs(result.Applied[0].Error, &conflictErr)
 	r.Equal(ID(owner), conflictErr.CurrentApplySetID)
+}
+
+// TestApply_RequiresReader covers Apply refusing to fall back to the possibly cached Client for conflict detection.
+func TestApply_RequiresReader(t *testing.T) {
+	r := require.New(t)
+
+	applier := New(Config{
+		Client:          newFakeClient(),
+		RESTMapper:      newTestRESTMapper(),
+		Log:             logr.Discard(),
+		ParentNamespace: "default",
+	}, newTestParent(schema.GroupVersionKind{Group: "delivery.ocm.software", Version: "v1alpha1", Kind: "TestKind"}))
+
+	_, err := applier.Apply(t.Context(), []Resource{{ID: "cm1", Object: newConfigMap("cm1", "default")}}, ApplyMode{})
+	r.ErrorContains(err, "needs a reader")
 }
