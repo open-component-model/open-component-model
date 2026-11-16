@@ -438,3 +438,27 @@ func TestReconcile_ResolutionFailureIsRetryable(t *testing.T) {
 	r.Equal(v1alpha1.ResolutionFailedReason, status.FindCondition(current, v1alpha1.ReadyCondition).Reason)
 	r.False(status.IsStalled(current), "a transient resolution failure is not a stall")
 }
+
+func TestReconcile_DeniedConfigurationIsNotReady(t *testing.T) {
+	r := require.New(t)
+
+	component := readyComponent("component", "default")
+	discovery := &v1alpha1.Discovery{
+		ObjectMeta: metav1.ObjectMeta{Name: "discovery", Namespace: "default"},
+		Spec: v1alpha1.DiscoverySpec{
+			ComponentRef: corev1.LocalObjectReference{Name: component.Name},
+			OCMConfig: []v1alpha1.OCMConfiguration{{
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{Kind: "Secret", Name: "creds"},
+			}},
+		},
+	}
+	rec, c := newReconciler(t, component, discovery)
+	rec.authorizer = serviceaccounttest.DenyingAuthorizer()
+
+	_, err := rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(discovery)})
+	r.ErrorContains(err, `secrets "creds" is forbidden`)
+
+	current := &v1alpha1.Discovery{}
+	r.NoError(c.Get(t.Context(), client.ObjectKeyFromObject(discovery), current))
+	r.Equal(v1alpha1.GetConfigurationFailedReason, status.FindCondition(current, v1alpha1.ReadyCondition).Reason)
+}

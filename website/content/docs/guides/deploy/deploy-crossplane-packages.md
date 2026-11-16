@@ -468,8 +468,18 @@ kubectl create secret docker-registry ghcr-secret \
   --docker-server=ghcr.io
 ```
 
+The controller reads the secret only if the `default` service account of the namespace may `get` it, see
+[Configuration Access]({{< relref "docs/concepts/ocm-controllers.md#configuration-access" >}}). Grant it:
+
+```shell
+kubectl create role ocm-config-reader --namespace default \
+  --verb=get --resource=secrets --resource-name=ghcr-secret
+kubectl create rolebinding ocm-config-reader --namespace default \
+  --role=ocm-config-reader --serviceaccount=default:default
+```
+
 Then uncomment `ocmConfig` on the `Repository` in the RGD of the next step. The `Component` and `Resource` objects
-inherit it. See [Configure Credentials for OCM Controllers]({{< relref "docs/guides/deploy/configure-controller-credentials.md" >}}).
+inherit it, so the same grant covers them. See [Configure Credentials for OCM Controllers]({{< relref "docs/guides/deploy/configure-controller-credentials.md" >}}).
 
 **Crossplane** pulls the packages, and the kubelet pulls the Function and Provider runtime images. Create the same
 secret in Crossplane's namespace:

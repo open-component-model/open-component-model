@@ -214,6 +214,53 @@ EOF
 kubectl apply -f config.yaml
 ```
 
+The controller reads the `Secret`s only if the service account of the referencing object may `get` them, see
+[Configuration Access]({{< relref "docs/concepts/ocm-controllers.md#configuration-access" >}}). Both objects below use
+the `default` service account of the namespace. The `Replication` also references the `Component` itself, so the
+service account needs `get` on it as well:
+
+<details>
+  <summary>rbac.yaml</summary>
+
+```bash
+cat <<EOF > rbac.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ocm-config-reader
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: ["ocm-credentials", "ocm-transfer-config"]
+    verbs: ["get"]
+  - apiGroups: ["delivery.ocm.software"]
+    resources: ["components"]
+    resourceNames: ["replication-component"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ocm-config-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ocm-config-reader
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: default
+EOF
+```
+
+</details>
+
+```bash
+kubectl apply -f rbac.yaml
+```
+
+Replace `namespace: default` in the subject if you work in another namespace.
+
 The `transfer.config.ocm.software` entry controls the transfer itself. Each key maps
 directly to a flag on the `ocm transfer component-version` CLI command:
 

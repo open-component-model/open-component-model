@@ -1,7 +1,6 @@
 package component
 
 import (
-	"context"
 	"fmt"
 	"time"
 
@@ -45,8 +44,8 @@ var _ = Describe("Component service account", func() {
 		}})
 		repositoryObj = test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace, "repository", specData)
 
-		local = createConfigSecret(ctx, namespace)
-		foreign = createConfigSecret(ctx, other)
+		local = serviceaccounttest.CreateConfigSecret(ctx, k8sClient, namespace)
+		foreign = serviceaccounttest.CreateConfigSecret(ctx, k8sClient, other)
 	})
 
 	newComponent := func(ctx SpecContext, mutate func(*v1alpha1.Component)) *v1alpha1.Component {
@@ -158,29 +157,3 @@ var _ = Describe("Component service account", func() {
 		})
 	})
 })
-
-// createConfigSecret creates the Secret "creds" holding an OCM config in namespace.
-func createConfigSecret(ctx context.Context, namespace string) *corev1.Secret {
-	GinkgoHelper()
-
-	secret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{Name: "creds", Namespace: namespace},
-		StringData: map[string]string{v1alpha1.OCMConfigKey: `
-type: generic.config.ocm.software/v1
-configurations:
-- type: credentials.config.ocm.software
-  consumers:
-  - identity:
-      type: MavenRepository
-      hostname: example.com
-    credentials:
-    - type: Credentials
-      properties:
-        username: user
-        password: secret
-`},
-	}
-	Expect(k8sClient.Create(ctx, secret)).To(Succeed())
-
-	return secret
-}

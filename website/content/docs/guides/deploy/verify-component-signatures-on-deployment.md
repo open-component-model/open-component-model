@@ -109,6 +109,17 @@ Store the configuration in a Secret. The controller reads it from the `.ocmconfi
 kubectl create secret generic signing-verification-secret --from-file=.ocmconfig=ocmconfig.yaml
 ```
 
+The controller reads the Secret only if the service account of the `Component` may `get` it, see
+[Configuration Access]({{< relref "docs/concepts/ocm-controllers.md#configuration-access" >}}). Without
+`spec.serviceAccountName` that is the `default` service account of the namespace. Grant it access to this one Secret:
+
+```bash
+kubectl create role ocm-config-reader --verb=get --resource=secrets --resource-name=signing-verification-secret
+kubectl create rolebinding ocm-config-reader --role=ocm-config-reader --serviceaccount=default:default
+```
+
+`--serviceaccount` takes `<namespace>:<name>`. Adjust it if you work in another namespace or set `spec.serviceAccountName`.
+
 {{< /step >}}
 
 {{< step >}}
@@ -318,6 +329,16 @@ does not carry the configuration under the `.ocmconfig` key.
 ```bash
 kubectl get secret signing-verification-secret -n <component-namespace> -o jsonpath='{.data.\.ocmconfig}' | base64 -d
 ```
+
+### Symptom: "secrets \"signing-verification-secret\" is forbidden: service account default/default may not get it"
+
+**Cause:** The `Component`'s service account may not `get` the Secret. The `Component` is not ready with reason
+`GetConfigurationFailed`. A `Resource` or `NamespacedDeployer` that inherits the configuration reports the same for
+its own service account.
+
+**Fix:** Bind a `Role` with `get` on the Secret to the service account named in the message, as shown in
+[Create the verification configuration](#prepare-the-verification-configuration). The controller does not watch RBAC,
+so the object recovers on its next retry, at most 5 minutes later.
 
 ### Symptom: "missing public key, required for plain RSA signatures"
 

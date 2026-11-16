@@ -61,10 +61,58 @@ func ProvisionDefaultServiceAccounts(mgr ctrl.Manager) error {
 		}))
 }
 
+// WaitForDefaultServiceAccount blocks until ProvisionDefaultServiceAccounts created the default service account of
+// namespace, so a spec does not race the provisioning with its first reconcile.
+func WaitForDefaultServiceAccount(ctx context.Context, c client.Client, namespace string) {
+	GinkgoHelper()
+
+	key := client.ObjectKey{Namespace: namespace, Name: serviceaccount.DefaultName}
+	Eventually(func(ctx context.Context) error {
+		return c.Get(ctx, key, &corev1.ServiceAccount{})
+	}).WithContext(ctx).Should(Succeed())
+}
+
+// CreateConfigSecret creates the Secret "creds" holding an OCM config in namespace.
+func CreateConfigSecret(ctx context.Context, c client.Client, namespace string) *corev1.Secret {
+	GinkgoHelper()
+
+	secret := &corev1.Secret{
+		Name: "creds", Namespace: namespace,
+		StringData: map[string]string{v1alpha1.OCMConfigKey: `
+type: generic.config.ocm.software/v1
+configurations:
+- type: credentials.config.ocm.software
+  consumers:
+  - identity:
+      type: MavenRepository
+      hostname: example.com
+    credentials:
+    - type: Credentials
+      properties:
+        username: user
+        password: secret
+`},
+	}
+	Expect(c.Create(ctx, secret)).To(Succeed())
+
+	return secret
+}
+
 // PermissiveAuthorizer returns an Authorizer for fake clients, which cannot review access: every service account
 // exists and is allowed everything.
 func PermissiveAuthorizer() *serviceaccount.Authorizer {
 	return serviceaccount.NewAuthorizer(existingServiceAccounts{}, allowedReviews{})
+}
+
+// DenyingAuthorizer returns an Authorizer for fake clients where every service account exists but may read nothing.
+func DenyingAuthorizer() *serviceaccount.Authorizer {
+	return serviceaccount.NewAuthorizer(existingServiceAccounts{}, deniedReviews{})
+}
+
+type deniedReviews struct{ client.Writer }
+
+func (deniedReviews) Create(context.Context, client.Object, ...client.CreateOption) error {
+	return nil
 }
 
 type existingServiceAccounts struct{ client.Reader }

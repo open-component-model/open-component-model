@@ -226,7 +226,7 @@ spec:
 ```
 
 The `Component` automatically inherits the `ocmConfig` from `my-repository` — no explicit `ocmConfig` field needed.
-he controller checks the Component's service account before reading the inherited secret. Both objects use `default`
+The controller checks the Component's service account before reading the inherited secret. Both objects use `default`
 here, so the binding from the previous step covers it. If you give them different service accounts, bind each one.
 
 Apply the resource:

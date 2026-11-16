@@ -150,6 +150,14 @@ kubectl create secret docker-registry ghcr-secret \
   --docker-server=ghcr.io
 ```
 
+The controller reads the secret only if the `default` service account of the namespace may `get` it, see
+[Configuration Access]({{< relref "/docs/concepts/ocm-controllers.md#configuration-access" >}}). Grant it:
+
+```shell
+kubectl create role ocm-config-reader --verb=get --resource=secrets --resource-name=ghcr-secret
+kubectl create rolebinding ocm-config-reader --role=ocm-config-reader --serviceaccount=default:default
+```
+
 Keep this secret in mind — you will reference it later when you define the `ResourceGraphDefinition` in the [next section](#create-resourcegraphdefinition). Specifically, add `ocmConfig` to the Repository resource in your RGD as shown below. The credentials propagate automatically to Component, Resource, and Deployer objects that reference this Repository:
 
   ```yaml
