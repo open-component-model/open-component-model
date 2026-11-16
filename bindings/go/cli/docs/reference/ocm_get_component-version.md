@@ -79,16 +79,16 @@ repository is deprecated and fails without it (see https://ocm.software/docs/cha
 ### Options
 
 ```
-      --constraint string    version constraint restricting which versions to output, evaluated by each version's configured scheme; versions with no applicable scheme are retained (default "> 0.0.0-0")
-      --display-mode enum    display mode can be used in combination with --recursive
-                               static: print the output once the complete component graph is discovered
-                               live (experimental): continuously updates the output to represent the current discovery state of the component graph
-                             (must be one of [live static]) (default static)
-  -h, --help                 help for component-version
-      --latest               if set, only the latest version of the component is returned
-  -o, --output enum          output format of the component descriptors
-                             (must be one of [json ndjson table tree widetree yaml]) (default tree)
-      --recursive int[=-1]   depth of recursion for resolving referenced component versions (0=none, -1=unlimited, >0=levels (not implemented yet))
+      --constraint string     version constraint restricting which versions to output, evaluated by each version's configured scheme; versions with no applicable scheme are retained (default "> 0.0.0-0")
+      --display-mode enum     display mode can be used in combination with --recursive
+                                static: print the output once the complete component graph is discovered
+                                live (experimental): continuously updates the output to represent the current discovery state of the component graph
+                              (must be one of [live static]) (default static)
+  -h, --help[=true|false]     help for component-version
+      --latest[=true|false]   if set, only the latest version of the component is returned
+  -o, --output enum           output format of the component descriptors
+                              (must be one of [json ndjson table tree widetree yaml]) (default tree)
+      --recursive int[=-1]    depth of recursion for resolving referenced component versions (0=none, -1=unlimited, >0=levels (not implemented yet))
 ```
 
 ### Options inherited from parent commands

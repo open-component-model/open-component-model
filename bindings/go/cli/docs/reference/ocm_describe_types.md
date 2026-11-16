@@ -106,12 +106,12 @@ ocm describe types [subsystem [type [field-path]]] [flags]
 ### Options
 
 ```
-  -h, --help               help for types
-  -o, --output enum        Output format (text, markdown, html are supported for all command combinations, jsonschema is only supported for type descriptions).
-                           (must be one of [examples html jsonschema markdown text]) (default text)
-      --show-paths         List all available field paths for the type (useful for navigation)
-      --table-style enum   table output style
-                           (must be one of [StyleColoredBright StyleColoredDark StyleDefault]) (default StyleDefault)
+  -h, --help[=true|false]         help for types
+  -o, --output enum               Output format (text, markdown, html are supported for all command combinations, jsonschema is only supported for type descriptions).
+                                  (must be one of [examples html jsonschema markdown text]) (default text)
+      --show-paths[=true|false]   List all available field paths for the type (useful for navigation)
+      --table-style enum          table output style
+                                  (must be one of [StyleColoredBright StyleColoredDark StyleDefault]) (default StyleDefault)
 ```
 
 ### Options inherited from parent commands
