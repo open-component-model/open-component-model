@@ -457,12 +457,16 @@ resources:
 **Only successful responses are accepted.** OCM accepts a 2xx status and fails on anything else. Redirects are followed by
 default. If you set `noRedirect: true`, the request fails.
 
-**Downloads are streamed, not held in memory or on disk.** The response body flows straight to wherever OCM stores or
-uploads it, so memory use stays flat no matter how big the file is. There is no size limit by default. Checksum and
-digest checks run while the body is read, so a mismatch fails that read. The request is sent only when the body is
-read. When OCM needs the size, media type, or advertised checksum before reading, for example to pack the resource
-into an OCI layer, a `GET` download sends a single `HEAD` request first. If the server refuses `HEAD`, these stay
-unknown until the body is read.
+**Downloads are streamed, not held in memory.** The request is sent only when the body is read, and memory use stays
+flat no matter how big the file is. There is no size limit by default. Checksum and digest checks run while the body is
+read, so a mismatch fails that read. When OCM needs the size, media type, or advertised checksum before reading, for
+example to pack the resource into an OCI layer, a `GET` download sends a single `HEAD` request first. If the server
+refuses `HEAD`, these stay unknown until the body is read.
+
+Where the body goes depends on the operation. A `wget` input in `ocm add cv` and the HTTP uploader pass it straight to
+the place that stores or uploads it. A transfer that copies a `Wget` resource into the target as a local
+blob first writes the body to a temporary file; see
+[Temporary Disk Usage]({{< relref "docs/reference/configuration/transfer-configuration/localblob-uploader.md#temporary-disk-usage" >}}).
 
 **Timeouts, retries, and per-host settings** come from the `http.config.ocm.software/v1alpha1` configuration and apply
 to every Wget request:
