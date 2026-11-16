@@ -3,7 +3,7 @@ package integration_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"net"
@@ -15,15 +15,17 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/registry/remote/auth"
+	orascreds "github.com/oras-project/oras-go/v3/registry/remote/credentials"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/log"
 	"github.com/testcontainers/testcontainers-go/network"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"oras.land/oras-go/v2/registry/remote/auth"
 
 	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const (
@@ -231,7 +233,8 @@ func initializeQuayUser(t *testing.T, ctx context.Context, endpoint, username, p
 		"password":     password,
 		"email":        "ocm@example.invalid",
 		"access_token": false,
-	})
+	}, runtime.JSONOptions)
+
 	require.NoError(t, err, "marshal Quay user initialization request")
 
 	initCtx, cancel := context.WithTimeout(ctx, time.Minute)
@@ -284,7 +287,7 @@ func newQuayAuthClient(mappedAddress, username, password string, recorder *uploa
 	return &auth.Client{
 		Client: &http.Client{Transport: recorder},
 		Header: http.Header{"User-Agent": []string{userAgent}},
-		Credential: auth.StaticCredential(quayLogicalHost, auth.Credential{
+		CredentialFunc: orascreds.StaticCredentialFunc(quayLogicalHost, orascreds.Credential{
 			Username: username,
 			Password: password,
 		}),

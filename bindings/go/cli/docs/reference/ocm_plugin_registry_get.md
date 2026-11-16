@@ -25,12 +25,12 @@ ocm plugin registry get <plugin-name[:version]> [flags]
 ### Options
 
 ```
-      --component-descriptor   return component descriptors of the plugins
-  -h, --help                   help for get
-  -o, --output enum            output format of the plugin list
-                               (must be one of [json ndjson table yaml]) (default table)
-      --registry string        registry URL to list plugins from
-      --version string         specific version of the plugin to display (default: latest version)
+      --component-descriptor[=true|false]   return component descriptors of the plugins
+  -h, --help[=true|false]                   help for get
+  -o, --output enum                         output format of the plugin list
+                                            (must be one of [json ndjson table yaml]) (default table)
+      --registry string                     registry URL to list plugins from
+      --version string                      specific version of the plugin to display (default: latest version)
 ```
 
 ### Options inherited from parent commands
@@ -61,7 +61,7 @@ ocm plugin registry get <plugin-name[:version]> [flags]
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
-                                              setting this flag disables the interactive progress display so logs are printed in the chosen format
+                                              the interactive progress display needs a terminal and the text format; any other format prints its records in full instead
                                            (must be one of [json text]) (default text)
       --loglevel enum                      sets the logging level
                                               debug: Show all logs including detailed debugging information

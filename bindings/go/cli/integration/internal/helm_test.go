@@ -2,7 +2,7 @@ package internal
 
 import (
 	"crypto/sha256"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +12,8 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/assert"
 	"helm.sh/helm/v4/pkg/registry"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // createTestOCILayout builds a minimal OCI layout directory with the given config media type and layers.
@@ -60,7 +62,7 @@ func createTestOCILayout(t *testing.T, dir string, configMediaType string, layer
 		Layers: layerDescs,
 	}
 
-	manifestData, err := json.Marshal(manifest)
+	manifestData, err := json.Marshal(manifest, runtime.JSONOptions)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +80,7 @@ func createTestOCILayout(t *testing.T, dir string, configMediaType string, layer
 		},
 	}
 
-	indexData, err := json.Marshal(index)
+	indexData, err := json.Marshal(index, runtime.JSONOptions)
 	if err != nil {
 		t.Fatal(err)
 	}

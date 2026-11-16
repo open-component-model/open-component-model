@@ -12,9 +12,9 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/errdef"
-	"oras.land/oras-go/v2/registry"
+	"github.com/oras-project/oras-go/v3/content"
+	"github.com/oras-project/oras-go/v3/errdef"
+	"github.com/oras-project/oras-go/v3/registry/remote/properties"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/direct"
@@ -333,10 +333,10 @@ func (s *repository) resolve(ctx context.Context, idx v1.Index, reference string
 	// looseref reads a bare tag as a repository name, which must be lower-case, so a valid tag such as
 	// "1.0.0-T0" fails to parse. Only in that case is the raw reference used as is.
 	if ref, err := looseref.ParseReference(reference); err != nil {
-		if (registry.Reference{Reference: reference}).ValidateReferenceAsTag() != nil {
+		if (properties.Reference{Tag: reference}).ValidateTag() != nil {
 			return ociImageSpecV1.Descriptor{}, fmt.Errorf("invalid reference %q: %w", reference, err)
 		}
-	} else if refOrTag := ref.ReferenceOrTag(); refOrTag != "" {
+	} else if refOrTag := ref.GetReference(); refOrTag != "" {
 		// If we have a valid digest or tag, use it instead of the reference.
 		reference = refOrTag
 	}
@@ -446,7 +446,7 @@ func artifactMetadataForReference(repo string, desc ociImageSpecV1.Descriptor, r
 	if err != nil {
 		// looseref reads a bare tag as a repository name, which must be
 		// lower-case, so a valid tag such as "1.0.0-T0" fails to parse.
-		if (registry.Reference{Reference: reference}).ValidateReferenceAsTag() != nil {
+		if (properties.Reference{Tag: reference}).ValidateTag() != nil {
 			return v1.ArtifactMetadata{}, fmt.Errorf("invalid reference %q: %w", reference, err)
 		}
 		return v1.ArtifactMetadata{
@@ -457,7 +457,8 @@ func artifactMetadataForReference(repo string, desc ociImageSpecV1.Descriptor, r
 		}, nil
 	}
 
-	if err := ref.ValidateReferenceAsTag(); err == nil {
+	// looseref already validated a non-empty tag and digest; a digest takes precedence.
+	if ref.Digest == "" && ref.Tag != "" {
 		return v1.ArtifactMetadata{
 			Repository: repo,
 			Tag:        ref.Tag,
@@ -465,7 +466,7 @@ func artifactMetadataForReference(repo string, desc ociImageSpecV1.Descriptor, r
 			MediaType:  desc.MediaType,
 		}, nil
 	}
-	if err := ref.ValidateReferenceAsDigest(); err == nil {
+	if ref.Digest != "" {
 		return v1.ArtifactMetadata{
 			Repository: repo,
 			Digest:     desc.Digest.String(),
@@ -475,8 +476,7 @@ func artifactMetadataForReference(repo string, desc ociImageSpecV1.Descriptor, r
 
 	// the reference is neither a full reference with a tag nor a digest;
 	// fall back to interpreting the raw string, e.g. a bare tag.
-	rawRef := registry.Reference{Reference: reference}
-	if err := rawRef.ValidateReferenceAsTag(); err == nil {
+	if (properties.Reference{Tag: reference}).ValidateTag() == nil {
 		return v1.ArtifactMetadata{
 			Repository: repo,
 			Tag:        reference,
@@ -484,7 +484,7 @@ func artifactMetadataForReference(repo string, desc ociImageSpecV1.Descriptor, r
 			MediaType:  desc.MediaType,
 		}, nil
 	}
-	if err := rawRef.ValidateReferenceAsDigest(); err == nil {
+	if (properties.Reference{Digest: reference}).ValidateDigest() == nil {
 		return v1.ArtifactMetadata{
 			Repository: repo,
 			Digest:     desc.Digest.String(),

@@ -44,8 +44,8 @@ ocm completion zsh [flags]
 ### Options
 
 ```
-  -h, --help              help for zsh
-      --no-descriptions   disable completion descriptions
+  -h, --help[=true|false]              help for zsh
+      --no-descriptions[=true|false]   disable completion descriptions
 ```
 
 ### Options inherited from parent commands
@@ -76,7 +76,7 @@ ocm completion zsh [flags]
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
-                                              setting this flag disables the interactive progress display so logs are printed in the chosen format
+                                              the interactive progress display needs a terminal and the text format; any other format prints its records in full instead
                                            (must be one of [json text]) (default text)
       --loglevel enum                      sets the logging level
                                               debug: Show all logs including detailed debugging information

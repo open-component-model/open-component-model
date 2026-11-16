@@ -14,7 +14,7 @@ type MockAddObjectTransformer struct {
 	Type   runtime.Type                    `json:"type"`
 	ID     string                          `json:"id,omitempty"`
 	Spec   *MockAddObjectTransformerSpec   `json:"spec"`
-	Output *MockAddObjectTransformerOutput `json:"output,omitempty"`
+	Output *MockAddObjectTransformerOutput `json:"output,omitzero"`
 }
 
 // MockAddObjectTransformerOutput is the output of the MockAddObjectTransformer.

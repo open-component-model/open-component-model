@@ -2,7 +2,7 @@ package replication
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"sync"
@@ -103,11 +103,14 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 }
 
 // replicationsForIndex returns a mapping function that enqueues every Replication
-// whose given field index matches the changed object's name.
+// in the changed object's namespace whose given field index matches its name.
+// Both references are LocalObjectReferences, so other namespaces cannot match.
 func (r *Reconciler) replicationsForIndex(index string) handler.MapFunc {
 	return func(ctx context.Context, obj client.Object) []reconcile.Request {
 		list := &v1alpha1.ReplicationList{}
-		if err := r.List(ctx, list, client.MatchingFields{index: obj.GetName()}); err != nil {
+		if err := r.List(ctx, list,
+			client.InNamespace(obj.GetNamespace()),
+			client.MatchingFields{index: obj.GetName()}); err != nil {
 			return nil
 		}
 
@@ -336,7 +339,7 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 		return ctrl.Result{}, fmt.Errorf("failed to build transfer graph definition: %w", err)
 	}
 
-	content, err := json.Marshal(tgd)
+	content, err := json.Marshal(tgd, runtime.JSONOptions)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, replication, v1alpha1.GetRepositoryFailedReason, err.Error())
 

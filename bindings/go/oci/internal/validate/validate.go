@@ -2,14 +2,14 @@ package validate
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
 	"strings"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2/content"
+	"github.com/oras-project/oras-go/v3/content"
 
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	componentConfig "ocm.software/open-component-model/bindings/go/oci/spec/config/component"
@@ -52,7 +52,7 @@ func ComponentVersionDescriptor(
 			return "", fmt.Errorf("failed to fetch descriptor for reference %q: %w", ref, err)
 		}
 		var manifest ociImageSpecV1.Manifest
-		if err := json.NewDecoder(data).Decode(&manifest); err != nil {
+		if err := json.UnmarshalRead(data, &manifest); err != nil {
 			return "", errors.Join(fmt.Errorf("failed to decode manifest for reference %q: %w", ref, err), data.Close())
 		}
 		manifestAnnotations = manifest.Annotations
@@ -70,7 +70,7 @@ func ComponentVersionDescriptor(
 			return "", fmt.Errorf("failed to fetch descriptor for reference %q: %w", ref, err)
 		}
 		var index ociImageSpecV1.Index
-		if err := json.NewDecoder(data).Decode(&index); err != nil {
+		if err := json.UnmarshalRead(data, &index); err != nil {
 			return "", errors.Join(fmt.Errorf("failed to decode index for reference %q: %w", ref, err), data.Close())
 		}
 		manifestAnnotations = index.Annotations

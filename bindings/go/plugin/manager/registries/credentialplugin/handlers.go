@@ -2,7 +2,6 @@ package credentialplugin
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -28,10 +27,7 @@ func GetConsumerIdentityHandlerFunc[T runtime.Typed](f func(ctx context.Context,
 			return
 		}
 
-		if err := json.NewEncoder(writer).Encode(identity); err != nil {
-			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
-			return
-		}
+		plugins.WriteJSON(writer, identity)
 	}
 }
 
@@ -57,9 +53,6 @@ func ResolveHandlerFunc[T runtime.Typed](f func(ctx context.Context, request v1.
 			return
 		}
 
-		if err := json.NewEncoder(writer).Encode(resolvedCredentials); err != nil {
-			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
-			return
-		}
+		plugins.WriteJSON(writer, resolvedCredentials)
 	}
 }

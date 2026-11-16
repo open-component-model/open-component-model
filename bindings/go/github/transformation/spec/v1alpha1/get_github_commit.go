@@ -21,7 +21,7 @@ type GetGitHubCommit struct {
 	Type   runtime.Type           `json:"type"`
 	ID     string                 `json:"id"`
 	Spec   *GetGitHubCommitSpec   `json:"spec"`
-	Output *GetGitHubCommitOutput `json:"output,omitempty"`
+	Output *GetGitHubCommitOutput `json:"output,omitzero"`
 }
 
 // GetGitHubCommitSpec is the input specification for the GetGitHubCommit

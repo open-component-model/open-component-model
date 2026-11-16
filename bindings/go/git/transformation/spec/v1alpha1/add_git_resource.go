@@ -19,7 +19,7 @@ type AddGitResource struct {
 	Type   runtime.Type          `json:"type"`
 	ID     string                `json:"id"`
 	Spec   *AddGitResourceSpec   `json:"spec"`
-	Output *AddGitResourceOutput `json:"output,omitempty"`
+	Output *AddGitResourceOutput `json:"output,omitzero"`
 }
 
 // AddGitResourceSpec names the target and the archive to push.

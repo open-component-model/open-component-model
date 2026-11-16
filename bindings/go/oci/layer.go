@@ -7,8 +7,8 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/registry"
+	"github.com/oras-project/oras-go/v3/content"
+	"github.com/oras-project/oras-go/v3/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"

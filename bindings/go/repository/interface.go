@@ -201,7 +201,7 @@ type ComponentLister interface {
 	// and return the complete list.
 	//
 	// The signature is inspired by ORAS TagLister interface:
-	// https://pkg.go.dev/oras.land/oras-go/v2/registry@v2.6.0#TagLister
+	// https://pkg.go.dev/github.com/oras-project/oras-go/v3/registry#TagLister
 	// See also:
 	// https://distribution.github.io/distribution/spec/api/#tags-paginated
 	ListComponents(ctx context.Context, last string, fn func(names []string) error) error

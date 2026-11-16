@@ -2,7 +2,7 @@ package blobtransformer
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"log/slog"
 	"os"
@@ -57,7 +57,7 @@ func TestPluginFlow(t *testing.T) {
 		Type:       osutil.ConnectionType(t.Context()),
 		PluginType: v1.BlobTransformerPluginType,
 	}
-	serialized, err := json.Marshal(config)
+	serialized, err := json.Marshal(config, runtime.JSONOptions)
 	require.NoError(t, err)
 
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))

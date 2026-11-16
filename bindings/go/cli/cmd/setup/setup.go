@@ -18,6 +18,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/spec/config/v2alpha1"
 	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	typesv1 "ocm.software/open-component-model/bindings/go/configuration/types/v1"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credentialsRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -57,7 +58,7 @@ func PluginManager(cmd *cobra.Command) error {
 		}
 
 		if pluginCfg.IdleTimeout == 0 {
-			pluginCfg.IdleTimeout = v2alpha1.Duration(time.Hour)
+			pluginCfg.IdleTimeout = typesv1.Duration(time.Hour)
 		}
 
 		var loadedAnyPlugins bool
@@ -172,7 +173,7 @@ func Syscalls(cmd *cobra.Command) {
 	))
 }
 
-func timeoutString(t *httpv1alpha1.Timeout) string {
+func timeoutString(t *typesv1.Duration) string {
 	if t == nil {
 		return "<nil>"
 	}

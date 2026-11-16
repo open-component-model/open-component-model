@@ -2,7 +2,7 @@ package oci_test
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"os"
 	"path/filepath"
@@ -72,7 +72,7 @@ func TestCopyChartToOCILayout_Success(t *testing.T) {
 				require.NoError(t, manifestRaw.Close())
 			})
 			manifest := ociImageSpecV1.Manifest{}
-			require.NoError(t, json.NewDecoder(manifestRaw).Decode(&manifest))
+			require.NoError(t, json.UnmarshalRead(manifestRaw, &manifest))
 
 			assert.Equal(t, registry.ConfigMediaType, manifest.Config.MediaType, "expected config media type")
 			require.GreaterOrEqual(t, len(manifest.Layers), 1, "expected at least one layer")
@@ -155,7 +155,7 @@ func TestCopyChartToOCILayout_ConfigContent(t *testing.T) {
 		require.NoError(t, manifestRaw.Close())
 	})
 	manifest := ociImageSpecV1.Manifest{}
-	require.NoError(t, json.NewDecoder(manifestRaw).Decode(&manifest))
+	require.NoError(t, json.UnmarshalRead(manifestRaw, &manifest))
 
 	configRaw, err := store.Fetch(ctx, manifest.Config)
 	require.NoError(t, err)
@@ -164,7 +164,7 @@ func TestCopyChartToOCILayout_ConfigContent(t *testing.T) {
 	})
 
 	var config map[string]string
-	require.NoError(t, json.NewDecoder(configRaw).Decode(&config))
+	require.NoError(t, json.UnmarshalRead(configRaw, &config))
 	assert.Equal(t, chart.Name, config["name"], "config name should match chart name")
 	assert.Equal(t, chart.Version, config["version"], "config version should match chart version")
 }
@@ -367,7 +367,7 @@ func readManifest(t *testing.T, ctx context.Context, result *oci.Result) (*tar.C
 	t.Cleanup(func() { require.NoError(t, manifestRaw.Close()) })
 
 	var manifest ociImageSpecV1.Manifest
-	require.NoError(t, json.NewDecoder(manifestRaw).Decode(&manifest))
+	require.NoError(t, json.UnmarshalRead(manifestRaw, &manifest))
 	return store, manifest
 }
 

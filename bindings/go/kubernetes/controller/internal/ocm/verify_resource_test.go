@@ -2,7 +2,7 @@ package ocm_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"encoding/pem"
 	"fmt"
 	"log/slog"
@@ -233,7 +233,7 @@ func newGitRepository() (string, string) {
 }
 
 func mustJSON(v any) []byte {
-	data, err := json.Marshal(v)
+	data, err := json.Marshal(v, runtime.JSONOptions)
 	Expect(err).NotTo(HaveOccurred())
 	return bytes.TrimSpace(data)
 }

@@ -1,13 +1,13 @@
 package runtime
 
 import (
-	"bytes"
 	"encoding"
 	"encoding/base64"
-	"encoding/json"
+	jsonv1 "encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
-	"io"
 	"math"
 	"reflect"
 	"strconv"
@@ -15,9 +15,10 @@ import (
 )
 
 var (
-	jsonMarshalerType = reflect.TypeFor[json.Marshaler]()
+	marshalerType     = reflect.TypeFor[json.Marshaler]()
+	marshalerToType   = reflect.TypeFor[json.MarshalerTo]()
 	textMarshalerType = reflect.TypeFor[encoding.TextMarshaler]()
-	numberType        = reflect.TypeFor[json.Number]()
+	numberType        = reflect.TypeFor[jsonv1.Number]()
 )
 
 // maxUnstructuredDepth guards against reference cycles, which are surfaced as an error
@@ -30,8 +31,9 @@ const maxUnstructuredDepth = 10000
 //
 // toUnstructuredMap converts a Typed into a map[string]any, preserving concrete numeric types
 // (int64/float64) rather than coercing everything to float64 as a json.Unmarshal into interface{}
-// would. Its output is JSON-native and marshals identically to encoding/json. json.Marshaler and
-// encoding.TextMarshaler are honoured (e.g. runtime.Type marshals to "name/version").
+// would. Its output is JSON-native and marshals identically to encoding/json/v2 under
+// [JSONOptions]. json.MarshalerTo, json.Marshaler and encoding.TextMarshaler are honoured
+// (e.g. runtime.Type marshals to "name/version").
 func toUnstructuredMap(from Typed) (map[string]any, error) {
 	c := &unstructuredConverter{}
 	v, err := c.value(reflect.ValueOf(from))
@@ -65,7 +67,7 @@ func (c *unstructuredConverter) value(v reflect.Value) (any, error) {
 
 	// json.Number is a string type; keep it a concrete number.
 	if v.Type() == numberType {
-		return numberToUnstructured(json.Number(v.String()))
+		return numberToUnstructured(jsonv1.Number(v.String()))
 	}
 
 	if out, ok, err := marshalerToUnstructured(v); ok || err != nil {
@@ -82,8 +84,8 @@ func (c *unstructuredConverter) value(v reflect.Value) (any, error) {
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
 		u := v.Uint()
 		if u > math.MaxInt64 {
-			// Too large for int64; json.Number is JSON-native and marshals as a bare number.
-			return json.Number(strconv.FormatUint(u, 10)), nil
+			// Too large for int64; jsonv1.Number is JSON-native and marshals as a bare number.
+			return jsonv1.Number(strconv.FormatUint(u, 10)), nil
 		}
 		return int64(u), nil
 	case reflect.Float32:
@@ -129,12 +131,25 @@ func floatToUnstructured(f float64, bitSize int) (any, error) {
 	return f, nil
 }
 
-// marshalerToUnstructured returns ok=false if v implements neither marshaler. Marshaler output
-// is decoded with UseNumber so numbers it produces stay lossless.
+// marshalerToUnstructured returns ok=false if v implements no marshaler. Marshaler output
+// is decoded with number preservation so numbers it produces stay lossless.
 func marshalerToUnstructured(v reflect.Value) (any, bool, error) {
 	t := v.Type()
 
-	if m, ok := asMarshaler[json.Marshaler](v, t, jsonMarshalerType); ok {
+	// json.MarshalerTo takes precedence over json.Marshaler, as it does in encoding/json/v2.
+	if m, ok := asMarshaler[json.MarshalerTo](v, t, marshalerToType); ok {
+		data, err := json.Marshal(m, JSONOptions)
+		if err != nil {
+			return nil, true, fmt.Errorf("MarshalJSONTo failed for %s: %w", t, err)
+		}
+		out, err := decodeJSONValue(data)
+		if err != nil {
+			return nil, true, fmt.Errorf("decoding MarshalJSONTo output of %s: %w", t, err)
+		}
+		return out, true, nil
+	}
+
+	if m, ok := asMarshaler[json.Marshaler](v, t, marshalerType); ok {
 		data, err := m.MarshalJSON()
 		if err != nil {
 			return nil, true, fmt.Errorf("MarshalJSON failed for %s: %w", t, err)
@@ -176,7 +191,7 @@ func asMarshaler[T any](v reflect.Value, t reflect.Type, iface reflect.Type) (T,
 	return zero, false
 }
 
-func numberToUnstructured(n json.Number) (any, error) {
+func numberToUnstructured(n jsonv1.Number) (any, error) {
 	if n == "" { // encoding/json encodes an empty json.Number as 0
 		return int64(0), nil
 	}
@@ -211,32 +226,44 @@ func isIntegerLiteral(s string) bool {
 	return true
 }
 
+// PreserveJSONNumbers decodes every JSON number into a [jsonv1.Number] instead of letting
+// encoding/json/v2 decode it into a float64, which would silently drop digits beyond 2^53.
+// It is the v2 replacement for encoding/json's Decoder.UseNumber, whose flag the standard
+// library keeps internal. encoding/json/v2 has no Number type of its own; encoding/json.Number
+// implements [json.MarshalerTo] and [json.UnmarshalerFrom] and is the type v2 round-trips
+// arbitrary-precision numbers through.
+var PreserveJSONNumbers = json.WithUnmarshalers(json.UnmarshalFromFunc(
+	func(dec *jsontext.Decoder, val *any) error {
+		if dec.PeekKind() != '0' {
+			// Not a number: fall back to the default representation.
+			return errors.ErrUnsupported
+		}
+		num, err := dec.ReadValue()
+		if err != nil {
+			return err
+		}
+		*val = jsonv1.Number(num)
+		return nil
+	}))
+
 // decodeJSONValue decodes JSON into JSON-native Go values with the same numeric representation
 // that the reflective walk produces, so a value reaches Unstructured.Data as the same concrete
 // type no matter which path built it.
 func decodeJSONValue(data []byte) (any, error) {
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.UseNumber()
 	var out any
-	if err := dec.Decode(&out); err != nil {
+	// json.Unmarshal rejects anything after the top-level value, so trailing data is reported
+	// instead of silently dropped.
+	if err := json.Unmarshal(data, &out, PreserveJSONNumbers); err != nil {
 		return nil, err
-	}
-	// json.Unmarshal rejects anything after the top-level value; decoding only the first one
-	// would silently drop the rest.
-	if err := dec.Decode(new(any)); !errors.Is(err, io.EOF) {
-		if err == nil {
-			return nil, fmt.Errorf("unexpected data after top-level JSON value")
-		}
-		return nil, fmt.Errorf("unexpected data after top-level JSON value: %w", err)
 	}
 	return normalizeDecodedNumbers(out)
 }
 
-// normalizeDecodedNumbers replaces every json.Number left by UseNumber with the concrete numeric
-// type a json.Number field yields, so Unstructured.Data holds one numeric representation.
+// normalizeDecodedNumbers replaces every number left by PreserveJSONNumbers with the concrete
+// numeric type a jsonv1.Number field yields, so Unstructured.Data holds one numeric representation.
 func normalizeDecodedNumbers(v any) (any, error) {
 	switch t := v.(type) {
-	case json.Number:
+	case jsonv1.Number:
 		return numberToUnstructured(t)
 	case map[string]any:
 		for k, val := range t {
@@ -355,9 +382,6 @@ func (c *unstructuredConverter) structValue(v reflect.Value) (any, error) {
 		}
 
 		fv := v.Field(i)
-		if tag.omitempty && isEmptyValue(fv) {
-			continue
-		}
 		if tag.omitzero && isZeroForOmit(fv) {
 			continue
 		}
@@ -373,6 +397,10 @@ func (c *unstructuredConverter) structValue(v reflect.Value) (any, error) {
 			if val, err = applyStringOption(val); err != nil {
 				return nil, err
 			}
+		}
+		// "omitempty" is decided on the encoded value, so it is evaluated after conversion.
+		if tag.omitempty && isEmptyUnstructured(val) {
+			continue
 		}
 		out[name] = val
 	}
@@ -433,8 +461,8 @@ func parseJSONTag(field reflect.StructField) jsonTag {
 // string; other kinds are returned unchanged.
 func applyStringOption(val any) (any, error) {
 	switch val.(type) {
-	case string, bool, int64, float64, json.Number:
-		data, err := json.Marshal(val)
+	case string, bool, int64, float64, jsonv1.Number:
+		data, err := json.Marshal(val, JSONOptions)
 		if err != nil {
 			return nil, fmt.Errorf("applying ,string option: %w", err)
 		}
@@ -458,20 +486,19 @@ func isZeroForOmit(v reflect.Value) bool {
 	return v.IsZero()
 }
 
-func isEmptyValue(v reflect.Value) bool {
-	switch v.Kind() {
-	case reflect.Array, reflect.Map, reflect.Slice, reflect.String:
-		return v.Len() == 0
-	case reflect.Bool:
-		return !v.Bool()
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		return v.Int() == 0
-	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
-		return v.Uint() == 0
-	case reflect.Float32, reflect.Float64:
-		return v.Float() == 0
-	case reflect.Interface, reflect.Pointer:
-		return v.IsNil()
+// isEmptyUnstructured reports whether a converted value encodes as an empty JSON value.
+// encoding/json/v2's "omitempty" omits exactly those: null, "", {} and [] - unlike v1, which
+// omitted empty Go values such as false and 0.
+func isEmptyUnstructured(val any) bool {
+	switch v := val.(type) {
+	case nil:
+		return true
+	case string:
+		return v == ""
+	case map[string]any:
+		return len(v) == 0
+	case []any:
+		return len(v) == 0
 	default:
 		return false
 	}

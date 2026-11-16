@@ -1,7 +1,7 @@
 package runtime
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -214,10 +214,10 @@ func TestLookupCredentialConfig(t *testing.T) {
 
 func mustCreateRaw(t *testing.T, data map[string]any) *runtime.Raw {
 	t.Helper()
-	bytes, err := json.Marshal(data)
+	bytes, err := json.Marshal(data, runtime.JSONOptions)
 	require.NoError(t, err)
 
 	raw := &runtime.Raw{}
-	require.NoError(t, raw.UnmarshalJSON(bytes))
+	require.NoError(t, json.Unmarshal(bytes, raw))
 	return raw
 }

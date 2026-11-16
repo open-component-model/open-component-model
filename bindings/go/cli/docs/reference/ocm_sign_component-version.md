@@ -216,17 +216,17 @@ sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --s
 
 ```
       --concurrency-limit int   maximum amount of parallel requests to the repository for resolving component versions (default 4)
-      --dry-run                 compute signature but do not persist it to the repository
-      --force                   overwrite existing signatures under the same name
+      --dry-run[=true|false]    compute signature but do not persist it to the repository
+      --force[=true|false]      overwrite existing signatures under the same name
       --hash string             hash algorithm to use (SHA256, SHA512) (default "SHA-256")
-  -h, --help                    help for component-version
+  -h, --help[=true|false]       help for component-version
       --normalisation enum      normalisation algorithm of the new signature
                                 (must be one of [jsonNormalisation/v4alpha1 jsonNormalisation/v4alpha2 jsonNormalisation/v4alpha3]) (default jsonNormalisation/v4alpha3)
   -o, --output enum             output format of the resulting signature
                                 (must be one of [json yaml]) (default yaml)
       --signature string        name of the signature to create or update. defaults to "default" (default "default")
       --signer-spec string      DEPRECATED: no longer supported, configure the signer in the OCM configuration instead (signing.config.ocm.software/v1alpha1, field "signer")
-      --tsa                     request an RFC 3161 timestamp from a TSA server (default: http://timestamp.digicert.com); not supported for Sigstore signers
+      --tsa[=true|false]        request an RFC 3161 timestamp from a TSA server (default: http://timestamp.digicert.com); not supported for Sigstore signers
       --tsa-url string          custom TSA server URL (implies --tsa); not supported for Sigstore signers
 ```
 
@@ -258,7 +258,7 @@ sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --s
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
-                                              setting this flag disables the interactive progress display so logs are printed in the chosen format
+                                              the interactive progress display needs a terminal and the text format; any other format prints its records in full instead
                                            (must be one of [json text]) (default text)
       --loglevel enum                      sets the logging level
                                               debug: Show all logs including detailed debugging information

@@ -15,7 +15,7 @@
 package examples
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -105,7 +105,7 @@ func TestExample_DescriptorWithLabels(t *testing.T) {
 					Name:    "acme.org/labelled",
 					Version: "1.0.0",
 					Labels: []descriptor.Label{
-						{Name: "env", Value: json.RawMessage(`"production"`)},
+						{Name: "env", Value: jsontext.Value(`"production"`)},
 					},
 				},
 			},
@@ -116,7 +116,7 @@ func TestExample_DescriptorWithLabels(t *testing.T) {
 							Name:    "chart",
 							Version: "1.0.0",
 							Labels: []descriptor.Label{
-								{Name: "deploy-order", Value: json.RawMessage(`1`)},
+								{Name: "deploy-order", Value: jsontext.Value(`1`)},
 							},
 						},
 					},

@@ -3,7 +3,7 @@ package deployer
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"os"
 	"time"
@@ -641,7 +641,7 @@ func mockYAMLResource(ctx SpecContext, namespace, manifest string) *v1alpha1.Res
 		Type:       runtime.Type{Name: "ctf", Version: "v1"},
 		FilePath:   tempDir,
 		AccessMode: ctfv1.AccessModeReadOnly,
-	})
+	}, runtime.JSONOptions)
 	Expect(err).NotTo(HaveOccurred())
 
 	info := v1alpha1.ComponentInfo{

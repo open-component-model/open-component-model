@@ -11,7 +11,7 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2/registry/remote"
+	"github.com/oras-project/oras-go/v3/registry/remote"
 )
 
 // sinkRegistry is a minimal in-process registry that accepts both the
@@ -46,8 +46,8 @@ func benchStore(b *testing.B, srv *httptest.Server, chunkSize, threshold int64) 
 	if err != nil {
 		b.Fatal(err)
 	}
-	repo.PlainHTTP = true
-	repo.Client = &http.Client{}
+	repo.Registry.PlainHTTP = true
+	repo.Registry.Client = &http.Client{}
 	return &RemoteStore{Repository: repo, ChunkSize: chunkSize, ChunkThreshold: threshold}
 }
 

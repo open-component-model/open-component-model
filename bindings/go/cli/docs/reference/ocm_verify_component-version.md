@@ -242,11 +242,11 @@ verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 -
 ### Options
 
 ```
-      --concurrency-limit int              maximum amount of parallel requests to the repository for resolving component versions (default 4)
-  -h, --help                               help for component-version
-      --insecure-trust-legacy-timestamps   use the time of trusted timestamps created by the OCM v1 CLI to validate expired signing certificates; these timestamps cover only the descriptor digest, so a signature made after the certificate expired can reuse one
-      --signature string                   name of the signature to verify. If not set, all signatures are verified.
-      --verifier-spec string               DEPRECATED: no longer supported, configure the verifier in the OCM configuration instead (signing.config.ocm.software/v1alpha1, field "verifier")
+      --concurrency-limit int                           maximum amount of parallel requests to the repository for resolving component versions (default 4)
+  -h, --help[=true|false]                               help for component-version
+      --insecure-trust-legacy-timestamps[=true|false]   use the time of trusted timestamps created by the OCM v1 CLI to validate expired signing certificates; these timestamps cover only the descriptor digest, so a signature made after the certificate expired can reuse one
+      --signature string                                name of the signature to verify. If not set, all signatures are verified.
+      --verifier-spec string                            DEPRECATED: no longer supported, configure the verifier in the OCM configuration instead (signing.config.ocm.software/v1alpha1, field "verifier")
 ```
 
 ### Options inherited from parent commands
@@ -277,7 +277,7 @@ verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 -
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
-                                              setting this flag disables the interactive progress display so logs are printed in the chosen format
+                                              the interactive progress display needs a terminal and the text format; any other format prints its records in full instead
                                            (must be one of [json text]) (default text)
       --loglevel enum                      sets the logging level
                                               debug: Show all logs including detailed debugging information

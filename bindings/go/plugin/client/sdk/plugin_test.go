@@ -132,7 +132,7 @@ func TestIdleChecker(t *testing.T) {
 	r := require.New(t)
 	location := osutil.SocketPath("test-plugin-idle")
 	output := bytes.NewBuffer(nil)
-	timeout := 10 * time.Millisecond
+	timeout := types.Duration(10 * time.Millisecond)
 	ctx := context.Background()
 	p := NewPlugin(ctx, slog.Default(), types.Config{
 		ID:          "test-plugin-idle",

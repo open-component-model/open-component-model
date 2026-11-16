@@ -1,13 +1,14 @@
 package discovery
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func filteredKeys(f *Filtered) []string {
@@ -230,7 +231,7 @@ func TestFilterDoesNotMutateInputs(t *testing.T) {
 			newResource("drop", withResourceLabels(stringLabel("kind", "buildtime"))),
 			newResource("keep"),
 		))
-	snapshot, err := json.Marshal(mustConvertV2(t, d))
+	snapshot, err := json.Marshal(mustConvertV2(t, d), runtime.JSONOptions)
 	r.NoError(err)
 
 	q, err := Compile(t.Context(), &v1alpha1.DiscoverySpec{
@@ -252,7 +253,7 @@ func TestFilterDoesNotMutateInputs(t *testing.T) {
 	r.Equal("keep", d.Component.Resources[1].Name)
 	r.Len(d.Component.Resources[0].Labels, 1)
 
-	after, err := json.Marshal(mustConvertV2(t, d))
+	after, err := json.Marshal(mustConvertV2(t, d), runtime.JSONOptions)
 	r.NoError(err)
 	r.JSONEq(string(snapshot), string(after), "filtering and projection must not mutate inputs")
 }

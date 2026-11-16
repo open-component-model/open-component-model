@@ -2,11 +2,10 @@ package blobtransformer
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"net/http"
 
-	"ocm.software/open-component-model/bindings/go/plugin/manager/contracts/blobtransformer/v1"
+	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/blobtransformer/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -32,10 +31,7 @@ func TransformBlobHandlerFunc[T runtime.Typed](f func(ctx context.Context, reque
 			return
 		}
 
-		if err := json.NewEncoder(writer).Encode(response); err != nil {
-			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
-			return
-		}
+		plugins.WriteJSON(writer, response)
 	}
 }
 
@@ -51,9 +47,6 @@ func GetIdentityHandlerFunc[T runtime.Typed](f func(ctx context.Context, typ *v1
 			return
 		}
 
-		if err := json.NewEncoder(writer).Encode(response); err != nil {
-			plugins.NewError(err, http.StatusInternalServerError).Write(writer)
-			return
-		}
+		plugins.WriteJSON(writer, response)
 	}
 }
