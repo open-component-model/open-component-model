@@ -109,8 +109,8 @@ github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f h1:lO4WD4F/rVNCu3HqELle0jiPLLBs70cWOduZpkS1E78=
 github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f/go.mod h1:cuUVRXasLTGF7a8hSLbxyZXjz+1KgoB3wDUb6vlszIc=
-github.com/digitorus/pkcs7 v0.0.0-20260914070511-d678ea5ea03f h1:LBDTasGDT7gkpSl3tIq+V4Yy0nr+l+ZmI6VN9MY9FU0=
-github.com/digitorus/pkcs7 v0.0.0-20260914070511-d678ea5ea03f/go.mod h1:OQvyvldkvDCxGsUPLSibXqM4B/Pz5RaXQP4CPo5LXs4=
+github.com/digitorus/pkcs7 v0.0.0-20261104125046-a476de3098e4 h1:xuGU1r23rCr51+kso0kGahEL6MNIi5ToHByt+BnHebA=
+github.com/digitorus/pkcs7 v0.0.0-20261104125046-a476de3098e4/go.mod h1:OQvyvldkvDCxGsUPLSibXqM4B/Pz5RaXQP4CPo5LXs4=
 github.com/digitorus/timestamp v0.0.0-20260914073129-b4b58b92aa51 h1:C5oJXjXaNiSSCs4b+yXP3JmMGKgJhuIakXD0UdjhB2k=
 github.com/digitorus/timestamp v0.0.0-20260914073129-b4b58b92aa51/go.mod h1:UbWLJjUt4ChMltkeZK0SKTUViVg4839mnQmyH8QWH+Y=
 github.com/distribution/distribution/v3 v3.1.1 h1:KUbk7C8CfaLXy8kbf/hGq9cad/wCoLB6dbWH6DMbmX0=
