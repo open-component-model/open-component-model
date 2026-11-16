@@ -3,7 +3,6 @@ package blobtransformer
 import (
 	"context"
 	"encoding/json/v2"
-	"errors"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -65,9 +64,14 @@ func TestPluginFlow(t *testing.T) {
 		if pluginCmd.Process == nil {
 			return
 		}
-		assert.NoError(t, pluginCmd.Process.Kill())
-		err := os.Remove(osutil.SocketPath(id))
-		assert.True(t, err == nil || errors.Is(err, os.ErrNotExist))
+		// ctx is cancelled before cleanup functions run, so exec.CommandContext races this
+		// kill for the same process: whoever loses kills a plugin that already exited.
+		if err := osutil.Kill(pluginCmd.Process); err != nil {
+			assert.ErrorIs(t, err, os.ErrProcessDone)
+		}
+		// A killed plugin cannot unlink its own socket, and on windows the file can still be
+		// held while the process goes away, so the leftovers are removed best effort.
+		_ = os.Remove(osutil.SocketPath(id))
 		_ = os.Remove(osutil.SocketPath(id) + ".lock")
 	})
 	pipe, err := pluginCmd.StdoutPipe()
