@@ -43,6 +43,7 @@ func NewDefaultBuilder(
 	resourceRepo repository.ResourceRepository,
 	credentialProvider credentials.Resolver,
 	httpConfig *httpv1alpha1.Config,
+	tempDir string,
 ) *builder.Builder {
 	transformerScheme := runtime.NewScheme()
 	transformerScheme.MustRegisterScheme(ociv1alpha1.Scheme)
@@ -200,6 +201,16 @@ func NewDefaultBuilder(
 		ResourceRepository: resourceRepo,
 		CredentialProvider: credentialProvider,
 	}
+
+	// Transformers that buffer content in a file follow the configured temporary folder.
+	ociGetResource.TempDir = tempDir
+	ociGetOCIArtifact.TempDir = tempDir
+	getHelmChart.TempDir = tempDir
+	convertHelmToOCI.TempDir = tempDir
+	downloadWget.TempDir = tempDir
+	downloadS3.TempDir = tempDir
+	getGitHubCommit.TempDir = tempDir
+	getGitResource.TempDir = tempDir
 
 	// File cleanup transformer
 	transformerScheme.MustRegisterWithAlias(&FileCleanupTransformation{}, FileCleanupVersionedType)

@@ -111,7 +111,15 @@ announces `Content-Length`.
 
 The remaining access types are downloaded to a temporary file, and a Helm chart is
 converted to OCI in a second one, before the upload starts. These files are created in
-the temporary directory of the operating system (`$TMPDIR` on Linux and macOS); they do
-not follow `tempFolder`. They are removed in a single `FileCleanup` step after all other
-steps of the transfer have finished. Plan free disk space there for the **sum** of all
-buffered resources in the transfer.
+the same temporary folder as spooled blobs: `--temp-folder`, then the `tempFolder` of the
+filesystem configuration, then the temporary directory of the operating system. OCM
+creates the folder if it does not exist.
+
+Unlike spooled blobs, buffered files have names (`wget-*`, `chart-*`, `oci-*`,
+`git-resource-*`, `github-commit-*`, `resource-*`) and stay until a single `FileCleanup`
+step removes them after all other steps of the transfer have finished. Plan free disk
+space for the **sum** of all buffered resources in the transfer. An interrupted transfer
+leaves them behind; they are safe to delete when no transfer is running.
+
+The OCM controller does not read `tempFolder`: its transfers buffer in the temporary
+directory of the operating system.

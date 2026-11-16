@@ -24,6 +24,9 @@ type GetGitResource struct {
 
 	ResourceRepository repository.ResourceRepository
 	CredentialProvider credentials.Resolver
+	// TempDir is the directory content is buffered in when the spec sets no output path.
+	// Empty means the default temporary directory of the operating system.
+	TempDir string
 }
 
 func (t *GetGitResource) Transform(ctx context.Context, step runtime.Typed) (_ runtime.Typed, err error) {
@@ -38,7 +41,11 @@ func (t *GetGitResource) Transform(ctx context.Context, step runtime.Typed) (_ r
 		return nil, fmt.Errorf("resource is required in spec for get git resource transformation")
 	}
 
-	outputPath, err := determineOutputPath(transformation.Spec.OutputPath, "git-resource")
+	bufferDir, err := filesystem.BufferDir(transformation.Spec.OutputPath, t.TempDir)
+	if err != nil {
+		return nil, fmt.Errorf("error getting output path: %w", err)
+	}
+	outputPath, err := determineOutputPath(bufferDir, "git-resource")
 	if err != nil {
 		return nil, fmt.Errorf("error getting content output path: %w", err)
 	}

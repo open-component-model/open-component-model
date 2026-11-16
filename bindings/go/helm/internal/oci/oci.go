@@ -26,6 +26,8 @@ import (
 type Result struct {
 	Blob *filesystem.Blob
 	Desc *ociImageSpecV1.Descriptor
+	// Path is the temporary file backing Blob. The caller removes it once Blob is no longer read.
+	Path string
 }
 
 // CopyChartToOCILayout takes a ChartData helper object and creates an OCI layout from it.
@@ -53,7 +55,7 @@ func CopyChartToOCILayout(ctx context.Context, chart *internal.ChartData, dir st
 	}
 	blob.SetMediaType(layout.MediaTypeOCIImageLayoutTarGzipV1)
 
-	return &Result{Blob: blob, Desc: &imgDesc}, nil
+	return &Result{Blob: blob, Desc: &imgDesc, Path: tmpFile.Name()}, nil
 }
 
 // writeOCILayout writes the chart as a gzipped OCI layout tagged with the chart version
