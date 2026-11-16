@@ -95,10 +95,11 @@ func (t *TransferLocalBlob) Transform(ctx context.Context, step runtime.Typed) (
 	return transformation, nil
 }
 
-// TransferOCIArtifactToLocalBlob is a fused transformer that streams an OCI artifact (or a
-// single layer) from its registry into a component version in an OCI or CTF repository as a
-// local blob, without buffering it in a file. It handles the
-// TransferOCIArtifactTo{OCI,CTF}LocalBlob transformations.
+// TransferOCIArtifactToLocalBlob is a fused transformer that streams a resource from its
+// source into a component version in an OCI or CTF repository as a local blob, without
+// buffering it in a file. It handles the TransferOCIArtifactTo{OCI,CTF}LocalBlob
+// transformations (OCI artifacts and single layers) and the
+// TransferResourceTo{OCI,CTF}LocalBlob transformations (plain blobs such as Wget and S3).
 type TransferOCIArtifactToLocalBlob struct {
 	Scheme             *runtime.Scheme
 	RepoProvider       repository.ComponentVersionRepositoryProvider
@@ -127,6 +128,22 @@ func (t *TransferOCIArtifactToLocalBlob) Transform(ctx context.Context, step run
 			return nil, fmt.Errorf("spec is required for %s transformation", tr.Type)
 		}
 		dst = localBlobTarget{repository: &tr.Spec.Repository, globalAccessPolicy: tr.Spec.GlobalAccessPolicy}
+		component, version = tr.Spec.Component, tr.Spec.Version
+		sourceResource, targetResource = descriptor.ConvertFromV2Resource(tr.Spec.Resource), descriptor.ConvertFromV2Resource(tr.Spec.TargetResource)
+		output = &tr.Output
+	case *v1alpha1.TransferResourceToOCILocalBlob:
+		if tr.Spec == nil {
+			return nil, fmt.Errorf("spec is required for %s transformation", tr.Type)
+		}
+		dst = localBlobTarget{repository: &tr.Spec.Repository, globalAccessPolicy: tr.Spec.GlobalAccessPolicy}
+		component, version = tr.Spec.Component, tr.Spec.Version
+		sourceResource, targetResource = descriptor.ConvertFromV2Resource(tr.Spec.Resource), descriptor.ConvertFromV2Resource(tr.Spec.TargetResource)
+		output = &tr.Output
+	case *v1alpha1.TransferResourceToCTFLocalBlob:
+		if tr.Spec == nil {
+			return nil, fmt.Errorf("spec is required for %s transformation", tr.Type)
+		}
+		dst = localBlobTarget{repository: &tr.Spec.Repository}
 		component, version = tr.Spec.Component, tr.Spec.Version
 		sourceResource, targetResource = descriptor.ConvertFromV2Resource(tr.Spec.Resource), descriptor.ConvertFromV2Resource(tr.Spec.TargetResource)
 		output = &tr.Output
@@ -167,7 +184,7 @@ func (t *TransferOCIArtifactToLocalBlob) Transform(ctx context.Context, step run
 	}
 	content, err := t.Repository.DownloadResource(ctx, sourceResource, creds)
 	if err != nil {
-		return nil, fmt.Errorf("failed downloading OCI artifact %v: %w", sourceResource.ToIdentity(), err)
+		return nil, fmt.Errorf("failed downloading resource %v: %w", sourceResource.ToIdentity(), err)
 	}
 
 	updated, err := target.AddLocalResource(ctx, component, version, targetResource, content)

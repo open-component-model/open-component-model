@@ -121,6 +121,23 @@ func ResourceLocalBlobOCILayer(ctx context.Context, storage content.Storage, b *
 		}
 	}
 
+	// The store cannot take a blob of unknown size or digest as a stream. Spool it to a
+	// file to learn both, instead of holding the whole blob in memory.
+	if dig, _, err := layerDigestAndMediaType(b, layerOpts); err != nil {
+		return ociImageSpecV1.Descriptor{}, err
+	} else if b.Size() == blob.SizeUnknown || len(dig) == 0 {
+		spooled, remove, err := b.Spool("")
+		if err != nil {
+			return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to spool blob: %w", err)
+		}
+		defer func() {
+			if err := remove(); err != nil {
+				slog.WarnContext(ctx, "failed to remove spooled blob", "error", err)
+			}
+		}()
+		b = spooled
+	}
+
 	b, layer, err := PrepareArtifactBlobForOCI(b, layerOpts)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to create resource layer based on blob: %w", err)

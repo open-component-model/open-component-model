@@ -27,17 +27,17 @@ func processOCIArtifact(resource descriptorv2.Resource, id string, val *discover
 	if err != nil {
 		return fmt.Errorf("cannot get reference name: %w", err)
 	}
-	return transferOCIArtifactToLocalBlob(resource, id, val, tgd, toSpec, resourceTransformIDs, i, referenceName)
+	return transferToLocalBlob(resource, id, val, tgd, toSpec, resourceTransformIDs, i, referenceName, chooseTransferOCIArtifactToLocalBlobType)
 }
 
-// transferOCIArtifactToLocalBlob appends the TransferOCIArtifactTo{OCI,CTF}LocalBlob
-// transformation, chosen from the target repository kind, that streams resource from its
-// registry into the target as a local blob named referenceName.
-func transferOCIArtifactToLocalBlob(resource descriptorv2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, referenceName string) error {
+// transferToLocalBlob appends a fused transformation, chosen by chooseType from the target
+// repository kind, that streams resource from its source into the target as a local blob.
+// referenceName is only set for OCI artifacts (see uploadAsLocalResource).
+func transferToLocalBlob(resource descriptorv2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int, referenceName string, chooseType func(runtime.Typed) (runtime.Type, error)) error {
 	transferID := fmt.Sprintf("%sTransfer%s", id, identityToTransformationID(resource.ToIdentity()))
-	transferType, err := chooseTransferOCIArtifactToLocalBlobType(toSpec)
+	transferType, err := chooseType(toSpec)
 	if err != nil {
-		return fmt.Errorf("choosing transfer OCI artifact to local blob type: %w", err)
+		return fmt.Errorf("choosing transfer to local blob type: %w", err)
 	}
 	toRepo, err := asUnstructured(toSpec)
 	if err != nil {
@@ -183,5 +183,5 @@ func ociAddArtifact(addResourceID, getResourceID, imageReference, label string) 
 // no repository or tag that would name it in the target, so the resource name is used, as it
 // is for other by-value resources.
 func processOCIImageLayer(resource descriptorv2.Resource, id string, val *discoveryValue, tgd *transformv1alpha1.TransformationGraphDefinition, toSpec runtime.Typed, resourceTransformIDs map[int]string, i int) error {
-	return transferOCIArtifactToLocalBlob(resource, id, val, tgd, toSpec, resourceTransformIDs, i, resource.Name)
+	return transferToLocalBlob(resource, id, val, tgd, toSpec, resourceTransformIDs, i, resource.Name, chooseTransferOCIArtifactToLocalBlobType)
 }

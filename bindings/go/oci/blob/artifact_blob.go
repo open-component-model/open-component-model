@@ -1,7 +1,10 @@
 package blob
 
 import (
+	"errors"
 	"fmt"
+	"io"
+	"os"
 	"sync"
 
 	"github.com/opencontainers/go-digest"
@@ -287,6 +290,74 @@ func (r *ArtifactBlob) Buffer() (result *ArtifactBlob, err error) {
 		ociLayout:    r.ociLayout,
 	}, nil
 }
+
+// Spool copies the blob into a temporary file in dir (the default temporary directory if
+// empty) and returns an ArtifactBlob over that file with a known size and digest. Unlike
+// Buffer it holds no content in memory. The content is verified against the byte digest of
+// an ordinary resource while it is copied. The caller must call remove once the returned
+// blob is no longer read.
+func (r *ArtifactBlob) Spool(dir string) (_ *ArtifactBlob, remove func() error, err error) {
+	expected, known, err := r.resourceByteDigest()
+	if err != nil {
+		return nil, nil, err
+	}
+	algorithm := digest.Canonical
+	if known {
+		algorithm = digest.Digest(expected).Algorithm()
+	}
+
+	file, err := os.CreateTemp(dir, "ocm-blob-*")
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create spool file: %w", err)
+	}
+	removeFile := func() error { return os.Remove(file.Name()) }
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, removeFile())
+		}
+	}()
+
+	digester := algorithm.Digester()
+	size, err := copyAndClose(io.MultiWriter(file, digester.Hash()), r)
+	if err = errors.Join(err, file.Close()); err != nil {
+		return nil, nil, fmt.Errorf("failed to spool blob to file: %w", err)
+	}
+	actual := digester.Digest().String()
+	if known && actual != expected {
+		return nil, nil, fmt.Errorf("resource blob digest mismatch: expected %s, got %s", expected, actual)
+	}
+
+	return &ArtifactBlob{
+		ReadOnlyBlob: &spooledBlob{path: file.Name(), size: size, digest: actual},
+		Artifact:     r.Artifact,
+		mediaType:    r.mediaType,
+		ociLayout:    r.ociLayout,
+	}, removeFile, nil
+}
+
+// copyAndClose copies src into dst. A source that verifies its content reports a mismatch
+// when it is closed, so the close error is part of the result.
+func copyAndClose(dst io.Writer, src blob.ReadOnlyBlob) (_ int64, err error) {
+	reader, err := src.ReadCloser()
+	if err != nil {
+		return 0, err
+	}
+	defer func() {
+		err = errors.Join(err, reader.Close())
+	}()
+	return blob.CopyReader(dst, reader)
+}
+
+// spooledBlob is a file written by Spool, whose size and digest were recorded while writing.
+type spooledBlob struct {
+	path   string
+	size   int64
+	digest string
+}
+
+func (b *spooledBlob) ReadCloser() (io.ReadCloser, error) { return os.Open(b.path) }
+func (b *spooledBlob) Size() int64                        { return b.size }
+func (b *spooledBlob) Digest() (string, bool)             { return b.digest, true }
 
 // Interface implementations
 var (

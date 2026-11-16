@@ -80,7 +80,7 @@ func TestBuildGraphDefinition_Labels(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
 	desc := testDescriptor("ocm.software/my-app", "1.0.0",
-		[]descriptor.Resource{localBlobResource("icons", "1.0.0"), wgetResource("docs", "1.0.0", "https://source.example/docs.tar")}, nil)
+		[]descriptor.Resource{localBlobResource("icons", "1.0.0"), wgetResource("manual", "1.0.0", "https://source.example/manual.tar"), wgetPostResource("docs", "1.0.0", "https://source.example/docs.tar")}, nil)
 	resolver := testResolverFor("ocm.software/my-app", "1.0.0", sourceRepo, desc)
 
 	tgd, err := BuildGraphDefinition(t.Context(),
@@ -97,11 +97,14 @@ func TestBuildGraphDefinition_Labels(t *testing.T) {
 		descriptor.IdentityAttributeName:    "ocm.software/my-app",
 		descriptor.IdentityAttributeVersion: "1.0.0",
 	})
-	icons, docs := localBlobResource("icons", "1.0.0"), wgetResource("docs", "1.0.0", "https://source.example/docs.tar")
+	icons, docs := localBlobResource("icons", "1.0.0"), wgetPostResource("docs", "1.0.0", "https://source.example/docs.tar")
 	iconsID, docsID := identityToTransformationID(icons.ToIdentity()), identityToTransformationID(docs.ToIdentity())
+	manual := wgetResource("manual", "1.0.0", "https://source.example/manual.tar")
+	manualID := identityToTransformationID(manual.ToIdentity())
 
 	assertLabel(t, r, tgd, componentID+"Upload", "my-app@1.0.0 [Upload to OCI ghcr.io/target]")
 	assertLabel(t, r, tgd, componentID+"Transfer"+iconsID, "my-app@1.0.0 [Transfer icons as LocalBlob to OCI ghcr.io/target]")
+	assertLabel(t, r, tgd, componentID+"Transfer"+manualID, "my-app@1.0.0 [Transfer manual as LocalBlob to OCI ghcr.io/target]")
 	assertLabel(t, r, tgd, componentID+"Get"+docsID, "my-app@1.0.0 [Get docs]")
 	assertLabel(t, r, tgd, componentID+"Add"+docsID, "my-app@1.0.0 [Add docs as LocalBlob to OCI ghcr.io/target]")
 	// the cleanup transformation buffers the downloaded docs, so it must exist and carry

@@ -823,7 +823,7 @@ func TestResourceLocalBlobOCISingleLayerArtifact(t *testing.T) {
 				AccessScheme:  runtime.NewScheme(),
 				BaseReference: "test-ref",
 			},
-			expectedError: "failed to create resource layer based on blob",
+			expectedError: "failed to spool blob",
 		},
 	}
 

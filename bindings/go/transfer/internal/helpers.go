@@ -162,6 +162,19 @@ func chooseTransferOCIArtifactToLocalBlobType(to runtime.Typed) (runtime.Type, e
 	return ociv1alpha1.TransferOCIArtifactToCTFLocalBlobV1alpha1, nil
 }
 
+// chooseTransferResourceToLocalBlobType returns the transformation that streams a plain blob
+// resource (such as Wget or S3) into a component version in the to repository as a local blob.
+func chooseTransferResourceToLocalBlobType(to runtime.Typed) (runtime.Type, error) {
+	toOCI, err := isOCIRepository(to)
+	if err != nil {
+		return runtime.Type{}, fmt.Errorf("target repository: %w", err)
+	}
+	if toOCI {
+		return ociv1alpha1.TransferResourceToOCILocalBlobV1alpha1, nil
+	}
+	return ociv1alpha1.TransferResourceToCTFLocalBlobV1alpha1, nil
+}
+
 func getReferenceName(imageReference string) (string, error) {
 	if imageReference == "" {
 		return "", fmt.Errorf("cannot get reference name from empty image reference")

@@ -134,7 +134,8 @@ func uploaderOutcomes(t *testing.T, tgd *transformv1alpha1.TransformationGraphDe
 			case ociv1alpha1.OCIAddLocalResourceV1alpha1, ociv1alpha1.CTFAddLocalResourceV1alpha1,
 				ociv1alpha1.TransferOCILocalBlobToOCILocalBlobV1alpha1, ociv1alpha1.TransferOCILocalBlobToCTFLocalBlobV1alpha1,
 				ociv1alpha1.TransferCTFLocalBlobToOCILocalBlobV1alpha1, ociv1alpha1.TransferCTFLocalBlobToCTFLocalBlobV1alpha1,
-				ociv1alpha1.TransferOCIArtifactToOCILocalBlobV1alpha1, ociv1alpha1.TransferOCIArtifactToCTFLocalBlobV1alpha1:
+				ociv1alpha1.TransferOCIArtifactToOCILocalBlobV1alpha1, ociv1alpha1.TransferOCIArtifactToCTFLocalBlobV1alpha1,
+				ociv1alpha1.TransferResourceToOCILocalBlobV1alpha1, ociv1alpha1.TransferResourceToCTFLocalBlobV1alpha1:
 				outcome = "local blob"
 			case wgetv1alpha1.HTTPStreamingV1alpha1:
 				outcome = "http"

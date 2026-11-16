@@ -38,6 +38,14 @@ func wgetResource(name, version, url string) descriptor.Resource {
 	}
 }
 
+// wgetPostResource is a wget resource fetched with POST. A request with side effects is
+// not streamed: it is downloaded to a file once.
+func wgetPostResource(name, version, url string) descriptor.Resource {
+	res := wgetResource(name, version, url)
+	res.Access.(*runtime.Raw).Data = []byte(`{"type":"Wget/v1","url":"` + url + `","verb":"POST"}`)
+	return res
+}
+
 func ociResource(name, version, imageRef string) descriptor.Resource {
 	return descriptor.Resource{
 		ElementMeta: descriptor.ElementMeta{
@@ -272,7 +280,7 @@ func TestBuildGraphDefinition_RepositoryUploaders(t *testing.T) {
 	})
 }
 
-func TestBuildGraphDefinition_NoUploader_KeepsDownloadWgetPath(t *testing.T) {
+func TestBuildGraphDefinition_LocalBlobUploader_StreamsWget(t *testing.T) {
 	r := require.New(t)
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
@@ -284,17 +292,20 @@ func TestBuildGraphDefinition_NoUploader_KeepsDownloadWgetPath(t *testing.T) {
 	tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, withLocalBlobUploader())
 	r.NoError(err)
 
-	var sawDownloadWget, sawStreaming bool
+	var sawTransfer, sawDownloadWget, sawStreaming bool
 	for i := range tgd.Transformations {
 		switch tgd.Transformations[i].Type {
+		case ociv1alpha1.TransferResourceToOCILocalBlobV1alpha1:
+			sawTransfer = true
 		case wgetv1alpha1.DownloadWgetResourceV1alpha1:
 			sawDownloadWget = true
 		case wgetv1alpha1.HTTPStreamingV1alpha1:
 			sawStreaming = true
 		}
 	}
-	assert.True(t, sawDownloadWget, "without an uploader the wget resource must use the DownloadWgetResource path")
-	assert.False(t, sawStreaming, "no HTTPStreaming node should be emitted without an uploader")
+	assert.True(t, sawTransfer, "the local blob uploader must stream a wget GET into the target")
+	assert.False(t, sawDownloadWget, "a wget GET must not be buffered in a file")
+	assert.False(t, sawStreaming, "no HTTPStreaming node should be emitted without an HTTP uploader")
 }
 
 func TestBuildGraphDefinition_UploaderPreservesResourceInStringLiteral(t *testing.T) {

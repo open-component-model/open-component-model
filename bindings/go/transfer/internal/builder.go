@@ -221,6 +221,8 @@ func NewDefaultBuilder(
 		WithTransformer(&ociv1alpha1.TransferCTFLocalBlobToOCIArtifact{}, transferLocalBlobToOCIArtifact).
 		WithTransformer(&ociv1alpha1.TransferOCIArtifactToOCILocalBlob{}, transferOCIArtifactToLocalBlob).
 		WithTransformer(&ociv1alpha1.TransferOCIArtifactToCTFLocalBlob{}, transferOCIArtifactToLocalBlob).
+		WithTransformer(&ociv1alpha1.TransferResourceToOCILocalBlob{}, transferOCIArtifactToLocalBlob).
+		WithTransformer(&ociv1alpha1.TransferResourceToCTFLocalBlob{}, transferOCIArtifactToLocalBlob).
 		WithTransformer(&helmv1alpha1.GetHelmChart{}, getHelmChart).
 		WithTransformer(&helmv1alpha1.ConvertHelmToOCI{}, convertHelmToOCI).
 		WithTransformer(&wgetv1alpha1.DownloadWgetResource{}, downloadWget).

@@ -5,6 +5,7 @@ import (
 	"encoding/json/v2"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"slices"
 	"strings"
 
@@ -451,19 +452,26 @@ func processResource(ctx context.Context, resource descriptorv2.Resource, access
 		}
 		return helmFileExpressions(id, resourceID), nil
 	case *wgetv1.Wget:
-		// A wget resource is a plain blob: download it and embed it as a local blob in the
-		// target. There is no OCI-artifact representation.
+		// A wget resource is a plain blob without an OCI-artifact representation. A GET is
+		// streamed into the target; any other method may have side effects and is refused
+		// on a second read, so it is downloaded to a file once.
+		if acc.Verb == "" || strings.EqualFold(acc.Verb, http.MethodGet) {
+			if err := transferToLocalBlob(resource, id, val, tgd, toSpec, resourceTransformIDs, i, "", chooseTransferResourceToLocalBlobType); err != nil {
+				return nil, fmt.Errorf("cannot process wget resource: %w", err)
+			}
+			return nil, nil
+		}
 		if err := processWget(resource, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
 			return nil, fmt.Errorf("cannot process wget resource: %w", err)
 		}
 		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
 	case *s3v2.S3:
-		// An S3 resource is a plain blob: download it and embed it as a local blob in the
-		// target. There is no OCI-artifact representation.
-		if err := processS3(resource, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
+		// An S3 resource is a plain blob without an OCI-artifact representation: stream it
+		// into the target as a local blob.
+		if err := transferToLocalBlob(resource, id, val, tgd, toSpec, resourceTransformIDs, i, "", chooseTransferResourceToLocalBlobType); err != nil {
 			return nil, fmt.Errorf("cannot process s3 resource: %w", err)
 		}
-		return []string{fmt.Sprintf("${%s.spec.file}", addResourceID)}, nil
+		return nil, nil
 	case *gitv1.Git:
 		if err := processGit(ctx, resource, acc, id, val, tgd, toSpec, resourceTransformIDs, i); err != nil {
 			return nil, fmt.Errorf("cannot process Git resource: %w", err)
