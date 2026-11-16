@@ -2,7 +2,7 @@ package integration_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"testing"
 
@@ -117,7 +117,7 @@ func Test_Integration_RelativeOCIReference_Read(t *testing.T) {
 	mrc, err := store.Fetch(ctx, store.Index.Manifests[0])
 	r.NoError(err)
 	var manifest ociImageSpecV1.Manifest
-	r.NoError(json.NewDecoder(mrc).Decode(&manifest))
+	r.NoError(json.UnmarshalRead(mrc, &manifest))
 	r.NoError(mrc.Close())
 	r.Len(manifest.Layers, 1)
 

@@ -2,7 +2,7 @@ package attestation_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"os"
 	goruntime "runtime"
@@ -21,6 +21,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const testRepository = "ctf.ocm.software/acme/app"
@@ -47,7 +48,7 @@ func pushBlob(t *testing.T, store spec.Store, mediaType string, raw []byte) ociI
 
 func pushJSON(t *testing.T, store spec.Store, mediaType string, value any) ociImageSpecV1.Descriptor {
 	t.Helper()
-	raw, err := json.Marshal(value)
+	raw, err := json.Marshal(value, runtime.JSONOptions)
 	require.NoError(t, err)
 	return pushBlob(t, store, mediaType, raw)
 }
@@ -124,7 +125,8 @@ func attestationFor(t *testing.T, store spec.Store, subject ociImageSpecV1.Descr
 				"digest": map[string]string{"sha256": subject.Digest.Encoded()},
 			}},
 			"predicate": predicateFor(i),
-		})
+		}, runtime.JSONOptions)
+
 		require.NoError(t, err)
 
 		layer := pushBlob(t, store, attestation.MediaTypeInTotoStatement, statement)

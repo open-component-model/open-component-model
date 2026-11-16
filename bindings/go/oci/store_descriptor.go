@@ -3,7 +3,7 @@ package oci
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -129,7 +129,7 @@ It is used to store the component descriptor in an OCI registry and can be refer
 	if opts.ReferrerTrackingPolicy == ReferrerTrackingPolicyByIndexAndSubject {
 		manifest.Subject = &indexv1.Descriptor
 	}
-	manifestRaw, err := json.Marshal(manifest)
+	manifestRaw, err := json.Marshal(manifest, runtime.JSONOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal manifest: %w", err)
 	}
@@ -180,7 +180,7 @@ It is used to store the component descriptor manifest and other related blob man
 		idx.Subject = &indexv1.Descriptor
 	}
 
-	idxRaw, err := json.Marshal(idx)
+	idxRaw, err := json.Marshal(idx, runtime.JSONOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal index: %w", err)
 	}

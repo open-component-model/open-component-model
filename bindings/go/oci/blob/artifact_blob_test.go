@@ -2,7 +2,7 @@ package blob_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"os"
@@ -679,7 +679,7 @@ func localBlobAccess(t *testing.T, representation, mediaType string) runtime.Typ
 	case "v2 access":
 		return local
 	case "raw access":
-		data, err := json.Marshal(local)
+		data, err := json.Marshal(local, runtime.JSONOptions)
 		r.NoError(err)
 		return &runtime.Raw{Type: local.Type, Data: data}
 	case "unstructured access":

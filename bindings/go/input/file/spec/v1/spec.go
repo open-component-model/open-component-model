@@ -23,7 +23,7 @@ type File struct {
 	// MediaType is the media type of the file.
 	MediaType string `json:"mediaType,omitempty"`
 	// Compress indicates whether the file should be compressed with gzip.
-	Compress bool `json:"compress,omitempty"`
+	Compress bool `json:"compress,omitzero"`
 }
 
 // Validate verifies that the path of the File input is set.

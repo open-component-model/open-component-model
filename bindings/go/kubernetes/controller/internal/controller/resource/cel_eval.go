@@ -2,7 +2,7 @@ package resource
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 
 	"cel.dev/cel-go/cel"
@@ -57,7 +57,7 @@ func ComputeAdditionalStatusFields(
 		return fmt.Errorf("failed to process additional status fields: %w", err)
 	}
 
-	raw, err := json.Marshal(result)
+	raw, err := json.Marshal(result, runtime.JSONOptions)
 	if err != nil {
 		return fmt.Errorf("failed to marshal additional status result: %w", err)
 	}
@@ -135,7 +135,7 @@ func evalCEL(
 
 // toGenericMapViaJSON marshals and unmarshals a struct into a generic map representation through JSON tags.
 func toGenericMapViaJSON(v any) (map[string]any, error) {
-	b, err := json.Marshal(v)
+	b, err := json.Marshal(v, runtime.JSONOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal JSON: %w", err)
 	}

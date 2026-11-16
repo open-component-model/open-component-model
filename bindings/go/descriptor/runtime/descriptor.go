@@ -2,7 +2,7 @@ package runtime
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"fmt"
 	"maps"
 	"time"
@@ -44,11 +44,11 @@ type Descriptor struct {
 	Signatures []Signature `json:"-"`
 }
 
-func (d Descriptor) MarshalJSON() ([]byte, error) {
-	return nil, fmt.Errorf("marshalling of runtime descriptor is not supported")
+func (d Descriptor) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return fmt.Errorf("marshalling of runtime descriptor is not supported")
 }
 
-func (d *Descriptor) UnmarshalJSON(data []byte) error {
+func (d *Descriptor) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	return fmt.Errorf("unmarshalling of runtime descriptor is not supported")
 }
 
@@ -381,7 +381,10 @@ type SignatureInfo struct {
 	// It provides consumers with the necessary context to decode and interpret the signature.
 	MediaType string `json:"-"`
 
-	// Issuer optionally identifies the signer of the signature.
+	// Issuer optionally identifies the signer of the signature. For X.509
+	// signatures it holds the subject of the signing certificate, which is what
+	// the specification and OCM v1 record there; verification also accepts the
+	// distinguished name of the authority that issued that certificate.
 	// Values can be:
 	//   - an RFC2253 Distinguished Name (DN) string,
 	//   - or a free-form string identifier for the signing authority.
@@ -399,9 +402,9 @@ type Label struct {
 	// Name is the unique name of the label.
 	Name string `json:"name"`
 	// Value is the json/yaml data of the label
-	Value json.RawMessage `json:"value"`
+	Value jsontext.Value `json:"value"`
 	// Signing describes whether the label should be included into the signature
-	Signing bool `json:"signing,omitempty"`
+	Signing bool `json:"signing,omitzero"`
 	// Version is the optional specification version of the attribute value
 	Version string `json:"version,omitempty"`
 }
@@ -436,18 +439,18 @@ func (in *Label) SetValue(value interface{}) error {
 	return nil
 }
 
-// MustAsRawMessage converts any given value to a json.RawMessage.
+// MustAsRawMessage converts any given value to a raw JSON value.
 // It panics if the conversion fails, so it should only be used when the conversion is guaranteed to succeed.
-func MustAsRawMessage(value interface{}) json.RawMessage {
+func MustAsRawMessage(value interface{}) jsontext.Value {
 	msg, err := AsRawMessage(value)
 	if err != nil {
-		panic(fmt.Sprintf("cannot convert value %T to json.RawMessage: %v", value, err))
+		panic(fmt.Sprintf("cannot convert value %T to raw json: %v", value, err))
 	}
 	return msg
 }
 
-// AsRawMessage converts any given value to a json.RawMessage.
-func AsRawMessage(value interface{}) (json.RawMessage, error) {
+// AsRawMessage converts any given value to a raw JSON value.
+func AsRawMessage(value interface{}) (jsontext.Value, error) {
 	if value == nil {
 		return nil, nil
 	}

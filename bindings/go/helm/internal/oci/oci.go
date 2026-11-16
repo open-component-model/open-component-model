@@ -3,7 +3,7 @@ package oci
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +19,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/helm/internal"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // Result holds both the OCI layout blob and the manifest descriptor produced by CopyChartToOCILayout.
@@ -133,7 +134,7 @@ func pushConfigLayer(ctx context.Context, name, version string, target oras.Targ
 	}
 
 	config := chartConfig{Name: name, Version: version}
-	jsonConfig, err := json.Marshal(config)
+	jsonConfig, err := json.Marshal(config, runtime.JSONOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal helm chart config to JSON: %w", err)
 	}

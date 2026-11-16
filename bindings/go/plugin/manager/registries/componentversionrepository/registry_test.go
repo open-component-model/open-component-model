@@ -2,7 +2,7 @@ package componentversionrepository
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -48,7 +48,7 @@ func TestPluginFlow(t *testing.T) {
 		Type:       osutil.ConnectionType(t.Context()),
 		PluginType: v1.ComponentVersionRepositoryPluginType,
 	}
-	serialized, err := json.Marshal(config)
+	serialized, err := json.Marshal(config, runtime.JSONOptions)
 	require.NoError(t, err)
 
 	proto := &dummyv1.Repository{}

@@ -1,7 +1,7 @@
 package v1alpha1_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +12,7 @@ import (
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	typesv1 "ocm.software/open-component-model/bindings/go/configuration/types/v1"
 	httpspec "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestConfig_ParseYAML(t *testing.T) {
@@ -191,7 +192,7 @@ configurations:
   - type: http.config.ocm.software/v1alpha1
     timeout: true
 `,
-				expectMsg: `duration must be a string like 30s or a number of nanoseconds, got bool`,
+				expectMsg: `duration must be a string like 30s or a number of nanoseconds, got true`,
 			},
 		}
 
@@ -455,24 +456,24 @@ func TestTimeoutConfig_Validate(t *testing.T) {
 func TestTimeout_MarshalJSON(t *testing.T) {
 	t.Run("marshals to duration string", func(t *testing.T) {
 		d := typesv1.Duration(30 * time.Second)
-		b, err := d.MarshalJSON()
+		b, err := json.Marshal(d, runtime.JSONOptions)
 		require.NoError(t, err)
 		assert.Equal(t, `"30s"`, string(b))
 	})
 
 	t.Run("zero marshals to 0s", func(t *testing.T) {
 		d := typesv1.Duration(0)
-		b, err := d.MarshalJSON()
+		b, err := json.Marshal(d, runtime.JSONOptions)
 		require.NoError(t, err)
 		assert.Equal(t, `"0s"`, string(b))
 	})
 
 	t.Run("round-trips through JSON", func(t *testing.T) {
 		original := typesv1.Duration(5 * time.Minute)
-		b, err := original.MarshalJSON()
+		b, err := json.Marshal(original, runtime.JSONOptions)
 		require.NoError(t, err)
 		var got typesv1.Duration
-		require.NoError(t, got.UnmarshalJSON(b))
+		require.NoError(t, json.Unmarshal(b, &got))
 		assert.Equal(t, original, got)
 	})
 }

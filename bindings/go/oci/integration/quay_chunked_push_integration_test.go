@@ -3,7 +3,7 @@ package integration_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"net"
@@ -25,6 +25,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const (
@@ -232,7 +233,8 @@ func initializeQuayUser(t *testing.T, ctx context.Context, endpoint, username, p
 		"password":     password,
 		"email":        "ocm@example.invalid",
 		"access_token": false,
-	})
+	}, runtime.JSONOptions)
+
 	require.NoError(t, err, "marshal Quay user initialization request")
 
 	initCtx, cancel := context.WithTimeout(ctx, time.Minute)

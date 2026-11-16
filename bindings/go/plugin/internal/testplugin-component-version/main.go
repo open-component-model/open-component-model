@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -218,7 +218,7 @@ func main() {
 	// TODO(Skarlso): ConsumerIdentityTypesForConfig endpoint
 
 	if len(args) > 0 && args[0] == "capabilities" {
-		content, err := capabilities.MarshalJSON()
+		content, err := json.Marshal(capabilities, runtime.JSONOptions)
 		if err != nil {
 			logger.Error("failed to marshal capabilities", "error", err)
 			os.Exit(1)

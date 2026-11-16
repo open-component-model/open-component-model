@@ -1,7 +1,8 @@
 package config
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -92,14 +93,11 @@ func GetConfig(cmd *cobra.Command, args []string) error {
 
 	switch output {
 	case render.OutputFormatJSON.String():
-		enc := json.NewEncoder(cmd.OutOrStdout())
-		enc.SetIndent("", "  ")
-		enc.SetEscapeHTML(false)
-		return enc.Encode(effectiveConfig)
+		enc := jsontext.NewEncoder(cmd.OutOrStdout(), jsontext.WithIndent("  "))
+		return json.MarshalEncode(enc, effectiveConfig, runtime.JSONOptions)
 	case render.OutputFormatNDJSON.String():
-		enc := json.NewEncoder(cmd.OutOrStdout())
-		enc.SetEscapeHTML(false)
-		return enc.Encode(effectiveConfig)
+		enc := jsontext.NewEncoder(cmd.OutOrStdout())
+		return json.MarshalEncode(enc, effectiveConfig, runtime.JSONOptions)
 	case render.OutputFormatYAML.String():
 		data, err := sigsyaml.Marshal(effectiveConfig)
 		if err != nil {

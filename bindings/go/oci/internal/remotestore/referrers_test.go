@@ -1,7 +1,7 @@
 package remotestore
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,6 +13,8 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/oras-project/oras-go/v3/registry/remote"
 	"github.com/stretchr/testify/require"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // TestRemoteStore_Predecessors_NameUnknownReferrersAPI covers registries such as xpkg.crossplane.io that
@@ -35,7 +37,8 @@ func TestRemoteStore_Predecessors_NameUnknownReferrersAPI(t *testing.T) {
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		MediaType: ociImageSpecV1.MediaTypeImageIndex,
 		Manifests: []ociImageSpecV1.Descriptor{referrer},
-	})
+	}, runtime.JSONOptions)
+
 	r.NoError(err)
 	referrersTag := "sha256-" + subject.Digest.Encoded()
 

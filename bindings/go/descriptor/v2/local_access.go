@@ -1,7 +1,8 @@
 package v2
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -13,7 +14,7 @@ const (
 	LegacyLocalBlobAccessType = "localBlob"
 	// LegacyLocalOciBlobAccessType is the access type OCM v1 wrote for a local blob in an
 	// OCI or CTF repository before it settled on localBlob. It carries the repository local
-	// blob reference in "digest" and records no media type, see [LocalBlob.UnmarshalJSON].
+	// blob reference in "digest" and records no media type, see [LocalBlob.UnmarshalJSONFrom].
 	LegacyLocalOciBlobAccessType = "localOciBlob"
 	LocalBlobAccessTypeVersion   = "v1"
 )
@@ -35,7 +36,7 @@ type LocalBlob struct {
 	MediaType string `json:"mediaType"`
 	// GlobalAccess is an optional field describing a possibility
 	// for a global access. If given, it MUST describe a global access method.
-	GlobalAccess *runtime.Raw `json:"globalAccess,omitempty"`
+	GlobalAccess *runtime.Raw `json:"globalAccess,omitzero"`
 	// ReferenceName is an optional static name the object should be
 	// use in a local repository context. It is use by a repository
 	// to optionally determine a globally referenceable access according
@@ -46,7 +47,7 @@ type LocalBlob struct {
 	ReferenceName string `json:"referenceName,omitempty"`
 }
 
-// UnmarshalJSON implements the json.Unmarshaler interface.
+// UnmarshalJSONFrom implements the [json.UnmarshalerFrom] interface.
 //
 // A [LegacyLocalOciBlobAccessType] access is decoded as a LocalBlob: OCM v1 wrote the
 // repository local blob reference in "digest" there and no media type at all, so without
@@ -55,11 +56,19 @@ type LocalBlob struct {
 // Its type is normalised to [LocalBlobAccessType], unlike the [LegacyLocalBlobAccessType]
 // alias, which keeps its spelling: localOciBlob declares a different field set, so writing
 // that type together with a localReference would produce an access no reader can resolve.
-func (a *LocalBlob) UnmarshalJSON(data []byte) error {
+func (a *LocalBlob) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	data, err := dec.ReadValue()
+	if err != nil {
+		return fmt.Errorf("decoding local blob access failed: %w", err)
+	}
+	// ReadValue borrows the decoder's buffer, which the next read invalidates, and the
+	// legacy mapping below reads the same value a second time.
+	data = data.Clone()
+
 	// localBlob sheds the methods of LocalBlob so json does not call back into this one.
 	type localBlob LocalBlob
 	var decoded localBlob
-	if err := json.Unmarshal(data, &decoded); err != nil {
+	if err := json.Unmarshal(data, &decoded, dec.Options()); err != nil {
 		return fmt.Errorf("decoding local blob access failed: %w", err)
 	}
 	*a = LocalBlob(decoded)
@@ -71,7 +80,7 @@ func (a *LocalBlob) UnmarshalJSON(data []byte) error {
 	var legacy struct {
 		Digest string `json:"digest"`
 	}
-	if err := json.Unmarshal(data, &legacy); err != nil {
+	if err := json.Unmarshal(data, &legacy, dec.Options()); err != nil {
 		return fmt.Errorf("decoding legacy %s access failed: %w", LegacyLocalOciBlobAccessType, err)
 	}
 	a.LocalReference = legacy.Digest

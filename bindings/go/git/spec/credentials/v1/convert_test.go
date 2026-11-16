@@ -1,7 +1,7 @@
 package v1_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -24,7 +24,7 @@ func TestConvertCredentials(t *testing.T) {
 	}
 
 	raw := &runtime.Raw{}
-	r.NoError(raw.UnmarshalJSON([]byte(`{"type":"GitCredentials/v1","username":"git","password":"passphrase","token":"token","privateKey":"/keys/key","privateKeyPEM":"pem"}`)))
+	r.NoError(json.Unmarshal([]byte(`{"type":"GitCredentials/v1","username":"git","password":"passphrase","token":"token","privateKey":"/keys/key","privateKeyPEM":"pem"}`), raw))
 
 	for _, input := range []runtime.Typed{want, raw, &directv1.DirectCredentials{
 		Type: runtime.NewVersionedType(directv1.CredentialsType, directv1.Version),
@@ -64,10 +64,10 @@ func TestConvertLegacyCredentialsToTransport(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			tc.credentials.Type = runtime.NewVersionedType(v1.GitCredentialsType, v1.Version)
-			data, err := json.Marshal(&tc.credentials)
+			data, err := json.Marshal(&tc.credentials, runtime.JSONOptions)
 			r.NoError(err)
 			raw := &runtime.Raw{}
-			r.NoError(raw.UnmarshalJSON(data))
+			r.NoError(json.Unmarshal(data, raw))
 			direct := &directv1.DirectCredentials{Type: runtime.NewVersionedType(directv1.CredentialsType, directv1.Version), Properties: map[string]string{
 				"username": tc.credentials.Username, "password": tc.credentials.Password, "token": tc.credentials.Token,
 				"privateKey": tc.credentials.PrivateKey, "privateKeyPEM": tc.credentials.PrivateKeyPEM,

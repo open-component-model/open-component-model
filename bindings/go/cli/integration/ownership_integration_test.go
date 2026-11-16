@@ -3,7 +3,7 @@ package integration
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -465,7 +465,7 @@ func assertOwnershipReferrer(t *testing.T, ctx context.Context, resolver oci.Res
 	r.NoError(err)
 	defer func() { r.NoError(rc.Close()) }()
 	var manifest ociImageSpecV1.Manifest
-	r.NoError(json.NewDecoder(rc).Decode(&manifest))
+	r.NoError(json.UnmarshalRead(rc, &manifest))
 	r.NotNil(manifest.Subject, "ownership referrer manifest must carry a subject")
 	assert.Equal(t, subject.Digest, manifest.Subject.Digest, "referrer subject must match the target subject manifest digest")
 }

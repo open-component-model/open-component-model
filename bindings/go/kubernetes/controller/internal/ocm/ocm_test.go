@@ -1,7 +1,7 @@
 package ocm
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -59,7 +59,7 @@ var _ = Describe("ocm utility", func() {
 				FilePath:   "dummy",
 				AccessMode: ctf.AccessModeReadOnly,
 			}
-			specdata, err := json.Marshal(spec)
+			specdata, err := json.Marshal(spec, runtime.JSONOptions)
 			Expect(err).ToNot(HaveOccurred())
 
 			repo := v1alpha1.Repository{
@@ -208,7 +208,7 @@ var _ = Describe("ocm utility", func() {
 				FilePath:   "dummy",
 				AccessMode: ctf.AccessModeReadOnly,
 			}
-			specdata, err := json.Marshal(spec)
+			specdata, err := json.Marshal(spec, runtime.JSONOptions)
 			Expect(err).ToNot(HaveOccurred())
 
 			configMap := corev1.ConfigMap{

@@ -23,7 +23,7 @@ type ConvertHelmToOCI struct {
 	Type   runtime.Type            `json:"type"`
 	ID     string                  `json:"id"`
 	Spec   *ConvertHelmToOCISpec   `json:"spec"`
-	Output *ConvertHelmToOCIOutput `json:"output,omitempty"`
+	Output *ConvertHelmToOCIOutput `json:"output,omitzero"`
 }
 
 // ConvertHelmToOCIOutput is the output specification of the ConvertHelmToOCI transformation.
@@ -48,7 +48,7 @@ type ConvertHelmToOCISpec struct {
 	// ChartFile is the file access specification for the downloaded helm chart
 	ChartFile v1alpha1.File `json:"chartFile"`
 	// ProvFile is the file access specification for the downloaded prov file, if it exists
-	ProvFile *v1alpha1.File `json:"provFile,omitempty"`
+	ProvFile *v1alpha1.File `json:"provFile,omitzero"`
 	// Resource is the resource descriptor from the component
 	Resource *v2.Resource `json:"resource"`
 	// OutputPath is the optional output the OCI artifact should be stored at.

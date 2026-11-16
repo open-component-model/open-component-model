@@ -2,7 +2,7 @@ package internal
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"strings"
 	"testing"
 
@@ -593,7 +593,7 @@ func TestResourceNodePath_ExtraIdentitySelectorEvaluatesOverMixedResources(t *te
 	v2desc, err := descriptor.ConvertToV2(runtime.NewScheme(runtime.WithAllowUnknown()), desc)
 	r.NoError(err)
 
-	raw, err := json.Marshal(v2desc)
+	raw, err := json.Marshal(v2desc, runtime.JSONOptions)
 	r.NoError(err)
 	var node map[string]any
 	r.NoError(json.Unmarshal(raw, &node))

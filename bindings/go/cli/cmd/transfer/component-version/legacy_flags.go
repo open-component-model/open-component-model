@@ -1,7 +1,7 @@
 package component_version
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"slices"
 
@@ -89,7 +89,7 @@ func withLegacyFlagUploaders(cmd *cobra.Command, cfg *genericv1.Config) (*generi
 		out.Configurations = slices.Clone(cfg.Configurations)
 	}
 	for _, e := range entries {
-		data, err := json.Marshal(e)
+		data, err := json.Marshal(e, runtime.JSONOptions)
 		if err != nil {
 			return nil, err
 		}

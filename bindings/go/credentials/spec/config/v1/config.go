@@ -1,7 +1,8 @@
 package v1
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -75,10 +76,14 @@ type Consumer struct {
 	Credentials []*runtime.Raw `json:"credentials"`
 }
 
-// UnmarshalJSON implements custom JSON unmarshaling for Consumer.
+// UnmarshalJSONFrom implements custom JSON unmarshaling for Consumer.
 // It handles both legacy single-identity format and the current multi-identity format.
 // This ensures backward compatibility with older configurations.
-func (a *Consumer) UnmarshalJSON(data []byte) error {
+func (a *Consumer) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	data, err := dec.ReadValue()
+	if err != nil {
+		return err
+	}
 	type ConsumerWithSingleIdentity struct {
 		// Legacy Identity field for backward compatibility
 		runtime.Identity `json:"identity,omitempty"`
@@ -86,7 +91,7 @@ func (a *Consumer) UnmarshalJSON(data []byte) error {
 		Credentials      []*runtime.Raw     `json:"credentials"`
 	}
 	var consumer ConsumerWithSingleIdentity
-	if err := json.Unmarshal(data, &consumer); err != nil {
+	if err := json.Unmarshal(data, &consumer, dec.Options()); err != nil {
 		return err
 	}
 	if consumer.Identity != nil {

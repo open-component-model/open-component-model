@@ -1,7 +1,7 @@
 package jsonschemagen
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
