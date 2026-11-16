@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -382,6 +383,26 @@ func TestLockFileProcessValidation(t *testing.T) {
 
 		r.NoError(os.Remove(lockFile))
 	})
+}
+
+func TestCleanUpKeepsLockFileWhenSocketSurvives(t *testing.T) {
+	r := require.New(t)
+	// A socket that cannot be removed: the lock file has to survive it, because it is what
+	// lets the next start find the leftovers instead of failing on a missing lock.
+	location := filepath.Join(t.TempDir(), "test-plugin-undeletable-plugin.socket")
+	r.NoError(os.Mkdir(location, 0o755))
+	r.NoError(os.WriteFile(filepath.Join(location, "blocker"), nil, 0o600))
+	lockFile := location + ".lock"
+	r.NoError(os.WriteFile(lockFile, []byte("999999"), 0o644))
+
+	p := NewPlugin(t.Context(), slog.Default(), types.Config{
+		ID:         "test-plugin-undeletable",
+		Type:       types.Socket,
+		PluginType: testPluginType,
+	}, os.Stdout)
+
+	r.ErrorContains(p.performCleanUp(location), "could not remove socket file")
+	r.FileExists(lockFile)
 }
 
 func createHttpClient(location string) *http.Client {

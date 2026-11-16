@@ -309,8 +309,7 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Con
 	pluginCmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "--config", string(serialized)) //nolint:gosec // G204 does not apply
 	pluginCmd.Cancel = func() error {
 		slog.InfoContext(ctx, "killing plugin process because the parent context is cancelled", "id", plugin.ID)
-		// os/exec only treats os.ErrProcessDone as "the plugin was already gone"; any other
-		// error turns the cancellation into a failure reported by Cmd.Wait.
+		// A plugin that exited before the cancellation is not a failed kill, on any OS.
 		return osutil.Kill(pluginCmd.Process)
 	}
 

@@ -348,12 +348,14 @@ func (p *Plugin) performCleanUp(loc string) error {
 }
 
 func (p *Plugin) removeFiles(loc string, lockFile string) error {
-	// The Process doesn't exist, safe to clean up
-	if err := os.Remove(lockFile); err != nil {
-		return fmt.Errorf("could not remove lock file: %w", err)
-	}
+	// The Process doesn't exist, safe to clean up. The socket goes first: the lock file is
+	// what lets a later start detect the leftovers at all, so losing it while the socket
+	// survives would make every further start of this plugin ID fail.
 	if err := os.Remove(loc); err != nil {
 		return fmt.Errorf("could not remove socket file: %w", err)
+	}
+	if err := os.Remove(lockFile); err != nil {
+		return fmt.Errorf("could not remove lock file: %w", err)
 	}
 	return nil
 }
