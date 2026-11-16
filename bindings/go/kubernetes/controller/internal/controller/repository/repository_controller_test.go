@@ -2,7 +2,7 @@ package repository
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -58,7 +58,7 @@ var _ = Describe("Repository Controller", func() {
 					FilePath:   ctfPath,
 					AccessMode: ctf.AccessModeReadOnly,
 				}
-				specdata, err := json.Marshal(spec)
+				specdata, err := json.Marshal(spec, runtime.JSONOptions)
 				Expect(err).NotTo(HaveOccurred())
 				repoName := TestRepositoryObj + "-passing"
 				ocmRepo = newTestRepository(TestNamespaceOCMRepo, repoName, &specdata)
@@ -81,7 +81,7 @@ var _ = Describe("Repository Controller", func() {
 					FilePath:   "/nonexistent/path/that/does/not/exist",
 					AccessMode: ctf.AccessModeReadOnly,
 				}
-				specdata, err := json.Marshal(spec)
+				specdata, err := json.Marshal(spec, runtime.JSONOptions)
 				Expect(err).NotTo(HaveOccurred())
 				repoName := TestRepositoryObj + "-no-path"
 				ocmRepo = newTestRepository(TestNamespaceOCMRepo, repoName, &specdata)
@@ -137,7 +137,7 @@ var _ = Describe("Repository Controller", func() {
 					FilePath:   ctfPath,
 					AccessMode: ctf.AccessModeReadOnly,
 				}
-				specdata, err := json.Marshal(spec)
+				specdata, err := json.Marshal(spec, runtime.JSONOptions)
 				Expect(err).NotTo(HaveOccurred())
 				repoName := TestRepositoryObj + "-all-fields"
 				ocmRepo = newTestRepository(TestNamespaceOCMRepo, repoName, &specdata)
@@ -276,7 +276,7 @@ var _ = Describe("Repository Controller", func() {
 					FilePath:   ctfpath,
 					AccessMode: ctf.AccessModeReadOnly,
 				}
-				specdata, err := json.Marshal(spec)
+				specdata, err := json.Marshal(spec, runtime.JSONOptions)
 				Expect(err).NotTo(HaveOccurred())
 				ocmRepoName := TestRepositoryObj + "-deleted"
 				ocmRepo = newTestRepository(TestNamespaceOCMRepo, ocmRepoName, &specdata)
@@ -360,7 +360,7 @@ var _ = Describe("Repository Controller OCM Config", func() {
 			FilePath:   ctfPath,
 			AccessMode: ctf.AccessModeReadOnly,
 		}
-		specdata, err := json.Marshal(spec)
+		specdata, err := json.Marshal(spec, runtime.JSONOptions)
 		Expect(err).NotTo(HaveOccurred())
 		ocmRepo = newTestRepository(namespace.GetName(), "repo-no-config", &specdata)
 
@@ -406,7 +406,7 @@ consumers:
 			FilePath:   ctfPath,
 			AccessMode: ctf.AccessModeReadOnly,
 		}
-		specdata, err := json.Marshal(spec)
+		specdata, err := json.Marshal(spec, runtime.JSONOptions)
 		Expect(err).NotTo(HaveOccurred())
 		ocmRepo = newTestRepository(namespace.GetName(), "repo-with-config", &specdata)
 		ocmRepo.Spec.OCMConfig = []v1alpha1.OCMConfiguration{

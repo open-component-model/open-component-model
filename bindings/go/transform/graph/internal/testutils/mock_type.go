@@ -1,8 +1,11 @@
 package testutils
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 type MockObject struct {
@@ -17,29 +20,35 @@ type MockObject struct {
 // +ocm:jsonschema-gen=true
 // +ocm:jsonschema-gen:schema-from=schemas/custom_schema.json
 type MockCustomSchemaObject struct {
-	StringWithPattern       string                  `json:"stringWithPattern,omitempty"`
-	OneOfStringOrNull       string                  `json:"oneOfStringOrNull,omitempty"`
-	OneOfStringNumberOrNull OneOfStringNumberOrNull `json:"oneOfStringNumberOrNull,omitempty"`
+	StringWithPattern string `json:"stringWithPattern,omitempty"`
+	OneOfStringOrNull string `json:"oneOfStringOrNull,omitempty"`
+	// No omitempty: the zero value marshals as "" via MarshalJSONTo, which encoding/json v1
+	// always emitted (omitempty never applied to structs) and which v2's omitempty would drop.
+	OneOfStringNumberOrNull OneOfStringNumberOrNull `json:"oneOfStringNumberOrNull"`
 }
 
 // OneOfStringNumberOrNull is a mock type to test oneOf with multiple types.
 // +k8s:deepcopy-gen=true
 type OneOfStringNumberOrNull struct {
-	String *string `json:"string,omitempty"`
-	Number *int    `json:"number,omitempty"`
+	String *string `json:"string,omitzero"`
+	Number *int    `json:"number,omitzero"`
 }
 
-func (o OneOfStringNumberOrNull) MarshalJSON() ([]byte, error) {
+func (o OneOfStringNumberOrNull) MarshalJSONTo(enc *jsontext.Encoder) error {
 	if o.String != nil {
-		return json.Marshal(*o.String)
+		return json.MarshalEncode(enc, *o.String, runtime.JSONOptions)
 	}
 	if o.Number != nil {
-		return json.Marshal(*o.Number)
+		return json.MarshalEncode(enc, *o.Number, runtime.JSONOptions)
 	}
-	return []byte(`""`), nil
+	return enc.WriteToken(jsontext.String(""))
 }
 
-func (o *OneOfStringNumberOrNull) UnmarshalJSON(data []byte) error {
+func (o *OneOfStringNumberOrNull) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	data, err := dec.ReadValue()
+	if err != nil {
+		return err
+	}
 	if len(data) == 0 || string(data) == "null" {
 		return nil
 	}

@@ -6,7 +6,8 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"encoding/pem"
 	"fmt"
 	"math/big"
@@ -190,8 +191,8 @@ COMPONENT                   │ VERSION │ PROVIDER
 			if tt.args[len(tt.args)-1] == "--output=json" || tt.args[len(tt.args)-1] == "--output=ndjson" {
 				// Handle JSON output separately
 				var resultJSON any
-				decoder := json.NewDecoder(result)
-				r.NoError(decoder.Decode(&resultJSON), "failed to decode result JSON")
+				decoder := jsontext.NewDecoder(result)
+				r.NoError(json.UnmarshalDecode(decoder, &resultJSON), "failed to decode result JSON")
 
 				component := map[string]any{
 					"component": map[string]any{
@@ -556,17 +557,17 @@ COMPONENT           │ VERSION │ PROVIDER
 				}
 
 				var resultJSON any
-				decoder := json.NewDecoder(result)
+				decoder := jsontext.NewDecoder(result)
 				switch {
 				case slices.Contains(tt.args, "--output=json"):
-					r.NoError(decoder.Decode(&resultJSON), "failed to decode result JSON")
+					r.NoError(json.UnmarshalDecode(decoder, &resultJSON), "failed to decode result JSON")
 					r.EqualValues([]any{expectedRoot, expectedLeafA, expectedLeafB}, resultJSON)
 				case slices.Contains(tt.args, "--output=ndjson"):
-					r.NoError(decoder.Decode(&resultJSON))
+					r.NoError(json.UnmarshalDecode(decoder, &resultJSON))
 					r.EqualValues(expectedRoot, resultJSON)
-					r.NoError(decoder.Decode(&resultJSON))
+					r.NoError(json.UnmarshalDecode(decoder, &resultJSON))
 					r.EqualValues(expectedLeafA, resultJSON)
-					r.NoError(decoder.Decode(&resultJSON))
+					r.NoError(json.UnmarshalDecode(decoder, &resultJSON))
 					r.EqualValues(expectedLeafB, resultJSON)
 				}
 			}
@@ -1582,8 +1583,8 @@ resources:
 			if tt.outputArg == "--output=json" || tt.outputArg == "--output=ndjson" {
 				// Handle JSON output separately
 				var resultJSON any
-				decoder := json.NewDecoder(result)
-				r.NoError(decoder.Decode(&resultJSON), "failed to decode result JSON")
+				decoder := jsontext.NewDecoder(result)
+				r.NoError(json.UnmarshalDecode(decoder, &resultJSON), "failed to decode result JSON")
 
 				component := map[string]any{
 					"component": map[string]any{

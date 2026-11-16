@@ -32,13 +32,13 @@ type Config struct {
 
 	// TempFolder defines places where plugins and other functionalities can put ephemeral files under.
 	// If not defined, os.TempDir is used as a default.
-	TempFolder *string `json:"tempFolder,omitempty"`
+	TempFolder *string `json:"tempFolder,omitzero"`
 
 	// WorkingDirectory defines the working directory for the filesystem operations.
 	// This is typically the directory where the plugin operates, and it can be used
 	// to resolve relative paths for file operations.
 	// If not defined, the current working directory is used as a default for file operations.
-	WorkingDirectory *string `json:"workingDirectory,omitempty"`
+	WorkingDirectory *string `json:"workingDirectory,omitzero"`
 }
 
 // LookupConfig creates a new filesystem configuration from a central V1 config.

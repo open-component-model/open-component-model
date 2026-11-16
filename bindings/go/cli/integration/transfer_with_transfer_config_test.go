@@ -333,5 +333,5 @@ func Test_Integration_TransferWithTransferConfig_StaleCopyModeRejected(t *testin
 
 	err = transferCMD.ExecuteContext(ctx)
 	r.Error(err, "stale copyMode in transfer config should fail before transfer starts")
-	r.Contains(err.Error(), `unknown field "copyMode"`, "error should identify the stale field")
+	r.Contains(err.Error(), `unknown object member name "copyMode"`, "error should identify the stale field")
 }

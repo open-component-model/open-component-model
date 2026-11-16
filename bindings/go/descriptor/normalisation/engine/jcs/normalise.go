@@ -2,13 +2,14 @@ package jcs
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"maps"
 	"slices"
 	"strconv"
 
-	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // Normalise is a helper function that prepares and marshals a normalized value.
@@ -143,7 +144,7 @@ func (n *normalised) ToString(gap string) string {
 
 // String returns the JSON marshaled string of the normalized value.
 func (n *normalised) String() string {
-	data, err := json.Marshal(n.value)
+	data, err := json.Marshal(n.value, runtime.JSONOptions)
 	if err != nil {
 		panic(err)
 	}
@@ -152,7 +153,7 @@ func (n *normalised) String() string {
 
 // Formatted returns an indented JSON string of the normalized value.
 func (n *normalised) Formatted() string {
-	data, err := json.MarshalIndent(n.value, "", "  ")
+	data, err := json.Marshal(n.value, runtime.JSONOptions, jsontext.WithIndent("  "))
 	if err != nil {
 		panic(err)
 	}
@@ -169,23 +170,27 @@ func (n *normalised) Formatted() string {
 //   - []byte: The encoded JSON data
 //   - error: Any error that occurred during encoding
 func (n *normalised) Marshal(gap string) ([]byte, error) {
-	buffer := new(bytes.Buffer)
-	encoder := json.NewEncoder(buffer)
-	encoder.SetEscapeHTML(false)
-	encoder.SetIndent("", gap)
-
-	if err := encoder.Encode(n.Value()); err != nil {
-		return nil, err
-	}
 	if gap != "" {
+		// jsontext.NewEncoder + MarshalEncode appends the trailing newline that
+		// json.NewEncoder(...).Encode used to write.
+		buffer := new(bytes.Buffer)
+		encoder := jsontext.NewEncoder(buffer, jsontext.WithIndent(gap))
+		if err := json.MarshalEncode(encoder, n.Value(), runtime.JSONOptions); err != nil {
+			return nil, err
+		}
 		return buffer.Bytes(), nil
 	}
-	// Canonicalize JSON if no indent is used.
-	data, err := jsoncanonicalizer.Transform(buffer.Bytes())
+
+	data, err := json.Marshal(n.Value(), runtime.JSONOptions)
 	if err != nil {
+		return nil, err
+	}
+	// Canonicalize JSON if no indent is used.
+	canonical := jsontext.Value(data)
+	if err := canonical.Canonicalize(); err != nil {
 		return nil, fmt.Errorf("cannot canonicalize json: %w", err)
 	}
-	return data, nil
+	return canonical, nil
 }
 
 // Normalisation defines methods to create normalized JSON structures.
@@ -211,7 +216,7 @@ type Normalised interface {
 type null struct{}
 
 func (n *null) IsEmpty() bool                          { return true }
-func (n *null) Marshal(gap string) ([]byte, error)     { return json.Marshal(nil) }
+func (n *null) Marshal(gap string) ([]byte, error)     { return json.Marshal(nil, runtime.JSONOptions) }
 func (n *null) ToString(gap string) string             { return n.String() }
 func (n *null) String() string                         { return "null" }
 func (n *null) Formatted() string                      { return n.String() }
@@ -226,7 +231,7 @@ var Null Normalised = (*null)(nil)
 // by marshaling it to JSON and then unmarshaling into a map or array.
 // This is the main entry point for the normalization process.
 func PrepareNormalisation(n Normalisation, v interface{}, excludes TransformationRules) (Normalised, error) {
-	data, err := json.Marshal(v)
+	data, err := json.Marshal(v, runtime.JSONOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +270,7 @@ func Prepare(n Normalisation, v interface{}, rules TransformationRules) (Normali
 	}
 
 	// Check if the value can be marshaled to JSON
-	if _, err := json.Marshal(v); err != nil {
+	if _, err := json.Marshal(v, runtime.JSONOptions); err != nil {
 		return nil, fmt.Errorf("cannot marshal value: %w", err)
 	}
 

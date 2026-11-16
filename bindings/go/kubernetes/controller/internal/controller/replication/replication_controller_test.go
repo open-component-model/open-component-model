@@ -2,7 +2,7 @@ package replication
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -296,7 +296,7 @@ var _ = Describe("Replication Controller", func() {
 				Type:       ocmruntime.Type{Version: "v1", Name: "ctf"},
 				FilePath:   readonlyPath,
 				AccessMode: ctf.AccessModeReadOnly,
-			})
+			}, ocmruntime.JSONOptions)
 			Expect(err).NotTo(HaveOccurred())
 			targetRepository := test.SetupRepositoryWithSpecData(ctx, k8sClient, namespace.GetName(), "readonly-target-repository", readonlySpec)
 

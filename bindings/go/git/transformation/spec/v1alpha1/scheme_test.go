@@ -1,7 +1,7 @@
 package v1alpha1
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -33,7 +33,7 @@ func TestScheme(t *testing.T) {
 	r.NotEqual(copied.Spec.Resource.Access.Data, step.Spec.Resource.Access.Data)
 	r.Empty(step.Output.Resource.Name)
 	for _, schema := range [][]byte{step.JSONSchema(), step.Spec.JSONSchema(), step.Output.JSONSchema()} {
-		r.True(json.Valid(schema))
+		r.True(jsontext.Value(schema).IsValid())
 	}
 	r.Contains(string(step.JSONSchema()), "GetGitResource/v1alpha1")
 }

@@ -7,7 +7,8 @@ import (
 	"encoding/asn1"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -265,6 +266,17 @@ func (h *Handler) Verify(
 		// --insecure-ignore-tlog replaces --private-infrastructure, which cosign deprecated in
 		// v3.1.0 and removes in v4. It is a pure alias, available since cosign v2.0.
 		extraArgs = append(extraArgs, "--insecure-ignore-tlog")
+		// When the bundle carries an RFC3161 signed timestamp (timestampVerificationData),
+		// also pass --use-signed-timestamps. Without this flag cosign validates the
+		// short-lived Fulcio leaf certificate against wall-clock time (time.Now()), so any
+		// aged keyless signature whose certificate has since expired fails even though it
+		// was valid when it was created. With --use-signed-timestamps cosign instead
+		// validates the leaf cert against the time recorded in the bundle's signed timestamp.
+		// We only add the flag when the bundle actually contains a timestamp, because cosign
+		// rejects --use-signed-timestamps when the bundle has no timestamp to verify.
+		if bundleHasSignedTimestamp(bundleJSON) {
+			extraArgs = append(extraArgs, "--use-signed-timestamps")
+		}
 	}
 
 	slog.InfoContext(ctx, "sigstore verify: enforcing identity constraints",
@@ -405,6 +417,30 @@ type sigstoreBundle struct {
 			RawBytes string `json:"rawBytes"`
 		} `json:"certificate"`
 	} `json:"verificationMaterial"`
+}
+
+// bundleHasSignedTimestamp reports whether a Sigstore bundle JSON contains at
+// least one RFC3161 signed timestamp in its timestampVerificationData field.
+// The field is written by a Timestamp Authority (TSA) and carries an RFC3161
+// signed timestamp that can be used instead of wall-clock time to validate
+// the Fulcio leaf certificate.
+//
+// Returns false if the field is absent, null, an empty object, or its
+// rfc3161Timestamps array is empty — conditions under which cosign rejects
+// --use-signed-timestamps.
+func bundleHasSignedTimestamp(bundleJSON []byte) bool {
+	var bundle struct {
+		VerificationMaterial struct {
+			TimestampVerificationData *struct {
+				RFC3161Timestamps []jsontext.Value `json:"rfc3161Timestamps"`
+			} `json:"timestampVerificationData"`
+		} `json:"verificationMaterial"`
+	}
+	if err := json.Unmarshal(bundleJSON, &bundle); err != nil {
+		return false
+	}
+	tvd := bundle.VerificationMaterial.TimestampVerificationData
+	return tvd != nil && len(tvd.RFC3161Timestamps) > 0
 }
 
 // extractCertInfoFromBundleJSON extracts the OIDC issuer and signer identity from

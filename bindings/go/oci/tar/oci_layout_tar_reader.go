@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +18,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/ctf"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // CloseableReadOnlyStore wraps an oci.ReadOnlyStore and provides a Close method.
@@ -116,7 +118,11 @@ func ReadOCILayout(ctx context.Context, b blob.ReadOnlyBlob) (_ *CloseableReadOn
 		_ = idxFile.Close()
 	}()
 	idx := ociImageSpecV1.Index{}
-	if err := json.NewDecoder(idxFile).Decode(&idx); err != nil {
+	// The index decodes with the leniency of encoding/json v1, which wrote and read every
+	// index.json so far: duplicate members take their last value, invalid UTF-8 is
+	// tolerated and data after the index value is ignored.
+	dec := jsontext.NewDecoder(idxFile, jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true))
+	if err := json.UnmarshalDecode(dec, &idx, runtime.JSONDecodeOptions); err != nil {
 		return nil, fmt.Errorf("failed to decode index file: %w", err)
 	}
 

@@ -2,7 +2,7 @@ package integration_test
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"testing"
@@ -184,7 +184,7 @@ func Test_Integration_TransferOCIArtifact_ExcludedFromSignature(t *testing.T) {
 			r.JSONEq(string(want), string(gotNormalised), "transfer must not change the normalised descriptor")
 
 			var access ociaccessv1.OCIImage
-			raw, err := json.Marshal(got.Component.Resources[0].Access)
+			raw, err := json.Marshal(got.Component.Resources[0].Access, runtime.JSONOptions)
 			r.NoError(err)
 			r.NoError(json.Unmarshal(raw, &access))
 			r.Contains(access.ImageReference, targetAddr, "the artifact must be uploaded to the target registry")

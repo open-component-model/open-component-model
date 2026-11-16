@@ -20,7 +20,8 @@ package attestation
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -176,7 +177,7 @@ func sbomsFromAttestation(
 		}
 
 		var envelope struct {
-			Predicate json.RawMessage `json:"predicate"`
+			Predicate jsontext.Value `json:"predicate"`
 		}
 		if err := json.Unmarshal(statement, &envelope); err != nil {
 			return nil, fmt.Errorf("malformed sbom in attestation %s: in-toto statement %s of predicate type %s is not valid json: %w",
