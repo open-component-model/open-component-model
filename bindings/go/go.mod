@@ -21,7 +21,7 @@ require (
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/digitorus/pkcs7 v0.0.0-20260914070511-d678ea5ea03f
 	github.com/digitorus/timestamp v0.0.0-20260914073129-b4b58b92aa51
-	github.com/docker/cli v29.9.0+incompatible
+	github.com/docker/cli v29.9.3+incompatible
 	github.com/gabriel-vasile/mimetype v1.4.15
 	github.com/go-git/go-billy/v6 v6.0.0-beta.1
 	github.com/go-git/go-git/v6 v6.0.0-beta.1
@@ -107,7 +107,7 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
-	github.com/docker/docker-credential-helpers v0.9.10 // indirect
+	github.com/docker/docker-credential-helpers v0.9.13 // indirect
 	github.com/docker/go-connections v0.8.2 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dylibso/observe-sdk/go v0.0.0-20240828172851-9145d8ad07e1 // indirect
