@@ -310,7 +310,7 @@ func (r *ArtifactBlob) Spool(dir string) (_ *ArtifactBlob, release func() error,
 		return nil, nil, err
 	}
 	if actual, _ := spooled.Digest(); known && actual != expected {
-		return nil, nil, errors.Join(fmt.Errorf("resource blob digest mismatch: expected %s, got %s", expected, actual), spooled.Close())
+		return nil, nil, errors.Join(fmt.Errorf("resource blob digest mismatch: expected %s, got %s", expected, actual), spooled.Remove())
 	}
 
 	return &ArtifactBlob{
@@ -318,7 +318,7 @@ func (r *ArtifactBlob) Spool(dir string) (_ *ArtifactBlob, release func() error,
 		Artifact:     r.Artifact,
 		mediaType:    r.mediaType,
 		ociLayout:    r.ociLayout,
-	}, spooled.Close, nil
+	}, spooled.Remove, nil
 }
 
 // Interface implementations

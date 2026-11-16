@@ -53,7 +53,7 @@ func (r *failingReader) Close() error { return r.blob.closeErr }
 func TestSpool(t *testing.T) {
 	const content = "streamed content of unknown size"
 
-	t.Run("records size and digest and frees the file when closed", func(t *testing.T) {
+	t.Run("records size and digest and frees the file when removed", func(t *testing.T) {
 		r := require.New(t)
 		dir := t.TempDir()
 		sum := sha256.Sum256([]byte(content))
@@ -74,10 +74,23 @@ func TestSpool(t *testing.T) {
 			r.Equal(content, string(data))
 		}
 
-		r.NoError(spooled.Close())
+		r.NoError(spooled.Remove())
 		entries, err := os.ReadDir(dir)
 		r.NoError(err)
 		r.Empty(entries)
+	})
+
+	t.Run("cannot be written or read once it is removed", func(t *testing.T) {
+		r := require.New(t)
+		spooled, err := filesystem.Spool(streamedBlob{content}, t.TempDir(), "")
+		r.NoError(err)
+		// Its digest was recorded while it was written, so the content must not change.
+		_, err = spooled.WriteCloser()
+		r.Error(err)
+
+		r.NoError(spooled.Remove())
+		_, err = spooled.ReadCloser()
+		r.Error(err)
 	})
 
 	t.Run("computes the digest with the requested algorithm", func(t *testing.T) {
@@ -88,7 +101,7 @@ func TestSpool(t *testing.T) {
 		r.NoError(err)
 		dig, _ := spooled.Digest()
 		r.Equal("sha512:"+hex.EncodeToString(sum[:]), dig)
-		r.NoError(spooled.Close())
+		r.NoError(spooled.Remove())
 	})
 
 	t.Run("rejects an algorithm it cannot compute", func(t *testing.T) {
@@ -111,7 +124,7 @@ func TestSpool(t *testing.T) {
 		r.NoError(err)
 		r.Empty(data)
 		r.NoError(rc.Close())
-		r.NoError(spooled.Close())
+		r.NoError(spooled.Remove())
 	})
 
 	t.Run("creates a missing directory", func(t *testing.T) {
@@ -121,7 +134,7 @@ func TestSpool(t *testing.T) {
 		spooled, err := filesystem.Spool(streamedBlob{content}, dir, "")
 		r.NoError(err)
 		r.DirExists(dir)
-		r.NoError(spooled.Close())
+		r.NoError(spooled.Remove())
 	})
 
 	t.Run("fails when the directory cannot be used", func(t *testing.T) {

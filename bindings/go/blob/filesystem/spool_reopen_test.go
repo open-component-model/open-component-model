@@ -22,5 +22,5 @@ func TestSpool_ReaderIsAFile(t *testing.T) {
 	r.NoError(err)
 	r.IsType(&os.File{}, reader)
 	r.NoError(reader.Close())
-	r.NoError(spooled.Close())
+	r.NoError(spooled.Remove())
 }

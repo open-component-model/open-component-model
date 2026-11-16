@@ -27,7 +27,7 @@ func TestSpool_FileIsDeletedWithItsLastHandle(t *testing.T) {
 
 	reader, err := spooled.ReadCloser()
 	r.NoError(err)
-	r.NoError(spooled.Close())
+	r.NoError(spooled.Remove())
 
 	data, err := io.ReadAll(reader)
 	r.NoError(err)

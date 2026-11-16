@@ -49,7 +49,7 @@ func TestSpool_ReadersAreIndependent(t *testing.T) {
 	r.NoError(err)
 	r.Equal(content, string(all))
 	r.NoError(third.Close())
-	r.NoError(spooled.Close())
+	r.NoError(spooled.Remove())
 }
 
 // An upload that fails half way is sent again from the start. HTTP clients do that only for
@@ -73,7 +73,7 @@ func TestSpool_ReaderCanBeRewound(t *testing.T) {
 	r.NoError(err)
 	r.Equal(content, string(all))
 	r.NoError(reader.Close())
-	r.NoError(spooled.Close())
+	r.NoError(spooled.Remove())
 }
 
 const (

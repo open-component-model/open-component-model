@@ -17,18 +17,22 @@ func (b stringBlob) ReadCloser() (io.ReadCloser, error) {
 // Where the operating system cannot open the spool file again, all readers share its one
 // handle. They must behave like files of their own all the same: independent positions,
 // rewindable, and closing one leaves the handle open for the others.
-func TestSpooledBlob_SharedReader(t *testing.T) {
+func TestSpool_SharedHandleReaders(t *testing.T) {
 	r := require.New(t)
 	const content = "0123456789abcdefghij"
 	spooled, err := Spool(stringBlob(content), t.TempDir(), "")
 	r.NoError(err)
+	files, ok := spooled.fileSystem.(spoolFS)
+	r.True(ok)
 
-	first := spooled.sharedReader()
+	first, err := files.openShared()
+	r.NoError(err)
 	half := make([]byte, len(content)/2)
 	_, err = io.ReadFull(first, half)
 	r.NoError(err)
 
-	second := spooled.sharedReader()
+	second, err := files.openShared()
+	r.NoError(err)
 	all, err := io.ReadAll(second)
 	r.NoError(err)
 	r.Equal(content, string(all))
@@ -45,6 +49,9 @@ func TestSpooledBlob_SharedReader(t *testing.T) {
 	all, err = io.ReadAll(first)
 	r.NoError(err)
 	r.Equal(content, string(all))
+	info, err := first.Stat()
+	r.NoError(err)
+	r.Equal(int64(len(content)), info.Size())
 	r.NoError(first.Close())
-	r.NoError(spooled.Close())
+	r.NoError(spooled.Remove())
 }

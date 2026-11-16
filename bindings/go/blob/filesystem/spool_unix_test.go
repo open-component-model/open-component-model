@@ -35,5 +35,5 @@ func TestSpool_FileHasNoNameWhileInUse(t *testing.T) {
 	r.NoError(err)
 	r.Equal(content, string(data))
 	r.NoError(rc.Close())
-	r.NoError(spooled.Close())
+	r.NoError(spooled.Remove())
 }
