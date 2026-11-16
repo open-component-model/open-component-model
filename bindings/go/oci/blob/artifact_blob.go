@@ -361,14 +361,20 @@ func copyAndClose(dst io.Writer, src blob.ReadOnlyBlob) (_ int64, err error) {
 }
 
 // spooledBlob is a file written by Spool, whose size and digest were recorded while writing.
-// It is read through the handle Spool opened, because the file may have no name any more.
+// The file may have no name any more, so readers are derived from the handle Spool opened.
 type spooledBlob struct {
 	file   *os.File
 	size   int64
 	digest string
 }
 
+// ReadCloser returns a reader with its own position. Where the operating system can open
+// the file again it is a real file, which lets the kernel copy it to a socket. Otherwise it
+// reads through the shared handle at explicit offsets.
 func (b *spooledBlob) ReadCloser() (io.ReadCloser, error) {
+	if reopened, err := reopenSpoolFile(b.file); err == nil {
+		return reopened, nil
+	}
 	return io.NopCloser(io.NewSectionReader(b.file, 0, b.size)), nil
 }
 func (b *spooledBlob) Size() int64            { return b.size }
