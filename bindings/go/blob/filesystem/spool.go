@@ -120,6 +120,12 @@ func (f spoolFS) Remove(name string) error {
 // sharedSpoolFile reads a spool file at its own position through a handle it shares, so
 // closing it leaves that handle open. Seek and ReadAt stay visible: HTTP clients look for
 // them to tell that a request body can be sent again after a failed attempt.
+//
+// It must not embed or expose the *os.File itself. A file has a single read position, so
+// its Read and Seek would be shared by all readers, and io.Copy would pick its WriteTo,
+// which copies from that shared position as well. Its Close would free the spool file
+// under every other reader, and Write or Truncate could change content whose digest is
+// already recorded. A section of the file has none of these: it reads at explicit offsets.
 type sharedSpoolFile struct {
 	*io.SectionReader
 	// info describes the file as it was opened. A spool file does not change any more.
