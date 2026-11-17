@@ -1,186 +1,304 @@
 ---
 title: "Key Differences Between OCM v1 and v2"
-description: "What changes from OCM v1 to OCM v2 in the CLI, configuration, signing, stored data, plugins, controllers and library, with links to the migration guides."
+description: "What changes from OCM v1 to OCM v2: breaking changes, spec support, CLI, configuration, signing, stored data, plugins and controllers, with migration guides."
 icon: "arrow-autofit-right"
 slug: "differences-v1-v2"
 weight: 5
 toc: true
 ---
 
-OCM v2 is a rebuild of the OCM CLI, Kubernetes controllers and Go library. Both versions implement the same
-[OCM specification](https://github.com/open-component-model/ocm-spec), and OCM v2 reads most component versions
-that OCM v1 created. The tooling around that data changed, though: commands, flags, configuration types, plugins and
-the library API. Use this page to estimate the effort and the risks of a migration. Each section links to the
-migration guide for the change, where one exists.
+OCM v2 is a rebuild of the OCM CLI, the Kubernetes controllers and the Go library. Both versions build on the
+[OCM specification](https://github.com/open-component-model/ocm-spec), and OCM v2 reads most component versions that
+OCM v1 created. Commands, flags, configuration, plugins and the library API changed, and some behavior changed without
+an error message. Use this page to plan a migration and to find the guide for each change.
 
-The [legacy documentation](https://ocm.software/legacy/docs/) still describes OCM v1.
+This page compares the OCM v1 CLI 0.55 with the current OCM v2 release. The
+[legacy documentation](https://ocm.software/legacy/docs/) still describes OCM v1.
 
-## At a Glance
+## Breaking Changes
 
-| Area | OCM v1 | OCM v2 | Migration guide |
-| ---- | ------ | ------ | --------------- |
-| CLI | Many verbs and nouns (`add resources`, `create transportarchive`, `bootstrap`, ...) | A small set around `component-version`: `add`, `get`, `sign`, `verify`, `transfer`, `download` | [CLI commands](#cli-commands) |
-| Component constructor | Templating with Go templates, spiff or subst, plus settings files | Environment variable expansion only | [Component constructor](#component-constructor) |
-| Resolvers | Fallback resolvers in `ocm.config.ocm.software` | Glob-based `resolvers.config.ocm.software/v1alpha1` | [Migrate Legacy Resolvers]({{< docref "docs/changelog/migrate-legacy-resolvers.md" >}}) |
-| Credentials | Untyped `Credentials/v1`, `pathprefix`, Vault and Gardener repositories | Same format, `path` instead of `pathprefix`, optional typed credentials | [Migrate Legacy Credentials]({{< docref "docs/changelog/migrate-legacy-credentials.md" >}}) |
-| Transfer | `--copy-resources`, `--upload-as`, `--uploader`, transfer scripts | Uploader configurations matched per resource with CEL | [Migrate --upload-as Flags]({{< docref "docs/changelog/migrate-from-upload-as.md" >}}) |
-| Plain HTTP | `http://` prefix on the registry URL | `plainHTTP` per host in the HTTP configuration | [Migrate from http:// Prefixes]({{< docref "docs/changelog/migrate-from-http-prefixes.md" >}}) |
-| Sources | Supported | Deprecated, replaced by resources and the `ocm.software/artifact-references` label | [Migrate from Sources to Resources]({{< docref "docs/changelog/migrate-from-sources.md" >}}) |
-| Signing | Keys and algorithm passed as CLI flags, default `RSASSA-PKCS1-V1_5` with `jsonNormalisation/v3` | Keys from the credential configuration, default `RSASSA-PSS` with `jsonNormalisation/v4alpha3` | [Migrate Normalisation Algorithms]({{< docref "docs/changelog/migrate-normalisation-algorithms.md" >}}) |
-| Storage | Component archives, CTF, OCI registries | CTF and OCI registries | [Data compatibility](#data-compatibility) |
-| Plugins | Executables that add access methods, uploaders, actions and more | A new plugin protocol and plugin registry | [Plugins](#plugins) |
-| Controllers | `ocm-controller` with Snapshots, Flux and an in-cluster registry | `Repository`, `Component`, `Resource` and `Deployer` without Flux | [Controllers](#controllers) |
-| Go library | `ocm.software/ocm` | `ocm.software/open-component-model/bindings/go`, a new API | [Go library](#go-library) |
+These changes can break a pipeline or change data without an error. Check them first.
 
-## CLI Commands
+| Change | Impact | What to do |
+| ------ | ------ | ---------- |
+| `ocm transfer cv` replaces a component version that already exists in the target, and drops the signatures stored there | OCM v1 skipped an identical version and refused a changed one without `--overwrite`. OCM v2 exits 0. | Sign after the transfer, or protect published versions with immutable tags in the registry. See [Transfer Component Versions]({{< docref "docs/guides/transfer/transfer-component-versions.md" >}}). |
+| Running `ocm add cv` again replaces the component version and drops its signatures | A constructor that lacks a resource or reference removes it from the version | Build a new version instead of rebuilding a published one. See [Migrate Component Constructors]({{< docref "docs/changelog/migrate-component-constructors.md" >}}). |
+| Copying Helm resources by value rewrites their digest | After `--copy-resources` or a local blob uploader, OCM v1 signatures fail in OCM v1 and OCM v2 ([ocm-project#1368](https://github.com/open-component-model/ocm-project/issues/1368)) | Transfer Helm resources by reference, or sign again after the transfer |
+| Some OCM v1 signatures do not verify | See [Data Compatibility](#data-compatibility) | Re-sign with OCM v2. See [Migrate Signing Setup]({{< docref "docs/changelog/migrate-signing-setup.md" >}}). |
+| OCM v1 cannot verify signatures that OCM v2 creates | OCM v2 signs with `jsonNormalisation/v4alpha3`, which OCM v1 does not know | Move all verifiers to OCM v2 before you sign with it |
+| Some OCM v1 configuration entries make every command fail | `HashiCorpVault`, `GardenerConfig` and `NPMConfig` credential repositories, an inline `dockerConfig` object, and resolvers with the repository type `OCIRegistry` | Remove or convert them, see [Configuration](#configuration) |
+| Most other OCM v1 configuration types are ignored without a message | For example `transport` with `recursive: true`: `ocm transfer cv` is then no longer recursive | Pass `--recursive` or use the v2 transfer configuration, see [Configuration](#configuration) |
+| Credential matching is stricter | A consumer without `port` no longer matches a request with a port, and one without `hostname` matches nothing | See [Credentials](#credentials) |
+| Script-facing output changed | `get cv` output formats, sort order and exit codes differ | See [Scripts and CI pipelines](#scripts-and-ci-pipelines) |
+| The legacy controller and the new controllers cannot share a cluster | Both define `resources.delivery.ocm.software` | See [Migrate from the Legacy OCM Controller]({{< docref "docs/changelog/migrate-from-legacy-ocm-controller.md" >}}) |
 
-The v2 CLI is organized around the component version. Most v1 commands that edit or inspect a single part of a
-component version are gone; you work with the whole component version instead.
+## Specification Support
+
+| Topic | OCM v1 | OCM v2 |
+| ----- | ------ | ------ |
+| Component descriptor schema | `v2` and `ocm.software/v3alpha1` | `v2` only |
+| Repositories | OCI registries, CTF (directory, `tar`, `tgz`), component archives | OCI registries and CTF. Writes directory CTFs only, reads `tar` and `tgz`. No component archives. |
+| Normalisation algorithms | `jsonNormalisation/v1`, `v2`, `v3` (default) | Signs with `jsonNormalisation/v4alpha3` (default, recommended), `v4alpha2` or `v4alpha1`. Verifies `v3` and `v1`, see [Data Compatibility](#data-compatibility). |
+| Signing | RSA (`RSASSA-PKCS1-V1_5` default, `RSASSA-PSS`), certificate chains, Sigstore | RSA (`RSASSA-PSS` default), certificate chains, GPG, Sigstore keyless. PSS, GPG and Sigstore are not defined in the specification. |
+| Sources | Supported | Deprecated in OCM v2, replaced by resources. The specification does not deprecate them. |
+| Label `merge` | Supported | Dropped on read and transfer. Deprecated in the specification ([ocm-spec#155](https://github.com/open-component-model/ocm-spec/pull/155)). |
+
+How OCM v2 stores component versions in OCI registries is described in
+[Component Version Storage]({{< docref "docs/concepts/component-storage.md" >}}), the descriptor format in
+[Component Descriptor]({{< docref "docs/reference/component-descriptor.md" >}}).
+
+## CLI
+
+The v2 CLI is built around the component version and has far fewer commands. Commands that edited or inspected one
+part of a component version are gone. For all commands and flags, see the
+[CLI reference]({{< docref "docs/reference/ocm-cli/ocm.md" >}}).
 
 | OCM v1 | OCM v2 |
 | ------ | ------ |
-| `ocm add componentversions` | `ocm add component-version` |
-| `ocm create transportarchive`, `ocm create componentarchive` | No command. `ocm add cv` creates the CTF archive if it does not exist. |
-| `ocm add resources`, `add sources`, `add references` | No command. Edit the component constructor and run `ocm add cv` again. |
+| `ocm add componentversions` | `ocm add component-version`, see [Migrate Component Constructors]({{< docref "docs/changelog/migrate-component-constructors.md" >}}) |
+| `ocm add resources`, `add sources`, `add references`, `create componentarchive`, `create transportarchive` | No command. Describe the whole component version in one constructor and run `ocm add cv`, which creates a missing CTF directory. |
 | `ocm get componentversions` | `ocm get component-version` |
-| `ocm get resources`, `get sources`, `get references` | `ocm get cv -o yaml`, or `-o widetree` for a resource overview |
-| `ocm download resources` | `ocm download resource` |
-| `ocm download componentversions`, `download artifacts` | No command |
-| `ocm transfer componentversions` | `ocm transfer component-version` |
-| `ocm transfer commontransportarchive`, `transfer artifacts` | `ocm transfer cv`, which accepts a CTF archive as source and target |
-| `ocm sign componentversions`, `verify componentversions` | `ocm sign component-version`, `ocm verify component-version` |
-| `ocm create rsakeypair` | No command. See [Generate Signing Keys]({{< docref "docs/guides/sign/generate-signing-keys.md" >}}). |
-| `ocm install plugins` | `ocm download plugin` and `ocm plugin registry` |
-| `ocm list`, `show versions`, `show tags` | `ocm get cv <component>` with `--constraint` or `--latest` |
-| `ocm bootstrap`, TOI packages | No command. Deploy with the [OCM controllers]({{< docref "docs/concepts/ocm-controllers.md" >}}). |
-| `ocm controller install` | No command. Install the controllers with Helm. |
-| `ocm hash`, `sign hash`, `check`, `execute action`, `set pubsub`, `get routingslips`, `get credentials`, `get verified`, `clean cache` | No command |
+| `ocm get resources`, `get sources`, `get references` | `ocm get cv -o yaml`, or `-o widetree` for resources |
+| `ocm list componentversions`, `show versions` | `ocm get cv <component>` with `--constraint` or `--latest`. Versions are listed newest first. |
+| `ocm sign componentversions`, `verify componentversions` | `ocm sign component-version`, `ocm verify component-version`, see [Migrate Signing Setup]({{< docref "docs/changelog/migrate-signing-setup.md" >}}) |
+| `ocm transfer componentversions`, `transfer commontransportarchive` | `ocm transfer component-version`. A repository as source transfers all its component versions. See [Transfer Component Versions]({{< docref "docs/guides/transfer/transfer-component-versions.md" >}}). |
+| `ocm download resources` | `ocm download resource`, see [Download Resources]({{< docref "docs/guides/transfer/download-resources.md" >}}) |
+| `ocm download componentversions` | `ocm transfer cv <reference> <directory>` writes a CTF |
+| `ocm install plugins` | `ocm download plugin` and `ocm plugin registry`, see [Plugins](#plugins) |
+| `ocm create rsakeypair` | `openssl`, see [Generate Signing Keys]({{< docref "docs/guides/sign/generate-signing-keys.md" >}}) |
+| `ocm controller install` | Helm, see [Set up Controller Environments]({{< docref "docs/getting-started/setup-controller-environment.md" >}}) |
+| `ocm check componentversions` | `ocm get cv <reference> --recursive` fails when a referenced component version is missing |
+| `ocm hash componentversions`, `sign hash` | No command yet ([open-component-model#1227](https://github.com/open-component-model/open-component-model/issues/1227)) |
+| `ocm cache`, `clean cache` | No command. OCM v2 caches OCI metadata for 10 minutes in its temporary folder, see [Caching]({{< docref "docs/reference/configuration/caching.md" >}}). |
+| `ocm bootstrap`, TOI packages | No command ([ocm-project#839](https://github.com/open-component-model/ocm-project/issues/839)). Deploy with the [OCM controllers]({{< docref "docs/concepts/ocm-controllers.md" >}}). |
+| `ocm download cli` | No command ([ocm-project#1094](https://github.com/open-component-model/ocm-project/issues/1094)). See [Install the OCM CLI]({{< docref "docs/getting-started/ocm-cli-installation.md" >}}). |
+| `ocm get artifacts`, `transfer artifacts`, `show tags`, `oci ...` | No command. `ocm transfer cv` copies component versions only. Use an OCI tool such as `oras` for plain OCI artifacts. |
+| `ocm add routingslips`, `get routingslips`, `execute action`, `get pubsub`, `set pubsub`, `get credentials`, `get verified` | No command |
 
-`ocm describe types` and `ocm get types` are new: they list the types each subsystem accepts and their fields, which
-replaces most of the v1 help topics such as `ocm ocm-accessmethods`.
+`ocm describe types` and `ocm get types` are new. They list the access, input, repository, credential and signing
+types and their fields. Configuration types are not listed; see
+[Configuration]({{< docref "docs/reference/configuration/_index.md" >}}).
 
-The v1 spellings `componentversions`, `componentversion` and `cv` still work. `get`, `sign`, `verify` and `transfer`
-also accept `component` and `comp`. `add` does not.
+### Scripts and CI pipelines
 
-### References and flags
+- **Command names.** `componentversions`, `componentversion` and `cv` still work. `component`, `comp` and `c` work for
+  `get`, `sign`, `verify` and `transfer`, but not for `add`. The resource aliases `res` and `r` are gone.
+- **Short flags changed meaning.** In `ocm add cv`, `-c` is `--constructor` (v1: `--create`) and `-r` is
+  `--repository`. In `ocm get cv`, `-r` is gone and `--recursive` takes a depth. `-c`/`--constraints` is now
+  `--constraint`. In `sign` and `verify`, `-s` is gone and `--signature` takes one name.
+- **One reference per call.** `get`, `sign` and `verify` take one reference, and `sign` and `verify` need a version.
+  `--repo` is gone: always pass the full reference, such as `ghcr.io/acme//acme.org/app:1.0.0` or
+  `ctf::./archive//acme.org/app:1.0.0`. A reference can pin a digest, such as `...:1.0.0@sha256:<digest>`.
+- **Rejected reference forms.** The `+` prefix that created a repository, `directory::`, `tgz::`, `ctf+tgz::`, JSON
+  repository specifications and the type name `OCIRegistry::` fail. Use `ctf::`, `oci::` or `OCIRepository::`.
+  `http://` needs `plainHTTP`, see
+  [Migrate from http:// Prefixes]({{< docref "docs/changelog/migrate-from-http-prefixes.md" >}}).
+- **Archives.** OCM v2 writes CTF directories only. To ship a `tgz`, pack the directory with `tar`.
+- **Output.** `ocm get cv` prints a tree by default, newest version first. A script that takes the last line of the v1
+  table now gets the oldest version. `-o json` prints a list instead of `{"items": [...]}`, and `-o yaml` prints one
+  YAML list instead of one document per component version. `-o wide` is gone.
+- **Exit codes.** `ocm get cv` with no matching version, and `ocm verify cv` on a component version without
+  signatures, exit 1. OCM v1 exited 0.
+- **Logging.** INFO messages go to stderr by default. Use `--loglevel warn` to quiet them. `--logfile`,
+  `--logconfig` and `--logkeys` are gone.
+- **Transfer.** `--overwrite`, `--enforce`, `--script`, `--uploader`, `--copy-local-resources` and
+  `--omit-access-types` are gone. Local blobs are copied by default, and uploader configurations decide what else is
+  copied. `--copy-resources` and `--upload-as` still work but are deprecated, see
+  [Migrate --upload-as Flags]({{< docref "docs/changelog/migrate-from-upload-as.md" >}}). To review a transfer before it
+  runs, write the plan to a file and replay it:
 
-- **References.** Component references keep the form `<repository>//<component>:<version>`, for example
-  `ghcr.io/acme//acme.org/app:1.0.0` or `ctf::./archive//acme.org/app:1.0.0`. The `--repo` flag is gone, so always pass
-  the full reference. A reference can pin a digest, such as `...:1.0.0@sha256:<digest>`.
-- **Lookup.** The `--lookup` flag is gone. Configure resolvers instead, see
-  [Migrate Legacy Resolvers]({{< docref "docs/changelog/migrate-legacy-resolvers.md" >}}).
-- **Transfer.** `--overwrite`, `--enforce`, `--script`, `--uploader`, `--copy-local-resources` and `--omit-access-types`
-  are gone. Local blobs are copied by default, and uploader configurations decide what else is copied.
-  `ocm transfer cv --dry-run -o yaml` writes the planned transfer to a file that `--transfer-spec` replays after review.
-- **Download.** `-O` becomes `--output`, download handlers become `--transformer`, and the resource identity moves to
-  `--identity`.
-- **Output.** `ocm get cv` prints a tree by default. The other formats are `table`, `widetree`, `yaml`, `json` and
-  `ndjson`.
+  ```bash
+  ocm transfer cv --dry-run -o yaml ghcr.io/acme//acme.org/app:1.0.0 ctf::./archive > spec.yaml
+  ocm transfer cv --transfer-spec spec.yaml
+  ```
 
-Scripts and CI pipelines that call the v1 CLI need a review against the
-[CLI reference]({{< docref "docs/reference/ocm-cli/ocm.md" >}}).
+- **Download.** `-O` is `--output`, and the resource identity moves to `--identity`. Archives are extracted by
+  default; `--extraction-policy disable` keeps them as they are. The executable bit is not set. Download handlers are
+  replaced by `--transformer`, which supports `helm`.
+- **Mixed pipelines.** OCM v2 writes CTF files read-only, so OCM v1 cannot write to a CTF that OCM v2 has written.
+  Run all steps that write a CTF with the same version.
 
 ## Component Constructor
 
-The constructor still describes one component or a `components:` list with resources, sources and references, see
-[Component Constructor]({{< docref "docs/reference/component-constructor.md" >}}). The differences:
+The constructor still describes one component or a `components:` list. The changes, with the steps to migrate, are in
+[Migrate Component Constructors]({{< docref "docs/changelog/migrate-component-constructors.md" >}}):
 
-- **No templating.** `--templater`, `--settings` and `--addenv` are gone, and so are spiff and Go templates. OCM v2
-  expands environment variables (`${VAR}` or `$VAR`) in the file before it parses it. Render more complex templates
-  before you call `ocm add cv`.
-- **File paths** must stay inside the working directory or its subdirectories.
-- **Input types** keep their v1 names as aliases where a v2 type exists:
+- No templating: OCM v2 expands environment variables (`$NAME` and `${NAME}`) and nothing else. Every `$` counts.
+- The file is validated before the build. `references:` must be `componentReferences:`, and `meta` and
+  `repositoryContexts` are rejected. Only the first YAML document is read.
+- Component references must resolve while the version is built.
+- Input types keep their v1 names as deprecated aliases. `ociImage`, `docker`, `binary`, `spiff`, `maven`, `npm` and
+  `ocm` inputs are gone. For images, see [Add OCI Artifacts]({{< docref "docs/guides/pack/add-oci-artifacts.md" >}}).
+  For component versions, use [component references]({{< docref "docs/guides/pack/add-component-references.md" >}}).
 
-| OCM v1 input | OCM v2 |
-| ------------ | ------ |
-| `dir`, `file`, `utf8`, `helm`, `wget`, `git` | `Dir/v1`, `File/v1`, `UTF8/v1`, `Helm/v1`, `Wget/v1`, `Git/v1`. The v1 names still work. |
-| `ociArtifact`, `ociImage`, `docker`, `dockermulti` | No input type. Reference the image with the `OCIImage/v1` access type, or add an OCI layout file with `File/v1` and the media type `application/vnd.ocm.software.oci.layout.v1+tar`. No input type reads images from a local Docker daemon. |
-| `binary`, `spiff`, `maven`, `npm`, `ocm` | No input type |
-
-`S3/v2` is a new input type. For all types and fields, see
+For all types and fields, see
+[Component Constructor]({{< docref "docs/reference/component-constructor.md" >}}) and
 [Input and Access Types]({{< docref "docs/reference/input-and-access-types.md" >}}).
 
-## Configuration and Credentials
+## Configuration
 
-The configuration file keeps its format: a `generic.config.ocm.software/v1` document with a `configurations:` list,
-read from `$HOME/.ocmconfig` or the file passed with `--config`. Several configuration types changed:
+The file format is the same: a `generic.config.ocm.software/v1` document with a `configurations:` list.
 
-- **Credentials** work mostly unchanged. `pathprefix` is renamed to `path`. `HashiCorpVault/v1`, `GardenerConfig/v1`
-  and `NPMConfig/v1` credential repositories are not available. See
-  [Migrate Legacy Credentials]({{< docref "docs/changelog/migrate-legacy-credentials.md" >}}).
-- **Resolvers** in `ocm.config.ocm.software` are deprecated in favor of `resolvers.config.ocm.software/v1alpha1`. See
-  [Migrate Legacy Resolvers]({{< docref "docs/changelog/migrate-legacy-resolvers.md" >}}).
-- **Transfer** settings move to uploader configurations. An `uploadType` field fails config loading. See
-  [Migrate --upload-as Flags]({{< docref "docs/changelog/migrate-from-upload-as.md" >}}).
-- **New types** configure signing (`signing.config.ocm.software/v1alpha1`), the HTTP client
-  (`http.config.ocm.software/v1alpha1`), caching and versioning. See
-  [Configuration]({{< docref "docs/reference/configuration/_index.md" >}}).
-- **No v2 counterpart** exists for `attributes`, `keys`, `rootcerts`, `logging`, `memory.credentials` and the v1
-  `scripts`, `transport`, `uploader` and `downloader` configuration types. Logging is set with the `--loglevel`,
-  `--logformat` and `--logoutput` flags.
+**Discovery.** OCM v1 read the first of `~/.ocmconfig`, `~/.ocm/ocmconfig` and `~/.ocm/config`. OCM v2 merges every
+file it finds: `$OCM_CONFIG`, `ocm/config` and `.ocmconfig` under `$XDG_CONFIG_HOME` or `~/.config`, `~/.ocm/config`,
+`~/.ocmconfig`, then `.ocm/config` and `.ocmconfig` in the working directory and next to the binary. Later files take
+priority. Running `ocm` inside a checkout therefore picks up the checkout's `.ocmconfig`. `--config` replaces the
+search. On first start, OCM v2 writes `~/.ocm/config` with your Docker credentials if you have none (turn off with
+`OCM_DISABLE_AUTO_CONFIG`), and it checks for new releases after each command (`OCM_DISABLE_VERSION_CHECK`).
 
-## Signing
+**Configuration types:**
+
+| OCM v1 type | OCM v2 |
+| ----------- | ------ |
+| `credentials.config.ocm.software` | Works, with changes, see [Credentials](#credentials) |
+| `ocm.config.ocm.software` resolvers | Deprecated, still read. Use `resolvers.config.ocm.software/v1alpha1`, see [Migrate Legacy Resolvers]({{< docref "docs/changelog/migrate-legacy-resolvers.md" >}}). A resolver with `type: OCIRegistry` makes every command fail; use `OCIRepository`. |
+| `http.config.ocm.software` | Works. The v2 type adds retries, TLS roots and per-host `plainHTTP`, see [HTTP Client]({{< docref "docs/reference/configuration/http-client.md" >}}). |
+| `transport.ocm.config.ocm.software`, `uploader.ocm.config.ocm.software`, `scripts.ocm.config.ocm.software`, `oci.uploader.config.ocm.software` | Ignored. Use `transfer.config.ocm.software/v1alpha1` and the uploader configurations, see [Transfer Configuration]({{< docref "docs/reference/configuration/transfer-configuration/_index.md" >}}). |
+| `keys.config.ocm.software` | Ignored. Keys are credentials, see [Configure Signing Credentials]({{< docref "docs/guides/sign/configure-signing-credentials.md" >}}). |
+| `rootcerts.config.ocm.software` | Ignored. Use `rootCAsPEM` or `rootCAsPEMFile` in the [HTTP client configuration]({{< docref "docs/reference/configuration/http-client.md" >}}). |
+| `downloader.ocm.config.ocm.software` | Ignored. Use `ocm download resource --transformer`. |
+| `logging.config.ocm.software` | Ignored. Use `--loglevel`, `--logformat` and `--logoutput`. |
+| `plugin.config.ocm.software` | The type name now configures the v2 plugin manager. v1 settings are dropped. |
+| `attributes`, `memory.credentials`, `oci`, `cli.ocm`, `ocm.cmd`, `hasher`, `blobLimits.ocireg.ocm`, `merge` (all `.config.ocm.software`), config `sets` | Ignored |
+
+Ignored types produce no message, even with `--loglevel debug`. Spiff expressions in the configuration file are not
+evaluated, and the `--cred`, `-X` and `--config-set` flags are gone. New types configure signing, transfer, uploaders,
+caching, versioning and the file system; see [Configuration]({{< docref "docs/reference/configuration/_index.md" >}}).
+
+OCM v1 rejects most v2 configuration types, so one file cannot serve both CLIs unless it uses only credentials and
+`http.config.ocm.software`.
+
+## Credentials
+
+The credential configuration keeps its format. The details are in
+[Migrate Legacy Credentials]({{< docref "docs/changelog/migrate-legacy-credentials.md" >}}):
+
+- `pathprefix` is converted to `path`, which is a glob: `*` matches one path segment and `**` any depth.
+- A consumer without `port` no longer matches a request that has a port, such as `localhost:5000`. A consumer without
+  `hostname` matches nothing.
+- When several consumers match a request, OCM v2 does not prefer the most specific one, and the one it uses can change
+  between runs. Do not configure overlapping consumers for the same host and path.
+- Only `DockerConfig/v1` is built in as a credential repository. `HashiCorpVault`, `GardenerConfig` and `NPMConfig`
+  make every command fail ([ocm-project#838](https://github.com/open-component-model/ocm-project/issues/838) tracks
+  Vault). An inline `dockerConfig` must be a JSON string. `aliases` and memory credentials are dropped.
+- Typed credentials such as `OCICredentials/v1` are new and optional. `Credentials/v1` keeps working.
+
+For the model behind it, see [Credential System]({{< docref "docs/concepts/credential-system.md" >}}),
+[Credential Consumer Identities]({{< docref "docs/reference/configuration/credential-consumer-identities.md" >}}) and
+[Credential Types]({{< docref "docs/reference/configuration/credential-types.md" >}}).
+
+## Transfer and Download
+
+- **Existing versions.** `ocm transfer cv` replaces a component version that the target already has, without a
+  warning, and drops the signatures stored in the target. This is intended: protect published versions with
+  immutable tags in the registry.
+- **What is copied.** Local blobs are copied, everything else stays by reference unless an uploader configuration
+  selects it. Uploaders exist for OCI registries, local blobs, HTTP, Git, JFrog Artifactory and Sonatype Nexus. See
+  [Transfer and Transport]({{< docref "docs/concepts/transfer-concept.md" >}}),
+  [Transfer Configuration]({{< docref "docs/reference/configuration/transfer-configuration/_index.md" >}}) and
+  [Vendor Repository Uploaders]({{< docref "docs/concepts/vendor-uploaders.md" >}}).
+- **Resources that are not copied.** `npm`, `maven`, `ocm`, `none` and `s3/v1` resources stay by reference with a
+  warning, and cannot be downloaded with OCM v2. Support for npm
+  ([ocm-project#835](https://github.com/open-component-model/ocm-project/issues/835)) and Maven
+  ([ocm-project#836](https://github.com/open-component-model/ocm-project/issues/836)) is planned. To publish Maven and
+  npm packages during a transfer, see
+  [Upload to JFrog Artifactory]({{< docref "docs/guides/transfer/upload-to-jfrog-artifactory.md" >}}) and
+  [Upload to Sonatype Nexus]({{< docref "docs/guides/transfer/upload-to-sonatype-nexus.md" >}}).
+- **Sources.** External sources stay by reference. A component version with a source stored as a local blob cannot be
+  transferred. See [Migrate from Sources to Resources]({{< docref "docs/changelog/migrate-from-sources.md" >}}).
+- **Air gaps** work as before with CTF directories, see
+  [Transfer Components across an Air Gap]({{< docref "docs/guides/transfer/air-gap-transfer.md" >}}).
+
+## Signing and Verification
 
 - **Keys come from the configuration.** The v1 flags `--private-key`, `--public-key`, `--issuer`, `--ca-cert`,
-  `--keyless` and `--algorithm` are gone. Keys are credentials, and the signer is set in
-  `signing.config.ocm.software/v1alpha1`. See
+  `--keyless` and `--algorithm` are gone, and `keys.config.ocm.software` is ignored. See
+  [Migrate Signing Setup]({{< docref "docs/changelog/migrate-signing-setup.md" >}}) and
   [Configure Signing Credentials]({{< docref "docs/guides/sign/configure-signing-credentials.md" >}}).
-- **Defaults changed.** New signatures use `RSASSA-PSS` and `jsonNormalisation/v4alpha3`. OCM v1 used
-  `RSASSA-PKCS1-V1_5` and `jsonNormalisation/v3`. To keep `RSASSA-PKCS1-V1_5`, configure it in the signer.
-  New signatures can only use `jsonNormalisation/v4alpha1` to `v4alpha3`.
-- **Signers.** OCM v2 signs with RSA (plain keys or PEM certificate chains), GPG and Sigstore. The v1 signing-service
-  handlers have no counterpart.
-- **Verifying v1 signatures.** RSA signatures created with `jsonNormalisation/v1` or `jsonNormalisation/v3` verify.
-  For the exceptions, see [Data compatibility](#data-compatibility). Timestamps from the v1 CLI need
-  `ocm verify cv --insecure-trust-legacy-timestamps`.
+- **New defaults.** New signatures use `RSASSA-PSS` and `jsonNormalisation/v4alpha3`. OCM v1 used
+  `RSASSA-PKCS1-V1_5` and `jsonNormalisation/v3`. Keep the default `jsonNormalisation/v4alpha3`, see
+  [Migrate Normalisation Algorithms]({{< docref "docs/changelog/migrate-normalisation-algorithms.md" >}}).
+- **What `ocm verify cv` checks.** It verifies each signature against the descriptor digest. It does not download
+  resources or referenced component versions to recompute their digests, as `ocm verify -V` did in OCM v1. Resource
+  digests are checked on download and when a transfer copies the resource. A component version without signatures
+  fails.
+- **Signers.** RSA with plain keys or PEM certificate chains, GPG, and Sigstore keyless. See the guides under
+  [Sign]({{< docref "docs/guides/sign/_index.md" >}}).
+- **Timestamps.** RFC 3161 timestamps from OCM v1 are checked without extra flags. Their time cannot prove when the
+  signature was made, because OCM v1 timestamps the descriptor digest. `ocm verify cv
+  --insecure-trust-legacy-timestamps` lets that time validate an expired signing certificate, so a signature created
+  after the certificate expired can pass. Use the flag only for component versions you know OCM v1 signed in time.
 
 ## Data Compatibility
 
-OCM v2 reads component versions that OCM v1 created in OCI registries and CTF archives, including the v1 names of
-access types such as `ociArtifact`, `localBlob`, `localOciBlob`, `ociBlob`, `helm`, `github`, `git` and `s3`. It
-stores embedded OCI artifacts differently, see
+OCM v2 reads component versions that OCM v1 created in OCI registries and CTF archives. A plain `ocm transfer cv`
+keeps their descriptors and signatures intact, and OCM v1 signatures still verify in OCM v1 and OCM v2 afterwards.
+OCM v2 stores embedded OCI artifacts differently, see
 [OCM v1 and OCM v2 storage]({{< docref "docs/concepts/component-storage.md#ocm-v1-and-ocm-v2" >}}).
+
 The following v1 data does not work in OCM v2:
 
-| v1 data | Behavior in OCM v2 |
-| ------- | ------------------ |
-| Component archives (`ocm create componentarchive`) | Rejected with `component archive ... is not supported`. Transfer them into a CTF archive with the v1 CLI first. |
-| `maven`, `npm` and `ocm` access types | No access type to read them |
-| Sigstore signatures from the v1 CLI | Cannot be verified. Re-sign with the v2 [Sigstore signer]({{< docref "docs/guides/sign/sign-with-sigstore.md" >}}). |
-| Signatures with `jsonNormalisation/v2` | Cannot be verified |
-| Certificate chains with an embedded self-signed root (v1 `create rsakeypair --ca-cert`) | Rejected |
-| Git resources built with v1 CLI 0.52.x or older | Digest mismatch on verify |
-| Descriptors in the `ocm.software/v3alpha1` schema | Cannot be read. OCM v2 reads `schemaVersion: v2` only. |
-| OCI repositories with `componentNameMapping: sha256-digest` | Components are not found |
-| Label `merge` specifications | Dropped on read and transfer |
+| v1 data | Behavior in OCM v2 | Tracking |
+| ------- | ------------------ | -------- |
+| Component archives (`ocm create componentarchive`) | Rejected with `component archive ... is not supported`. Transfer them into a CTF with the v1 CLI first. | [#1406](https://github.com/open-component-model/ocm-project/issues/1406) |
+| Descriptors in the `ocm.software/v3alpha1` schema | Cannot be read. The error does not name the schema yet, for example `parsing identity "name=,version="`. | [#1407](https://github.com/open-component-model/ocm-project/issues/1407) |
+| OCI repositories with `componentNameMapping: sha256-digest` | Components are not found | [#1405](https://github.com/open-component-model/ocm-project/issues/1405) |
+| Signatures with `jsonNormalisation/v2` | Cannot be verified | [#1403](https://github.com/open-component-model/ocm-project/issues/1403) |
+| Signatures with `jsonNormalisation/v3` over a signed label with `value: null` | Digest mismatch | [#1402](https://github.com/open-component-model/ocm-project/issues/1402) |
+| Signatures with `jsonNormalisation/v3` over reference labels with `merge` | Digest mismatch | |
+| Signatures with `jsonNormalisation/v1` | OCM v2 computes this algorithm as cc-utils did. Signatures from the OCM v1 CLI fail with a digest mismatch, for example for resource types `blob`, `helmChart`, `filesystem` and `ociArtifact`, or with provider labels. See [Migrate Signing Setup]({{< docref "docs/changelog/migrate-signing-setup.md" >}}). | |
+| Several v1 signatures with different hash or normalisation algorithms on a component version with references | Only the signature created last verifies | |
+| Certificate chains with an embedded self-signed root (v1 `create rsakeypair --ca-cert`) | Rejected | [#1376](https://github.com/open-component-model/ocm-project/issues/1376) |
+| Sigstore signatures from the v1 CLI | Cannot be verified. `ocm verify cv` without `--signature` fails as well. Re-sign with the v2 [Sigstore signer]({{< docref "docs/guides/sign/sign-with-sigstore.md" >}}). | [#1376](https://github.com/open-component-model/ocm-project/issues/1376) |
+| Private keys encrypted with v1 `create rsakeypair --encrypt` | Cannot be read | |
+| Helm resources copied with `--copy-resources` or a local blob uploader | Digest is rewritten and v1 signatures fail | [#1368](https://github.com/open-component-model/ocm-project/issues/1368) |
+| Resources with the access type `git` or `git/v1alpha1` | Download and copy fail with a digest mismatch. Verify and transfer by reference work. | [#1376](https://github.com/open-component-model/ocm-project/issues/1376) |
+| Resources with the access types `npm`, `maven`, `ocm` or `none` | Cannot be downloaded or copied | [#1376](https://github.com/open-component-model/ocm-project/issues/1376) |
+| Sources stored as local blobs | The component version cannot be transferred | [Migrate from Sources to Resources]({{< docref "docs/changelog/migrate-from-sources.md" >}}) |
+| Label `merge` specifications | Dropped on read and transfer. Signatures still verify, because `merge` is not signed. | [#1371](https://github.com/open-component-model/ocm-project/issues/1371) |
+| Routing slips | Kept as a label and transferred, but OCM v2 has no commands for them | |
 
-Decisions on these items are tracked in the
-[OCM v1 to v2 compatibility epic](https://github.com/open-component-model/ocm-project/issues/1366). Routing slips,
-pubsub, TOI packages and actions have no v2 support.
-
-Reading OCM v2 output with OCM v1 is not supported. The v1 CLI reads local blobs in the v2 format from v0.36.0 on, but
-newer v2 features may not work with OCM v1.
+All tracking issues are in `open-component-model/ocm-project` and collected in the
+[OCM v1 to v2 compatibility epic](https://github.com/open-component-model/ocm-project/issues/1366).
 
 ## Plugins
 
-OCM v2 uses a new plugin protocol, so v1 plugins do not run in OCM v2. v2 plugins extend repositories, credential
-repositories, input and resource types, signing handlers and blob transformers. `ocm download plugin` downloads a
-plugin binary from a component version, and `ocm plugin registry` lists the plugins a registry offers. v1 extension points such as actions, value sets, label merge handlers and CLI
-commands have no counterpart. See [Plugin System]({{< docref "docs/concepts/plugin-system.md" >}}).
+OCM v2 has a new plugin protocol, and v1 plugins do not run in it. v2 plugins add repository types, access and input
+types, credential repositories, signing handlers and blob transformers. Actions, value sets, label merge handlers and CLI
+commands have no plugin counterpart. The v1 JFrog plugin is replaced by the built-in
+[Artifactory uploader]({{< docref "docs/reference/configuration/transfer-configuration/artifactory-uploader.md" >}}).
+The ECR plugin has no counterpart. The plugin directory moved from `~/.ocm/plugins` to `~/.config/ocm/plugins`. See
+[Plugin System]({{< docref "docs/concepts/plugin-system.md" >}}).
 
 ## Controllers
 
-The new controllers replace the legacy `ocm-controller`. The `ComponentVersion` resource becomes `Component`, which
-references a new `Repository` resource. `FluxDeployer` becomes `Deployer`, which applies plain manifests itself
-without Flux. `ComponentDescriptor`, `Snapshot`, `Configuration` and `Localization` are gone, and so is the in-cluster
-OCI registry. Configuration and localization move to build time. For a walkthrough, read
-[What changed between legacy and new OCM Controllers](/blog/2026-03-16-ocm-controllers-differences/) and
-[OCM Controllers]({{< docref "docs/concepts/ocm-controllers.md" >}}).
+The new controllers replace the legacy `ocm-controller`. Both use the API group `delivery.ocm.software` and define a
+`Resource` kind with different schemas, so remove the legacy controller and its CRDs before you install the new one.
+
+| Legacy kind | New kind |
+| ----------- | -------- |
+| `ComponentVersion` | `Repository` and `Component` |
+| `ComponentVersion` with `destination` | `Replication` |
+| `Resource` | `Resource`, with a new schema |
+| `FluxDeployer` | `NamespacedDeployer` for plain manifests. Helm charts stay with a Flux `HelmRelease`. |
+| `ComponentDescriptor`, `Snapshot` | None. The descriptor is in the `Component` status, and there is no in-cluster OCI registry. |
+| `Configuration`, `Localization` | None. Localize at build time or in the `HelmRelease` values. |
+
+`Discovery` is new, and the cluster-scoped `Deployer` is deprecated in favor of `NamespacedDeployer`. For the steps,
+see [Migrate from the Legacy OCM Controller]({{< docref "docs/changelog/migrate-from-legacy-ocm-controller.md" >}}).
+For the concepts, see [Kubernetes Controllers]({{< docref "docs/concepts/ocm-controllers.md" >}}) and the
+[Controller CRDs]({{< docref "docs/reference/kubernetes-api/_index.md" >}}).
+
+## Installation
+
+Both CLIs are called `ocm`. The Homebrew formula `open-component-model/tap/ocm` still installs OCM v1. To install
+OCM v2, see [Install the OCM CLI]({{< docref "docs/getting-started/ocm-cli-installation.md" >}}). In GitHub Actions,
+`open-component-model/ocm-setup-action@v2` installs OCM v2. The v2 container image is
+`ghcr.io/open-component-model/cli`.
 
 ## Go Library
 
-The v2 library is a new API in the module `ocm.software/open-component-model/bindings/go`, so code written against
-`ocm.software/ocm` has to be rewritten. The v1 context and registry model is replaced by typed objects in a
-`runtime.Scheme` and plugin-backed registries. The library is still evolving and its API is not yet stable. Start
-with the package list in the
+The v2 library is a new API in the module `ocm.software/open-component-model/bindings/go`. Code written against
+`ocm.software/ocm` has to be rewritten. The library is still evolving and its API is not yet stable. Start with the
+package list in the
 [bindings README](https://github.com/open-component-model/open-component-model/tree/main/bindings/go).
