@@ -89,8 +89,9 @@ enough to cover the worst-case retry chain:
 | `-1`            | Disable retries entirely                    |
 | positive        | That many retries after the initial attempt |
 
-Retries cover 5xx, `429`, `408`, network timeouts, connection resets,
-unexpected EOF, and lost HTTP/2 connections or streams. A request with a body is
+Retries cover 5xx, `429`, `408`, network timeouts, connections that are reset or
+closed before the response arrived, unexpected EOF, and lost HTTP/2 connections
+or streams. A request with a body is
 retried only when the body can be rewound; seekable bodies such as file-backed
 blobs are rewound automatically. A failure after the response started streaming
 cannot be retried by the client; `ocm transfer` retries the whole affected step

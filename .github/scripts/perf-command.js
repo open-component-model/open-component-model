@@ -23,7 +23,7 @@ export function isPerfCommand(body) {
  * github-script entry point: turn a /perf comment into the two commits to benchmark.
  *
  * Sets the outputs run, base_ref, base_sha and pr_sha, and reacts to the comment:
- * 👀 when seen, 🚀 when launched, 😕 when invalid.
+ * 👀 when seen, 🚀 when launched, 😕 when invalid or the author cannot merge.
  *
  * @param {object} deps
  * @param {import("@actions/github-script").AsyncFunctionArguments["github"]} deps.github
@@ -32,7 +32,7 @@ export function isPerfCommand(body) {
  */
 export default async function perfCommand({ github, context, core }) {
   const { owner, repo } = context.repo;
-  const { comment, issue } = /** @type {{ comment: { id: number, body: string }, issue: { number: number } }} */ (context.payload);
+  const { comment, issue } = /** @type {{ comment: { id: number, body: string, user: { login: string } }, issue: { number: number } }} */ (context.payload);
   /** @param {"eyes" | "rocket" | "confused"} content */
   const react = (content) =>
     github.rest.reactions.createForIssueComment({ owner, repo, comment_id: comment.id, content });
@@ -45,10 +45,20 @@ export default async function perfCommand({ github, context, core }) {
     core.setFailed(String(err));
     return;
   }
-  core.setOutput("run", String(run));
   if (!run) {
+    core.setOutput("run", "false");
     return;
   }
+  // The only access check: /perf runs the pull request's code, so it takes the permission to merge it.
+  // The API reports maintain as write.
+  const author = comment.user.login;
+  const { data: access } = await github.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username: author });
+  if (!["admin", "write"].includes(access.permission)) {
+    await react("confused");
+    core.setFailed(`/perf needs write access, ${author} has ${access.role_name}`);
+    return;
+  }
+  core.setOutput("run", "true");
   await react("eyes");
 
   const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: issue.number });

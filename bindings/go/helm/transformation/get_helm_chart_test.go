@@ -333,6 +333,57 @@ func TestGetHelmChart_Transform(t *testing.T) {
 		r.Nil(helmOutput.Output.ProvFile)
 	})
 
+	t.Run("removes the buffered chart file when the download fails", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		ctx := t.Context()
+		tempDir := t.TempDir()
+
+		srv := newChartRepoServer(t, "../testdata")
+
+		transform := &transformation.GetHelmChart{
+			Scheme:             scheme,
+			ResourceRepository: helmresource.NewResourceRepository(nil, helmresource.WithHTTPConfig(plainHTTPConfig())),
+			TempDir:            tempDir,
+		}
+
+		helmAccessData, err := json.Marshal(map[string]string{
+			"helmRepository": srv.URL,
+			"helmChart":      "does-not-exist-0.1.0.tgz",
+		}, runtime.JSONOptions)
+		r.NoError(err)
+
+		spec := &v1alpha1.GetHelmChart{
+			Type: runtime.NewVersionedType(v1alpha1.GetHelmChartType, v1alpha1.Version),
+			ID:   "test-get-helm-chart-cleanup-on-error",
+			Spec: &v1alpha1.GetHelmChartSpec{
+				Resource: &v2.Resource{
+					ElementMeta: v2.ElementMeta{
+						ObjectMeta: v2.ObjectMeta{
+							Name:    "mychart",
+							Version: "0.1.0",
+						},
+					},
+					Type: "helmChart",
+					Access: &runtime.Raw{
+						Type: runtime.Type{
+							Name:    "helm",
+							Version: "v1",
+						},
+						Data: helmAccessData,
+					},
+				},
+			},
+		}
+
+		_, err = transform.Transform(ctx, spec)
+		r.Error(err)
+
+		entries, err := os.ReadDir(tempDir)
+		r.NoError(err)
+		r.Empty(entries, "the buffered chart file must not survive a failed download")
+	})
+
 	t.Run("fails when spec is nil", func(t *testing.T) {
 		t.Parallel()
 		r := require.New(t)

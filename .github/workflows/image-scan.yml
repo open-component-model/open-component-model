@@ -93,13 +93,13 @@ jobs:
         run: grep -E '^(TRIVY_VERSION|OPENSCAP_IMAGE|DOCKLE_IMAGE)=' .env >> "$GITHUB_ENV"
 
       - name: Download image artifact
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ${{ matrix.artifact }}
           path: tmp/artifact
 
       - name: Download OpenVEX
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ${{ needs.vex.outputs.vex_artifact_prefix }}-${{ matrix.arch }}
           path: tmp/vex
@@ -262,7 +262,7 @@ jobs:
 
       - name: Upload reports
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: image-scan-${{ matrix.image }}-${{ matrix.arch }}
           path: |
@@ -371,7 +371,7 @@ jobs:
 
       - name: CIS Kubernetes Benchmark summary
         if: ${{ !cancelled() }}
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const fs = require('node:fs');
@@ -401,7 +401,7 @@ jobs:
 
       - name: NSA/CISA and MITRE summary
         if: ${{ !cancelled() && hashFiles('tmp/chart-scan/kubescape.json') != '' }}
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const report = JSON.parse(require('node:fs').readFileSync('tmp/chart-scan/kubescape.json', 'utf8'));
@@ -434,7 +434,7 @@ jobs:
 
       - name: Upload reports
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: chart-scan
           path: |
