@@ -265,9 +265,9 @@ For the model behind it, see [Credential System]({{< docref "docs/concepts/crede
   `RSASSA-PKCS1-V1_5` and `jsonNormalisation/v3`. Keep the default `jsonNormalisation/v4alpha3`, see
   [Migrate Normalisation Algorithms]({{< docref "docs/changelog/migrate-normalisation-algorithms.md" >}}).
 - **What `ocm verify cv` checks.** It verifies each signature against the descriptor digest. It does not download
-  resources or referenced component versions to recompute their digests, as `ocm verify -V` did in OCM v1. Resource
-  digests are checked on download and when a transfer copies the resource. A component version without signatures
-  fails.
+  resources or referenced component versions to recompute their digests, as `ocm verify -V` did in OCM v1 ([#1437](https://github.com/open-component-model/ocm-project/issues/1437)).
+  Resource digests are checked on download and when a transfer copies the resource. A component version without
+  signatures fails.
 - **Signers.** RSA with plain keys or PEM certificate chains, GPG, and Sigstore keyless. See the guides under
   [Sign]({{< docref "docs/guides/sign/_index.md" >}}).
 - **Timestamps.** RFC 3161 timestamps from OCM v1 are checked without extra flags. Their time cannot prove when the
@@ -302,15 +302,15 @@ The following v1 data does not work in OCM v2:
 | OCI repositories with `componentNameMapping: sha256-digest` | Components are not found | [#1405](https://github.com/open-component-model/ocm-project/issues/1405) |
 | Signatures with `jsonNormalisation/v2` | Cannot be verified | [#1403](https://github.com/open-component-model/ocm-project/issues/1403) |
 | Signatures with `jsonNormalisation/v3` over a signed label with `value: null` | Digest mismatch | [#1402](https://github.com/open-component-model/ocm-project/issues/1402) |
-| Signatures with `jsonNormalisation/v3` over reference labels with `merge` | Digest mismatch | |
-| Signatures with `jsonNormalisation/v1` | OCM v2 computes this algorithm as cc-utils did. Signatures from the OCM v1 CLI fail with a digest mismatch, for example for resource types `blob`, `helmChart`, `filesystem` and `ociArtifact`, or with provider labels. See [Migrate Signing Setup]({{< docref "docs/changelog/migrate-signing-setup.md" >}}). | |
-| Several v1 signatures with different hash or normalisation algorithms on a component version with references | Only the signature created last verifies | |
+| Signatures with `jsonNormalisation/v3` over reference labels with `merge` | Digest mismatch. The specification excludes this case. | [ocm-spec](https://github.com/open-component-model/ocm-spec/blob/9cc597a84484e24524b538442aa9d3f87adfac82/doc/04-extensions/04-algorithms/component-descriptor-normalization-algorithms.md#L261-L263) |
+| Signatures with `jsonNormalisation/v1` | OCM v2 computes this algorithm as cc-utils did. Signatures from the OCM v1 CLI fail with a digest mismatch, for example for resource types `blob`, `helmChart`, `filesystem` and `ociArtifact`, or with provider labels. See [Migrate Signing Setup]({{< docref "docs/changelog/migrate-signing-setup.md" >}}). | [#1434](https://github.com/open-component-model/ocm-project/issues/1434) |
+| Several v1 signatures with different hash or normalisation algorithms on a component version with references | Only the signature created last verifies | [#1436](https://github.com/open-component-model/ocm-project/issues/1436) |
 | Certificate chains with an embedded self-signed root (v1 `create rsakeypair --ca-cert`) | Rejected | [#1376](https://github.com/open-component-model/ocm-project/issues/1376) |
 | Certificate chain signatures whose `issuer` names only part of the certificate subject | Rejected with `issuer mismatch`. Signatures written by the v1 CLI record the full subject and are not affected. | [#1418](https://github.com/open-component-model/ocm-project/issues/1418) |
 | Sigstore signatures from the v1 CLI | Cannot be verified. `ocm verify cv` without `--signature` fails as well. Re-sign with the v2 [Sigstore signer]({{< docref "docs/guides/sign/sign-with-sigstore.md" >}}). | [#1376](https://github.com/open-component-model/ocm-project/issues/1376) |
 | Private keys encrypted with v1 `create rsakeypair --encrypt` | Cannot be read | |
-| Helm resources copied with `--copy-resources` or a local blob uploader | Digest is rewritten and v1 signatures fail | [#1368](https://github.com/open-component-model/ocm-project/issues/1368) |
-| Resources with the access type `git` or `git/v1alpha1` | Download and copy fail with a digest mismatch. Verify and transfer by reference work. | [#1376](https://github.com/open-component-model/ocm-project/issues/1376) |
+| Helm resources copied with `--copy-resources` or a local blob uploader | Digest is rewritten and v1 signatures fail. The new digest changes with every transfer. | [#1368](https://github.com/open-component-model/ocm-project/issues/1368), [#1435](https://github.com/open-component-model/ocm-project/issues/1435) |
+| Resources with the access type `git` or `git/v1alpha1` | Download and copy fail with a digest mismatch. Verify and transfer by reference work. | [#1433](https://github.com/open-component-model/ocm-project/issues/1433) |
 | Resources with the access types `npm`, `maven`, `ocm` or `none` | Cannot be downloaded or copied | [#1376](https://github.com/open-component-model/ocm-project/issues/1376) |
 | Resources with the access type `s3/v1` | `--copy-resources` keeps them by reference | [#1404](https://github.com/open-component-model/ocm-project/issues/1404) |
 | Sources stored as local blobs | The component version cannot be transferred | [Migrate from Sources to Resources]({{< docref "docs/changelog/migrate-from-sources.md" >}}) |

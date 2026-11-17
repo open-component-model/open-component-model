@@ -191,9 +191,9 @@ record the exact subject and are not affected.
 | v1 signature | In OCM v2 |
 | ------------ | --------- |
 | RSA with `jsonNormalisation/v3`, the v1 default | Verifies, with a warning about the older normalisation algorithm. Exceptions: a signed label with `value: null` ([ocm-project#1402](https://github.com/open-component-model/ocm-project/issues/1402)) or reference labels with `merge` give `digest mismatch`. Re-sign. |
-| RSA with `jsonNormalisation/v1` | OCM v2 computes this algorithm as cc-utils did. A v1 CLI signature gives `digest mismatch` if a resource has the type `blob`, `helmChart`, `filesystem` or `ociArtifact`, or `directoryTree/v1`, `npmPackage/v1` or `ociImage/v1`, if the provider has labels, or if a signed label value contains `<`, `>`, `&`, an exponent number or an integer above 2^53. Re-sign. |
+| RSA with `jsonNormalisation/v1` | OCM v2 computes this algorithm as cc-utils did. A v1 CLI signature gives `digest mismatch` if a resource has the type `blob`, `helmChart`, `filesystem` or `ociArtifact`, or `directoryTree/v1`, `npmPackage/v1` or `ociImage/v1`, if the provider has labels, or if a signed label value contains `<`, `>`, `&`, an exponent number or an integer above 2^53 ([#1434](https://github.com/open-component-model/ocm-project/issues/1434)). Re-sign. |
 | RSA with `jsonNormalisation/v2` | `unknown normalisation algorithm` ([ocm-project#1403](https://github.com/open-component-model/ocm-project/issues/1403)). Re-sign. |
-| Several signatures with different hash or normalisation algorithms on a component version with references | Only the signature created last verifies. Re-sign. |
+| Several signatures with different hash or normalisation algorithms on a component version with references | Only the signature created last verifies ([#1436](https://github.com/open-component-model/ocm-project/issues/1436)). Re-sign. |
 | Certificate chain with an embedded root | Rejected, see step 5 |
 | Sigstore (`sigstore`, `sigstore-v2`) | Rejected. `ocm verify cv` without `--signature` then fails even if another signature is valid, so pass `--signature` for the others. Re-sign with the [Sigstore signer]({{< docref "docs/guides/sign/sign-with-sigstore.md" >}}). |
 | With an RFC 3161 timestamp | Verifies. See below. |
