@@ -156,12 +156,11 @@ func (m Metadata) PruneScope() *PruneScope {
 // Config for creating an ApplySet.
 type Config struct {
 	Client client.Client
-	// Reader lists the ApplySet members for conflict detection as Client's identity. It must read live: a cache needs
-	// an informer per applied kind, which requires the watch permission and holds every object of that kind in
-	// memory. Required by Apply, and never defaulted to Client, which may be cached.
+	// Reader reads the applied objects by name for conflict detection, as Client's identity. It must read live: a
+	// cache needs an informer per applied kind, which requires the watch permission and holds every object of that
+	// kind in memory. Required by Apply, and never defaulted to Client, which may be cached.
 	Reader client.Reader
-	// Members optionally answers conflict detection from a member cache. Reader then only reads the applied objects
-	// the cache does not show as members of this ApplySet, and lists a kind live while the cache cannot answer for it.
+	// Members optionally spares Reader the applied objects a member cache shows as members of this ApplySet.
 	Members         MemberLister
 	RESTMapper      meta.RESTMapper
 	Log             logr.Logger
@@ -273,8 +272,7 @@ func (a *ApplySet) Apply(ctx context.Context, resources []Resource, mode ApplyMo
 		toApply = append(toApply, applyEntry{resource: r, mapping: mapping})
 	}
 
-	// Batch conflict detection: one read per unique (GVK, namespace) instead of
-	// individual GETs per resource.
+	// Conflict detection reads only the objects being applied, never every member of their kinds.
 	conflicts, err := a.detectConflicts(ctx, toApply)
 	if err != nil {
 		return nil, fmt.Errorf("conflict detection failed: %w", err)
@@ -454,8 +452,8 @@ type conflictKey struct {
 	name      string
 }
 
-// detectConflicts finds the applied resources that already belong to a different ApplySet, reading the members
-// once per unique (GVK, namespace) instead of once per resource.
+// detectConflicts finds the applied resources that already belong to a different ApplySet, checking each
+// (GVK, namespace) in parallel.
 //
 // Returns a map from conflictKey to the owning ApplySet ID for any conflicts found.
 func (a *ApplySet) detectConflicts(ctx context.Context, entries []applyEntry) (map[conflictKey]string, error) {
@@ -505,37 +503,11 @@ func (a *ApplySet) detectConflicts(ctx context.Context, entries []applyEntry) (m
 	return conflicts, nil
 }
 
-// ownersOf returns the owning ApplySet of each member of a kind in a namespace, covering at least the applied keys.
+// ownersOf returns the owning ApplySet of each applied key of a kind in a namespace. It reads every key live by name
+// with Reader unless the member cache shows it as this ApplySet's own: the cache lags and reads as the controller,
+// while Apply forces ownership. A read by name is a single key on the API server and needs only the list permission.
 func (a *ApplySet) ownersOf(ctx context.Context, gvk schema.GroupVersionKind, namespace string, applied []conflictKey) (map[conflictKey]string, error) {
-	// Covers every ApplySet member of the kind, not just this ApplySet's, and the check reads nothing but their
-	// metadata.
-	listOpts := []client.ListOption{client.HasLabels{ApplysetPartOfLabel}}
-	if namespace != "" {
-		listOpts = append(listOpts, client.InNamespace(namespace))
-	}
-
-	if a.members != nil {
-		cached := newMemberList(gvk)
-		synced, err := a.members.ListSynced(ctx, cached, listOpts...)
-		if err != nil {
-			a.log.V(1).Info("listing ApplySet members live after the member cache failed", "gvk", gvk.String(), "error", err)
-		}
-		if synced && err == nil {
-			return a.confirmOwners(ctx, gvk, namespace, applied, ownersIn(gvk, cached))
-		}
-	}
-
-	live := newMemberList(gvk)
-	if err := a.reader.List(ctx, live, listOpts...); err != nil {
-		return nil, err
-	}
-
-	return ownersIn(gvk, live), nil
-}
-
-// confirmOwners reads with Reader every applied key the cache does not show as this ApplySet's own: the cache lags
-// and reads as the controller, while Apply forces ownership. Reading by name needs only the list permission.
-func (a *ApplySet) confirmOwners(ctx context.Context, gvk schema.GroupVersionKind, namespace string, applied []conflictKey, cached map[conflictKey]string) (map[conflictKey]string, error) {
+	cached := a.cachedOwners(ctx, gvk, namespace)
 	owners := make(map[conflictKey]string, len(applied))
 	for _, key := range applied {
 		if cached[key] == a.applySetID {
@@ -555,6 +527,29 @@ func (a *ApplySet) confirmOwners(ctx context.Context, gvk schema.GroupVersionKin
 	}
 
 	return owners, nil
+}
+
+// cachedOwners returns the members the member cache holds of a kind in a namespace, or nil while it cannot answer.
+func (a *ApplySet) cachedOwners(ctx context.Context, gvk schema.GroupVersionKind, namespace string) map[conflictKey]string {
+	if a.members == nil {
+		return nil
+	}
+
+	var opts []client.ListOption
+	if namespace != "" {
+		opts = append(opts, client.InNamespace(namespace))
+	}
+	cached := newMemberList(gvk)
+	synced, err := a.members.ListSynced(ctx, cached, opts...)
+	if err != nil {
+		a.log.V(1).Info("reading the applied objects live after the member cache failed", "gvk", gvk.String(), "error", err)
+		return nil
+	}
+	if !synced {
+		return nil
+	}
+
+	return ownersIn(gvk, cached)
 }
 
 func newMemberList(gvk schema.GroupVersionKind) *metav1.PartialObjectMetadataList {

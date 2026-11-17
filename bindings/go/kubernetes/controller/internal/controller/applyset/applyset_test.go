@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -123,11 +124,22 @@ func newFakeClient(objs ...client.Object) client.Client {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 
-	builder := fake.NewClientBuilder().WithScheme(scheme)
+	builder := withNameIndex(fake.NewClientBuilder().WithScheme(scheme))
 	if len(objs) > 0 {
 		builder = builder.WithObjects(objs...)
 	}
 	return builder.Build()
+}
+
+// withNameIndex lets the fake client serve the metadata.name field selector conflict detection reads with, which
+// the API server supports for every kind.
+func withNameIndex(builder *fake.ClientBuilder) *fake.ClientBuilder {
+	name := func(obj client.Object) []string { return []string{obj.GetName()} }
+	for _, obj := range []client.Object{&corev1.ConfigMap{}, &corev1.Secret{}, &corev1.Namespace{}} {
+		builder = builder.WithIndex(obj, "metadata.name", name)
+	}
+
+	return builder
 }
 
 func TestApply_BasicSSA(t *testing.T) {
@@ -1332,7 +1344,7 @@ func TestPrune_TerminatingObjectIsPendingWithoutDelete(t *testing.T) {
 }
 
 // TestApply_ConflictDetection_DoesNotTransferObjectContents covers the OOM when many deployers share a namespace
-// (ocm-project#1412): the check reads only metadata, so the list must not carry the members' contents.
+// (ocm-project#1412): the check reads only the metadata of the applied objects, never the other members.
 func TestApply_ConflictDetection_DoesNotTransferObjectContents(t *testing.T) {
 	r := require.New(t)
 
@@ -1358,9 +1370,10 @@ func TestApply_ConflictDetection_DoesNotTransferObjectContents(t *testing.T) {
 	}
 
 	var (
-		mu         sync.Mutex
-		listAccept []string
-		listBytes  int
+		mu             sync.Mutex
+		listAccept     []string
+		fieldSelectors []string
+		listBytes      int
 	)
 
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -1371,9 +1384,11 @@ func TestApply_ConflictDetection_DoesNotTransferObjectContents(t *testing.T) {
 		switch request.Method {
 		case http.MethodGet:
 			accept := request.Header.Get("Accept")
-			body, err = configMapListResponse(accept, stored)
+			selector := request.URL.Query().Get("fieldSelector")
+			body, err = configMapListResponse(accept, byFieldSelector(stored, selector))
 			mu.Lock()
 			listAccept = append(listAccept, accept)
+			fieldSelectors = append(fieldSelectors, selector)
 			listBytes += len(body)
 			mu.Unlock()
 		case http.MethodPatch:
@@ -1418,7 +1433,18 @@ func TestApply_ConflictDetection_DoesNotTransferObjectContents(t *testing.T) {
 
 	r.Len(listAccept, 1)
 	r.Contains(listAccept[0], "as=PartialObjectMetadataList", "conflict detection must request metadata only")
+	r.Equal([]string{"metadata.name=cm1"}, fieldSelectors, "conflict detection must read the applied object alone")
 	r.Less(listBytes, payloadSize, "conflict detection must not read the members' contents")
+}
+
+// byFieldSelector filters items by a metadata.name field selector, as the API server does.
+func byFieldSelector(items []corev1.ConfigMap, selector string) []corev1.ConfigMap {
+	name, ok := strings.CutPrefix(selector, "metadata.name=")
+	if !ok {
+		return items
+	}
+
+	return slices.DeleteFunc(slices.Clone(items), func(item corev1.ConfigMap) bool { return item.Name != name })
 }
 
 // configMapListResponse answers a LIST with metadata only when the client asks for it, as the API server does.
@@ -1513,19 +1539,18 @@ func TestApply_ConflictDetection_MemberCache(t *testing.T) {
 		liveErr     error
 		wantOwner   string
 		wantErr     string
-		wantLists   int
 		wantByNames int
 	}{
-		"lists live while the cache has not synced the kind": {
-			live:      []client.Object{member(ID(other))},
-			wantOwner: ID(other),
-			wantLists: 1,
+		"reads the applied object by name while the cache has not synced the kind": {
+			live:        []client.Object{member(ID(other))},
+			wantOwner:   ID(other),
+			wantByNames: 1,
 		},
-		"lists live when the cache fails": {
-			members:   fakeMembers{synced: true, err: errors.New("cache failed")},
-			live:      []client.Object{member(ID(other))},
-			wantOwner: ID(other),
-			wantLists: 1,
+		"reads the applied object by name when the cache fails": {
+			members:     fakeMembers{synced: true, err: errors.New("cache failed")},
+			live:        []client.Object{member(ID(other))},
+			wantOwner:   ID(other),
+			wantByNames: 1,
 		},
 		"reads nothing for an object the cache shows as its own": {
 			members: fakeMembers{synced: true, objects: []client.Object{member(ID(parent))}},
@@ -1567,8 +1592,7 @@ func TestApply_ConflictDetection_MemberCache(t *testing.T) {
 			lists, byNames := 0, 0
 			scheme := runtime.NewScheme()
 			r.NoError(corev1.AddToScheme(scheme))
-			reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.live...).
-				WithIndex(&corev1.ConfigMap{}, "metadata.name", func(obj client.Object) []string { return []string{obj.GetName()} }).
+			reader := withNameIndex(fake.NewClientBuilder().WithScheme(scheme)).WithObjects(tt.live...).
 				WithInterceptorFuncs(interceptor.Funcs{
 					List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
 						listOpts := &client.ListOptions{}
@@ -1611,7 +1635,7 @@ func TestApply_ConflictDetection_MemberCache(t *testing.T) {
 			} else {
 				r.NoError(result.Applied[0].Error)
 			}
-			r.Equal(tt.wantLists, lists, "live lists of the kind")
+			r.Zero(lists, "conflict detection must never list every member of the kind")
 			r.Equal(tt.wantByNames, byNames, "live reads by name")
 		})
 	}
