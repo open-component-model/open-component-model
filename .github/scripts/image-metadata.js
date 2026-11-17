@@ -1,17 +1,16 @@
 // @ts-check
-import { execFile } from "node:child_process";
-import { writeFile } from "node:fs/promises";
-import { promisify } from "node:util";
+import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 
 /**
- * Checks that an image in an OCI archive carries the metadata that makes its
+ * Checks that an image in an OCI image layout carries the metadata that makes its
  * function and history traceable (BSI IT-Grundschutz SYS.1.6.A12): the
  * pre-defined OCI annotations on the platform manifest (set by
  * oci-annotations.sh) and a SLSA provenance attestation whose in-toto statement
  * names that manifest (BuildKit attestation manifest).
  */
 
-const run = promisify(execFile);
+const DIGEST = /^[a-z0-9]+(?:[.+_-][a-z0-9]+)*:[a-zA-Z0-9=_-]+$/;
 
 /** Annotations every image manifest must carry, without the org.opencontainers.image. prefix. */
 export const REQUIRED_ANNOTATIONS = ["title", "description", "version", "revision", "source", "created", "vendor", "licenses"];
@@ -119,21 +118,26 @@ export async function checkImage(blob, index, platform) {
 }
 
 /**
- * Read blobs from an OCI archive (tar) with the system tar.
+ * Read a JSON blob of an extracted OCI image layout.
  *
- * @param {string} archive
- * @param {string} file
+ * @param {string} layout - directory of the layout
+ * @param {string} digest
+ * @returns {Promise<Blob>}
  */
-async function readMember(archive, file) {
-    const { stdout } = await run("tar", ["-xOf", archive, file], { maxBuffer: 64 * 1024 * 1024 });
-    return JSON.parse(stdout);
+async function readBlob(layout, digest) {
+    if (!DIGEST.test(digest)) throw new Error(`malformed digest ${digest}`);
+    const [algorithm, hex] = digest.split(":");
+    return JSON.parse(await readFile(path.join(layout, "blobs", algorithm, hex), "utf8"));
 }
 
 /**
  * GitHub Actions entrypoint.
  *
  * Environment variables:
- * - OCI_ARCHIVE: OCI image archive (required)
+ * - OCI_LAYOUT: directory of the extracted OCI image layout (required)
+ * - OCI_INDEX: index to start from (default <OCI_LAYOUT>/index.json); the scan
+ *   job narrows the layout's own index to one platform, which drops the
+ *   attestation manifests this check needs, and keeps the original here.
  * - ARCH: architecture to check (required); the OS is linux
  * - OUTPUT: path of the JSON result (required)
  * - SUMMARY_TITLE: heading of the job summary; no summary is written without it
@@ -141,13 +145,13 @@ async function readMember(archive, file) {
  * @param {import('@actions/github-script').AsyncFunctionArguments} args
  */
 export default async function imageMetadataAction({ core }) {
-    const { OCI_ARCHIVE: archive, ARCH: architecture, OUTPUT: output, SUMMARY_TITLE: title } = process.env;
-    if (!archive || !architecture || !output) {
-        core.setFailed("OCI_ARCHIVE, ARCH and OUTPUT environment variables are required");
+    const { OCI_LAYOUT: layout, OCI_INDEX: indexFile, ARCH: architecture, OUTPUT: output, SUMMARY_TITLE: title } = process.env;
+    if (!layout || !architecture || !output) {
+        core.setFailed("OCI_LAYOUT, ARCH and OUTPUT environment variables are required");
         return;
     }
-    const blob = (/** @type {string} */ digest) => readMember(archive, `blobs/${digest.replace(":", "/")}`);
-    const checks = await checkImage(blob, await readMember(archive, "index.json"), { os: "linux", architecture });
+    const index = JSON.parse(await readFile(indexFile || path.join(layout, "index.json"), "utf8"));
+    const checks = await checkImage((digest) => readBlob(layout, digest), index, { os: "linux", architecture });
     await writeFile(output, `${JSON.stringify(checks, null, 2)}\n`);
 
     for (const c of checks) {

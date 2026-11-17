@@ -2,6 +2,7 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import * as yaml from "js-yaml";
+import { DOMParser, onWarningStopParsing } from "@xmldom/xmldom";
 
 /**
  * Evaluates the BSI IT-Grundschutz requirements in .github/benchmarks/bsi
@@ -23,8 +24,11 @@ const UNCHECKED = new Set(["manual", "operator"]);
 export const LEVELS = /** @type {const} */ (["basic", "standard", "elevated"]);
 
 /**
- * dockle v0.4 checkpoints. dockle reports only the checks that did not pass,
- * so a mapped code must be one of these to be counted as passed when absent.
+ * dockle v0.4 checkpoints (pkg/types/checkpoint.go of the pinned image).
+ * dockle reports only the checks that did not pass, so a mapped code must be
+ * one of these to be counted as passed when absent. addDockle checks the set
+ * against every report, so a dockle update that adds, drops or renames a
+ * checkpoint fails the report instead of passing the mapped rules silently.
  */
 export const DOCKLE_CHECKS = new Set([
     "CIS-DI-0001", "CIS-DI-0005",
@@ -83,7 +87,8 @@ export function validateModule(module) {
 }
 
 /**
- * Load all control files of a directory, sorted by module.
+ * Load all control files of a directory, sorted by module id (the file names
+ * need not sort the same way).
  *
  * @param {string} dir
  * @returns {Promise<Module[]>}
@@ -97,7 +102,7 @@ export async function loadModules(dir) {
         if (errors.length > 0) throw new Error(`${file}: ${errors.join("; ")}`);
         modules.push(module);
     }
-    return modules;
+    return modules.sort((a, b) => a.module.localeCompare(b.module));
 }
 
 /**
@@ -112,18 +117,24 @@ export function stigCheck(id) {
 }
 
 /**
- * Rule results of an XCCDF results document, as OpenSCAP writes them. Only the
- * rule-result elements are of interest, so the document is scanned for them
- * instead of parsed; element names may carry a namespace prefix.
+ * Rule results of an XCCDF results document, as OpenSCAP writes them. XCCDF
+ * 1.1 and 1.2 use different namespaces and OpenSCAP writes prefixed element
+ * names, so elements are matched by local name in any namespace.
  *
  * @param {string} xml
  * @returns {{ id: string, result: string }[]}
  */
 export function parseXccdfResults(xml) {
-    const pattern = /<(?:\w+:)?rule-result\b[^>]*\bidref="([^"]+)"[^>]*>([\s\S]*?)<\/(?:\w+:)?rule-result>/g;
-    return [...xml.matchAll(pattern)].flatMap(([, id, body]) => {
-        const result = body.match(/<(?:\w+:)?result>([^<]+)<\/(?:\w+:)?result>/)?.[1];
-        return result ? [{ id, result: result.trim() }] : [];
+    const doc = new DOMParser({ onError: onWarningStopParsing }).parseFromString(xml, "application/xml");
+    /** @param {{ getElementsByTagNameNS: (ns: string, name: string) => { length: number, item: (i: number) => any } }} node @param {string} name */
+    const children = (node, name) => {
+        const list = node.getElementsByTagNameNS("*", name);
+        return Array.from({ length: list.length }, (_, i) => list.item(i));
+    };
+    return children(doc, "rule-result").flatMap((element) => {
+        const id = element.getAttribute("idref");
+        const result = children(element, "result")[0]?.textContent?.trim();
+        return id && result ? [{ id, result }] : [];
     });
 }
 
@@ -148,23 +159,38 @@ export function addStig(results, xml, target) {
 }
 
 /**
- * dockle lists only checks that did not pass; WARN and FATAL fail the scan,
- * INFO and SKIP are not a verdict.
+ * dockle lists only the checks that did not pass and counts every checkpoint it
+ * ran in its summary. A listed check is a finding whatever level dockle gives
+ * it: the image-scan job gates on WARN and FATAL, but a mapped check reported
+ * at INFO (CIS-DI-0008, setuid/setgid files, is INFO by default) is still a
+ * deviation and fails the requirement it is mapped to. SKIP (a check that does
+ * not apply to the image) is not a verdict.
  *
  * @param {Results} results
  * @param {any} report - dockle JSON report
  * @param {string} target
+ * @returns {string[]} problems with the report itself, not with the image
  */
 export function addDockle(results, report, target) {
-    if (!report?.summary) return;
+    if (!report?.summary) return [`${target}: dockle report has no summary`];
     /** @type {Map<string, string>} */
     const levels = new Map((report.details ?? []).map((/** @type {any} */ d) => [d.code, d.level]));
+    const problems = [];
+    // Every checkpoint lands in exactly one summary counter, except the ones
+    // silenced with --ignore, which dockle lists as IGNORE and counts nowhere.
+    const ran = Object.values(report.summary ?? {}).reduce((/** @type {number} */ n, v) => n + (typeof v === "number" ? v : 0), 0)
+        + [...levels.values()].filter((l) => l === "IGNORE").length;
+    if (ran !== DOCKLE_CHECKS.size) problems.push(`${target}: dockle ran ${ran} checks, expected the ${DOCKLE_CHECKS.size} known checkpoints`);
+    for (const code of levels.keys()) {
+        if (!DOCKLE_CHECKS.has(code)) problems.push(`${target}: dockle reported unknown check ${code}`);
+    }
     for (const code of DOCKLE_CHECKS) {
         const level = levels.get(code);
         /** @type {Outcome} */
-        const outcome = level === undefined ? "pass" : level === "WARN" || level === "FATAL" ? "fail" : "skip";
+        const outcome = level === undefined ? "pass" : level === "SKIP" || level === "IGNORE" ? "skip" : "fail";
         observe(results, `dockle:${code}`, { target, outcome });
     }
+    return problems;
 }
 
 /**
@@ -285,15 +311,26 @@ async function readOptional(file) {
  * image-scan-<image>-<arch>/{stig/{ocm,gpos}-results.xml,dockle.json,metadata.json}
  * and chart-scan/{trivy-all,trivy,kubescape}.json.
  *
+ * The scan targets are given, not discovered: a job that uploaded nothing
+ * leaves no directory behind, so its rules would silently be evaluated by the
+ * remaining targets alone.
+ *
  * @param {string} reportsDir
+ * @param {string[]} expected - scan targets (<image>-<arch>) whose reports must be there
  * @returns {Promise<{ results: Results, errors: string[] }>}
  */
-export async function collect(reportsDir) {
+export async function collect(reportsDir, expected) {
     /** @type {Results} */
     const results = new Map();
     const errors = [];
     const images = (await readdir(reportsDir)).filter((d) => d.startsWith("image-scan-")).sort();
-    if (images.length === 0) errors.push(`no image-scan-* reports in ${reportsDir}`);
+    const found = new Set(images.map((d) => d.slice("image-scan-".length)));
+    for (const target of expected) {
+        if (!found.has(target)) errors.push(`missing image-scan-${target} reports in ${reportsDir}`);
+    }
+    for (const target of found) {
+        if (!expected.includes(target)) errors.push(`image-scan-${target} is not an expected scan target`);
+    }
     for (const dir of images) {
         const target = dir.slice("image-scan-".length);
         for (const file of ["stig/ocm-results.xml", "stig/gpos-results.xml"]) {
@@ -303,7 +340,7 @@ export async function collect(reportsDir) {
         }
         const dockle = await readOptional(path.join(reportsDir, dir, "dockle.json"));
         if (dockle === undefined) errors.push(`${dir}: missing dockle.json`);
-        else addDockle(results, JSON.parse(dockle), target);
+        else errors.push(...addDockle(results, JSON.parse(dockle), target));
         const metadata = await readOptional(path.join(reportsDir, dir, "metadata.json"));
         if (metadata === undefined) errors.push(`${dir}: missing metadata.json`);
         else addOci(results, JSON.parse(metadata), target);
@@ -325,6 +362,8 @@ const ICON = { pass: "✅", accepted: "☑️", fail: "❌", missing: "❓", man
  *
  * Environment variables:
  * - REPORTS_DIR: directory with the downloaded scan artifacts (required)
+ * - EXPECTED_TARGETS: scan targets (<image>-<arch>) the image-scan matrix produces,
+ *   separated by whitespace or commas (required); a target without reports fails.
  * - CONTROLS_DIR: directory with the control files (default .github/benchmarks/bsi)
  * - OUTPUT: path of the JSON result (optional)
  *
@@ -333,15 +372,16 @@ const ICON = { pass: "✅", accepted: "☑️", fail: "❌", missing: "❓", man
 export default async function bsiReportAction({ core }) {
     const {
         REPORTS_DIR: reportsDir,
+        EXPECTED_TARGETS: targets,
         CONTROLS_DIR: controlsDir = ".github/benchmarks/bsi",
         OUTPUT: output,
     } = process.env;
-    if (!reportsDir) {
-        core.setFailed("REPORTS_DIR environment variable is required");
+    if (!reportsDir || !targets) {
+        core.setFailed("REPORTS_DIR and EXPECTED_TARGETS environment variables are required");
         return;
     }
     const modules = await loadModules(controlsDir);
-    const { results, errors } = await collect(reportsDir);
+    const { results, errors } = await collect(reportsDir, targets.split(/[\s,]+/).filter(Boolean));
     const report = evaluate(modules, results);
     if (output) await writeFile(output, `${JSON.stringify(report, null, 2)}\n`);
 

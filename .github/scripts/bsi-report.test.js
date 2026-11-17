@@ -1,8 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import { addDockle, addKubescape, addStig, addTrivy, evaluate, loadModules, parseXccdfResults, ruleVerdict, stigCheck, validateModule } from "./bsi-report.js";
+import { addDockle, addKubescape, addStig, addTrivy, collect, DOCKLE_CHECKS, evaluate, loadModules, parseXccdfResults, ruleVerdict, stigCheck, validateModule } from "./bsi-report.js";
 
 const repo = path.resolve(import.meta.dirname, "../..");
 
@@ -71,17 +72,35 @@ describe("ruleVerdict", () => {
 });
 
 describe("addDockle", () => {
-    it("counts unlisted checks as passed and only WARN and FATAL as failed", () => {
+    /** dockle counts every checkpoint it ran: the ones it lists, plus the rest as passed. */
+    const report = (details) => {
+        const summary = { fatal: 0, warn: 0, info: 0, skip: 0, pass: DOCKLE_CHECKS.size - details.length };
+        for (const d of details) summary[d.level.toLowerCase()]++;
+        return { summary, details };
+    };
+
+    it("counts unlisted checks as passed and every listed one as a finding", () => {
         const results = new Map();
-        addDockle(results, { summary: {}, details: [{ code: "CIS-DI-0001", level: "WARN" }, { code: "CIS-DI-0005", level: "INFO" }] }, "cli");
+        // CIS-DI-0008 (setuid/setgid files) is INFO in dockle's default level
+        // map, so it never fails the scan, but it is still a finding here.
+        const details = [{ code: "CIS-DI-0001", level: "WARN" }, { code: "CIS-DI-0008", level: "INFO" }, { code: "DKL-LI-0003", level: "SKIP" }];
+        assert.deepEqual(addDockle(results, report(details), "cli"), []);
         assert.deepEqual(results.get("dockle:CIS-DI-0001"), [{ target: "cli", outcome: "fail" }]);
-        assert.deepEqual(results.get("dockle:CIS-DI-0005"), [{ target: "cli", outcome: "skip" }]);
-        assert.deepEqual(results.get("dockle:CIS-DI-0008"), [{ target: "cli", outcome: "pass" }]);
+        assert.deepEqual(results.get("dockle:CIS-DI-0008"), [{ target: "cli", outcome: "fail" }]);
+        assert.deepEqual(results.get("dockle:DKL-LI-0003"), [{ target: "cli", outcome: "skip" }]);
+        assert.deepEqual(results.get("dockle:CIS-DI-0010"), [{ target: "cli", outcome: "pass" }]);
+    });
+
+    it("reports a dockle whose checkpoints no longer match the known set", () => {
+        const dropped = addDockle(new Map(), { summary: { fatal: 0, warn: 0, info: 0, skip: 0, pass: DOCKLE_CHECKS.size - 1 }, details: [] }, "cli");
+        assert.match(dropped.join(), new RegExp(`dockle ran ${DOCKLE_CHECKS.size - 1} checks, expected the ${DOCKLE_CHECKS.size} known checkpoints`));
+        const renamed = addDockle(new Map(), report([{ code: "CIS-DI-0011", level: "WARN" }]), "cli");
+        assert.match(renamed.join(), /dockle reported unknown check CIS-DI-0011/);
     });
 
     it("records nothing for a report without a summary", () => {
         const results = new Map();
-        addDockle(results, {}, "cli");
+        assert.match(addDockle(results, {}, "cli").join(), /dockle report has no summary/);
         assert.equal(results.size, 0);
     });
 });
@@ -167,5 +186,28 @@ describe("evaluate", () => {
         }], results);
         assert.deepEqual(module.controls.map((c) => [c.id, c.result]), [["SYS.1.6.A1", "manual"], ["SYS.1.6.A8", "accepted"], ["SYS.1.6.A17", "fail"]]);
         assert.deepEqual(module.controls[2].rules.map((r) => [r.rule, r.verdict]), [["trivy:KSV-0012", "pass"], ["trivy:KSV-9999", "missing"]]);
+    });
+});
+
+describe("collect", () => {
+    /** @param {string[]} dirs */
+    const reportsDir = async (dirs) => {
+        const dir = await mkdtemp(path.join(tmpdir(), "bsi-reports-"));
+        for (const d of dirs) await mkdir(path.join(dir, d), { recursive: true });
+        return dir;
+    };
+
+    it("fails on an expected scan target that uploaded no reports", async (t) => {
+        const dir = await reportsDir(["image-scan-cli-amd64", "chart-scan"]);
+        t.after(() => rm(dir, { recursive: true, force: true }));
+        const { errors } = await collect(dir, ["cli-amd64", "controller-amd64"]);
+        assert.ok(errors.some((e) => e.includes("missing image-scan-controller-amd64")), errors.join("; "));
+    });
+
+    it("fails on reports of a target nobody expects", async (t) => {
+        const dir = await reportsDir(["image-scan-cli-amd64", "image-scan-cli-s390x"]);
+        t.after(() => rm(dir, { recursive: true, force: true }));
+        const { errors } = await collect(dir, ["cli-amd64"]);
+        assert.ok(errors.some((e) => e.includes("image-scan-cli-s390x is not an expected scan target")), errors.join("; "));
     });
 });
