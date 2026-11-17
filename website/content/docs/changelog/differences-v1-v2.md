@@ -1,6 +1,6 @@
 ---
 title: "Key Differences Between OCM v1 and v2"
-description: "What changes from OCM v1 to OCM v2: breaking changes, spec support, CLI, configuration, signing, stored data, plugins and controllers, with migration guides."
+description: "Moving from OCM v1 to OCM v2: migration order, your v1 tasks in v2, breaking changes and every difference, with the guide for each."
 icon: "arrow-autofit-right"
 slug: "differences-v1-v2"
 weight: 5
@@ -10,10 +10,56 @@ toc: true
 OCM v2 is a rebuild of the OCM CLI, the Kubernetes controllers and the Go library. Both versions build on the
 [OCM specification](https://github.com/open-component-model/ocm-spec), and OCM v2 reads most component versions that
 OCM v1 created. Commands, flags, configuration, plugins and the library API changed, and some behavior changed without
-an error message. Use this page to plan a migration and to find the guide for each change.
+an error message. This page gives you a migration order, shows how your daily OCM v1 tasks look in OCM v2, and lists
+every difference with the guide that covers it.
 
 This page compares the OCM v1 CLI 0.55 with the current OCM v2 release. The
-[legacy documentation](https://ocm.software/legacy/docs/) still describes OCM v1.
+[legacy documentation](https://ocm.software/legacy/docs/) still describes OCM v1. If you are new to OCM v2, start with
+[Getting Started]({{< docref "docs/getting-started/_index.md" >}}) and [How OCM Works]({{< docref "docs/overview/how-ocm-works.md" >}}).
+
+## Migrate Step by Step
+
+Component versions that OCM v1 published keep working. You do not have to rebuild or re-sign them before you switch,
+except for the cases listed under [Data Compatibility](#data-compatibility). Move in this order:
+
+1. **Install OCM v2 next to OCM v1.** Both binaries are called `ocm`, and the Homebrew formula still installs OCM v1,
+   so keep one of them under another name while you migrate. See
+   [Install the OCM CLI]({{< docref "docs/getting-started/ocm-cli-installation.md" >}}).
+2. **Give OCM v2 its own configuration file.** OCM v1 rejects most v2 configuration types, and OCM v2 fails on some
+   v1 entries. Pass the v2 file with `--config`, which replaces the default search. See [Configuration](#configuration).
+3. **Check your existing component versions with OCM v2.** Run `ocm get cv` and `ocm verify cv` against the
+   repositories you publish to. These commands only read. Compare the results with
+   [Data Compatibility](#data-compatibility).
+4. **Move credentials and resolvers.** See
+   [Migrate Legacy Credentials]({{< docref "docs/changelog/migrate-legacy-credentials.md" >}}) and
+   [Migrate Legacy Resolvers]({{< docref "docs/changelog/migrate-legacy-resolvers.md" >}}).
+5. **Move verification before signing.** OCM v1 cannot verify signatures that OCM v2 creates. Switch every verifier
+   to OCM v2 first, then the signers. See [Migrate Signing Setup]({{< docref "docs/changelog/migrate-signing-setup.md" >}}).
+6. **Move your builds.** Convert component constructors and transfer settings. See
+   [Migrate Component Constructors]({{< docref "docs/changelog/migrate-component-constructors.md" >}}),
+   [Migrate --upload-as Flags]({{< docref "docs/changelog/migrate-from-upload-as.md" >}}) and
+   [Migrate from Sources to Resources]({{< docref "docs/changelog/migrate-from-sources.md" >}}).
+7. **Update scripts and pipelines.** Check output formats and exit codes, see
+   [Scripts and CI pipelines](#scripts-and-ci-pipelines). In GitHub Actions, use
+   `open-component-model/ocm-setup-action@v2`.
+8. **Move Kubernetes deployments.** See
+   [Migrate from the Legacy OCM Controller]({{< docref "docs/changelog/migrate-from-legacy-ocm-controller.md" >}}).
+
+## Your OCM v1 Tasks in OCM v2
+
+| Task | OCM v1 | OCM v2 | Guide |
+| ---- | ------ | ------ | ----- |
+| Build a component version | `ocm add componentversions --create --file ./ctf component-constructor.yaml` | `ocm add cv --repository ./ctf --constructor component-constructor.yaml` | [Create Component Versions]({{< docref "docs/getting-started/create-component-version.md" >}}) |
+| Inspect a component version | `ocm get cv ./ctf//acme.org/app:1.0.0 -o yaml` | `ocm get cv ./ctf//acme.org/app:1.0.0 -o yaml` | [Reference: ocm get cv]({{< docref "docs/reference/ocm-cli/ocm_get_component-version.md" >}}) |
+| Configure registry credentials | Consumers in `~/.ocmconfig` | Consumers in the configuration file, mostly unchanged | [Configure Registry Credentials]({{< docref "docs/guides/transfer/configure-registry-credentials.md" >}}) |
+| Sign | `ocm sign cv --signature acme --private-key rsa.priv <ref>` | `ocm sign cv --signature acme <ref>`, with the key in the configuration | [Sign with Plain RSA]({{< docref "docs/guides/sign/sign-with-plain-rsa.md" >}}) |
+| Verify | `ocm verify cv --signature acme --public-key rsa.pub <ref>` | `ocm verify cv --signature acme <ref>`, with the key in the configuration | [Verify Plain RSA]({{< docref "docs/guides/sign/verify-with-plain-rsa.md" >}}) |
+| Transfer to a registry | `ocm transfer cv --copy-resources <ref> ghcr.io/acme/target` | `ocm transfer cv <ref> ghcr.io/acme/target`, with an uploader configuration to copy resources | [Transfer Component Versions]({{< docref "docs/guides/transfer/transfer-component-versions.md" >}}) |
+| Transfer across an air gap | `ocm transfer cv --copy-resources <ref> ./ctf` | `ocm transfer cv <ref> ./ctf`, with an uploader configuration | [Transfer Components across an Air Gap]({{< docref "docs/guides/transfer/air-gap-transfer.md" >}}) |
+| Download a resource | `ocm download resources <ref> my-resource -O out` | `ocm download resource <ref> --identity name=my-resource --output out` | [Download Resources]({{< docref "docs/guides/transfer/download-resources.md" >}}) |
+| Reference other components | References plus fallback resolvers | References plus glob resolvers | [Add Component References]({{< docref "docs/guides/pack/add-component-references.md" >}}) |
+| Deploy to Kubernetes | `ocm-controller` with Flux | OCM controllers | [Deploy Helm Charts]({{< docref "docs/getting-started/deploy-helm-chart.md" >}}) |
+| Look up types and fields | Help topics such as `ocm ocm-accessmethods` | `ocm describe types` | [Input and Access Types]({{< docref "docs/reference/input-and-access-types.md" >}}) |
 
 ## Breaking Changes
 
@@ -236,6 +282,17 @@ keeps their descriptors and signatures intact, and OCM v1 signatures still verif
 OCM v2 stores embedded OCI artifacts differently, see
 [OCM v1 and OCM v2 storage]({{< docref "docs/concepts/component-storage.md#ocm-v1-and-ocm-v2" >}}).
 
+This v1 data works in OCM v2 for get, verify, download and transfer:
+
+- CTF directories and CTF `tar` and `tgz` archives, including transfer of a whole archive
+- RSA signatures with `jsonNormalisation/v3`, the v1 default, with `RSASSA-PKCS1-V1_5` or `RSASSA-PSS` and SHA-256 or
+  SHA-512, apart from the exceptions below
+- Certificate chain signatures without the root certificate, and RFC 3161 timestamps
+- Resources with the access types `ociArtifact`, `localBlob`, `localOciBlob`, `helm`, `github`, `wget` and `Git/v1`,
+  under their v1 names. `s3` resources are read and transferred by reference. For the field changes of Git and S3, see
+  [Input and Access Types]({{< docref "docs/reference/input-and-access-types.md#git-migration-from-ocm-v1" >}}).
+- Component references with digests, `extraIdentity`, versions with `+` build metadata, and external sources
+
 The following v1 data does not work in OCM v2:
 
 | v1 data | Behavior in OCM v2 | Tracking |
@@ -249,11 +306,13 @@ The following v1 data does not work in OCM v2:
 | Signatures with `jsonNormalisation/v1` | OCM v2 computes this algorithm as cc-utils did. Signatures from the OCM v1 CLI fail with a digest mismatch, for example for resource types `blob`, `helmChart`, `filesystem` and `ociArtifact`, or with provider labels. See [Migrate Signing Setup]({{< docref "docs/changelog/migrate-signing-setup.md" >}}). | |
 | Several v1 signatures with different hash or normalisation algorithms on a component version with references | Only the signature created last verifies | |
 | Certificate chains with an embedded self-signed root (v1 `create rsakeypair --ca-cert`) | Rejected | [#1376](https://github.com/open-component-model/ocm-project/issues/1376) |
+| Certificate chain signatures whose `issuer` names only part of the certificate subject | Rejected with `issuer mismatch`. Signatures written by the v1 CLI record the full subject and are not affected. | [#1418](https://github.com/open-component-model/ocm-project/issues/1418) |
 | Sigstore signatures from the v1 CLI | Cannot be verified. `ocm verify cv` without `--signature` fails as well. Re-sign with the v2 [Sigstore signer]({{< docref "docs/guides/sign/sign-with-sigstore.md" >}}). | [#1376](https://github.com/open-component-model/ocm-project/issues/1376) |
 | Private keys encrypted with v1 `create rsakeypair --encrypt` | Cannot be read | |
 | Helm resources copied with `--copy-resources` or a local blob uploader | Digest is rewritten and v1 signatures fail | [#1368](https://github.com/open-component-model/ocm-project/issues/1368) |
 | Resources with the access type `git` or `git/v1alpha1` | Download and copy fail with a digest mismatch. Verify and transfer by reference work. | [#1376](https://github.com/open-component-model/ocm-project/issues/1376) |
 | Resources with the access types `npm`, `maven`, `ocm` or `none` | Cannot be downloaded or copied | [#1376](https://github.com/open-component-model/ocm-project/issues/1376) |
+| Resources with the access type `s3/v1` | `--copy-resources` keeps them by reference | [#1404](https://github.com/open-component-model/ocm-project/issues/1404) |
 | Sources stored as local blobs | The component version cannot be transferred | [Migrate from Sources to Resources]({{< docref "docs/changelog/migrate-from-sources.md" >}}) |
 | Label `merge` specifications | Dropped on read and transfer. Signatures still verify, because `merge` is not signed. | [#1371](https://github.com/open-component-model/ocm-project/issues/1371) |
 | Routing slips | Kept as a label and transferred, but OCM v2 has no commands for them | |

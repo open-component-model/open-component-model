@@ -522,6 +522,7 @@ The following table maps old values to their replacements:
 
 ## Related documentation
 
+- [Key Differences Between OCM v1 and v2]({{< docref "docs/changelog/differences-v1-v2.md#data-compatibility" >}}) - Which OCM v1 data OCM v2 reads, and what fails
 - [Reference: Transfer Configuration Reference]({{< docref "docs/reference/configuration/transfer-configuration/_index.md" >}}) - Full configuration schema and field descriptions
 - [Guides: Configure Custom Uploads During Transfer]({{< docref "docs/guides/transfer/upload-to-custom-target.md" >}}) - Tutorial for the HTTP streaming uploader
 - [Guides: Upload OCI Images]({{< docref "docs/guides/transfer/upload-oci-images.md" >}}) - Upload component resources, including Helm charts, as standalone OCI artifacts
