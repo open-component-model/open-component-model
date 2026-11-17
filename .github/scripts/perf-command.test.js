@@ -28,7 +28,11 @@ function fakePerf(getCollaboratorPermissionLevel) {
   const github = {
     rest: {
       repos: {
-        getCollaboratorPermissionLevel,
+        getCollaboratorPermissionLevel: async (/** @type {object} */ params) => {
+          // The check must be about the comment author, not the repository owner or anyone else.
+          assert.deepStrictEqual(params, { owner: "o", repo: "r", username: "someone" });
+          return getCollaboratorPermissionLevel();
+        },
         compareCommitsWithBasehead: async () => ({ data: { merge_base_commit: { sha: "base" } } }),
       },
       pulls: {
