@@ -94,7 +94,7 @@ jobs:
 
       - name: Setup Go
         timeout-minutes: 5
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: ${{ env.GO_MODULE_ROOT }}/go.mod
           cache-dependency-path: ${{ env.GO_MODULE_ROOT }}/go.sum
@@ -108,7 +108,7 @@ jobs:
 
       - name: Setup docker/buildx
         timeout-minutes: 5
-        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
       - name: Install Helm
         timeout-minutes: 5
@@ -153,7 +153,7 @@ jobs:
       - name: Upload results
         timeout-minutes: 10
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: controller-performance-${{ github.run_id }}-${{ matrix.side }}
           path: ${{ env.CONTROLLER_DIR }}/test/performance/results/
@@ -180,14 +180,14 @@ jobs:
 
       - name: Download base results
         if: needs.benchmark.result == 'success'
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: controller-performance-${{ github.run_id }}-base
           path: results/base
 
       - name: Download pull request results
         if: needs.benchmark.result == 'success'
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: controller-performance-${{ github.run_id }}-pr
           path: results/pr
