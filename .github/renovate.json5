@@ -381,6 +381,19 @@
       ],
       minimumReleaseAge: null,
     },
+    {
+      // Version-only .env fields (datasource=docker, no @sha256) can't be
+      // digest-pinned; the inherited docker:pinDigests preset proposes a
+      // pinDigest that custom.regex can't apply, aborting the whole weekly
+      // 'Digest pins' branch (renovatebot/renovate#24942). `force` is needed
+      // because the preset's broad docker rule resolves after repo rules and
+      // would re-enable pinning otherwise (renovatebot/renovate#34763).
+      matchManagers: ['custom.regex'],
+      matchDatasources: ['docker'],
+      force: {
+        pinDigests: false,
+      },
+    },
   ],
   customDatasources: {
     envtest: {
