@@ -18,7 +18,7 @@ ocm add {component-version|component-versions|cv|cvs} [flags]
 ### Options
 
 ```
-  -h, --help   help for add
+  -h, --help[=true|false]   help for add
 ```
 
 ### Options inherited from parent commands
