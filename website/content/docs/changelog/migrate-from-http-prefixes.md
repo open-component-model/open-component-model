@@ -98,5 +98,6 @@ registry.local:5000/ocm
 
 ## Related documentation
 
+- [Key Differences Between OCM v1 and v2]({{< docref "docs/changelog/differences-v1-v2.md#data-compatibility" >}}) - Which OCM v1 data OCM v2 reads, and what fails
 - [Guides: Configure HTTP Behaviour]({{< docref "docs/guides/transfer/configure-http.md" >}}) - Timeouts, retries, TLS, and plain HTTP per host
 - [Reference: HTTP Client]({{< docref "docs/reference/configuration/http-client.md" >}}) - Full schema of `http.config.ocm.software/v1alpha1`

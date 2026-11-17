@@ -155,3 +155,7 @@ component version.
 
 Component versions that were published with sources keep them: changing a published component version changes its
 digest and breaks existing signatures. Migrate when you build the next version.
+
+## Related documentation
+
+- [Key Differences Between OCM v1 and v2]({{< docref "docs/changelog/differences-v1-v2.md#data-compatibility" >}}) - Which OCM v1 data OCM v2 reads, and what fails
