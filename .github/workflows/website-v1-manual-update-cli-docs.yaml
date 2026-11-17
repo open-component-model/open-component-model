@@ -44,7 +44,7 @@ jobs:
         fi
         echo "RELEASE_VERSION=$(echo "${INPUT_VERSION}" )" >> $GITHUB_ENV
     - name: Publish Event
-      uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # v4
+      uses: peter-evans/repository-dispatch@28959ce8df70de7be546dd1250a005dd32156697 # v4.0.1
       with:
         token: ${{ steps.generate_token.outputs.token }}
         repository: ${{ github.repository }}
