@@ -27,6 +27,8 @@ type GetGitHubCommit struct {
 	// credential consumer identities.
 	ResourceRepository repository.ResourceRepository
 	CredentialProvider credentials.Resolver
+	// TempFolder is the base directory for temporary output files. Empty means os.TempDir.
+	TempFolder string
 }
 
 func (t *GetGitHubCommit) Transform(ctx context.Context, step runtime.Typed) (_ runtime.Typed, err error) {
@@ -45,7 +47,7 @@ func (t *GetGitHubCommit) Transform(ctx context.Context, step runtime.Typed) (_ 
 		transformation.Output = &v1alpha1.GetGitHubCommitOutput{}
 	}
 
-	contentOutputPath, err := determineOutputPath(transformation.Spec.OutputPath, "github-commit")
+	contentOutputPath, err := determineOutputPath(t.TempFolder, transformation.Spec.OutputPath, "github-commit")
 	if err != nil {
 		return nil, fmt.Errorf("error getting content output path: %w", err)
 	}

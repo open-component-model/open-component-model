@@ -23,6 +23,8 @@ type DownloadS3Resource struct {
 	// ResourceRepository is used to download S3 resources and resolve credential consumer identities.
 	ResourceRepository repository.ResourceRepository
 	CredentialProvider credentials.Resolver
+	// TempFolder is the base directory for temporary output files. Empty means os.TempDir.
+	TempFolder string
 }
 
 func (t *DownloadS3Resource) Transform(ctx context.Context, step runtime.Typed) (_ runtime.Typed, err error) {
@@ -41,7 +43,7 @@ func (t *DownloadS3Resource) Transform(ctx context.Context, step runtime.Typed) 
 		transformation.Output = &v1alpha1.DownloadS3ResourceOutput{}
 	}
 
-	outputPath, err := determineOutputPath(transformation.Spec.OutputPath, "s3")
+	outputPath, err := determineOutputPath(t.TempFolder, transformation.Spec.OutputPath, "s3")
 	if err != nil {
 		return nil, fmt.Errorf("error getting output path: %w", err)
 	}

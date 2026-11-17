@@ -23,7 +23,7 @@ func TestDetermineOutputPath(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			path, err := determineOutputPath(tc.path, "git-resource")
+			path, err := determineOutputPath("", tc.path, "git-resource")
 			if tc.wantErr != "" {
 				r.ErrorContains(err, tc.wantErr)
 				r.Empty(path)
@@ -44,4 +44,15 @@ func TestDetermineOutputPath(t *testing.T) {
 	content, err := os.ReadFile("file")
 	r.NoError(err)
 	r.Equal("keep", string(content))
+}
+
+// TestDetermineOutputPath_EmptyPathUsesTempDir pins that an empty output path
+// creates the temporary file under the configured temp directory.
+func TestDetermineOutputPath_EmptyPathUsesTempDir(t *testing.T) {
+	r := require.New(t)
+	tempDir := t.TempDir()
+	path, err := determineOutputPath(tempDir, "", "git-resource")
+	r.NoError(err)
+	t.Cleanup(func() { _ = os.Remove(path) })
+	r.Equal(tempDir, filepath.Dir(path))
 }

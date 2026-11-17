@@ -1,6 +1,7 @@
 package transfer
 
 import (
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -16,6 +17,11 @@ type Options struct {
 	// Accepts the serialisable config type so that external plugins can
 	// round-trip it over the wire and reconstruct an equivalent client.
 	HTTPConfig *httpv1alpha1.Config
+
+	// FilesystemConfig provides the configured temporary folder used by
+	// transformers that buffer downloaded content to disk. When nil, os.TempDir
+	// is used.
+	FilesystemConfig *filesystemv1alpha1.Config
 }
 
 type Option func(*Options)
@@ -27,6 +33,15 @@ type Option func(*Options)
 func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 	return func(o *Options) {
 		o.HTTPConfig = cfg
+	}
+}
+
+// WithFilesystemConfig sets the filesystem configuration. Transformers that
+// buffer downloaded content to disk create their temporary files under its
+// TempFolder. When nil, os.TempDir is used.
+func WithFilesystemConfig(cfg *filesystemv1alpha1.Config) Option {
+	return func(o *Options) {
+		o.FilesystemConfig = cfg
 	}
 }
 
@@ -49,5 +64,6 @@ func NewDefaultBuilder(
 		resourceRepo,
 		credentialProvider,
 		options.HTTPConfig,
+		options.FilesystemConfig,
 	)
 }

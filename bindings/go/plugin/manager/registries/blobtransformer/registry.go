@@ -33,6 +33,17 @@ type Registry struct {
 	// registration will be added to this scheme holder. Once this happens, the code will validate any passed in objects
 	// that their type is registered or not.
 	scheme *runtime.Scheme
+	// tempFolder is the base directory for temporary files the converter creates
+	// when staging blobs for external plugins. Empty means os.TempDir.
+	tempFolder string
+}
+
+// SetTempFolder sets the base directory for temporary files the converter creates
+// when staging blobs for external plugins. It must be set before plugins are used.
+func (r *Registry) SetTempFolder(tempFolder string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.tempFolder = tempFolder
 }
 
 // RegisterInternalBlobTransformerPlugin can be called by actual implementations in the source.

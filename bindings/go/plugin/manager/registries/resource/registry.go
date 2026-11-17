@@ -38,6 +38,9 @@ type ResourceRegistry struct {
 	// artifactVerifier verifies OCI artifacts plugins deliver as archives; without it
 	// content recorded with an OCI artifact digest is unverifiable.
 	artifactVerifier integrity.ArtifactVerifier
+	// tempFolder is the base directory for temporary files the converter creates
+	// when staging blobs for external plugins. Empty means os.TempDir.
+	tempFolder string
 }
 
 // SetArtifactVerifier sets the verifier for OCI artifacts that external plugins deliver
@@ -46,6 +49,14 @@ func (r *ResourceRegistry) SetArtifactVerifier(v integrity.ArtifactVerifier) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.artifactVerifier = v
+}
+
+// SetTempFolder sets the base directory for temporary files the converter creates
+// when staging blobs for external plugins. It must be set before plugins are used.
+func (r *ResourceRegistry) SetTempFolder(tempFolder string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.tempFolder = tempFolder
 }
 
 // ResourceScheme returns the scheme used by the Resource registry.

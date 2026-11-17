@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -363,9 +364,11 @@ func (r *Reconciler) reconcile(ctx context.Context, replication *v1alpha1.Replic
 	return ctrl.Result{}, nil
 }
 
-// transferOptions passes the HTTP configuration of cfg to the transfer. The transfer
-// builds its own OCI clients for artifacts it copies by value; without the configuration
-// they would ignore plainHTTP, timeouts and per-host settings. A nil cfg is valid.
+// transferOptions passes the HTTP and filesystem configuration of cfg to the transfer. The
+// transfer builds its own OCI clients for artifacts it copies by value; without the
+// configuration they would ignore plainHTTP, timeouts and per-host settings. The filesystem
+// configuration determines the temporary folder transformers buffer downloaded content to.
+// A nil cfg is valid.
 func transferOptions(cfg *configuration.Configuration) ([]transfer.Option, error) {
 	var generic *genericv1.Config
 	if cfg != nil {
@@ -375,7 +378,14 @@ func transferOptions(cfg *configuration.Configuration) ([]transfer.Option, error
 	if err != nil {
 		return nil, fmt.Errorf("failed to look up http configuration: %w", err)
 	}
-	return []transfer.Option{transfer.WithHTTPConfig(httpCfg)}, nil
+	fsCfg, err := filesystemv1alpha1.LookupConfig(generic)
+	if err != nil {
+		return nil, fmt.Errorf("failed to look up filesystem configuration: %w", err)
+	}
+	return []transfer.Option{
+		transfer.WithHTTPConfig(httpCfg),
+		transfer.WithFilesystemConfig(fsCfg),
+	}, nil
 }
 
 func (r *Reconciler) transfer(ctx context.Context, logger logr.Logger, replication *v1alpha1.Replication, cfg *configuration.Configuration, pm *manager.PluginManager, tgd *transformv1alpha1.TransformationGraphDefinition, component *v1alpha1.Component, sourceDigest string) error {

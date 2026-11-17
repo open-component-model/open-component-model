@@ -12,7 +12,7 @@ import (
 
 func Test_determineOutputPath_EmptyPath(t *testing.T) {
 	prefix := "test-prefix"
-	outputPath, err := determineOutputPath("", prefix)
+	outputPath, err := determineOutputPath("", "", prefix)
 
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Remove(outputPath) })
@@ -27,11 +27,22 @@ func Test_determineOutputPath_EmptyPath(t *testing.T) {
 	assert.False(t, info.IsDir())
 }
 
+// Test_determineOutputPath_EmptyPathUsesTempDir pins that an empty output path
+// creates the temporary file under the configured temp directory.
+func Test_determineOutputPath_EmptyPathUsesTempDir(t *testing.T) {
+	tempDir := t.TempDir()
+	outputPath, err := determineOutputPath(tempDir, "", "test-prefix")
+
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Remove(outputPath) })
+	assert.True(t, strings.HasPrefix(outputPath, tempDir), "expected output under %q, got %q", tempDir, outputPath)
+}
+
 func Test_determineOutputPath_DirectoryPath(t *testing.T) {
 	tempDir := t.TempDir()
 	prefix := "test-prefix"
 
-	outputPath, err := determineOutputPath(tempDir, prefix)
+	outputPath, err := determineOutputPath("", tempDir, prefix)
 
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Remove(outputPath) })
@@ -53,7 +64,7 @@ func Test_determineOutputPath_RelativeDirectoryPath(t *testing.T) {
 	require.NoError(t, os.Mkdir(filepath.Join(base, "out"), 0o755))
 	t.Chdir(base)
 
-	outputPath, err := determineOutputPath("out", "test-prefix")
+	outputPath, err := determineOutputPath("", "out", "test-prefix")
 
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.Remove(outputPath) })
@@ -66,7 +77,7 @@ func Test_determineOutputPath_RelativeDirectoryPath(t *testing.T) {
 }
 
 func Test_determineOutputPath_NonExistentPath(t *testing.T) {
-	_, err := determineOutputPath(filepath.Join(t.TempDir(), "does-not-exist"), "test-prefix")
+	_, err := determineOutputPath("", filepath.Join(t.TempDir(), "does-not-exist"), "test-prefix")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "output path does not exist")
@@ -77,7 +88,7 @@ func Test_determineOutputPath_ExistingFilePath(t *testing.T) {
 	filePath := filepath.Join(tempDir, "existing-file.tar.gz")
 	require.NoError(t, os.WriteFile(filePath, []byte("content"), 0o644))
 
-	_, err := determineOutputPath(filePath, "test-prefix")
+	_, err := determineOutputPath("", filePath, "test-prefix")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "is a file, not a directory")

@@ -19,6 +19,8 @@ type GetLocalResource struct {
 	Scheme             *runtime.Scheme
 	RepoProvider       repository.ComponentVersionRepositoryProvider
 	CredentialProvider credentials.Resolver
+	// TempFolder is the base directory for temporary output files. Empty means os.TempDir.
+	TempFolder string
 }
 
 func (t *GetLocalResource) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
@@ -103,7 +105,7 @@ func (t *GetLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 	}
 
 	// Determine output path
-	if outputPath, err = DetermineOutputPath(outputPath, "resource"); err != nil {
+	if outputPath, err = DetermineOutputPath(t.TempFolder, outputPath, "resource"); err != nil {
 		return nil, fmt.Errorf("failed determining output path: %w", err)
 	}
 

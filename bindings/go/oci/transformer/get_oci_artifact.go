@@ -20,6 +20,8 @@ type GetOCIArtifact struct {
 	Scheme             *runtime.Scheme
 	Repository         repository.ResourceRepository
 	CredentialProvider credentials.Resolver
+	// TempFolder is the base directory for temporary output files. Empty means os.TempDir.
+	TempFolder string
 }
 
 func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
@@ -65,7 +67,7 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	}
 
 	// Determine output path
-	if outputPath, err = DetermineOutputPath(outputPath, "oci-artifact"); err != nil {
+	if outputPath, err = DetermineOutputPath(t.TempFolder, outputPath, "oci-artifact"); err != nil {
 		return nil, fmt.Errorf("failed determining output path: %w", err)
 	}
 

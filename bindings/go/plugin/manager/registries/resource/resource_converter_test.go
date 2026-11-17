@@ -1,6 +1,7 @@
 package resource
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
@@ -31,6 +33,39 @@ func (p *fileResourcePlugin) GetGlobalResource(context.Context, *v1.GetGlobalRes
 		Value:        p.path,
 		MediaType:    p.mediaType,
 	}}, nil
+}
+
+// uploadCapturingPlugin records the staged temp file location that UploadResource passes.
+type uploadCapturingPlugin struct {
+	v1.ReadWriteResourcePluginContract
+	gotLocation string
+}
+
+func (p *uploadCapturingPlugin) AddGlobalResource(_ context.Context, req *v1.AddGlobalResourceRequest, _ runtime.Typed) (*v1.AddGlobalResourceResponse, error) {
+	p.gotLocation = req.ResourceLocation.Value
+	return &v1.AddGlobalResourceResponse{Resource: req.Resource}, nil
+}
+
+// TestResourcePluginConverter_UploadResource_HonorsTempFolder pins that the staged
+// temp file is created under the configured temp folder set via SetTempFolder.
+func TestResourcePluginConverter_UploadResource_HonorsTempFolder(t *testing.T) {
+	r := require.New(t)
+	tempFolder := t.TempDir()
+
+	registry := NewResourceRegistry(t.Context())
+	registry.SetTempFolder(tempFolder)
+	plugin := &uploadCapturingPlugin{}
+	converter := registry.externalToResourcePluginConverter(plugin, runtime.NewScheme())
+
+	res := &descriptor.Resource{
+		ElementMeta: descriptor.ElementMeta{ObjectMeta: descriptor.ObjectMeta{Name: "res", Version: "v1"}},
+		Type:        "blob",
+		Access:      &runtime.Raw{Type: dummyType, Data: []byte(`{"type":"` + dummyType.String() + `"}`)},
+	}
+
+	_, err := converter.UploadResource(t.Context(), res, inmemory.New(bytes.NewReader([]byte("payload"))), nil)
+	r.NoError(err)
+	r.Equal(tempFolder, filepath.Dir(plugin.gotLocation), "staged temp file must live under the configured temp folder")
 }
 
 const testArchiveMediaType = "application/vnd.test.archive"

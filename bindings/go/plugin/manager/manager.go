@@ -82,6 +82,17 @@ func WithArtifactVerifier(v integrity.ArtifactVerifier) Option {
 	}
 }
 
+// WithTempFolder sets the base directory for temporary files that registries create
+// when staging blobs for external plugins. Empty means os.TempDir. It corresponds to
+// the filesystem.config.ocm.software TempFolder field.
+func WithTempFolder(tempFolder string) Option {
+	return func(pm *PluginManager) {
+		pm.ComponentVersionRepositoryRegistry.SetTempFolder(tempFolder)
+		pm.ResourcePluginRegistry.SetTempFolder(tempFolder)
+		pm.BlobTransformerRegistry.SetTempFolder(tempFolder)
+	}
+}
+
 // NewPluginManager initializes the PluginManager
 // the passed ctx is used for all plugins.
 func NewPluginManager(ctx context.Context, opts ...Option) *PluginManager {

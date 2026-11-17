@@ -21,6 +21,8 @@ type resourcePluginConverter struct {
 	externalPlugin   v1.ReadWriteResourcePluginContract
 	scheme           *runtime.Scheme
 	artifactVerifier integrity.ArtifactVerifier
+	// tempFolder is the base directory for temporary files. Empty means os.TempDir.
+	tempFolder string
 }
 
 func (r *resourcePluginConverter) GetResourceCredentialConsumerIdentity(ctx context.Context, resource *descriptor.Resource) (identity runtime.Identity, err error) {
@@ -71,7 +73,7 @@ func (r *resourcePluginConverter) UploadResource(ctx context.Context, resource *
 		return nil, fmt.Errorf("failed to convert resource: %w", err)
 	}
 
-	tmp, err := os.CreateTemp("", "resource")
+	tmp, err := os.CreateTemp(r.tempFolder, "resource")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp file: %w", err)
 	}
@@ -105,5 +107,6 @@ func (r *ResourceRegistry) externalToResourcePluginConverter(plugin v1.ReadWrite
 		externalPlugin:   plugin,
 		scheme:           scheme,
 		artifactVerifier: r.artifactVerifier,
+		tempFolder:       r.tempFolder,
 	}
 }

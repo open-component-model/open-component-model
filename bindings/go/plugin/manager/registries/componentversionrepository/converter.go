@@ -27,6 +27,8 @@ type componentVersionRepositoryWrapper struct {
 	credentials             runtime.Typed
 	scheme                  *runtime.Scheme
 	artifactVerifier        integrity.ArtifactVerifier
+	// tempFolder is the base directory for temporary files. Empty means os.TempDir.
+	tempFolder string
 }
 
 var _ repository.ComponentVersionRepository = (*componentVersionRepositoryWrapper)(nil)
@@ -70,7 +72,7 @@ func (c *componentVersionRepositoryWrapper) AddLocalResource(ctx context.Context
 		return nil, fmt.Errorf("failed to convert resource: %w", err)
 	}
 
-	tmp, err := os.CreateTemp("", "resource")
+	tmp, err := os.CreateTemp(c.tempFolder, "resource")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp file: %w", err)
 	}
@@ -132,7 +134,7 @@ func (c *componentVersionRepositoryWrapper) AddLocalSource(ctx context.Context, 
 		return nil, fmt.Errorf("failed to convert source: %w", err)
 	}
 
-	tmp, err := os.CreateTemp("", "source")
+	tmp, err := os.CreateTemp(c.tempFolder, "source")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp file: %w", err)
 	}
@@ -189,5 +191,6 @@ func (r *RepositoryRegistry) externalToComponentVersionRepository(plugin ocmrepo
 		credentials:             credentials,
 		scheme:                  scheme,
 		artifactVerifier:        r.artifactVerifier,
+		tempFolder:              r.tempFolder,
 	}
 }

@@ -23,6 +23,8 @@ type DownloadWgetResource struct {
 	// ResourceRepository is used to download wget resources and resolve credential consumer identities.
 	ResourceRepository repository.ResourceRepository
 	CredentialProvider credentials.Resolver
+	// TempFolder is the base directory for temporary output files. Empty means os.TempDir.
+	TempFolder string
 }
 
 func (t *DownloadWgetResource) Transform(ctx context.Context, step runtime.Typed) (_ runtime.Typed, err error) {
@@ -41,7 +43,7 @@ func (t *DownloadWgetResource) Transform(ctx context.Context, step runtime.Typed
 		transformation.Output = &v1alpha1.DownloadWgetResourceOutput{}
 	}
 
-	outputPath, err := determineOutputPath(transformation.Spec.OutputPath, "wget")
+	outputPath, err := determineOutputPath(t.TempFolder, transformation.Spec.OutputPath, "wget")
 	if err != nil {
 		return nil, fmt.Errorf("error getting output path: %w", err)
 	}

@@ -101,7 +101,10 @@ func NewPluginManager(ctx context.Context, cfg *genericv1.Config, logger *slog.L
 		fsCfg.TempFolder = &options.TempDir
 	}
 
-	pm := manager.NewPluginManager(ctx, manager.WithArtifactVerifier(ocitar.LayoutVerifier{}))
+	pm := manager.NewPluginManager(ctx,
+		manager.WithArtifactVerifier(ocitar.LayoutVerifier{}),
+		manager.WithTempFolder(options.TempDir),
+	)
 
 	providerOpts := []provider.Option{
 		provider.WithScheme(ocirepository.Scheme),

@@ -24,6 +24,8 @@ type GetGitResource struct {
 
 	ResourceRepository repository.ResourceRepository
 	CredentialProvider credentials.Resolver
+	// TempFolder is the base directory for temporary output files. Empty means os.TempDir.
+	TempFolder string
 }
 
 func (t *GetGitResource) Transform(ctx context.Context, step runtime.Typed) (_ runtime.Typed, err error) {
@@ -38,7 +40,7 @@ func (t *GetGitResource) Transform(ctx context.Context, step runtime.Typed) (_ r
 		return nil, fmt.Errorf("resource is required in spec for get git resource transformation")
 	}
 
-	outputPath, err := determineOutputPath(transformation.Spec.OutputPath, "git-resource")
+	outputPath, err := determineOutputPath(t.TempFolder, transformation.Spec.OutputPath, "git-resource")
 	if err != nil {
 		return nil, fmt.Errorf("error getting content output path: %w", err)
 	}

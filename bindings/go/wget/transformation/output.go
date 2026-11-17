@@ -7,7 +7,8 @@ import (
 )
 
 // determineOutputPath determines the output path for buffering the downloaded content.
-// If the outputPath is empty, it creates a temporary file in the default temp directory.
+// If the outputPath is empty, it creates a temporary file under tempDir (the
+// configured filesystem temp folder; empty means os.TempDir).
 // If the outputPath is provided, it checks if the path exists:
 //   - If the outputPath does not exist, it returns an error.
 //   - If the outputPath exists and is a file, it returns an error.
@@ -15,9 +16,9 @@ import (
 //
 // The returned path is always absolute, so it stays valid regardless of the
 // caller's working directory.
-func determineOutputPath(outputPath string, filePrefix string) (string, error) {
+func determineOutputPath(tempDir string, outputPath string, filePrefix string) (string, error) {
 	if outputPath == "" {
-		tempFile, err := os.CreateTemp("", filePrefix+"-*")
+		tempFile, err := os.CreateTemp(tempDir, filePrefix+"-*")
 		if err != nil {
 			return "", fmt.Errorf("failed creating temporary file: %w", err)
 		}

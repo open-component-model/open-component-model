@@ -22,6 +22,8 @@ import (
 
 type ConvertHelmChartToOCI struct {
 	Scheme *runtime.Scheme
+	// TempFolder is the base directory for temporary output files. Empty means os.TempDir.
+	TempFolder string
 }
 
 func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
@@ -75,7 +77,7 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 		slog.DebugContext(ctx, "Created blob for prov file", "uri", transformation.Spec.ProvFile.URI)
 	}
 
-	outputPath, err := DetermineOutputPath(transformation.Spec.OutputPath, "oci")
+	outputPath, err := DetermineOutputPath(t.TempFolder, transformation.Spec.OutputPath, "oci")
 	if err != nil {
 		return nil, fmt.Errorf("error getting OCI output path: %w", err)
 	}

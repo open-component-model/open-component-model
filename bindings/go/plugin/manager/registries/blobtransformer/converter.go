@@ -18,10 +18,12 @@ import (
 type converter struct {
 	externalPlugin blobtransformerv1.BlobTransformerPluginContract[runtime.Typed]
 	scheme         *runtime.Scheme
+	// tempFolder is the base directory for temporary files. Empty means os.TempDir.
+	tempFolder string
 }
 
 func (c *converter) TransformBlob(ctx context.Context, blob blob.ReadOnlyBlob, spec runtime.Typed, credentials runtime.Typed) (_ blob.ReadOnlyBlob, err error) {
-	tmp, err := os.CreateTemp("", "blob")
+	tmp, err := os.CreateTemp(c.tempFolder, "blob")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp file: %w", err)
 	}
@@ -69,5 +71,6 @@ func (r *Registry) externalToBlobTransformerConverter(plugin blobtransformerv1.B
 	return &converter{
 		externalPlugin: plugin,
 		scheme:         scheme,
+		tempFolder:     r.tempFolder,
 	}
 }

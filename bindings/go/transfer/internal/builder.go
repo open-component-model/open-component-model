@@ -43,7 +43,12 @@ func NewDefaultBuilder(
 	resourceRepo repository.ResourceRepository,
 	credentialProvider credentials.Resolver,
 	httpConfig *httpv1alpha1.Config,
+	filesystemConfig *filesystemv1alpha1.Config,
 ) *builder.Builder {
+	var tempFolder string
+	if filesystemConfig != nil && filesystemConfig.TempFolder != nil {
+		tempFolder = *filesystemConfig.TempFolder
+	}
 	transformerScheme := runtime.NewScheme()
 	transformerScheme.MustRegisterScheme(ociv1alpha1.Scheme)
 	transformerScheme.MustRegisterScheme(ociaccess.Scheme)
@@ -73,6 +78,7 @@ func NewDefaultBuilder(
 		Scheme:             transformerScheme,
 		RepoProvider:       repoProvider,
 		CredentialProvider: credentialProvider,
+		TempFolder:         tempFolder,
 	}
 	ociAddResource := &ocitransformer.AddLocalResource{
 		Scheme:             transformerScheme,
@@ -102,6 +108,7 @@ func NewDefaultBuilder(
 		Scheme:             transformerScheme,
 		Repository:         resourceRepo,
 		CredentialProvider: credentialProvider,
+		TempFolder:         tempFolder,
 	}
 
 	ociAddOCIArtifact := &ocitransformer.AddOCIArtifact{
@@ -137,9 +144,11 @@ func NewDefaultBuilder(
 		Scheme:             transformerScheme,
 		ResourceRepository: resourceRepo,
 		CredentialProvider: credentialProvider,
+		TempFolder:         tempFolder,
 	}
 	convertHelmToOCI := &helmtransformer.ConvertHelmChartToOCI{
-		Scheme: transformerScheme,
+		Scheme:     transformerScheme,
+		TempFolder: tempFolder,
 	}
 
 	// Wget transformer
@@ -147,6 +156,7 @@ func NewDefaultBuilder(
 		Scheme:             transformerScheme,
 		ResourceRepository: resourceRepo,
 		CredentialProvider: credentialProvider,
+		TempFolder:         tempFolder,
 	}
 
 	// S3 transformer
@@ -154,6 +164,7 @@ func NewDefaultBuilder(
 		Scheme:             transformerScheme,
 		ResourceRepository: resourceRepo,
 		CredentialProvider: credentialProvider,
+		TempFolder:         tempFolder,
 	}
 
 	// GitHub transformers
@@ -161,12 +172,14 @@ func NewDefaultBuilder(
 		Scheme:             transformerScheme,
 		ResourceRepository: resourceRepo,
 		CredentialProvider: credentialProvider,
+		TempFolder:         tempFolder,
 	}
 
 	getGitResource := &gittransformer.GetGitResource{
 		Scheme:             transformerScheme,
 		ResourceRepository: resourceRepo,
 		CredentialProvider: credentialProvider,
+		TempFolder:         tempFolder,
 	}
 
 	// Git upload transformer (git uploader configurations)

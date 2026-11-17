@@ -14,7 +14,7 @@ import (
 
 func Test_DetermineOutputPath_EmptyPath(t *testing.T) {
 	prefix := "test-prefix"
-	outputPath, err := transformer.DetermineOutputPath("", prefix)
+	outputPath, err := transformer.DetermineOutputPath("", "", prefix)
 
 	require.NoError(t, err)
 	assert.NotEmpty(t, outputPath)
@@ -26,11 +26,30 @@ func Test_DetermineOutputPath_EmptyPath(t *testing.T) {
 	_ = os.Remove(outputPath)
 }
 
+// Test_DetermineOutputPath_EmptyPathUsesTempDir pins that an empty output path
+// creates the temporary file under the configured temp directory rather than
+// the OS default.
+func Test_DetermineOutputPath_EmptyPathUsesTempDir(t *testing.T) {
+	tempDir := t.TempDir()
+	prefix := "test-prefix"
+
+	outputPath, err := transformer.DetermineOutputPath(tempDir, "", prefix)
+
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Remove(outputPath) })
+
+	assert.Contains(t, filepath.Base(outputPath), prefix)
+	assert.True(t, strings.HasPrefix(outputPath, tempDir), "expected output under %q, got %q", tempDir, outputPath)
+	info, err := os.Stat(outputPath)
+	require.NoError(t, err)
+	assert.False(t, info.IsDir())
+}
+
 func Test_DetermineOutputPath_DirectoryPath(t *testing.T) {
 	tempDir := t.TempDir()
 	prefix := "test-prefix"
 
-	outputPath, err := transformer.DetermineOutputPath(tempDir, prefix)
+	outputPath, err := transformer.DetermineOutputPath("", tempDir, prefix)
 
 	require.NoError(t, err)
 	assert.Contains(t, filepath.Base(outputPath), prefix)
@@ -42,7 +61,7 @@ func Test_DetermineOutputPath_DirectoryPath(t *testing.T) {
 }
 
 func Test_DetermineOutputPath_NonExistentPath(t *testing.T) {
-	_, err := transformer.DetermineOutputPath("/nonexistent/path", "test-prefix")
+	_, err := transformer.DetermineOutputPath("", "/nonexistent/path", "test-prefix")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "output path does not exist")
@@ -53,7 +72,7 @@ func Test_DetermineOutputPath_ExistingFilePath(t *testing.T) {
 	filePath := filepath.Join(tempDir, "existing-file.tar.gz")
 	require.NoError(t, os.WriteFile(filePath, []byte("content"), 0o644))
 
-	_, err := transformer.DetermineOutputPath(filePath, "test-prefix")
+	_, err := transformer.DetermineOutputPath("", filePath, "test-prefix")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "is a file, not a directory")

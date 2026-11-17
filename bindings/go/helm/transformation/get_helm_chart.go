@@ -30,6 +30,8 @@ type GetHelmChart struct {
 	// ResourceRepository is used to download helm chart resources and resolve credential consumer identities.
 	ResourceRepository repository.ResourceRepository
 	CredentialProvider credentials.Resolver
+	// TempFolder is the base directory for temporary output files. Empty means os.TempDir.
+	TempFolder string
 }
 
 func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
@@ -45,7 +47,7 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 		transformation.Output = &v1alpha1.GetHelmChartOutput{}
 	}
 
-	chartOutputPath, err := DetermineOutputPath(transformation.Spec.OutputPath, "chart")
+	chartOutputPath, err := DetermineOutputPath(t.TempFolder, transformation.Spec.OutputPath, "chart")
 	if err != nil {
 		return nil, fmt.Errorf("error getting chart output path: %w", err)
 	}

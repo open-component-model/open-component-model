@@ -206,7 +206,7 @@ func TestBuildGraphDefinition_GitUploader(t *testing.T) {
 			}
 			r.NoError(err)
 			r.Equal(tc.wantTypes, transformationTypes(tgd))
-			_, err = NewDefaultBuilder(nil, nil, nil, nil).BuildAndCheck(tgd)
+			_, err = NewDefaultBuilder(nil, nil, nil, nil, nil).BuildAndCheck(tgd)
 			r.NoError(err, "default builder must resolve AddGitResource and its references")
 			if tc.wantAccess == nil {
 				return

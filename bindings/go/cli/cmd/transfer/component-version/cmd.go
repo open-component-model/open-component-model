@@ -284,6 +284,7 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		pm.ResourcePluginRegistry,
 		credGraph,
 		transfer.WithHTTPConfig(httpConfig),
+		transfer.WithFilesystemConfig(octx.FilesystemConfig()),
 	)
 	// BuildAndCheck wires and checks every transformation node; the node count
 	// is known from the TGD, so track it as a determinate operation.

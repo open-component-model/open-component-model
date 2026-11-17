@@ -42,7 +42,15 @@ func OCMConfig(cmd *cobra.Command) error {
 }
 
 func PluginManager(cmd *cobra.Command) error {
-	pluginManager := manager.NewPluginManager(cmd.Context(), manager.WithArtifactVerifier(ocitar.LayoutVerifier{}))
+	filesystemConfig := ocmctx.FromContext(cmd.Context()).FilesystemConfig()
+	var tempFolder string
+	if filesystemConfig != nil && filesystemConfig.TempFolder != nil {
+		tempFolder = *filesystemConfig.TempFolder
+	}
+	pluginManager := manager.NewPluginManager(cmd.Context(),
+		manager.WithArtifactVerifier(ocitar.LayoutVerifier{}),
+		manager.WithTempFolder(tempFolder),
+	)
 
 	if cfg := ocmctx.FromContext(cmd.Context()).Configuration(); cfg == nil {
 		slog.WarnContext(cmd.Context(), "could not get configuration to initialize plugin manager")
@@ -83,7 +91,6 @@ func PluginManager(cmd *cobra.Command) error {
 	}
 
 	ocmContext := ocmctx.FromContext(cmd.Context())
-	filesystemConfig := ocmContext.FilesystemConfig()
 	httpConfig, err := httpv1alpha1.ResolveHTTPConfig(ocmContext.Configuration())
 	if err != nil {
 		return fmt.Errorf("could not get http configuration: %w", err)
