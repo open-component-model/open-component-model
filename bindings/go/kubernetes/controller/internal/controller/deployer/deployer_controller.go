@@ -351,7 +351,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("unexpected type %T after deep copy", deployer)
 	}
 	defer func(ctx context.Context) {
-		status.UpdateBeforePatch(ctx, deployer, r.EventRecorder, 0, err)
+		err = status.UpdateBeforePatch(ctx, deployer, r.EventRecorder, 0, err)
 		if !equality.Semantic.DeepEqual(deployer.GetDeployerStatus(), old.GetDeployerStatus()) {
 			patchCtx, cancel := status.PatchContext(ctx)
 			defer cancel()

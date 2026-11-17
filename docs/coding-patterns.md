@@ -965,13 +965,20 @@ Named error return enables deferred status updates that capture the final error 
 
 ```go
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Result, err error) {
-    patchHelper := patch.NewSerialPatcher(obj, r.Client)
+    old := obj.DeepCopy()
     defer func(ctx context.Context) {
-        err = errors.Join(err, status.UpdateStatus(ctx, patchHelper, obj, r.EventRecorder, obj.GetRequeueAfter(), err))
+        err = status.UpdateBeforePatch(ctx, obj, r.EventRecorder, obj.GetRequeueAfter(), err)
+        if !equality.Semantic.DeepEqual(obj.Status, old.Status) {
+            patchCtx, cancel := status.PatchContext(ctx)
+            defer cancel()
+            err = errors.Join(err, r.GetClient().Status().Patch(patchCtx, obj, client.MergeFrom(old)))
+        }
     }(ctx)
     // ...
 }
 ```
+
+The patch runs on `status.PatchContext`, not on the reconcile context: once the per-controller reconcile timeout (`--<controller>-controller-reconcile-timeout`, off by default) or a shutdown has canceled `ctx`, a patch on it would fail and the object would never learn why the run stopped. `UpdateBeforePatch` marks a timed-out run `Ready=False` with reason `ReconcileTimeout` and returns a retryable error even if the aborted step declared its error terminal, so the object is requeued rather than parked as Stalled.
 
 ### Status Conditions
 
@@ -983,7 +990,7 @@ status.MarkNotReady(recorder, obj, reason, message)
 status.MarkAsStalled(recorder, obj, reason, message)
 ```
 
-The deferred `UpdateStatus` observes reconciliation state — setting `ProgressingWithRetryReason` on errors during reconciliation and mutating `ObservedGeneration` only when ready.
+The deferred `UpdateBeforePatch` observes reconciliation state — setting `ProgressingWithRetryReason` on errors during reconciliation and mutating `ObservedGeneration` only when ready.
 
 ### Predicates
 

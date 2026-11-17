@@ -142,7 +142,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	old := replication.DeepCopy()
 	defer func(ctx context.Context) {
-		status.UpdateBeforePatch(ctx, replication, r.EventRecorder, 0, err)
+		err = status.UpdateBeforePatch(ctx, replication, r.EventRecorder, 0, err)
 		if !equality.Semantic.DeepEqual(replication.Status, old.Status) {
 			patchCtx, cancel := status.PatchContext(ctx)
 			defer cancel()

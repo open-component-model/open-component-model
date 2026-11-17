@@ -23,12 +23,16 @@ func PatchContext(ctx context.Context) (context.Context, context.CancelFunc) {
 }
 
 // MarkTimedOut marks obj not ready with [v1alpha1.ReconcileTimeoutReason] when
-// ctx ran into its deadline and the reconcile failed.
-func MarkTimedOut(ctx context.Context, recorder kuberecorder.EventRecorder, obj IdentifiableClientObject, err error) bool {
+// ctx ran into its deadline and the reconcile failed, and returns the error the
+// reconcile should report. If a step returned with a TerminalError, such as, CEL.Compile
+// we need to strip that part from the error because otherwise, a timeout will not be retried
+// as intended. If the attached context did not time out, we leave the error intact.
+func MarkTimedOut(ctx context.Context, recorder kuberecorder.EventRecorder, obj IdentifiableClientObject, err error) error {
 	if err == nil || !errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return false
+		return err
 	}
 	MarkNotReady(recorder, obj, v1alpha1.ReconcileTimeoutReason,
 		fmt.Sprintf("reconciliation aborted by the reconcile timeout: %s", err))
-	return true
+	// Flattening err to its text drops any reconcile.TerminalError marker; the deadline stays matchable.
+	return fmt.Errorf("reconciliation aborted by the reconcile timeout: %s: %w", err.Error(), context.DeadlineExceeded)
 }

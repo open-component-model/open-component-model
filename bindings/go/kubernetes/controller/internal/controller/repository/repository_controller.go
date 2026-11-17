@@ -113,7 +113,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	old := ocmRepo.DeepCopy()
 	defer func(ctx context.Context) {
-		status.UpdateBeforePatch(ctx, ocmRepo, r.EventRecorder, ocmRepo.GetRequeueAfter(), err)
+		err = status.UpdateBeforePatch(ctx, ocmRepo, r.EventRecorder, ocmRepo.GetRequeueAfter(), err)
 		if !equality.Semantic.DeepEqual(ocmRepo.Status, old.Status) {
 			logger.Info("updating status")
 			patchCtx, cancel := status.PatchContext(ctx)

@@ -134,7 +134,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	old := discovery.DeepCopy()
 	result, err := r.reconcile(ctx, discovery)
-	status.MarkTimedOut(ctx, r.EventRecorder, discovery, err)
+	err = status.MarkTimedOut(ctx, r.EventRecorder, discovery, err)
 	if perr := r.publish(ctx, old, discovery); perr != nil {
 		// log the error of the reconcile since we weren't able to update the state of the object.
 		if err != nil {

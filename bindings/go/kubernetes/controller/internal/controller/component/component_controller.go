@@ -193,7 +193,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	old := component.DeepCopy()
 	defer func(ctx context.Context) {
-		status.UpdateBeforePatch(ctx, component, r.EventRecorder, component.GetRequeueAfter(), err)
+		err = status.UpdateBeforePatch(ctx, component, r.EventRecorder, component.GetRequeueAfter(), err)
 		if !equality.Semantic.DeepEqual(component.Status, old.Status) {
 			patchCtx, cancel := status.PatchContext(ctx)
 			defer cancel()
