@@ -102,6 +102,9 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	}
 
 	var resolvedDigest godigest.Digest
+	// resolvedVersion is the chart version the repository index actually selected. It differs
+	// from the requested one only when the access carries no version at all.
+	var resolvedVersion string
 	normalisation := genericBlobDigestV1
 
 	var err error
@@ -125,13 +128,23 @@ func (p *DigestProcessor) ProcessResourceDigest(
 				return nil, fmt.Errorf("error converting credentials: %w", err)
 			}
 		}
-		resolvedDigest, err = p.resolveHTTPDigest(ctx, helm, helmCreds)
+		resolvedDigest, resolvedVersion, err = p.resolveHTTPDigest(ctx, helm, helmCreds)
 	}
 	if err != nil {
 		return nil, err
 	}
 
 	resource = resource.DeepCopy()
+
+	// A chart reference without a version floats: the index picks its newest version, so a later
+	// download would resolve a different chart than the one digested here. Pin what was digested.
+	if helm.GetVersion() == "" && resolvedVersion != "" {
+		pinned := helm.DeepCopy()
+		pinned.Version = resolvedVersion
+		slog.InfoContext(ctx, "helm access carries no chart version; pinning the version resolved from the repository index",
+			"chart", helm.GetChartName(), "version", resolvedVersion)
+		resource.Access = pinned
+	}
 
 	if resource.Digest == nil {
 		resource.Digest = &runtime.Digest{}
@@ -145,9 +158,11 @@ func (p *DigestProcessor) ProcessResourceDigest(
 	return resource, nil
 }
 
-func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Helm, credentials *helmcredsv1.HelmHTTPCredentials) (godigest.Digest, error) {
+// resolveHTTPDigest resolves the digest of the chart the repository index selects, together with
+// the chart version it selected. A requested version must be present in the index verbatim.
+func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Helm, credentials *helmcredsv1.HelmHTTPCredentials) (godigest.Digest, string, error) {
 	if err := ctx.Err(); err != nil {
-		return "", fmt.Errorf("context cancelled before resolving HTTP digest: %w", err)
+		return "", "", fmt.Errorf("context cancelled before resolving HTTP digest: %w", err)
 	}
 
 	tempDir := p.tempFolder
@@ -157,7 +172,7 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 
 	cacheDir, err := os.MkdirTemp(tempDir, "helm-digest-cache-*")
 	if err != nil {
-		return "", fmt.Errorf("error creating temporary directory: %w", err)
+		return "", "", fmt.Errorf("error creating temporary directory: %w", err)
 	}
 	defer func(path string) {
 		if err := os.RemoveAll(path); err != nil {
@@ -179,11 +194,11 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 
 	providers, err := download.IndexGetterProviders(ctx, helm.HelmRepository, credentials, p.httpConfig)
 	if err != nil {
-		return "", fmt.Errorf("error creating helm repository client: %w", err)
+		return "", "", fmt.Errorf("error creating helm repository client: %w", err)
 	}
 	chartRepo, err := repo.NewChartRepository(entry, providers)
 	if err != nil {
-		return "", fmt.Errorf("error creating chart repository: %w", err)
+		return "", "", fmt.Errorf("error creating chart repository: %w", err)
 	}
 	chartRepo.CachePath = cacheDir
 
@@ -202,25 +217,25 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 	var idxPath string
 	select {
 	case <-ctx.Done():
-		return "", fmt.Errorf("context cancelled while downloading repository index: %w", ctx.Err())
+		return "", "", fmt.Errorf("context cancelled while downloading repository index: %w", ctx.Err())
 	case res := <-ch:
 		if res.err != nil {
-			return "", fmt.Errorf("error downloading repository index: %w", res.err)
+			return "", "", fmt.Errorf("error downloading repository index: %w", res.err)
 		}
 		idxPath = res.path
 	}
 
 	indexFile, err := repo.LoadIndexFile(idxPath)
 	if err != nil {
-		return "", fmt.Errorf("error loading repository index: %w", err)
+		return "", "", fmt.Errorf("error loading repository index: %w", err)
 	}
 
 	chartName := helm.GetChartName()
 	version := helm.GetVersion()
 
-	cv, err := indexFile.Get(chartName, version)
+	cv, err := download.ChartVersionFromIndex(indexFile, chartName, version)
 	if err != nil {
-		return "", fmt.Errorf("chart %q version %q not found in repository index: %w", chartName, version, err)
+		return "", "", err
 	}
 
 	if cv.Digest == "" {
@@ -228,15 +243,19 @@ func (p *DigestProcessor) resolveHTTPDigest(ctx context.Context, helm helmv1.Hel
 		// and hashed, from the URL the index lists for it.
 		slog.InfoContext(ctx, "helm repository index lists no digest for the chart; downloading it to compute one",
 			"chart", chartName, "version", cv.Version)
-		return downloadChartDigest(ctx, providers, helm.HelmRepository, cv, credentials)
+		d, err := downloadChartDigest(ctx, providers, helm.HelmRepository, cv, credentials)
+		if err != nil {
+			return "", "", err
+		}
+		return d, cv.Version, nil
 	}
 
 	d, err := parseDigest(cv.Digest)
 	if err != nil {
-		return "", fmt.Errorf("error parsing chart digest %q: %w", cv.Digest, err)
+		return "", "", fmt.Errorf("error parsing chart digest %q: %w", cv.Digest, err)
 	}
 
-	return d, nil
+	return d, cv.Version, nil
 }
 
 // downloadChartDigest downloads the chart cv names with the getters the index was fetched
