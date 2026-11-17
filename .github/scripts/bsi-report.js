@@ -38,6 +38,15 @@ export const DOCKLE_CHECKS = new Set([
 ]);
 
 /**
+ * Checkpoints dockle cannot evaluate from an image archive: DKL-DI-0006 is
+ * derived from the image reference given on the command line, and the scan
+ * passes --input, so dockle never assesses the tag. Such a check is absent
+ * from every report for a reason that has nothing to do with the image, so it
+ * is recorded as not evaluated instead of passed, and nothing may map it.
+ */
+export const DOCKLE_ARCHIVE_BLIND = new Set(["DKL-DI-0006"]);
+
+/**
  * @typedef {"pass" | "accepted" | "fail" | "skip"} Outcome
  * @typedef {{ target: string, outcome: Outcome }} Observation
  * @typedef {Map<string, Observation[]>} Results - observations by rule reference ("<scanner>:<check>")
@@ -80,6 +89,7 @@ export function validateModule(module) {
             const [scanner, check] = String(rule).split(":");
             if (!SCANNERS.includes(/** @type {any} */ (scanner)) || !check) errors.push(`${where}: rule ${rule} must be <${SCANNERS.join("|")}>:<check>`);
             else if (scanner === "dockle" && !DOCKLE_CHECKS.has(check)) errors.push(`${where}: unknown dockle check ${check}`);
+            else if (scanner === "dockle" && DOCKLE_ARCHIVE_BLIND.has(check)) errors.push(`${where}: dockle cannot evaluate ${check} from an image archive`);
             else if (scanner === "oci" && !OCI_CHECKS.has(check)) errors.push(`${where}: unknown oci check ${check}`);
         }
     }
@@ -187,7 +197,7 @@ export function addDockle(results, report, target) {
     for (const code of DOCKLE_CHECKS) {
         const level = levels.get(code);
         /** @type {Outcome} */
-        const outcome = level === undefined ? "pass" : level === "SKIP" || level === "IGNORE" ? "skip" : "fail";
+        const outcome = DOCKLE_ARCHIVE_BLIND.has(code) || level === "SKIP" || level === "IGNORE" ? "skip" : level === undefined ? "pass" : "fail";
         observe(results, `dockle:${code}`, { target, outcome });
     }
     return problems;
@@ -307,6 +317,23 @@ async function readOptional(file) {
 }
 
 /**
+ * Read a JSON report. A truncated or empty file is reported like a missing
+ * one: it must not abort the report and leave the other targets unevaluated.
+ *
+ * @param {string} file
+ * @returns {Promise<{ value?: any, error?: string }>}
+ */
+async function readJson(file) {
+    const text = await readOptional(file);
+    if (text === undefined) return { error: `missing ${path.basename(file)}` };
+    try {
+        return { value: JSON.parse(text) };
+    } catch (error) {
+        return { error: `unreadable ${path.basename(file)}: ${error instanceof Error ? error.message : error}` };
+    }
+}
+
+/**
  * Collect the results of a directory holding the downloaded scan artifacts:
  * image-scan-<image>-<arch>/{stig/{ocm,gpos}-results.xml,dockle.json,metadata.json}
  * and chart-scan/{trivy-all,trivy,kubescape}.json.
@@ -338,20 +365,20 @@ export async function collect(reportsDir, expected) {
             if (xml === undefined) errors.push(`${dir}: missing ${file}`);
             else addStig(results, xml, target);
         }
-        const dockle = await readOptional(path.join(reportsDir, dir, "dockle.json"));
-        if (dockle === undefined) errors.push(`${dir}: missing dockle.json`);
-        else errors.push(...addDockle(results, JSON.parse(dockle), target));
-        const metadata = await readOptional(path.join(reportsDir, dir, "metadata.json"));
-        if (metadata === undefined) errors.push(`${dir}: missing metadata.json`);
-        else addOci(results, JSON.parse(metadata), target);
+        const dockle = await readJson(path.join(reportsDir, dir, "dockle.json"));
+        if (dockle.error) errors.push(`${dir}: ${dockle.error}`);
+        else errors.push(...addDockle(results, dockle.value, target));
+        const metadata = await readJson(path.join(reportsDir, dir, "metadata.json"));
+        if (metadata.error) errors.push(`${dir}: ${metadata.error}`);
+        else addOci(results, metadata.value, target);
     }
-    const trivy = await readOptional(path.join(reportsDir, "chart-scan", "trivy-all.json"));
-    const gated = await readOptional(path.join(reportsDir, "chart-scan", "trivy.json"));
-    if (trivy === undefined || gated === undefined) errors.push("chart-scan: missing trivy-all.json or trivy.json");
-    else addTrivy(results, JSON.parse(trivy), JSON.parse(gated));
-    const kubescape = await readOptional(path.join(reportsDir, "chart-scan", "kubescape.json"));
-    if (kubescape === undefined) errors.push("chart-scan: missing kubescape.json");
-    else addKubescape(results, JSON.parse(kubescape));
+    const trivy = await readJson(path.join(reportsDir, "chart-scan", "trivy-all.json"));
+    const gated = await readJson(path.join(reportsDir, "chart-scan", "trivy.json"));
+    if (trivy.error || gated.error) errors.push(`chart-scan: ${trivy.error ?? gated.error}`);
+    else addTrivy(results, trivy.value, gated.value);
+    const kubescape = await readJson(path.join(reportsDir, "chart-scan", "kubescape.json"));
+    if (kubescape.error) errors.push(`chart-scan: ${kubescape.error}`);
+    else addKubescape(results, kubescape.value);
     return { results, errors };
 }
 

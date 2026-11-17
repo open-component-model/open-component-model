@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { addDockle, addKubescape, addStig, addTrivy, collect, DOCKLE_CHECKS, evaluate, loadModules, parseXccdfResults, ruleVerdict, stigCheck, validateModule } from "./bsi-report.js";
@@ -35,6 +35,7 @@ describe("validateModule", () => {
     it("rejects unknown scanners and dockle checks it cannot count as passed", () => {
         assert.match(validateModule(module({ status: "automated", rules: ["kube-bench:1.1"] })).join(), /must be <stig\|dockle\|oci\|trivy\|kubescape>/);
         assert.match(validateModule(module({ status: "automated", rules: ["dockle:CIS-DI-0999"] })).join(), /unknown dockle check/);
+        assert.match(validateModule(module({ status: "automated", rules: ["dockle:DKL-DI-0006"] })).join(), /dockle cannot evaluate DKL-DI-0006 from an image archive/);
     });
 
     it("keeps operator controls to the operator's part and manual controls to OCM measures", () => {
@@ -88,6 +89,8 @@ describe("addDockle", () => {
         assert.deepEqual(results.get("dockle:CIS-DI-0001"), [{ target: "cli", outcome: "fail" }]);
         assert.deepEqual(results.get("dockle:CIS-DI-0008"), [{ target: "cli", outcome: "fail" }]);
         assert.deepEqual(results.get("dockle:DKL-LI-0003"), [{ target: "cli", outcome: "skip" }]);
+        // dockle derives DKL-DI-0006 from the image reference, which --input has none of.
+        assert.deepEqual(results.get("dockle:DKL-DI-0006"), [{ target: "cli", outcome: "skip" }]);
         assert.deepEqual(results.get("dockle:CIS-DI-0010"), [{ target: "cli", outcome: "pass" }]);
     });
 
@@ -209,5 +212,14 @@ describe("collect", () => {
         t.after(() => rm(dir, { recursive: true, force: true }));
         const { errors } = await collect(dir, ["cli-amd64"]);
         assert.ok(errors.some((e) => e.includes("image-scan-cli-s390x is not an expected scan target")), errors.join("; "));
+    });
+
+    it("reports a truncated report instead of aborting the whole run", async (t) => {
+        const dir = await reportsDir(["image-scan-cli-amd64"]);
+        t.after(() => rm(dir, { recursive: true, force: true }));
+        await writeFile(path.join(dir, "image-scan-cli-amd64", "dockle.json"), '{"summary":');
+        const { errors } = await collect(dir, ["cli-amd64"]);
+        assert.ok(errors.some((e) => e.includes("unreadable dockle.json")), errors.join("; "));
+        assert.ok(errors.some((e) => e.includes("missing metadata.json")), errors.join("; "));
     });
 });

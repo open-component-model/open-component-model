@@ -75,7 +75,6 @@ controls:
       - stig:ocm_rule_no_shared_libraries
       - stig:ocm_rule_ca_bundle
       - dockle:CIS-DI-0008
-      - dockle:DKL-DI-0006
       - trivy:KSV-0013
       - trivy:KSV-0125
       - trivy:OCM-DS-0001

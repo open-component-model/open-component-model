@@ -245,7 +245,14 @@ jobs:
           mkdir -p tmp/dockle
           rc=0
           docker run --rm -v "$PWD/tmp/image.tar:/image.tar:ro" -v "$PWD/tmp/dockle:/out" "$DOCKLE_IMAGE" \
-            --exit-code 1 --exit-level warn --format json --output /out/dockle.json --input /image.tar || rc=$?
+            --exit-code 1 --exit-level warn --format json --output /out/dockle.json --input /image.tar \
+            > tmp/dockle/dockle.log 2>&1 || rc=$?
+          cat tmp/dockle/dockle.log
+          # An assessor that fails is logged and skipped, and dockle still exits
+          # 0 with a report: its checks would then count as passed everywhere.
+          if grep -q 'ERROR' tmp/dockle/dockle.log; then
+            echo "::error::dockle logged an error; its checks were not all evaluated"; rc=1
+          fi
           # dockle writes no report when it fails before the scan; rc stays its exit status.
           if [[ -f tmp/dockle/dockle.json ]]; then
             mv tmp/dockle/dockle.json dockle.json
