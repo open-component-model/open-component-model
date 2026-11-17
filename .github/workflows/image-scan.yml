@@ -1,15 +1,18 @@
 name: Image scan
 
 # Reusable: pipeline.yml scans the CLI (default, slim) and controller images it
-# built, per architecture: with Trivy and govulncheck's OpenVEX (findings warn;
-# a broken scan fails), against the DISA GPOS SRG as tailored in .github/stig,
-# and against the CIS Docker Benchmark (dockle). STIG and CIS findings fail.
+# built, per architecture: for their OCI metadata and SLSA provenance, with
+# Trivy and govulncheck's OpenVEX (findings warn; a broken scan fails), against
+# the DISA GPOS SRG as tailored in .github/stig, and against the CIS Docker
+# Benchmark (dockle). Metadata, STIG and CIS findings fail.
 # The controller chart, rendered with its opt-in NetworkPolicy, is checked
 # against the CIS Kubernetes Benchmark (Trivy config) and NSA/CISA and MITRE
 # (Kubescape); the image build files get Trivy's Dockerfile checks. OCM's own
 # Trivy checks are in .github/trivy-checks (unit-tested by trivy-checks.yml),
 # accepted findings and check settings in .github/benchmarks.
-# Benchmark findings fail.
+# Benchmark findings fail. All results are then mapped to the BSI IT-Grundschutz
+# requirements in .github/benchmarks/bsi, which fails on a failed or unevaluated
+# mapped rule.
 on:
   workflow_call:
     inputs:
@@ -78,6 +81,8 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           sparse-checkout: |
+            .github/scripts/image-metadata.js
+            .github/scripts/package.json
             .github/stig
             .env
             ${{ matrix.containerfile }}
@@ -88,13 +93,13 @@ jobs:
         run: grep -E '^(TRIVY_VERSION|OPENSCAP_IMAGE|DOCKLE_IMAGE)=' .env >> "$GITHUB_ENV"
 
       - name: Download image artifact
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ${{ matrix.artifact }}
           path: tmp/artifact
 
       - name: Download OpenVEX
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ${{ needs.vex.outputs.vex_artifact_prefix }}-${{ matrix.arch }}
           path: tmp/vex
@@ -110,9 +115,12 @@ jobs:
           blob() { echo "tmp/layout/blobs/${1/://}"; }
           mkdir -p tmp/layout
           tar -xf "tmp/artifact/${OCI_TAR}" -C tmp/layout
+          # The image metadata check reads the archive's own index: narrowing
+          # drops the attestation manifests it has to find.
+          cp tmp/layout/index.json tmp/oci-index.json
           jq --arg arch "$ARCH" '.manifests |= map(select(.platform.os == "linux" and .platform.architecture == $arch))' \
-            "$(blob "$(jq -r '.manifests[0].digest' tmp/layout/index.json)")" > tmp/index.json
-          mv tmp/index.json tmp/layout/index.json
+            "$(blob "$(jq -r '.manifests[0].digest' tmp/layout/index.json)")" > tmp/narrowed-index.json
+          mv tmp/narrowed-index.json tmp/layout/index.json
           manifest="$(blob "$(jq -r '.manifests[0].digest' tmp/layout/index.json)")"
 
           # dockle reads only docker-archive tarballs: the layout plus a docker
@@ -161,6 +169,24 @@ jobs:
         continue-on-error: true
         run: exit 1
 
+      # OCI annotations and SLSA provenance attestation of the platform manifest,
+      # which make the image's function and history traceable (BSI SYS.1.6.A12).
+      # Runs after the vulnerability steps, which carry no `if`: a missing
+      # annotation must not skip them.
+      - name: Image metadata
+        if: ${{ !cancelled() }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          OCI_LAYOUT: tmp/layout
+          OCI_INDEX: tmp/oci-index.json
+          ARCH: ${{ matrix.arch }}
+          OUTPUT: metadata.json
+          SUMMARY_TITLE: ${{ matrix.image }} (linux/${{ matrix.arch }})
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/image-metadata.js');
+            await script.default({ core });
+
       # DISA GPOS SRG as tailored in .github/stig, plus OCM's supplement for the
       # deselected rules, evaluated offline on the image's root filesystem.
       # Fails on any failed rule of either evaluation.
@@ -208,21 +234,41 @@ jobs:
             { echo "::error::CA bundle differs from the one in $base"; fail=1; }
           exit "$fail"
 
-      # CIS Docker Benchmark section 4. Fails on WARN and FATAL; INFO (content
-      # trust) and SKIP (no /etc/passwd in scratch) do not fail.
+      # CIS Docker Benchmark section 4. The job fails on WARN and FATAL; INFO
+      # (content trust) and SKIP (no /etc/passwd in scratch) do not fail it, but
+      # the BSI report counts a reported check of any level as a finding of the
+      # requirement it is mapped to. -f json replaces dockle's own output, so
+      # the findings are rendered from the report.
       - name: CIS Docker Benchmark (dockle)
         if: ${{ !cancelled() }}
         run: |
-          docker run --rm -v "$PWD/tmp/image.tar:/image.tar:ro" "$DOCKLE_IMAGE" \
-            --exit-code 1 --exit-level warn --input /image.tar
+          mkdir -p tmp/dockle
+          rc=0
+          docker run --rm -v "$PWD/tmp/image.tar:/image.tar:ro" -v "$PWD/tmp/dockle:/out" "$DOCKLE_IMAGE" \
+            --exit-code 1 --exit-level warn --format json --output /out/dockle.json --input /image.tar \
+            > tmp/dockle/dockle.log 2>&1 || rc=$?
+          cat tmp/dockle/dockle.log
+          # An assessor that fails is logged and skipped, and dockle still exits
+          # 0 with a report: its checks would then count as passed everywhere.
+          if grep -q 'ERROR' tmp/dockle/dockle.log; then
+            echo "::error::dockle logged an error; its checks were not all evaluated"; rc=1
+          fi
+          # dockle writes no report when it fails before the scan; rc stays its exit status.
+          if [[ -f tmp/dockle/dockle.json ]]; then
+            mv tmp/dockle/dockle.json dockle.json
+            jq -r '.details[]? | "\(.level) \(.code): \((.alerts // []) | join("; "))"' dockle.json || true
+          fi
+          exit "$rc"
 
       - name: Upload reports
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: image-scan-${{ matrix.image }}-${{ matrix.arch }}
           path: |
             trivy.json
+            metadata.json
+            dockle.json
             stig/
           if-no-files-found: ignore
 
@@ -284,6 +330,9 @@ jobs:
       - name: CIS Kubernetes Benchmark (Trivy config)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         env:
+          # Passed checks too, so the BSI report can tell a passed check from one
+          # that was not run. The gate below only counts failures.
+          TRIVY_INCLUDE_NON_FAILURES: "true"
           # OCM's own checks (OCM-*) for what no built-in check covers.
           TRIVY_CONFIG_CHECK: .github/trivy-checks
           TRIVY_CHECK_NAMESPACES: user
@@ -298,20 +347,31 @@ jobs:
           cache: 'false'
           scan-type: config
           scan-ref: tmp/chart
-          trivyignores: .github/benchmarks/trivyignore.yaml
-          exit-code: '1'
+          # No ignore file here: the full report is what the BSI mapping is
+          # evaluated against, and an accepted finding has to show up in it.
+          exit-code: '0'
           format: json
-          output: tmp/chart-scan/trivy.json
+          output: tmp/chart-scan/trivy-all.json
 
-      # Trivy's JSON lists only failed checks; accepted findings are dropped.
-      # trivy convert renders the failed ones with their source lines.
+      # Drops the findings accepted in trivyignore.yaml and fails on what is
+      # left. Filtering the full report, instead of scanning with the ignore
+      # file, keeps both reports from one scan: the difference between them is
+      # exactly the set of accepted findings.
+      - name: Accept known findings and gate on the rest
+        if: ${{ !cancelled() && hashFiles('tmp/chart-scan/trivy-all.json') != '' }}
+        run: |
+          trivy convert --ignorefile .github/benchmarks/trivyignore.yaml --exit-code 1 \
+            --format json --output tmp/chart-scan/trivy.json tmp/chart-scan/trivy-all.json
+
+      # The gated JSON lists only the failed checks; trivy convert renders them
+      # with their source lines.
       - name: Render CIS Kubernetes Benchmark findings
         if: ${{ !cancelled() && hashFiles('tmp/chart-scan/trivy.json') != '' }}
         run: trivy convert --format table --table-mode detailed --scanners misconfig --output tmp/chart-scan/trivy.txt tmp/chart-scan/trivy.json
 
       - name: CIS Kubernetes Benchmark summary
         if: ${{ !cancelled() }}
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const fs = require('node:fs');
@@ -341,7 +401,7 @@ jobs:
 
       - name: NSA/CISA and MITRE summary
         if: ${{ !cancelled() && hashFiles('tmp/chart-scan/kubescape.json') != '' }}
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const report = JSON.parse(require('node:fs').readFileSync('tmp/chart-scan/kubescape.json', 'utf8'));
@@ -374,10 +434,71 @@ jobs:
 
       - name: Upload reports
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: chart-scan
           path: |
             tmp/chart-scan/
             tmp/chart/
+          if-no-files-found: ignore
+
+  # Maps the reports of the jobs above to BSI IT-Grundschutz SYS.1.6 and
+  # APP.4.4 requirements (.github/benchmarks/bsi). Fails on a failed mapped
+  # rule and on a mapped rule that no scan evaluated.
+  bsi:
+    name: BSI IT-Grundschutz
+    needs: [scan, chart]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-26.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          sparse-checkout: |
+            .github/benchmarks
+            .github/scripts
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .github/scripts/package.json
+
+      - name: Install dependencies
+        working-directory: .github/scripts
+        run: npm ci
+
+      - name: Download image reports
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: image-scan-*
+          path: tmp/reports
+
+      # The artifact already carries the chart-scan/ prefix of its upload.
+      - name: Download chart reports
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: chart-scan
+          path: tmp/reports
+
+      - name: BSI report
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          REPORTS_DIR: tmp/reports
+          # Every target of the scan matrix above; the report fails on a target
+          # whose job uploaded no reports, and on a target that is not listed here.
+          EXPECTED_TARGETS: cli-amd64 cli-arm64 cli-slim-amd64 cli-slim-arm64 controller-amd64 controller-arm64
+          OUTPUT: tmp/reports/bsi-it-grundschutz.json
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/bsi-report.js');
+            await script.default({ core });
+
+      - name: Upload report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: bsi-it-grundschutz
+          path: tmp/reports/bsi-it-grundschutz.json
           if-no-files-found: ignore

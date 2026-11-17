@@ -471,7 +471,18 @@ func TestResolveHTTPChartURL(t *testing.T) {
 					_, _ = w.Write([]byte(makeIndex(getSrvURL())))
 				})
 			},
-			wantErr: "not found in index",
+			wantErr: "not found in repository index",
+		},
+		{
+			name:     "a version that is only a semver constraint match is rejected",
+			helmRepo: "%s/mychart:0.1.x",
+			setupMux: func(mux *http.ServeMux, getSrvURL func() string) {
+				mux.HandleFunc("/index.yaml", func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/yaml")
+					_, _ = w.Write([]byte(makeIndex(getSrvURL())))
+				})
+			},
+			wantErr: `chart "mychart" version "0.1.x" not found in repository index (available: 0.1.0)`,
 		},
 		{
 			name:     "index fetch failure returns error",

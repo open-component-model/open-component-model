@@ -107,6 +107,11 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 			_ = os.RemoveAll(ociPath)
 		})
 
+		// Only the output file stays behind: the layout is built in a temporary file first.
+		leftovers, err := filepath.Glob(filepath.Join(outputDir, "oci-layout-*"))
+		r.NoError(err)
+		r.Empty(leftovers)
+
 		// Verify it is a valid OCI layout with a helm chart layer
 		verifyOCILayout(t, ociPath, "mychart", "0.1.0", false)
 
@@ -256,6 +261,62 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 		})
 
 		verifyOCILayout(t, ociPath, "mychart", "0.1.0", false)
+	})
+
+	t.Run("removes the buffered layout when a later step fails", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		ctx := t.Context()
+		tempDir := t.TempDir()
+
+		chartPath, err := filepath.Abs(filepath.Join(testDataDir, "mychart-0.1.0.tgz"))
+		r.NoError(err)
+
+		transform := &transformation.ConvertHelmChartToOCI{
+			Scheme:  scheme,
+			TempDir: tempDir,
+		}
+
+		// Without a chart name the OCI image reference cannot be constructed, which fails
+		// after the layout has been written to the buffered file.
+		helmAccessData, err := json.Marshal(map[string]string{
+			"helmRepository": "https://example.com",
+			"version":        "0.1.0",
+		}, runtime.JSONOptions)
+		r.NoError(err)
+
+		spec := &v1alpha1.ConvertHelmToOCI{
+			Type: runtime.NewVersionedType(v1alpha1.ConvertHelmToOCIType, v1alpha1.Version),
+			ID:   "test-convert-cleanup-on-error",
+			Spec: &v1alpha1.ConvertHelmToOCISpec{
+				ChartFile: filev1alpha1.File{
+					URI: fileURI(t, chartPath),
+				},
+				Resource: &descv2.Resource{
+					ElementMeta: descv2.ElementMeta{
+						ObjectMeta: descv2.ObjectMeta{
+							Name:    "mychart",
+							Version: "0.1.0",
+						},
+					},
+					Type: "helmChart",
+					Access: &runtime.Raw{
+						Type: runtime.Type{
+							Name:    "helm",
+							Version: "v1",
+						},
+						Data: helmAccessData,
+					},
+				},
+			},
+		}
+
+		_, err = transform.Transform(ctx, spec)
+		r.Error(err)
+
+		entries, err := os.ReadDir(tempDir)
+		r.NoError(err)
+		r.Empty(entries, "the buffered layout must not survive a failed transformation")
 	})
 
 	t.Run("fails when spec is nil", func(t *testing.T) {

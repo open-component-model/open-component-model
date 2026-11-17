@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
           filters: |
@@ -60,7 +60,7 @@ jobs:
               - 'bindings/go/**/doc.go'
       - name: Compute scopes
         id: compute
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           GO_CHANGED: ${{ steps.filter.outputs.go }}
           SHOULD_LINT: ${{ steps.filter.outputs.lint }}
@@ -145,7 +145,7 @@ jobs:
             /.github/scripts/package.json
             /.github/scripts/package-lock.json
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
       - name: Install Task
@@ -194,7 +194,7 @@ jobs:
             .env
           persist-credentials: false
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
           cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
@@ -219,7 +219,7 @@ jobs:
             echo "pkgs=./..." >> "$GITHUB_OUTPUT"
           fi
       - name: golangci-lint ${{ matrix.module }} (GOOS=${{ matrix.goos }})
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         env:
           GOOS: ${{ matrix.goos }}
         with:
@@ -253,7 +253,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: '${{ github.workspace }}/bindings/go/go.mod'
           cache-dependency-path: '${{ github.workspace }}/bindings/go/go.sum'
@@ -331,7 +331,7 @@ jobs:
             bindings/go
           persist-credentials: false
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: '${{ github.workspace }}/bindings/go/go.mod'
           cache-dependency-path: '${{ github.workspace }}/bindings/go/go.sum'
@@ -383,7 +383,7 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup Go (required by some generators)
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: ${{ github.workspace }}/bindings/go/go.mod
           cache-dependency-path: |

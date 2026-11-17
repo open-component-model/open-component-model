@@ -75,8 +75,8 @@ configurations:
     tempFolder: /var/cache/ocm
 ```
 
-The same temporary folder is also used for other short-lived files, for example extracted CTF archives
-and downloaded resource content.
+The same temporary folder is also used for other short-lived files, for example extracted CTF archives,
+downloaded resource content, and the files `ocm transfer cv` buffers a resource in before it is uploaded.
 
 #### `filesystem.config.ocm.software/v1alpha1` Fields
 
