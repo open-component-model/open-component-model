@@ -16,6 +16,9 @@ type Options struct {
 	// Accepts the serialisable config type so that external plugins can
 	// round-trip it over the wire and reconstruct an equivalent client.
 	HTTPConfig *httpv1alpha1.Config
+	// TempDir is the directory transformations buffer content in before uploading it.
+	// Empty means the default temporary directory of the operating system.
+	TempDir string
 }
 
 type Option func(*Options)
@@ -27,6 +30,15 @@ type Option func(*Options)
 func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 	return func(o *Options) {
 		o.HTTPConfig = cfg
+	}
+}
+
+// WithTempDir sets the directory transformations buffer content in before uploading it,
+// typically the tempFolder of the filesystem configuration. It is created when it does
+// not exist. When empty, the default temporary directory of the operating system is used.
+func WithTempDir(dir string) Option {
+	return func(o *Options) {
+		o.TempDir = dir
 	}
 }
 
@@ -49,5 +61,6 @@ func NewDefaultBuilder(
 		resourceRepo,
 		credentialProvider,
 		options.HTTPConfig,
+		options.TempDir,
 	)
 }
