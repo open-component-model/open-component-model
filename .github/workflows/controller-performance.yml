@@ -12,7 +12,7 @@ on:
         type: string
         required: false
   # A "/perf" comment on a pull request benchmarks its head commit against its merge base with the base branch.
-  issue_comment:
+  issue_comment: # zizmor: ignore[dangerous-triggers] perf-command.js requires write access before any pull request code runs
     types: [created]
   schedule:
     # Nightly: the standard suite, the same one /perf runs: three 1000-object runs of 8 to 13 minutes each. Sundays run every object count instead.
@@ -33,8 +33,7 @@ jobs:
     if: >-
       github.event_name == 'issue_comment' &&
       github.event.issue.pull_request &&
-      startsWith(github.event.comment.body, '/perf') &&
-      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association)
+      startsWith(github.event.comment.body, '/perf')
     runs-on: ubuntu-26.04-arm
     timeout-minutes: 5
     permissions:
