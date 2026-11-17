@@ -62,7 +62,7 @@ jobs:
           echo "ref=${ref}" >> "$GITHUB_OUTPUT"
 
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: bindings/go/go.mod
           cache-dependency-path: bindings/go/go.sum
@@ -113,7 +113,7 @@ jobs:
             tmp/vex/ocm.openvex.json >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload OpenVEX
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: openvex-${{ matrix.arch }}
           path: tmp/vex/
