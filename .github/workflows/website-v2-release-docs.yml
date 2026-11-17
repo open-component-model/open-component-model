@@ -50,7 +50,7 @@ jobs:
             || { echo "::error::tag v${VERSION} not found (release not promoted yet?)"; exit 1; }
 
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: bindings/go/go.mod
           cache: false
@@ -64,7 +64,7 @@ jobs:
           git show "v${VERSION}:bindings/go/go.mod" > "${{ runner.temp }}/cli-go.mod"
 
       - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: website/package.json
 
@@ -103,7 +103,7 @@ jobs:
           permission-pull-requests: write
 
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
           base: main
           token: ${{ steps.get_token.outputs.token }}
