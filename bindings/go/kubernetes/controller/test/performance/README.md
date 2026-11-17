@@ -36,11 +36,11 @@ its job summary and uploads the results directory as an artifact.
 | `/perf` comment on a PR   | The standard suite, for the PR and for its merge base                |
 
 `/perf` takes no arguments, so every comparison runs the same suite. The workflow reacts with 👀 when it sees the
-command, 🚀 when the runs are launched, and 😕 when the comment has arguments. When both runs succeed, it replies with a
-table of the medians of both sides and the difference; when either fails, it replies with 🛑 and a link to the run.
-Rows marked `*` depend on the runner, because the two sides run on different machines. A new `/perf` on the same pull
-request cancels the runs of the previous one. Only repository owners, organization members and collaborators can
-trigger it.
+command, 🚀 when the runs are launched, and 😕 when the comment has arguments or its author has no write access to the
+repository: `/perf` runs the code of the pull request, so only people who can merge it may start it. When both runs
+succeed, it replies with a table of the medians of both sides and the difference; when either fails, it replies with 🛑
+and a link to the run. Rows marked `*` depend on the runner, because the two sides run on different machines. A new
+`/perf` on the same pull request cancels the runs of the previous one.
 
 ## Structure
 
