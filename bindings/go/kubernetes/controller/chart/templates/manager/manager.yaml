@@ -2,6 +2,7 @@
 {{- if and (gt (int .Values.manager.replicas) 1) (not (dig "leaderElection" "enabled" true .Values.manager)) }}
 {{- fail "manager.replicas > 1 requires manager.leaderElection.enabled=true to prevent concurrent reconcilers from racing on the same resources" }}
 {{- end }}
+{{- include "ocm-k8s-toolkit.validatePorts" . }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -185,7 +186,7 @@ spec:
                   livenessProbe:
                     httpGet:
                         path: {{ dig "livenessProbe" "path" "/healthz" .Values.manager }}
-                        port: {{ dig "livenessProbe" "port" 8081 .Values.manager }}
+                        port: {{ include "ocm-k8s-toolkit.healthProbePort" . }}
                     initialDelaySeconds: {{ dig "livenessProbe" "initialDelaySeconds" 15 .Values.manager }}
                     periodSeconds: {{ dig "livenessProbe" "periodSeconds" 20 .Values.manager }}
                   name: manager
@@ -207,7 +208,7 @@ spec:
                   readinessProbe:
                     httpGet:
                         path: {{ dig "readinessProbe" "path" "/readyz" .Values.manager }}
-                        port: {{ dig "readinessProbe" "port" 8081 .Values.manager }}
+                        port: {{ include "ocm-k8s-toolkit.healthProbePort" . }}
                     initialDelaySeconds: {{ dig "readinessProbe" "initialDelaySeconds" 5 .Values.manager }}
                     periodSeconds: {{ dig "readinessProbe" "periodSeconds" 10 .Values.manager }}
                   resources:

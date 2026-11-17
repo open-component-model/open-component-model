@@ -176,3 +176,53 @@ tests:
             app.kubernetes.io/instance: foo
             control-plane: controller-manager
         template: monitoring/servicemonitor.yaml
+
+  - it: fails when metricsServer is null and prometheus is enabled
+    # Simulates helm upgrade --reuse-values from a release that predates metricsServer.
+    set:
+      prometheus.enable: true
+      manager.metricsServer: null
+    template: monitoring/servicemonitor.yaml
+    asserts:
+      - failedTemplate:
+          errorPattern: requires manager.metricsServer.bindAddress
+
+  - it: normalises a leading-zero port in the Service
+    set:
+      prometheus.enable: true
+      manager.metricsServer.bindAddress: ":01024"
+    template: monitoring/service.yaml
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 1024
+
+  - it: takes the port from a bracketed IPv6 bind address
+    set:
+      prometheus.enable: true
+      manager.metricsServer.bindAddress: "[::]:8443"
+    template: monitoring/service.yaml
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 8443
+
+  - it: accepts the minimum valid port 1
+    set:
+      prometheus.enable: true
+      manager.metricsServer.bindAddress: ":1"
+    template: monitoring/service.yaml
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 1
+
+  - it: accepts the maximum valid port 65535
+    set:
+      prometheus.enable: true
+      manager.metricsServer.bindAddress: ":65535"
+    template: monitoring/service.yaml
+    asserts:
+      - equal:
+          path: spec.ports[0].port
+          value: 65535

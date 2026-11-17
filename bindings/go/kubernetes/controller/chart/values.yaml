@@ -99,14 +99,12 @@ manager:
     enabled: true
   ## Health and metrics endpoints
   healthProbe:
-    # -- Address the health probe endpoint binds to
+    # -- Address the health probe endpoint binds to, as host:port with a numeric port. The liveness and readiness probes use its port
     bindAddress: ":8081"
   ## Liveness probe configuration
   livenessProbe:
     # -- Path for the liveness probe
     path: /healthz
-    # -- Port for the liveness probe
-    port: 8081
     # -- Initial delay before starting liveness probes
     initialDelaySeconds: 15
     # -- Period between liveness probes
@@ -115,14 +113,12 @@ manager:
   readinessProbe:
     # -- Path for the readiness probe
     path: /readyz
-    # -- Port for the readiness probe
-    port: 8081
     # -- Initial delay before starting readiness probes
     initialDelaySeconds: 5
     # -- Period between readiness probes
     periodSeconds: 10
   metricsServer:
-    # -- Address the metric endpoint binds to, for example ":8443". "0" disables metrics. Required by prometheus.enable
+    # -- Address the metric endpoint binds to, as host:port with a numeric port, for example ":8443". "0" disables metrics. Required by prometheus.enable, and then it must be reachable from the pod network
     bindAddress: "0"
     # -- Serve the metrics endpoint over TLS with a certificate the manager generates at startup. The ServiceMonitor then scrapes over https without verification
     secure: false
