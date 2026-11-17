@@ -583,9 +583,9 @@ func resolveHTTPChartURL(ctx context.Context, helmRepo, requestedVersion, tmpDir
 		return "", fmt.Errorf("error parsing index.yaml from %q: %w", repoBase, err)
 	}
 
-	cv, err := index.Get(chartName, chartVersion)
+	cv, err := ChartVersionFromIndex(index, chartName, chartVersion)
 	if err != nil {
-		return "", fmt.Errorf("chart %q version %q not found in index at %q: %w", chartName, chartVersion, repoBase, err)
+		return "", fmt.Errorf("error resolving chart in index at %q: %w", repoBase, err)
 	}
 
 	if len(cv.URLs) == 0 {

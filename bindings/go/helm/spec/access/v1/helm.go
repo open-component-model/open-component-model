@@ -41,7 +41,11 @@ type Helm struct {
 	// version (for example mariadb:12.2.7).
 	HelmChart string `json:"helmChart"`
 
-	// Version can either be specified as part of the chart name or separately.
+	// Version can either be specified as part of the chart name or separately. It must name a
+	// version that the repository index lists verbatim; SemVer constraints ("1.x", "^1.0.0")
+	// are not resolved. A leading "v" is optional, as SemVer does not treat it as part of the
+	// version. An omitted version resolves to the newest version in the index at the time the
+	// resource is digested, and is pinned into the access from then on.
 	Version string `json:"version,omitempty"`
 }
 

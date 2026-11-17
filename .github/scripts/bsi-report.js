@@ -1,0 +1,451 @@
+// @ts-check
+import { readdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import * as yaml from "js-yaml";
+import { DOMParser, onWarningStopParsing } from "@xmldom/xmldom";
+
+/**
+ * Evaluates the BSI IT-Grundschutz requirements in .github/benchmarks/bsi
+ * against the reports of the image-scan workflow, the way ComplianceAsCode
+ * profiles map BSI controls to rules.
+ *
+ * Every rule of an automated or partial requirement must have been evaluated
+ * by its scanner on at least one target. A rule that failed anywhere, or that
+ * no scan evaluated (a renamed or dropped check), fails the report, so the
+ * mapping cannot silently drift from what the scanners check.
+ */
+
+export const SCANNERS = /** @type {const} */ (["stig", "dockle", "oci", "trivy", "kubescape"]);
+export const STATUSES = /** @type {const} */ (["automated", "partial", "manual", "operator"]);
+/** Checks of image-metadata.js. */
+export const OCI_CHECKS = new Set(["annotations", "provenance"]);
+/** Statuses without rules: no automated check, or nothing OCM can influence. */
+const UNCHECKED = new Set(["manual", "operator"]);
+export const LEVELS = /** @type {const} */ (["basic", "standard", "elevated"]);
+
+/**
+ * dockle v0.4 checkpoints (pkg/types/checkpoint.go of the pinned image).
+ * dockle reports only the checks that did not pass, so a mapped code must be
+ * one of these to be counted as passed when absent. addDockle checks the set
+ * against every report, so a dockle update that adds, drops or renames a
+ * checkpoint fails the report instead of passing the mapped rules silently.
+ */
+export const DOCKLE_CHECKS = new Set([
+    "CIS-DI-0001", "CIS-DI-0005",
+    "CIS-DI-0006", "CIS-DI-0007", "CIS-DI-0008", "CIS-DI-0009", "CIS-DI-0010",
+    "DKL-DI-0001", "DKL-DI-0002", "DKL-DI-0003", "DKL-DI-0004", "DKL-DI-0005", "DKL-DI-0006",
+    "DKL-LI-0001", "DKL-LI-0002", "DKL-LI-0003",
+]);
+
+/**
+ * Checkpoints dockle cannot evaluate from an image archive: DKL-DI-0006 is
+ * derived from the image reference given on the command line, and the scan
+ * passes --input, so dockle never assesses the tag. Such a check is absent
+ * from every report for a reason that has nothing to do with the image, so it
+ * is recorded as not evaluated instead of passed, and nothing may map it.
+ */
+export const DOCKLE_ARCHIVE_BLIND = new Set(["DKL-DI-0006"]);
+
+/**
+ * @typedef {"pass" | "accepted" | "fail" | "skip"} Outcome
+ * @typedef {{ target: string, outcome: Outcome }} Observation
+ * @typedef {Map<string, Observation[]>} Results - observations by rule reference ("<scanner>:<check>")
+ * @typedef {{ id: string, title: string, level: string, status: string, gspp?: string[], ocm?: string, operator?: string, rules?: string[] }} Control
+ * @typedef {{ module: string, title: string, edition: string, source: string, controls: Control[] }} Module
+ */
+
+/**
+ * Structural problems of a control file.
+ *
+ * @param {any} module
+ * @returns {string[]}
+ */
+export function validateModule(module) {
+    const errors = [];
+    for (const key of ["module", "title", "edition", "source"]) {
+        if (typeof module?.[key] !== "string" || module[key] === "") errors.push(`missing ${key}`);
+    }
+    if (!Array.isArray(module?.controls) || module.controls.length === 0) return [...errors, "no controls"];
+    const seen = new Set();
+    for (const c of module.controls) {
+        const where = c?.id ?? "control without id";
+        if (typeof c?.id !== "string" || !c.id.startsWith(`${module.module}.A`)) errors.push(`${where}: id must start with ${module.module}.A`);
+        if (seen.has(c?.id)) errors.push(`${where}: duplicate id`);
+        seen.add(c?.id);
+        if (typeof c?.title !== "string" || c.title === "") errors.push(`${where}: missing title`);
+        if (!LEVELS.includes(c?.level)) errors.push(`${where}: level must be one of ${LEVELS.join(", ")}`);
+        if (!STATUSES.includes(c?.status)) errors.push(`${where}: status must be one of ${STATUSES.join(", ")}`);
+        if (c?.status === "operator" && (c?.ocm || !c?.operator)) errors.push(`${where}: operator controls describe only the operator's part`);
+        else if (c?.status !== "operator" && !c?.ocm) errors.push(`${where}: ${c?.status} controls describe what OCM provides`);
+        const rules = c?.rules ?? [];
+        if (!Array.isArray(rules)) {
+            errors.push(`${where}: rules must be a list`);
+            continue;
+        }
+        if (UNCHECKED.has(c?.status) && rules.length > 0) errors.push(`${where}: ${c?.status} controls have no rules`);
+        if (!UNCHECKED.has(c?.status) && rules.length === 0) errors.push(`${where}: ${c?.status} controls need rules`);
+        if (new Set(rules).size !== rules.length) errors.push(`${where}: duplicate rule`);
+        for (const rule of rules) {
+            const [scanner, check] = String(rule).split(":");
+            if (!SCANNERS.includes(/** @type {any} */ (scanner)) || !check) errors.push(`${where}: rule ${rule} must be <${SCANNERS.join("|")}>:<check>`);
+            else if (scanner === "dockle" && !DOCKLE_CHECKS.has(check)) errors.push(`${where}: unknown dockle check ${check}`);
+            else if (scanner === "dockle" && DOCKLE_ARCHIVE_BLIND.has(check)) errors.push(`${where}: dockle cannot evaluate ${check} from an image archive`);
+            else if (scanner === "oci" && !OCI_CHECKS.has(check)) errors.push(`${where}: unknown oci check ${check}`);
+        }
+    }
+    return errors;
+}
+
+/**
+ * Load all control files of a directory, sorted by module id (the file names
+ * need not sort the same way).
+ *
+ * @param {string} dir
+ * @returns {Promise<Module[]>}
+ */
+export async function loadModules(dir) {
+    const files = (await readdir(dir)).filter((f) => f.endsWith(".yaml")).sort();
+    const modules = [];
+    for (const file of files) {
+        const module = /** @type {any} */ (yaml.load(await readFile(path.join(dir, file), "utf8")));
+        const errors = validateModule(module);
+        if (errors.length > 0) throw new Error(`${file}: ${errors.join("; ")}`);
+        modules.push(module);
+    }
+    return modules.sort((a, b) => a.module.localeCompare(b.module));
+}
+
+/**
+ * Rule reference of an XCCDF rule id: the SRG id for DISA rules
+ * (xccdf_mil.disa.stig_rule_SV-203716r982210_rule -> SV-203716), the bare id
+ * for OCM's supplement (xccdf_software.ocm_rule_minimal_rootfs -> ocm_rule_minimal_rootfs).
+ *
+ * @param {string} id
+ */
+export function stigCheck(id) {
+    return id.match(/_rule_(SV-\d+)r\d+_rule$/)?.[1] ?? id.replace(/^xccdf_[^.]+\./, "");
+}
+
+/**
+ * Rule results of an XCCDF results document, as OpenSCAP writes them. XCCDF
+ * 1.1 and 1.2 use different namespaces and OpenSCAP writes prefixed element
+ * names, so elements are matched by local name in any namespace.
+ *
+ * @param {string} xml
+ * @returns {{ id: string, result: string }[]}
+ */
+export function parseXccdfResults(xml) {
+    const doc = new DOMParser({ onError: onWarningStopParsing }).parseFromString(xml, "application/xml");
+    /** @param {{ getElementsByTagNameNS: (ns: string, name: string) => { length: number, item: (i: number) => any } }} node @param {string} name */
+    const children = (node, name) => {
+        const list = node.getElementsByTagNameNS("*", name);
+        return Array.from({ length: list.length }, (_, i) => list.item(i));
+    };
+    return children(doc, "rule-result").flatMap((element) => {
+        const id = element.getAttribute("idref");
+        const result = children(element, "result")[0]?.textContent?.trim();
+        return id && result ? [{ id, result }] : [];
+    });
+}
+
+/** @param {Results} results @param {string} rule @param {Observation} observation */
+function observe(results, rule, observation) {
+    const list = results.get(rule) ?? [];
+    list.push(observation);
+    results.set(rule, list);
+}
+
+/**
+ * @param {Results} results
+ * @param {string} xml - XCCDF results document
+ * @param {string} target
+ */
+export function addStig(results, xml, target) {
+    for (const r of parseXccdfResults(xml)) {
+        /** @type {Outcome} */
+        const outcome = r.result === "pass" ? "pass" : ["fail", "error", "unknown"].includes(r.result) ? "fail" : "skip";
+        observe(results, `stig:${stigCheck(r.id)}`, { target, outcome });
+    }
+}
+
+/**
+ * dockle lists only the checks that did not pass and counts every checkpoint it
+ * ran in its summary. A listed check is a finding whatever level dockle gives
+ * it: the image-scan job gates on WARN and FATAL, but a mapped check reported
+ * at INFO (CIS-DI-0008, setuid/setgid files, is INFO by default) is still a
+ * deviation and fails the requirement it is mapped to. SKIP (a check that does
+ * not apply to the image) is not a verdict.
+ *
+ * @param {Results} results
+ * @param {any} report - dockle JSON report
+ * @param {string} target
+ * @returns {string[]} problems with the report itself, not with the image
+ */
+export function addDockle(results, report, target) {
+    if (!report?.summary) return [`${target}: dockle report has no summary`];
+    /** @type {Map<string, string>} */
+    const levels = new Map((report.details ?? []).map((/** @type {any} */ d) => [d.code, d.level]));
+    const problems = [];
+    // Every checkpoint lands in exactly one summary counter, except the ones
+    // silenced with --ignore, which dockle lists as IGNORE and counts nowhere.
+    const ran = Object.values(report.summary ?? {}).reduce((/** @type {number} */ n, v) => n + (typeof v === "number" ? v : 0), 0)
+        + [...levels.values()].filter((l) => l === "IGNORE").length;
+    if (ran !== DOCKLE_CHECKS.size) problems.push(`${target}: dockle ran ${ran} checks, expected the ${DOCKLE_CHECKS.size} known checkpoints`);
+    for (const code of levels.keys()) {
+        if (!DOCKLE_CHECKS.has(code)) problems.push(`${target}: dockle reported unknown check ${code}`);
+    }
+    for (const code of DOCKLE_CHECKS) {
+        const level = levels.get(code);
+        /** @type {Outcome} */
+        const outcome = DOCKLE_ARCHIVE_BLIND.has(code) || level === "SKIP" || level === "IGNORE" ? "skip" : level === undefined ? "pass" : "fail";
+        observe(results, `dockle:${code}`, { target, outcome });
+    }
+    return problems;
+}
+
+/**
+ * @param {Results} results
+ * @param {{ id: string, result: string }[]} checks - image-metadata.js result
+ * @param {string} target
+ */
+export function addOci(results, checks, target) {
+    for (const c of checks) observe(results, `oci:${c.id}`, { target, outcome: c.result === "pass" ? "pass" : "fail" });
+}
+
+/**
+ * Trivy config reports of the chart job: the full scan, run with
+ * --include-non-failures, and the gated one, from which `trivy convert
+ * --ignorefile` dropped the findings accepted in trivyignore.yaml. A finding
+ * counts as accepted only when the full scan reported it and the gated report
+ * no longer has it, so a stale ignore entry for a renamed or dropped check
+ * cannot stand in for an observation: that rule stays missing.
+ *
+ * @param {Results} results
+ * @param {any} report - full Trivy JSON report
+ * @param {any} gated - Trivy JSON report with the accepted findings removed
+ */
+export function addTrivy(results, report, gated) {
+    const open = new Set();
+    for (const result of gated?.Results ?? []) {
+        for (const m of result.Misconfigurations ?? []) {
+            if (m.Status === "FAIL") open.add(`${m.ID}\u0000${result.Target}`);
+        }
+    }
+    for (const result of report?.Results ?? []) {
+        for (const m of result.Misconfigurations ?? []) {
+            /** @type {Outcome} */
+            const outcome = m.Status === "PASS" ? "pass"
+                : m.Status !== "FAIL" ? "skip"
+                : open.has(`${m.ID}\u0000${result.Target}`) ? "fail" : "accepted";
+            observe(results, `trivy:${m.ID}`, { target: result.Target, outcome });
+        }
+    }
+}
+
+/**
+ * Kubescape reports a control once per resource it relates to; an exception of
+ * .github/benchmarks/kubescape-exceptions.json marks such a failure accepted
+ * ("w/exceptions"), and summaryDetails still counts the control as failed.
+ * The passed and skipped controls only appear in summaryDetails.
+ *
+ * @param {Results} results
+ * @param {any} report - Kubescape JSON report
+ */
+export function addKubescape(results, report) {
+    /** @type {Map<string, Outcome>} */
+    const failures = new Map();
+    for (const r of report?.results ?? []) {
+        for (const c of r.controls ?? []) {
+            if (c.status?.status !== "failed") continue;
+            /** @type {Outcome} */
+            const outcome = c.status.subStatus === "w/exceptions" ? "accepted" : "fail";
+            if (outcome === "fail" || !failures.has(c.controlID)) failures.set(c.controlID, outcome);
+        }
+    }
+    for (const [id, control] of Object.entries(report?.summaryDetails?.controls ?? {})) {
+        const status = /** @type {any} */ (control).status;
+        /** @type {Outcome} */
+        const outcome = failures.get(id) ?? (status === "passed" ? "pass" : status === "failed" ? "fail" : "skip");
+        observe(results, `kubescape:${id}`, { target: "chart", outcome });
+    }
+}
+
+/**
+ * Verdict of one rule over all its observations. "missing" means no scan
+ * evaluated it.
+ *
+ * @param {Observation[] | undefined} observations
+ * @returns {{ verdict: "pass" | "accepted" | "fail" | "missing", failed: string[], evaluated: number }}
+ */
+export function ruleVerdict(observations) {
+    const evaluated = (observations ?? []).filter((o) => o.outcome !== "skip");
+    const failed = evaluated.filter((o) => o.outcome === "fail").map((o) => o.target);
+    if (evaluated.length === 0) return { verdict: "missing", failed, evaluated: 0 };
+    if (failed.length > 0) return { verdict: "fail", failed, evaluated: evaluated.length };
+    const accepted = evaluated.some((o) => o.outcome === "accepted");
+    return { verdict: accepted ? "accepted" : "pass", failed, evaluated: evaluated.length };
+}
+
+/**
+ * @param {Module[]} modules
+ * @param {Results} results
+ */
+export function evaluate(modules, results) {
+    return modules.map((module) => ({
+        module: module.module,
+        title: module.title,
+        edition: module.edition,
+        controls: module.controls.map((control) => {
+            const rules = (control.rules ?? []).map((rule) => ({ rule, ...ruleVerdict(results.get(rule)) }));
+            const verdicts = new Set(rules.map((r) => r.verdict));
+            const result = UNCHECKED.has(control.status) ? control.status
+                : verdicts.has("fail") || verdicts.has("missing") ? "fail"
+                : verdicts.has("accepted") ? "accepted" : "pass";
+            return { id: control.id, title: control.title, level: control.level, status: control.status, gspp: control.gspp ?? [], result, rules };
+        }),
+    }));
+}
+
+/** @param {string} file */
+async function readOptional(file) {
+    try {
+        return await readFile(file, "utf8");
+    } catch (error) {
+        if (/** @type {any} */ (error)?.code === "ENOENT") return undefined;
+        throw error;
+    }
+}
+
+/**
+ * Read a JSON report. A truncated or empty file is reported like a missing
+ * one: it must not abort the report and leave the other targets unevaluated.
+ *
+ * @param {string} file
+ * @returns {Promise<{ value?: any, error?: string }>}
+ */
+async function readJson(file) {
+    const text = await readOptional(file);
+    if (text === undefined) return { error: `missing ${path.basename(file)}` };
+    try {
+        return { value: JSON.parse(text) };
+    } catch (error) {
+        return { error: `unreadable ${path.basename(file)}: ${error instanceof Error ? error.message : error}` };
+    }
+}
+
+/**
+ * Collect the results of a directory holding the downloaded scan artifacts:
+ * image-scan-<image>-<arch>/{stig/{ocm,gpos}-results.xml,dockle.json,metadata.json}
+ * and chart-scan/{trivy-all,trivy,kubescape}.json.
+ *
+ * The scan targets are given, not discovered: a job that uploaded nothing
+ * leaves no directory behind, so its rules would silently be evaluated by the
+ * remaining targets alone.
+ *
+ * @param {string} reportsDir
+ * @param {string[]} expected - scan targets (<image>-<arch>) whose reports must be there
+ * @returns {Promise<{ results: Results, errors: string[] }>}
+ */
+export async function collect(reportsDir, expected) {
+    /** @type {Results} */
+    const results = new Map();
+    const errors = [];
+    const images = (await readdir(reportsDir)).filter((d) => d.startsWith("image-scan-")).sort();
+    const found = new Set(images.map((d) => d.slice("image-scan-".length)));
+    for (const target of expected) {
+        if (!found.has(target)) errors.push(`missing image-scan-${target} reports in ${reportsDir}`);
+    }
+    for (const target of found) {
+        if (!expected.includes(target)) errors.push(`image-scan-${target} is not an expected scan target`);
+    }
+    for (const dir of images) {
+        const target = dir.slice("image-scan-".length);
+        for (const file of ["stig/ocm-results.xml", "stig/gpos-results.xml"]) {
+            const xml = await readOptional(path.join(reportsDir, dir, file));
+            if (xml === undefined) errors.push(`${dir}: missing ${file}`);
+            else addStig(results, xml, target);
+        }
+        const dockle = await readJson(path.join(reportsDir, dir, "dockle.json"));
+        if (dockle.error) errors.push(`${dir}: ${dockle.error}`);
+        else errors.push(...addDockle(results, dockle.value, target));
+        const metadata = await readJson(path.join(reportsDir, dir, "metadata.json"));
+        if (metadata.error) errors.push(`${dir}: ${metadata.error}`);
+        else addOci(results, metadata.value, target);
+    }
+    const trivy = await readJson(path.join(reportsDir, "chart-scan", "trivy-all.json"));
+    const gated = await readJson(path.join(reportsDir, "chart-scan", "trivy.json"));
+    if (trivy.error || gated.error) errors.push(`chart-scan: ${trivy.error ?? gated.error}`);
+    else addTrivy(results, trivy.value, gated.value);
+    const kubescape = await readJson(path.join(reportsDir, "chart-scan", "kubescape.json"));
+    if (kubescape.error) errors.push(`chart-scan: ${kubescape.error}`);
+    else addKubescape(results, kubescape.value);
+    return { results, errors };
+}
+
+const ICON = { pass: "✅", accepted: "☑️", fail: "❌", missing: "❓", manual: "📝", operator: "👤" };
+
+/**
+ * GitHub Actions entrypoint.
+ *
+ * Environment variables:
+ * - REPORTS_DIR: directory with the downloaded scan artifacts (required)
+ * - EXPECTED_TARGETS: scan targets (<image>-<arch>) the image-scan matrix produces,
+ *   separated by whitespace or commas (required); a target without reports fails.
+ * - CONTROLS_DIR: directory with the control files (default .github/benchmarks/bsi)
+ * - OUTPUT: path of the JSON result (optional)
+ *
+ * @param {import('@actions/github-script').AsyncFunctionArguments} args
+ */
+export default async function bsiReportAction({ core }) {
+    const {
+        REPORTS_DIR: reportsDir,
+        EXPECTED_TARGETS: targets,
+        CONTROLS_DIR: controlsDir = ".github/benchmarks/bsi",
+        OUTPUT: output,
+    } = process.env;
+    if (!reportsDir || !targets) {
+        core.setFailed("REPORTS_DIR and EXPECTED_TARGETS environment variables are required");
+        return;
+    }
+    const modules = await loadModules(controlsDir);
+    const { results, errors } = await collect(reportsDir, targets.split(/[\s,]+/).filter(Boolean));
+    const report = evaluate(modules, results);
+    if (output) await writeFile(output, `${JSON.stringify(report, null, 2)}\n`);
+
+    const problems = [...errors];
+    for (const module of report) {
+        for (const control of module.controls) {
+            for (const r of control.rules) {
+                if (r.verdict === "fail") problems.push(`${control.id}: ${r.rule} failed on ${r.failed.join(", ")}`);
+                if (r.verdict === "missing") problems.push(`${control.id}: ${r.rule} was not evaluated by any scan`);
+            }
+        }
+    }
+    for (const p of problems) core.error(p);
+
+    if (process.env.GITHUB_STEP_SUMMARY) {
+        const summary = core.summary.addHeading("🛡️ BSI IT-Grundschutz");
+        summary.addRaw("Status describes the part OCM can influence: automated and partial requirements are checked by the listed rules; manual ones are documented only; operator ones are entirely the operator's responsibility. ☑️ = accepted finding, see .github/benchmarks.", true);
+        for (const module of report) {
+            summary.addHeading(`${module.module} ${module.title} (Edition ${module.edition})`, 3);
+            summary.addTable([
+                ["Requirement", "Level", "Status", "Result", "Rules"].map((data) => ({ data, header: true })),
+                ...module.controls.map((c) => [
+                    `${c.id} ${c.title}`,
+                    c.level,
+                    c.status,
+                    `${ICON[/** @type {keyof typeof ICON} */ (c.result)]} ${c.result}`,
+                    c.rules.map((r) => `${ICON[r.verdict]} ${r.rule}`).join("<br>"),
+                ]),
+            ]);
+        }
+        if (problems.length > 0) summary.addHeading("Errors", 3).addList(problems);
+        await summary.write();
+    }
+
+    for (const module of report) {
+        const counts = Object.groupBy(module.controls, (c) => c.result);
+        core.info(`${module.module}: ${Object.entries(counts).map(([k, v]) => `${v?.length} ${k}`).join(", ")}`);
+    }
+    if (problems.length > 0) core.setFailed(`${problems.length} BSI rule problem(s)`);
+}

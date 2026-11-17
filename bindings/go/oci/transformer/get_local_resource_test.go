@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -213,9 +214,12 @@ func TestGetLocalResource_Transform_CTF(t *testing.T) {
 	combinedScheme.MustRegisterWithAlias(&v1alpha1.OCIGetLocalResource{}, v1alpha1.OCIGetLocalResourceV1alpha1)
 	combinedScheme.MustRegisterWithAlias(&v1alpha1.CTFGetLocalResource{}, v1alpha1.CTFGetLocalResourceV1alpha1)
 
+	// The temporary directory does not exist yet: the transformer creates it.
+	tempDir := filepath.Join(t.TempDir(), "configured-temp-folder")
 	transformer := &GetLocalResource{
 		Scheme:       combinedScheme,
 		RepoProvider: mockProvider,
+		TempDir:      tempDir,
 	}
 
 	// Create transformation spec without OutputPath (should create temp file)
@@ -255,12 +259,11 @@ func TestGetLocalResource_Transform_CTF(t *testing.T) {
 	assert.Contains(t, outputPath, "file://")
 	assert.Contains(t, outputPath, "resource-")
 
-	// Clean up temp file
+	// Without an output path the file is buffered in the configured temporary directory.
 	tempPath, err := filesystem.FilePathFromURI(outputPath)
 	require.NoError(t, err)
-	if _, err := os.Stat(tempPath); err == nil {
-		os.Remove(tempPath)
-	}
+	assert.Equal(t, tempDir, filepath.Dir(tempPath))
+	assert.FileExists(t, tempPath)
 }
 
 func TestGetLocalResource_Transform_ValidationErrors(t *testing.T) {

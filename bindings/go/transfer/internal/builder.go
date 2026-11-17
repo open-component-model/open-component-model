@@ -43,6 +43,7 @@ func NewDefaultBuilder(
 	resourceRepo repository.ResourceRepository,
 	credentialProvider credentials.Resolver,
 	httpConfig *httpv1alpha1.Config,
+	tempDir string,
 ) *builder.Builder {
 	transformerScheme := runtime.NewScheme()
 	transformerScheme.MustRegisterScheme(ociv1alpha1.Scheme)
@@ -73,6 +74,7 @@ func NewDefaultBuilder(
 		Scheme:             transformerScheme,
 		RepoProvider:       repoProvider,
 		CredentialProvider: credentialProvider,
+		TempDir:            tempDir,
 	}
 	ociAddResource := &ocitransformer.AddLocalResource{
 		Scheme:             transformerScheme,
@@ -102,6 +104,7 @@ func NewDefaultBuilder(
 		Scheme:             transformerScheme,
 		Repository:         resourceRepo,
 		CredentialProvider: credentialProvider,
+		TempDir:            tempDir,
 	}
 
 	ociAddOCIArtifact := &ocitransformer.AddOCIArtifact{
@@ -137,9 +140,11 @@ func NewDefaultBuilder(
 		Scheme:             transformerScheme,
 		ResourceRepository: resourceRepo,
 		CredentialProvider: credentialProvider,
+		TempDir:            tempDir,
 	}
 	convertHelmToOCI := &helmtransformer.ConvertHelmChartToOCI{
-		Scheme: transformerScheme,
+		Scheme:  transformerScheme,
+		TempDir: tempDir,
 	}
 
 	// Wget transformer
@@ -147,6 +152,7 @@ func NewDefaultBuilder(
 		Scheme:             transformerScheme,
 		ResourceRepository: resourceRepo,
 		CredentialProvider: credentialProvider,
+		TempDir:            tempDir,
 	}
 
 	// S3 transformer
@@ -154,6 +160,7 @@ func NewDefaultBuilder(
 		Scheme:             transformerScheme,
 		ResourceRepository: resourceRepo,
 		CredentialProvider: credentialProvider,
+		TempDir:            tempDir,
 	}
 
 	// GitHub transformers
@@ -161,12 +168,14 @@ func NewDefaultBuilder(
 		Scheme:             transformerScheme,
 		ResourceRepository: resourceRepo,
 		CredentialProvider: credentialProvider,
+		TempDir:            tempDir,
 	}
 
 	getGitResource := &gittransformer.GetGitResource{
 		Scheme:             transformerScheme,
 		ResourceRepository: resourceRepo,
 		CredentialProvider: credentialProvider,
+		TempDir:            tempDir,
 	}
 
 	// Git upload transformer (git uploader configurations)

@@ -23,6 +23,9 @@ type DownloadS3Resource struct {
 	// ResourceRepository is used to download S3 resources and resolve credential consumer identities.
 	ResourceRepository repository.ResourceRepository
 	CredentialProvider credentials.Resolver
+	// TempDir is the directory content is buffered in when the spec sets no output path.
+	// Empty means the default temporary directory of the operating system.
+	TempDir string
 }
 
 func (t *DownloadS3Resource) Transform(ctx context.Context, step runtime.Typed) (_ runtime.Typed, err error) {
@@ -41,11 +44,11 @@ func (t *DownloadS3Resource) Transform(ctx context.Context, step runtime.Typed) 
 		transformation.Output = &v1alpha1.DownloadS3ResourceOutput{}
 	}
 
-	outputPath, err := determineOutputPath(transformation.Spec.OutputPath, "s3")
+	outputPath, err := filesystem.BufferFile(transformation.Spec.OutputPath, t.TempDir, "s3")
 	if err != nil {
 		return nil, fmt.Errorf("error getting output path: %w", err)
 	}
-	// determineOutputPath creates the file; retain it on success for Output.File, remove it on failure.
+	// BufferFile creates the file; retain it on success for Output.File, remove it on failure.
 	defer func() {
 		if err != nil {
 			if removeErr := os.Remove(outputPath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
