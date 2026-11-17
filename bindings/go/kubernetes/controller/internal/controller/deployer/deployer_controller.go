@@ -198,6 +198,7 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: concurrency,
 			RateLimiter:             r.RateLimit.Limiter(),
+			ReconciliationTimeout:   r.ReconcileTimeout,
 		}).
 		Complete(r)
 }
@@ -350,10 +351,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("unexpected type %T after deep copy", deployer)
 	}
 	defer func(ctx context.Context) {
-		status.UpdateBeforePatch(deployer, r.EventRecorder, 0, err)
+		status.UpdateBeforePatch(ctx, deployer, r.EventRecorder, 0, err)
 		if !equality.Semantic.DeepEqual(deployer.GetDeployerStatus(), old.GetDeployerStatus()) {
+			patchCtx, cancel := status.PatchContext(ctx)
+			defer cancel()
 			// Removing the last finalizer deletes the object before the status can be patched.
-			err = errors.Join(err, client.IgnoreNotFound(r.GetClient().Status().Patch(ctx, deployer, client.MergeFrom(old))))
+			err = errors.Join(err, client.IgnoreNotFound(r.GetClient().Status().Patch(patchCtx, deployer, client.MergeFrom(old))))
 		}
 	}(ctx)
 

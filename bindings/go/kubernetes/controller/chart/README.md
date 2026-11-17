@@ -116,6 +116,13 @@ Kubernetes: `>=1.26.0-0`
 | manager.readinessProbe.path | string | `"/readyz"` | Path for the readiness probe |
 | manager.readinessProbe.periodSeconds | int | `10` | Period between readiness probes |
 | manager.readinessProbe.port | int | `8081` | Port for the readiness probe |
+| manager.reconcileTimeout.component | string | `"0s"` | Reconciliation timeout for the component controller. Off by default (0). Timeout is reported as ReconcileTimeout and retried. |
+| manager.reconcileTimeout.deployer | string | `"0s"` | Reconciliation timeout for the deployer controller. Off by default (0). Timeout is reported as ReconcileTimeout and retried. |
+| manager.reconcileTimeout.discovery | string | `"0s"` | Reconciliation timeout for the discovery controller. Off by default (0). Timeout is reported as ReconcileTimeout and retried. |
+| manager.reconcileTimeout.namespacedDeployer | string | `"0s"` | Reconciliation timeout for the namespacedDeployer controller. Off by default (0). Timeout is reported as ReconcileTimeout and retried. |
+| manager.reconcileTimeout.replication | string | `"0s"` | Reconciliation timeout for the replication controller. Off by default (0). Timeout is reported as ReconcileTimeout and retried. |
+| manager.reconcileTimeout.repository | string | `"0s"` | Reconciliation timeout for the repository controller. Off by default (0). Timeout is reported as ReconcileTimeout and retried. |
+| manager.reconcileTimeout.resource | string | `"0s"` | Reconciliation timeout for the resource controller. Off by default (0). Timeout is reported as ReconcileTimeout and retried. |
 | manager.replicas | int | `1` | Number of controller manager replicas |
 | manager.resources | object | `{"limits":{"cpu":"500m","memory":"512Mi"},"requests":{"cpu":"100m","memory":"256Mi"}}` | Resource limits and requests |
 | manager.securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true}` | Container-level security context |

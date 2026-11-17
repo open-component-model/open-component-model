@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/hashicorp/golang-lru/v2/expirable"
@@ -76,6 +77,46 @@ type BlobCache struct {
 	// result is buffered in memory and each waiter is served its own
 	// reader over those bytes.
 	sf singleflight.Group
+	// flights holds the context each collapsed fetch runs under and how many
+	// callers still wait for it, see [BlobCache.joinFlight].
+	flightsMu sync.Mutex
+	flights   map[digest.Digest]*flight
+}
+
+// flight is the shared upstream fetch of one digest.
+type flight struct {
+	ctx     context.Context
+	cancel  context.CancelFunc
+	waiters int
+}
+
+// joinFlight registers the caller as a waiter on the fetch of dgst and returns
+// the context that fetch runs under. The context outlives any single caller,
+// so a canceled caller does not fail the others, but it does not outlive all of
+// them: the last caller to leave cancels it and forgets the singleflight key,
+// so a stalled upstream is abandoned instead of being joined by every retry
+// until the upstream itself gives up.
+func (c *BlobCache) joinFlight(dgst digest.Digest) (ctx context.Context, leave func()) {
+	c.flightsMu.Lock()
+	defer c.flightsMu.Unlock()
+	f := c.flights[dgst]
+	if f == nil {
+		f = &flight{}
+		f.ctx, f.cancel = context.WithCancel(context.Background())
+		c.flights[dgst] = f
+	}
+	f.waiters++
+	return f.ctx, func() {
+		c.flightsMu.Lock()
+		defer c.flightsMu.Unlock()
+		f.waiters--
+		if f.waiters > 0 {
+			return
+		}
+		f.cancel()
+		delete(c.flights, dgst)
+		c.sf.Forget(dgst.String())
+	}
 }
 
 // NewBlobCache constructs a [BlobCache]. [Options.Dir] is required;
@@ -100,7 +141,11 @@ func NewBlobCache(opts Options) (*BlobCache, error) {
 		return nil, fmt.Errorf("blobcache: %w", err)
 	}
 
-	c := &BlobCache{opts: opts, logger: slog.Default().With(slog.String("dir", opts.Dir))}
+	c := &BlobCache{
+		opts:    opts,
+		logger:  slog.Default().With(slog.String("dir", opts.Dir)),
+		flights: map[digest.Digest]*flight{},
+	}
 	c.lru = expirable.NewLRU(opts.MaxEntries, c.onEvict, opts.TTL)
 	if opts.RemotePolicy == RemotePolicyAlways {
 		c.served, err = NewReferenceCache(Options{
@@ -267,16 +312,10 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream ReadOnlyRepository, targ
 	//
 	// We use DoChan instead of Do so that each caller can return on its
 	// own context cancellation while the shared fetch continues for any
-	// remaining waiters. The fetch itself runs under context.Background
-	// so it is not tied to any single caller's lifetime.
-	//
-	// Trade-off: if every caller cancels before the fetch completes the
-	// upstream round-trip continues to completion with no one to receive
-	// the result. For this cache (small manifests, bounded by
-	// MaxBlobSize, registry upstreams with their own timeouts) that is
-	// acceptable. A ref-counted shared context that cancels when the
-	// last waiter leaves would be the more principled alternative.
-	fetchCtx := context.Background()
+	// remaining waiters. The fetch itself runs under the flight context,
+	// which is canceled once the last waiter has left.
+	fetchCtx, leave := c.joinFlight(target.Digest)
+	defer leave()
 	ch := c.sf.DoChan(target.Digest.String(), func() (any, error) {
 		// singleflight only collapses calls that overlap in time: a caller
 		// whose lookup above missed just before the previous flight

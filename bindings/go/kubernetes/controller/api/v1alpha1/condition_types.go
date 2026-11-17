@@ -18,6 +18,8 @@ const (
 	SucceededReason = "Succeeded"
 	// ProgressingWithRetryReason indicates reconciliation is retrying after a failure.
 	ProgressingWithRetryReason = "ProgressingWithRetry"
+	// ReconcileTimeoutReason indicates the reconciliation was aborted by the controller's reconcile timeout.
+	ReconcileTimeoutReason = "ReconcileTimeout"
 )
 
 // Event severity constants.

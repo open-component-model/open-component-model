@@ -153,6 +153,7 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: concurrency,
 			RateLimiter:             r.RateLimit.Limiter(),
+			ReconciliationTimeout:   r.ReconcileTimeout,
 		}).
 		Complete(r)
 }
@@ -172,9 +173,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 
 	old := resource.DeepCopy()
 	defer func(ctx context.Context) {
-		status.UpdateBeforePatch(resource, r.EventRecorder, 0, err)
+		status.UpdateBeforePatch(ctx, resource, r.EventRecorder, 0, err)
 		if !equality.Semantic.DeepEqual(resource.Status, old.Status) {
-			err = errors.Join(err, r.GetClient().Status().Patch(ctx, resource, client.MergeFrom(old)))
+			patchCtx, cancel := status.PatchContext(ctx)
+			defer cancel()
+			err = errors.Join(err, r.GetClient().Status().Patch(patchCtx, resource, client.MergeFrom(old)))
 		}
 	}(ctx)
 
