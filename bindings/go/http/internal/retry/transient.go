@@ -36,14 +36,15 @@ var http2TransientMessages = []string{
 
 // IsTransientError reports whether err is a network failure that is worth
 // retrying with a fresh connection: a connection reset or broken pipe, a
-// message truncated on the wire, a network timeout, or an HTTP/2
-// connection/stream failure. Cancellation and exceeded context deadlines are
-// never transient: a retry would start with the same exhausted budget, so a
-// slow server would only time out again.
+// connection that was closed underneath a request, a message truncated on the
+// wire, a network timeout, or an HTTP/2 connection/stream failure. Cancellation
+// and exceeded context deadlines are never transient: a retry would start with
+// the same exhausted budget, so a slow server would only time out again.
 //
 // io.ErrUnexpectedEOF counts only when it came out of an HTTP round trip
 // (*url.Error) or a response body read (*BodyReadError); from a local file or
-// archive it means corrupt content, which no retry fixes.
+// archive it means corrupt content, which no retry fixes. io.EOF and
+// net.ErrClosed count only when they came out of an HTTP round trip.
 func IsTransientError(err error) bool {
 	return isTransient(err, false)
 }
@@ -71,6 +72,9 @@ func isTransient(err error, fromRoundTrip bool) bool {
 	if errors.Is(err, io.ErrUnexpectedEOF) && (fromRoundTrip || fromNetwork(err)) {
 		return true
 	}
+	if (fromRoundTrip || fromRequest(err)) && isClosedUnderRequest(err) {
+		return true
+	}
 	var netErr net.Error
 	if errors.As(err, &netErr) && netErr.Timeout() {
 		return true
@@ -88,4 +92,26 @@ func fromNetwork(err error) bool {
 	var urlErr *url.Error
 	var bodyErr *BodyReadError
 	return errors.As(err, &urlErr) || errors.As(err, &bodyErr)
+}
+
+func fromRequest(err error) bool {
+	var urlErr *url.Error
+	return errors.As(err, &urlErr)
+}
+
+// isClosedUnderRequest reports whether a round trip failed because the peer
+// closed the connection, in the two shapes that carry no errno:
+//
+//   - io.EOF: the peer closed the connection without answering, for example a
+//     server or load balancer that shuts down after it received the request.
+//   - net.ErrClosed: net/http reads and writes a connection on two goroutines.
+//     When the reading one sees the peer close or reset the connection first, it
+//     closes the connection, and the request body that is still being written
+//     fails with "use of closed network connection" instead of a reset or a
+//     broken pipe. Which goroutine wins depends on timing.
+//
+// A canceled request closes the connection as well, but net/http reports the
+// cancellation then, which isTransient rules out before it gets here.
+func isClosedUnderRequest(err error) bool {
+	return errors.Is(err, io.EOF) || errors.Is(err, net.ErrClosed)
 }
