@@ -1,3 +1,9 @@
+// Read by deps (https://github.com/jakobmoellerdev/deps) in Renovate
+// compatibility mode, see .github/workflows/deps.yml: deps translates this file
+// in memory on every run. Renovate itself no longer runs on this repository,
+// the file name and the Renovate schema stay. `deps plan --renovate --config
+// .github/renovate.json5` shows the effect of a change locally, and the deps
+// workflow dry-runs it on every pull request that touches this file.
 {
   $schema: 'https://docs.renovatebot.com/renovate-schema.json',
   extends: [
@@ -337,8 +343,10 @@
       // The internal org workflows repo is tracked on @main intentionally
       // (see .github/workflows/stale.yaml). Disable Renovate so it does not
       // re-pin the ref to a SHA and then bump it on every upstream commit.
+      // Renovate names this dependency by the repository, deps by the workflow
+      // file it points at; both names are listed so either tool skips it.
       matchManagers: ['github-actions'],
-      matchDepNames: ['open-component-model/.github'],
+      matchDepNames: ['open-component-model/.github', 'open-component-model/.github/**'],
       enabled: false,
     },
     {

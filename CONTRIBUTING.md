@@ -82,7 +82,8 @@ task tidy
 | `go`        | `1.xx.0`   | The **minimum** Go a consumer needs to build against this module. Usually, a minor with 0 for patch          |
 | `toolchain` | `go1.xx.5` | The Go version **open-component-model** uses for builds, testing and scanning. Usually, specific with patch. |
 
-Renovate bumps `toolchain` on every Go release, along with the `golang` container images, etc. Since `setup-go` already
+deps (the dependency bot, see `.github/workflows/deps.yml`) bumps `toolchain` on every Go release, along with the
+`golang` container images, etc. Since `setup-go` already
 references the go.mod files, it should automatically get the right version. It never bumps the `go` directive in the go
 mod files. That is only increased if we require or would like to use some new go version ability.
 
