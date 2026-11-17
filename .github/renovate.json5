@@ -381,6 +381,14 @@
       ],
       minimumReleaseAge: null,
     },
+    {
+      // Version-only .env fields have no digest capture, so custom.regex cannot
+      // apply pinDigest updates; one failure aborts the shared Digest pins branch.
+      // Existing currentDigest captures still receive digest updates.
+      matchManagers: ['custom.regex'],
+      matchDatasources: ['docker'],
+      pinDigests: false,
+    },
   ],
   customDatasources: {
     envtest: {
