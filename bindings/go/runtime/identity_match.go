@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"cmp"
 	"maps"
 	"strings"
 
@@ -71,6 +72,15 @@ func negateClassesAsGlob(pattern string) string {
 // applying default port mapping based on scheme.
 // - HTTPS defaults to port 443 if not explicitly set
 // - HTTP defaults to port 80 if not explicitly set
+// When neither side carries a scheme, a well-known port supplies the scheme used
+// for this port defaulting (443 implies https, 80 implies http). This lets an
+// identity that names an explicit standard port but no scheme (for example a
+// "host:443" OCI reference) collapse against an entry that omits the port, the
+// same way an explicit https scheme already does. A non-standard port yields no
+// inference, so it still has to be configured explicitly. The inferred scheme is
+// used only for defaulting, never to override or conflict with an explicit
+// scheme, so an explicit non-http(s) scheme on a standard port (for example
+// ssh on 443) keeps matching.
 // Allows identities differing only in explicit vs implicit ports to match.
 // Deletes the URL attributes (scheme, hostname, port) from both identities
 // after comparison, as it is expected to be used in a chain with Identity.Match.
@@ -95,11 +105,11 @@ func IdentityMatchesURL(i, o Identity) bool {
 		return false
 	}
 
-	// Use effective scheme for port defaulting: if one is empty, use the other
-	effectiveScheme := iScheme
-	if effectiveScheme == "" {
-		effectiveScheme = oScheme
-	}
+	// Use effective scheme for port defaulting: prefer an explicit scheme from
+	// either side, otherwise derive it from a well-known port so that a
+	// scheme-less "host:443" collapses to the https default just like an explicit
+	// https scheme does.
+	effectiveScheme := cmp.Or(iScheme, oScheme, schemeForPort(iPort), schemeForPort(oPort))
 
 	defaultPort := func(s, p string) string {
 		if p != "" {
@@ -124,6 +134,20 @@ func normalizeScheme(scheme string) string {
 		return "https"
 	}
 	return scheme
+}
+
+// schemeForPort infers the URL scheme from a well-known port: 443 implies https,
+// 80 implies http. Any other port (or none) yields the empty scheme. It is used
+// only to pick the scheme for default-port collapsing, never for scheme conflict
+// detection.
+func schemeForPort(port string) string {
+	switch port {
+	case "443":
+		return "https"
+	case "80":
+		return "http"
+	}
+	return ""
 }
 
 // IdentityEqual is an equality IdentityMatchingChainFn. see Identity.Equal for more information

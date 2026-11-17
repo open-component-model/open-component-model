@@ -401,6 +401,23 @@ func TestResolveCredentials(t *testing.T) {
 			require.NoError,
 		},
 		{
+			// A scheme-less "host:443" OCI reference yields a lookup identity with
+			// an explicit port 443 and no scheme. It must still resolve against a
+			// hostname-only consumer entry, just like a scheme-qualified request.
+			"oci lookup with explicit standard port 443 resolves hostname-only entry",
+			testYAML,
+			runtime.Identity{
+				"type":     "OCIRegistry",
+				"hostname": "docker.io",
+				"port":     "443",
+			},
+			map[string]string{
+				"username": "foo",
+				"password": "bar",
+			},
+			require.NoError,
+		},
+		{
 			"docker config based resolution",
 			testYAML,
 			runtime.Identity{

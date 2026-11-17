@@ -535,7 +535,7 @@ func TestIdentityMatchesURL(t *testing.T) {
 			true,
 		},
 		{
-			"no scheme but one has port - does not match",
+			"no scheme but explicit standard port 443 matches no scheme no port",
 			args{
 				a: runtime.Identity{
 					runtime.IdentityAttributeHostname: "example.com",
@@ -543,6 +543,145 @@ func TestIdentityMatchesURL(t *testing.T) {
 				},
 				b: runtime.Identity{
 					runtime.IdentityAttributeHostname: "example.com",
+				},
+			},
+			true,
+		},
+		{
+			"no scheme but explicit standard port 80 matches no scheme no port",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "80",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+				},
+			},
+			true,
+		},
+		{
+			"no scheme but explicit non-standard port does not match no scheme no port",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "8443",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+				},
+			},
+			false,
+		},
+		{
+			"no scheme port 443 does not match explicit http scheme",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "443",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributeScheme:   "http",
+				},
+			},
+			false,
+		},
+		{
+			"explicit ssh scheme on port 443 matches port-only entry (no inferred scheme conflict)",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "ssh.github.com",
+					runtime.IdentityAttributeScheme:   "ssh",
+					runtime.IdentityAttributePort:     "443",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "ssh.github.com",
+					runtime.IdentityAttributePort:     "443",
+				},
+			},
+			true,
+		},
+		{
+			"https on explicit port 80 matches port-only entry 80 (no inferred scheme conflict)",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributeScheme:   "https",
+					runtime.IdentityAttributePort:     "80",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "80",
+				},
+			},
+			true,
+		},
+		{
+			"no scheme no port matches explicit standard port 443 (reverse direction)",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "443",
+				},
+			},
+			true,
+		},
+		{
+			"no scheme standard ports 443 and 80 do not match each other",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "443",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "80",
+				},
+			},
+			false,
+		},
+		{
+			"no scheme port 443 matches oci scheme without port",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "ghcr.io",
+					runtime.IdentityAttributePort:     "443",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "ghcr.io",
+					runtime.IdentityAttributeScheme:   "oci",
+				},
+			},
+			true,
+		},
+		{
+			"explicit port 443 does not match explicit ssh scheme without port",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "443",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributeScheme:   "ssh",
+				},
+			},
+			false,
+		},
+		{
+			"explicit port 80 does not match explicit https scheme without port",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "80",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributeScheme:   "https",
 				},
 			},
 			false,
