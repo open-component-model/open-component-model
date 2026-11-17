@@ -86,7 +86,7 @@ Used when OCM accesses an OCI registry — pushing, pulling, or resolving compon
 | `hostname` | Yes      | Registry hostname (e.g. `ghcr.io`, `registry.example.com`)                                                                          |
 | `path`     | No       | Repository path. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname.               |
 | `scheme`   | No       | URL scheme (`https`, `http`, `oci`). `oci` and `https` are equivalent. If omitted or empty on the request side, matches any scheme. |
-| `port`     | No       | Port as string. Default when `scheme` set (`https`/`oci`=`443`, `http`=`80`); else `443`/`80` imply `https`/`http`.                 |
+| `port`     | No       | Port as string. With `scheme`: `https`/`oci`=`443`, `http`=`80`; else a request's `443`/`80` imply the scheme.                      |
 
 ### Credential Properties
 
@@ -106,7 +106,7 @@ Matching runs three chained checks — all must pass:
 1. **Path matcher** — compares `path` as a glob ([Path Patterns](#path-patterns)). `*` matches within one segment,
    `**` matches across `/`. If the configured entry has no `path`, any request path is accepted.
 2. **URL matcher** — compares `scheme`, `hostname`, and `port`. Applies default ports when a scheme is present (
-   `https` → `443`, `http` → `80`, `oci` → `443` via normalization to `https`). A request with no scheme matches any configured scheme. When neither side sets a scheme, a well-known port supplies the one used for port defaulting (`443` implies `https`, `80` implies `http`), so a scheme-less `host:443` request matches an entry with no port just like `https://host` does. An inferred scheme is only used for defaulting, never to override an explicit one, and a non-standard port has no implied scheme, so it must be configured explicitly.
+   `https` → `443`, `http` → `80`, `oci` → `443` via normalization to `https`). A request with no scheme matches any configured scheme. When neither side sets a scheme, a well-known port on the request supplies the one used for port defaulting (`443` implies `https`, `80` implies `http`), so a scheme-less `host:443` request matches an entry with no port just like `https://host` does. The inference is request-side only: an entry that sets `port: "443"` without a scheme does **not** match a request that omits the port, so use a hostname-only entry to catch every port on a host. An inferred scheme is only used for defaulting, never to override an explicit one, and a non-standard port has no implied scheme, so it must be configured explicitly.
 3. **Equality matcher** — all remaining attributes (like `type`) must be exactly equal.
 
 For detailed matching examples and edge cases, see [Tutorial: Understand Credential Resolution]({{< relref "docs/concepts/credential-resolution.md" >}}).

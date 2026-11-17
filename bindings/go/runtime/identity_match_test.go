@@ -618,7 +618,12 @@ func TestIdentityMatchesURL(t *testing.T) {
 			true,
 		},
 		{
-			"no scheme no port matches explicit standard port 443 (reverse direction)",
+			// Inference is one-directional (request-side port only), so a port-less
+			// identity does not collapse onto a port-scoped entry. This asymmetry is
+			// deliberate: it stops a hostname-only entry and the same host with
+			// port 443 from matching both ways, which the credential DAG would
+			// reject as a cycle.
+			"no scheme no port does not match explicit standard port 443 (one-directional inference)",
 			args{
 				a: runtime.Identity{
 					runtime.IdentityAttributeHostname: "example.com",
@@ -628,7 +633,7 @@ func TestIdentityMatchesURL(t *testing.T) {
 					runtime.IdentityAttributePort:     "443",
 				},
 			},
-			true,
+			false,
 		},
 		{
 			"no scheme standard ports 443 and 80 do not match each other",
@@ -890,6 +895,25 @@ func TestIdentity_Match_WithURLMatching(t *testing.T) {
 				runtime.IdentityAttributeHostname: "ghcr.io",
 				runtime.IdentityAttributeScheme:   "https",
 				runtime.IdentityAttributePath:     "org/*",
+			},
+			true,
+		},
+		{
+			// Crux of the well-known-port fix at the full-chain level: a
+			// scheme-less host:443 lookup that also carries a path matches a
+			// hostname-only entry (no path, no port, no scheme). The port 443
+			// infers https for default-port collapsing and the entry's missing
+			// path accepts any request path.
+			"path-bearing host:443 lookup matches hostname-only entry",
+			runtime.Identity{
+				runtime.IdentityAttributeType:     "OCIRegistry",
+				runtime.IdentityAttributeHostname: "ghcr.io",
+				runtime.IdentityAttributePort:     "443",
+				runtime.IdentityAttributePath:     "some-org",
+			},
+			runtime.Identity{
+				runtime.IdentityAttributeType:     "OCIRegistry",
+				runtime.IdentityAttributeHostname: "ghcr.io",
 			},
 			true,
 		},

@@ -72,15 +72,20 @@ func negateClassesAsGlob(pattern string) string {
 // applying default port mapping based on scheme.
 // - HTTPS defaults to port 443 if not explicitly set
 // - HTTP defaults to port 80 if not explicitly set
-// When neither side carries a scheme, a well-known port supplies the scheme used
-// for this port defaulting (443 implies https, 80 implies http). This lets an
-// identity that names an explicit standard port but no scheme (for example a
-// "host:443" OCI reference) collapse against an entry that omits the port, the
-// same way an explicit https scheme already does. A non-standard port yields no
-// inference, so it still has to be configured explicitly. The inferred scheme is
-// used only for defaulting, never to override or conflict with an explicit
-// scheme, so an explicit non-http(s) scheme on a standard port (for example
-// ssh on 443) keeps matching.
+// When neither side carries a scheme, a well-known port on the first identity
+// (i, the request/lookup side) supplies the scheme used for this port defaulting
+// (443 implies https, 80 implies http). This lets an identity that names an
+// explicit standard port but no scheme (for example a "host:443" OCI reference)
+// collapse against an entry that omits the port, the same way an explicit https
+// scheme already does. The inference is one-directional on purpose: it ignores
+// the o-side port, so a port-less identity never collapses onto a port-scoped
+// entry. That keeps the match asymmetric and avoids making a hostname-only entry
+// and the same host with port 443/80 match each other both ways (the credential
+// DAG would reject that as a cycle and refuse to load the config). A non-standard
+// port yields no inference, so it still has to be configured explicitly. The
+// inferred scheme is used only for defaulting, never to override or conflict
+// with an explicit scheme, so an explicit non-http(s) scheme on a standard port
+// (for example ssh on 443) keeps matching.
 // Allows identities differing only in explicit vs implicit ports to match.
 // Deletes the URL attributes (scheme, hostname, port) from both identities
 // after comparison, as it is expected to be used in a chain with Identity.Match.
@@ -106,10 +111,14 @@ func IdentityMatchesURL(i, o Identity) bool {
 	}
 
 	// Use effective scheme for port defaulting: prefer an explicit scheme from
-	// either side, otherwise derive it from a well-known port so that a
-	// scheme-less "host:443" collapses to the https default just like an explicit
-	// https scheme does.
-	effectiveScheme := cmp.Or(iScheme, oScheme, schemeForPort(iPort), schemeForPort(oPort))
+	// either side, otherwise derive it from the request-side (i) port so that a
+	// scheme-less "host:443" lookup collapses to the https default like an
+	// explicit https scheme does. Inference is intentionally one-directional: it
+	// does not use the o-side port, so a port-less identity never collapses onto
+	// a port-scoped entry. A symmetric inference would make a hostname-only entry
+	// and the same host with port 443/80 match each other both ways, which the
+	// credential DAG rejects as a cycle and would stop such configs from loading.
+	effectiveScheme := cmp.Or(iScheme, oScheme, schemeForPort(iPort))
 
 	defaultPort := func(s, p string) string {
 		if p != "" {
