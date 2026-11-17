@@ -58,6 +58,34 @@ func TestChartVersionFromIndex(t *testing.T) {
 			wantErr: `chart "mychart" version "0.1.0" not found in repository index (available: 0.1.0+abc123)`,
 		},
 		{
+			name:        "a leading v is not part of the version",
+			index:       indexWith("1.0.0"),
+			chart:       "mychart",
+			version:     "v1.0.0",
+			wantVersion: "1.0.0",
+		},
+		{
+			name:        "a v-prefixed index entry matches an unprefixed request",
+			index:       indexWith("v1.0.0"),
+			chart:       "mychart",
+			version:     "1.0.0",
+			wantVersion: "v1.0.0",
+		},
+		{
+			name:        "an exact match wins over a v-prefixed one",
+			index:       indexWith("v1.0.0", "1.0.0"),
+			chart:       "mychart",
+			version:     "1.0.0",
+			wantVersion: "1.0.0",
+		},
+		{
+			name:    "a v prefix does not make a constraint resolvable",
+			index:   indexWith("1.206.0"),
+			chart:   "mychart",
+			version: "v1.x",
+			wantErr: `chart "mychart" version "v1.x" not found in repository index (available: 1.206.0)`,
+		},
+		{
 			// Regression: helm's IndexFile.Get reads the version as a SemVer constraint and
 			// returns the closest match, binding a chart that was never requested.
 			name:    "semver range",

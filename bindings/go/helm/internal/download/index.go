@@ -15,10 +15,15 @@ const maxReportedVersions = 10
 
 // ChartVersionFromIndex looks a chart version up in a Helm repository index.
 //
-// A requested version must match the index entry exactly. Helm's own
+// A requested version must name exactly one index entry. Helm's own
 // [helmrepo.IndexFile.Get] interprets the version as a SemVer *constraint* and falls
 // back to the closest version it matches ("1.x" or "^1.0.0" select the newest 1.y.z),
 // which would silently bind a resource to a chart that was never requested.
+//
+// The only tolerated difference is a leading "v", which SemVer does not consider part of
+// the version: "v1.2.3" resolves the index entry "1.2.3" and vice versa, as helm itself
+// and OCM v1 did. An exact match always wins over a prefix-normalised one, so an index
+// carrying both spellings stays unambiguous.
 //
 // An empty version selects the newest version in the index, which is helm's behaviour
 // for an unversioned chart reference. Callers that persist the result (digest processing)
@@ -37,13 +42,21 @@ func ChartVersionFromIndex(index *helmrepo.IndexFile, chartName, version string)
 		return cv, nil
 	}
 
+	var prefixMatch *helmrepo.ChartVersion
+	unprefixed := strings.TrimPrefix(version, "v")
 	for _, cv := range versions {
-		if cv == nil || cv.Metadata == nil {
+		if cv == nil || cv.Metadata == nil || cv.Version == "" {
 			continue
 		}
 		if cv.Version == version {
 			return cv, nil
 		}
+		if prefixMatch == nil && strings.TrimPrefix(cv.Version, "v") == unprefixed {
+			prefixMatch = cv
+		}
+	}
+	if prefixMatch != nil {
+		return prefixMatch, nil
 	}
 
 	return nil, fmt.Errorf("chart %q version %q not found in repository index (available: %s)",

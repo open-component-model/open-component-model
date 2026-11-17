@@ -276,6 +276,17 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 		}
 	})
 
+	// SemVer does not make a leading "v" part of the version, and helm itself resolves it, so
+	// a "v"-spelled access keeps working instead of failing on an exact string comparison.
+	t.Run("resolves a v-prefixed version against an unprefixed index entry", func(t *testing.T) {
+		t.Parallel()
+		p := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig()))
+
+		result, err := p.ProcessResourceDigest(t.Context(), helmAccessResource(t, srv.URL, "mychart:v1.0.0"), nil)
+		require.NoError(t, err)
+		assert.Equal(t, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", result.Digest.Value)
+	})
+
 	// Without a version the index picks its newest chart; the digest is only reproducible if
 	// the access records which version that was.
 	t.Run("pins the version the index selects when the access has none", func(t *testing.T) {
