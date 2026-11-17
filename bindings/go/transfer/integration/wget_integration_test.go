@@ -18,11 +18,11 @@ import (
 	ocirepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/transfer"
+	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 	wgetrepository "ocm.software/open-component-model/bindings/go/wget/repository"
 	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
 	wgetaccessv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
-	wgetv1alpha1 "ocm.software/open-component-model/bindings/go/wget/transformation/spec/v1alpha1"
 )
 
 // Test_Integration_TransferWgetResource_LocalBlobUploader verifies that a wget resource (content
@@ -107,15 +107,15 @@ func Test_Integration_TransferWgetResource_LocalBlobUploader(t *testing.T) {
 	r.NoError(err)
 	r.NotNil(tgd)
 
-	// A wget resource should generate a DownloadWgetResource transformation.
-	hasDownloadWget := false
+	// A wget resource is streamed into the target by a single fused transformation.
+	hasTransfer := false
 	for _, tr := range tgd.Transformations {
-		if tr.Type.Name == wgetv1alpha1.DownloadWgetResourceType {
-			hasDownloadWget = true
+		if tr.Type.Name == uploadv1alpha1.TransferWgetToOCILocalBlobType {
+			hasTransfer = true
 			break
 		}
 	}
-	r.True(hasDownloadWget, "wget resource should generate a DownloadWgetResource transformation")
+	r.True(hasTransfer, "wget resource should generate a TransferWgetToOCILocalBlob transformation")
 
 	// 5. Build and execute the graph.
 	ctx := t.Context()

@@ -4,7 +4,6 @@ import (
 	"encoding/json/v2"
 	"fmt"
 
-	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/access/v1"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
@@ -43,29 +42,7 @@ func transferOCIArtifactToLocalBlob(resource descriptorv2.Resource, id string, v
 	if err != nil {
 		return fmt.Errorf("cannot convert target spec to unstructured: %w", err)
 	}
-	access := map[string]any{"type": descriptor.GetLocalBlobAccessType().String()}
-	if referenceName != "" {
-		access["referenceName"] = referenceName
-	}
-	targetResource := map[string]any{
-		"name":     resource.Name,
-		"version":  resource.Version,
-		"type":     resource.Type,
-		"relation": resource.Relation,
-		"access":   access,
-	}
-	if resource.Digest != nil {
-		targetResource["digest"] = resource.Digest
-	}
-	if len(resource.Labels) > 0 {
-		targetResource["labels"] = resource.Labels
-	}
-	if len(resource.ExtraIdentity) > 0 {
-		targetResource["extraIdentity"] = resource.ExtraIdentity
-	}
-	if len(resource.SourceRefs) > 0 {
-		targetResource["srcRefs"] = resource.SourceRefs
-	}
+	targetResource := localBlobTargetResource(resource, referenceName)
 	spec, err := runtime.UnstructuredFromMixedData(map[string]any{
 		"resource":       resource,
 		"repository":     toRepo.Data,

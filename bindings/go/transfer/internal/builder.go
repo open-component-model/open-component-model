@@ -43,6 +43,7 @@ func NewDefaultBuilder(
 	resourceRepo repository.ResourceRepository,
 	credentialProvider credentials.Resolver,
 	httpConfig *httpv1alpha1.Config,
+	tempDir string,
 ) *builder.Builder {
 	transformerScheme := runtime.NewScheme()
 	transformerScheme.MustRegisterScheme(ociv1alpha1.Scheme)
@@ -193,6 +194,24 @@ func NewDefaultBuilder(
 		HTTPConfig:         httpConfig,
 	}
 
+	// Fused plain blob (wget, s3) to local blob transformer
+	transferToLocalBlob := &TransferToLocalBlob{
+		Scheme:             transformerScheme,
+		RepoProvider:       repoProvider,
+		ResourceRepository: resourceRepo,
+		CredentialProvider: credentialProvider,
+	}
+
+	// Transformers that buffer content in a file follow the configured temporary folder.
+	ociGetResource.TempDir = tempDir
+	ociGetOCIArtifact.TempDir = tempDir
+	getHelmChart.TempDir = tempDir
+	convertHelmToOCI.TempDir = tempDir
+	downloadWget.TempDir = tempDir
+	downloadS3.TempDir = tempDir
+	getGitHubCommit.TempDir = tempDir
+	getGitResource.TempDir = tempDir
+
 	// File cleanup transformer
 	transformerScheme.MustRegisterWithAlias(&FileCleanupTransformation{}, FileCleanupVersionedType)
 	fileCleanup := &FileCleanup{
@@ -231,6 +250,10 @@ func NewDefaultBuilder(
 		WithTransformer(&wgetv1alpha1.HTTPStreaming{}, httpStreaming).
 		WithTransformer(&uploadv1alpha1.ArtifactoryUpload{}, &artifactory.Transformer{Uploader: repositoryUpload}).
 		WithTransformer(&uploadv1alpha1.NexusUpload{}, &nexus.Transformer{Uploader: repositoryUpload}).
+		WithTransformer(&uploadv1alpha1.TransferWgetToOCILocalBlob{}, transferToLocalBlob).
+		WithTransformer(&uploadv1alpha1.TransferWgetToCTFLocalBlob{}, transferToLocalBlob).
+		WithTransformer(&uploadv1alpha1.TransferS3ToOCILocalBlob{}, transferToLocalBlob).
+		WithTransformer(&uploadv1alpha1.TransferS3ToCTFLocalBlob{}, transferToLocalBlob).
 		WithTransformer(&FileCleanupTransformation{}, fileCleanup)
 }
 

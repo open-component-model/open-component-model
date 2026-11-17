@@ -75,8 +75,10 @@ configurations:
     tempFolder: /var/cache/ocm
 ```
 
-The same temporary folder is also used for other short-lived files, for example extracted CTF archives
-and downloaded resource content.
+The same temporary folder is also used for other short-lived files, for example extracted CTF archives,
+downloaded resource content, and blobs that are
+[spooled to disk]({{< relref "docs/reference/configuration/transfer-configuration/localblob-uploader.md#spooled-blobs" >}})
+during a transfer.
 
 #### `filesystem.config.ocm.software/v1alpha1` Fields
 

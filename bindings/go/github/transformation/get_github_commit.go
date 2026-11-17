@@ -27,6 +27,9 @@ type GetGitHubCommit struct {
 	// credential consumer identities.
 	ResourceRepository repository.ResourceRepository
 	CredentialProvider credentials.Resolver
+	// TempDir is the directory content is buffered in when the spec sets no output path.
+	// Empty means the default temporary directory of the operating system.
+	TempDir string
 }
 
 func (t *GetGitHubCommit) Transform(ctx context.Context, step runtime.Typed) (_ runtime.Typed, err error) {
@@ -45,7 +48,11 @@ func (t *GetGitHubCommit) Transform(ctx context.Context, step runtime.Typed) (_ 
 		transformation.Output = &v1alpha1.GetGitHubCommitOutput{}
 	}
 
-	contentOutputPath, err := determineOutputPath(transformation.Spec.OutputPath, "github-commit")
+	bufferDir, err := filesystem.BufferDir(transformation.Spec.OutputPath, t.TempDir)
+	if err != nil {
+		return nil, fmt.Errorf("error getting output path: %w", err)
+	}
+	contentOutputPath, err := determineOutputPath(bufferDir, "github-commit")
 	if err != nil {
 		return nil, fmt.Errorf("error getting content output path: %w", err)
 	}

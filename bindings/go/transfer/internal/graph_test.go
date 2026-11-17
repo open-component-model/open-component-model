@@ -814,7 +814,7 @@ func TestBuildGraphDefinition_CleanupReferencesAddSpec_Wget(t *testing.T) {
 	sourceRepo := testOCIRepo("ghcr.io/source")
 	targetRepo := testOCIRepo("ghcr.io/target")
 	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{wgetResource("blob", "1.0.0", "https://source.example/blob.tar")}, nil)
+		[]descriptor.Resource{wgetPostResource("blob", "1.0.0", "https://source.example/blob.tar")}, nil)
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 	roots := testTransferRoots("ocm.software/test", "1.0.0", targetRepo, resolver)
 
@@ -918,7 +918,7 @@ func TestBuildGraphDefinition_CleanupMultiTarget_AggregatesAllRefs(t *testing.T)
 	target2 := testOCIRepo("ghcr.io/target2")
 
 	desc := testDescriptor("ocm.software/test", "1.0.0",
-		[]descriptor.Resource{wgetResource("blob", "1.0.0", "https://source.example/blob.tar")}, nil)
+		[]descriptor.Resource{wgetPostResource("blob", "1.0.0", "https://source.example/blob.tar")}, nil)
 	resolver := testResolverFor("ocm.software/test", "1.0.0", sourceRepo, desc)
 
 	roots := map[string]TransferRoot{

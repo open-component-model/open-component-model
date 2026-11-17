@@ -24,6 +24,33 @@ var schemaRepositoryUploadOutput []byte
 //go:embed schemas/RepositoryUploadSpec.schema.json
 var schemaRepositoryUploadSpec []byte
 
+//go:embed schemas/TransferS3ToCTFLocalBlob.schema.json
+var schemaTransferS3ToCTFLocalBlob []byte
+
+//go:embed schemas/TransferS3ToCTFLocalBlobSpec.schema.json
+var schemaTransferS3ToCTFLocalBlobSpec []byte
+
+//go:embed schemas/TransferS3ToOCILocalBlob.schema.json
+var schemaTransferS3ToOCILocalBlob []byte
+
+//go:embed schemas/TransferS3ToOCILocalBlobSpec.schema.json
+var schemaTransferS3ToOCILocalBlobSpec []byte
+
+//go:embed schemas/TransferToLocalBlobOutput.schema.json
+var schemaTransferToLocalBlobOutput []byte
+
+//go:embed schemas/TransferWgetToCTFLocalBlob.schema.json
+var schemaTransferWgetToCTFLocalBlob []byte
+
+//go:embed schemas/TransferWgetToCTFLocalBlobSpec.schema.json
+var schemaTransferWgetToCTFLocalBlobSpec []byte
+
+//go:embed schemas/TransferWgetToOCILocalBlob.schema.json
+var schemaTransferWgetToOCILocalBlob []byte
+
+//go:embed schemas/TransferWgetToOCILocalBlobSpec.schema.json
+var schemaTransferWgetToOCILocalBlobSpec []byte
+
 // JSONSchema returns the JSON Schema for ArtifactoryUpload.
 func (ArtifactoryUpload) JSONSchema() []byte {
 	return schemaArtifactoryUpload
@@ -47,4 +74,49 @@ func (RepositoryUploadOutput) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for RepositoryUploadSpec.
 func (RepositoryUploadSpec) JSONSchema() []byte {
 	return schemaRepositoryUploadSpec
+}
+
+// JSONSchema returns the JSON Schema for TransferS3ToCTFLocalBlob.
+func (TransferS3ToCTFLocalBlob) JSONSchema() []byte {
+	return schemaTransferS3ToCTFLocalBlob
+}
+
+// JSONSchema returns the JSON Schema for TransferS3ToCTFLocalBlobSpec.
+func (TransferS3ToCTFLocalBlobSpec) JSONSchema() []byte {
+	return schemaTransferS3ToCTFLocalBlobSpec
+}
+
+// JSONSchema returns the JSON Schema for TransferS3ToOCILocalBlob.
+func (TransferS3ToOCILocalBlob) JSONSchema() []byte {
+	return schemaTransferS3ToOCILocalBlob
+}
+
+// JSONSchema returns the JSON Schema for TransferS3ToOCILocalBlobSpec.
+func (TransferS3ToOCILocalBlobSpec) JSONSchema() []byte {
+	return schemaTransferS3ToOCILocalBlobSpec
+}
+
+// JSONSchema returns the JSON Schema for TransferToLocalBlobOutput.
+func (TransferToLocalBlobOutput) JSONSchema() []byte {
+	return schemaTransferToLocalBlobOutput
+}
+
+// JSONSchema returns the JSON Schema for TransferWgetToCTFLocalBlob.
+func (TransferWgetToCTFLocalBlob) JSONSchema() []byte {
+	return schemaTransferWgetToCTFLocalBlob
+}
+
+// JSONSchema returns the JSON Schema for TransferWgetToCTFLocalBlobSpec.
+func (TransferWgetToCTFLocalBlobSpec) JSONSchema() []byte {
+	return schemaTransferWgetToCTFLocalBlobSpec
+}
+
+// JSONSchema returns the JSON Schema for TransferWgetToOCILocalBlob.
+func (TransferWgetToOCILocalBlob) JSONSchema() []byte {
+	return schemaTransferWgetToOCILocalBlob
+}
+
+// JSONSchema returns the JSON Schema for TransferWgetToOCILocalBlobSpec.
+func (TransferWgetToOCILocalBlobSpec) JSONSchema() []byte {
+	return schemaTransferWgetToOCILocalBlobSpec
 }

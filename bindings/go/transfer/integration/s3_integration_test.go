@@ -28,8 +28,8 @@ import (
 	s3access "ocm.software/open-component-model/bindings/go/s3/spec/access"
 	s3accessv2 "ocm.software/open-component-model/bindings/go/s3/spec/access/v2"
 	s3identityv1 "ocm.software/open-component-model/bindings/go/s3/spec/identity/v1"
-	s3v1alpha1 "ocm.software/open-component-model/bindings/go/s3/transformation/spec/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/transfer"
+	uploadv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/transformation/spec/v1alpha1"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
@@ -129,15 +129,15 @@ func Test_Integration_TransferS3Resource_LocalBlobUploader(t *testing.T) {
 	r.NoError(err)
 	r.NotNil(tgd)
 
-	// An s3 resource should generate a DownloadS3Resource transformation.
-	hasDownloadS3 := false
+	// An s3 resource is streamed into the target by a single fused transformation.
+	hasTransfer := false
 	for _, tr := range tgd.Transformations {
-		if tr.Type.Name == s3v1alpha1.DownloadS3ResourceType {
-			hasDownloadS3 = true
+		if tr.Type.Name == uploadv1alpha1.TransferS3ToOCILocalBlobType {
+			hasTransfer = true
 			break
 		}
 	}
-	r.True(hasDownloadS3, "s3 resource should generate a DownloadS3Resource transformation")
+	r.True(hasTransfer, "s3 resource should generate a TransferS3ToOCILocalBlob transformation")
 
 	// 5. Build and execute the graph.
 	credResolver := newS3CredResolver(t, endpoint, bucket, objectKey, s3AccessKey, s3SecretKey,

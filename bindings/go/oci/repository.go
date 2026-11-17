@@ -548,6 +548,7 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(
 		ExtendedCopyGraphOptions: repo.extendedCopyGraphOptions(),
 		BaseReference:            reference,
 		GlobalAccessPolicy:       repo.globalAccessPolicy,
+		TempDir:                  repo.tempDir,
 	}
 	_, err = pack.ArtifactBlob(slogcontext.With(ctx, slog.String("target", reference)), store, artifactBlob, packOptions)
 	if err != nil {

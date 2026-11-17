@@ -19,6 +19,9 @@ type GetLocalResource struct {
 	Scheme             *runtime.Scheme
 	RepoProvider       repository.ComponentVersionRepositoryProvider
 	CredentialProvider credentials.Resolver
+	// TempDir is the directory content is buffered in when the spec sets no output path.
+	// Empty means the default temporary directory of the operating system.
+	TempDir string
 }
 
 func (t *GetLocalResource) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
@@ -103,6 +106,9 @@ func (t *GetLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 	}
 
 	// Determine output path
+	if outputPath, err = filesystem.BufferDir(outputPath, t.TempDir); err != nil {
+		return nil, fmt.Errorf("failed determining output path: %w", err)
+	}
 	if outputPath, err = DetermineOutputPath(outputPath, "resource"); err != nil {
 		return nil, fmt.Errorf("failed determining output path: %w", err)
 	}

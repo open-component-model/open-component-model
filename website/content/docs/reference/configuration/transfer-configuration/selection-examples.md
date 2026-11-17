@@ -228,8 +228,8 @@ configurations:
 | `notes`  | local blob |
 | `docs`   | local blob |
 
-`chart` goes through GetHelmChart → ConvertHelmToOCI → OCIAddLocalResource;
-`docs` through DownloadWgetResource → OCIAddLocalResource. The OCI images `app`
+`chart` goes through GetHelmChart → ConvertHelmToOCI → OCIAddLocalResource.
+`docs`, a `Wget` download, is streamed by a single TransferWgetToOCILocalBlob node. The OCI images `app`
 and `nginx` are streamed by a single TransferOCIArtifactToOCILocalBlob node each, and
 `bundle` and `notes`, which are local blobs already, by a single
 TransferOCILocalBlobToOCILocalBlob node each (TransferCTFLocalBlobToOCILocalBlob

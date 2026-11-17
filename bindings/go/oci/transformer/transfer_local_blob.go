@@ -358,3 +358,10 @@ func componentVersionRepository(ctx context.Context, provider repository.Compone
 	}
 	return repo, nil
 }
+
+// OpenLocalBlobTarget returns the OCI or CTF repository described by spec for adding local
+// blobs. globalAccessPolicy must be empty unless spec is an OCI repository. It lets fused
+// transformations for other source kinds share the target handling of this package.
+func OpenLocalBlobTarget(ctx context.Context, provider repository.ComponentVersionRepositoryProvider, resolver credentials.Resolver, spec runtime.Typed, globalAccessPolicy ocirepospecv1.GlobalAccessPolicy) (repository.ComponentVersionRepository, error) {
+	return localBlobTarget{repository: spec, globalAccessPolicy: globalAccessPolicy}.open(ctx, provider, resolver)
+}

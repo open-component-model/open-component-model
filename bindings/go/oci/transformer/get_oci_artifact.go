@@ -20,6 +20,9 @@ type GetOCIArtifact struct {
 	Scheme             *runtime.Scheme
 	Repository         repository.ResourceRepository
 	CredentialProvider credentials.Resolver
+	// TempDir is the directory content is buffered in when the spec sets no output path.
+	// Empty means the default temporary directory of the operating system.
+	TempDir string
 }
 
 func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
@@ -65,6 +68,9 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	}
 
 	// Determine output path
+	if outputPath, err = filesystem.BufferDir(outputPath, t.TempDir); err != nil {
+		return nil, fmt.Errorf("failed determining output path: %w", err)
+	}
 	if outputPath, err = DetermineOutputPath(outputPath, "oci-artifact"); err != nil {
 		return nil, fmt.Errorf("failed determining output path: %w", err)
 	}

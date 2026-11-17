@@ -107,6 +107,11 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 			_ = os.RemoveAll(ociPath)
 		})
 
+		// Only the output file stays behind: the layout is built in a temporary file first.
+		leftovers, err := filepath.Glob(filepath.Join(outputDir, "oci-layout-*"))
+		r.NoError(err)
+		r.Empty(leftovers)
+
 		// Verify it is a valid OCI layout with a helm chart layer
 		verifyOCILayout(t, ociPath, "mychart", "0.1.0", false)
 
