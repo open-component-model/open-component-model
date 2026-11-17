@@ -48,15 +48,11 @@ func (t *GetGitHubCommit) Transform(ctx context.Context, step runtime.Typed) (_ 
 		transformation.Output = &v1alpha1.GetGitHubCommitOutput{}
 	}
 
-	bufferDir, err := filesystem.BufferDir(transformation.Spec.OutputPath, t.TempDir)
-	if err != nil {
-		return nil, fmt.Errorf("error getting output path: %w", err)
-	}
-	contentOutputPath, err := determineOutputPath(bufferDir, "github-commit")
+	contentOutputPath, err := filesystem.BufferFile(transformation.Spec.OutputPath, t.TempDir, "github-commit")
 	if err != nil {
 		return nil, fmt.Errorf("error getting content output path: %w", err)
 	}
-	// determineOutputPath creates the file; retain it on success for Output.File, remove it on
+	// BufferFile creates the file; retain it on success for Output.File, remove it on
 	// failure. The graph's cleanup node only sees files that reached the consuming node's spec,
 	// and graph processing aborts on a failing node, so nothing else would remove it.
 	defer func() {

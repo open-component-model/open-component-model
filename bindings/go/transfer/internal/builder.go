@@ -74,6 +74,7 @@ func NewDefaultBuilder(
 		Scheme:             transformerScheme,
 		RepoProvider:       repoProvider,
 		CredentialProvider: credentialProvider,
+		TempDir:            tempDir,
 	}
 	ociAddResource := &ocitransformer.AddLocalResource{
 		Scheme:             transformerScheme,
@@ -103,6 +104,7 @@ func NewDefaultBuilder(
 		Scheme:             transformerScheme,
 		Repository:         resourceRepo,
 		CredentialProvider: credentialProvider,
+		TempDir:            tempDir,
 	}
 
 	ociAddOCIArtifact := &ocitransformer.AddOCIArtifact{
@@ -138,9 +140,11 @@ func NewDefaultBuilder(
 		Scheme:             transformerScheme,
 		ResourceRepository: resourceRepo,
 		CredentialProvider: credentialProvider,
+		TempDir:            tempDir,
 	}
 	convertHelmToOCI := &helmtransformer.ConvertHelmChartToOCI{
-		Scheme: transformerScheme,
+		Scheme:  transformerScheme,
+		TempDir: tempDir,
 	}
 
 	// Wget transformer
@@ -148,6 +152,7 @@ func NewDefaultBuilder(
 		Scheme:             transformerScheme,
 		ResourceRepository: resourceRepo,
 		CredentialProvider: credentialProvider,
+		TempDir:            tempDir,
 	}
 
 	// S3 transformer
@@ -155,6 +160,7 @@ func NewDefaultBuilder(
 		Scheme:             transformerScheme,
 		ResourceRepository: resourceRepo,
 		CredentialProvider: credentialProvider,
+		TempDir:            tempDir,
 	}
 
 	// GitHub transformers
@@ -162,12 +168,14 @@ func NewDefaultBuilder(
 		Scheme:             transformerScheme,
 		ResourceRepository: resourceRepo,
 		CredentialProvider: credentialProvider,
+		TempDir:            tempDir,
 	}
 
 	getGitResource := &gittransformer.GetGitResource{
 		Scheme:             transformerScheme,
 		ResourceRepository: resourceRepo,
 		CredentialProvider: credentialProvider,
+		TempDir:            tempDir,
 	}
 
 	// Git upload transformer (git uploader configurations)
@@ -193,16 +201,6 @@ func NewDefaultBuilder(
 		CredentialProvider: credentialProvider,
 		HTTPConfig:         httpConfig,
 	}
-
-	// Transformers that buffer content in a file follow the configured temporary folder.
-	ociGetResource.TempDir = tempDir
-	ociGetOCIArtifact.TempDir = tempDir
-	getHelmChart.TempDir = tempDir
-	convertHelmToOCI.TempDir = tempDir
-	downloadWget.TempDir = tempDir
-	downloadS3.TempDir = tempDir
-	getGitHubCommit.TempDir = tempDir
-	getGitResource.TempDir = tempDir
 
 	// File cleanup transformer
 	transformerScheme.MustRegisterWithAlias(&FileCleanupTransformation{}, FileCleanupVersionedType)

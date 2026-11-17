@@ -106,10 +106,7 @@ func (t *GetLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 	}
 
 	// Determine output path
-	if outputPath, err = filesystem.BufferDir(outputPath, t.TempDir); err != nil {
-		return nil, fmt.Errorf("failed determining output path: %w", err)
-	}
-	if outputPath, err = DetermineOutputPath(outputPath, "resource"); err != nil {
+	if outputPath, err = filesystem.BufferFile(outputPath, t.TempDir, "resource"); err != nil {
 		return nil, fmt.Errorf("failed determining output path: %w", err)
 	}
 

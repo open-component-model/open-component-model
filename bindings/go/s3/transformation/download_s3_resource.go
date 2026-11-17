@@ -44,15 +44,11 @@ func (t *DownloadS3Resource) Transform(ctx context.Context, step runtime.Typed) 
 		transformation.Output = &v1alpha1.DownloadS3ResourceOutput{}
 	}
 
-	bufferDir, err := filesystem.BufferDir(transformation.Spec.OutputPath, t.TempDir)
+	outputPath, err := filesystem.BufferFile(transformation.Spec.OutputPath, t.TempDir, "s3")
 	if err != nil {
 		return nil, fmt.Errorf("error getting output path: %w", err)
 	}
-	outputPath, err := determineOutputPath(bufferDir, "s3")
-	if err != nil {
-		return nil, fmt.Errorf("error getting output path: %w", err)
-	}
-	// determineOutputPath creates the file; retain it on success for Output.File, remove it on failure.
+	// BufferFile creates the file; retain it on success for Output.File, remove it on failure.
 	defer func() {
 		if err != nil {
 			if removeErr := os.Remove(outputPath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {

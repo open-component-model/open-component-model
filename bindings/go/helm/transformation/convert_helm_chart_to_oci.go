@@ -29,7 +29,7 @@ type ConvertHelmChartToOCI struct {
 	TempDir string
 }
 
-func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
+func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Typed) (_ runtime.Typed, err error) {
 	var transformation v1alpha1.ConvertHelmToOCI
 	if err := t.Scheme.Convert(step, &transformation); err != nil {
 		return nil, fmt.Errorf("failed converting generic transformation to convert helm transformation: %w", err)
@@ -57,7 +57,6 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 	var (
 		chartSpec *filesystem.Blob
 		provSpec  *filesystem.Blob
-		err       error
 	)
 
 	chartPath, err := filesystem.FilePathFromURI(transformation.Spec.ChartFile.URI)
@@ -80,14 +79,19 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 		slog.DebugContext(ctx, "Created blob for prov file", "uri", transformation.Spec.ProvFile.URI)
 	}
 
-	bufferDir, err := filesystem.BufferDir(transformation.Spec.OutputPath, t.TempDir)
+	outputPath, err := filesystem.BufferFile(transformation.Spec.OutputPath, t.TempDir, "oci")
 	if err != nil {
 		return nil, fmt.Errorf("error getting OCI output path: %w", err)
 	}
-	outputPath, err := DetermineOutputPath(bufferDir, "oci")
-	if err != nil {
-		return nil, fmt.Errorf("error getting OCI output path: %w", err)
-	}
+	// BufferFile creates the file; retain it on success for Output.File, remove it on failure.
+	// Failed graph nodes never pass their output to the consuming cleanup node.
+	defer func() {
+		if err != nil {
+			if removeErr := os.Remove(outputPath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+				slog.WarnContext(ctx, "failed to clean up OCI layout file after error", "path", outputPath, "err", removeErr)
+			}
+		}
+	}()
 	slog.DebugContext(ctx, "Going to use oci output path", "path", outputPath)
 
 	result, err := oci.CopyChartToOCILayout(ctx, &internal.ChartData{
@@ -95,17 +99,10 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 		Version:   helmAccess.GetVersion(),
 		ChartBlob: chartSpec,
 		ProvBlob:  provSpec,
-	}, bufferDir)
+	}, outputPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OCI layout from helm chart: %w", err)
 	}
-	// The layout is copied to outputPath below; its own temporary file is not needed after that.
-	defer func() {
-		if err := os.Remove(result.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
-			slog.WarnContext(ctx, "failed to remove temporary OCI layout file", "path", result.Path, "error", err)
-		}
-	}()
-
 	if result.Blob == nil {
 		return nil, fmt.Errorf("OCI layout blob is required but was not returned from OCI layout creation")
 	}
@@ -113,7 +110,7 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 		return nil, fmt.Errorf("OCI layout descriptor is required but was not returned from OCI layout creation")
 	}
 
-	spec, err := filesystem.BlobToSpec(result.Blob, outputPath)
+	spec, err := filesystem.FileToSpec(result.Blob, outputPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed converting OCI layout blob to file spec: %w", err)
 	}

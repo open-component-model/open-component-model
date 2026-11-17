@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -26,36 +27,36 @@ import (
 type Result struct {
 	Blob *filesystem.Blob
 	Desc *ociImageSpecV1.Descriptor
-	// Path is the temporary file backing Blob. The caller removes it once Blob is no longer read.
-	Path string
 }
 
 // CopyChartToOCILayout takes a ChartData helper object and creates an OCI layout from it.
 // Three OCI layers are expected: config, tgz contents and optionally a provenance file.
 // The result is tagged with the helm chart version.
-// The OCI layout is written to a temporary file in dir and returned as a file-backed blob.
+//
+// The OCI layout is written to the file at path, which is created or truncated, and
+// returned as a blob backed by it. Intermediate data is buffered in the directory of path.
+// The caller owns the file: it removes it when this call fails or the blob is no longer read.
 // See also: https://github.com/helm/community/blob/main/hips/hip-0006.md#2-support-for-provenance-files
-func CopyChartToOCILayout(ctx context.Context, chart *internal.ChartData, dir string) (*Result, error) {
-	tmpFile, err := os.CreateTemp(dir, "oci-layout-*.tar.gz")
+func CopyChartToOCILayout(ctx context.Context, chart *internal.ChartData, path string) (*Result, error) {
+	file, err := os.Create(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create temp file for OCI layout: %w", err)
+		return nil, fmt.Errorf("failed to open file for OCI layout: %w", err)
 	}
 
-	imgDesc, err := writeOCILayout(ctx, chart, tmpFile, dir)
-	// The file is closed before it is handed out or removed: an open file can be neither
+	imgDesc, err := writeOCILayout(ctx, chart, file, filepath.Dir(path))
+	// The file is closed before it is handed out: an open file can be neither
 	// removed nor have its directory removed on windows.
-	err = errors.Join(err, tmpFile.Close())
-	if err != nil {
-		return nil, errors.Join(err, os.Remove(tmpFile.Name()))
+	if err = errors.Join(err, file.Close()); err != nil {
+		return nil, err
 	}
 
-	blob, err := filesystem.GetBlobFromOSPath(tmpFile.Name())
+	blob, err := filesystem.GetBlobFromOSPath(path)
 	if err != nil {
-		return nil, errors.Join(fmt.Errorf("failed to create blob from OCI layout file: %w", err), os.Remove(tmpFile.Name()))
+		return nil, fmt.Errorf("failed to create blob from OCI layout file: %w", err)
 	}
 	blob.SetMediaType(layout.MediaTypeOCIImageLayoutTarGzipV1)
 
-	return &Result{Blob: blob, Desc: &imgDesc, Path: tmpFile.Name()}, nil
+	return &Result{Blob: blob, Desc: &imgDesc}, nil
 }
 
 // writeOCILayout writes the chart as a gzipped OCI layout tagged with the chart version

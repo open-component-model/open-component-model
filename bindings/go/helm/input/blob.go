@@ -2,6 +2,7 @@ package input
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -109,14 +110,23 @@ func GetV1HelmBlob(ctx context.Context, helmSpec v1.Helm, tmpDir string, opts ..
 		return nil, nil, fmt.Errorf("either path or helmRepository must be specified")
 	}
 
+	// The layout file is kept for the caller to read the returned blob from; it lives in tmpDir,
+	// which the input method owns (see method.go).
+	layoutPath, err := filesystem.BufferFile("", tmpDir, "oci-layout")
+	if err != nil {
+		return nil, nil, fmt.Errorf("error creating file for OCI layout: %w", err)
+	}
 	result, err := oci.CopyChartToOCILayout(ctx, &internal.ChartData{
 		Name:      chart.Name,
 		Version:   chart.Version,
 		ChartBlob: chart.ChartBlob,
 		ProvBlob:  chart.ProvBlob,
-	}, tmpDir)
+	}, layoutPath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("error converting helm chart to OCI layout: %w", err)
+		return nil, nil, errors.Join(
+			fmt.Errorf("error converting helm chart to OCI layout: %w", err),
+			os.Remove(layoutPath),
+		)
 	}
 
 	return result.Blob, chart, nil
