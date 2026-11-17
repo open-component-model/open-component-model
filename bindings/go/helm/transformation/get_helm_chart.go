@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 
 	"helm.sh/helm/v4/pkg/chart/v2/loader"
 
@@ -30,9 +31,12 @@ type GetHelmChart struct {
 	// ResourceRepository is used to download helm chart resources and resolve credential consumer identities.
 	ResourceRepository repository.ResourceRepository
 	CredentialProvider credentials.Resolver
+	// TempDir is the directory content is buffered in when the spec sets no output path.
+	// Empty means the default temporary directory of the operating system.
+	TempDir string
 }
 
-func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
+func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (_ runtime.Typed, err error) {
 	var transformation v1alpha1.GetHelmChart
 	if err := t.Scheme.Convert(step, &transformation); err != nil {
 		return nil, fmt.Errorf("failed converting generic transformation to get helm transformation: %w", err)
@@ -45,10 +49,23 @@ func (t *GetHelmChart) Transform(ctx context.Context, step runtime.Typed) (runti
 		transformation.Output = &v1alpha1.GetHelmChartOutput{}
 	}
 
-	chartOutputPath, err := DetermineOutputPath(transformation.Spec.OutputPath, "chart")
+	chartOutputPath, err := filesystem.BufferFile(transformation.Spec.OutputPath, t.TempDir, "chart")
 	if err != nil {
 		return nil, fmt.Errorf("error getting chart output path: %w", err)
 	}
+	// BufferFile creates the file and writeChartAndProvFiles adds the provenance file next to
+	// it; retain both on success for the output, remove them on failure. Failed graph nodes
+	// never pass their output to the consuming cleanup node, and the transfer runtime retries
+	// transient errors, so each attempt would otherwise leave a file behind.
+	defer func() {
+		if err != nil {
+			for _, path := range []string{chartOutputPath, chartOutputPath + provFileSuffix} {
+				if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+					slog.WarnContext(ctx, "failed to clean up helm chart output file after error", "path", path, "err", removeErr)
+				}
+			}
+		}
+	}()
 	slog.DebugContext(ctx, "Going to use chart output path", "path", chartOutputPath)
 
 	targetResource := descriptor.ConvertFromV2Resource(transformation.Spec.Resource)
@@ -135,9 +152,12 @@ func (t *GetHelmChart) resolveCredentials(ctx context.Context, targetResource *d
 	return typed, nil
 }
 
+// provFileSuffix is appended to the chart file path to hold the provenance file of a chart.
+const provFileSuffix = ".prov"
+
 // writeChartAndProvFiles buffers the chart archive and, if present, the provenance file
-// to disk at chartOutputPath and chartOutputPath+".prov" respectively, returning file specs
-// for each. The prov file spec is nil when no provenance file is present in the download.
+// to disk at chartOutputPath and chartOutputPath+provFileSuffix respectively, returning file
+// specs for each. The prov file spec is nil when no provenance file is present in the download.
 func writeChartAndProvFiles(ctx context.Context, chartBlob *helmblob.ChartBlob, chartArchive blob.ReadOnlyBlob, chartOutputPath string) (*blobv1alpha1.File, *blobv1alpha1.File, error) {
 	chartFileSpec, err := filesystem.BlobToSpec(chartArchive, chartOutputPath)
 	if err != nil {
@@ -152,7 +172,7 @@ func writeChartAndProvFiles(ctx context.Context, chartBlob *helmblob.ChartBlob, 
 	if provArchive == nil {
 		return chartFileSpec, nil, nil
 	}
-	provFileSpec, err := filesystem.BlobToSpec(provArchive, fmt.Sprintf("%s.prov", chartOutputPath))
+	provFileSpec, err := filesystem.BlobToSpec(provArchive, chartOutputPath+provFileSuffix)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed buffering prov blob to file: %w", err)
 	}
