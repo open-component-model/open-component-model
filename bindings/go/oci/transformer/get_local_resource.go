@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"os"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -24,7 +26,7 @@ type GetLocalResource struct {
 	TempDir string
 }
 
-func (t *GetLocalResource) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
+func (t *GetLocalResource) Transform(ctx context.Context, step runtime.Typed) (_ runtime.Typed, err error) {
 	transformation, err := t.Scheme.NewObject(step.GetType())
 	if err != nil {
 		return nil, fmt.Errorf("failed creating get local resource transformation object: %w", err)
@@ -109,6 +111,14 @@ func (t *GetLocalResource) Transform(ctx context.Context, step runtime.Typed) (r
 	if outputPath, err = filesystem.BufferFile(outputPath, t.TempDir, "resource"); err != nil {
 		return nil, fmt.Errorf("failed determining output path: %w", err)
 	}
+	// BufferFile creates the file; retain it on success for the output, remove it on failure.
+	defer func() {
+		if err != nil {
+			if removeErr := os.Remove(outputPath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+				slog.WarnContext(ctx, "failed to clean up local resource output file after error", "path", outputPath, "err", removeErr)
+			}
+		}
+	}()
 
 	// Buffer blob to file
 	fileSpec, err := filesystem.BlobToSpec(blobContent, outputPath)
