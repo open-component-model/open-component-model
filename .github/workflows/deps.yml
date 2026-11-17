@@ -49,9 +49,11 @@ jobs:
       name: automation
       deployment: false
     steps:
-      - if: ${{ github.event_name != 'pull_request' && github.repository_owner == 'open-component-model' }}
+      # A dry run pushes nothing, so it needs no App token: checkout and Run fall back to
+      # GITHUB_TOKEN, as every pull request run already does.
+      - if: ${{ github.event_name != 'pull_request' && !inputs.dryRun && github.repository_owner == 'open-component-model' }}
         id: generate_token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           client-id: ${{ secrets.OCMBOT_APP_ID }}
           private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
@@ -71,12 +73,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1 # zizmor: ignore[artipacked] intentional: deps lists, pushes and deletes its branches with the checkout's credentials
         with:
+          # A queued run must start from the current tip of its branch, not from the commit
+          # that triggered it: deps refuses a write run whose HEAD is behind origin/main.
+          # Pull requests keep the default merge commit.
+          ref: ${{ github.event_name != 'pull_request' && github.ref || '' }}
           token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - name: Run
-        uses: jakobmoellerdev/deps@12a1ba987a60a0ca783cd2f5c98ac9565993edb9 # v0.17.0
+        uses: jakobmoellerdev/deps@62afe8b1562bfe4effdee2f94b0a2fcff550352b # v0.18.0
         with:
-          version: v0.17.0
+          version: v0.18.0
           token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
           # Pull requests only check that the config still resolves and what it would do.
           dry-run: ${{ (github.event_name == 'pull_request' || inputs.dryRun) && 'true' || 'false' }}
