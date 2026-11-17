@@ -1490,3 +1490,144 @@ func TestApply_RequiresReader(t *testing.T) {
 	_, err := applier.Apply(t.Context(), []Resource{{ID: "cm1", Object: newConfigMap("cm1", "default")}}, ApplyMode{})
 	r.ErrorContains(err, "needs a reader")
 }
+
+// TestApply_ConflictDetection_MemberCache covers conflict detection answered from Config.Members: the cache only
+// spares the read of objects it shows as this ApplySet's own, and Reader decides everything else.
+func TestApply_ConflictDetection_MemberCache(t *testing.T) {
+	parentGVK := schema.GroupVersionKind{Group: "delivery.ocm.software", Version: "v1alpha1", Kind: "TestKind"}
+	parent := newTestParent(parentGVK)
+	other := &testParent{
+		ObjectMeta: metav1.ObjectMeta{Name: "other-instance", Namespace: "default", UID: types.UID("other-parent-uid")},
+		gvk:        parentGVK,
+	}
+	member := func(owner string) *unstructured.Unstructured {
+		cm := newConfigMap("cm1", "default")
+		cm.SetLabels(map[string]string{ApplysetPartOfLabel: owner})
+		cm.SetUID(types.UID("existing-uid"))
+		return cm
+	}
+
+	tests := map[string]struct {
+		members     fakeMembers
+		live        []client.Object
+		liveErr     error
+		wantOwner   string
+		wantErr     string
+		wantLists   int
+		wantByNames int
+	}{
+		"lists live while the cache has not synced the kind": {
+			live:      []client.Object{member(ID(other))},
+			wantOwner: ID(other),
+			wantLists: 1,
+		},
+		"lists live when the cache fails": {
+			members:   fakeMembers{synced: true, err: errors.New("cache failed")},
+			live:      []client.Object{member(ID(other))},
+			wantOwner: ID(other),
+			wantLists: 1,
+		},
+		"reads nothing for an object the cache shows as its own": {
+			members: fakeMembers{synced: true, objects: []client.Object{member(ID(parent))}},
+			liveErr: errors.New("must not read"),
+		},
+		"confirms a conflict the cache reports": {
+			members:     fakeMembers{synced: true, objects: []client.Object{member(ID(other))}},
+			live:        []client.Object{member(ID(other))},
+			wantOwner:   ID(other),
+			wantByNames: 1,
+		},
+		"drops a cached conflict the object no longer has": {
+			members:     fakeMembers{synced: true, objects: []client.Object{member(ID(other))}},
+			live:        []client.Object{member(ID(parent))},
+			wantByNames: 1,
+		},
+		"drops a cached conflict with a deleted object": {
+			members:     fakeMembers{synced: true, objects: []client.Object{member(ID(other))}},
+			wantByNames: 1,
+		},
+		"finds a member another ApplySet created after the cache last saw the kind": {
+			members:     fakeMembers{synced: true},
+			live:        []client.Object{member(ID(other))},
+			wantOwner:   ID(other),
+			wantByNames: 1,
+		},
+		"fails when Reader cannot read an object the cache does not show as its own": {
+			members: fakeMembers{synced: true, objects: []client.Object{member(ID(other))}},
+			liveErr: errors.New("forbidden"),
+			wantErr: "forbidden",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			r := require.New(t)
+
+			var mu sync.Mutex
+			lists, byNames := 0, 0
+			scheme := runtime.NewScheme()
+			r.NoError(corev1.AddToScheme(scheme))
+			reader := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.live...).
+				WithIndex(&corev1.ConfigMap{}, "metadata.name", func(obj client.Object) []string { return []string{obj.GetName()} }).
+				WithInterceptorFuncs(interceptor.Funcs{
+					List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+						listOpts := &client.ListOptions{}
+						listOpts.ApplyOptions(opts)
+						mu.Lock()
+						if listOpts.FieldSelector != nil {
+							byNames++
+						} else {
+							lists++
+						}
+						mu.Unlock()
+						if tt.liveErr != nil {
+							return tt.liveErr
+						}
+						return c.List(ctx, list, opts...)
+					},
+				}).
+				Build()
+
+			applier := New(Config{
+				Client:          newFakeClient(tt.live...),
+				Reader:          reader,
+				Members:         tt.members,
+				RESTMapper:      newTestRESTMapper(),
+				Log:             logr.Discard(),
+				ParentNamespace: "default",
+			}, parent)
+
+			result, err := applier.Apply(t.Context(), []Resource{{ID: "cm1", Object: newConfigMap("cm1", "default")}}, ApplyMode{})
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.Len(result.Applied, 1)
+			if tt.wantOwner != "" {
+				var conflictErr *ApplySetConflictError
+				r.ErrorAs(result.Applied[0].Error, &conflictErr)
+				r.Equal(tt.wantOwner, conflictErr.CurrentApplySetID)
+			} else {
+				r.NoError(result.Applied[0].Error)
+			}
+			r.Equal(tt.wantLists, lists, "live lists of the kind")
+			r.Equal(tt.wantByNames, byNames, "live reads by name")
+		})
+	}
+}
+
+// fakeMembers stands in for a member cache that has or has not synced.
+type fakeMembers struct {
+	synced  bool
+	err     error
+	objects []client.Object
+}
+
+func (f fakeMembers) ListSynced(ctx context.Context, list *metav1.PartialObjectMetadataList, opts ...client.ListOption) (bool, error) {
+	if f.err != nil || !f.synced {
+		return false, f.err
+	}
+
+	return true, newFakeClient(f.objects...).List(ctx, list, opts...)
+}
