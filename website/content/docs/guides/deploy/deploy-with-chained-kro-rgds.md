@@ -366,17 +366,8 @@ Alternatively, if you want to keep your package private, configure credentials f
 Controllers and kro:
 
 {{< details "Using a private registry" >}}
-Create a pull secret from a token with `read:packages`, in the same namespace as the bootstrap
-resources:
-
-```bash
-kubectl create secret docker-registry ghcr-secret \
-  --namespace default \
-  --docker-username=$GITHUB_USERNAME \
-  --docker-password="$(gh auth token)" \
-  --docker-server=ghcr.io
-```
-
+Create a `ghcr-secret` in the `default` namespace, the namespace of the bootstrap resources, as described in
+[Quickstart: GitHub Container Registry]({{< relref "/docs/guides/deploy/configure-controller-credentials.md#quickstart-github-container-registry" >}}).
 Then wire it into three places:
 
 1. The `Repository` in `bootstrap.yaml`. Credentials propagate to the Component and Resources:
@@ -413,8 +404,6 @@ Then wire it into three places:
    ```
 
 Rebuild and transfer the component after editing the RGDs.
-
-For more details, see [Configure Credentials for Controllers]({{< relref "/docs/guides/deploy/configure-controller-credentials.md" >}}).
 {{< /details >}}
 
 ## Deploy the application

@@ -456,23 +456,14 @@ visibility of every package below `ocm-tutorial` that the transfer created to `p
 Alternatively, if you want to keep your packages private, configure credentials for the OCM Controllers and Crossplane:
 
 {{< details "Configure credentials for private registries" >}}
-The **OCM Controllers** read the component version. Create a `docker-registry` secret in the namespace of the
-instance you create later (here `default`). For GitHub Container Registry, you can use a short-lived token from the
-GitHub CLI:
-
-```shell
-kubectl create secret docker-registry ghcr-secret \
-  --namespace default \
-  --docker-username=$GITHUB_USERNAME \
-  --docker-password="$(gh auth token)" \
-  --docker-server=ghcr.io
-```
-
+The **OCM Controllers** read the component version. Create a `ghcr-secret` in the namespace of the instance you
+create later (here `default`), as described in
+[Quickstart: GitHub Container Registry]({{< relref "docs/guides/deploy/configure-controller-credentials.md#quickstart-github-container-registry" >}}).
 Then uncomment `ocmConfig` on the `Repository` in the RGD of the next step. The `Component` and `Resource` objects
-inherit it. See [Configure Credentials for OCM Controllers]({{< relref "docs/guides/deploy/configure-controller-credentials.md" >}}).
+inherit it.
 
-**Crossplane** pulls the packages, and the kubelet pulls the Function and Provider runtime images. Create the same
-secret in Crossplane's namespace:
+**Crossplane** pulls the packages, and the kubelet pulls the Function and Provider runtime images. Create a second
+secret with the same token in Crossplane's namespace:
 
 ```shell
 kubectl create secret docker-registry xpkg-pull-secret \

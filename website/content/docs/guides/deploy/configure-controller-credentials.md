@@ -33,6 +33,41 @@ Kubernetes secrets are only base64-encoded, not encrypted.
 Ensure proper RBAC policies to restrict access to secrets containing credentials.
 {{< /callout >}}
 
+## Quickstart: GitHub Container Registry
+
+If your component versions live in a private package on GitHub Container Registry (`ghcr.io`), create a
+`docker-registry` secret from a token with the `read:packages` scope. A classic personal access token works, or
+the token of the GitHub CLI. The GitHub CLI does not request `read:packages` by default, so add it first:
+
+```shell
+gh auth refresh --scopes read:packages
+```
+
+Create the secret in the namespace of the `Repository` that will use it. An `ocmConfig` reference without a
+`namespace` resolves in the namespace of the resource that declares it:
+
+```shell
+kubectl create secret docker-registry ghcr-secret \
+  --namespace <namespace-of-your-repository> \
+  --docker-username=$GITHUB_USERNAME \
+  --docker-password="$(gh auth token)" \
+  --docker-server=ghcr.io
+```
+
+Reference the secret from the `Repository`:
+
+```yaml
+spec:
+  ocmConfig:
+    - kind: Secret
+      name: ghcr-secret
+```
+
+`Component`, `Resource`, and `NamespacedDeployer` objects that reference this `Repository` inherit the
+credentials, see [Credential inheritance for dependent resources](#credential-inheritance-for-dependent-resources).
+To pull the deployed images, the workload also needs `ghcr-secret` as an image pull secret. Where to set it depends
+on the deployment method; each deploy guide shows its own wiring.
+
 ## Configure and propagate credentials for OCM resources
 
 {{< steps >}}
