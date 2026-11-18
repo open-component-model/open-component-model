@@ -9,7 +9,7 @@ toc: true
 
 ## Goal
 
-Align the component-name grammar with the one real constraint, the OCI repository path grammar, so a name maps directly to the OCI repository path `<base>/component-descriptors/<name>`. This is grammar compatibility; a registry may still reject an otherwise valid name, for example when the full repository path exceeds its length limit.
+Align the component-name grammar with the one real constraint, the OCI repository path grammar, so a name maps directly to the OCI repository path `<subPath>/component-descriptors/<name>`. This is grammar compatibility. The name itself is limited to 255 characters, but OCI distribution registries cap the repository path after the registry host at 255 characters, so the `component-descriptors/` prefix (22 characters) and any `subPath` reduce the usable name length. A name that is valid on its own may still be rejected by a registry when the full path is too long; that limit is enforced at the storage backend.
 
 ## What Changed
 

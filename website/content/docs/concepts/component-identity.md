@@ -55,7 +55,7 @@ The grammar follows the OCI repository path grammar, so a name maps directly to 
 - Names are lowercase only.
 - The `component-descriptors` segment is reserved for the storage mapping and must not appear in a name.
 
-This is grammar compatibility only. A registry may still reject an otherwise valid name, for example when the full repository path (the base path, the `component-descriptors/` prefix, and the name) exceeds the length a registry allows.
+This is grammar compatibility only. The 255 character limit applies to the name itself. A component version is stored at the OCI repository path `<subPath>/component-descriptors/<name>`, and OCI distribution registries cap the repository path after the registry host at 255 characters, with no per-segment limit. The `component-descriptors/` prefix (22 characters) and any repository `subPath` reduce the usable name length, so a name that is valid on its own may still be rejected by a registry when the full path is too long. This is enforced at the storage backend, not by the grammar.
 
 {{< callout context="note" >}}
 Digit-led and digit-only segments (for example `acme.org/1`) are readable only by legacy OCM tooling (v1) from the patch release that relaxes the letter-first rule; older binaries reject such names. See the changelog entry for the minimum version.
