@@ -24,7 +24,7 @@ Replace a cluster-scoped `Deployer` with a `NamespacedDeployer` while the deploy
 
 - OCM Controllers with the `NamespacedDeployer` controller enabled (Helm value `manager.namespacedDeployer.enabled`, on by default)
 - The `NamespacedDeployer` lives in the namespace of the `Deployer`'s `Resource`. Its service account must be allowed
-  to `get` the OCM configuration it references or inherits, see
+  to `get` the OCM configuration it references or inherits from another namespace, see
   [Configuration Access]({{< relref "docs/concepts/ocm-controllers.md#configuration-access" >}}).
 
 {{< callout type="warning" >}}
@@ -177,8 +177,8 @@ You should see: `No resources found`.
 
 ### Symptom: `GetConfigurationFailed` with `may not get it in namespace`
 
-**Cause:** The service account may not `get` a `Secret`, `ConfigMap` or OCM object that the `NamespacedDeployer`
-references or inherits. The `Deployer` read it with the controller's permissions.
+**Cause:** The service account may not `get` a `Secret`, `ConfigMap` or OCM object in another namespace that the
+`NamespacedDeployer` references or inherits. The `Deployer` read it with the controller's permissions.
 
 **Fix:** Grant the service account `get` on the object named in the message, in the namespace named there.
 

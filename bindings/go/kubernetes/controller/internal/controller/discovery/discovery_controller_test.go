@@ -448,7 +448,7 @@ func TestReconcile_DeniedConfigurationIsNotReady(t *testing.T) {
 		Spec: v1alpha1.DiscoverySpec{
 			ComponentRef: corev1.LocalObjectReference{Name: component.Name},
 			OCMConfig: []v1alpha1.OCMConfiguration{{
-				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{Kind: "Secret", Name: "creds"},
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{Kind: "Secret", Name: "creds", Namespace: "other"},
 			}},
 		},
 	}

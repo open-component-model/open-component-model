@@ -58,7 +58,7 @@ var (
 
 // SetupWithManager sets up the controller with the Manager. Manager bootstrap
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, concurrency int) error {
-	r.authorizer = serviceaccount.NewAuthorizer(mgr.GetAPIReader(), mgr.GetClient())
+	r.authorizer = serviceaccount.NewAuthorizer(mgr.GetAPIReader(), mgr.GetClient(), r.ReviewSameNamespaceConfig)
 
 	// Create index for repository reference name from components to make sure to reconcile, when the base ocm-
 	// repository changes.

@@ -50,7 +50,7 @@ var _ ocm.Reconciler = (*Reconciler)(nil)
 var deployerIndex = "Resource.spec.resourceRef"
 
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, concurrency int) error {
-	r.authorizer = serviceaccount.NewAuthorizer(mgr.GetAPIReader(), mgr.GetClient())
+	r.authorizer = serviceaccount.NewAuthorizer(mgr.GetAPIReader(), mgr.GetClient(), r.ReviewSameNamespaceConfig)
 
 	// Build index for resources that reference a component to make sure that we get notified when a component changes.
 	const fieldName = "spec.componentRef.name"

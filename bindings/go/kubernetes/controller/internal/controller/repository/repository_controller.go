@@ -45,7 +45,7 @@ type Reconciler struct {
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, concurrency int) error {
-	r.authorizer = serviceaccount.NewAuthorizer(mgr.GetAPIReader(), mgr.GetClient())
+	r.authorizer = serviceaccount.NewAuthorizer(mgr.GetAPIReader(), mgr.GetClient(), r.ReviewSameNamespaceConfig)
 
 	// This index is required to get all components that reference an OCM repository. This is required to make sure that
 	// when deleting the OCM repository, no component exists anymore that references that OCM repository.

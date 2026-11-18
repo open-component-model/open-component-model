@@ -1,7 +1,6 @@
 package component
 
 import (
-	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -70,18 +69,18 @@ var _ = Describe("Component service account", func() {
 		return component
 	}
 
+	It("reads a Secret in its own namespace without a service account", func(ctx SpecContext) {
+		// envtest runs no service account controller, so the namespace has not even a default one.
+		component := newComponent(ctx, func(c *v1alpha1.Component) {
+			c.Spec.OCMConfig = []v1alpha1.OCMConfiguration{test.SecretOCMConfiguration(local)}
+		})
+
+		test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{"Status.Component.Version": Version1})
+	})
+
 	Context("without a service account", func() {
 		BeforeEach(func(ctx SpecContext) {
 			serviceaccounttest.CreateServiceAccount(ctx, k8sClient, namespace, serviceaccount.DefaultName)
-			serviceaccounttest.GrantOCMConfigReads(ctx, k8sClient, namespace, namespace, serviceaccount.DefaultName)
-		})
-
-		It("authorizes a Secret in its own namespace as the default service account", func(ctx SpecContext) {
-			component := newComponent(ctx, func(c *v1alpha1.Component) {
-				c.Spec.OCMConfig = []v1alpha1.OCMConfiguration{test.SecretOCMConfiguration(local)}
-			})
-
-			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{"Status.Component.Version": Version1})
 		})
 
 		It("denies a Secret in another namespace until default may get it", func(ctx SpecContext) {
@@ -136,20 +135,10 @@ var _ = Describe("Component service account", func() {
 			test.WaitForReadyObject(ctx, k8sClient, component, map[string]any{"Status.Component.Version": Version1})
 		})
 
-		It("denies a Secret in its own namespace it may not get", func(ctx SpecContext) {
-			serviceaccounttest.CreateServiceAccount(ctx, k8sClient, namespace, reader)
-			component := newComponent(ctx, func(c *v1alpha1.Component) {
-				c.Spec.ServiceAccountName = reader
-				c.Spec.OCMConfig = []v1alpha1.OCMConfiguration{test.SecretOCMConfiguration(local)}
-			})
-
-			test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, component, v1alpha1.GetConfigurationFailedReason,
-				fmt.Sprintf("service account %s/%s may not get it", namespace, reader))
-		})
-
-		It("fails while the service account does not exist", func(ctx SpecContext) {
+		It("fails a review while the service account does not exist", func(ctx SpecContext) {
 			component := newComponent(ctx, func(c *v1alpha1.Component) {
 				c.Spec.ServiceAccountName = "missing"
+				c.Spec.OCMConfig = []v1alpha1.OCMConfiguration{test.SecretOCMConfiguration(foreign)}
 			})
 
 			test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, component, v1alpha1.GetConfigurationFailedReason,

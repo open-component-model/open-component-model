@@ -85,16 +85,6 @@ func serviceAccountName(deployer deliveryv1alpha1.DeployerObject) string {
 	return serviceaccount.Name(deployer.GetServiceAccountName())
 }
 
-// serviceAccountAccess returns the Access of the service account of a NamespacedDeployer. A Deployer has none and
-// reads its configuration with the controller's identity.
-func (r *Reconciler) serviceAccountAccess(ctx context.Context, deployer deliveryv1alpha1.DeployerObject) (*serviceaccount.Access, error) {
-	if !r.Namespaced {
-		return nil, nil
-	}
-
-	return r.authorizer.For(ctx, deployer.GetNamespace(), deployer.GetServiceAccountName())
-}
-
 // applyClient returns the client used to apply and prune the deployed objects. A Deployer applies with the
 // controller's own identity, a NamespacedDeployer always impersonates a service account.
 func (r *Reconciler) applyClient(ctx context.Context, deployer deliveryv1alpha1.DeployerObject) (client.Client, error) {
@@ -378,21 +368,20 @@ func (r *Reconciler) watchedObjects(ctx context.Context, deployer deliveryv1alph
 // authorizeWatches returns a Forbidden error if the service account of a NamespacedDeployer may not list and watch
 // the deployed objects. The controller watches them for drift with its own identity, which must not see more than
 // the service account could.
-func (r *Reconciler) authorizeWatches(ctx context.Context, access *serviceaccount.Access, objs []*unstructured.Unstructured) error {
+func (r *Reconciler) authorizeWatches(ctx context.Context, deployer deliveryv1alpha1.DeployerObject, objs []*unstructured.Unstructured) error {
 	if !r.Namespaced {
 		return nil
 	}
 
+	watches := make([]serviceaccount.Watch, 0, len(objs))
 	for _, obj := range objs {
 		gvk := obj.GroupVersionKind()
 		mapping, err := r.resourceRESTMapper.RESTMapping(gvk.GroupKind(), gvk.Version)
 		if err != nil {
 			return fmt.Errorf("failed to map %s: %w", gvk, err)
 		}
-		if err := access.AuthorizeWatch(ctx, mapping.Resource.GroupResource(), obj.GetNamespace()); err != nil {
-			return err
-		}
+		watches = append(watches, serviceaccount.Watch{Resource: mapping.Resource.GroupResource(), Namespace: obj.GetNamespace()})
 	}
 
-	return nil
+	return r.authorizer.AuthorizeWatches(ctx, deployer, watches)
 }

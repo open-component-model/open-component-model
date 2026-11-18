@@ -168,8 +168,8 @@ Discovery uses the shared OCM configuration propagation of the controller chain:
 - **Explicit `spec.ocmConfig`:** resolve those entries instead of the implicit
   inheritance.
 
-The `Discovery`'s service account must be allowed to `get` every effective entry, inherited ones included, see
-[Configuration Access]({{< relref "ocm-controllers.md#configuration-access" >}}).
+The `Discovery`'s service account must be allowed to `get` every effective entry in another namespace, inherited
+ones included, see [Configuration Access]({{< relref "ocm-controllers.md#configuration-access" >}}).
 
 The effective configuration is published in `status.effectiveOCMConfig` and used
 uniformly for the root and all transitive fetches, including any resolvers it

@@ -135,7 +135,7 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 
 	r.apiReader = mgr.GetAPIReader()
 	r.restConfig = mgr.GetConfig()
-	r.authorizer = serviceaccount.NewAuthorizer(r.apiReader, mgr.GetClient())
+	r.authorizer = serviceaccount.NewAuthorizer(r.apiReader, mgr.GetClient(), r.ReviewSameNamespaceConfig)
 
 	// Build index for deployers that reference a resource to get notified about resource changes.
 	const fieldName = ".spec.resourceRef"
@@ -391,14 +391,7 @@ func (r *Reconciler) reconcileDeployment(ctx context.Context, deployer deliveryv
 		return ctrl.Result{}, err
 	}
 
-	access, err := r.serviceAccountAccess(ctx, deployer)
-	if err != nil {
-		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.GetConfigurationFailedReason, err.Error())
-
-		return ctrl.Result{}, err
-	}
-
-	cfg, err := r.resolveConfiguration(ctx, deployer, resource, access)
+	cfg, err := r.resolveConfiguration(ctx, deployer, resource)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -444,7 +437,7 @@ func (r *Reconciler) reconcileDeployment(ctx context.Context, deployer deliveryv
 		return ctrl.Result{}, fmt.Errorf("failed to determine watched resources: %w", err)
 	}
 
-	if err = r.authorizeWatches(ctx, access, watched); err != nil {
+	if err = r.authorizeWatches(ctx, deployer, watched); err != nil {
 		status.MarkNotReady(r.EventRecorder, deployer, deliveryv1alpha1.ResourceNotSynced, err.Error())
 
 		return ctrl.Result{}, fmt.Errorf("failed to authorize resource watches: %w", err)
@@ -511,18 +504,17 @@ func (r *Reconciler) resolveResource(
 	return resource, nil
 }
 
-// resolveConfiguration loads the effective OCM configuration for the deployer, authorized against access unless it
-// is nil. Sets deployer.Status.EffectiveOCMConfig as a side effect.
+// resolveConfiguration loads the effective OCM configuration for the deployer. A NamespacedDeployer has it authorized
+// against its service account. Sets deployer.Status.EffectiveOCMConfig as a side effect.
 func (r *Reconciler) resolveConfiguration(
 	ctx context.Context,
 	deployer deliveryv1alpha1.DeployerObject,
 	resource *deliveryv1alpha1.Resource,
-	access *serviceaccount.Access,
 ) (*configuration.Configuration, error) {
 	var configs []deliveryv1alpha1.OCMConfiguration
 	var err error
-	if access != nil {
-		configs, err = access.EffectiveConfig(ctx, r.GetClient(), deployer, resource)
+	if r.Namespaced {
+		configs, err = r.authorizer.EffectiveConfig(ctx, r.GetClient(), deployer, resource)
 	} else {
 		configs, err = ocm.GetEffectiveConfig(ctx, r.GetClient(), deployer, resource)
 	}

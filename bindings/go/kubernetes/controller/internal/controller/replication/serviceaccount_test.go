@@ -36,8 +36,8 @@ var _ = Describe("Replication service account", func() {
 		for _, name := range []string{namespace, other} {
 			Expect(k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name}})).To(Succeed())
 		}
-		// The suite grants the default service account the configuration of its own namespace only.
-		serviceaccounttest.WaitForDefaultServiceAccount(ctx, k8sClient, namespace)
+		// envtest runs no service account controller, so the default service account has to be created.
+		serviceaccounttest.CreateServiceAccount(ctx, k8sClient, namespace, serviceaccount.DefaultName)
 		foreign = serviceaccounttest.CreateConfigSecret(ctx, k8sClient, other)
 
 		_, sourceSpecData := test.SetupCTFComponentVersionRepository(ctx, GinkgoT().TempDir(), []*descruntime.Descriptor{{

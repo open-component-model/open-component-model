@@ -15,7 +15,6 @@ Configure credentials to allow OCM Controllers to access OCM components stored i
 ## You will end up with
 
 - A Kubernetes secret containing registry credentials
-- A `Role` that lets the service account of your OCM Controller resources read the secret
 - OCM Controller resources configured to use these credentials
 - Verified access to private OCM repositories
 
@@ -107,48 +106,6 @@ secret/ocm-secret created
 
 {{< step >}}
 
-### Allow the service account to read the secret
-
-The controller reads the secret only if the service account of the referencing object may `get` it, see
-[Configuration Access]({{< relref "ocm-controllers.md#configuration-access" >}}). Without `spec.serviceAccountName`,
-that is the `default` service account of the object's namespace. Grant it access to this one secret:
-
-```bash
-kubectl create role ocm-config-reader --verb=get --resource=secrets --resource-name=ocm-secret
-kubectl create rolebinding ocm-config-reader --role=ocm-config-reader --serviceaccount=default:default
-```
-
-`--serviceaccount` takes `<namespace>:<name>`. Adjust it if you work in another namespace or set
-`spec.serviceAccountName`.
-
-<details>
-<summary>You should see this output</summary>
-
-```text
-role.rbac.authorization.k8s.io/ocm-config-reader created
-rolebinding.rbac.authorization.k8s.io/ocm-config-reader created
-```
-</details>
-<br>
-
-Check the access:
-
-```bash
-kubectl auth can-i get secret/ocm-secret --as=system:serviceaccount:default:default
-```
-
-<details>
-<summary>You should see this output</summary>
-
-```text
-yes
-```
-</details>
-
-{{< /step >}}
-
-{{< step >}}
-
 ### Reference the secret in OCM Controller resources
 
 Add the `spec.ocmConfig` field to your OCM Controller resources to use the credentials.
@@ -169,6 +126,10 @@ spec:
     - kind: Secret
       name: ocm-secret
 ```
+
+The secret sits in the namespace of the `Repository`, so the controller reads it without further RBAC. A secret in
+another namespace needs a grant, see
+[Configuration Access]({{< relref "docs/concepts/ocm-controllers.md#configuration-access" >}}).
 
 Apply the resource:
 
@@ -226,8 +187,6 @@ spec:
 ```
 
 The `Component` automatically inherits the `ocmConfig` from `my-repository` — no explicit `ocmConfig` field needed.
-The controller checks the Component's service account before reading the inherited secret. Both objects use `default`
-here, so the binding from the previous step covers it. If you give them different service accounts, bind each one.
 
 Apply the resource:
 
@@ -318,20 +277,15 @@ spec:
 
 3. Ensure the `ocmConfig` field references the correct secret name in your resource.
 
-### Symptom: "secrets \"ocm-secret\" is forbidden: service account default/default may not get it in namespace default"
+### Symptom: "secrets \"ocm-secret\" is forbidden: service account my-team/default may not get it in namespace shared"
 
-**Cause:** The object's service account may not `get` a secret that its own or its inherited `ocmConfig` references.
-The object is not ready with reason `GetConfigurationFailed`.
+**Cause:** The object references or inherits a secret in another namespace, and its service account may not `get`
+it. The object is not ready with reason `GetConfigurationFailed`. A secret in the object's own namespace needs no
+grant.
 
-**Fix:** Bind a `Role` with `get` on the secret to the service account named in the message, as shown in
-[Allow the service account to read the secret](#allow-the-service-account-to-read-the-secret). The controller
+**Fix:** In the namespace of the secret, bind a `Role` with `get` on it to the service account named in the message,
+see [Configuration Access]({{< relref "docs/concepts/ocm-controllers.md#configuration-access" >}}). The controller
 does not watch RBAC, so the object recovers on its next retry, at most 5 minutes later.
-
-### Symptom: "failed to get service account default/my-reader: serviceaccounts \"my-reader\" not found"
-
-**Cause:** `spec.serviceAccountName` names a service account that does not exist in the object's namespace.
-
-**Fix:** Create it with `kubectl create serviceaccount my-reader`, or fix the name.
 
 ### Symptom: "failed to load configurations: secret does not contain supported keys [\".ocmconfig\" \".dockerconfigjson\"]"
 

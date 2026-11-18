@@ -159,6 +159,9 @@ spec:
                     {{- /* Deployers */}}
                     - --enable-deployer={{ dig "deployer" "enabled" true .Values.manager }}
                     - --enable-namespaced-deployer={{ dig "namespacedDeployer" "enabled" true .Values.manager }}
+                    {{- if dig "configAccess" "reviewSameNamespace" false .Values.manager }}
+                    - --review-same-namespace-config
+                    {{- end }}
                     {{- /* Logging */}}
                     {{- with .Values.manager.logging }}
                     {{- if .level }}

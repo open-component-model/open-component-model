@@ -72,6 +72,7 @@ Kubernetes: `>=1.26.0-0`
 | manager.concurrency.replication | int | `4` | Number of active replication controller workers |
 | manager.concurrency.repository | int | `4` | Number of active repository controller workers |
 | manager.concurrency.resource | int | `4` | Number of active resource controller workers |
+| manager.configAccess.reviewSameNamespace | bool | `false` | Review OCM configuration in the namespace of an object against its service account as well. By default only configuration in other namespaces is reviewed, and an object reads the Secrets, ConfigMaps and OCM objects of its own namespace without RBAC. |
 | manager.deployer.enabled | bool | `true` | Run the controller for the cluster-scoped Deployer. It applies with the permissions of the controller itself. Deprecated: Use NamespacedDeployer instead. |
 | manager.env | list | `[]` | Environment variables for the controller |
 | manager.extraArgs | list | `[]` | Extra arguments to pass to the controller |

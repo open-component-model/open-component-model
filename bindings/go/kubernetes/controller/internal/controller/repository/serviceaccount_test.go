@@ -1,8 +1,6 @@
 package repository
 
 import (
-	"fmt"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -30,8 +28,8 @@ var _ = Describe("Repository service account", func() {
 		for _, name := range []string{namespace, other} {
 			Expect(k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: name}})).To(Succeed())
 		}
-		// The suite grants the default service account the configuration of its own namespace only.
-		serviceaccounttest.WaitForDefaultServiceAccount(ctx, k8sClient, namespace)
+		// envtest runs no service account controller, so the default service account has to be created.
+		serviceaccounttest.CreateServiceAccount(ctx, k8sClient, namespace, serviceaccount.DefaultName)
 
 		_, specData = test.SetupCTFComponentVersionRepository(ctx, GinkgoT().TempDir(), nil)
 		local = serviceaccounttest.CreateConfigSecret(ctx, k8sClient, namespace)
@@ -63,14 +61,13 @@ var _ = Describe("Repository service account", func() {
 		test.WaitForReadyObject(ctx, k8sClient, repository, map[string]any{})
 	})
 
-	It("denies a Secret in its own namespace its service account may not get", func(ctx SpecContext) {
+	It("reads a Secret in its own namespace its service account was not granted", func(ctx SpecContext) {
 		serviceaccounttest.CreateServiceAccount(ctx, k8sClient, namespace, reader)
 		repository := newRepository(ctx, func(r *v1alpha1.Repository) {
 			r.Spec.ServiceAccountName = reader
 			r.Spec.OCMConfig = []v1alpha1.OCMConfiguration{test.SecretOCMConfiguration(local)}
 		})
 
-		test.WaitForNotReadyObjectWithMessage(ctx, k8sClient, repository, v1alpha1.GetConfigurationFailedReason,
-			fmt.Sprintf("service account %s/%s may not get it", namespace, reader))
+		test.WaitForReadyObject(ctx, k8sClient, repository, map[string]any{})
 	})
 })

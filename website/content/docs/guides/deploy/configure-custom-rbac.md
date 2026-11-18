@@ -119,8 +119,8 @@ kubectl auth can-i create deployments.apps -n my-team \
 
 Keep `list` and `watch` in the service account's rules. Before it starts the drift watches, the controller checks
 with a `SubjectAccessReview` that the service account may `list` and `watch` every deployed kind in its target
-namespace, and reports `ResourceNotSynced` otherwise. If the `NamespacedDeployer` references OCM configuration, the
-service account also needs `get` on it, see
+namespace, and reports `ResourceNotSynced` otherwise. If the `NamespacedDeployer` references OCM configuration in
+another namespace, the service account also needs `get` on it, see
 [Configuration Access]({{< relref "/docs/concepts/ocm-controllers.md#configuration-access" >}}).
 
 The controller additionally needs read access to the same kinds, see the next section.

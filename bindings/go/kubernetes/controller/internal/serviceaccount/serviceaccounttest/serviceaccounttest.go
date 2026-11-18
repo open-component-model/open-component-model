@@ -11,9 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/serviceaccount"
@@ -32,44 +30,6 @@ func GrantOCMConfigReads(ctx context.Context, c client.Client, namespace, saName
 	GinkgoHelper()
 
 	Expect(grantOCMConfigReads(ctx, c, namespace, saNamespace, sa)).To(Succeed())
-}
-
-// ProvisionDefaultServiceAccounts stands in for the service account controller envtest does not run. Every namespace
-// gets its default service account, allowed to get the OCM configuration in that namespace, for suites that do not
-// test the authorization itself.
-func ProvisionDefaultServiceAccounts(mgr ctrl.Manager) error {
-	c := mgr.GetClient()
-
-	return ctrl.NewControllerManagedBy(mgr).
-		Named("test-default-service-accounts").
-		For(&corev1.Namespace{}).
-		Complete(reconcile.Func(func(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
-			ns := &corev1.Namespace{}
-			if err := c.Get(ctx, req.NamespacedName, ns); err != nil {
-				return reconcile.Result{}, client.IgnoreNotFound(err)
-			}
-			// envtest runs no namespace controller either, so a deleted namespace stays terminating and rejects creates.
-			if !ns.GetDeletionTimestamp().IsZero() {
-				return reconcile.Result{}, nil
-			}
-
-			if err := createServiceAccount(ctx, c, ns.GetName(), serviceaccount.DefaultName); err != nil && !apierrors.IsAlreadyExists(err) {
-				return reconcile.Result{}, err
-			}
-
-			return reconcile.Result{}, grantOCMConfigReads(ctx, c, ns.GetName(), ns.GetName(), serviceaccount.DefaultName)
-		}))
-}
-
-// WaitForDefaultServiceAccount blocks until ProvisionDefaultServiceAccounts created the default service account of
-// namespace, so a spec does not race the provisioning with its first reconcile.
-func WaitForDefaultServiceAccount(ctx context.Context, c client.Client, namespace string) {
-	GinkgoHelper()
-
-	key := client.ObjectKey{Namespace: namespace, Name: serviceaccount.DefaultName}
-	Eventually(func(ctx context.Context) error {
-		return c.Get(ctx, key, &corev1.ServiceAccount{})
-	}).WithContext(ctx).Should(Succeed())
 }
 
 // CreateConfigSecret creates the Secret "creds" holding an OCM config in namespace.
@@ -101,12 +61,13 @@ configurations:
 // PermissiveAuthorizer returns an Authorizer for fake clients, which cannot review access: every service account
 // exists and is allowed everything.
 func PermissiveAuthorizer() *serviceaccount.Authorizer {
-	return serviceaccount.NewAuthorizer(existingServiceAccounts{}, allowedReviews{})
+	return serviceaccount.NewAuthorizer(existingServiceAccounts{}, allowedReviews{}, false)
 }
 
-// DenyingAuthorizer returns an Authorizer for fake clients where every service account exists but may read nothing.
+// DenyingAuthorizer returns an Authorizer for fake clients where every service account exists but may read nothing
+// outside its namespace.
 func DenyingAuthorizer() *serviceaccount.Authorizer {
-	return serviceaccount.NewAuthorizer(existingServiceAccounts{}, deniedReviews{})
+	return serviceaccount.NewAuthorizer(existingServiceAccounts{}, deniedReviews{}, false)
 }
 
 type deniedReviews struct{ client.Writer }
