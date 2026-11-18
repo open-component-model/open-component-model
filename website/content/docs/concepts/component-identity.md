@@ -50,7 +50,7 @@ The name must match the regex: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z
 
 The grammar follows the OCI repository path grammar, so a name maps directly to the OCI repository path `<base>/component-descriptors/<name>`:
 
-- The DNS domain uses RFC 1123 labels and ends in an alphabetic top-level label (for example `.org`, `.com`).
+- The DNS domain uses DNS-style labels and ends in an alphabetic top-level label (for example `.org`, `.com`). Labels follow the OCI path-component rules and, unlike strict DNS, are not capped at 63 characters.
 - Each path segment follows the OCI path-component grammar. Segments may start with a digit or consist only of digits (for example `1password.com/cli`, `acme.org/1`, `acme.org/v1/2`). Separators (`.`, `_`, `__`, one or more `-`) must sit between two non-empty alphanumeric runs, so names like `acme.org/foo-`, `acme.org/a_-b` or `acme.org/a___b` are invalid.
 - Names are lowercase only.
 - The `component-descriptors` segment is reserved for the storage mapping and must not appear in a name.

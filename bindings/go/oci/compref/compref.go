@@ -21,7 +21,7 @@ var Base = slog.With(slog.String("realm", "compref"))
 
 const (
 	// ComponentRegex is the regular expression used to validate component names.
-	// It is an RFC 1123 DNS name with an alphabetic top-level label, followed by one or
+	// It is a DNS-style name with an alphabetic top-level label, followed by one or
 	// more OCI repository path segments. Path segments may start with or consist only of
 	// digits. OCI-invalid names (trailing/leading separators, uppercase, forbidden separator
 	// runs) are rejected so a name can always be stored verbatim under the urlPath mapping.
