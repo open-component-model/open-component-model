@@ -59,6 +59,7 @@ type JSONSchemaDraft202012 struct {
 
 	OneOf []*JSONSchemaDraft202012          `json:"oneOf,omitempty"`
 	AnyOf []*JSONSchemaDraft202012          `json:"anyOf,omitempty"`
+	Not   *JSONSchemaDraft202012            `json:"not,omitzero"`
 	Defs  map[string]*JSONSchemaDraft202012 `json:"$defs,omitempty"`
 
 	Items    *JSONSchemaDraft202012 `json:"items,omitzero"`

@@ -795,7 +795,9 @@ $defs:
   componentName:
     type: 'string'
     maxLength: 255
-    pattern: '^[a-z][-a-z0-9]*([.][a-z][-a-z0-9]*)*[.][a-z]{2,}(/[a-z][-a-z0-9_]*([.][a-z][-a-z0-9_]*)*)+$'
+    pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*[.][a-z]{2,}(/[a-z0-9]+(([.]|_|__|-+)[a-z0-9]+)*)+$'
+    not:
+      pattern: '(^|/)component-descriptors(/|$)'
     default: 'github.com/acme.org/helloworld'
     examples: ['github.com/acme.org/helloworld']
 

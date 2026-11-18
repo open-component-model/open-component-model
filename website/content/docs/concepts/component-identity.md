@@ -46,7 +46,18 @@ The DNS domain at the start of the name (e.g., `acme.org` in `acme.org/webshop/b
 | `acme.org/webshop/backend` | Acme Corp |
 | `acme.org/webshop/frontend` | Acme Corp |
 
-The name must match the regex: `^[a-z][-a-z0-9]*([.][a-z][-a-z0-9]*)*[.][a-z]{2,}(/[a-z][-a-z0-9_]*([.][a-z][-a-z0-9_]*)*)+$`
+The name must match the regex: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*[.][a-z]{2,}(/[a-z0-9]+(([.]|_|__|-+)[a-z0-9]+)*)+$`
+
+The grammar follows the OCI repository path grammar, so a name is always storable verbatim under `<base>/component-descriptors/<name>`:
+
+- The DNS domain uses RFC 1123 labels and ends in an alphabetic top-level label (for example `.org`, `.com`).
+- Each path segment follows the OCI path-component grammar. Segments may start with a digit or consist only of digits (for example `1password.com/cli`, `acme.org/1`, `acme.org/v1/2`). Separators (`.`, `_`, `__`, one or more `-`) must sit between two non-empty alphanumeric runs, so names like `acme.org/foo-`, `acme.org/a_-b` or `acme.org/a___b` are invalid.
+- Names are lowercase only.
+- The `component-descriptors` segment is reserved for the storage mapping and must not appear in a name.
+
+{{< callout context="note" >}}
+Digit-led and digit-only segments (for example `acme.org/1`) are readable only by legacy OCM tooling (v1) from the patch release that relaxes the letter-first rule; older binaries reject such names. See the changelog entry for the minimum version.
+{{< /callout >}}
 
 ### Component Version
 

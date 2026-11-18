@@ -901,3 +901,65 @@ func Test_Ref_String(t *testing.T) {
 		})
 	}
 }
+
+// Test_ComponentName_Grammar pins the component-name grammar against the OCI
+// repository path grammar. Names that pass the grammar must be storable verbatim
+// under the urlPath mapping (<base>/component-descriptors/<name>); names that fail
+// cannot be stored. The grammar is asserted directly so the reserved
+// "component-descriptors" segment is not swallowed by the reference splitter.
+func Test_ComponentName_Grammar(t *testing.T) {
+	cases := []struct {
+		name     string
+		grammar  bool // matches ComponentRegex
+		reserved bool // contains the reserved component-descriptors segment
+	}{
+		// digit-led and digit-only segments are accepted (letter-first rule dropped)
+		{"1password.com/cli", true, false},
+		{"acme.org/1", true, false},
+		{"acme.org/1foo", true, false},
+		{"acme.org/v1/2", true, false},
+		{"acme.org/foo", true, false},
+		{"acme.org/webshop/backend", true, false},
+		{"acme.org/a_b", true, false},
+		{"acme.org/a__b", true, false},
+		{"acme.org/a-b", true, false},
+		{"acme.org/a--b", true, false},
+		// OCI-invalid names are rejected (previously passed the schema but failed at the store)
+		{"acme.org/foo-", false, false},
+		{"acme.org/foo_", false, false},
+		{"acme.org/a_-b", false, false},
+		{"acme.org/a___b", false, false},
+		{"acme-.org/x", false, false},
+		{"acme.org/Foo", false, false},
+		{"Acme.org/foo", false, false},
+		{"acme.org/-foo", false, false},
+		// missing alphabetic TLD or missing path
+		{"acme/foo", false, false},
+		{"acme.org", false, false},
+		// the component-descriptors segment is reserved for the storage mapping;
+		// it matches the grammar but is rejected by the reservation check
+		{"acme.org/component-descriptors/x", true, true},
+		{"acme.org/component-descriptors", true, true},
+		{"component-descriptors/x", false, true},
+		{"acme.org/mycomponent-descriptors", true, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.grammar, componentRegex.MatchString(tc.name), "grammar match")
+			assert.Equal(t, tc.reserved, reservedComponentSegmentRegex.MatchString(tc.name), "reserved segment")
+		})
+	}
+}
+
+// Test_ComponentName_DigitLed_EndToEnd checks that a digit-led component name
+// survives a full parse, matching the relaxed grammar end to end.
+func Test_ComponentName_DigitLed_EndToEnd(t *testing.T) {
+	for _, name := range []string{"1password.com/cli", "acme.org/1", "acme.org/1foo"} {
+		t.Run(name, func(t *testing.T) {
+			ref, err := Parse("ctf::/tmp/ctfrepo/component-descriptors/" + name + ":1.0.0")
+			require.NoError(t, err)
+			require.Equal(t, name, ref.Component)
+		})
+	}
+}
