@@ -121,9 +121,9 @@ A reconcile timeout can be set for each controller through `manager.reconcileTim
 It is off by default (`0s`); turn it on when objects regularly get stuck. When it fires, the object reports
 `Ready=False` with reason `ReconcileTimeout` and the reconcile is retried.
 The timeout does not cancel a manifest fetch that is shared through the OCI cache. If such a fetch stalls and no HTTP
-timeout applies to it, the object keeps timing out until the controller restarts. Set `timeout` or
-`responseHeaderTimeout` in the [HTTP client configuration]({{< relref "docs/reference/configuration/http-client.md" >}})
-of the object's `spec.ocmConfig` to bound it.
+timeout applies to it, the object keeps timing out until the controller restarts. Set a positive `timeout` in the
+[HTTP client configuration]({{< relref "docs/reference/configuration/http-client.md" >}}). `responseHeaderTimeout` limits
+only the wait for response headers and does not bound a stalled response body.
 
 To read more about these settings, please consult the
 [README](https://github.com/open-component-model/open-component-model/blob/main/bindings/go/kubernetes/controller/chart/README.md) file of the helm chart.

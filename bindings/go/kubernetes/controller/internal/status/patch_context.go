@@ -7,6 +7,7 @@ import (
 	"time"
 
 	kuberecorder "k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 )
@@ -24,11 +25,15 @@ func PatchContext(ctx context.Context) (context.Context, context.CancelFunc) {
 
 // MarkTimedOut marks obj not ready with [v1alpha1.ReconcileTimeoutReason] when
 // ctx ran into its deadline and the reconcile failed, and returns the error the
-// reconcile should report. If a step returned with a TerminalError, such as, CEL.Compile
+// reconcile should report. If a step returned with a TerminalError that wraps the deadline, such as, a CEL stage
 // we need to strip that part from the error because otherwise, a timeout will not be retried
 // as intended. If the attached context did not time out, we leave the error intact.
 func MarkTimedOut(ctx context.Context, recorder kuberecorder.EventRecorder, obj IdentifiableClientObject, err error) error {
 	if err == nil || !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return err
+	}
+	// A terminal error the deadline did not cause fails the same way on a retry, so it stays terminal.
+	if errors.Is(err, reconcile.TerminalError(nil)) && !errors.Is(err, context.DeadlineExceeded) {
 		return err
 	}
 	MarkNotReady(recorder, obj, v1alpha1.ReconcileTimeoutReason,

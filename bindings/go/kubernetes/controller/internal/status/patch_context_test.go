@@ -3,6 +3,7 @@ package status_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -58,13 +59,23 @@ func TestMarkTimedOut(t *testing.T) {
 		// A CEL stage interrupted by the deadline reports a TerminalError; left alone,
 		// controller-runtime would never requeue the object.
 		r := require.New(t)
-		terminal := reconcile.TerminalError(failure)
+		terminal := reconcile.TerminalError(fmt.Errorf("discovery evaluation cancelled: %w", context.DeadlineExceeded))
 		r.ErrorIs(terminal, reconcile.TerminalError(nil))
 
 		got := status.MarkTimedOut(expired(t), record.NewFakeRecorder(4), stalled(), terminal)
 
 		r.NotErrorIs(got, reconcile.TerminalError(nil))
 		r.ErrorIs(got, context.DeadlineExceeded)
+	})
+
+	t.Run("terminal error the timeout did not cause stays terminal", func(t *testing.T) {
+		// A payload that is too large stays too large, however late the reconcile noticed.
+		r := require.New(t)
+		obj := stalled()
+		terminal := reconcile.TerminalError(errors.New("payload too large"))
+
+		r.Same(terminal, status.MarkTimedOut(expired(t), record.NewFakeRecorder(4), obj, terminal))
+		r.True(status.IsStalled(obj))
 	})
 
 	t.Run("expired reconcile without error is left alone", func(t *testing.T) {
