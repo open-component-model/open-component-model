@@ -82,7 +82,7 @@ For every identity type, the `scheme` and `port` attributes are compared by the 
 - When neither side sets a `scheme`, a well-known port on the request supplies it (`443` implies `https`, `80` implies `http`), so a scheme-less `host:443` request matches an entry with no port just like `https://host` does. This inference is request-side only, so an entry that sets `port: "443"` without a scheme does not match a request that omits the port; use a hostname-only entry to cover the default ports (443/80) on a host.
 - A non-standard port has no implied scheme and must be configured explicitly.
 
-Most identities are derived from a URL that already carries a scheme, so the well-known-port inference mainly affects scheme-less references such as OCM OCI references like `host:443//component`.
+Most identities are derived from a URL that already carries a scheme, so the well-known-port inference mainly affects scheme-less references such as OCM OCI references like `host:443//component`. Avoid giving a hostname-only entry and the same host scoped to `port: "443"` different credentials: a path-bearing `host:443` request can match either, and resolution between overlapping entries is not ordered.
 
 ---
 
@@ -117,7 +117,7 @@ Matching runs three chained checks — all must pass:
 
 1. **Path matcher** — compares `path` as a glob ([Path Patterns](#path-patterns)). `*` matches within one segment,
    `**` matches across `/`. If the configured entry has no `path`, any request path is accepted.
-2. **URL matcher** — compares `scheme`, `hostname`, and `port` as described in [Scheme and Port Matching](#scheme-and-port). A request with no scheme matches any configured scheme, and a well-known request port (`443`, `80`) supplies the scheme used for default-port collapsing.
+2. **URL matcher** — compares `scheme`, `hostname`, and `port` as described in [Scheme and Port Matching](#scheme-and-port).
 3. **Equality matcher** — all remaining attributes (like `type`) must be exactly equal.
 
 For detailed matching examples and edge cases, see [Tutorial: Understand Credential Resolution]({{< relref "docs/concepts/credential-resolution.md" >}}).
