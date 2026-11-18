@@ -35,12 +35,14 @@ func (s *serviceAccounts) Get(_ context.Context, key client.ObjectKey, _ client.
 // reviews records the namespaces of the reviewed objects and allows none of them.
 type reviews struct {
 	client.Writer
-	namespaces []string
+	namespaces      []string
+	evaluationError string
 }
 
 func (r *reviews) Create(_ context.Context, obj client.Object, _ ...client.CreateOption) error {
 	review := obj.(*authorizationv1.SubjectAccessReview)
 	r.namespaces = append(r.namespaces, review.Spec.ResourceAttributes.Namespace)
+	review.Status.EvaluationError = r.evaluationError
 
 	return nil
 }
@@ -121,6 +123,17 @@ func TestAuthorizeConfigs(t *testing.T) {
 			r.Equal(tt.lookups, accounts.lookups)
 		})
 	}
+}
+
+func TestAuthorizeConfigsReportsEvaluationErrors(t *testing.T) {
+	r := require.New(t)
+	recorded := &reviews{evaluationError: "webhook unavailable"}
+	authorizer := NewAuthorizer(&serviceAccounts{existing: DefaultName}, recorded, false)
+
+	err := authorizer.AuthorizeConfigs(t.Context(), component(""), []v1alpha1.OCMConfiguration{config("Secret", "team-b")})
+
+	r.ErrorContains(err, "webhook unavailable")
+	r.False(apierrors.IsForbidden(err), "a review that was not evaluated is no missing permission")
 }
 
 func TestAuthorizeWatchesReviewsItsOwnNamespace(t *testing.T) {

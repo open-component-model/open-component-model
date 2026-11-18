@@ -17,8 +17,9 @@ its own permissions. It now reads a reference into another namespace only if the
 it, see [Configuration Access]({{< relref "docs/concepts/ocm-controllers.md#configuration-access" >}}). An object
 without that grant is no longer ready and reports `GetConfigurationFailed`.
 
-Configuration in the object's own namespace is not affected. If all your `ocmConfig` references stay within one
-namespace, you have nothing to do.
+By default, configuration in the object's own namespace is not affected. If all your `ocmConfig` references stay
+within one namespace, you have nothing to do, unless you turn on
+[the review of the same namespace]({{< relref "docs/concepts/ocm-controllers.md#review-the-same-namespace" >}}).
 {{< /callout >}}
 
 ## You'll end up with
@@ -47,7 +48,7 @@ Run this before the upgrade. It lists every object whose own or effective config
 ```bash
 kubectl get repositories,components,resources,namespaceddeployers,discoveries,replications -A -o json \
   | jq -r '.items[] | . as $o | (.spec.ocmConfig[]?, .status.effectiveOCMConfig[]?)
-      | select((.namespace // $o.metadata.namespace) != $o.metadata.namespace)
+      | select((.namespace // "") as $ns | $ns != "" and $ns != $o.metadata.namespace)
       | "\($o.kind) \($o.metadata.namespace)/\($o.metadata.name) reads \(.kind) \(.namespace)/\(.name)"' \
   | sort -u
 ```

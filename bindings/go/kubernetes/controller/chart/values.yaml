@@ -26,7 +26,7 @@ manager:
     enabled: true
   ## Access to OCM configuration
   configAccess:
-    # -- Review OCM configuration in the namespace of an object against its service account as well. By default only configuration in other namespaces is reviewed, and an object reads the Secrets, ConfigMaps and OCM objects of its own namespace without RBAC.
+    # -- Review OCM configuration in the namespace of an object against its service account as well. By default only configuration in other namespaces is reviewed, and an object reads the Secrets, ConfigMaps and OCM objects of its own namespace without a review of its service account. The cluster-scoped Deployer has no service account and is never reviewed.
     reviewSameNamespace: false
   ## Controller concurrency settings
   concurrency:

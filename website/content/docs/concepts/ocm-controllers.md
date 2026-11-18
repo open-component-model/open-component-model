@@ -224,9 +224,13 @@ the next retry, which backs off up to 5 minutes. Grant access before you create 
 ### Review the Same Namespace
 
 Trusting the namespace means that whoever may create an OCM object in a namespace can make the controller use the
-`Secrets` of that namespace. To close that as well, set the Helm value `manager.configAccess.reviewSameNamespace` to
-`true`, which starts the controller with `--review-same-namespace-config`. Every reference is then reviewed, and the
-service account needs `get` on the configuration in its own namespace too.
+`Secrets` of that namespace. To review those references as well, set the Helm value
+`manager.configAccess.reviewSameNamespace` to `true`, which starts the controller with
+`--review-same-namespace-config`. The service account then needs `get` on the configuration in its own namespace too.
+
+The review checks the service account, not the user who created the object. Whoever may create an OCM object in a
+namespace can name any service account of that namespace in `spec.serviceAccountName`, and so use whatever that
+account may `get`. The same holds for references into other namespaces.
 
 ## Additional Status Fields
 

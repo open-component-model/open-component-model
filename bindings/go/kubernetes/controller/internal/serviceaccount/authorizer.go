@@ -195,6 +195,14 @@ func (a *Authorizer) authorize(ctx context.Context, obj Subject, refs []referenc
 				ref.verb, key, ref.resource, ref.namespace, ref.name, err)
 		}
 
+		// A review that could not be evaluated is no denial, so granting access would not help.
+		if !review.Status.Allowed && review.Status.EvaluationError != "" {
+			errs = append(errs, fmt.Errorf("failed to evaluate %s access of service account %s to %s %s/%s: %s",
+				ref.verb, key, ref.resource, ref.namespace, ref.name, review.Status.EvaluationError))
+
+			continue
+		}
+
 		if !review.Status.Allowed {
 			scope := "in namespace " + ref.namespace
 			if ref.namespace == "" {

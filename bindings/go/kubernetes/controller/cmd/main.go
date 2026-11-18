@@ -171,7 +171,8 @@ func main() {
 		"Run the controller for the NamespacedDeployer.")
 	flag.BoolVar(&reviewSameNamespaceConfig, "review-same-namespace-config", false,
 		"Review OCM configuration in the namespace of an object against its service account as well. "+
-			"By default only configuration in other namespaces is reviewed.")
+			"By default only configuration in other namespaces is reviewed. "+
+			"The cluster-scoped Deployer has no service account and is never reviewed.")
 
 	opts := zap.Options{
 		Development: true,
