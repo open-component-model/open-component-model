@@ -27,6 +27,9 @@ Configure credentials to allow OCM Controllers to access OCM components stored i
 - [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) installed
 - Credentials for your private OCI registry (username and password, Docker config file, or OCM CLI config file)
 - The registry URL where your OCM components are stored
+- For the [GitHub Container Registry quickstart](#quickstart-github-container-registry) only: the
+  [GitHub CLI](https://cli.github.com/) (`gh`), logged in with `gh auth login`, or a classic personal access token
+  with the `read:packages` scope
 
 {{< callout context="caution" title="Security Warning" icon="outline/alert-triangle" >}}
 Kubernetes secrets are only base64-encoded, not encrypted.
@@ -44,7 +47,8 @@ gh auth refresh --scopes read:packages
 ```
 
 Create the secret in the namespace of the `Repository` that will use it. An `ocmConfig` reference without a
-`namespace` resolves in the namespace of the resource that declares it:
+`namespace` resolves in the namespace of the resource that declares it. Set `GITHUB_USERNAME` to your GitHub user
+name. With a personal access token, pass the token instead of `$(gh auth token)`:
 
 ```shell
 kubectl create secret docker-registry ghcr-secret \
