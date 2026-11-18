@@ -3,6 +3,7 @@ package credentials
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/dag"
@@ -76,6 +77,13 @@ func (g *syncedDag) addEdge(from, to string, attributes ...map[string]any) error
 // If an exact match is not found, it falls back to a wildcard search by comparing identities
 // using the Identity.Match method.
 // This wildcard search is the reason there can be undiscovered cycles at runtime.
+//
+// When more than one vertex matches, matchAnyNode selects the most specific one
+// deterministically: first the identity with the most attributes, then the
+// lexicographically smallest identity string as a stable tie-break. This keeps
+// resolution stable across runs even when overlapping entries (for example a
+// hostname-only entry and the same host scoped to an explicit port or path)
+// both match the same lookup.
 func (g *syncedDag) matchAnyNode(identity runtime.Identity) (*dag.Vertex[string], error) {
 	g.dagMu.RLock()
 	defer g.dagMu.RUnlock()
@@ -83,16 +91,50 @@ func (g *syncedDag) matchAnyNode(identity runtime.Identity) (*dag.Vertex[string]
 	if vertex, ok := g.dag.Vertices[node]; ok {
 		return vertex, nil
 	}
+
+	var best *dag.Vertex[string]
+	var bestIdentity runtime.Identity
 	for _, vertex := range g.dag.Vertices {
 		existing, ok := vertex.Attributes[attributeIdentity].(runtime.Identity)
 		if !ok {
 			continue
 		}
-		if identity.Match(existing) {
-			return vertex, nil
+		if !identity.Match(existing) {
+			continue
+		}
+		if best == nil || moreSpecific(existing, bestIdentity) {
+			best, bestIdentity = vertex, existing
 		}
 	}
+	if best != nil {
+		return best, nil
+	}
 	return nil, fmt.Errorf("failed to match any node: %w", ErrNoDirectCredentials)
+}
+
+// moreSpecific reports whether identity a is more specific than identity b.
+//
+// Specificity is ranked in this order:
+//  1. An identity with more attributes is more specific (for example an entry
+//     scoped to an explicit port or path beats a hostname-only entry).
+//  2. For an equal attribute count, the identity whose path glob has fewer
+//     wildcard characters is more specific (for example "my-org/*" beats "*/*").
+//  3. As a final, stable tie-break, the lexicographically smaller identity
+//     string is treated as more specific, so selection is deterministic.
+func moreSpecific(a, b runtime.Identity) bool {
+	if len(a) != len(b) {
+		return len(a) > len(b)
+	}
+	if aw, bw := pathWildcards(a), pathWildcards(b); aw != bw {
+		return aw < bw
+	}
+	return a.String() < b.String()
+}
+
+// pathWildcards counts the glob wildcard characters in the path attribute of an
+// identity. An identity with no path, or a path with no wildcards, counts as 0.
+func pathWildcards(i runtime.Identity) int {
+	return strings.Count(i[runtime.IdentityAttributePath], "*")
 }
 
 // addIdentity ensures that a given identity is represented as a vertex in the graph.

@@ -64,7 +64,7 @@ Matching runs three chained matchers **in order** — all three must pass:
 2. **URL matcher** — compares `scheme`, `hostname`, and `port`. Applies default ports: `https` → `443`, `http` → `80`. Schemes must be equal (if neither side specifies one, they match).
 3. **Equality matcher** — all remaining attributes (like `type`) must be exactly equal.
 
-If any matcher fails, the entry is skipped. **First match wins** — OCM returns the first matching entry it finds.
+If any matcher fails, the entry is skipped. When more than one entry matches, OCM returns the **most specific** match: an entry with more attributes (for example an explicit `port` or `path`) wins over a broader one, and a path glob with fewer wildcards (for example `my-org/*`) wins over a wider one (for example `*/*`). Selection is deterministic, so the same request always resolves the same entry.
 
 Quick reference:
 
@@ -162,7 +162,7 @@ configurations:
 `*` matches exactly one path segment. It does **not** match across `/` separators. To match two levels like `my-org/team/repo`, use `my-org/*/*`, or `my-org/**` for any depth.
 {{< /callout >}}
 
-**Takeaway:** OCM first tries an exact string match on the full identity. If that fails, it iterates all configured entries and returns the first wildcard match.
+**Takeaway:** OCM first tries an exact string match on the full identity. If that fails, it iterates all configured entries and returns the most specific wildcard match.
 
 ### Example B2: Two-Level Wildcard Matching (`*/*`)
 
@@ -197,7 +197,7 @@ configurations:
 
 | Request | Consumer A (`*/*`) | Consumer B (`my-org/*`) | Result | Why |
 | --- | --- | --- | --- | --- |
-| `ghcr.io/my-org/repo` | ✅ | ✅ | ✅ `my-org-user` | B matches first (more specific) |
+| `ghcr.io/my-org/repo` | ✅ | ✅ | ✅ `my-org-user` | B wins: both match, but `my-org/*` is more specific than `*/*` |
 | `ghcr.io/other-org/project` | ✅ | ❌ | ✅ `org-user` | Only A matches (two-level wildcard) |
 | `ghcr.io/my-org/team/subteam/repo` | ❌ | ❌ | ❌ No credentials | Path has 4 segments, `*/*` only matches 2 |
 | `ghcr.io/singlelevel` | ❌ | ❌ | ❌ No credentials | Path has 1 segment, `*/*` requires exactly 2 |

@@ -109,6 +109,8 @@ Matching runs three chained checks — all must pass:
    `https` → `443`, `http` → `80`, `oci` → `443` via normalization to `https`). A request with no scheme matches any configured scheme.
 3. **Equality matcher** — all remaining attributes (like `type`) must be exactly equal.
 
+When more than one entry matches a request, OCM selects the most specific one deterministically: an entry with more attributes (for example an explicit `port` or `path`) wins over a broader one, and a path glob with fewer wildcards wins over a wider one. The same request always resolves the same entry.
+
 For detailed matching examples and edge cases, see [Tutorial: Understand Credential Resolution]({{< relref "docs/concepts/credential-resolution.md" >}}).
 
 ### Examples

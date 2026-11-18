@@ -490,6 +490,52 @@ func TestResolveCredentials(t *testing.T) {
 	}
 }
 
+// TestResolveOverlappingEntriesPrefersMostSpecific verifies that when a
+// path-bearing lookup matches both a hostname-only entry and a more specific
+// path-scoped entry, resolution deterministically returns the credentials of
+// the most specific entry. On overlapping matches the previous behaviour
+// returned the first entry in Go map order, which was non-deterministic.
+func TestResolveOverlappingEntriesPrefersMostSpecific(t *testing.T) {
+	const yaml = `
+type: credentials.config.ocm.software
+consumers:
+  - identities:
+      - type: OCIRegistry
+        hostname: ghcr.io
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: catchall-user
+          password: abc
+  - identities:
+      - type: OCIRegistry
+        hostname: ghcr.io
+        path: my-org/*
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: org-user
+          password: abc
+`
+	lookup := runtime.Identity{
+		"type":     "OCIRegistry",
+		"hostname": "ghcr.io",
+		"path":     "my-org/repo",
+	}
+	want := map[string]string{"username": "org-user", "password": "abc"}
+
+	// Repeat to surface any dependence on map iteration order.
+	for range 50 {
+		graph, err := GetGraph(t, yaml)
+		require.NoError(t, err)
+		typed, err := graph.Resolve(t.Context(), lookup)
+		require.NoError(t, err)
+		dc, ok := typed.(*v1.DirectCredentials)
+		require.True(t, ok, "expected *v1.DirectCredentials, got %T", typed)
+		require.Equal(t, want, dc.Properties)
+	}
+}
+
 func TestResolveTypedCredentials(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
