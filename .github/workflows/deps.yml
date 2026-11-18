@@ -46,7 +46,7 @@ jobs:
   deps:
     runs-on: ubuntu-26.04-arm
     environment:
-      name: automation
+      name: ${{ github.event_name != 'pull_request' && !inputs.dryRun && github.repository_owner == 'open-component-model' && 'deps' || '' }}
       deployment: false
     steps:
       # A dry run pushes nothing, so it needs no App token: checkout and Run fall back to
@@ -55,8 +55,8 @@ jobs:
         id: generate_token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          client-id: ${{ secrets.OCMBOT_APP_ID }}
-          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          client-id: ${{ secrets.DEPS_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.DEPS_BOT_PRIVATE_KEY }}
           repositories: ${{ github.event.repository.name }}
           # Push update branches and create the commits through the API, so GitHub signs them.
           permission-contents: write
