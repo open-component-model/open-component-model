@@ -490,6 +490,7 @@ apiVersion: kro.run/v1alpha1
 kind: Simple
 metadata:
   name: simple
+  namespace: default
 spec:
   message: "Deployed with OCM!"
 EOF

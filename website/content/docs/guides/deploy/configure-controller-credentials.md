@@ -68,7 +68,8 @@ spec:
 ```
 
 `Component`, `Resource`, and `NamespacedDeployer` objects that reference this `Repository` inherit the
-credentials, see [Credential inheritance for dependent resources](#credential-inheritance-for-dependent-resources).
+credentials, unless they set their own `ocmConfig`. See
+[Credential inheritance for dependent resources](#credential-inheritance-for-dependent-resources).
 To pull the deployed images, the workload also needs `ghcr-secret` as an image pull secret. Where to set it depends
 on the deployment method; each deploy guide shows its own wiring.
 

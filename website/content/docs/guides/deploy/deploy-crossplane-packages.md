@@ -473,6 +473,8 @@ kubectl create secret docker-registry xpkg-pull-secret \
   --docker-server=ghcr.io
 ```
 
+With a personal access token, pass the token instead of `$(gh auth token)`, as for `ghcr-secret`.
+
 Then uncomment `packagePullSecrets` in the RGD. Crossplane passes the secret on to the runtime Deployments. Instead of
 setting secrets per package, you can attach the secret to every package under a registry prefix with a Crossplane
 [ImageConfig](https://docs.crossplane.io/latest/packages/image-configs/) (`spec.registry.authentication.pullSecretRef`).
