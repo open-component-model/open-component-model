@@ -64,7 +64,7 @@ Matching runs three chained matchers **in order** — all three must pass:
 2. **URL matcher** — compares `scheme`, `hostname`, and `port`. Applies default ports: `https` → `443`, `http` → `80`. Schemes must be equal (if neither side specifies one, they match).
 3. **Equality matcher** — all remaining attributes (like `type`) must be exactly equal.
 
-If any matcher fails, the entry is skipped. When more than one entry matches, OCM returns the **most specific** match: an entry with more attributes (for example an explicit `port` or `path`) wins over a broader one, and a path glob with fewer wildcards (for example `my-org/*`) wins over a wider one (for example `*/*`). Selection is deterministic, so the same request always resolves the same entry.
+If any matcher fails, the entry is skipped. OCM first tries an exact match on the full identity string and uses it when present. When no exact match exists and more than one entry matches, OCM returns the **most specific** match, chosen deterministically in this order: first the entry with more scope attributes (for example an explicit `port` or `path`; an empty `path` does not count, it matches any path); then, for an equal attribute count, the path glob with fewer wildcards (for example `my-org/*` over `*/*`); and finally, as a stable tie-break, the lexicographically smaller identity string. The same request always resolves the same entry.
 
 Quick reference:
 
