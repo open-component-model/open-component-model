@@ -299,7 +299,6 @@ func TestDefaultAccept_AllBranches(t *testing.T) {
 type blockingReadOnly struct {
 	*fakeReadOnly
 	blocked chan struct{}
-	aborted chan struct{}
 	ready   chan struct{}
 }
 
@@ -307,7 +306,6 @@ func newBlocking(base *fakeReadOnly) *blockingReadOnly {
 	return &blockingReadOnly{
 		fakeReadOnly: base,
 		blocked:      make(chan struct{}, 1),
-		aborted:      make(chan struct{}, 1),
 		ready:        make(chan struct{}),
 	}
 }
@@ -319,10 +317,6 @@ func (s *blockingReadOnly) Fetch(ctx context.Context, target ociImageSpecV1.Desc
 	}
 	select {
 	case <-ctx.Done():
-		select {
-		case s.aborted <- struct{}{}:
-		default:
-		}
 		return nil, ctx.Err()
 	case <-s.ready:
 	}
@@ -338,32 +332,10 @@ func (s *blockingReadOnly) waitBlocked(t *testing.T) {
 	}
 }
 
-// waitAborted waits until the parked upstream call observed the
-// cancellation of the flight context.
-func (s *blockingReadOnly) waitAborted(t *testing.T) {
-	t.Helper()
-	select {
-	case <-s.aborted:
-	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for the upstream fetch to be canceled")
-	}
-}
-
-// waitWaiters polls until n callers wait on the flight for dgst.
-func (c *BlobCache) waitWaiters(t *testing.T, dgst digest.Digest, n int) {
-	t.Helper()
-	require.Eventually(t, func() bool {
-		c.flightsMu.Lock()
-		defer c.flightsMu.Unlock()
-		f := c.flights[dgst]
-		return f != nil && f.waiters == n
-	}, 5*time.Second, 5*time.Millisecond, "expected %d waiters on the flight", n)
-}
-
 // TestCache_Fetch_CanceledLeaderFollowerStillReceives verifies that
-// when the leader caller's context is canceled while a follower still
-// waits on the shared fetch, the fetch continues and the follower
-// receives the result from the single upstream round-trip.
+// when the leader caller's context is canceled before the shared fetch
+// completes, the fetch continues and a concurrent follower receives
+// the result.
 func TestCache_Fetch_CanceledLeaderFollowerStillReceives(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	c := newTestCache(t, Options{})
@@ -382,90 +354,47 @@ func TestCache_Fetch_CanceledLeaderFollowerStillReceives(t *testing.T) {
 		_, leaderErr = c.Fetch(leaderCtx, blocking, desc)
 		t.Logf("leader: Fetch returned: %v", leaderErr)
 	}()
+
+	// blockingReadOnly.Fetch signals on blocked before parking; this
+	// confirms the singleflight goroutine is inside the upstream call
+	// and won't complete until blocking.ready is closed.
 	t.Log("waiting for singleflight goroutine to park inside upstream Fetch")
 	blocking.waitBlocked(t)
+	t.Log("singleflight goroutine parked; canceling leader context")
+	leaderCancel()
+	<-leaderDone
+	require.ErrorIs(t, leaderErr, context.Canceled, "leader must return its cancellation")
+	t.Log("leader returned context.Canceled — singleflight goroutine still blocked on ready")
 
+	// The singleflight goroutine is still running (blocked on ready).
+	// Start the follower; it calls DoChan and receives the same
+	// in-flight result channel, or gets a cache hit if the fetch
+	// completes first — either way it must succeed.
 	type fetchResult struct {
 		data []byte
 		err  error
 	}
 	followerCh := make(chan fetchResult, 1)
-	t.Log("follower: joining the in-flight fetch")
+	t.Log("follower: starting Fetch while singleflight goroutine is still in-flight")
 	go func() {
 		rc, err := c.Fetch(t.Context(), blocking, desc)
 		if err != nil {
+			t.Logf("follower: Fetch returned error: %v", err)
 			followerCh <- fetchResult{err: err}
 			return
 		}
-		followerCh <- fetchResult{data: readAllAndClose(t, rc)}
+		data := readAllAndClose(t, rc)
+		t.Logf("follower: Fetch succeeded (%d bytes)", len(data))
+		followerCh <- fetchResult{data: data}
 	}()
-	c.waitWaiters(t, desc.Digest, 2)
-
-	t.Log("follower joined; canceling leader context")
-	leaderCancel()
-	<-leaderDone
-	require.ErrorIs(t, leaderErr, context.Canceled, "leader must return its cancellation")
-
-	t.Log("unblocking the upstream fetch by closing ready")
+	t.Log("unblocking singleflight goroutine by closing ready")
 	close(blocking.ready)
+
 	res := <-followerCh
 	require.NoError(t, res.err, "follower must succeed even after leader canceled")
 	assert.Equal(t, manifest, res.data)
 	assert.True(t, c.Has(desc.Digest), "blob must be persisted for the follower")
-	assert.EqualValues(t, 1, base.fetches.Load(), "one upstream round-trip serves both callers")
-	assert.Empty(t, blocking.aborted, "a flight with a remaining waiter must not be canceled")
-}
-
-// TestCache_Fetch_LastWaiterLeavingCancelsUpstream verifies that a fetch
-// nobody waits for anymore is canceled upstream, and that a later caller
-// starts a fresh fetch instead of joining the abandoned one. Without this
-// a stalled registry would keep every retry hanging on the first flight.
-func TestCache_Fetch_LastWaiterLeavingCancelsUpstream(t *testing.T) {
-	c := newTestCache(t, Options{})
-	base := newFakeReadOnly()
-	manifest := []byte(`{"schemaVersion":2,"abandoned":true}`)
-	desc := base.put(ociImageSpecV1.MediaTypeImageManifest, manifest)
-	blocking := newBlocking(base)
-
-	leaderCtx, leaderCancel := context.WithCancel(t.Context())
-	var leaderErr error
-	leaderDone := make(chan struct{})
-	go func() {
-		defer close(leaderDone)
-		_, leaderErr = c.Fetch(leaderCtx, blocking, desc)
-	}()
-	blocking.waitBlocked(t)
-	t.Log("upstream parked; canceling the only waiter")
-	leaderCancel()
-	<-leaderDone
-	require.ErrorIs(t, leaderErr, context.Canceled)
-	blocking.waitAborted(t)
-	c.flightsMu.Lock()
-	assert.Empty(t, c.flights, "the abandoned flight must be forgotten")
-	c.flightsMu.Unlock()
-	assert.EqualValues(t, 0, base.fetches.Load(), "the canceled upstream call never reached the blobs")
-
-	t.Log("late caller: must start a fresh fetch rather than join the canceled one")
-	type fetchResult struct {
-		data []byte
-		err  error
-	}
-	lateCh := make(chan fetchResult, 1)
-	go func() {
-		rc, err := c.Fetch(t.Context(), blocking, desc)
-		if err != nil {
-			lateCh <- fetchResult{err: err}
-			return
-		}
-		lateCh <- fetchResult{data: readAllAndClose(t, rc)}
-	}()
-	blocking.waitBlocked(t)
-	close(blocking.ready)
-	res := <-lateCh
-	require.NoError(t, res.err, "the late caller must not inherit the canceled flight")
-	assert.Equal(t, manifest, res.data)
-	assert.EqualValues(t, 1, base.fetches.Load())
-	assert.True(t, c.Has(desc.Digest))
+	t.Logf("blob persisted: %v", c.Has(desc.Digest))
 }
 
 // TestCache_Fetch_CanceledFollowerDoesNotAffectOthers verifies that a

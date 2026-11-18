@@ -174,7 +174,8 @@ func main() {
 	flag.IntVar(&namespacedDeployerRateLimit.Burst, "namespaced-deployer-controller-rate-limit-burst", ocm.DefaultRateLimitBurst,
 		"Requeues the NamespacedDeployer controller admits at once before its qps applies. Must be at least 1.")
 
-	const reconcileTimeoutHelp = "Reconciliation timeout for the %s controller. Off by default (0). Timeout is reported as ReconcileTimeout and retried."
+	const reconcileTimeoutHelp = "Reconciliation timeout for the %s controller. Off by default (0). Timeout is reported as ReconcileTimeout and retried. " +
+		"Does not cancel a stalled manifest fetch shared through the OCI cache; set an HTTP timeout in spec.ocmConfig to bound that."
 	for _, t := range []struct {
 		dst  *time.Duration
 		flag string
