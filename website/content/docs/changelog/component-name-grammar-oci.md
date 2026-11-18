@@ -2,7 +2,7 @@
 title: "Component Name Grammar Aligned with OCI"
 icon: "arrow-autofit-right"
 slug: "component-name-grammar-oci"
-description: "The component-name grammar now follows the OCI repository path grammar: digit-led and digit-only segments are accepted, and OCI-invalid names are rejected early."
+description: "The component-name grammar now follows the OCI repository path grammar: digit-led and digit-only segments are accepted, and OCI-invalid names are rejected."
 weight: 80
 toc: true
 ---
