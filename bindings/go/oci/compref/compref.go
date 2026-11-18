@@ -47,6 +47,10 @@ var (
 // DefaultPrefix is the default prefix used for component descriptors.
 const DefaultPrefix = "component-descriptors"
 
+// MaxComponentNameLength is the maximum length of a component name, matching the
+// maxLength of $defs.componentName in the descriptor v2 and constructor v1 schemas.
+const MaxComponentNameLength = 255
+
 // ctfArchiveExtensions is the list of archive file extensions that should be treated as CTF
 var ctfArchiveExtensions = [...]string{".tar.gz", ".tgz", ".tar"}
 
@@ -246,6 +250,9 @@ func Parse(input string, opts ...Option) (*Ref, error) {
 	// Step 5: Validate component name
 	if !componentRegex.MatchString(ref.Component) {
 		return nil, fmt.Errorf("invalid component name %q in %q, must match %q", ref.Component, originalInput, ComponentRegex)
+	}
+	if len(ref.Component) > MaxComponentNameLength {
+		return nil, fmt.Errorf("invalid component name %q in %q, must not exceed %d characters", ref.Component, originalInput, MaxComponentNameLength)
 	}
 	if reservedComponentSegmentRegex.MatchString(ref.Component) {
 		return nil, fmt.Errorf("invalid component name %q in %q, the %q segment is reserved for the storage mapping", ref.Component, originalInput, DefaultPrefix)

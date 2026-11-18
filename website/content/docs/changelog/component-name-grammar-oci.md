@@ -9,7 +9,7 @@ toc: true
 
 ## Goal
 
-Align the component-name grammar with the one real constraint, the OCI repository path grammar, so a name is always storable verbatim under `<base>/component-descriptors/<name>`.
+Align the component-name grammar with the one real constraint, the OCI repository path grammar, so a name maps directly to the OCI repository path `<base>/component-descriptors/<name>`. This is grammar compatibility; a registry may still reject an otherwise valid name, for example when the full repository path exceeds its length limit.
 
 ## What Changed
 
@@ -33,8 +33,9 @@ Lowercase-only is unchanged. Uppercase would need a new name mapping and is out 
 
 ## Compatibility with Legacy OCM (v1)
 
-- **Tightening is compatible:** the OCI-invalid names rejected here could never be stored, so no working name is lost.
-- **Dropping the letter-first rule is not:** legacy OCM (v1) rejects digit-led names such as `acme.org/1`. Digit-led and digit-only names are readable only by legacy tooling from the patch release that relaxes the letter-first rule in its embedded schemas.
+- **Tightening OCI-invalid names is compatible:** the names rejected here (`acme.org/foo-`, `acme.org/a___b`, `acme-.org/x`, ...) could never be stored, so no working name is lost.
+- **Reserving `component-descriptors` is a narrow exception:** a name such as `acme.org/component-descriptors` is a valid OCI path and passed the old grammar, but it collides with the storage prefix and is now rejected. Referencing such a name was already unreliable, because the reference parser splits on the last `component-descriptors` segment. If you published one, rename the component before you upgrade.
+- **Dropping the letter-first rule is not compatible:** legacy OCM (v1) rejects digit-led names such as `acme.org/1`. Digit-led and digit-only names are readable only by legacy tooling from the patch release that relaxes the letter-first rule in its embedded schemas.
 
 {{< callout context="note" >}}
 Minimum legacy OCM (v1) version that reads digit-led component names: to be filled in once the legacy patch release is cut (tracked in [open-component-model/ocm#2186](https://github.com/open-component-model/ocm/pull/2186)).

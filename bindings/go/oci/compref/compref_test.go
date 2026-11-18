@@ -963,3 +963,20 @@ func Test_ComponentName_DigitLed_EndToEnd(t *testing.T) {
 		})
 	}
 }
+
+// Test_ComponentName_MaxLength enforces the schema maxLength (255) in Parse: a
+// grammatically valid name of exactly 255 characters is accepted, 256 is rejected.
+func Test_ComponentName_MaxLength(t *testing.T) {
+	// "acme.org/" is 9 characters; pad the single path segment to reach the target length.
+	name := func(total int) string {
+		return "acme.org/" + strings.Repeat("a", total-len("acme.org/"))
+	}
+
+	ref, err := Parse("ctf::/tmp/ctfrepo/component-descriptors/" + name(MaxComponentNameLength) + ":1.0.0")
+	require.NoError(t, err)
+	require.Len(t, ref.Component, MaxComponentNameLength)
+
+	_, err = Parse("ctf::/tmp/ctfrepo/component-descriptors/" + name(MaxComponentNameLength+1) + ":1.0.0")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "must not exceed")
+}
