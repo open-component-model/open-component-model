@@ -20,7 +20,7 @@ jobs:
     name: Open website update PR for ${{ inputs.version }}
     runs-on: ubuntu-26.04-arm
     environment:
-      name: automation
+      name: pull-requests
       deployment: false
     permissions:
       contents: read
@@ -96,8 +96,8 @@ jobs:
         id: get_token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          app-id: ${{ secrets.OCMBOT_APP_ID }}
-          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          client-id: ${{ secrets.PR_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.PR_BOT_PRIVATE_KEY }}
           repositories: ${{ github.event.repository.name }}
           permission-contents: write
           permission-pull-requests: write
