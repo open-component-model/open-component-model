@@ -140,14 +140,16 @@ ever need to make to an SVG; everything else stays as downloaded.
 
 ### Gardener
 
-- **File:** `gardener-color.svg`
-- **Source:** <https://github.com/gardener/gardener/blob/master/logo/gardener.svg>
+- **Files:** `gardener-light.svg` (official colour variant) and
+  `gardener-dark.svg` (official white variant for dark backgrounds)
+- **Source:** <https://github.com/gardener/gardener/tree/master/logo/horizontal>
+  (`color/gardener-brand-horizontal-color.svg`, `white/gardener-brand-horizontal-white.svg`)
 - **Trademark owner:** NeoNephos Foundation
 - **Permission:** granted (implicit)
-- **Fetched:** 2026-10-26
+- **Fetched:** 2026-10-26 (colour), 2026-11-19 (white)
 - **Licence:** NeoNephos trademark usage guidelines
-- **Notes:** viewBox cropped from `0 0 595.3 170.1` to `46 0 502 170.1` to
-  remove ~24 px of internal padding on each side. No path data changed.
+- **Notes:** viewBox cropped from `0 0 595.3 170.1` to `46 0 502 170.1` on both
+  files to remove ~24 px of internal padding on each side. No path data changed.
 
 ### IronCore
 
