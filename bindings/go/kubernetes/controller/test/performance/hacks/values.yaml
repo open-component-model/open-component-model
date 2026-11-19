@@ -22,11 +22,6 @@ manager:
     discovery: {qps: 10000, burst: 10000}
     deployer: {qps: 10000, burst: 10000}
     namespacedDeployer: {qps: 10000, burst: 10000}
-  resolver:
-    workerCount: 10
-    workerQueueLength: 1000
-    subscriberBufferSize: 100
-    cacheTTL: 30
   logging:
     level: "info"
     development: false

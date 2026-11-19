@@ -5,14 +5,9 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
-	"ocm.software/open-component-model/bindings/go/oci/internal/fetch"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 	"ocm.software/open-component-model/bindings/go/repository"
 )
-
-// LocalBlob represents a blob that is stored locally in the OCI repository.
-// It provides methods to access the blob's metadata and content.
-type LocalBlob fetch.LocalBlob
 
 // ComponentVersionRepository defines the interface for storing and retrieving OCM component versions
 // and their associated resources in a Store.

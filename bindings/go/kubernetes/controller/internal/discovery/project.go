@@ -2,7 +2,8 @@ package discovery
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -17,7 +18,7 @@ type Payload struct {
 	// Components carries the filtered raw v2 descriptors, sorted
 	// lexicographically by (component.name, component.version). Selected when
 	// the Discovery has no extract configuration.
-	Components []json.RawMessage
+	Components []jsontext.Value
 	// Extracted carries the projected records. Selected when the Discovery
 	// has an extract configuration.
 	Extracted []map[string]any
@@ -54,7 +55,7 @@ func (q *Query) Project(ctx context.Context, filtered *Filtered) (*Payload, erro
 	}
 
 	if q.extract == nil {
-		payload := &Payload{Components: make([]json.RawMessage, 0, len(filtered.Descriptors)), EmptyStage: filtered.EmptyStage}
+		payload := &Payload{Components: make([]jsontext.Value, 0, len(filtered.Descriptors)), EmptyStage: filtered.EmptyStage}
 		if len(filtered.Descriptors) == 0 {
 			return payload, nil
 		}
@@ -104,12 +105,12 @@ func (q *Query) Project(ctx context.Context, filtered *Filtered) (*Payload, erro
 
 // marshalV2 converts a runtime descriptor to v2 and marshals it as deterministic
 // JSON. Conversion and marshalling failures carry the component name/version.
-func marshalV2(scheme *runtime.Scheme, d *descriptor.Descriptor) (json.RawMessage, error) {
+func marshalV2(scheme *runtime.Scheme, d *descriptor.Descriptor) (jsontext.Value, error) {
 	v2desc, err := descriptor.ConvertToV2(scheme, d)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert descriptor %s to v2: %w", d.Component.String(), err)
 	}
-	raw, err := json.Marshal(v2desc)
+	raw, err := json.Marshal(v2desc, runtime.JSONOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal descriptor %s: %w", d.Component.String(), err)
 	}

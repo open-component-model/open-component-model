@@ -2,7 +2,7 @@ package versioncheck
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -194,14 +194,9 @@ func fetchLatestVersion(ctx context.Context, opts Options) (string, error) {
 		return "", fmt.Errorf("github api returned %d", resp.StatusCode)
 	}
 
-	// Limit response body to 1MB to prevent excessive memory use on unexpected responses.
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return "", err
-	}
-
 	var releases []githubRelease
-	if err := json.Unmarshal(body, &releases); err != nil {
+	// Limit response body to 1MB to prevent excessive memory use on unexpected responses.
+	if err := json.UnmarshalRead(io.LimitReader(resp.Body, 1<<20), &releases); err != nil {
 		return "", err
 	}
 

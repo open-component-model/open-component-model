@@ -172,6 +172,10 @@ The Secret is looked up in the `Component`'s own namespace unless the reference 
 this `Component` inherits it and verifies the same signature.
 {{< /callout >}}
 
+{{< callout context="caution" title="Ensure component version verification" icon="outline/alert-triangle" >}}
+Specifying a different `ocmConfig` in an object referencing the `Component` (e.g. a `Resource`) drops the inherited config including the verifier configuration. As a result, the component version won't be verified again! To keep the verifier configuration and enforce component version verification, reference the parent objects, too.
+{{< /callout >}}
+
 {{< /step >}}
 
 {{< step >}}
@@ -181,15 +185,15 @@ this `Component` inherits it and verifies the same signature.
 Check that the `Component` resource reconciles successfully with verification:
 
 ```bash
-kubectl get component helloworld-component -o wide
+kubectl get component helloworld-component
 ```
 
 <details>
 <summary>Expected output</summary>
 
 ```text
-NAME                   READY                   AGE
-helloworld-component   Applied version 1.0.0   98s
+NAME                   COMPONENT                        VERSION   READY   AGE   STATUS
+helloworld-component   github.com/acme.org/helloworld   1.0.0     True    98s   Applied version 1.0.0
 ```
 </details>
 
@@ -215,12 +219,12 @@ If verification fails, the `Component` will not become ready and an error condit
 <summary>Check for failure</summary>
 
 ```bash
-kubectl get component helloworld-component -o wide
+kubectl get component helloworld-component
 ```
 
 ```text
-NAME                   READY                                                                                                        AGE
-helloworld-component   signature verification failed for signature default: missing public key, required for plain RSA signatures   7s
+NAME                   COMPONENT                        VERSION   READY   AGE   STATUS
+helloworld-component   github.com/acme.org/helloworld             False   7s    signature verification failed for signature default: missing public key, required for plain RSA signatures
 ```
 </details>
 

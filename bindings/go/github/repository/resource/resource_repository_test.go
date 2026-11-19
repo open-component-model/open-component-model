@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	blobpkg "ocm.software/open-component-model/bindings/go/blob"
+	typesv1 "ocm.software/open-component-model/bindings/go/configuration/types/v1"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v1 "ocm.software/open-component-model/bindings/go/github/spec/access/v1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -234,15 +235,8 @@ func TestResourceRepository_DownloadResource_DigestVerification(t *testing.T) {
 		res := githubResource(baseURL+"/octocat/Hello-World", testCommit)
 		res.Digest = digestOf([]byte("an archive GitHub never served"))
 
-		// Verification is streaming, so the download itself still succeeds.
-		downloaded, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
-		require.NoError(t, err)
-
-		rc, err := downloaded.ReadCloser()
-		require.NoError(t, err)
-		_, err = io.ReadAll(rc)
+		_, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
 		require.ErrorContains(t, err, "digest mismatch")
-		require.ErrorContains(t, rc.Close(), "digest mismatch")
 	})
 
 	t.Run("serves an archive unverified when the resource carries no digest", func(t *testing.T) {
@@ -254,24 +248,6 @@ func TestResourceRepository_DownloadResource_DigestVerification(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, payload, readBlob(t, downloaded))
 	})
-
-	t.Run("the digest processor reads the archive digest without tripping verification", func(t *testing.T) {
-		baseURL, payload := mockGitHub(t)
-		res := githubResource(baseURL+"/octocat/Hello-World", testCommit)
-		res.Digest = digestOf([]byte("an archive GitHub never served"))
-
-		// The digest is taken from the blob, which reports what it holds rather than
-		// what the resource claims, so establishing a digest never reads through the
-		// verifying reader. This is what replaced a download-by-access method.
-		downloaded, err := NewResourceRepository().DownloadResource(t.Context(), res, nil)
-		require.NoError(t, err)
-
-		aware, ok := downloaded.(blobpkg.DigestAware)
-		require.True(t, ok)
-		raw, known := aware.Digest()
-		require.True(t, known)
-		require.Equal(t, godigest.FromBytes(payload).String(), raw)
-	})
 }
 
 func TestResourceRepository_WithHTTPConfig_IsAppliedToRequests(t *testing.T) {
@@ -279,8 +255,8 @@ func TestResourceRepository_WithHTTPConfig_IsAppliedToRequests(t *testing.T) {
 		return &httpv1alpha1.Config{
 			Retry: &httpv1alpha1.RetryConfig{
 				MaxRetries: &n,
-				MinWait:    httpv1alpha1.NewTimeout(time.Millisecond),
-				MaxWait:    httpv1alpha1.NewTimeout(2 * time.Millisecond),
+				MinWait:    typesv1.NewDuration(time.Millisecond),
+				MaxWait:    typesv1.NewDuration(2 * time.Millisecond),
 			},
 		}
 	}

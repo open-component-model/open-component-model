@@ -66,6 +66,11 @@ Kubernetes: `>=1.26.0-0`
 | manager.affinity | object | `{}` | Pod affinity rules |
 | manager.cache.deployerDownloadMaxResourceSize | string | `"2Mi"` | Maximum size of a single downloadable resource as a Kubernetes resource.Quantity (e.g. "2Mi", "512Ki"). "0" disables the limit. |
 | manager.cache.deployerDownloadSize | int | `1000` | Maximum size of the deployer download object LRU cache |
+| manager.concurrency.component | int | `4` | Number of active component controller workers |
+| manager.concurrency.deployer | int | `4` | Number of active workers per enabled deployer controller (Deployer and NamespacedDeployer) |
+| manager.concurrency.discovery | int | `4` | Number of active discovery controller workers |
+| manager.concurrency.replication | int | `4` | Number of active replication controller workers |
+| manager.concurrency.repository | int | `4` | Number of active repository controller workers |
 | manager.concurrency.resource | int | `4` | Number of active resource controller workers |
 | manager.deployer.enabled | bool | `true` | Run the controller for the cluster-scoped Deployer. It applies with the permissions of the controller itself. Deprecated: Use NamespacedDeployer instead. |
 | manager.env | list | `[]` | Environment variables for the controller |
@@ -83,14 +88,15 @@ Kubernetes: `>=1.26.0-0`
 | manager.logging.development | bool | `false` | Enable development mode (console encoder, debug level, warn stacktrace) |
 | manager.logging.encoder | string | `"json"` | Log encoding: 'json' or 'console' |
 | manager.logging.level | string | `"info"` | Zap log level: 'debug', 'info', 'error', 'panic' or integer > 0 |
-| manager.metricsServer.bindAddress | string | `"0"` | Address the metric endpoint binds to. Set to "0" to disable |
+| manager.metricsServer.bindAddress | string | `"0"` | Address the metric endpoint binds to, for example ":8443". "0" disables metrics. Required by prometheus.enable |
 | manager.metricsServer.enableHttp2 | bool | `false` | Enable HTTP/2 for metrics and webhook servers |
-| manager.metricsServer.secure | bool | `false` | Serve metrics endpoint securely |
+| manager.metricsServer.secure | bool | `false` | Serve the metrics endpoint over TLS with a certificate the manager generates at startup. The ServiceMonitor then scrapes over https without verification |
 | manager.namespacedDeployer.enabled | bool | `true` | Run the controller for the NamespacedDeployer and grant the controller permission to impersonate service accounts. A NamespacedDeployer without spec.serviceAccountName impersonates the default service account of its namespace. |
 | manager.networkPolicy.egress | list | `[]` | Egress rules replacing the defaults (DNS on 53, TCP 443 and 6443 to any destination). Set this to reach registries on other ports; it replaces all defaults, so include DNS. Leave empty to keep defaults |
 | manager.networkPolicy.enabled | bool | `false` | Enable NetworkPolicy for the controller manager |
 | manager.networkPolicy.ingress | list | `[]` | Extra ingress rules appended after the default rule, which admits the health-probe port and, if enabled, the metrics and webhook ports |
 | manager.nodeSelector | object | `{}` | Node selector for pod scheduling |
+| manager.ocmConfig | object | `{}` | OCM configuration for the whole controller. Loaded _once_ at startup. Only `oci.cache.config.ocm.software` is accepted at the moment of this writing. `type` defaults to `generic.config.ocm.software/v1`. Example: `{configurations: [{type: oci.cache.config.ocm.software/v1alpha1, remotePolicy: Always}]}` |
 | manager.podSecurityContext | object | `{"runAsGroup":65532,"runAsNonRoot":true,"runAsUser":65532,"seccompProfile":{"type":"RuntimeDefault"}}` | Pod-level security context |
 | manager.rateLimiter.component.burst | int | `100` | Requeues the Component controller admits at once before qps applies. Must be at least 1. |
 | manager.rateLimiter.component.qps | float | `10` | Requeues per second the Component controller admits once its burst is used up. A float greater than 0, e.g. 0.1. |
@@ -111,17 +117,13 @@ Kubernetes: `>=1.26.0-0`
 | manager.readinessProbe.periodSeconds | int | `10` | Period between readiness probes |
 | manager.readinessProbe.port | int | `8081` | Port for the readiness probe |
 | manager.replicas | int | `1` | Number of controller manager replicas |
-| manager.resolver.cacheTTL | int | `30` | The time-to-live (TTL) for the resolver cache entries in minutes. Setting TTL to less than 30 minutes is discouraged in productive use as it can lead to unintended performance issues. |
-| manager.resolver.subscriberBufferSize | int | `100` | Buffer size for each subscriber's event channel. Larger values reduce dropped resolution events under load. Monitor resolver_event_channel_drops_total metric. |
-| manager.resolver.workerCount | int | `10` | Number of active resolver workers |
-| manager.resolver.workerQueueLength | int | `1000` | Maximum work items in queue for component version resolution |
 | manager.resources | object | `{"limits":{"cpu":"500m","memory":"512Mi"},"requests":{"cpu":"100m","memory":"256Mi"}}` | Resource limits and requests |
 | manager.securityContext | object | `{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]},"readOnlyRootFilesystem":true}` | Container-level security context |
 | manager.tolerations | list | `[]` | Pod tolerations |
-| prometheus.enable | bool | `false` | Enable Prometheus ServiceMonitor (requires prometheus-operator) |
+| prometheus.enable | bool | `false` | Render a metrics Service and a Prometheus ServiceMonitor (requires prometheus-operator and manager.metricsServer.bindAddress) |
 | rbacHelpers.aggregateToDefaultRoles | bool | `true` | Install ClusterRoles that aggregate OCM resource permissions into the built-in `admin`, `edit` and `view` cluster roles |
 | rbacHelpers.enable | bool | `false` | Install convenience admin/editor/viewer roles for CRDs |
-| webhook.certSecret | string | `""` | Secret name for webhook TLS certificates (when not using cert-manager, create this secret manually) |
+| webhook.certSecret | string | `""` | Secret name for the webhook TLS certificate. With cert-manager the Certificate writes into it; without cert-manager, create it manually. Empty uses the chart default name. |
 | webhook.enable | bool | `false` | Enable conversion webhook for CRD version conversion |
 
 ## Development
@@ -167,6 +169,7 @@ task helm/validate
 
 This checks:
 - Chart linting passes
+- The [helm-unittest](https://github.com/helm-unittest/helm-unittest) suites in `tests/` pass (`task helm/unittest` runs them alone)
 - Templates render successfully
 - CRDs, manager-role, schema, and docs are up to date
 

@@ -4,18 +4,19 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociimagespecv1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/content"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2/content"
 
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/ctf"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 const artifactSetMediaType = "application/vnd.oci.image.manifest.v1" + ctf.SynthesizedBlobFormatSuffix
@@ -50,6 +51,21 @@ func TestNewArtifactSetFromBlob_Compression(t *testing.T) {
 	}
 }
 
+func TestIsArtifactSetMediaType(t *testing.T) {
+	for mt, want := range map[string]bool{
+		"application/vnd.oci.image.manifest.v1" + ctf.SynthesizedBlobFormatSuffix:                true,
+		"application/vnd.oci.image.index.v1" + ctf.SynthesizedBlobFormatSuffix:                   true,
+		"application/vnd.docker.distribution.manifest.v2" + ctf.SynthesizedBlobFormatSuffix:      true,
+		"application/vnd.docker.distribution.manifest.list.v2" + ctf.SynthesizedBlobFormatSuffix: true,
+		"application/vnd.docker.distribution.manifest.v2+json":                                   false,
+		"application/vnd.oci.image.manifest.v1+json":                                             false,
+	} {
+		t.Run(mt, func(t *testing.T) {
+			require.Equal(t, want, ctf.IsArtifactSetMediaType(mt))
+		})
+	}
+}
+
 func TestNewArtifactSetFromBlob_IncompleteIndexEntry(t *testing.T) {
 	r := require.New(t)
 	manifestData := []byte(`{"schemaVersion":2,"config":{},"layers":[]}`)
@@ -74,7 +90,7 @@ func TestNewArtifactSetFromBlob_IncompleteIndexEntry(t *testing.T) {
 		indexData, err := json.Marshal(ociimagespecv1.Index{
 			Versioned: specs.Versioned{SchemaVersion: 2},
 			Manifests: []ociimagespecv1.Descriptor{tc.entry},
-		})
+		}, runtime.JSONOptions)
 		r.NoError(err)
 
 		for _, format := range []ctf.ArtifactSetFormat{
@@ -137,7 +153,7 @@ func artifactSetArchive(t *testing.T, format ctf.ArtifactSetFormat) ([]byte, art
 		MediaType: ociimagespecv1.MediaTypeImageManifest,
 		Config:    config,
 		Layers:    []ociimagespecv1.Descriptor{layer},
-	})
+	}, runtime.JSONOptions)
 	r.NoError(err)
 	manifest := content.NewDescriptorFromBytes(ociimagespecv1.MediaTypeImageManifest, manifestData)
 
@@ -147,7 +163,7 @@ func artifactSetArchive(t *testing.T, format ctf.ArtifactSetFormat) ([]byte, art
 		Versioned: specs.Versioned{SchemaVersion: 2},
 		MediaType: ociimagespecv1.MediaTypeImageIndex,
 		Manifests: []ociimagespecv1.Descriptor{tagged},
-	})
+	}, runtime.JSONOptions)
 	r.NoError(err)
 
 	data := map[string][]byte{}

@@ -6,9 +6,6 @@ manager:
     tag: latest
   concurrency:
     resource: 10
-  resolver:
-    workerCount: 10
-    workerQueueLength: 1000
   logging:
     level: "debug"
     development: true

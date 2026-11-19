@@ -3,7 +3,8 @@ package v1
 import (
 	"cmp"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"iter"
@@ -14,7 +15,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 	"golang.org/x/sync/errgroup"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -413,15 +413,15 @@ func (f *FallbackRepository) GetRepositorySpecificationForComponent(ctx context.
 }
 
 func (f *FallbackRepository) getRepositoryFromCache(ctx context.Context, specification runtime.Typed) (repository.ComponentVersionRepository, error) {
-	specdata, err := json.Marshal(specification)
+	specdata, err := json.Marshal(specification, runtime.JSONOptions)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling repository to json failed: %w", err)
 	}
-	specdata, err = jsoncanonicalizer.Transform(specdata)
-	if err != nil {
+	canonical := jsontext.Value(specdata)
+	if err := canonical.Canonicalize(); err != nil {
 		return nil, fmt.Errorf("canonicalizing repository json failed: %w", err)
 	}
-	key := string(specdata)
+	key := string(canonical)
 
 	var repo repository.ComponentVersionRepository
 

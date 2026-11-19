@@ -46,10 +46,11 @@ ocm [sub-command] [flags]
                                            Use "-" to read configuration documents from stdin. It is an entry like any other: on its own it
                                            replaces the lookup above, so add --config <file> to keep a file, and a repeated "-" is ignored.
                                            Other documents on stdin stay there for commands that read it, such as transfer with --transfer-spec -.
-  -h, --help                               help for ocm
+  -h, --help[=true|false]                  help for ocm
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
+                                              the interactive progress display needs a terminal and the text format; any other format prints its records in full instead
                                            (must be one of [json text]) (default text)
       --loglevel enum                      sets the logging level
                                               debug: Show all logs including detailed debugging information
@@ -64,7 +65,7 @@ ocm [sub-command] [flags]
       --plugin-directory string            default directory path for ocm plugins. (default "$HOME/.config/ocm/plugins")
       --plugin-shutdown-timeout duration   Timeout for plugin shutdown. If a plugin does not shut down within this time, it is forcefully killed (default 10s)
       --temp-folder string                 Specify a custom temporary folder path for filesystem operations.
-  -v, --version                            version for ocm
+  -v, --version[=true|false]               version for ocm
       --working-directory string           Specify a custom working directory path to load resources from.
 ```
 

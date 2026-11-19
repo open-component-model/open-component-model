@@ -1,7 +1,8 @@
 package internal
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"maps"
 	"net/url"
@@ -104,11 +105,11 @@ func templateExpressions(raw *runtime.Raw, aliases map[string]string) error {
 		}
 	}
 
-	data, err := json.Marshal(obj)
+	data, err := json.Marshal(obj, runtime.JSONOptions)
 	if err != nil {
 		return fmt.Errorf("cannot re-encode target access: %w", err)
 	}
-	raw.Data = data
+	raw.Data = jsontext.Value(data)
 	return nil
 }
 

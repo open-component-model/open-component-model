@@ -3,7 +3,7 @@ package descriptor
 import (
 	"archive/tar"
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"testing"
 
@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func createV2DescriptorYAML() []byte {
@@ -47,7 +48,7 @@ func createV2DescriptorJSON(tb testing.TB) []byte {
 			},
 		},
 	}
-	data, err := json.Marshal(desc)
+	data, err := json.Marshal(desc, runtime.JSONOptions)
 	require.NoError(tb, err)
 	return data
 }

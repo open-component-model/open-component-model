@@ -13,8 +13,10 @@ workflow after the shared builds. It downloads that build's artifact and runs
 `task conformance/compatibility:test OCM_V2_BIN=<path>` without rebuilding the CLI.
 
 The test invokes OCM v1 to create three component versions in temporary CTFs.
-The signed version contains a local text resource; OCM v2 reads it, verifies
-the signature, downloads its bytes, and checks its recorded digest. The second
+The signed version uses an uppercase prerelease and contains a local text resource.
+OCM v2 reads and verifies it, then lists and transfers the whole v1-produced TGZ
+repository. It verifies the transferred signature, downloads the resource bytes,
+and checks the recorded digest. The second
 version contains v1 Helm, OCI, Git, and S3 access specifications; OCM v2 reads
 each one and checks its type and fields. OCM v1 creates that version with
 digest generation disabled because its external resources are deliberately

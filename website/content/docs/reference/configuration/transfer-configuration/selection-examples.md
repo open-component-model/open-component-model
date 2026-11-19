@@ -234,7 +234,7 @@ and `nginx` are streamed by a single TransferOCIArtifactToOCILocalBlob node each
 `bundle` and `notes`, which are local blobs already, by a single
 TransferOCILocalBlobToOCILocalBlob node each (TransferCTFLocalBlobToOCILocalBlob
 when the source is a CTF), with no intermediate file between download and upload.
-An OCI image is still materialized as an OCI layout while it is downloaded.
+An OCI image, or a local blob holding one, is copied blob by blob without building an OCI layout.
 A config with only a `localblob.uploader…` entry (no other uploaders) produces the same graph.
 
 ## E11 — OCI artifacts plus everything else copied

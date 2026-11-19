@@ -106,12 +106,12 @@ ocm get types [subsystem [type [field-path]]] [flags]
 ### Options
 
 ```
-  -h, --help               help for types
-  -o, --output enum        Output format (text, markdown, html are supported for all command combinations, jsonschema is only supported for type descriptions).
-                           (must be one of [examples html jsonschema markdown text]) (default text)
-      --show-paths         List all available field paths for the type (useful for navigation)
-      --table-style enum   table output style
-                           (must be one of [StyleColoredBright StyleColoredDark StyleDefault]) (default StyleDefault)
+  -h, --help[=true|false]         help for types
+  -o, --output enum               Output format (text, markdown, html are supported for all command combinations, jsonschema is only supported for type descriptions).
+                                  (must be one of [examples html jsonschema markdown text]) (default text)
+      --show-paths[=true|false]   List all available field paths for the type (useful for navigation)
+      --table-style enum          table output style
+                                  (must be one of [StyleColoredBright StyleColoredDark StyleDefault]) (default StyleDefault)
 ```
 
 ### Options inherited from parent commands
@@ -142,6 +142,7 @@ ocm get types [subsystem [type [field-path]]] [flags]
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
+                                              the interactive progress display needs a terminal and the text format; any other format prints its records in full instead
                                            (must be one of [json text]) (default text)
       --loglevel enum                      sets the logging level
                                               debug: Show all logs including detailed debugging information

@@ -3,11 +3,10 @@ package manager
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"log/slog"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +15,7 @@ import (
 	"time"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	"ocm.software/open-component-model/bindings/go/plugin/internal/osutil"
 	blobtransformerv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/blobtransformer/v1"
 	componentlisterv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/componentlister/v1"
 	credentialpluginv1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/credentialplugin/v1"
@@ -38,6 +38,7 @@ import (
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	pluginruntime "ocm.software/open-component-model/bindings/go/plugin/manager/types/runtime"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types/spec"
+	"ocm.software/open-component-model/bindings/go/repository/integrity"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -68,10 +69,23 @@ type PluginManager struct {
 	baseCtx context.Context
 }
 
+// Option configures a PluginManager.
+type Option func(*PluginManager)
+
+// WithArtifactVerifier sets the verifier for OCI artifacts (OCI layouts, artifact sets) that
+// external plugins deliver as archives. Without it, plugin content recorded with an OCI
+// artifact digest cannot be verified and is refused.
+func WithArtifactVerifier(v integrity.ArtifactVerifier) Option {
+	return func(pm *PluginManager) {
+		pm.ComponentVersionRepositoryRegistry.SetArtifactVerifier(v)
+		pm.ResourcePluginRegistry.SetArtifactVerifier(v)
+	}
+}
+
 // NewPluginManager initializes the PluginManager
 // the passed ctx is used for all plugins.
-func NewPluginManager(ctx context.Context) *PluginManager {
-	return &PluginManager{
+func NewPluginManager(ctx context.Context, opts ...Option) *PluginManager {
+	pm := &PluginManager{
 		ComponentVersionRepositoryRegistry: componentversionrepository.NewComponentVersionRepositoryRegistry(ctx),
 		ComponentListerRegistry:            componentlister.NewComponentListerRegistry(ctx),
 		CredentialPluginRegistry:           credentialplugin.NewRegistry(ctx),
@@ -84,6 +98,10 @@ func NewPluginManager(ctx context.Context) *PluginManager {
 		CredentialTypeRegistry:             credentialtyperepository.NewCredentialTypeRegistry(ctx),
 		baseCtx:                            ctx,
 	}
+	for _, opt := range opts {
+		opt(pm)
+	}
+	return pm
 }
 
 type RegistrationOptions struct {
@@ -122,15 +140,12 @@ func (pm *PluginManager) RegisterPlugins(ctx context.Context, dir string, opts .
 		opt(defaultOpts)
 	}
 
+	idleTimeout := mtypes.Duration(defaultOpts.IdleTimeout)
 	conf := &mtypes.Config{
-		IdleTimeout: &defaultOpts.IdleTimeout,
+		IdleTimeout: &idleTimeout,
 	}
 
-	t, err := determineConnectionType(ctx)
-	if err != nil {
-		return fmt.Errorf("could not determine connection type: %w", err)
-	}
-	conf.Type = t
+	conf.Type = osutil.ConnectionType(ctx)
 
 	plugins, err := pm.fetchPlugins(ctx, conf, dir)
 	if err != nil {
@@ -209,13 +224,10 @@ func (pm *PluginManager) fetchPlugins(ctx context.Context, conf *mtypes.Config, 
 			return nil
 		}
 
-		// TODO(Skarlso): Determine plugin extension.
-		ext := filepath.Ext(info.Name())
-		if ext != "" {
+		id, ok := pluginID(info.Name())
+		if !ok {
 			return nil
 		}
-
-		id := filepath.Base(path)
 
 		p := &mtypes.Plugin{
 			ID:     id,
@@ -233,6 +245,21 @@ func (pm *PluginManager) fetchPlugins(ctx context.Context, conf *mtypes.Config, 
 	}
 
 	return plugins, nil
+}
+
+// pluginID returns the ID of the plugin executable with the given file name and whether the file is a plugin.
+// Plugins are files without extension, on Windows executables have to carry the .exe extension.
+func pluginID(name string) (string, bool) {
+	ext := filepath.Ext(name)
+	switch {
+	case ext == "":
+		// Without the extension this OS requires for executables, the file cannot be run.
+		return name, mtypes.ExecutableSuffix == ""
+	case mtypes.ExecutableSuffix != "" && strings.EqualFold(ext, mtypes.ExecutableSuffix):
+		return strings.TrimSuffix(name, ext), true
+	default:
+		return "", false
+	}
 }
 
 var scheme *runtime.Scheme
@@ -273,7 +300,7 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Con
 		plugin.Config.ConfigTypes = append(plugin.Config.ConfigTypes, filtered.Configurations...)
 	}
 
-	serialized, err := json.Marshal(plugin.Config)
+	serialized, err := json.Marshal(plugin.Config, runtime.JSONOptions)
 	if err != nil {
 		return err
 	}
@@ -282,7 +309,8 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Con
 	pluginCmd := exec.CommandContext(ctx, cleanPath(plugin.Path), "--config", string(serialized)) //nolint:gosec // G204 does not apply
 	pluginCmd.Cancel = func() error {
 		slog.InfoContext(ctx, "killing plugin process because the parent context is cancelled", "id", plugin.ID)
-		return pluginCmd.Process.Kill()
+		// A plugin that exited before the cancellation is not a failed kill, on any OS.
+		return osutil.Kill(pluginCmd.Process)
 	}
 
 	// Set up communication pipes.
@@ -361,30 +389,4 @@ func (pm *PluginManager) addPlugin(ctx context.Context, ocmConfig *genericv1.Con
 	}
 
 	return nil
-}
-
-func determineConnectionType(ctx context.Context) (mtypes.ConnectionType, error) {
-	// if we can't create a temp folder ( for example we are in a scratch container ) we default to TCP
-	tmp, err := os.MkdirTemp("", "")
-	if err != nil {
-		slog.DebugContext(ctx, "failed to create temporary folder, falling back to TCP connection", "err", err.Error())
-		return mtypes.TCP, nil
-	}
-
-	defer func() {
-		_ = os.RemoveAll(tmp)
-	}()
-
-	socketPath := filepath.Join(tmp, "plugin.sock")
-	var lc net.ListenConfig
-	listener, err := lc.Listen(ctx, "unix", socketPath)
-	if err != nil {
-		return mtypes.TCP, nil
-	}
-
-	if err := listener.Close(); err != nil {
-		return "", fmt.Errorf("failed to close socket: %w", err)
-	}
-
-	return mtypes.Socket, nil
 }

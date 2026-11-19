@@ -11,7 +11,7 @@ package fips140
 
 import (
 	"crypto/fips140"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -48,18 +48,18 @@ func TestDownloadResource_LegacyChecksums(t *testing.T) {
 			}))
 			t.Cleanup(server.Close)
 
-			repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(server.Client()),
+			repo := repository.NewResourceRepository(repository.WithHTTPClient(server.Client()),
 				repository.WithChecksumConfig(&checksumhttpv1alpha1.Config{Mode: checksumhttpv1alpha1.ChecksumModeRequire}))
 			b, err := repo.DownloadResource(t.Context(), wgetResource(t, server.URL+"/resource"), nil)
-			if tt.wantErr != "" {
-				r.ErrorContains(err, tt.wantErr)
-				return
-			}
 			r.NoError(err)
 			rc, err := b.ReadCloser()
 			r.NoError(err)
 			t.Cleanup(func() { _ = rc.Close() })
 			data, err := io.ReadAll(rc)
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
+				return
+			}
 			r.NoError(err)
 			r.Equal(content, data)
 		})
@@ -68,7 +68,7 @@ func TestDownloadResource_LegacyChecksums(t *testing.T) {
 
 func wgetResource(t *testing.T, url string) *descruntime.Resource {
 	t.Helper()
-	raw, err := json.Marshal(map[string]any{"url": url})
+	raw, err := json.Marshal(map[string]any{"url": url}, runtime.JSONOptions)
 	require.NoError(t, err)
 	res := &descruntime.Resource{}
 	res.Name, res.Version, res.Type = "fips-resource", "1.0.0", "blob"

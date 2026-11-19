@@ -14,8 +14,18 @@ import (
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/content"
+	"github.com/oras-project/oras-go/v3/registry/remote/properties"
 	"golang.org/x/sync/singleflight"
-	"oras.land/oras-go/v2/content"
+)
+
+const (
+	// blobSubdir is the directory under [Options.Dir] that holds the blobs
+	// of a [BlobCache].
+	blobSubdir = "blobs"
+	// servedSubdir is the directory under [Options.Dir] that holds the records
+	// of which repository served which blob under [RemotePolicyAlways].
+	servedSubdir = "served"
 )
 
 // blobEntry is the LRU value for [BlobCache]. The on-disk path is
@@ -25,6 +35,15 @@ import (
 type blobEntry struct {
 	path string
 	size int64
+}
+
+// ReadOnlyRepository is the upstream of a [BlobCache]: read-only storage of one
+// repository. ParseReference identifies that repository, so the identity under
+// which [RemotePolicyAlways] records a blob comes from the same object that
+// answers Exists. A [*remote.Repository] satisfies it.
+type ReadOnlyRepository interface {
+	content.ReadOnlyStorage
+	ParseReference(reference string) (properties.Reference, error)
 }
 
 // BlobCache is a digest-keyed, disk-backed LRU+TTL cache for small
@@ -44,6 +63,13 @@ type BlobCache struct {
 	logger *slog.Logger
 	lru    *expirable.LRU[digest.Digest, blobEntry]
 
+	// served records which repository served which blob, as the qualified
+	// reference of the blob. It is only set under [RemotePolicyAlways] and bounds
+	// what a hit may be served to, see [BlobCache.fetchAlways]. It must not be
+	// shared with a caller's [ReferenceCache]: that one records what a registry
+	// resolved, which proves nothing about holding the bytes.
+	served *ReferenceCache
+
 	// sf collapses concurrent upstream fetches for the same digest into
 	// a single round-trip. Because cached blobs are small (manifests
 	// and descriptors, bounded by [Options.MaxBlobSize]), the shared
@@ -57,22 +83,35 @@ type BlobCache struct {
 //
 // The cache stores its files under `<Options.Dir>/blobs/<algo>/<hex>`
 // so the same Dir can also host a [ReferenceCache] (which writes
-// `<Dir>/refs/<sha256(namespace)>.json`) without collisions.
+// `<Dir>/refs/<sha256(namespace)>.json`) without collisions. Under
+// [RemotePolicyAlways] it also records what each repository served, in
+// a [ReferenceCache] of its own under `<Options.Dir>/served/`.
 func NewBlobCache(opts Options) (*BlobCache, error) {
-	opts, err := opts.applyDefaults()
+	opts, err := opts.applyDefaults(DefaultBlobMaxEntries)
 	if err != nil {
 		return nil, err
 	}
+	root := opts.Dir
 	// Scope to a dedicated subdirectory so a shared Options.Dir does
 	// not entangle blob layout with anything else the caller stores
 	// at that path.
-	opts.Dir = filepath.Join(opts.Dir, "blobs")
+	opts.Dir = filepath.Join(root, blobSubdir)
 	if err := ensureDir(opts.Dir); err != nil {
 		return nil, fmt.Errorf("blobcache: %w", err)
 	}
 
 	c := &BlobCache{opts: opts, logger: slog.Default().With(slog.String("dir", opts.Dir))}
 	c.lru = expirable.NewLRU(opts.MaxEntries, c.onEvict, opts.TTL)
+	if opts.RemotePolicy == RemotePolicyAlways {
+		c.served, err = NewReferenceCache(Options{
+			Dir:        filepath.Join(root, servedSubdir),
+			MaxEntries: opts.MaxEntries,
+			TTL:        noExpiry, // a hit also needs the blob, so the blob's lifetime decides
+		})
+		if err != nil {
+			return nil, fmt.Errorf("blobcache: %w", err)
+		}
+	}
 
 	startScan := time.Now()
 	existing, err := scanExisting(opts.Dir)
@@ -195,8 +234,11 @@ func (c *BlobCache) populate(ctx context.Context, dgst digest.Digest, size int64
 //
 // Concurrent Fetches for the same digest are collapsed via
 // singleflight into a single upstream.Fetch; every caller receives an
-// independent reader over identical bytes.
-func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
+// independent reader over identical bytes. Under [RemotePolicyAlways]
+// every caller proves access with its own upstream: a cache hit requires
+// that its repository served the blob before and that Exists passes, and
+// any other call is not collapsed but fetched by the caller itself.
+func (c *BlobCache) Fetch(ctx context.Context, upstream ReadOnlyRepository, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 	if c == nil || !c.Accept(target) {
 		return upstream.Fetch(ctx, target)
 	}
@@ -208,11 +250,11 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage,
 		return upstream.Fetch(ctx, target)
 	}
 
-	f, err := c.cached(ctx, upstream, target)
-	if err != nil {
-		return nil, err
+	if c.opts.RemotePolicy == RemotePolicyAlways {
+		return c.fetchAlways(ctx, upstream, target)
 	}
-	if f != nil {
+
+	if f := c.cached(ctx, target); f != nil {
 		return f, nil
 	}
 
@@ -240,11 +282,7 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage,
 		// whose lookup above missed just before the previous flight
 		// populated the cache, but whose DoChan arrives after that flight
 		// returned, would otherwise start a second upstream fetch.
-		f, err := c.cached(fetchCtx, upstream, target)
-		if err != nil {
-			return nil, err
-		}
-		if f != nil {
+		if f := c.cached(fetchCtx, target); f != nil {
 			data, rerr := io.ReadAll(f)
 			_ = f.Close()
 			if rerr == nil {
@@ -255,18 +293,7 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage,
 		}
 		c.logger.Debug("blobcache: singleflight leader: starting upstream fetch",
 			slog.String("digest", target.Digest.String()))
-		data, err := content.FetchAll(fetchCtx, upstream, target)
-		if err != nil {
-			return nil, fmt.Errorf("blobcache: fetch upstream: %w", err)
-		}
-		// populate is best-effort: a failure to persist must not fail
-		// the fetch, since we already hold the verified bytes to serve
-		// the caller.
-		if _, perr := c.populate(fetchCtx, target.Digest, target.Size, bytes.NewReader(data)); perr != nil {
-			c.logger.DebugContext(ctx, "blobcache: populate failed, serving from memory",
-				slog.String("digest", target.Digest.String()), slog.String("err", perr.Error()))
-		}
-		return data, nil
+		return c.fetchAndPopulate(fetchCtx, upstream, target)
 	})
 	select {
 	case <-ctx.Done():
@@ -286,34 +313,88 @@ func (c *BlobCache) Fetch(ctx context.Context, upstream content.ReadOnlyStorage,
 	}
 }
 
-// cached returns an open file for target if it is in the cache and,
-// under [RemotePolicyAlways], upstream confirms access. A nil file
-// with a nil error is a miss; a failing local lookup is logged and
-// reported as a miss so the caller falls through to upstream.
-func (c *BlobCache) cached(ctx context.Context, upstream content.ReadOnlyStorage, target ociImageSpecV1.Descriptor) (*os.File, error) {
+// fetchAlways serves target under [RemotePolicyAlways]. A hit is only served if
+// the repository of upstream served this blob before and still allows access to
+// it. Exists alone would not do: upstream is chosen by the caller, and a registry
+// the caller controls can claim to hold any digest. Any other caller fetches the
+// blob itself, not collapsed with others, so it only ever gets bytes its own
+// repository served and that match the digest.
+func (c *BlobCache) fetchAlways(ctx context.Context, upstream ReadOnlyRepository, target ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
+	blobRef, err := upstream.ParseReference(target.Digest.String())
+	if err != nil {
+		return nil, fmt.Errorf("blobcache: identify repository of %s: %w", target.Digest, err)
+	}
+	// The record must be for this digest, whatever the implementation returns.
+	blobRef.Tag = ""
+	blobRef.Digest = target.Digest.String()
+
+	_, known := c.served.Lookup(blobRef)
+	if known {
+		if f := c.cached(ctx, target); f != nil {
+			if err := c.verifyRemoteAccess(ctx, upstream, target); err != nil {
+				return nil, errors.Join(err, f.Close())
+			}
+			return f, nil
+		}
+	}
+
+	data, err := c.fetchAndPopulate(ctx, upstream, target)
+	if err != nil {
+		return nil, err
+	}
+	if !known {
+		// Only the digest: annotations of a descriptor can be of any size, and
+		// writing a record rewrites the snapshot of its repository.
+		c.served.Add(blobRef, ociImageSpecV1.Descriptor{Digest: target.Digest})
+	}
+	return io.NopCloser(bytes.NewReader(data)), nil
+}
+
+// fetchAndPopulate fetches target from upstream through [content.FetchAll],
+// which verifies the bytes against target.Digest, and caches them.
+func (c *BlobCache) fetchAndPopulate(ctx context.Context, upstream content.ReadOnlyStorage, target ociImageSpecV1.Descriptor) ([]byte, error) {
+	data, err := content.FetchAll(ctx, upstream, target)
+	if err != nil {
+		return nil, fmt.Errorf("blobcache: fetch upstream: %w", err)
+	}
+	// populate is best-effort: a failure to persist must not fail
+	// the fetch, since we already hold the verified bytes to serve
+	// the caller.
+	if _, perr := c.populate(ctx, target.Digest, target.Size, bytes.NewReader(data)); perr != nil {
+		c.logger.DebugContext(ctx, "blobcache: populate failed, serving from memory",
+			slog.String("digest", target.Digest.String()), slog.String("err", perr.Error()))
+	}
+	return data, nil
+}
+
+// cached returns an open file for target if it is in the cache, or nil
+// on a miss. A failing local lookup is logged and reported as a miss so
+// the caller falls through to upstream. The caller verifies remote access.
+func (c *BlobCache) cached(ctx context.Context, target ociImageSpecV1.Descriptor) *os.File {
 	f, hit, err := c.Get(target.Digest)
 	if err != nil {
 		c.logger.DebugContext(ctx, "blobcache: get failed, falling through",
 			slog.String("digest", target.Digest.String()), slog.String("err", err.Error()))
-		return nil, nil
+		return nil
 	}
 	if !hit {
-		return nil, nil
-	}
-	if c.opts.RemotePolicy == RemotePolicyAlways {
-		ok, err := upstream.Exists(ctx, target)
-		if err != nil {
-			_ = f.Close()
-			return nil, fmt.Errorf("blobcache: verify remote access: %w", err)
-		}
-		if !ok {
-			_ = f.Close()
-			return nil, fmt.Errorf("blobcache: remote does not contain or allow access to %s", target.Digest)
-		}
+		return nil
 	}
 	c.logger.DebugContext(ctx, "blobcache: hit",
 		slog.String("digest", target.Digest.String()), slog.Int64("size", target.Size))
-	return f, nil
+	return f
+}
+
+// verifyRemoteAccess checks whether upstream can access target.
+func (c *BlobCache) verifyRemoteAccess(ctx context.Context, upstream content.ReadOnlyStorage, target ociImageSpecV1.Descriptor) error {
+	ok, err := upstream.Exists(ctx, target)
+	if err != nil {
+		return fmt.Errorf("blobcache: verify remote access: %w", err)
+	}
+	if !ok {
+		return fmt.Errorf("blobcache: remote does not contain or allow access to %s", target.Digest)
+	}
+	return nil
 }
 
 // onEvict is the LRU's eviction callback. It removes the on-disk file

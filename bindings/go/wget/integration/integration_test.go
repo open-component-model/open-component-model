@@ -11,8 +11,9 @@ import (
 	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -32,7 +33,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/wget/repository"
 	accessspec "ocm.software/open-component-model/bindings/go/wget/spec/access"
-	"ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
+	v1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 	credv1 "ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1"
 )
 
@@ -63,7 +64,7 @@ func newAuthServer(t *testing.T, dir string, username, password string) *httptes
 
 func wgetResource(t *testing.T, spec map[string]any) *descruntime.Resource {
 	t.Helper()
-	raw, err := json.Marshal(spec)
+	raw, err := json.Marshal(spec, runtime.JSONOptions)
 	require.NoError(t, err)
 
 	r := &descruntime.Resource{}
@@ -87,6 +88,16 @@ func readBlob(t *testing.T, b blob.ReadOnlyBlob) []byte {
 	data, err := io.ReadAll(rc)
 	require.NoError(t, err)
 	return data
+}
+
+// readError fully reads b and returns the error of the read and of closing the
+// reader: the download sends its request only when it is read.
+func readError(t *testing.T, b blob.ReadOnlyBlob) error {
+	t.Helper()
+	rc, err := b.ReadCloser()
+	require.NoError(t, err)
+	_, readErr := io.ReadAll(rc)
+	return errors.Join(readErr, rc.Close())
 }
 
 func sha256sum(data []byte) string {
@@ -133,7 +144,7 @@ func Test_Integration_WgetResourceRepository(t *testing.T) {
 	srv := newFileServer(t, testDataDir)
 	t.Logf("File server at %s", srv.URL)
 
-	repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(srv.Client()))
+	repo := repository.NewResourceRepository(repository.WithHTTPClient(srv.Client()))
 
 	t.Run("download plain text file and verify content", func(t *testing.T) {
 		t.Parallel()
@@ -180,13 +191,6 @@ func Test_Integration_WgetResourceRepository(t *testing.T) {
 		// Verify blob reports correct size
 		if sa, ok := b.(blob.SizeAware); ok {
 			assert.Equal(t, int64(1024), sa.Size())
-		}
-
-		// Verify blob digest is computed
-		if da, ok := b.(blob.DigestAware); ok {
-			digest, known := da.Digest()
-			assert.True(t, known)
-			assert.NotEmpty(t, digest)
 		}
 	})
 
@@ -252,7 +256,7 @@ func Test_Integration_WgetResourceRepository(t *testing.T) {
 		}))
 		t.Cleanup(echoSrv.Close)
 
-		echoRepo := repository.NewResourceRepository(nil, repository.WithHTTPClient(echoSrv.Client()))
+		echoRepo := repository.NewResourceRepository(repository.WithHTTPClient(echoSrv.Client()))
 		resource := wgetResource(t, map[string]any{
 			"url": echoSrv.URL + "/echo",
 			"header": map[string][]string{
@@ -278,12 +282,12 @@ func Test_Integration_WgetResourceRepository(t *testing.T) {
 			resp, _ := json.Marshal(map[string]string{
 				"method": req.Method,
 				"body":   string(body),
-			})
+			}, runtime.JSONOptions)
 			_, _ = w.Write(resp)
 		}))
 		t.Cleanup(echoSrv.Close)
 
-		echoRepo := repository.NewResourceRepository(nil, repository.WithHTTPClient(echoSrv.Client()))
+		echoRepo := repository.NewResourceRepository(repository.WithHTTPClient(echoSrv.Client()))
 		resource := wgetResource(t, map[string]any{
 			"url":  echoSrv.URL + "/api",
 			"verb": "POST",
@@ -342,9 +346,9 @@ func Test_Integration_WgetResourceRepository(t *testing.T) {
 			"url": srv.URL + "/does-not-exist",
 		})
 
-		_, err := repo.DownloadResource(t.Context(), resource, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "status 404")
+		b, err := repo.DownloadResource(t.Context(), resource, nil)
+		require.NoError(t, err)
+		assert.ErrorContains(t, readError(t, b), "status 404")
 	})
 
 	t.Run("upload is not supported", func(t *testing.T) {
@@ -370,7 +374,7 @@ func Test_Integration_WgetWithAuthentication(t *testing.T) {
 	srv := newAuthServer(t, testDataDir, testUser, testPass)
 	t.Logf("Authenticated file server at %s", srv.URL)
 
-	repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(srv.Client()))
+	repo := repository.NewResourceRepository(repository.WithHTTPClient(srv.Client()))
 
 	t.Run("download succeeds with valid credentials", func(t *testing.T) {
 		t.Parallel()
@@ -398,9 +402,9 @@ func Test_Integration_WgetWithAuthentication(t *testing.T) {
 			"url": srv.URL + "/hello.txt",
 		})
 
-		_, err := repo.DownloadResource(t.Context(), resource, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "status 401")
+		b, err := repo.DownloadResource(t.Context(), resource, nil)
+		require.NoError(t, err)
+		assert.ErrorContains(t, readError(t, b), "status 401")
 	})
 
 	t.Run("download fails with wrong credentials", func(t *testing.T) {
@@ -416,9 +420,9 @@ func Test_Integration_WgetWithAuthentication(t *testing.T) {
 			Password: "wrong",
 		}
 
-		_, err := repo.DownloadResource(t.Context(), resource, creds)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "status 401")
+		b, err := repo.DownloadResource(t.Context(), resource, creds)
+		require.NoError(t, err)
+		assert.ErrorContains(t, readError(t, b), "status 401")
 	})
 }
 
@@ -436,7 +440,7 @@ func Test_Integration_WgetWithRedirects(t *testing.T) {
 	t.Cleanup(redirectSrv.Close)
 
 	// Use a shared client that trusts both servers
-	repo := repository.NewResourceRepository(nil)
+	repo := repository.NewResourceRepository()
 
 	t.Run("follows redirects by default", func(t *testing.T) {
 		t.Parallel()
@@ -459,9 +463,9 @@ func Test_Integration_WgetWithRedirects(t *testing.T) {
 			"noRedirect": true,
 		})
 
-		_, err := repo.DownloadResource(t.Context(), resource, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "status 307")
+		b, err := repo.DownloadResource(t.Context(), resource, nil)
+		require.NoError(t, err)
+		assert.ErrorContains(t, readError(t, b), "status 307")
 	})
 }
 
@@ -502,7 +506,7 @@ func Test_Integration_WgetSchemeRegistration(t *testing.T) {
 			NoRedirect: true,
 		}
 
-		data, err := json.Marshal(original)
+		data, err := json.Marshal(original, runtime.JSONOptions)
 		r.NoError(err)
 
 		raw := &runtime.Raw{
@@ -552,7 +556,7 @@ func Test_Integration_WgetPluginRegistration(t *testing.T) {
 
 	// Verify the ResourceRepository satisfies BuiltinResourceRepository
 	// by checking scheme is returned and types are registered.
-	repo := repository.NewResourceRepository(nil)
+	repo := repository.NewResourceRepository()
 	scheme := repo.GetResourceRepositoryScheme()
 
 	require.NotNil(t, scheme)
@@ -594,7 +598,7 @@ func Test_Integration_WgetAuthExclusiveness(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(srv.Client()))
+	repo := repository.NewResourceRepository(repository.WithHTTPClient(srv.Client()))
 
 	tests := []struct {
 		name     string
@@ -718,7 +722,7 @@ func Test_Integration_WgetMTLS(t *testing.T) {
 
 	t.Run("client certificate authenticates the request", func(t *testing.T) {
 		t.Parallel()
-		repo := repository.NewResourceRepository(nil)
+		repo := repository.NewResourceRepository()
 		resource := wgetResource(t, map[string]any{"url": srv.URL + "/resource"})
 		creds := &credv1.WgetCredentials{
 			Type:                 runtime.NewVersionedType(credv1.WgetCredentialsType, credv1.Version),
@@ -734,7 +738,7 @@ func Test_Integration_WgetMTLS(t *testing.T) {
 
 	t.Run("client certificate composes with a bearer token", func(t *testing.T) {
 		t.Parallel()
-		repo := repository.NewResourceRepository(nil)
+		repo := repository.NewResourceRepository()
 		resource := wgetResource(t, map[string]any{"url": srv.URL + "/resource"})
 		creds := &credv1.WgetCredentials{
 			Type:                 runtime.NewVersionedType(credv1.WgetCredentialsType, credv1.Version),
@@ -751,23 +755,25 @@ func Test_Integration_WgetMTLS(t *testing.T) {
 
 	t.Run("request without a client certificate is rejected", func(t *testing.T) {
 		t.Parallel()
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(srv.Client()))
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(srv.Client()))
 		resource := wgetResource(t, map[string]any{"url": srv.URL + "/resource"})
 
-		_, err := repo.DownloadResource(t.Context(), resource, nil)
-		require.Error(t, err)
+		b, err := repo.DownloadResource(t.Context(), resource, nil)
+		require.NoError(t, err)
+		require.Error(t, readError(t, b))
 	})
 
 	t.Run("credentials without a client certificate are rejected", func(t *testing.T) {
 		t.Parallel()
-		repo := repository.NewResourceRepository(nil, repository.WithHTTPClient(srv.Client()))
+		repo := repository.NewResourceRepository(repository.WithHTTPClient(srv.Client()))
 		resource := wgetResource(t, map[string]any{"url": srv.URL + "/resource"})
 		creds := &credv1.WgetCredentials{
 			Type:          runtime.NewVersionedType(credv1.WgetCredentialsType, credv1.Version),
 			IdentityToken: "my-token",
 		}
 
-		_, err := repo.DownloadResource(t.Context(), resource, creds)
-		require.Error(t, err)
+		b, err := repo.DownloadResource(t.Context(), resource, creds)
+		require.NoError(t, err)
+		require.Error(t, readError(t, b))
 	})
 }

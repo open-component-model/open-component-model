@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -35,6 +35,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
+	"ocm.software/open-component-model/bindings/go/runtime"
+	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
 func Test_Integration_AddComponentVersion_OCIRepository(t *testing.T) {
@@ -65,7 +67,8 @@ configurations:
       properties:
         username: %[3]q
         password: %[4]q
-`,
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`,
 		},
 		{
 			name: "targeting fallback resolvers",
@@ -89,7 +92,8 @@ configurations:
   - repository:
       type: OCIRepository
       hostname: %[1]q
-`,
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`,
 			external: true,
 		},
 		{
@@ -115,7 +119,8 @@ configurations:
       type: OCIRepository/v1
       baseUrl: http://%[1]s:%[2]s
     componentNamePattern: "*"
-`,
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`,
 			external: true,
 		},
 	}
@@ -687,6 +692,13 @@ generated: "2024-01-01T00:00:00.000000000Z"
 	r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
 
 	ctfDir := filepath.Join(tempDir, "ctf")
+	// The chart server runs without TLS, and an http:// URL alone no longer selects plain HTTP.
+	cfgPath := filepath.Join(tempDir, "ocmconfig.yaml")
+	r.NoError(os.WriteFile(cfgPath, []byte(`type: generic.config.ocm.software/v1
+configurations:
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true
+`), os.ModePerm))
 
 	addCMD := cmd.New()
 	addCMD.SetArgs([]string{
@@ -694,6 +706,7 @@ generated: "2024-01-01T00:00:00.000000000Z"
 		"component-version",
 		"--repository", fmt.Sprintf("ctf::%s", ctfDir),
 		"--constructor", constructorPath,
+		"--config", cfgPath,
 	})
 	r.NoError(addCMD.ExecuteContext(ctx), "add cv with helm access should succeed and trigger digest processor")
 
@@ -748,6 +761,13 @@ func Test_Integration_HelmInput_RemoteRepository(t *testing.T) {
 	r.NoError(os.WriteFile(constructorPath, []byte(constructor), os.ModePerm))
 
 	ctfDir := filepath.Join(tempDir, "ctf")
+	// The chart server runs without TLS, and an http:// URL alone no longer selects plain HTTP.
+	cfgPath := filepath.Join(tempDir, "ocmconfig.yaml")
+	r.NoError(os.WriteFile(cfgPath, []byte(`type: generic.config.ocm.software/v1
+configurations:
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true
+`), os.ModePerm))
 
 	addCMD := cmd.New()
 	addCMD.SetArgs([]string{
@@ -755,6 +775,7 @@ func Test_Integration_HelmInput_RemoteRepository(t *testing.T) {
 		"component-version",
 		"--repository", fmt.Sprintf("ctf::%s", ctfDir),
 		"--constructor", constructorPath,
+		"--config", cfgPath,
 	})
 	r.NoError(addCMD.ExecuteContext(ctx), "add cv with remote helm input should succeed")
 
@@ -809,7 +830,8 @@ configurations:
       properties:
         username: %[3]q
         password: %[4]q
-`, registry.Host, registry.Port, registry.User, registry.Password)
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`, registry.Host, registry.Port, registry.User, registry.Password)
 
 	tempDir := t.TempDir()
 	cfgPath := filepath.Join(tempDir, "ocmconfig.yaml")
@@ -906,7 +928,8 @@ configurations:
       properties:
         username: %[3]q
         password: %[4]q
-`, registry.Host, registry.Port, registry.User, registry.Password)
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`, registry.Host, registry.Port, registry.User, registry.Password)
 	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
@@ -1110,7 +1133,7 @@ components:
 
 		// Decode the stored access as plain fields rather than importing the
 		// github binding, keeping this test black-box like its wget sibling.
-		raw, err := json.Marshal(res.Access)
+		raw, err := json.Marshal(res.Access, runtime.JSONOptions)
 		r.NoError(err)
 		var stored map[string]string
 		r.NoError(json.Unmarshal(raw, &stored))
@@ -1310,8 +1333,9 @@ func Test_Integration_AddComponentVersion_GitAccess(t *testing.T) {
 	}})
 	r.NoError(err)
 
-	// A local repository keeps the test offline; file:// runs the same fetch and archive path as a remote.
+	// Git/v1 accesses reject local paths, so the test serves a local repository over HTTP.
 	repoDir, commit := createGitRepository(t)
+	repoURL := testgit.Serve(t, repoDir)
 
 	const componentName = "ocm.software/git-access-component"
 	const componentVersion = "v1.0.0"
@@ -1329,9 +1353,9 @@ components:
     relation: external
     access:
       type: Git/v1
-      repository: file://%s
+      repository: %s
       ref: main
-`, componentName, componentVersion, repoDir)
+`, componentName, componentVersion, repoURL)
 	constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
 	r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
 
@@ -1361,7 +1385,7 @@ components:
 
 	// Decode the stored access as plain fields rather than importing the git binding,
 	// keeping this test black-box like its github sibling.
-	raw, err := json.Marshal(res.Access)
+	raw, err := json.Marshal(res.Access, runtime.JSONOptions)
 	r.NoError(err)
 	var stored map[string]string
 	r.NoError(json.Unmarshal(raw, &stored))
@@ -1409,6 +1433,73 @@ components:
 	}
 	r.Equal(map[string]string{"README.md": "hello from git access\n"}, files)
 	r.Contains(history, ".git/HEAD", "the archive carries the commit history")
+}
+
+// Test_Integration_AddComponentVersion_GitAccess_LocalRejected verifies that add cv
+// rejects a Git access whose repository resolves to a local path (file:// or plain path).
+// Consumption of existing component versions that carry a local git access is unaffected;
+// see Test_Integration_Transfer_Git for end-to-end transfer/download coverage.
+func Test_Integration_AddComponentVersion_GitAccess_LocalRejected(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctx := t.Context()
+
+	registry, err := internal.CreateOCIRegistry(t)
+	r.NoError(err)
+	cfgPath, err := internal.CreateOCMConfigForRegistry(t, []internal.ConfigOpts{{
+		Host: registry.Host, Port: registry.Port, User: registry.User, Password: registry.Password,
+	}})
+	r.NoError(err)
+
+	repoDir, _ := createGitRepository(t)
+
+	const componentName = "ocm.software/git-access-component"
+	const componentVersion = "v1.0.0"
+
+	for _, tc := range []struct {
+		name, repository string
+	}{
+		{name: "file:// URL", repository: "file://" + repoDir},
+		{name: "plain path", repository: repoDir},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+
+			constructorContent := fmt.Sprintf(`
+components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+  - name: repo-archive
+    version: v1.0.0
+    type: blob
+    relation: external
+    access:
+      type: Git/v1
+      repository: %s
+      ref: main
+`, componentName, componentVersion, tc.repository)
+			constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+			r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), os.ModePerm))
+
+			addCMD := cmd.New()
+			addCMD.SetArgs([]string{
+				"add",
+				"component-version",
+				"--repository", fmt.Sprintf("http://%s", registry.RegistryAddress),
+				"--constructor", constructorPath,
+				"--config", cfgPath,
+			})
+			addCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+			defer cancel()
+			err := addCMD.ExecuteContext(addCtx)
+			r.Error(err, "add cv with a local git access must be rejected")
+			r.ErrorContains(err, "local git repository",
+				"error must explain that a local repository is not allowed at creation time")
+		})
+	}
 }
 
 // startS3WithObject starts RustFS holding content at bucket/key and writes an ocmconfig
@@ -1493,7 +1584,8 @@ configurations:
     - type: S3Credentials/v1
       accessKeyId: %[7]q
       secretAccessKey: %[8]q
-`, registry.Host, registry.Port, registry.User, registry.Password, host, port, s3AccessKey, s3SecretKey)
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`, registry.Host, registry.Port, registry.User, registry.Password, host, port, s3AccessKey, s3SecretKey)
 	cfgPath = filepath.Join(t.TempDir(), "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 	return endpoint, cfgPath

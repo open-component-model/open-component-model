@@ -5,7 +5,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -17,6 +18,7 @@ import (
 	ociimagespec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // ArtifactSetFormat is the format of an ArtifactSet.
@@ -84,8 +86,12 @@ const SynthesizedBlobFormatSuffix = "+tar+gzip"
 var recognizedArtifactSetMediaTypes = map[string]bool{
 	"application/vnd.oci.image.manifest.v1" + SynthesizedBlobFormatSuffix: true,
 	"application/vnd.oci.image.index.v1" + SynthesizedBlobFormatSuffix:    true,
-	// TODO(jakobmoellerdev): technically docker image types could be an artifact set too, but
-	//   in the new world its probably not worth supporting as docker has started support for OCI too.
+	// Docker image types are artifact sets too: the OCM library synthesizes them for
+	// docker/dockermulti inputs and OCI resources whose manifests use the docker
+	// media types. Reading and uploading them must preserve the manifest digest, so
+	// they are read as-is (no docker->OCI conversion), same as the OCI variants above.
+	"application/vnd.docker.distribution.manifest.v2" + SynthesizedBlobFormatSuffix:      true,
+	"application/vnd.docker.distribution.manifest.list.v2" + SynthesizedBlobFormatSuffix: true,
 }
 
 // IsArtifactSetMediaType gives confirmation that the given media type is likely containing
@@ -227,7 +233,7 @@ func ConvertToOCIImageLayout(ctx context.Context, as *ArtifactSet, writer io.Wri
 	}()
 
 	layout := ociimagespec.ImageLayout{Version: ociimagespec.ImageLayoutVersion}
-	layoutRaw, err := json.Marshal(layout)
+	layoutRaw, err := json.Marshal(layout, runtime.JSONOptions)
 	if err != nil {
 		return fmt.Errorf("unable to marshal layout: %w", err)
 	}
@@ -257,7 +263,7 @@ func ConvertToOCIImageLayout(ctx context.Context, as *ArtifactSet, writer io.Wri
 		}
 		annotations[ociimagespec.AnnotationRefName] = name
 	}
-	idxJson, err := json.Marshal(idx)
+	idxJson, err := json.Marshal(idx, runtime.JSONOptions)
 	if err != nil {
 		return fmt.Errorf("unable to marshal index.json: %w", err)
 	}
@@ -301,7 +307,8 @@ func ConvertToOCIImageLayout(ctx context.Context, as *ArtifactSet, writer io.Wri
 		if err != nil {
 			return fmt.Errorf("unable to read blob %s: %w", b, err)
 		}
-		if _, err := io.Copy(tw, rc); err != nil {
+		_, copyErr := blob.CopyReader(tw, rc)
+		if err := errors.Join(copyErr, rc.Close()); err != nil {
 			return fmt.Errorf("unable to copy blob %s: %w", b, err)
 		}
 	}
@@ -494,7 +501,12 @@ func decodeIndexFromFS(fs fs.FS, name string) (*ociimagespec.Index, error) {
 		return nil, fmt.Errorf("unable to open %s: %w", name, err)
 	}
 	defer rawidx.Close()
-	if err := json.NewDecoder(rawidx).Decode(&idx); err != nil {
+	// The index decodes with the leniency of encoding/json v1, which wrote and read every
+	// index.json so far: duplicate members take their last value, invalid UTF-8 is
+	// tolerated and data after the index value is ignored. Tightening any of these would
+	// make an archive that opens today unopenable.
+	dec := jsontext.NewDecoder(rawidx, jsontext.AllowDuplicateNames(true), jsontext.AllowInvalidUTF8(true))
+	if err := json.UnmarshalDecode(dec, &idx, runtime.JSONDecodeOptions); err != nil {
 		return nil, fmt.Errorf("unable to decode %s: %w", name, err)
 	}
 	return &idx, err

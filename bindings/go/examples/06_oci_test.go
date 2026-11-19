@@ -21,12 +21,13 @@ import (
 	"testing"
 
 	"github.com/opencontainers/go-digest"
+	"github.com/oras-project/oras-go/v3/registry/remote/auth"
+	orascreds "github.com/oras-project/oras-go/v3/registry/remote/credentials"
+	"github.com/oras-project/oras-go/v3/registry/remote/retry"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/registry"
 	"golang.org/x/crypto/bcrypt"
-	"oras.land/oras-go/v2/registry/remote/auth"
-	"oras.land/oras-go/v2/registry/remote/retry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
@@ -304,7 +305,7 @@ func TestExample_PrivateOCIRegistry(t *testing.T) {
 		urlresolver.WithBaseClient(&auth.Client{
 			Client: retry.DefaultClient,
 			Cache:  auth.NewCache(),
-			Credential: auth.StaticCredential(registryAddress, auth.Credential{
+			CredentialFunc: orascreds.StaticCredentialFunc(registryAddress, orascreds.Credential{
 				Username: username,
 				Password: password,
 			}),

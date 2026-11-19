@@ -1,7 +1,7 @@
 package component
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/opencontainers/go-digest"

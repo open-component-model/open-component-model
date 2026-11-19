@@ -9,10 +9,12 @@ import (
 	"crypto/x509/pkix"
 	"encoding/asn1"
 	"encoding/base64"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"math/big"
 	"os"
+	"path/filepath"
+	goruntime "runtime"
 	"slices"
 	"testing"
 	"time"
@@ -28,6 +30,14 @@ import (
 	signerv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/signer/v1alpha1"
 	verifierv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/identity/verifier/v1alpha1"
 )
+
+// absPath turns a slash-separated absolute path into an absolute path on the current OS.
+func absPath(p string) string {
+	if goruntime.GOOS == "windows" {
+		return `C:` + filepath.FromSlash(p)
+	}
+	return p
+}
 
 // execRecorder captures args and env from ExecCosign calls and optionally writes a bundle file.
 type execRecorder struct {
@@ -159,7 +169,7 @@ func fakeBundleJSONWithCert(t *testing.T, issuer string) []byte {
 			"signature":     "",
 		},
 	}
-	data, err := json.Marshal(bundle)
+	data, err := json.Marshal(bundle, runtime.JSONOptions)
 	require.NoError(t, err)
 	return data
 }
@@ -193,6 +203,53 @@ func fakeBundleJSONWithCertV2(t *testing.T, issuer string) []byte {
 		"verificationMaterial": map[string]any{
 			"certificate": map[string]string{"rawBytes": certB64},
 			"tlogEntries": []any{},
+		},
+		"messageSignature": map[string]any{
+			"messageDigest": map[string]string{"algorithm": "SHA2_256", "digest": ""},
+			"signature":     "",
+		},
+	}
+	data, err := json.Marshal(bundle, runtime.JSONOptions)
+	require.NoError(t, err)
+	return data
+}
+
+// fakeBundleJSONWithTimestamp returns a fake Sigstore bundle that includes a
+// non-empty timestampVerificationData field, simulating a TSA-timestamped
+// bundle produced by a private-infrastructure Sigstore stack.
+func fakeBundleJSONWithTimestamp(t *testing.T) []byte {
+	t.Helper()
+
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+
+	template := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "test"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		BasicConstraintsValid: true,
+		EmailAddresses:        []string{"signer@example.com"},
+		ExtraExtensions: []pkix.Extension{
+			{Id: sigstoreIssuerV1OID, Value: []byte("https://accounts.google.com")},
+		},
+	}
+
+	certDER, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	require.NoError(t, err)
+
+	certB64 := base64.StdEncoding.EncodeToString(certDER)
+	bundle := map[string]any{
+		"mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+		"verificationMaterial": map[string]any{
+			"certificate": map[string]string{"rawBytes": certB64},
+			"tlogEntries": []any{},
+			// Non-empty timestampVerificationData signals that a TSA signed timestamp is present.
+			"timestampVerificationData": map[string]any{
+				"rfc3161Timestamps": []any{
+					map[string]string{"signedTimestamp": base64.StdEncoding.EncodeToString([]byte("fake-tsa-timestamp"))},
+				},
+			},
 		},
 		"messageSignature": map[string]any{
 			"messageDigest": map[string]string{"algorithm": "SHA2_256", "digest": ""},
@@ -577,7 +634,7 @@ func TestVerify_TUF_ROOT_DoesNotSuppressTrustedRootFlag(t *testing.T) {
 
 	cfg := testVerifyConfig()
 	creds := &trustedrootv1.TrustedRoot{
-		TrustedRootJSONFile: "/cred/root.json",
+		TrustedRootJSONFile: absPath("/cred/root.json"),
 	}
 
 	bundleJSON := fakeBundleJSON(t)
@@ -593,7 +650,7 @@ func TestVerify_TUF_ROOT_DoesNotSuppressTrustedRootFlag(t *testing.T) {
 
 	err := h.Verify(t.Context(), signed, cfg, creds)
 	require.NoError(t, err)
-	require.Equal(t, "/cred/root.json", argValue(mock.lastVerifyArgs, "--trusted-root"),
+	require.Equal(t, absPath("/cred/root.json"), argValue(mock.lastVerifyArgs, "--trusted-root"),
 		"TUF_ROOT is for TUF cache, not trusted root — credential should still produce --trusted-root")
 }
 
@@ -608,6 +665,7 @@ func TestHandler_Verify(t *testing.T) {
 		creds      runtime.Typed
 		mockErr    error
 		wantErr    string
+		bundleJSON func(t *testing.T) []byte
 		assertArgs func(t *testing.T, args []string)
 		assertMock func(t *testing.T, mock *execRecorder)
 	}{
@@ -630,7 +688,7 @@ func TestHandler_Verify(t *testing.T) {
 				cfg.CertificateOIDCIssuerRegexp = ".*google.*"
 				cfg.CertificateIdentityRegexp = ".*@example.com"
 			},
-			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/path/to/trusted_root.json"},
+			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: absPath("/path/to/trusted_root.json")},
 			assertArgs: func(t *testing.T, args []string) {
 				t.Helper()
 				r := require.New(t)
@@ -638,7 +696,7 @@ func TestHandler_Verify(t *testing.T) {
 				r.False(hasArg(args, "--certificate-oidc-issuer"))
 				r.Equal(".*@example.com", argValue(args, "--certificate-identity-regexp"))
 				r.Equal(".*google.*", argValue(args, "--certificate-oidc-issuer-regexp"))
-				r.Equal("/path/to/trusted_root.json", argValue(args, "--trusted-root"))
+				r.Equal(absPath("/path/to/trusted_root.json"), argValue(args, "--trusted-root"))
 			},
 		},
 		{
@@ -646,12 +704,65 @@ func TestHandler_Verify(t *testing.T) {
 			cfgSetup: func(cfg *v1alpha1.VerifyConfig) {
 				cfg.PrivateInfrastructure = true
 			},
-			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/path/to/private_trusted_root.json"},
+			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: absPath("/path/to/private_trusted_root.json")},
 			assertArgs: func(t *testing.T, args []string) {
 				t.Helper()
 				r := require.New(t)
 				r.True(hasArg(args, "--insecure-ignore-tlog"))
-				r.Equal("/path/to/private_trusted_root.json", argValue(args, "--trusted-root"))
+				r.Equal(absPath("/path/to/private_trusted_root.json"), argValue(args, "--trusted-root"))
+			},
+		},
+		{
+			// When PrivateInfrastructure=true and the bundle carries a signed timestamp
+			// (timestampVerificationData), cosign must receive --use-signed-timestamps so it
+			// validates the Fulcio leaf certificate against the bundle timestamp instead of
+			// wall-clock time. Without it, any aged keyless signature fails verification.
+			name: "private infrastructure with signed timestamp adds --use-signed-timestamps",
+			cfgSetup: func(cfg *v1alpha1.VerifyConfig) {
+				cfg.PrivateInfrastructure = true
+			},
+			creds:      &trustedrootv1.TrustedRoot{TrustedRootJSONFile: absPath("/path/to/private_trusted_root.json")},
+			bundleJSON: fakeBundleJSONWithTimestamp,
+			assertMock: func(t *testing.T, mock *execRecorder) {
+				t.Helper()
+				r := require.New(t)
+				r.True(hasArg(mock.lastVerifyArgs, "--use-signed-timestamps"),
+					"expected --use-signed-timestamps in verify args: %v", mock.lastVerifyArgs)
+				r.True(hasArg(mock.lastVerifyArgs, "--insecure-ignore-tlog"),
+					"expected --insecure-ignore-tlog in verify args: %v", mock.lastVerifyArgs)
+			},
+		},
+		{
+			// When PrivateInfrastructure=true but the bundle has NO signed timestamp, we must
+			// NOT pass --use-signed-timestamps (cosign would fail if there is nothing to verify).
+			name: "private infrastructure without signed timestamp omits --use-signed-timestamps",
+			cfgSetup: func(cfg *v1alpha1.VerifyConfig) {
+				cfg.PrivateInfrastructure = true
+			},
+			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: absPath("/path/to/private_trusted_root.json")},
+			// Default bundle (fakeBundleJSON) has no timestampVerificationData.
+			assertArgs: func(t *testing.T, args []string) {
+				t.Helper()
+				r := require.New(t)
+				r.False(hasArg(args, "--use-signed-timestamps"),
+					"--use-signed-timestamps must NOT be added when there is no signed timestamp")
+				r.True(hasArg(args, "--insecure-ignore-tlog"))
+			},
+		},
+		{
+			// --use-signed-timestamps and --insecure-ignore-tlog are added only on the
+			// private-infrastructure path. A public verify uses the tlog, so it must omit
+			// both even when the bundle carries a signed timestamp (timestampVerificationData).
+			name:       "public infrastructure with signed timestamp omits --use-signed-timestamps",
+			creds:      &trustedrootv1.TrustedRoot{TrustedRootJSON: `{"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1"}`},
+			bundleJSON: fakeBundleJSONWithTimestamp,
+			assertArgs: func(t *testing.T, args []string) {
+				t.Helper()
+				r := require.New(t)
+				r.False(hasArg(args, "--use-signed-timestamps"),
+					"--use-signed-timestamps must NOT be added for public infrastructure")
+				r.False(hasArg(args, "--insecure-ignore-tlog"),
+					"public infrastructure must not ignore the tlog")
 			},
 		},
 		{
@@ -666,10 +777,10 @@ func TestHandler_Verify(t *testing.T) {
 		},
 		{
 			name:  "trusted root from file credential",
-			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/custom/path/trusted_root.json"},
+			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: absPath("/custom/path/trusted_root.json")},
 			assertArgs: func(t *testing.T, args []string) {
 				t.Helper()
-				require.Equal(t, "/custom/path/trusted_root.json", argValue(args, "--trusted-root"))
+				require.Equal(t, absPath("/custom/path/trusted_root.json"), argValue(args, "--trusted-root"))
 			},
 		},
 		{
@@ -700,6 +811,9 @@ func TestHandler_Verify(t *testing.T) {
 			}
 
 			bundleJSON := fakeBundleJSON(t)
+			if tc.bundleJSON != nil {
+				bundleJSON = tc.bundleJSON(t)
+			}
 			signed := descruntime.Signature{
 				Name:   "test-sig",
 				Digest: testDigest(),
@@ -923,8 +1037,8 @@ func TestResolveTrustedRootPath(t *testing.T) {
 		},
 		{
 			name:  "file credential used",
-			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/cred/root.json"},
-			want:  "/cred/root.json",
+			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: absPath("/cred/root.json")},
+			want:  absPath("/cred/root.json"),
 		},
 		{
 			name:  "empty when nothing set",
@@ -938,7 +1052,7 @@ func TestResolveTrustedRootPath(t *testing.T) {
 		},
 		{
 			name:    "path traversal rejected",
-			creds:   &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/legit/../../../etc/passwd"},
+			creds:   &trustedrootv1.TrustedRoot{TrustedRootJSONFile: absPath("/legit/../../../etc/passwd")},
 			wantErr: "non-canonical",
 		},
 		{
@@ -953,8 +1067,8 @@ func TestResolveTrustedRootPath(t *testing.T) {
 		},
 		{
 			name:  "valid absolute path accepted",
-			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: "/opt/sigstore/trusted_root.json"},
-			want:  "/opt/sigstore/trusted_root.json",
+			creds: &trustedrootv1.TrustedRoot{TrustedRootJSONFile: absPath("/opt/sigstore/trusted_root.json")},
+			want:  absPath("/opt/sigstore/trusted_root.json"),
 		},
 	}
 
@@ -1253,7 +1367,7 @@ func TestExtractCertInfoFromBundleJSON(t *testing.T) {
 						"certificate": map[string]string{"rawBytes": certB64},
 					},
 				}
-				data, err := json.Marshal(bundle)
+				data, err := json.Marshal(bundle, runtime.JSONOptions)
 				require.NoError(t, err)
 				return data
 			},
@@ -1283,7 +1397,7 @@ func TestExtractCertInfoFromBundleJSON(t *testing.T) {
 						"certificate": map[string]string{"rawBytes": certB64},
 					},
 				}
-				data, err := json.Marshal(bundle)
+				data, err := json.Marshal(bundle, runtime.JSONOptions)
 				require.NoError(t, err)
 				return data
 			},
@@ -1328,19 +1442,91 @@ func TestExtractCertInfoFromBundleJSON(t *testing.T) {
 	}
 }
 
-func TestWithOperationTimeout_DeadlineExceeded(t *testing.T) {
-	t.Parallel()
+// hangingCosignEnv makes the test binary act as a cosign whose signing never finishes, see TestMain.
+const hangingCosignEnv = "OCM_SIGSTORE_HANDLER_TEST_HANGING_COSIGN"
 
+func TestMain(m *testing.M) {
+	if os.Getenv(hangingCosignEnv) != "" {
+		if len(os.Args) > 1 && os.Args[1] == "version" {
+			_, _ = fmt.Fprintln(os.Stdout, "GitVersion: v99.0.0")
+			os.Exit(0)
+		}
+		time.Sleep(time.Hour)
+		os.Exit(1)
+	}
+	os.Exit(m.Run())
+}
+
+func TestWithOperationTimeout_DeadlineExceeded(t *testing.T) {
+	// Not parallel: the hanging cosign is selected through the environment inherited by the child process.
+	t.Setenv(hangingCosignEnv, "1")
+	executable, err := os.Executable()
+	require.NoError(t, err)
 	h := New(
-		WithLookPath(func(string) (string, error) { return "/bin/sleep", nil }),
-		WithOperationTimeout(time.Nanosecond),
+		WithLookPath(func(string) (string, error) { return executable, nil }),
+		WithOperationTimeout(500*time.Millisecond),
 	)
 
-	_, err := h.Sign(
+	_, err = h.Sign(
 		t.Context(),
 		testDigest(),
 		testSignConfig(),
 		&oidcv1.OIDCIdentityToken{Token: "tok"},
 	)
 	require.ErrorContains(t, err, "timed out")
+}
+
+// --- BundleHasSignedTimestamp Tests ---
+
+func TestBundleHasSignedTimestamp(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{
+			name:  "absent field returns false",
+			input: `{"verificationMaterial":{}}`,
+			want:  false,
+		},
+		{
+			name:  "null field returns false",
+			input: `{"verificationMaterial":{"timestampVerificationData":null}}`,
+			want:  false,
+		},
+		{
+			name:  "empty object returns false",
+			input: `{"verificationMaterial":{"timestampVerificationData":{}}}`,
+			want:  false,
+		},
+		{
+			name:  "empty rfc3161Timestamps array returns false",
+			input: `{"verificationMaterial":{"timestampVerificationData":{"rfc3161Timestamps":[]}}}`,
+			want:  false,
+		},
+		{
+			name:  "one rfc3161 entry returns true",
+			input: `{"verificationMaterial":{"timestampVerificationData":{"rfc3161Timestamps":[{}]}}}`,
+			want:  true,
+		},
+		{
+			name:  "invalid JSON returns false",
+			input: `not json`,
+			want:  false,
+		},
+		{
+			name:  "empty string returns false",
+			input: ``,
+			want:  false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, bundleHasSignedTimestamp([]byte(tc.input)))
+		})
+	}
 }

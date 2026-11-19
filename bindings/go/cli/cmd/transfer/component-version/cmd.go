@@ -3,7 +3,8 @@ package component_version
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -63,7 +64,7 @@ a target repository using an internally generated transformation graph.
 When a version is included in the source reference, exactly that version is transferred.
 A digest pins it (see "ocm get cv --help"). With an OCI digest, "@sha256:<hex>", the descriptor and all
 local resources are read from the source artifact with that digest instead of through the version tag,
-and the version may be omitted. With a normalized digest, "@jsonNormalisation.v4alpha1+sha256:<hex>"
+and the version may be omitted. With a normalized digest, "@jsonNormalisation.v4alpha3+sha256:<hex>"
 (the digest signatures sign), the transfer fails unless the source descriptor matches it. An OCI digest
 is specific to the source repository; a normalized digest also matches the transferred copy.
 When the version is omitted (and no OCI digest is given), all versions of the component are discovered and transferred.
@@ -283,6 +284,7 @@ func TransferComponentVersion(cmd *cobra.Command, args []string) error {
 		pm.ResourcePluginRegistry,
 		credGraph,
 		transfer.WithHTTPConfig(httpConfig),
+		transfer.WithTempDir(tempFolder(octx)),
 	)
 	// BuildAndCheck wires and checks every transformation node; the node count
 	// is known from the TGD, so track it as a determinate operation.
@@ -648,18 +650,17 @@ func renderTGD(tgd *transformv1alpha1.TransformationGraphDefinition, format stri
 	switch format {
 	case render.OutputFormatJSON.String():
 		read, write := io.Pipe()
-		encoder := json.NewEncoder(write)
-		encoder.SetIndent("", "  ")
+		encoder := jsontext.NewEncoder(write, jsontext.WithIndent("  "))
 		go func() {
-			err := encoder.Encode(tgd)
+			err := json.MarshalEncode(encoder, tgd, runtime.JSONOptions)
 			_ = write.CloseWithError(err)
 		}()
 		return read, nil
 	case render.OutputFormatNDJSON.String():
 		read, write := io.Pipe()
-		encoder := json.NewEncoder(write)
+		encoder := jsontext.NewEncoder(write)
 		go func() {
-			err := encoder.Encode(tgd)
+			err := json.MarshalEncode(encoder, tgd, runtime.JSONOptions)
 			_ = write.CloseWithError(err)
 		}()
 		return read, nil
@@ -672,4 +673,13 @@ func renderTGD(tgd *transformv1alpha1.TransformationGraphDefinition, format stri
 	default:
 		return nil, fmt.Errorf("invalid output format %q", format)
 	}
+}
+
+// tempFolder returns the temporary folder of the filesystem configuration (which
+// --temp-folder overrides), or "" for the default of the operating system.
+func tempFolder(octx *ocmctx.Context) string {
+	if cfg := octx.FilesystemConfig(); cfg != nil && cfg.TempFolder != nil {
+		return *cfg.TempFolder
+	}
+	return ""
 }

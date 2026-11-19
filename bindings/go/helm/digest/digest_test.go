@@ -1,17 +1,26 @@
 package digest_test
 
 import (
-	"encoding/json"
+	"context"
+	"encoding/json/v2"
+	"encoding/pem"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	godigest "github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/helm/digest"
+	"ocm.software/open-component-model/bindings/go/helm/spec/access"
 	"ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -40,14 +49,12 @@ entries:
       version: 1.0.0
       digest: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
       apiVersion: v2
-  nodigest:
-    - urls:
-        - https://example.com/charts/nodigest-1.0.0.tgz
-      name: nodigest
-      description: A chart without digest
-      version: 1.0.0
-      apiVersion: v2
 `
+
+// plainHTTPConfig enables plain HTTP for every host, as the httptest servers need.
+func plainHTTPConfig() *httpv1alpha1.Config {
+	return &httpv1alpha1.Config{ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: new(true)}}
+}
 
 func helmAccessResource(t *testing.T, helmRepository, helmChart string) *descruntime.Resource {
 	t.Helper()
@@ -56,7 +63,7 @@ func helmAccessResource(t *testing.T, helmRepository, helmChart string) *descrun
 		"helmRepository": helmRepository,
 		"helmChart":      helmChart,
 	}
-	raw, err := json.Marshal(data)
+	raw, err := json.Marshal(data, runtime.JSONOptions)
 	require.NoError(t, err)
 
 	r := &descruntime.Resource{}
@@ -175,7 +182,7 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 
 	t.Run("applies digest from index with sha256 prefix", func(t *testing.T) {
 		t.Parallel()
-		p := digest.NewDigestProcessor(t.TempDir())
+		p := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig()))
 		resource := helmAccessResource(t, srv.URL, "mychart:1.0.0")
 
 		result, err := p.ProcessResourceDigest(t.Context(), resource, nil)
@@ -190,7 +197,7 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 
 	t.Run("applies digest from index with bare hex", func(t *testing.T) {
 		t.Parallel()
-		p := digest.NewDigestProcessor(t.TempDir())
+		p := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig()))
 		resource := helmAccessResource(t, srv.URL, "barehex:1.0.0")
 
 		result, err := p.ProcessResourceDigest(t.Context(), resource, nil)
@@ -204,7 +211,7 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 
 	t.Run("does not mutate original resource", func(t *testing.T) {
 		t.Parallel()
-		p := digest.NewDigestProcessor(t.TempDir())
+		p := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig()))
 		resource := helmAccessResource(t, srv.URL, "mychart:1.0.0")
 
 		result, err := p.ProcessResourceDigest(t.Context(), resource, nil)
@@ -217,7 +224,7 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 
 	t.Run("verifies matching existing digest", func(t *testing.T) {
 		t.Parallel()
-		p := digest.NewDigestProcessor(t.TempDir())
+		p := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig()))
 		resource := helmAccessResource(t, srv.URL, "mychart:1.0.0")
 		resource.Digest = &descruntime.Digest{
 			HashAlgorithm:          "SHA-256",
@@ -233,7 +240,7 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 
 	t.Run("returns error on digest mismatch", func(t *testing.T) {
 		t.Parallel()
-		p := digest.NewDigestProcessor(t.TempDir())
+		p := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig()))
 		resource := helmAccessResource(t, srv.URL, "mychart:1.0.0")
 		resource.Digest = &descruntime.Digest{
 			HashAlgorithm:          "SHA-256",
@@ -246,19 +253,9 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 		assert.Contains(t, err.Error(), "digest value mismatch")
 	})
 
-	t.Run("returns error when chart has no digest in index", func(t *testing.T) {
-		t.Parallel()
-		p := digest.NewDigestProcessor(t.TempDir())
-		resource := helmAccessResource(t, srv.URL, "nodigest:1.0.0")
-
-		_, err := p.ProcessResourceDigest(t.Context(), resource, nil)
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "has no digest")
-	})
-
 	t.Run("returns error when chart not found in index", func(t *testing.T) {
 		t.Parallel()
-		p := digest.NewDigestProcessor(t.TempDir())
+		p := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig()))
 		resource := helmAccessResource(t, srv.URL, "nonexistent:1.0.0")
 
 		_, err := p.ProcessResourceDigest(t.Context(), resource, nil)
@@ -266,15 +263,217 @@ func TestProcessResourceDigest_HTTP(t *testing.T) {
 		assert.Contains(t, err.Error(), "not found in repository index")
 	})
 
+	// A requested version is matched verbatim: helm's own index lookup treats it as a SemVer
+	// constraint and falls back to the closest version, which would digest a chart nobody asked for.
+	t.Run("returns error for a version that is only a constraint match", func(t *testing.T) {
+		t.Parallel()
+		p := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig()))
+
+		for _, version := range []string{"1.0-287.87c9d32.master.309", "1.x", "^1.0.0"} {
+			_, err := p.ProcessResourceDigest(t.Context(), helmAccessResource(t, srv.URL, "mychart:"+version), nil)
+			require.Error(t, err, "version %q must not resolve", version)
+			assert.Contains(t, err.Error(), `version "`+version+`" not found in repository index (available: 1.0.0, 0.1.0)`)
+		}
+	})
+
+	// SemVer does not make a leading "v" part of the version, and helm itself resolves it, so
+	// a "v"-spelled access keeps working instead of failing on an exact string comparison.
+	t.Run("resolves a v-prefixed version against an unprefixed index entry", func(t *testing.T) {
+		t.Parallel()
+		p := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig()))
+
+		result, err := p.ProcessResourceDigest(t.Context(), helmAccessResource(t, srv.URL, "mychart:v1.0.0"), nil)
+		require.NoError(t, err)
+		assert.Equal(t, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", result.Digest.Value)
+	})
+
+	// Without a version the index picks its newest chart; the digest is only reproducible if
+	// the access records which version that was.
+	t.Run("pins the version the index selects when the access has none", func(t *testing.T) {
+		t.Parallel()
+		p := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig()))
+		resource := helmAccessResource(t, srv.URL, "mychart")
+
+		result, err := p.ProcessResourceDigest(t.Context(), resource, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", result.Digest.Value)
+
+		pinned := v1.Helm{}
+		require.NoError(t, access.Scheme.Convert(result.Access, &pinned))
+		assert.Equal(t, "1.0.0", pinned.GetVersion())
+
+		original := v1.Helm{}
+		require.NoError(t, access.Scheme.Convert(resource.Access, &original))
+		assert.Empty(t, original.GetVersion(), "the input resource must not be mutated")
+	})
+
 	t.Run("returns error for empty helm repository", func(t *testing.T) {
 		t.Parallel()
-		p := digest.NewDigestProcessor(t.TempDir())
+		p := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig()))
 		resource := helmAccessResource(t, "", "mychart:1.0.0")
 
 		_, err := p.ProcessResourceDigest(t.Context(), resource, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "helm repository URL is required")
 	})
+}
+
+// An http:// repository index is fetched only when plainHTTP is enabled for its host,
+// as for chart downloads.
+func TestProcessResourceDigest_HTTPIndexNeedsPlainHTTP(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		assert.Fail(t, "no request may reach the repository")
+	}))
+	t.Cleanup(srv.Close)
+
+	for name, opts := range map[string][]digest.Option{
+		"without the HTTP configuration": nil,
+		"with plainHTTP not enabled":     {digest.WithHTTPConfig(&httpv1alpha1.Config{})},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := require.New(t)
+			_, err := digest.NewDigestProcessor(t.TempDir(), opts...).ProcessResourceDigest(t.Context(), helmAccessResource(t, srv.URL, "mychart:1.0.0"), nil)
+			r.ErrorContains(err, "plain HTTP is not enabled")
+		})
+	}
+}
+
+func TestProcessResourceDigest_HTTPIndexWithoutDigest(t *testing.T) {
+	tgz, err := os.ReadFile("../testdata/mychart-0.1.0.tgz")
+	require.NoError(t, err)
+	var srv *httptest.Server
+	srv = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/index.yaml":
+			_, _ = fmt.Fprintf(w, "apiVersion: v1\nentries:\n  mychart:\n    - urls: [%s/mychart-0.1.0.tgz]\n      name: mychart\n      version: 0.1.0\n      apiVersion: v2\n", srv.URL)
+		case "/mychart-0.1.0.tgz":
+			_, _ = w.Write(tgz)
+		default:
+			http.NotFound(w, req)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	trusted := &httpv1alpha1.Config{TLSConfig: httpv1alpha1.TLSConfig{
+		RootCAsPEM: string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})),
+	}}
+
+	for _, tc := range []struct {
+		name    string
+		chart   string
+		opts    []digest.Option
+		wantErr string
+	}{
+		{name: "with the HTTP configuration", chart: "mychart:0.1.0", opts: []digest.Option{digest.WithHTTPConfig(trusted)}},
+		{name: "without a requested version, the version the index selects", chart: "mychart", opts: []digest.Option{digest.WithHTTPConfig(trusted)}},
+		{name: "without the HTTP configuration", chart: "mychart:0.1.0", wantErr: "certificate"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			result, err := digest.NewDigestProcessor(t.TempDir(), tc.opts...).ProcessResourceDigest(t.Context(), helmAccessResource(t, srv.URL, tc.chart), nil)
+			if tc.wantErr != "" {
+				r.ErrorContains(err, tc.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.Equal(godigest.FromBytes(tgz).Encoded(), result.Digest.Value)
+			r.Equal("genericBlobDigest/v1", result.Digest.NormalisationAlgorithm)
+		})
+	}
+}
+
+// The chart the index selects is downloaded from the URL the index lists, resolved against
+// the repository, without fetching the index again. Credentials go to the repository host only.
+func TestProcessResourceDigest_HTTPIndexWithoutDigestDownloadsListedURL(t *testing.T) {
+	tgz, err := os.ReadFile("../testdata/mychart-0.1.0.tgz")
+	require.NoError(t, err)
+	creds := &runtime.Raw{
+		Type: runtime.NewVersionedType("HelmHTTPCredentials", "v1"),
+		Data: []byte(`{"type":"HelmHTTPCredentials/v1","username":"user","password":"secret"}`),
+	}
+
+	// elsewhere serves the chart on another host and records whether credentials reached it.
+	var elsewhereAuth atomic.Bool
+	elsewhere := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if _, _, ok := req.BasicAuth(); ok {
+			elsewhereAuth.Store(true)
+		}
+		_, _ = w.Write(tgz)
+	}))
+	t.Cleanup(elsewhere.Close)
+
+	for _, tc := range []struct {
+		name      string
+		chartURL  func(repo string) string
+		wantAuth  bool
+		elsewhere bool
+	}{
+		{name: "relative URL on the repository host", chartURL: func(string) string { return "charts/mychart-0.1.0.tgz" }, wantAuth: true},
+		{name: "absolute URL on another host", chartURL: func(string) string { return elsewhere.URL + "/mychart-0.1.0.tgz" }, elsewhere: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			elsewhereAuth.Store(false)
+			var indexFetches atomic.Int32
+			var chartAuth atomic.Bool
+			var srv *httptest.Server
+			srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				switch req.URL.Path {
+				case "/index.yaml":
+					indexFetches.Add(1)
+					_, _ = fmt.Fprintf(w, "apiVersion: v1\nentries:\n  mychart:\n    - urls: [%s]\n      name: mychart\n      version: 0.1.0\n      apiVersion: v2\n", tc.chartURL(srv.URL))
+				case "/charts/mychart-0.1.0.tgz":
+					_, _, ok := req.BasicAuth()
+					chartAuth.Store(ok)
+					_, _ = w.Write(tgz)
+				default:
+					http.NotFound(w, req)
+				}
+			}))
+			t.Cleanup(srv.Close)
+
+			result, err := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig())).ProcessResourceDigest(t.Context(), helmAccessResource(t, srv.URL, "mychart:0.1.0"), creds)
+			r.NoError(err)
+			r.Equal(godigest.FromBytes(tgz).Encoded(), result.Digest.Value)
+			r.Equal(int32(1), indexFetches.Load(), "the index is fetched once")
+			if tc.elsewhere {
+				r.False(elsewhereAuth.Load(), "credentials must not reach another host")
+			} else {
+				r.Equal(tc.wantAuth, chartAuth.Load())
+			}
+		})
+	}
+}
+
+// Cancelling digest processing ends a stalled chart download with an HTTP configuration,
+// so no request outlives the reconciliation that started it.
+func TestProcessResourceDigest_CancelEndsStalledChartDownload(t *testing.T) {
+	r := require.New(t)
+	requested, aborted := make(chan struct{}), make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		switch req.URL.Path {
+		case "/index.yaml":
+			_, _ = fmt.Fprint(w, "apiVersion: v1\nentries:\n  mychart:\n    - urls: [mychart-0.1.0.tgz]\n      name: mychart\n      version: 0.1.0\n      apiVersion: v2\n")
+		case "/mychart-0.1.0.tgz":
+			close(requested)
+			<-req.Context().Done()
+			close(aborted)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	go func() {
+		<-requested
+		cancel()
+	}()
+	_, err := digest.NewDigestProcessor(t.TempDir(), digest.WithHTTPConfig(plainHTTPConfig())).
+		ProcessResourceDigest(ctx, helmAccessResource(t, srv.URL, "mychart:0.1.0"), nil)
+	r.ErrorIs(err, context.Canceled)
+	select {
+	case <-aborted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the chart request was not cancelled")
+	}
 }
 
 func TestProcessResourceDigest_RealRepo(t *testing.T) {

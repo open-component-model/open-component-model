@@ -1,19 +1,21 @@
 package tar
 
 import (
-	"compress/gzip"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
 	"maps"
+	"slices"
+	"sync"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2"
-	"oras.land/oras-go/v2/content"
+	"github.com/oras-project/oras-go/v3"
+	"github.com/oras-project/oras-go/v3/content"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/compression/gzippool"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
@@ -27,19 +29,33 @@ type CopyToOCILayoutOptions struct {
 
 // CopyToOCILayoutInMemory streams the contents of an OCI graph from the given
 // ReadOnlyGraphStorage into an in-memory OCI layout archive (gzipped tar),
-// returning a Blob that can be read by consumers. The actual copy happens
-// asynchronously in a goroutine; if the caller never reads from the returned
-// Blob, the copy will block.
+// returning a Blob that can be read by consumers. The copy runs asynchronously
+// in a goroutine that is only started on the first read of the returned Blob,
+// so a Blob that is never read holds no goroutine or scratch file.
 //
 // Returns an inmemory.Blob wrapping the read side of a pipe, with media type
 // [layout.MediaTypeOCIImageLayoutTarGzipV1].
 func CopyToOCILayoutInMemory(ctx context.Context, src content.ReadOnlyGraphStorage, base ociImageSpecV1.Descriptor, opts CopyToOCILayoutOptions) (*inmemory.Blob, error) {
 	r, w := io.Pipe()
+	lazy := &lazyStartReader{
+		r:     r,
+		start: func() { go copyToOCILayoutInMemoryAsync(ctx, src, base, opts, w) },
+	}
 
-	go copyToOCILayoutInMemoryAsync(ctx, src, base, opts, w)
-
-	downloaded := inmemory.New(r, inmemory.WithMediaType(layout.MediaTypeOCIImageLayoutTarGzipV1))
+	downloaded := inmemory.New(lazy, inmemory.WithMediaType(layout.MediaTypeOCIImageLayoutTarGzipV1))
 	return downloaded, nil
+}
+
+// lazyStartReader runs start once before the first Read from r.
+type lazyStartReader struct {
+	once  sync.Once
+	start func()
+	r     io.Reader
+}
+
+func (l *lazyStartReader) Read(p []byte) (int, error) {
+	l.once.Do(l.start)
+	return l.r.Read(p)
 }
 
 // copyToOCILayoutInMemoryAsync performs the actual OCI‐layout archive creation
@@ -53,9 +69,10 @@ func copyToOCILayoutInMemoryAsync(ctx context.Context, src content.ReadOnlyGraph
 		w.CloseWithError(err)
 	}()
 
-	zippedBuf := gzip.NewWriter(w)
+	zippedBuf := gzippool.Get(w)
 	defer func() {
 		err = errors.Join(err, zippedBuf.Close())
+		gzippool.Put(zippedBuf)
 	}()
 
 	// Create an OCI layout writer over the gzip stream.
@@ -101,7 +118,7 @@ type CopyOCILayoutWithIndexOptions struct {
 
 // CopyOCILayoutWithIndex reads an OCI layout tarball from src, picks the
 // layout's top-level manifest or index via [pickTopLevelDescriptor], and copies
-// its full graph into dst via [oras.ExtendedCopyGraph], including referrers.
+// its full graph into dst via [CopyGraphWithRoot].
 //
 // Returns the descriptor of the root that was copied.
 func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.ReadOnlyBlob, opts CopyOCILayoutWithIndexOptions) (top ociImageSpecV1.Descriptor, err error) {
@@ -117,11 +134,27 @@ func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.R
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, err
 	}
+	return CopyGraphWithRoot(ctx, dst, ociStore, index, opts)
+}
+
+// CopyGraphWithRoot copies the graph rooted at root from src into dst via
+// [oras.ExtendedCopyGraph], including referrers. [CopyOCILayoutWithIndexOptions.MutateParentFunc]
+// runs once against root before any write.
+//
+// Returns the (possibly mutated) root that was copied.
+func CopyGraphWithRoot(ctx context.Context, dst content.Storage, src content.ReadOnlyGraphStorage, root ociImageSpecV1.Descriptor, opts CopyOCILayoutWithIndexOptions) (ociImageSpecV1.Descriptor, error) {
 	// We call the mutateParentFunc here instead of directly in FindSuccessors
 	// as the FindSuccessors path is only reached if there is a referrer in the
-	// source layout.
+	// source. It may mutate Annotations and Platform, which root shares with
+	// the caller.
+	root.Annotations = maps.Clone(root.Annotations)
+	if root.Platform != nil {
+		platform := *root.Platform
+		platform.OSFeatures = slices.Clone(platform.OSFeatures)
+		root.Platform = &platform
+	}
 	if opts.MutateParentFunc != nil {
-		if err := opts.MutateParentFunc(&index); err != nil {
+		if err := opts.MutateParentFunc(&root); err != nil {
 			return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to mutate top level descriptor before copy: %w", err)
 		}
 	}
@@ -145,45 +178,51 @@ func CopyOCILayoutWithIndex(ctx context.Context, dst content.Storage, src blob.R
 			return nil, err
 		}
 		for i := range successors {
-			if successors[i].Digest == index.Digest {
-				successors[i] = index
+			if successors[i].Digest == root.Digest {
+				successors[i] = root
 			}
 		}
 		return successors, nil
 	}
 
-	if err := oras.ExtendedCopyGraph(ctx, ociStore, dst, index, extendedCopyOpts); err != nil {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to copy graph for index from oci layout %v: %w", index, err)
+	if err := oras.ExtendedCopyGraph(ctx, src, dst, root, extendedCopyOpts); err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to copy graph rooted at %v: %w", root, err)
 	}
 
-	return index, nil
+	return root, nil
 }
 
 // pickTopLevelDescriptor works out which manifest in the layout was requested,
+// see [selectRoot].
+func pickTopLevelDescriptor(ctx context.Context, ociStore *CloseableReadOnlyStore) (ociImageSpecV1.Descriptor, error) {
+	return selectRoot(ctx, fetcherEdges(ociStore), ociStore.Index.Manifests)
+}
+
+// selectRoot works out which of the manifests a layout index lists was requested,
 // in order: the only one; the one marked with [annotations.OCMLayoutRoot]; the
 // one named by `org.opencontainers.image.ref.name`, only ever set for tag-based
-// references; else [TopLevelArtifacts] for a layout carrying neither. Errors
-// when nothing settles it, because a wrong guess silently packs the wrong
-// artifact.
-func pickTopLevelDescriptor(ctx context.Context, ociStore *CloseableReadOnlyStore) (ociImageSpecV1.Descriptor, error) {
-	if len(ociStore.Index.Manifests) == 1 {
-		return ociStore.Index.Manifests[0], nil
+// references; else [TopLevelArtifacts] for a layout carrying neither, with edges
+// reading the manifests. Errors when nothing settles it, because a wrong
+// guess silently packs the wrong artifact.
+func selectRoot(ctx context.Context, edges edgesFunc, manifests []ociImageSpecV1.Descriptor) (ociImageSpecV1.Descriptor, error) {
+	if len(manifests) == 1 {
+		return manifests[0], nil
 	}
-	if root, ok := markedRoot(ociStore.Index.Manifests); ok {
+	if root, ok := markedRoot(manifests); ok {
 		return root, nil
 	}
 	var named []int
-	for idx, manifest := range ociStore.Index.Manifests {
+	for idx, manifest := range manifests {
 		if manifest.Annotations != nil && manifest.Annotations[ociImageSpecV1.AnnotationRefName] != "" {
 			named = append(named, idx)
 		}
 	}
 	if len(named) == 1 {
-		return ociStore.Index.Manifests[named[0]], nil
+		return manifests[named[0]], nil
 	}
 	// Nothing was written down, so infer it: an index and the children it lists
 	// collapse to the index. Last, because this branch is the one that guesses.
-	if top := TopLevelArtifacts(ctx, ociStore, ociStore.Index.Manifests); len(top) == 1 {
+	if top := topLevelArtifacts(ctx, edges, manifests); len(top) == 1 {
 		return top[0], nil
 	}
 	return ociImageSpecV1.Descriptor{}, fmt.Errorf(
@@ -202,6 +241,18 @@ const (
 	mediaTypeDockerManifest     = "application/vnd.docker.distribution.manifest.v2+json"
 	mediaTypeDockerManifestList = "application/vnd.docker.distribution.manifest.list.v2+json"
 )
+
+// edgesFunc returns the subject of desc (nil if desc is not a referrer) and its
+// containment successors (config+layers, child manifests, or blobs depending on
+// media type).
+type edgesFunc func(ctx context.Context, desc ociImageSpecV1.Descriptor) (*ociImageSpecV1.Descriptor, []ociImageSpecV1.Descriptor, error)
+
+// fetcherEdges returns the edges of descriptors that fetcher serves.
+func fetcherEdges(fetcher content.Fetcher) edgesFunc {
+	return func(ctx context.Context, desc ociImageSpecV1.Descriptor) (*ociImageSpecV1.Descriptor, []ociImageSpecV1.Descriptor, error) {
+		return extractSubjectAndSuccessors(ctx, fetcher, desc)
+	}
+}
 
 // extractSubjectAndSuccessors decodes desc once and returns its subject (nil if desc is not a
 // referrer) and its containment successors (config+layers, child manifests, or

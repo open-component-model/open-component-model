@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/cli/internal/versioncheck/schemas/Config.schema.json",
   "title": "Config",
   "type": "object",
-  "description": "Config configures the default policy for version checking.\nThe policy field controls whether the CLI performs automatic update checks.\nSet to \"disable\" to suppress all version check activity for an environment.\n\nExample config:\n\ntype: generic.config.ocm.software/v1\nconfigurations:\n- type: versioncheck.cli.config.ocm.software/v1alpha1\npolicy: disable",
+  "description": "Config configures the default policy for version checking.\nThe policy field controls whether the CLI performs automatic update checks.\nSet to \"disable\" to suppress all version check activity for an environment.\n\nExample config:\n\n\ttype: generic.config.ocm.software/v1\n\tconfigurations:\n\t- type: versioncheck.cli.config.ocm.software/v1alpha1\n\t  policy: disable",
   "properties": {
     "policy": {
       "type": "string",

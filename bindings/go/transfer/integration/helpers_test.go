@@ -9,12 +9,13 @@ import (
 	"time"
 
 	godigest "github.com/opencontainers/go-digest"
+	"github.com/oras-project/oras-go/v3/registry/remote/auth"
+	orascreds "github.com/oras-project/oras-go/v3/registry/remote/credentials"
+	"github.com/oras-project/oras-go/v3/registry/remote/retry"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/registry"
 	"golang.org/x/crypto/bcrypt"
-	"oras.land/oras-go/v2/registry/remote/auth"
-	"oras.land/oras-go/v2/registry/remote/retry"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
@@ -22,6 +23,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ocictf "ocm.software/open-component-model/bindings/go/oci/ctf"
 	credidentity "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
@@ -74,9 +76,16 @@ func generateHtpasswd(t *testing.T, username, password string) string {
 
 func createAuthClient(address, username, password string) *auth.Client {
 	return &auth.Client{
-		Client:     retry.DefaultClient,
-		Credential: auth.StaticCredential(address, auth.Credential{Username: username, Password: password}),
+		Client:         retry.DefaultClient,
+		CredentialFunc: orascreds.StaticCredentialFunc(address, orascreds.Credential{Username: username, Password: password}),
 	}
+}
+
+// plainHTTPConfig returns an HTTP client configuration that turns plain HTTP
+// on for every host. The test registries have no TLS, and only this
+// configuration (not the http:// prefix on the base URL) decides that.
+func plainHTTPConfig() *httpv1alpha1.Config {
+	return &httpv1alpha1.Config{ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: new(true)}}
 }
 
 // registryCreds holds credentials for a single OCI registry.

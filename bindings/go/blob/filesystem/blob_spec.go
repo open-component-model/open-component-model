@@ -50,23 +50,37 @@ func GetBlobFromSpec(ctx context.Context, spec runtime.Typed) (blob.ReadOnlyBlob
 // BlobToSpec writes a blob to the filesystem and returns a File access specification.
 //
 // The function copies the blob content to the specified path using CopyBlobToOSPath,
-// then creates a v1alpha1.File specification with a "file://" URI pointing to that path.
+// then derives the specification with FileToSpec.
 //
-// If the blob implements blob.MediaTypeAware, the media type is extracted and included
-// in the spec. If the blob implements blob.DigestAware, the digest is extracted and
-// included in the spec.
+// Returns an error if:
+//   - The blob content cannot be copied to the path
+//   - The absolute path cannot be resolved
+func BlobToSpec(content blob.ReadOnlyBlob, path string) (*v1alpha1.File, error) {
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("cannot resolve absolute path: %w", err)
+	}
+	if err := CopyBlobToOSPath(content, absPath); err != nil {
+		return nil, err
+	}
+	return FileToSpec(content, absPath)
+}
+
+// FileToSpec returns a File access specification for content that already resides at path.
+//
+// The spec carries a "file://" URI (see URIFromFilePath) pointing to the absolute form of
+// that path. If the blob implements blob.MediaTypeAware, the media type is extracted and
+// included in the spec. If the blob implements blob.DigestAware, the digest is extracted
+// and included in the spec.
 //
 // The returned File spec has its type field populated with the default type from the
 // access scheme registry.
 //
-// Returns an error if:
-//   - The blob content cannot be copied to the path
-//
-// Note: The path should be an absolute path to avoid ambiguity in the resulting URI.
-func BlobToSpec(content blob.ReadOnlyBlob, path string) (*v1alpha1.File, error) {
-	err := CopyBlobToOSPath(content, path)
+// Returns an error if the absolute path cannot be resolved.
+func FileToSpec(content blob.ReadOnlyBlob, path string) (*v1alpha1.File, error) {
+	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("cannot resolve absolute path: %w", err)
 	}
 
 	var mediaType string
@@ -78,8 +92,12 @@ func BlobToSpec(content blob.ReadOnlyBlob, path string) (*v1alpha1.File, error) 
 		digest, _ = digestAware.Digest()
 	}
 
+	uri, err := URIFromFilePath(absPath)
+	if err != nil {
+		return nil, err
+	}
 	spec := &v1alpha1.File{
-		URI:       "file://" + path,
+		URI:       uri,
 		MediaType: mediaType,
 		Digest:    digest,
 	}

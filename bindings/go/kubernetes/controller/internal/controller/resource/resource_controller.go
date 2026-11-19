@@ -3,7 +3,7 @@ package resource
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"strings"
@@ -28,7 +28,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/event"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution"
-	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/resolution/workerpool"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/util"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/verification"
@@ -39,8 +38,7 @@ import (
 type Reconciler struct {
 	*ocm.BaseReconciler
 
-	// Resolver provides repository resolution and caching for resource reconciliation.
-	// It ensures that repository access is efficient and consistent during reconciliation operations.
+	// Resolver provides repository resolution and verification for resource reconciliation.
 	Resolver *resolution.Resolver
 }
 
@@ -118,12 +116,8 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 		}
 	})
 
-	// event source from resolver's worker pool to get notified when resolutions complete
-	eventSource := workerpool.NewEventSource(r.Resolver.WorkerPool())
-
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.Resource{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		WatchesRawSource(eventSource).
 		// Watch for component-events that are referenced by resources
 		Watches(
 			&v1alpha1.Component{},
@@ -135,7 +129,9 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 
 				// Get list of resources that reference the component
 				list := &v1alpha1.ResourceList{}
-				if err := r.List(ctx, list, client.MatchingFields{fieldName: component.GetName()}); err != nil {
+				if err := r.List(ctx, list,
+					client.InNamespace(component.GetNamespace()),
+					client.MatchingFields{fieldName: component.GetName()}); err != nil {
 					return []reconcile.Request{}
 				}
 
@@ -309,39 +305,18 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		return ctrl.Result{}, fmt.Errorf("failed to get verifications: %w", err)
 	}
 
-	cacheBackedRepo, err := r.Resolver.NewCacheBackedRepository(ctx, &resolution.RepositoryOptions{
+	resolveOpts := &resolution.Options{
 		RepositorySpec: repoSpec,
 		Configuration:  cfg,
 		PluginManager:  pm,
-		Verifications:  verifications,
-		RequesterFunc: func() workerpool.RequesterInfo {
-			return workerpool.RequesterInfo{
-				NamespacedName: k8stypes.NamespacedName{
-					Namespace: resource.GetNamespace(),
-					Name:      resource.GetName(),
-				},
-			}
-		},
-	})
-	if err != nil {
-		status.MarkNotReady(r.GetEventRecorder(), resource, v1alpha1.GetRepositoryFailedReason, err.Error())
-
-		return ctrl.Result{}, fmt.Errorf("failed to create cache-backed repository: %w", err)
 	}
 
-	referencedDescriptor, err := cacheBackedRepo.GetComponentVersion(ctx,
+	referencedDescriptor, err := r.Resolver.GetComponentVersion(ctx, resolveOpts,
+		resolution.Verification{Verifications: verifications},
 		component.Status.Component.Component,
 		component.Status.Component.Version)
 	switch {
-	case errors.Is(err, workerpool.ErrResolutionInProgress):
-		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
-		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.ResolutionInProgress, err.Error())
-		logger.Info("component version resolution in progress, waiting for event notification",
-			"component", component.Status.Component.Component,
-			"version", component.Status.Component.Version)
-
-		return ctrl.Result{}, nil
-	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+	case errors.Is(err, resolution.ErrNotSafelyDigestible):
 		// Ignore error, but log event
 		event.New(r.EventRecorder, resource, nil, v1alpha1.EventSeverityError, "%s", err.Error())
 	default:
@@ -359,28 +334,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 		r.Resolver,
 		referencedDescriptor,
 		resource.Spec.Resource.ByReference.ReferencePath,
-		&resolution.RepositoryOptions{
-			RepositorySpec: repoSpec,
-			Configuration:  cfg,
-			PluginManager:  pm,
-			RequesterFunc: func() workerpool.RequesterInfo {
-				return workerpool.RequesterInfo{
-					NamespacedName: k8stypes.NamespacedName{
-						Namespace: resource.GetNamespace(),
-						Name:      resource.GetName(),
-					},
-				}
-			},
-		},
+		resolveOpts,
 	)
 	switch {
-	case errors.Is(err, workerpool.ErrResolutionInProgress):
-		// Resolution is in progress, the controller will be re-triggered via event source when resolution completes
-		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.ResolutionInProgress, err.Error())
-		logger.Info("reference path resolution in progress, waiting for event notification")
-
-		return ctrl.Result{}, nil
-	case errors.Is(err, workerpool.ErrNotSafelyDigestible):
+	case errors.Is(err, resolution.ErrNotSafelyDigestible):
 		// Ignore error, but log event
 		event.New(r.EventRecorder, resource, nil, v1alpha1.EventSeverityError, "%s", err.Error())
 	default:
@@ -412,17 +369,17 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	if resource.Spec.VerificationPolicy != v1alpha1.VerificationPolicyNever {
 		logger.V(1).Info("verifying resource")
 
-		matchedResource, err = ocm.VerifyResource(ctx, pm, matchedResource, cfg)
+		if ocm.IsLocalResource(matchedResource) {
+			// Local resources are checked against the digest their repository stores them
+			// under; only content it cannot check that way is downloaded.
+			err = ocm.VerifyLocalResource(ctx, r.Resolver, resolveOpts, resourceDescriptor, matchedResource)
+		} else {
+			matchedResource, err = ocm.VerifyResource(ctx, pm, matchedResource, cfg)
+		}
 		if err != nil {
-			if errors.Is(err, ocm.ErrPluginNotFound) {
-				// TODO(@frewilhelm): For now we skip resource types that do not have a digest processor plugin.
-				//                    We need to adjust this when the plugins are available
-				logger.V(1).Info("skipping resource verification as no suitable plugin was found")
-			} else {
-				status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
+			status.MarkNotReady(r.EventRecorder, resource, v1alpha1.GetOCMResourceFailedReason, err.Error())
 
-				return ctrl.Result{}, fmt.Errorf("failed to verify resource: %w", err)
-			}
+			return ctrl.Result{}, fmt.Errorf("failed to verify resource: %w", err)
 		}
 	} else {
 		logger.V(1).Info("skip verifying resource: verification policy is Never")
@@ -431,7 +388,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (_ ctrl.Re
 	logger.V(1).Info("retrieved resource", "component", fmt.Sprintf("%s:%s", resourceDescriptor.Component.Name, resourceDescriptor.Component.Version),
 		"resource", matchedResource.Name, "duration", time.Since(startRetrievingResource))
 
-	resourceRepoSpecData, err := json.Marshal(resourceRepoSpec)
+	resourceRepoSpecData, err := json.Marshal(resourceRepoSpec, runtime.JSONOptions)
 	if err != nil {
 		status.MarkNotReady(r.EventRecorder, resource, v1alpha1.MarshalFailedReason, err.Error())
 
@@ -481,7 +438,7 @@ func setResourceStatus(
 
 // buildResourceInfo constructs a ResourceInfo from a descriptor resource.
 func buildResourceInfo(res *descriptor.Resource) (*v1alpha1.ResourceInfo, error) {
-	raw, err := json.Marshal(res.Access)
+	raw, err := json.Marshal(res.Access, runtime.JSONOptions)
 	if err != nil {
 		return nil, fmt.Errorf("marshaling access spec: %w", err)
 	}
@@ -506,7 +463,7 @@ func buildResourceInfo(res *descriptor.Resource) (*v1alpha1.ResourceInfo, error)
 func convertLabels(in []descriptor.Label) ([]v1alpha1.Label, error) {
 	out := make([]v1alpha1.Label, len(in))
 	for i, l := range in {
-		valueBytes, err := json.Marshal(l.Value)
+		valueBytes, err := json.Marshal(l.Value, runtime.JSONOptions)
 		if err != nil {
 			return nil, fmt.Errorf("marshaling label %q value: %w", l.Name, err)
 		}

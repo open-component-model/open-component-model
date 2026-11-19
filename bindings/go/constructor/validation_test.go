@@ -18,7 +18,7 @@ import (
 type validatedAccess struct {
 	Type    runtime.Type `json:"type"`
 	URL     string       `json:"url,omitempty"`
-	Retries int          `json:"retries,omitempty"`
+	Retries int          `json:"retries,omitzero"`
 }
 
 func (a *validatedAccess) GetType() runtime.Type  { return a.Type }
@@ -39,7 +39,7 @@ func (a *validatedAccess) Validate() error {
 type validatedInput struct {
 	Type     runtime.Type `json:"type"`
 	Path     string       `json:"path,omitempty"`
-	Compress bool         `json:"compress,omitempty"`
+	Compress bool         `json:"compress,omitzero"`
 }
 
 func (i *validatedInput) GetType() runtime.Type  { return i.Type }

@@ -295,6 +295,20 @@ the same as the fields of the access type.
 If you set neither `ref` nor `commit`, OCM archives the commit that the repository's `HEAD` points to, usually the default
 branch. The result then changes when the branch moves. Set `commit` for a reproducible build.
 
+The `repository` field accepts the same remote URL forms as the
+[`Git/v1` access type]({{< relref "input-and-access-types.md#git-url-forms" >}}), and also local repositories:
+
+| Form                | Example                                           |
+|---------------------|---------------------------------------------------|
+| HTTPS or HTTP       | `https://github.com/org/repo.git`                 |
+| SSH URL             | `ssh://git@git.example.com:2222/org/repo.git`     |
+| scp-style SSH       | `git@github.com:org/repo.git`                     |
+| Git protocol        | `git://git.example.com/org/repo.git`              |
+| Local (input only)  | `file:///srv/git/repo.git` or `/srv/git/repo.git` |
+
+A local path is resolved relative to the working directory unless it is absolute. scp-style SSH addresses are
+never treated as local paths.
+
 **Example**
 
 ```yaml
@@ -536,12 +550,17 @@ protected by the component version digest or a signature. Use a resource; see
 | SSH URL       | `ssh://git@git.example.com:2222/org/repo.git`     |
 | scp-style SSH | `git@github.com:org/repo.git`                     |
 | Git protocol  | `git://git.example.com/org/repo.git`              |
-| Local         | `file:///srv/git/repo.git` or `/srv/git/repo.git` |
 
-{{< callout context="caution" >}}
-A URL needs a scheme, such as `https://github.com/org/repo`. Without one, OCM treats the value as a **local
-directory**, so `github.com/org/repo` points to a folder under the current working directory. scp-style SSH addresses
-such as `git@github.com:org/repo.git` are the exception and always mean SSH.
+{{< callout context="danger" title="Local repositories are not allowed" >}}
+A `Git/v1` access spec must use a remote URL. A `file://` URL or a plain path (such as `/srv/git/repo.git`)
+fails validation with an error containing `must not reference a local git repository`. No remote consumer can
+reach a local path, so OCM rejects such values at add, read, and transfer time.
+
+If you need to archive a local repository into the component version, use the
+[`Git/v1` input type]({{< relref "input-and-access-types.md#gitv1-input" >}}) instead: it clones the local
+repository once and stores the archive as a portable local blob.
+
+scp-style SSH addresses such as `git@github.com:org/repo.git` are **not** treated as local paths; they always mean SSH.
 {{< /callout >}}
 
 OCM checks the server's host key against your `~/.ssh/known_hosts`. Without a configured SSH key, OCM uses the SSH agent.
@@ -565,8 +584,10 @@ specifications with the types `git`, `git/v1alpha1` and `Git/v1alpha1` unchanged
 
 Two differences need attention:
 
-- **Scheme.** OCM v1 read `github.com/org/repo` as a remote repository. OCM v2 reads it as a local directory, so
-  add the scheme. scp-style SSH addresses such as `git@github.com:org/repo.git` are unaffected.
+- **Scheme.** OCM v1 read `github.com/org/repo` as a remote repository. OCM v2 rejects a schemeless or
+  local-path value for the `Git/v1` access with *"must not reference a local git repository"*, so add the scheme.
+  Local paths are valid only as `Git/v1` **input** (component creation), not as an access type stored in a
+  component descriptor. scp-style SSH addresses such as `git@github.com:org/repo.git` are unaffected.
 - **Credentials.** The consumer identity type is still `Git`. Use `path`, which supports glob patterns, instead of the
   OCM v1 `pathprefix` attribute. See
   [Credential Consumer Identities: Git]({{< relref "credential-consumer-identities.md" >}}#git).

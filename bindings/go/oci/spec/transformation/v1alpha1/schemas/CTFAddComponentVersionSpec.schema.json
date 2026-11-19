@@ -754,7 +754,7 @@
         },
         "filePath": {
           "type": "string",
-          "description": "Path is the path of the CTF Archive on the filesystem.\n\nExamples\n- ./relative/path/to/archive.tgz\n- relative/path/to/archive.tar\n- /absolute/path/to/archive-folder"
+          "description": "Path is the path of the CTF Archive on the filesystem.\n\nExamples\n  - ./relative/path/to/archive.tgz\n  - relative/path/to/archive.tar\n  - /absolute/path/to/archive-folder"
         },
         "type": {
           "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.runtime.Type",

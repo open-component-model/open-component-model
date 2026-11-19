@@ -63,16 +63,17 @@ func TestBuildGraphDefinition_GitUploader(t *testing.T) {
 			},
 		},
 		{
+			// Local paths are rejected by Validate; use an https URL which is always remote.
 			name:     "a local blob without origin is pushed with explicit match, repository and ref",
 			resource: withoutOrigin,
 			uploader: &transferv1alpha1.GitUploaderConfig{
 				Match:      `resource.access.isType("LocalBlob")`,
-				Repository: "/srv/git/repo.git",
+				Repository: "https://git.target.example/mirror/repo.git",
 				Ref:        "refs/heads/release",
 			},
 			wantTypes: getAdd(ociv1alpha1.OCIGetLocalResourceV1alpha1),
 			wantAccess: map[string]string{
-				"repository": "/srv/git/repo.git",
+				"repository": "https://git.target.example/mirror/repo.git",
 				"ref":        "refs/heads/release",
 			},
 		},
@@ -205,7 +206,7 @@ func TestBuildGraphDefinition_GitUploader(t *testing.T) {
 			}
 			r.NoError(err)
 			r.Equal(tc.wantTypes, transformationTypes(tgd))
-			_, err = NewDefaultBuilder(nil, nil, nil, nil).BuildAndCheck(tgd)
+			_, err = NewDefaultBuilder(nil, nil, nil, nil, "").BuildAndCheck(tgd)
 			r.NoError(err, "default builder must resolve AddGitResource and its references")
 			if tc.wantAccess == nil {
 				return

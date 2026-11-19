@@ -9,26 +9,34 @@
 // followed.
 //
 // [ocm.software/open-component-model/bindings/go/wget/repository.ResourceRepository]
-// is the entry point. It resolves the access spec of a resource, performs the
-// request (following redirects unless the spec disables them in the access), and
-// returns the response body as a blob. Bodies are streamed into a file under the
-// temp folder of the supplied filesystem configuration rather than buffered, so
-// memory use stays flat regardless of response size. There is no size limit by
-// default; [repository.WithMaxDownloadSize] adds one:
+// is the entry point. It resolves the access spec of a resource and returns a
+// blob streaming the response body. Nothing is buffered in memory or on disk.
+// The request (following redirects unless the spec disables them in the access)
+// is sent when the blob is read, and every read sends it again, which is only
+// done for GET and HEAD requests: other methods may have side effects. A reader
+// closed before its first Read sends nothing. Size, media type and an advertised
+// digest are learned from a single HEAD request when they are asked for before
+// the first read. The blob is readable only while the context passed to the
+// download is alive. There is no size limit by default;
+// [repository.WithMaxDownloadSize] adds one:
 //
-//	repo := repository.NewResourceRepository(filesystemConfig,
+//	repo := repository.NewResourceRepository(
 //	    repository.WithMaxDownloadSize(50 * 1024 * 1024),
 //	)
 //	b, err := repo.DownloadResource(ctx, resource, credentials)
 //	if err != nil {
 //	    return err
 //	}
-//	defer b.(io.Closer).Close()
+//	rc, err := b.ReadCloser()
+//	if err != nil {
+//	    return err
+//	}
+//	defer rc.Close()
 //
-// The returned blob owns the file it is backed by. Closing it removes that file;
-// a blob that is dropped without being closed has its file removed once it becomes
-// unreachable, so downloads do not pile up in the temp folder of a long-running
-// process.
+// Checks over the content (size limit, checksum policy, pinned digest) run as the
+// blob is read: a failure is returned by the reader's last Read and by its Close.
+// A non-2xx status or a checksum policy that rejects the response headers fails
+// the reader's first Read.
 //
 // Credentials are optional. When supplied as
 // [ocm.software/open-component-model/bindings/go/wget/spec/credentials/v1.WgetCredentials]

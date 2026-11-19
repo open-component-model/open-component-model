@@ -22,7 +22,7 @@ Resources can be accessed either locally or via a plugin that supports remote fe
 
 A reference can pin the component version with a digest: "{component}[:{version}]@sha256:<hex>" (OCI digest
 of the artifact the component version is stored as, which local resources are then read from) or
-"{component}:{version}@jsonNormalisation.v4alpha1+sha256:<hex>" (normalized: the digest signatures sign).
+"{component}:{version}@jsonNormalisation.v4alpha3+sha256:<hex>" (normalized: the digest signatures sign).
 See "ocm get cv --help" for when to use which. The plugin binary is then verified against its digest in the pinned descriptor.
 
 ```
@@ -42,14 +42,14 @@ ocm download plugin [flags]
 ### Options
 
 ```
-      --extra-identity strings    extra identity parameters for resource matching (e.g., os=linux,arch=amd64)
-  -h, --help                      help for plugin
-      --output string             output folder to download the plugin binary to (default $HOME/.config/ocm/plugins)
-  -f, --output-format enum        output format of the plugin information, defaults to table
-                                  (must be one of [json table yaml]) (default table)
-      --plugin-type string        type of the plugin resource in the component version containing the plugin binary (default "ocmPlugin")
-      --resource-version string   version of the plugin resource to download (optional, defaults to component version)
-      --skip-validation           skip validation of the downloaded plugin binary
+      --extra-identity strings         extra identity parameters for resource matching (e.g., os=linux,arch=amd64)
+  -h, --help[=true|false]              help for plugin
+      --output string                  output folder to download the plugin binary to (default $HOME/.config/ocm/plugins)
+  -f, --output-format enum             output format of the plugin information, defaults to table
+                                       (must be one of [json table yaml]) (default table)
+      --plugin-type string             type of the plugin resource in the component version containing the plugin binary (default "ocmPlugin")
+      --resource-version string        version of the plugin resource to download (optional, defaults to component version)
+      --skip-validation[=true|false]   skip validation of the downloaded plugin binary
 ```
 
 ### Options inherited from parent commands
@@ -80,6 +80,7 @@ ocm download plugin [flags]
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
+                                              the interactive progress display needs a terminal and the text format; any other format prints its records in full instead
                                            (must be one of [json text]) (default text)
       --loglevel enum                      sets the logging level
                                               debug: Show all logs including detailed debugging information

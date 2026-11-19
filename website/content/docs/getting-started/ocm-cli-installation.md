@@ -1,6 +1,6 @@
 ---
 title: "Install the OCM CLI"
-description: "Learn how to install the OCM CLI on Linux, macOS, and Windows using package managers, the install script, or downloading the binary."
+description: "Learn how to install the OCM CLI on Linux, macOS, and Windows using package managers, the install script, GitHub Actions, or downloading the binary."
 icon: "💻"
 weight: 10
 toc: true
@@ -38,6 +38,40 @@ wget -qO- https://ocm.software/install-cli.sh | {{< site-version "env" >}}bash
 ```shell
 curl -sfL https://ocm.software/install-cli.sh | {{< site-version "env" >}}bash
 ```
+
+{{< /tab >}}
+{{< tab "GitHub Actions" >}}
+
+In GitHub Actions workflows, use [`open-component-model/ocm-setup-action`](https://github.com/open-component-model/ocm-setup-action).
+It installs the CLI for the runner's OS and architecture (Linux, macOS, Windows on x64 and arm64), verifies the
+binary's SHA-256 digest and its [GitHub attestation](#verify-binary-authenticity), caches it with `actions/cache`,
+and adds `ocm` to the `PATH` of subsequent steps:
+
+```yaml
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: open-component-model/ocm-setup-action@v2
+{{< site-version "action-with" >}}      - run: ocm version
+```
+
+On the `main` docs the example installs the latest stable release; versioned docs pin `version` to that release.
+Set `cache: false` to skip the `actions/cache` restore and save — a binary already in the runner's tool
+cache is still reused when its digest matches the release asset.
+The action outputs the installed `version`, the binary `path`, and `cache-hit`.
+See the [action's README](https://github.com/open-component-model/ocm-setup-action#readme) for all inputs and outputs.
+
+{{< callout context="caution" title="Do not install unverified binaries" icon="outline/alert-triangle" >}}
+`verify-attestation: false` installs the CLI without checking its provenance — only set it on self-hosted
+runners that lack the [GitHub CLI](https://cli.github.com/), and verify the binary by another means as
+described in [Verify Binary Authenticity](#verify-binary-authenticity).
+{{< /callout >}}
 
 {{< /tab >}}
 {{< tab "OCM Component" >}}
@@ -250,11 +284,18 @@ ocm version
 Expected output:
 
 ```text
-{"major":"0","minor":"1","patch":"0","gitVersion":"0.1.0","goVersion":"go1.26.0","compiler":"gc","platform":"darwin/arm64"}
+OCM CLI (Open Component Model v2)
+  Version:  {{< site-version "semver" >}}
 ```
 
+The same command in a workflow step (`- run: ocm version`) prints this into the job log.
+
+Releases before `0.17.0` print a lowercase JSON object instead, for example
+`{"major":"0","minor":"16","patch":"0","gitVersion":"0.16.0",…}`. That is still the v2 CLI.
+
 {{< callout title="If the output looks different" icon="outline/info-circle" >}}
-If the field names are **capitalised** (`Major`, `Minor`, `Patch`), you are running the legacy v1
+If the output is a JSON object with **capitalised** field names (`Major`, `Minor`, `Patch`) instead of the
+`OCM CLI (Open Component Model v2)` header, you are running the legacy v1
 CLI, not v2. A previous v1 installation is shadowing the new binary. Run `which ocm` (Linux/macOS)
 or `where.exe ocm` (Windows) to see which binary is active — then either move `~/.local/bin` earlier
 in your PATH or remove the v1 binary. Common v1 install locations are `/opt/homebrew/bin`

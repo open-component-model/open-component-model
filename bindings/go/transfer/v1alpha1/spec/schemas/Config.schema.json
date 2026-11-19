@@ -4,7 +4,7 @@
   "$id": "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec/schemas/Config.schema.json",
   "title": "Config",
   "type": "object",
-  "description": "Config is the canonical wire format for transfer settings. It is carried as an\nentry inside the central generic configuration\n(generic.config.ocm.software/v1) and extracted with [LookupConfig].\nDownstream consumers (CLI, controllers) pass it directly to\n[transfer.BuildGraphDefinition], so any new transfer setting belongs here first.\nWhich resources are copied is decided by uploader configurations (see\n[UploaderConfig]), not by this type.\n\ntype: generic.config.ocm.software/v1\nconfigurations:\n- type: transfer.config.ocm.software/v1alpha1\nrecursive: -1\nunmatchedResourcePolicy: Fail",
+  "description": "Config is the canonical wire format for transfer settings. It is carried as an\nentry inside the central generic configuration\n(generic.config.ocm.software/v1) and extracted with [LookupConfig].\nDownstream consumers (CLI, controllers) pass it directly to\n[transfer.BuildGraphDefinition], so any new transfer setting belongs here first.\nWhich resources are copied is decided by uploader configurations (see\n[UploaderConfig]), not by this type.\n\n\ttype: generic.config.ocm.software/v1\n\tconfigurations:\n\t  - type: transfer.config.ocm.software/v1alpha1\n\t    recursive: -1\n\t    unmatchedResourcePolicy: Fail",
   "properties": {
     "recursive": {
       "$ref": "#/$defs/ocm.software.open-component-model.bindings.go.transfer.v1alpha1.spec.Recursive",

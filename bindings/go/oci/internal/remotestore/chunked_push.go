@@ -1,9 +1,8 @@
 package remotestore
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -15,9 +14,9 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2/registry/remote"
-	"oras.land/oras-go/v2/registry/remote/auth"
-	"oras.land/oras-go/v2/registry/remote/errcode"
+	"github.com/oras-project/oras-go/v3/registry/remote"
+	"github.com/oras-project/oras-go/v3/registry/remote/auth"
+	"github.com/oras-project/oras-go/v3/registry/remote/errcode"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
@@ -126,7 +125,8 @@ func (r *RemoteStore) PushStreaming(ctx context.Context, partial ociImageSpecV1.
 // chunkedUpload holds the mutable state of one chunked upload session: the
 // current push location (updated after each PATCH), how many bytes have been
 // streamed, whether any byte has been consumed (after which no monolithic
-// fallback is possible), and the running digest of the streamed content.
+// fallback is possible), and the running digest of the streamed content, which
+// is nil when the digest is declared up front.
 type chunkedUpload struct {
 	location *url.URL
 	chunk    int64
@@ -141,9 +141,9 @@ type chunkedUpload struct {
 // When fallback is non-nil it is invoked for any failure that occurs before the
 // first byte is consumed (so no registry regresses); once a chunk has been
 // sent, an io.Reader cannot be rewound, so later failures return a wrapped
-// error and best-effort cancel the session. When knownDigest is set it is
-// verified against the streamed content and used to close the session; when
-// empty the digest is computed from the stream.
+// error and best-effort cancel the session. When knownDigest is set the session
+// is closed with it and the registry verifies the content against it, as for
+// the monolithic push; when empty the digest is computed from the stream.
 func (r *RemoteStore) pushChunked(
 	ctx context.Context,
 	mediaType string,
@@ -152,7 +152,7 @@ func (r *RemoteStore) pushChunked(
 	content io.Reader,
 	fallback func() error,
 ) (ociImageSpecV1.Descriptor, error) {
-	ctx = auth.AppendRepositoryScope(ctx, r.Reference, auth.ActionPull, auth.ActionPush)
+	ctx = auth.AppendRepositoryScope(ctx, r.Reference(), auth.ActionPull, auth.ActionPush)
 
 	up, err := r.openUploadSession(ctx, knownDigest)
 	if err != nil {
@@ -168,10 +168,9 @@ func (r *RemoteStore) pushChunked(
 		return ociImageSpecV1.Descriptor{}, err
 	}
 
-	finalDigest, err := resolveFinalDigest(up.digester.Digest(), knownDigest)
-	if err != nil {
-		r.cancelUpload(ctx, up.location)
-		return ociImageSpecV1.Descriptor{}, err
+	finalDigest := knownDigest
+	if up.digester != nil {
+		finalDigest = up.digester.Digest()
 	}
 
 	if knownSize != blob.SizeUnknown && knownSize >= 0 && up.offset != knownSize {
@@ -200,24 +199,10 @@ func fallbackOrUnavailable(fallback func() error, cause error) (ociImageSpecV1.D
 	return ociImageSpecV1.Descriptor{}, fmt.Errorf("%w: %w", ErrStreamingUnavailable, cause)
 }
 
-// resolveFinalDigest picks the digest used to close the session: the computed
-// digest when none was declared, or the declared digest after verifying it
-// matches the streamed content (closing under a mismatching claim would push
-// corrupt content under a false identifier).
-func resolveFinalDigest(computed, known digest.Digest) (digest.Digest, error) {
-	if known == "" {
-		return computed, nil
-	}
-	if computed != known {
-		return "", fmt.Errorf("chunked blob push: content digest %s does not match declared digest %s", computed, known)
-	}
-	return known, nil
-}
-
 // openUploadSession performs the POST that starts a blob upload and returns the
-// initialised session state. Its digester matches knownDigest's algorithm (the
-// canonical algorithm when no digest is declared), and a non-sha256 knownDigest
-// additionally advertises that algorithm via the digest-algorithm query
+// initialised session state. Without knownDigest the session hashes the content
+// with the canonical algorithm; a non-sha256 knownDigest advertises its
+// algorithm via the digest-algorithm query
 // parameter. The returned chunkedUpload has its chunk size raised to any
 // registry-advertised OCI-Chunk-Min-Length. Both the configured chunk size and
 // the advertised minimum are bounded by MaxChunkSize so the PATCH buffer stays
@@ -226,20 +211,16 @@ func (r *RemoteStore) openUploadSession(ctx context.Context, knownDigest digest.
 	if r.ChunkSize > MaxChunkSize {
 		return nil, fmt.Errorf("chunked blob push: configured chunk size %d exceeds the maximum supported chunk size %d", r.ChunkSize, MaxChunkSize)
 	}
-	uploads := r.endpoint(path.Join("/v2", r.Reference.Repository, "blobs", "uploads") + "/")
-	// The running digest must use the declared algorithm; otherwise the
-	// computed digest could never match knownDigest for non-sha256 blobs.
-	algo := digest.Canonical
-	if knownDigest != "" {
-		algo = knownDigest.Algorithm()
-		if !algo.Available() {
-			return nil, fmt.Errorf("chunked blob push: digest algorithm %q is not available", algo)
-		}
-		if algo != digest.SHA256 {
-			q := uploads.Query()
-			q.Set("digest-algorithm", string(algo))
-			uploads.RawQuery = q.Encode()
-		}
+	uploads := r.endpoint(path.Join("/v2", r.RepositoryName, "blobs", "uploads") + "/")
+	var digester digest.Digester
+	if knownDigest == "" {
+		digester = digest.Canonical.Digester()
+	} else if algo := knownDigest.Algorithm(); !algo.Available() {
+		return nil, fmt.Errorf("chunked blob push: digest algorithm %q is not available", algo)
+	} else if algo != digest.SHA256 {
+		q := uploads.Query()
+		q.Set("digest-algorithm", string(algo))
+		uploads.RawQuery = q.Encode()
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, uploads.String(), http.NoBody)
 	if err != nil {
@@ -265,7 +246,7 @@ func (r *RemoteStore) openUploadSession(ctx context.Context, knownDigest digest.
 		}
 		chunk = minLen
 	}
-	return &chunkedUpload{location: location, chunk: chunk, digester: algo.Digester()}, nil
+	return &chunkedUpload{location: location, chunk: chunk, digester: digester}, nil
 }
 
 // uploadChunks streams content in PATCH requests of up.chunk bytes, updating the
@@ -274,10 +255,18 @@ func (r *RemoteStore) openUploadSession(ctx context.Context, knownDigest digest.
 // cannot be rewound, so failures cancel the session rather than falling back to
 // the monolithic push.
 func (r *RemoteStore) uploadChunks(ctx context.Context, up *chunkedUpload, content io.Reader) error {
-	hasher := up.digester.Hash()
-	buf := make([]byte, up.chunk)
+	hasher := io.Discard
+	if up.digester != nil {
+		hasher = up.digester.Hash()
+	}
+	buf := getChunkBuffer(up.chunk)
+	defer func() { buf.release() }()
 	for {
-		n, readErr := io.ReadFull(content, buf)
+		if buf.inUse() {
+			// The transport may still read the previous PATCH body; never overwrite it.
+			buf = getChunkBuffer(up.chunk)
+		}
+		n, readErr := io.ReadFull(content, buf.data)
 		if n > 0 {
 			// Bytes have left the reader: the stream can no longer be rewound,
 			// so no monolithic fallback is possible from here on. Mark consumed
@@ -297,13 +286,15 @@ func (r *RemoteStore) uploadChunks(ctx context.Context, up *chunkedUpload, conte
 		if n == 0 {
 			return nil
 		}
-		_, _ = hasher.Write(buf[:n])
+		_, _ = hasher.Write(buf.data[:n])
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodPatch, up.location.String(), bytes.NewReader(buf[:n]))
+		chunk := buf
+		req, err := http.NewRequestWithContext(ctx, http.MethodPatch, up.location.String(), chunk.body(n))
 		if err != nil {
 			r.cancelUpload(ctx, up.location)
 			return fmt.Errorf("chunked blob push: failed to build PATCH request: %w", err)
 		}
+		req.GetBody = func() (io.ReadCloser, error) { return chunk.body(n), nil }
 		req.Header.Set("Content-Type", "application/octet-stream")
 		req.Header.Set("Content-Range", fmt.Sprintf("%d-%d", up.offset, up.offset+int64(n)-1))
 		req.ContentLength = int64(n)
@@ -357,9 +348,9 @@ func (r *RemoteStore) closeUploadSession(ctx context.Context, up *chunkedUpload,
 }
 
 // do sends an HTTP request using the same client resolution and response
-// handling as the embedded oras *remote.Repository: it uses r.Client (falling
+// handling as the embedded oras *remote.Repository: it uses r.Registry.Client (falling
 // back to auth.DefaultClient) so retries, authentication, TLS, proxy and header
-// configuration are respected identically, and it applies r.HandleWarning to
+// configuration are respected identically, and it applies r.Registry.HandleWarning to
 // response Warning headers just as oras' internal do() does.
 // It also refuses to auto-follow redirects for body-carrying requests: a
 // registry-controlled 307/308 must never replay the blob body to a host this
@@ -373,7 +364,7 @@ func (r *RemoteStore) closeUploadSession(ctx context.Context, up *chunkedUpload,
 // upload-location handoffs still occur explicitly through the Location header,
 // which resolveUploadLocation validates for host and scheme.
 func (r *RemoteStore) do(req *http.Request) (*http.Response, error) {
-	client := r.Client
+	client := r.Registry.Client
 	if client == nil {
 		client = auth.DefaultClient
 	}
@@ -384,10 +375,10 @@ func (r *RemoteStore) do(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	if r.HandleWarning != nil {
+	if r.Registry.HandleWarning != nil {
 		for _, h := range resp.Header.Values("Warning") {
 			if value, perr := parseWarningHeader(h); perr == nil {
-				r.HandleWarning(remote.Warning{WarningValue: value})
+				r.Registry.HandleWarning(remote.Warning{WarningValue: value})
 			}
 		}
 	}
@@ -395,8 +386,9 @@ func (r *RemoteStore) do(req *http.Request) (*http.Response, error) {
 }
 
 // noFollowRedirects returns a client equivalent to c but that stops at the
-// first response instead of following redirects, without mutating c. It shares
-// c's credential cache and configuration; only redirect handling changes.
+// first response instead of following redirects, without mutating c. An
+// *auth.Client is derived via Clone, so it shares c's credential cache and
+// configuration; only redirect handling changes.
 //
 // The redirect policy lives on a concrete *http.Client, reached differently per
 // implementation: an *auth.Client carries it on its inner client (oras' send()
@@ -407,9 +399,9 @@ func (r *RemoteStore) do(req *http.Request) (*http.Response, error) {
 func noFollowRedirects(c remote.Client) remote.Client {
 	switch client := c.(type) {
 	case *auth.Client:
-		copyClient := *client
+		copyClient := client.Clone()
 		copyClient.Client = redirectSuppressed(client.Client)
-		return &copyClient
+		return copyClient
 	case *http.Client:
 		return redirectSuppressed(client)
 	default:
@@ -467,10 +459,10 @@ func parseWarningHeader(header string) (remote.WarningValue, error) {
 // repository's scheme and host.
 func (r *RemoteStore) endpoint(p string) *url.URL {
 	scheme := "https"
-	if r.PlainHTTP {
+	if r.Registry.PlainHTTP {
 		scheme = "http"
 	}
-	return &url.URL{Scheme: scheme, Host: r.Reference.Host(), Path: p}
+	return &url.URL{Scheme: scheme, Host: r.Reference().Host(), Path: p}
 }
 
 // cancelUpload issues a best-effort DELETE to release an in-progress upload
@@ -555,7 +547,7 @@ func parseErrorResponse(resp *http.Response) error {
 	var body struct {
 		Errors errcode.Errors `json:"errors"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err == nil {
+	if err := json.UnmarshalRead(resp.Body, &body); err == nil {
 		errResp.Errors = body.Errors
 	}
 	return errResp

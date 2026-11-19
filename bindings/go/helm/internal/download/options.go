@@ -3,6 +3,7 @@ package download
 import (
 	"time"
 
+	godigest "github.com/opencontainers/go-digest"
 	"helm.sh/helm/v4/pkg/getter"
 
 	helmcredsv1 "ocm.software/open-component-model/bindings/go/helm/spec/credentials/v1"
@@ -52,13 +53,17 @@ type option struct {
 
 	// AlwaysDownloadProv indicates whether to always download the provenance file for the chart.
 	// In cases where a Keyring is present in the credentials, Helm will attempt to download the provenance file to verify the chart's integrity.
-	AlwaysDownloadProv bool `json:"alwaysDownloadProv,omitempty"`
+	AlwaysDownloadProv bool `json:"alwaysDownloadProv,omitzero"`
 
 	// HTTPConfig is the HTTP client configuration (timeouts, per-host overrides) used for
 	// chart downloads and OCI registry access. When nil, the default Helm client is used.
 	// Accepts the serialisable config type so that external plugins can round-trip it over
 	// the wire and reconstruct an equivalent client.
 	HTTPConfig *httpv1alpha1.Config
+
+	// OCIManifestDigest pins an oci:// chart to this manifest digest: the chart is pulled by
+	// digest instead of by tag, so the registry client verifies it against the manifest.
+	OCIManifestDigest godigest.Digest
 }
 
 // Option configures the behavior of [NewReadOnlyChartFromRemote].
@@ -123,5 +128,12 @@ func WithAlwaysDownloadProv(dl bool) Option {
 func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 	return func(t *option) {
 		t.HTTPConfig = cfg
+	}
+}
+
+// WithOCIManifestDigest pins an oci:// chart reference to the manifest digest d.
+func WithOCIManifestDigest(d godigest.Digest) Option {
+	return func(t *option) {
+		t.OCIManifestDigest = d
 	}
 }

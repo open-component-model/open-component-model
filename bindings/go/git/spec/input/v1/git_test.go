@@ -1,7 +1,7 @@
 package v1
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"strings"
 	"testing"
 
@@ -44,6 +44,22 @@ func TestGit_Validate(t *testing.T) {
 			repository: "https://example.com/repo.git#branch=main",
 			ref:        "dev",
 			wantErr:    "conflicts",
+		},
+		// local repositories must be ACCEPTED for inputs (they are archived into a portable local blob)
+		{
+			name:       "file:// URL accepted",
+			repository: "file:///srv/repo.git",
+			ref:        "main",
+		},
+		{
+			name:       "file://localhost URL accepted",
+			repository: "file://localhost/srv/repo.git",
+			ref:        "main",
+		},
+		{
+			name:       "plain absolute path accepted",
+			repository: "/srv/repo.git",
+			ref:        "main",
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -110,7 +126,7 @@ func TestGit_JSON(t *testing.T) {
 		t.Run(typ.String(), func(t *testing.T) {
 			r := require.New(t)
 			input := Git{Type: typ, Repository: "https://example.com/repo.git"}
-			data, err := json.Marshal(input)
+			data, err := json.Marshal(input, runtime.JSONOptions)
 			r.NoError(err)
 			r.JSONEq(`{"type":"`+typ.String()+`","repository":"https://example.com/repo.git"}`, string(data))
 			var decoded Git

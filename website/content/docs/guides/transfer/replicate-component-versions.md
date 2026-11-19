@@ -186,7 +186,7 @@ stringData:
       - type: credentials.config.ocm.software
         consumers:
           - identity:
-              type: OCIRegistry
+              type: OCIRegistry/v1
               hostname: ghcr.io
             credentials:
               - type: Credentials
@@ -278,7 +278,7 @@ kubectl apply -f component.yaml
 Wait for it to become ready:
 
 ```bash
-kubectl get component replication-component -o wide
+kubectl get component replication-component
 ```
 
 {{< /step >}}
@@ -333,14 +333,13 @@ and the target `Repository`'s configuration.
 ### Watch it run
 
 ```bash
-kubectl get replication replication-example -owide
+kubectl get replication replication-example
 ```
 
 The transfer proceeds in two stages:
 
-- While the controller walks the component's reference graph through the
-  resolution service, the `Ready` condition stays `False` with reason
-  `ResolutionInProgress` (one pass per graph level, event-driven).
+- The controller walks the component's reference graph to resolve every
+  referenced component version.
 - While the transfer executes, the `TransferInProgress` condition is `True`.
 - On completion the `Ready` condition flips to `True`,
   `status.lastTransferredVersion` and `status.lastTransferredDigest` are set, and
@@ -383,15 +382,13 @@ message, and per-transformation failures are recorded in
 kubectl get replication replication-example -o jsonpath='{.status.lastFailedTransferEvents}'
 ```
 
-### Symptom: `Ready=False` stuck on `ResolutionInProgress`
+### Symptom: `Ready=False` with reason `ReplicationFailed` and "failed to build transfer graph definition"
 
-**Cause:** The controller is still discovering the component's reference graph, or
-a referenced component version cannot be resolved from the source repository.
+**Cause:** A referenced component version cannot be resolved from the source
+repository.
 
 **Fix:** Confirm the source `Component` is ready and that every referenced
-component version actually exists in the source repository. Resolution is
-event-driven and advances one graph level per pass, so a large graph takes
-several reconciliations.
+component version actually exists in the source repository.
 
 ### Symptom: authentication or "unauthorized" errors during transfer
 
@@ -410,8 +407,8 @@ The controller waits for both before transferring.
 **Fix:** Check both objects:
 
 ```bash
-kubectl get component replication-component -o wide
-kubectl get repository replication-target -o wide
+kubectl get component replication-component
+kubectl get repository replication-target
 ```
 
 ## Next Steps

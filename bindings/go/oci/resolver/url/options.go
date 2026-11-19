@@ -1,8 +1,9 @@
 package url
 
 import (
-	"oras.land/oras-go/v2/registry/remote"
+	"github.com/oras-project/oras-go/v3/registry/remote"
 
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 )
 
@@ -34,10 +35,33 @@ func WithBaseClient(client remote.Client) Option {
 	})
 }
 
-// WithPlainHTTP sets whether to use plain HTTP instead of HTTPS for any repository clients
+// WithPlainHTTP uses cleartext HTTP for every host the HTTP configuration
+// does not decide; an explicit plainHTTP value for the host in the
+// configuration wins. It is the programmatic counterpart of a global
+// plainHTTP: true, meant for tools and tests that talk to a local registry.
+// User-facing input goes through the HTTP configuration instead.
 func WithPlainHTTP(plainHTTP bool) Option {
 	return OptionFunc(func(resolver *CachingResolver) {
 		resolver.plainHTTP = plainHTTP
+	})
+}
+
+// WithBaseURLScheme records the scheme prefix ("http" or "https") the base
+// URL was given with, so the resolver can check it against the HTTP
+// configuration. The prefix is deprecated and never decides the connection:
+// http:// is an error for a host that is not plainHTTP, https:// on a
+// plainHTTP host warns about the downgrade. Pass "" for no prefix.
+func WithBaseURLScheme(scheme string) Option {
+	return OptionFunc(func(resolver *CachingResolver) {
+		resolver.baseScheme = scheme
+	})
+}
+
+// WithHTTPConfig sets the central HTTP client configuration. A nil config is
+// allowed.
+func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
+	return OptionFunc(func(resolver *CachingResolver) {
+		resolver.httpConfig = cfg
 	})
 }
 
@@ -49,10 +73,8 @@ func WithSubPath(subPath string) Option {
 	})
 }
 
-// WithBlobCache wires a manifest blob cache into the resolver. Stores
-// returned by [CachingResolver.StoreForReference] are wrapped with
-// [cache.Repository] so their Fetch consults the cache; layer blobs
-// and other non-manifest media types pass through unchanged.
+// WithBlobCache enables manifest Fetch caching for stores returned by
+// [CachingResolver.StoreForReference], leaving other media types uncached.
 //
 // Pass nil to disable blob caching (the default).
 func WithBlobCache(blob *cache.BlobCache) Option {
@@ -61,10 +83,8 @@ func WithBlobCache(blob *cache.BlobCache) Option {
 	})
 }
 
-// WithReferenceCache wires a reference cache into the resolver.
-// Stores returned by [CachingResolver.StoreForReference] are wrapped
-// with [cache.Repository] so their Resolve consults the reference
-// cache before performing a remote round-trip.
+// WithReferenceCache configures reference caching for stores returned by
+// [CachingResolver.StoreForReference].
 //
 // Pass nil to disable reference caching (the default).
 func WithReferenceCache(refs *cache.ReferenceCache) Option {
@@ -80,9 +100,8 @@ func WithReferenceCache(refs *cache.ReferenceCache) Option {
 // threshold <= 0 uses remotestore.DefaultChunkThreshold.
 //
 // Chunked upload also enables streaming pushes (see remotestore.StreamingPusher)
-// so blobs of unknown size or digest can be uploaded without buffering. Chunked
-// upload is bypassed when a blob or reference cache is active on the resolver,
-// because those wrap the raw *remote.Repository.
+// so blobs of unknown size or digest can be uploaded without buffering.
+// Chunked and streaming pushes remain available with either cache enabled.
 func WithChunkedPush(chunkSize, threshold int64) Option {
 	return OptionFunc(func(resolver *CachingResolver) {
 		resolver.chunkSize = chunkSize

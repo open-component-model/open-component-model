@@ -27,7 +27,7 @@ When --output is not provided, the output filename is the resource name.
 
 A reference can pin the component version with a digest: "{component}[:{version}]@sha256:<hex>" (OCI digest
 of the artifact the component version is stored as, which local resources are then read from) or
-"{component}:{version}@jsonNormalisation.v4alpha1+sha256:<hex>" (normalized: the digest signatures sign).
+"{component}:{version}@jsonNormalisation.v4alpha3+sha256:<hex>" (normalized: the digest signatures sign).
 See "ocm get cv --help" for when to use which. The resource content is then verified against its digest in the pinned descriptor.
 
 With --sbom, the Software Bills of Materials describing the resource are downloaded instead of the
@@ -76,10 +76,10 @@ ocm download resource [flags]
 ```
       --extraction-policy enum   policy to apply when extracting a resource. If set to 'disable', the resource will not be extracted, even if they could be. If set to 'auto', the resource will be automatically extracted if the returned resource is a recognized archive format.
                                  (must be one of [auto disable]) (default auto)
-  -h, --help                     help for resource
+  -h, --help[=true|false]        help for resource
       --identity string          resource identity to download
       --output string            output path. With --extraction-policy auto, extractable archives are extracted into this directory; otherwise, the resource is saved as this file path. Intermediate directories are created automatically. If not provided, defaults to the resource name. With --sbom this is a single file, and standard output is used when it is not given.
-      --sbom                     experimental: download the SBOMs describing the resource instead of the resource itself, writing every SBOM found to its own file in the output directory. What is discovered, how it is written out and this flag itself may change in a future release
+      --sbom[=true|false]        experimental: download the SBOMs describing the resource instead of the resource itself, writing every SBOM found to its own file in the output directory. What is discovered, how it is written out and this flag itself may change in a future release
       --transformer string       transformer to use for the output. If not specified, the resource will be written as is. 
 ```
 
@@ -111,6 +111,7 @@ ocm download resource [flags]
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
+                                              the interactive progress display needs a terminal and the text format; any other format prints its records in full instead
                                            (must be one of [json text]) (default text)
       --loglevel enum                      sets the logging level
                                               debug: Show all logs including detailed debugging information

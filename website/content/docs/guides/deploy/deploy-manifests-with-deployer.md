@@ -319,24 +319,24 @@ kubectl apply -f deployment-subst.yaml
 Check the controller resources:
 
 ```shell
-kubectl get resource,namespaceddeployer,component,repository -owide
+kubectl get resource,namespaceddeployer,component,repository
 ```
 
 <details>
 <summary>You should see this output</summary>
 
 ```text
-NAME                                                  READY                   AGE
-resource.delivery.ocm.software/bootstrap-deployment   Applied version 1.0.0   20s
+NAME                                                  COMPONENT REF         RESOURCE              VERSION   READY   AGE   STATUS
+resource.delivery.ocm.software/bootstrap-deployment   bootstrap-component   deployment-resource   1.0.0     True    20s   Applied version 1.0.0
 
-NAME                                                          AGE
-namespaceddeployer.delivery.ocm.software/bootstrap-deployer   20s
+NAME                                                          RESOURCE REF           READY   AGE   STATUS
+namespaceddeployer.delivery.ocm.software/bootstrap-deployer   bootstrap-deployment   True    20s   Applied ocm.software/ocm-k8s-toolkit/simple:1.0.0, resource deployment-resource
 
-NAME                                                  READY                   AGE
-component.delivery.ocm.software/bootstrap-component   Applied version 1.0.0   20s
+NAME                                                  COMPONENT                             VERSION   READY   AGE   STATUS
+component.delivery.ocm.software/bootstrap-component   ocm.software/ocm-k8s-toolkit/simple   1.0.0     True    20s   Applied version 1.0.0
 
-NAME                                                    READY                                    AGE
-repository.delivery.ocm.software/bootstrap-repository   Successfully reconciled OCM repository   20s
+NAME                                                    TYPE          READY   AGE   STATUS
+repository.delivery.ocm.software/bootstrap-repository   OCIRegistry   True    20s   Successfully reconciled OCM repository
 ```
 </details>
 

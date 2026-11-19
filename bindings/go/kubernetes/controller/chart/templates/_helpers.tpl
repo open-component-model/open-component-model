@@ -24,14 +24,6 @@ The name, by default, is ocm-k8s-toolkit. It can be overwritten by nameOverride 
 {{- end }}
 
 {{/*
-Namespace for generated references.
-Always uses the Helm release namespace.
-*/}}
-{{- define "ocm-k8s-toolkit.namespaceName" -}}
-{{- .Release.Namespace }}
-{{- end }}
-
-{{/*
 Resource name with proper truncation for Kubernetes 63-character limit.
 Takes a dict with:
   - .suffix: Resource name suffix (e.g., "metrics", "webhook")
@@ -47,4 +39,26 @@ Dynamically calculates safe truncation to ensure total name length <= 63 chars.
 {{- else }}
 {{- printf "%s-%s" $fullname $suffix | trunc 63 | trimSuffix "-" }}
 {{- end }}
+{{- end }}
+
+{{/*
+Port the manager serves metrics on, parsed from manager.metricsServer.bindAddress.
+Empty when metrics are disabled ("0", the manager default). dig keeps a helm
+upgrade --reuse-values from a release without the key working.
+*/}}
+{{- define "ocm-k8s-toolkit.metricsPort" -}}
+{{- $addr := dig "metricsServer" "bindAddress" "0" .Values.manager | toString }}
+{{- if ne $addr "0" }}{{ regexFind "[0-9]+$" $addr }}{{ end }}
+{{- end }}
+
+{{/*
+Same as metricsPort, but fails the render when metrics are disabled. Used by
+the Prometheus objects, which are useless without a metrics endpoint.
+*/}}
+{{- define "ocm-k8s-toolkit.prometheusMetricsPort" -}}
+{{- $port := include "ocm-k8s-toolkit.metricsPort" . }}
+{{- if not $port }}
+{{- fail "prometheus.enable=true requires manager.metricsServer.bindAddress to be set (for example \":8443\"); the manager serves no metrics with the default \"0\"" }}
+{{- end }}
+{{- $port }}
 {{- end }}

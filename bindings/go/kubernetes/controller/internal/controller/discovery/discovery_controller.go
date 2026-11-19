@@ -3,7 +3,7 @@ package discovery
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 
@@ -39,11 +39,10 @@ import (
 // compiled selector/extraction query against it, and atomically publishes the
 // resulting payload and conditions into the Discovery status.
 //
-// The reconciler is synchronous: contrary to BaseReconciler.PluginManagerFor,
-// the request-scoped plugin manager is built with the reconcile context so
-// cancellation propagates into plugin calls. It does not use the resolution
-// worker pool; repository access happens through a request-scoped resolver
-// rooted at the referenced Component's repository spec.
+// The request-scoped plugin manager is built with the reconcile context so
+// cancellation propagates into plugin calls. Repository access happens
+// through a request-scoped resolver rooted at the referenced Component's
+// repository spec.
 type Reconciler struct {
 	*ocm.BaseReconciler
 }
@@ -54,7 +53,7 @@ var _ ocm.Reconciler = (*Reconciler)(nil)
 const componentRefIndex = "spec.componentRef.name"
 
 // SetupWithManager sets up the Discovery controller with the Manager.
-func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) error {
+func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, concurrency int) error {
 	// Build index for discoveries that reference a component to make sure that we
 	// get notified when a component changes.
 	if err := mgr.GetFieldIndexer().IndexField(ctx, &v1alpha1.Discovery{}, componentRefIndex, func(obj client.Object) []string {
@@ -75,7 +74,8 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager) err
 			handler.EnqueueRequestsFromMapFunc(r.mapComponentToDiscoveries),
 			builder.WithPredicates(ocm.ComponentInfoChangedPredicate{})).
 		WithOptions(controller.Options{
-			RateLimiter: r.RateLimit.Limiter(),
+			MaxConcurrentReconciles: concurrency,
+			RateLimiter:             r.RateLimit.Limiter(),
 		}).
 		Complete(r)
 }
@@ -317,7 +317,7 @@ func (r *Reconciler) setPayload(discovery *v1alpha1.Discovery, payload *internal
 		for _, record := range payload.Extracted {
 			typed := make(v1alpha1.ExtractedRecord, len(record))
 			for name, value := range record {
-				raw, err := json.Marshal(value)
+				raw, err := json.Marshal(value, runtime.JSONOptions)
 				if err != nil {
 					return fmt.Errorf("failed to marshal extracted field %q: %w", name, err)
 				}

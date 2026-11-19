@@ -6,7 +6,8 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"encoding/pem"
 	"fmt"
 	"math/big"
@@ -190,8 +191,8 @@ COMPONENT                   │ VERSION │ PROVIDER
 			if tt.args[len(tt.args)-1] == "--output=json" || tt.args[len(tt.args)-1] == "--output=ndjson" {
 				// Handle JSON output separately
 				var resultJSON any
-				decoder := json.NewDecoder(result)
-				r.NoError(decoder.Decode(&resultJSON), "failed to decode result JSON")
+				decoder := jsontext.NewDecoder(result)
+				r.NoError(json.UnmarshalDecode(decoder, &resultJSON), "failed to decode result JSON")
 
 				component := map[string]any{
 					"component": map[string]any{
@@ -424,17 +425,9 @@ func Test_Get_Component_Version_Formats_Recursive(t *testing.T) {
 - component:
     componentReferences:
     - componentName: ocm.software/leaf-a
-      digest:
-        hashAlgorithm: ""
-        normalisationAlgorithm: ""
-        value: ""
       name: leaf-a
       version: 0.0.1
     - componentName: ocm.software/leaf-b
-      digest:
-        hashAlgorithm: ""
-        normalisationAlgorithm: ""
-        value: ""
       name: leaf-b
       version: 0.0.1
     name: ocm.software/root
@@ -516,21 +509,11 @@ COMPONENT           │ VERSION │ PROVIDER
 								"name":          "leaf-a",
 								"version":       "0.0.1",
 								"componentName": "ocm.software/leaf-a",
-								"digest": map[string]any{
-									"hashAlgorithm":          "",
-									"normalisationAlgorithm": "",
-									"value":                  "",
-								},
 							},
 							map[string]any{
 								"name":          "leaf-b",
 								"version":       "0.0.1",
 								"componentName": "ocm.software/leaf-b",
-								"digest": map[string]any{
-									"hashAlgorithm":          "",
-									"normalisationAlgorithm": "",
-									"value":                  "",
-								},
 							},
 						},
 						"name":               "ocm.software/root",
@@ -574,17 +557,17 @@ COMPONENT           │ VERSION │ PROVIDER
 				}
 
 				var resultJSON any
-				decoder := json.NewDecoder(result)
+				decoder := jsontext.NewDecoder(result)
 				switch {
 				case slices.Contains(tt.args, "--output=json"):
-					r.NoError(decoder.Decode(&resultJSON), "failed to decode result JSON")
+					r.NoError(json.UnmarshalDecode(decoder, &resultJSON), "failed to decode result JSON")
 					r.EqualValues([]any{expectedRoot, expectedLeafA, expectedLeafB}, resultJSON)
 				case slices.Contains(tt.args, "--output=ndjson"):
-					r.NoError(decoder.Decode(&resultJSON))
+					r.NoError(json.UnmarshalDecode(decoder, &resultJSON))
 					r.EqualValues(expectedRoot, resultJSON)
-					r.NoError(decoder.Decode(&resultJSON))
+					r.NoError(json.UnmarshalDecode(decoder, &resultJSON))
 					r.EqualValues(expectedLeafA, resultJSON)
-					r.NoError(decoder.Decode(&resultJSON))
+					r.NoError(json.UnmarshalDecode(decoder, &resultJSON))
 					r.EqualValues(expectedLeafB, resultJSON)
 				}
 			}
@@ -960,7 +943,7 @@ resources:
 		r.NoError(blob.Copy(&buf, blb))
 		r.Equal("foobar", buf.String(), "expected resource content to match test file content")
 
-		t.Run("expect failure on existing component version", func(t *testing.T) {
+		t.Run("expect failure on invalid semver in constructor", func(t *testing.T) {
 			constructorYAML = fmt.Sprintf(`
 name: ocm.software/examples-01
 version: invalid_1.0.0
@@ -985,16 +968,17 @@ resources:
 			_, err := test.OCM(t, test.WithArgs("add", "cv",
 				"--constructor", constructorYAMLFilePath,
 				"--repository", archiveFilePath,
-				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
 			), test.WithErrorOutput(logs), test.WithOutput(result))
 
 			r.Error(err, "expected error on invalid component version semver")
 		})
 
-		t.Run("expect failure on invalid semver in constructor", func(t *testing.T) {
+		// The abort policy is deprecated but still honoured until it is removed.
+		t.Run("expect failure on existing component version with abort-and-fail", func(t *testing.T) {
 			_, err := test.OCM(t, test.WithArgs("add", "cv",
 				"--constructor", constructorYAMLFilePath,
 				"--repository", archiveFilePath,
+				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyAbortAndFail),
 			), test.WithErrorOutput(logs))
 
 			r.Error(err, "expected error on adding existing component version")
@@ -1005,7 +989,7 @@ resources:
 			r.NotEmpty(entries, "expected log entries to be present")
 		})
 
-		t.Run("expect success on replace strategy", func(t *testing.T) {
+		t.Run("expect existing component version to be replaced by default", func(t *testing.T) {
 			constructorYAML = fmt.Sprintf(`
 name: ocm.software/examples-01
 version: 1.0.0
@@ -1030,10 +1014,9 @@ resources:
 			_, err := test.OCM(t, test.WithArgs("add", "cv",
 				"--constructor", constructorYAMLFilePath,
 				"--repository", archiveFilePath,
-				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
 			), test.WithErrorOutput(logs), test.WithOutput(result))
 
-			r.NoError(err, "could not construct component version", "replace strategy should allow an existing component version to be replaced")
+			r.NoError(err, "could not construct component version", "an existing component version is replaced by default")
 
 			entries, err := logs.List()
 			r.NoError(err, "failed to list log entries")
@@ -1093,7 +1076,6 @@ resources:
 				"--constructor", constructorYAMLFilePath,
 				"--repository", archiveFilePath,
 				"--working-directory", tmp,
-				"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
 			), test.WithErrorOutput(logs))
 
 			r.Equal(new(tmp), ocmctx.FromContext(cmd.Context()).FilesystemConfig().WorkingDirectory, "expected working directory to be set in ocm context automatically")
@@ -1181,7 +1163,6 @@ components:
 			"--repository", archiveFilePath,
 			"--working-directory", tmp,
 			"--config", legacyResolverConfigYAMLFilePath,
-			"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
 			"--external-component-version-copy-policy", string(componentversion.ExternalComponentVersionCopyPolicyCopyOrFail),
 		), test.WithErrorOutput(logs))
 
@@ -1297,7 +1278,6 @@ components:
 			"--repository", archiveFilePath,
 			"--working-directory", tmp,
 			"--config", resolverConfigYAMLFilePath,
-			"--component-version-conflict-policy", string(componentversion.ComponentVersionConflictPolicyReplace),
 			"--external-component-version-copy-policy", string(componentversion.ExternalComponentVersionCopyPolicyCopyOrFail),
 		), test.WithErrorOutput(logs))
 
@@ -1331,6 +1311,59 @@ components:
 			})
 		}
 	})
+}
+
+// Test_Add_Component_Version_Preserves_Source_Refs proves resource srcRefs from the
+// constructor reach the stored component version.
+func Test_Add_Component_Version_Preserves_Source_Refs(t *testing.T) {
+	r := require.New(t)
+	tmp := t.TempDir()
+
+	constructorYAML := `
+name: acme.org/srcrefs
+version: 1.0.0
+provider:
+  name: acme.org
+sources:
+  - name: src
+    type: blob
+    input:
+      type: utf8/v1
+      text: "source"
+resources:
+  - name: app
+    type: blob
+    relation: local
+    srcRefs:
+      - identitySelector:
+          name: src
+    input:
+      type: utf8/v1
+      text: "hello"
+`
+	constructorYAMLFilePath := filepath.Join(tmp, "component-constructor.yaml")
+	r.NoError(os.WriteFile(constructorYAMLFilePath, []byte(constructorYAML), 0o600))
+
+	archiveFilePath := filepath.Join(tmp, "transport-archive")
+
+	// The sources deprecation warning is written to stderr and is expected here.
+	_, err := test.OCM(t, test.WithArgs("add", "cv",
+		"--constructor", constructorYAMLFilePath,
+		"--repository", archiveFilePath,
+	), test.WithErrorOutput(new(bytes.Buffer)))
+	r.NoError(err, "could not construct component version")
+
+	fs, err := filesystem.NewFS(archiveFilePath, os.O_RDONLY)
+	r.NoError(err, "could not create test filesystem")
+	archive := ctf.NewFileSystemCTF(fs)
+	helperRepo, err := oci.NewRepository(ocictf.WithCTF(ocictf.NewFromCTF(archive)))
+	r.NoError(err, "could not create helper test repository")
+
+	desc, err := helperRepo.GetComponentVersion(t.Context(), "acme.org/srcrefs", "1.0.0")
+	r.NoError(err, "could not retrieve component version from test repository")
+	r.Len(desc.Component.Resources, 1, "expected one resource in component version")
+	r.Len(desc.Component.Resources[0].SourceRefs, 1, "expected resource srcRefs to be preserved")
+	r.Equal("src", desc.Component.Resources[0].SourceRefs[0].IdentitySelector["name"], "expected srcRef identity selector to match")
 }
 
 // Test_Add_Component_Version_Formats tests the different output formats for the add cv command
@@ -1550,8 +1583,8 @@ resources:
 			if tt.outputArg == "--output=json" || tt.outputArg == "--output=ndjson" {
 				// Handle JSON output separately
 				var resultJSON any
-				decoder := json.NewDecoder(result)
-				r.NoError(decoder.Decode(&resultJSON), "failed to decode result JSON")
+				decoder := jsontext.NewDecoder(result)
+				r.NoError(json.UnmarshalDecode(decoder, &resultJSON), "failed to decode result JSON")
 
 				component := map[string]any{
 					"component": map[string]any{
@@ -1836,13 +1869,52 @@ configurations:
 	)
 	r.NoError(err, "failed to sign component version")
 
+	// Signing without --normalisation must default to jsonNormalisation/v4alpha3:
+	// the printed signature pins its own normalisation algorithm.
+	r.Contains(logs.String(), "jsonNormalisation/v4alpha3",
+		"signing without --normalisation must default to v4alpha3")
+
+	// --normalisation only offers signable algorithms: the verify-only v1 and
+	// the legacy v3 alias are rejected while parsing the flag.
+	for _, algo := range []string{"jsonNormalisation/v1", "jsonNormalisation/v3"} {
+		_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+			reference,
+			"--signature", signatureName,
+			"--normalisation", algo,
+			"--config", ocmConfigFilePath),
+		)
+		r.ErrorContains(err, "expected one of", "%s must not be signable", algo)
+	}
+
+	const olderAlgorithmWarning = "older normalisation algorithm"
+	verifyLogs := test.NewJSONLogReader()
 	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
 		reference,
 		"--signature", signatureName,
 		"--config", ocmConfigFilePath),
-		test.WithOutput(logs),
+		test.WithErrorOutput(verifyLogs),
 	)
 	r.NoError(err, "failed to verify component version")
+	r.NotContains(verifyLogs.String(), olderAlgorithmWarning, "a default signature must not warn")
+
+	// Trusting a signature under an older algorithm warns, recommending an upgrade.
+	_, err = test.OCM(t, test.WithArgs("sign", "component-version",
+		reference,
+		"--signature", signatureName,
+		"--normalisation", "jsonNormalisation/v4alpha1",
+		"--force",
+		"--config", ocmConfigFilePath),
+	)
+	r.NoError(err, "failed to re-sign component version with v4alpha1")
+	verifyLogs = test.NewJSONLogReader()
+	_, err = test.OCM(t, test.WithArgs("verify", "component-version",
+		reference,
+		"--signature", signatureName,
+		"--config", ocmConfigFilePath),
+		test.WithErrorOutput(verifyLogs),
+	)
+	r.NoError(err, "failed to verify v4alpha1 signature")
+	r.Contains(verifyLogs.String(), olderAlgorithmWarning, "a v4alpha1 signature must warn")
 }
 
 func Test_Sign_With_Sigstore_Spec_Selects_Cosign_Handler(t *testing.T) {

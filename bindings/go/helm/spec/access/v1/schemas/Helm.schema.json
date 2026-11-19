@@ -35,7 +35,7 @@
     },
     "version": {
       "type": "string",
-      "description": "Version can either be specified as part of the chart name or separately."
+      "description": "Version can either be specified as part of the chart name or separately. It must name a\nversion that the repository index lists verbatim; SemVer constraints (\"1.x\", \"^1.0.0\")\nare not resolved. A leading \"v\" is optional, as SemVer does not treat it as part of the\nversion. An omitted version resolves to the newest version in the index at the time the\nresource is digested, and is pinned into the access from then on."
     }
   },
   "required": [

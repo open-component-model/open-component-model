@@ -186,7 +186,7 @@ ocm sign cv ./transport-archive//github.com/acme.org/helloworld:1.0.0
 time=2026-03-17T15:32:55.707+01:00 level=INFO msg="no signer configured, using default" algorithm=RSASSA-PSS encodingPolicy=Plain
 digest:
   hashAlgorithm: SHA-256
-  normalisationAlgorithm: jsonNormalisation/v4alpha1
+  normalisationAlgorithm: jsonNormalisation/v4alpha3
   value: 4e376182b3d535143e8e009b1e467df3a5b0c1f912c71ae432200654c355606f
 name: default
 signature:
@@ -194,7 +194,7 @@ signature:
   mediaType: application/vnd.ocm.signature.rsa.pss
   value: 9cafe48d6633b3889c445ac06e6b9d1e108126de28ea8e8c33a0821907f3933bba74a0dd33a7451912edd19ca79a49a6c5d21c7528a65182a827f14d6a79d3fcf0bf2e2d239e39a0421d283d74929abdb227a50010fda4791eb14f2abd55453b8de738312a6cd42cbb58c98ccc056aa0c4fefd39a6156370545befef3322974e321bc1b516d3cfc03bfa94a63c6f619cdf050ae08972e908bf91ccd62884c7540e27df492ebc8774cabbc565e47b39f73ab09c41c4750d3d8afdd6e619a3e92b7a85f84fb4e8574f79015a048f777d43d6eb9fd8ce7950f9b1e3e7a92641d6457cfc0c5b0e0eedcf0ac43e6f547452acd714e6d7629698de4529fb4b326a5813a711bcac6ca120e70a2bca0bb6fac4ba669f06694dd346f220dbbd6116bd5316ed104f630eeb84d2512beca587e0b9c7ba6d5e318ff14e1cda8f4eae05c55758018a57a5d1c8773c137c6edaeb9a817c8e305c62dfe82d3f76244b13481450e25674345481c61efdf9f97b73aa29579a133551163f5d82f2370897042a2c86a25f3a5a071b598e0032bc2395f63fced400c677901e5bd4826f83af3a0fdc5de9066684758f05c4900c25bc8898d0f0cd6b82075eac6df946b12b0f76cb59addfa8acbcdfe8ccb371ca80c792424f7e5a9ef85f6b33c11e243c424af2e90c5f725e337ed11539b8ccca9868c1ac4b6977e71c3b2901b68feb7480e6fbe08db8e8
 
-time=2026-03-17T15:32:55.725+01:00 level=INFO msg="signed successfully" name=default digest=4e376182b3d535143e8e009b1e467df3a5b0c1f912c71ae432200654c355606f hashAlgorithm=SHA-256 normalisationAlgorithm=jsonNormalisation/v4alpha1
+time=2026-03-17T15:32:55.725+01:00 level=INFO msg="signed successfully" name=default digest=4e376182b3d535143e8e009b1e467df3a5b0c1f912c71ae432200654c355606f hashAlgorithm=SHA-256 normalisationAlgorithm=jsonNormalisation/v4alpha3
 ```
 
 </details>
@@ -214,7 +214,7 @@ You should see a `signatures:` section with your signature.
   signatures:
   - digest:
       hashAlgorithm: SHA-256
-      normalisationAlgorithm: jsonNormalisation/v4alpha1
+      normalisationAlgorithm: jsonNormalisation/v4alpha3
       value: 4e376182b3d535143e8e009b1e467df3a5b0c1f912c71ae432200654c355606f
     name: default
     signature:

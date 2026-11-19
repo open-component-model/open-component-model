@@ -120,8 +120,10 @@ func (in *NamespacedDeployer) GetDeployerStatus() *DeployerStatus {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Namespaced
-// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,description="Indicates if the NamespacedDeployer is Ready",priority=1
+// +kubebuilder:printcolumn:name="Resource Ref",type=string,JSONPath=`.spec.resourceRef.name`,description="Referenced Resource"
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`,description="Indicates if the NamespacedDeployer is Ready"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Displays the Age of the NamespacedDeployer"
+// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,description="Ready condition message"
 
 // NamespacedDeployer is the Schema for the namespaceddeployers API.
 // It applies objects with the permissions of the service account

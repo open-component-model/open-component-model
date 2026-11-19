@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"os"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -20,9 +22,12 @@ type GetOCIArtifact struct {
 	Scheme             *runtime.Scheme
 	Repository         repository.ResourceRepository
 	CredentialProvider credentials.Resolver
+	// TempDir is the directory content is buffered in when the spec sets no output path.
+	// Empty means the default temporary directory of the operating system.
+	TempDir string
 }
 
-func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
+func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (_ runtime.Typed, err error) {
 	var transformation v1alpha1.GetOCIArtifact
 	if err := t.Scheme.Convert(step, &transformation); err != nil {
 		return nil, fmt.Errorf("failed converting generic transformation to get oci artifact transformation: %w", err)
@@ -63,12 +68,19 @@ func (t *GetOCIArtifact) Transform(ctx context.Context, step runtime.Typed) (run
 	if err != nil {
 		return nil, fmt.Errorf("failed downloading OCI artifact %v %w", resource.ToIdentity(), err)
 	}
-	defer releaseBlob(ctx, blobContent)
 
 	// Determine output path
-	if outputPath, err = DetermineOutputPath(outputPath, "oci-artifact"); err != nil {
+	if outputPath, err = filesystem.BufferFile(outputPath, t.TempDir, "oci-artifact"); err != nil {
 		return nil, fmt.Errorf("failed determining output path: %w", err)
 	}
+	// BufferFile creates the file; retain it on success for the output, remove it on failure.
+	defer func() {
+		if err != nil {
+			if removeErr := os.Remove(outputPath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+				slog.WarnContext(ctx, "failed to clean up OCI artifact output file after error", "path", outputPath, "err", removeErr)
+			}
+		}
+	}()
 
 	// Buffer blob to file
 	fileSpec, err := filesystem.BlobToSpec(blobContent, outputPath)

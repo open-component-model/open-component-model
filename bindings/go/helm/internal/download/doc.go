@@ -48,6 +48,9 @@
 //
 // Client certificates and CA certificates can be configured either inline or via file paths
 // using [WithCACert], [WithCACertFile], or through credential keys [CredentialCertFile] and [CredentialKeyFile].
+// With [WithHTTPConfig], one client built from that configuration serves the OCI registry, the OCI
+// chart pull and HTTP/S downloads; a CA certificate or client certificate configured as above
+// replaces the one of the configuration.
 //
 // # Provenance
 //

@@ -2,7 +2,7 @@ package plugins
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // TestStructs defines sample structs for testing
@@ -67,7 +68,7 @@ func TestCall(t *testing.T) {
 				Status:  "success",
 				Message: "Operation completed",
 			}
-			json.NewEncoder(w).Encode(resp)
+			json.MarshalWrite(w, resp, runtime.JSONOptions)
 		}))
 		defer server.Close()
 
@@ -356,7 +357,7 @@ func TestCall(t *testing.T) {
 				Status:  "success",
 				Message: "Operation completed",
 			}
-			json.NewEncoder(w).Encode(resp)
+			json.MarshalWrite(w, resp, runtime.JSONOptions)
 		}))
 		defer server.Close()
 

@@ -7,12 +7,18 @@ on:
     paths:
       - '.github/workflows/verify-github-scripts.yml'
       - '.github/scripts/**'
+      # Data the script tests validate.
+      - '.github/benchmarks/bsi/**'
+      - '.github/stig/ocm-supplement-xccdf.xml'
   pull_request:
     branches:
       - main
     paths:
       - '.github/workflows/verify-github-scripts.yml'
       - '.github/scripts/**'
+      # Data the script tests validate.
+      - '.github/benchmarks/bsi/**'
+      - '.github/stig/ocm-supplement-xccdf.xml'
 
 permissions:
   contents: read
@@ -27,10 +33,12 @@ jobs:
         with:
           sparse-checkout: |
             .github/scripts
+            .github/benchmarks
+            .github/stig
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .github/scripts/package.json
 

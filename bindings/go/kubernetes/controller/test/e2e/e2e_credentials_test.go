@@ -44,7 +44,7 @@ var _ = Describe("Credentials E2E Tests", func() {
 			)
 
 			By("creating an instance of the example")
-			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(testdata, ctx.SpecReport().LeafNodeText, Instance), "condition=Ready=true", timeout)).To(Succeed())
+			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(testdata, ctx.SpecReport().LeafNodeText, KroInstance), "condition=Ready=true", timeout)).To(Succeed())
 
 			By("validating the example")
 			deploymentName := "deployment.apps/" + testName + "-podinfo"
@@ -75,7 +75,7 @@ var _ = Describe("Credentials E2E Tests", func() {
 			)
 
 			By("creating an instance of the example")
-			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(testdata, ctx.SpecReport().LeafNodeText, Instance), "condition=Ready=true", timeout)).To(Succeed())
+			Expect(utils.DeployAndWaitForResource(ctx, filepath.Join(testdata, ctx.SpecReport().LeafNodeText, KroInstance), "condition=Ready=true", timeout)).To(Succeed())
 
 			By("validating the example")
 			deploymentName := "deployment.apps/" + testName + "-podinfo"
@@ -102,12 +102,16 @@ func prepareOCMwithCredentials(ctx SpecContext, testName string, testdata string
 	_, err := utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred())
 
+	plainHTTPConfig, err := utils.PlainHTTPConfig(tmpDir)
+	Expect(err).NotTo(HaveOccurred())
+
 	ctfRef := "ctf::" + ctfDir + "//ocm.software/ocm-k8s-toolkit/" + testName
 	cmd = exec.CommandContext(ctx, ocm,
 		"transfer", "cv",
 		ctfRef,
 		privateRegistry,
 		"--config", ocmConfig,
+		"--config", plainHTTPConfig,
 	)
 	_, err = utils.Run(cmd)
 	Expect(err).NotTo(HaveOccurred())

@@ -30,7 +30,8 @@ func collectDoc(cg *ast.CommentGroup) (doc []string, deprecated bool) {
 
 	for _, c := range cg.List {
 		for _, raw := range splitCommentText(c.Text) {
-			line := extractCommentLine(raw)
+			body := extractCommentLine(raw)
+			line := strings.TrimSpace(body)
 
 			if skipLine(line) {
 				continue
@@ -41,17 +42,23 @@ func collectDoc(cg *ast.CommentGroup) (doc []string, deprecated bool) {
 				deprecated = true
 			}
 
-			lines = append(lines, line)
+			lines = append(lines, body)
 		}
 	}
 
 	return lines, deprecated
 }
 
+// extractCommentLine strips the comment markers from a single comment line. For
+// line comments the indentation after "// " is kept: godoc marks code blocks and
+// lists by indentation, and the website renders descriptions by those rules.
 func extractCommentLine(s string) string {
 	s = strings.TrimSpace(s)
 
-	s = strings.TrimPrefix(s, "//")
+	if rest, ok := strings.CutPrefix(s, "//"); ok {
+		return strings.TrimRight(strings.TrimPrefix(rest, " "), " \t")
+	}
+
 	s = strings.TrimPrefix(s, "/*")
 	s = strings.TrimSuffix(s, "*/")
 

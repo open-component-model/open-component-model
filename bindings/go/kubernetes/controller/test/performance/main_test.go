@@ -1,7 +1,7 @@
 package main
 
 import (
-	"errors"
+	"encoding/json/v2"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestParseFlags(t *testing.T) {
@@ -21,7 +23,6 @@ func TestParseFlags(t *testing.T) {
 		{
 			name: "defaults run the full matrix",
 			want: func(r *require.Assertions, o options) {
-				r.Equal(allScenarios, o.scenarios)
 				r.Equal([]int{100, 500, 1000}, o.sizes)
 				r.Equal(3, o.repeats)
 				r.Equal("kind-ocm-perf", o.kubeContext)
@@ -29,28 +30,26 @@ func TestParseFlags(t *testing.T) {
 				r.Equal(defaultVersions, o.versions)
 				r.Equal(defaultDepth, o.depth)
 				r.Equal(defaultResources, o.resources)
-				r.Equal(defaultFanout, o.fanout)
 				r.Equal(defaultRepositories, o.repositories)
 				r.True(o.sign)
 			},
 		},
 		{
 			name: "subset",
-			args: []string{"--scenarios=cold, update", "--objects=10", "--repeats=1", "--timeout=1m"},
+			args: []string{"--objects=10, 20", "--repeats=1", "--timeout=1m"},
 			want: func(r *require.Assertions, o options) {
-				r.Equal([]scenario{scenarioCold, scenarioUpdate}, o.scenarios)
-				r.Equal([]int{10}, o.sizes)
+				r.Equal([]int{10, 20}, o.sizes)
 				r.Equal(1, o.repeats)
 				r.Equal(time.Minute, o.timeout)
 			},
 		},
-		{name: "unknown scenario", args: []string{"--scenarios=warm"}, wantErr: `unknown scenario "warm"`},
+		{name: "scenarios are gone", args: []string{"--scenarios=complex"}, wantErr: "flag provided but not defined: -scenarios"},
 		{name: "invalid size", args: []string{"--objects=100,0"}, wantErr: `invalid object count "0"`},
 		{name: "invalid repeats", args: []string{"--repeats=0"}, wantErr: "repeats must be at least 1"},
 		{name: "depth 0 is allowed", args: []string{"--depth=0"}, want: func(r *require.Assertions, o options) { r.Zero(o.depth) }},
 		{name: "invalid depth", args: []string{"--depth=-1"}, wantErr: "depth must not be negative"},
-		{name: "invalid fanout", args: []string{"--fanout=0"}, wantErr: "versions, resources, fanout and repositories must be at least 1"},
-		{name: "invalid repositories", args: []string{"--repositories=0"}, wantErr: "versions, resources, fanout and repositories must be at least 1"},
+		{name: "invalid resources", args: []string{"--resources=0"}, wantErr: "versions, resources and repositories must be at least 1"},
+		{name: "invalid repositories", args: []string{"--repositories=0"}, wantErr: "versions, resources and repositories must be at least 1"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -66,27 +65,20 @@ func TestParseFlags(t *testing.T) {
 	}
 }
 
-func TestSummarizeRegistryUnavailable(t *testing.T) {
-	r := require.New(t)
-	res := &result{}
-	after := scrapes{registryErr: errors.New("connection refused")}
-
-	err := (&runner{}).summarize(res, scrapes{}, after, nil, time.Second)
-
-	r.ErrorContains(err, "registry metrics unavailable: connection refused")
-	r.Nil(res.Usage.RegistryRequests)
-}
-
 func TestWriteSummary(t *testing.T) {
 	r := require.New(t)
 	dir := t.TempDir()
-	requests := 42.0
+	requests, driftRequests := 42.0, 7.0
 	results := []*result{
 		{
-			Scenario: scenarioComplex, Signed: true, Usage: usage{RegistryRequests: &requests},
+			Signed:      true,
 			Environment: environment{ControllerImageID: "docker.io/library/import-2026-10-26@sha256:18bb5d7f6bba0123456789"},
+			Phases: []phaseResult{
+				{Name: "rollout", Cost: cost{RegistryRequests: &requests}},
+				{Name: "drift", Outcome: outcome{Ready: 3}, Cost: cost{RegistryRequests: &driftRequests}, Errors: []string{"boom"}},
+			},
 		},
-		{Scenario: scenarioCold, Outcome: outcome{TimedOut: true}, ControllerRestarted: true},
+		{Phases: []phaseResult{{Name: "rollout", Outcome: outcome{TimedOut: true, ControllerRestarted: true}}}},
 	}
 
 	r.NoError(writeSummary(dir, results))
@@ -94,11 +86,69 @@ func TestWriteSummary(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join(dir, "summary.md"))
 	r.NoError(err)
 	rows := strings.Split(strings.TrimSpace(string(raw)), "\n")
-	r.Len(rows, 4)
-	r.Contains(rows[2], "| complex | 0 | 0 | 18bb5d7f6bba | yes |")
+	r.Len(rows, 2+3, "one row per phase; a run whose rollout did not complete has one")
+	r.Contains(rows[0], "| Phase |")
+	r.Contains(rows[2], "| rollout | 0 | 0 | 18bb5d7f6bba | yes |")
 	r.Contains(rows[2], "| 42 |  |")
-	r.Contains(rows[3], "| cold | 0 | 0 | n/a | no |")
-	r.Contains(rows[3], "| n/a | timed out, controller restarted |")
+	r.Contains(rows[3], "| drift | 0 | 0 | 18bb5d7f6bba | yes | 3 |")
+	r.Contains(rows[3], "| 7 | drift metric errors |")
+	r.Contains(rows[4], "| rollout | 0 | 0 | n/a | no |")
+	r.Contains(rows[4], "| n/a | rollout timed out, rollout controller restarted |")
+}
+
+func TestResultJSON(t *testing.T) {
+	r := require.New(t)
+	requests := 5.0
+	res := &result{Phases: []phaseResult{
+		{
+			Name:      "rollout",
+			Outcome:   outcome{ControllerRestarted: true},
+			Durations: durations{Prepare: 70, Change: 3, Total: 10},
+			Cost:      cost{ControllerCounters: map[string]float64{"a": 1}},
+		},
+		{
+			Name:      "drift",
+			Outcome:   outcome{NotReady: map[string]int{"NamespacedDeployer/unknown": 1}},
+			Durations: durations{Total: 2},
+			Cost:      cost{RegistryRequests: &requests, RegistryCounters: map[string]float64{"b": 4}},
+		},
+	}}
+
+	raw, err := json.Marshal(res, ocmruntime.JSONOptions)
+	r.NoError(err)
+	var got map[string]any
+	r.NoError(json.Unmarshal(raw, &got, ocmruntime.JSONOptions))
+	for _, key := range []string{"durations", "outcome", "usage", "controllerCounters", "scenario", "drift"} {
+		r.NotContains(got, key, "every phase lives in phases")
+	}
+	for _, key := range []string{"versions", "depth", "resources", "repositories", "signed"} {
+		r.Contains(got, key, "the workload knobs are always written, 0 and false included")
+	}
+
+	phases := got["phases"].([]any)
+	r.Len(phases, 2)
+	rollout, drift := phases[0].(map[string]any), phases[1].(map[string]any)
+	r.Equal("rollout", rollout["name"])
+	r.Equal("drift", drift["name"], "in execution order")
+	r.ElementsMatch([]string{"name", "outcome", "durations", "cost"}, keys(rollout))
+
+	r.Equal(true, rollout["outcome"].(map[string]any)["controllerRestarted"])
+	r.NotContains(rollout["outcome"], "notReady", "only written when a phase timed out")
+	r.Equal(map[string]any{"NamespacedDeployer/unknown": 1.0}, drift["outcome"].(map[string]any)["notReady"])
+	r.InDelta(70, rollout["durations"].(map[string]any)["prepare"], 0)
+	r.InDelta(3, rollout["durations"].(map[string]any)["change"], 0)
+	r.InDelta(0, drift["durations"].(map[string]any)["prepare"], 0, "written for every phase")
+	r.InDelta(5, drift["cost"].(map[string]any)["registryRequests"], 0)
+	r.Contains(drift["cost"], "registryCounters")
+	r.Contains(rollout["cost"], "controllerCounters")
+}
+
+func keys(m map[string]any) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }
 
 func TestPercentile(t *testing.T) {
@@ -148,4 +198,10 @@ func TestSettledAt(t *testing.T) {
 			r.InDelta(tc.at, at, 0)
 		})
 	}
+}
+
+func TestResultNotesNameTheirPhase(t *testing.T) {
+	r := require.New(t)
+	res := &result{Phases: []phaseResult{{Name: "rollout"}, {Name: "drift", Outcome: outcome{Unsettled: true}}}}
+	r.Equal([]string{"drift queues not drained"}, res.notes(), "a phase that did not complete makes the run unusable")
 }

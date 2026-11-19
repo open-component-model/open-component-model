@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
-	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	httpclient "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/credentialtyperepository"
@@ -21,15 +20,9 @@ func Register(inputRegistry *input.RepositoryRegistry,
 	digestProcessorRegistry *digestprocessor.RepositoryRegistry,
 	credentialTypeRegistry *credentialtyperepository.CredentialTypeRegistry,
 	httpConfig *httpv1alpha1.Config,
-	filesystemConfig *filesystemv1alpha1.Config,
 	checksumHTTPConfig *checksumhttpv1alpha1.Config,
 ) error {
-	var tempFolder string
-	if filesystemConfig.TempFolder != nil {
-		tempFolder = *filesystemConfig.TempFolder
-	}
 	method := &wgetinput.InputMethod{
-		TempFolder:     tempFolder,
 		HTTPConfig:     httpConfig,
 		ChecksumConfig: checksumHTTPConfig,
 	}
@@ -43,7 +36,6 @@ func Register(inputRegistry *input.RepositoryRegistry,
 	}
 
 	wgetResourceRepository := wgetrepository.NewResourceRepository(
-		filesystemConfig,
 		wgetrepository.WithHTTPClient(httpclient.New(httpclient.WithConfig(httpConfig))),
 		wgetrepository.WithChecksumConfig(checksumHTTPConfig),
 	)

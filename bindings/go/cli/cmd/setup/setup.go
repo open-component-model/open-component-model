@@ -18,9 +18,12 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/plugin/spec/config/v2alpha1"
 	checksumhttpv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/checksum/http/v1alpha1/spec"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	typesv1 "ocm.software/open-component-model/bindings/go/configuration/types/v1"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	credentialsRuntime "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	ocicachev1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/cache/v1alpha1"
+	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 )
 
@@ -39,7 +42,7 @@ func OCMConfig(cmd *cobra.Command) error {
 }
 
 func PluginManager(cmd *cobra.Command) error {
-	pluginManager := manager.NewPluginManager(cmd.Context())
+	pluginManager := manager.NewPluginManager(cmd.Context(), manager.WithArtifactVerifier(ocitar.LayoutVerifier{}))
 
 	if cfg := ocmctx.FromContext(cmd.Context()).Configuration(); cfg == nil {
 		slog.WarnContext(cmd.Context(), "could not get configuration to initialize plugin manager")
@@ -55,7 +58,7 @@ func PluginManager(cmd *cobra.Command) error {
 		}
 
 		if pluginCfg.IdleTimeout == 0 {
-			pluginCfg.IdleTimeout = v2alpha1.Duration(time.Hour)
+			pluginCfg.IdleTimeout = typesv1.Duration(time.Hour)
 		}
 
 		var loadedAnyPlugins bool
@@ -94,7 +97,11 @@ func PluginManager(cmd *cobra.Command) error {
 	if err != nil {
 		return fmt.Errorf("could not get checksum-http configuration: %w", err)
 	}
-	if err := builtin.Register(pluginManager, filesystemConfig, httpConfig, checksumHTTPConfig, slog.Default()); err != nil {
+	ociCacheConfig, err := ocicachev1alpha1.LookupConfig(ocmContext.Configuration())
+	if err != nil {
+		return fmt.Errorf("could not get oci cache configuration: %w", err)
+	}
+	if err := builtin.Register(pluginManager, filesystemConfig, httpConfig, checksumHTTPConfig, ociCacheConfig, slog.Default()); err != nil {
 		return fmt.Errorf("could not register builtin plugins: %w", err)
 	}
 
@@ -166,7 +173,7 @@ func Syscalls(cmd *cobra.Command) {
 	))
 }
 
-func timeoutString(t *httpv1alpha1.Timeout) string {
+func timeoutString(t *typesv1.Duration) string {
 	if t == nil {
 		return "<nil>"
 	}

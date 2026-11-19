@@ -31,7 +31,7 @@ bindings/go/kubernetes/controller/
 ├── internal/
 │   ├── controller/                      # Reconcilers (one per CRD above)
 │   ├── ocm/                             # Base reconciler, shared OCM utilities
-│   └── resolution/                      # Component resolution worker pool + cache
+│   └── resolution/                      # Component version resolution + verification
 ├── chart/                               # Helm chart
 └── hack/                                # Generation scripts (CRD/RBAC)
 ```
@@ -45,9 +45,8 @@ The controller uses the same OCM [plugin system](https://ocm.software/docs/conce
 startup, `cmd/main.go` registers plugins for OCI component repositories, RSA signing, OCI credentials, resource
 fetching, digest processing, and blob transformation. These plugins handle all communication with OCM repositories.
 
-Component descriptor resolution runs through a worker pool with an in-memory LRU cache
-(`internal/resolution/workerpool/`). The worker pool is added as a controller-runtime `Runnable` so the manager handles
-its lifecycle.
+Component descriptor resolution runs synchronously inside the reconcile loop through `internal/resolution/`, which
+also verifies signatures and reference digests.
 
 ## CRD and Code Generation
 
@@ -68,8 +67,8 @@ To validate that everything is in sync:
 task bindings/go/kubernetes/controller:helm/validate
 ```
 
-This regenerates all artifacts, lints the chart, renders templates, and checks that the working tree is clean. CI
-enforces this - if you modify `api/v1alpha1/` types or RBAC markers and forget to regenerate, CI will fail.
+This regenerates all artifacts, lints the chart, runs the chart unit tests, renders templates, and checks that the
+working tree is clean. CI enforces this - if you modify `api/v1alpha1/` types or RBAC markers and forget to regenerate, CI will fail.
 
 ## Prerequisites
 
@@ -83,7 +82,8 @@ In addition to the [general prerequisites](../../../../CONTRIBUTING.md#prerequis
 - **[kro](https://kro.run)** - required for E2E tests
 
 All other tools (controller-gen, envtest, helm-docs, yq) are installed automatically by the Taskfile into
-`bin/`. Their versions are pinned in `.env`.
+`bin/`. Their versions are pinned in `.env`. The Helm plugins `schema` and `unittest` are installed into your
+Helm plugin directory on first use.
 
 ## Building
 
@@ -142,6 +142,9 @@ The chart lives in `chart/` and is the primary deployment mechanism.
 ```bash
 # Lint the chart
 task bindings/go/kubernetes/controller:helm/lint
+
+# Run the chart unit tests in chart/tests (helm-unittest, installed on first run)
+task bindings/go/kubernetes/controller:helm/unittest
 
 # Render templates locally
 task bindings/go/kubernetes/controller:helm/template

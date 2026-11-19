@@ -3,17 +3,13 @@ package input_test
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
+	"errors"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/go-git/go-git/v6"
-	"github.com/go-git/go-git/v6/config"
-	"github.com/go-git/go-git/v6/plumbing"
-	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -23,6 +19,7 @@ import (
 	inputspec "ocm.software/open-component-model/bindings/go/git/spec/input"
 	inputv1 "ocm.software/open-component-model/bindings/go/git/spec/input/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
 func TestProcessResourceSnapshots(t *testing.T) {
@@ -63,7 +60,6 @@ func TestProcessResourceSnapshots(t *testing.T) {
 
 			reader, err := result.ProcessedBlobData.ReadCloser()
 			r.NoError(err)
-			t.Cleanup(func() { r.NoError(reader.Close()) })
 			gz, err := gzip.NewReader(reader)
 			r.NoError(err)
 			t.Cleanup(func() { r.NoError(gz.Close()) })
@@ -84,12 +80,30 @@ func TestProcessResourceSnapshots(t *testing.T) {
 			}
 			r.Equal(map[string]string{"README.md": tc.want}, archived)
 
+			// The clone serving the read is removed once the reader is closed.
+			_, err = io.Copy(io.Discard, reader)
+			r.NoError(err)
+			r.NoError(reader.Close())
 			files, err := os.ReadDir(dir)
 			r.NoError(err)
-			r.Len(files, 1, "only the returned archive should outlive the download")
-			r.False(files[0].IsDir())
+			r.Empty(files, "closing the reader removes the clone; the archive is never stored")
 		})
 	}
+}
+
+// processAndRead processes resource and reads the archive to its end, which is when a
+// download fails.
+func processAndRead(ctx context.Context, method *input.InputMethod, resource *constructorruntime.Resource, creds runtime.Typed) error {
+	result, err := method.ProcessResource(ctx, resource, creds)
+	if err != nil {
+		return err
+	}
+	rc, err := result.ProcessedBlobData.ReadCloser()
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(io.Discard, rc)
+	return errors.Join(err, rc.Close())
 }
 
 func TestProcessResourceErrors(t *testing.T) {
@@ -117,9 +131,8 @@ func TestProcessResourceErrors(t *testing.T) {
 			dir := t.TempDir()
 			method := &input.InputMethod{TempFolder: dir, MaxArchiveSize: tc.maxArchiveSize}
 
-			result, err := method.ProcessResource(t.Context(), resource, tc.credentials)
+			err := processAndRead(t.Context(), method, resource, tc.credentials)
 			r.ErrorContains(err, tc.wantErr)
-			r.Nil(result)
 			r.Equal(before, resource)
 		})
 	}
@@ -176,35 +189,11 @@ func TestInvalidResource(t *testing.T) {
 
 func newRepository(t *testing.T) (path, firstCommit string) {
 	t.Helper()
-	r := require.New(t)
-	work := t.TempDir()
-	repo, err := git.PlainInit(work, false)
-	r.NoError(err)
-	// go-git reads the global Git config; a host commit.gpgSign must not sign fixtures.
-	cfg, err := repo.Config()
-	r.NoError(err)
-	cfg.Commit.GpgSign = config.OptBoolFalse
-	r.NoError(repo.SetConfig(cfg))
-	r.NoError(repo.Storer.SetReference(plumbing.NewSymbolicReference(plumbing.HEAD, "refs/heads/main")))
-	tree, err := repo.Worktree()
-	r.NoError(err)
-	for _, content := range []string{"first\n", "second\n"} {
-		r.NoError(os.WriteFile(filepath.Join(work, "README.md"), []byte(content), 0o600))
-		_, err := tree.Add("README.md")
-		r.NoError(err)
-		hash, err := tree.Commit(content, &git.CommitOptions{Author: &object.Signature{
-			Name: "OCM fixture", Email: "fixture@example.invalid", When: time.Unix(1700000000, 0).UTC(),
-		}})
-		r.NoError(err)
-		if firstCommit == "" {
-			firstCommit = hash.String()
-			r.NoError(repo.Storer.SetReference(plumbing.NewHashReference("refs/heads/previous", hash)))
-			_, err = repo.CreateTag("v1", hash, nil)
-			r.NoError(err)
-		}
-	}
-	path = filepath.Join(t.TempDir(), "fixture.git")
-	_, err = git.PlainClone(path, &git.CloneOptions{URL: work, Bare: true})
-	r.NoError(err)
-	return path, firstCommit
+	path, first := testgit.Repository(t, testgit.Options{
+		DefaultBranch: "main",
+		Bare:          true,
+		Branches:      []string{"previous"},
+		Tags:          []string{"v1"},
+	})
+	return path, first.String()
 }

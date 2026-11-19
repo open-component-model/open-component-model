@@ -37,9 +37,8 @@
 //     - ArtifactAnnotation: Handles OCI artifact annotations
 //
 //     Resources are managed through multiple types:
-//     - LocalBlob: For temporary storage of resources
 //     - ResourceBlob: For resource-specific operations (a blob described by an OCM resource)
-//     - DescriptorBlob: For OCI descriptor management (a blob described by an OCI descriptor)
+//     - NewDescriptorBlob: For OCI descriptor management (a verified blob described by an OCI descriptor)
 //
 // Core Interfaces:
 //
@@ -124,7 +123,7 @@
 // The package relies on several external packages:
 //   - github.com/opencontainers/go-digest: For content addressing
 //   - github.com/opencontainers/image-spec: For OCI image specifications
-//   - oras.land/oras-go: For OCI registry operations
+//   - github.com/oras-project/oras-go/v3: For OCI registry operations
 //   - golang.org/x/sync/errgroup: For concurrent operations
 //   - github.com/Masterminds/semver/v3: For interpreting component version tags / referrers as semvers
 package oci

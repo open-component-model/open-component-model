@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -156,7 +158,8 @@ func TestGetLocalResource_Transform_OCI(t *testing.T) {
 	require.NotNil(t, transformed.Output.Resource)
 
 	// Verify file was created in the output directory
-	outputFile := strings.ReplaceAll(transformed.Output.File.URI, "file://", "")
+	outputFile, err := filesystem.FilePathFromURI(transformed.Output.File.URI)
+	require.NoError(t, err)
 	assert.FileExists(t, outputFile)
 	assert.True(t, strings.HasPrefix(outputFile, tempDir))
 
@@ -211,9 +214,12 @@ func TestGetLocalResource_Transform_CTF(t *testing.T) {
 	combinedScheme.MustRegisterWithAlias(&v1alpha1.OCIGetLocalResource{}, v1alpha1.OCIGetLocalResourceV1alpha1)
 	combinedScheme.MustRegisterWithAlias(&v1alpha1.CTFGetLocalResource{}, v1alpha1.CTFGetLocalResourceV1alpha1)
 
+	// The temporary directory does not exist yet: the transformer creates it.
+	tempDir := filepath.Join(t.TempDir(), "configured-temp-folder")
 	transformer := &GetLocalResource{
 		Scheme:       combinedScheme,
 		RepoProvider: mockProvider,
+		TempDir:      tempDir,
 	}
 
 	// Create transformation spec without OutputPath (should create temp file)
@@ -253,11 +259,11 @@ func TestGetLocalResource_Transform_CTF(t *testing.T) {
 	assert.Contains(t, outputPath, "file://")
 	assert.Contains(t, outputPath, "resource-")
 
-	// Clean up temp file
-	tempPath := outputPath[7:] // Remove "file://" prefix
-	if _, err := os.Stat(tempPath); err == nil {
-		os.Remove(tempPath)
-	}
+	// Without an output path the file is buffered in the configured temporary directory.
+	tempPath, err := filesystem.FilePathFromURI(outputPath)
+	require.NoError(t, err)
+	assert.Equal(t, tempDir, filepath.Dir(tempPath))
+	assert.FileExists(t, tempPath)
 }
 
 func TestGetLocalResource_Transform_ValidationErrors(t *testing.T) {

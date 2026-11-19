@@ -1,7 +1,7 @@
 package v1
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -34,7 +34,7 @@ func Test_ConvertToS3Credentials_Anonymous(t *testing.T) {
 			out, err := ConvertToS3Credentials(raw)
 			r.NoError(err)
 			r.Equal(tt.anonymous, out.Anonymous)
-			encoded, err := json.Marshal(out)
+			encoded, err := json.Marshal(out, runtime.JSONOptions)
 			r.NoError(err)
 			if out.Anonymous {
 				r.Contains(string(encoded), `"anonymous":true`)
@@ -56,7 +56,7 @@ func Test_ConvertToS3Credentials_AnonymousConflicts(t *testing.T) {
 			r.ErrorContains(err, "anonymous S3 credentials cannot be combined")
 			r.Nil(out)
 			if key == "accessKeyId" || key == "secretAccessKey" || key == "sessionToken" {
-				data, err := json.Marshal(map[string]any{"type": "S3Credentials/v1", "anonymous": true, key: "value"})
+				data, err := json.Marshal(map[string]any{"type": "S3Credentials/v1", "anonymous": true, key: "value"}, runtime.JSONOptions)
 				r.NoError(err)
 				creds := &S3Credentials{}
 				r.NoError(json.Unmarshal(data, creds))

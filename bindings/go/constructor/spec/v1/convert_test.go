@@ -591,6 +591,11 @@ func TestConvertFromLabels(t *testing.T) {
 			},
 		},
 		{
+			name:     "versioned label",
+			input:    []Label{{Name: "sig", Value: []byte(`"v"`), Signing: true, Version: "v1"}},
+			expected: []descriptor.Label{{Name: "sig", Value: []byte(`"v"`), Signing: true, Version: "v1"}},
+		},
+		{
 			name: "multiple labels",
 			input: []Label{
 				{

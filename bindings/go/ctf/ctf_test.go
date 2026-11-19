@@ -16,6 +16,52 @@ import (
 	v1 "ocm.software/open-component-model/bindings/go/ctf/index/v1"
 )
 
+func Test_CTF_RejectOCMv1ComponentArchive(t *testing.T) {
+	for _, path := range []string{
+		"testdata/ocmv1-component-archive",
+		"testdata/ocmv1-component-archive.tgz",
+	} {
+		t.Run(path, func(t *testing.T) {
+			r := require.New(t)
+			_, _, err := ctf.OpenCTFByFileExtension(t.Context(), ctf.OpenCTFOptions{
+				Path:    path,
+				Flag:    ctf.O_RDONLY,
+				TempDir: t.TempDir(),
+			})
+			r.ErrorContains(err, "component archive")
+			r.ErrorContains(err, "not supported")
+		})
+	}
+}
+
+func Test_CTF_ArchiveExtractionErrors(t *testing.T) {
+	for _, extension := range []string{".tar", ".tgz"} {
+		for _, missing := range []bool{true, false} {
+			name := "corrupt"
+			if missing {
+				name = "missing"
+			}
+			t.Run(name+extension, func(t *testing.T) {
+				r := require.New(t)
+				path := filepath.Join(t.TempDir(), "archive"+extension)
+				if !missing {
+					r.NoError(os.WriteFile(path, []byte("invalid archive"), 0o600))
+				}
+				archive, _, err := ctf.OpenCTFByFileExtension(t.Context(), ctf.OpenCTFOptions{
+					Path:    path,
+					Flag:    ctf.O_RDONLY,
+					TempDir: t.TempDir(),
+				})
+				r.Error(err)
+				r.Nil(archive)
+				if missing {
+					r.ErrorIs(err, os.ErrNotExist)
+				}
+			})
+		}
+	}
+}
+
 func Test_CTF_ReadWrite(t *testing.T) {
 	for _, format := range []ctf.FileFormat{
 		ctf.FormatDirectory,
@@ -224,4 +270,29 @@ func Test_CTF_CustomTempFolder_TGZ(t *testing.T) {
 	r.NoError(err)
 	r.Len(blobs, 1)
 	r.Contains(blobs, digest)
+}
+
+// Test_CTF_SaveBlob_BaseReplacedBySymlink covers the store-level consequence of
+// the RootFileSystem confinement: SaveBlob stages through a raw OS path, so a CTF
+// directory swapped for a symlink must fail instead of filling a foreign directory.
+func Test_CTF_SaveBlob_BaseReplacedBySymlink(t *testing.T) {
+	r := require.New(t)
+	parent := t.TempDir()
+	base := filepath.Join(parent, "ctf")
+	outside := filepath.Join(parent, "outside")
+	r.NoError(os.Mkdir(outside, 0o755))
+
+	archive, err := ctf.OpenCTFFromOSPath(base, ctf.O_CREATE|ctf.O_RDWR)
+	r.NoError(err)
+
+	r.NoError(os.Rename(base, base+".moved"))
+	if err := os.Symlink(outside, base); err != nil {
+		t.Skipf("cannot create symlinks here: %v", err)
+	}
+
+	r.Error(archive.SaveBlob(t.Context(), inmemory.New(strings.NewReader("blob"))))
+
+	entries, err := os.ReadDir(outside)
+	r.NoError(err)
+	r.Empty(entries, "blob escaped into %s", outside)
 }

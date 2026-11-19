@@ -1,7 +1,6 @@
 package ctf
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -13,16 +12,18 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/errdef"
-	"oras.land/oras-go/v2/registry"
+	"github.com/oras-project/oras-go/v3/content"
+	"github.com/oras-project/oras-go/v3/errdef"
+	"github.com/oras-project/oras-go/v3/registry/remote/properties"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/direct"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	v1 "ocm.software/open-component-model/bindings/go/ctf/index/v1"
 	"ocm.software/open-component-model/bindings/go/oci"
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
+	"ocm.software/open-component-model/bindings/go/oci/internal/remotestore"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
 )
@@ -53,10 +54,10 @@ func NewFromCTF(store ctf.CTF) *Store {
 // - Handle blob operations (Fetch, Exists, Push) through the CTF's blob archive
 // - Emulate an OCM OCI Repository for accessing component versions stored in the CTF
 type Store struct {
-	// mu protects concurrent access to the CTF archive, especially for index
-	// operations. A pointer to the mutex is shared with all oras oci store
-	// instances created for repositories within this CTF to ensure consistent
-	// locking.
+	// mu serializes changes to the CTF (see repository for why it is never held
+	// while a blob source is read). A pointer to the mutex is shared with all oras
+	// oci store instances created for repositories within this CTF to ensure
+	// consistent locking.
 	mu      sync.RWMutex
 	archive ctf.CTF
 }
@@ -93,11 +94,20 @@ func (s *Store) ComponentVersionReference(ctx context.Context, component, versio
 // Repository implements the spec.Store interface for a CTF OCI Repository.
 // Each repository instance shares the same mutex with its parent Store to ensure
 // consistent locking across all repositories within the same CTF archive.
+//
+// The mutex serializes every change to the archive, but for an archive that can stage
+// blobs (ctf.BlobStager) it is never held while a caller-supplied stream is read: blobs
+// are staged (read, written and verified) without it and only published under it (see
+// saveBlob). Holding it while reading would leave
+// every other writer's source unread for that long, and a server streaming such a
+// source may reset it (e.g. an HTTP/2 RST_STREAM once its send window stays full).
 type repository struct {
 	archive ctf.CTF
 	repo    string
 	mu      *sync.RWMutex
 }
+
+var _ remotestore.StreamingPusher = (*repository)(nil)
 
 // Fetch retrieves a blob from the CTF archive based on its descriptor.
 // Returns an io.ReadCloser for the blob content or an error if the blob cannot be found.
@@ -169,27 +179,18 @@ func (s *repository) fetchReference(ctx context.Context, idx v1.Index, reference
 }
 
 // Push stores a new blob in the CTF archive with the expected descriptor.
-// The content is read from the provided io.Reader.
+// The content is read from the provided io.Reader and verified against expected;
+// content read from a verified.Blob for the same digest is not hashed again.
 //
 // Push also updates referrers for manifests with a subject field.
 func (s *repository) Push(ctx context.Context, expected ociImageSpecV1.Descriptor, data io.Reader) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if !introspection.IsOCICompliantMediaType(expected.MediaType) {
-		if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(io.NopCloser(data), expected)); err != nil {
+		if err := s.pushBlob(ctx, expected, data); err != nil {
 			return fmt.Errorf("unable to save blob for descriptor %v: %w", expected, err)
 		}
 		return nil
 	}
 
-	return s.pushManifest(ctx, expected, data)
-}
-
-// pushManifest is the manifest branch of Push.
-//
-// The caller MUST hold the write lock.
-func (s *repository) pushManifest(ctx context.Context, expected ociImageSpecV1.Descriptor, data io.Reader) error {
 	// Buffer the manifest so its subject can be inspected. content.ReadAll
 	// also verifies the content against the expected size and digest, which
 	// SaveBlob alone does not (it trusts the descriptor's digest).
@@ -197,7 +198,77 @@ func (s *repository) pushManifest(ctx context.Context, expected ociImageSpecV1.D
 	if err != nil {
 		return fmt.Errorf("unable to read manifest content for descriptor %v: %w", expected, err)
 	}
-	if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(io.NopCloser(bytes.NewReader(manifestJSON)), expected)); err != nil {
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.pushManifest(ctx, expected, manifestJSON)
+}
+
+// pushBlob is the non-manifest branch of Push.
+func (s *repository) pushBlob(ctx context.Context, expected ociImageSpecV1.Descriptor, data io.Reader) error {
+	if expected.Digest == "" {
+		return errors.New("descriptor has no digest")
+	}
+	b, err := newDigestingBlob(data, expected.Digest, expected.Size)
+	if err != nil {
+		return err
+	}
+	return s.saveBlob(ctx, b)
+}
+
+// PushStreaming implements remotestore.StreamingPusher: it stores a blob whose digest
+// and/or size is unknown through ctf.SaveBlob with a blob that computes both while it is
+// read, so the CTF stages the content in a file and renames it to its content address
+// once both are known and verified; the blob is never buffered in memory. Manifests are
+// not streamed, as their subject must be inspected (see Push).
+func (s *repository) PushStreaming(ctx context.Context, partial ociImageSpecV1.Descriptor, data io.Reader) (ociImageSpecV1.Descriptor, error) {
+	if introspection.IsOCICompliantMediaType(partial.MediaType) {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("manifest %s cannot be streamed: %w", partial.MediaType, remotestore.ErrStreamingUnavailable)
+	}
+	size := partial.Size
+	if size == 0 {
+		// Same convention as RemoteStore.PushStreaming: zero on a partial descriptor is unknown.
+		size = blob.SizeUnknown
+	}
+	b, err := newDigestingBlob(data, partial.Digest, size)
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, err
+	}
+
+	if err := s.saveBlob(ctx, b); err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("unable to save streamed blob of media type %s: %w", partial.MediaType, err)
+	}
+	dig, _ := b.Digest()
+	return ociImageSpecV1.Descriptor{MediaType: partial.MediaType, Digest: digest.Digest(dig), Size: b.Size()}, nil
+}
+
+// saveBlob stages b without the lock, which may take as long as its source does, and
+// publishes it under the write lock. An archive that cannot stage saves b under the lock.
+func (s *repository) saveBlob(ctx context.Context, b blob.ReadOnlyBlob) (err error) {
+	stager, ok := s.archive.(ctf.BlobStager)
+	if !ok {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.archive.SaveBlob(ctx, b)
+	}
+	staged, err := stager.StageBlob(ctx, b)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		err = errors.Join(err, staged.Discard())
+	}()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return staged.Publish()
+}
+
+// pushManifest saves the verified manifestJSON and indexes it.
+//
+// The caller MUST hold the write lock.
+func (s *repository) pushManifest(ctx context.Context, expected ociImageSpecV1.Descriptor, manifestJSON []byte) error {
+	if err := s.archive.SaveBlob(ctx, ociblob.NewDescriptorBlob(direct.NewFromBytes(manifestJSON), expected)); err != nil {
 		return fmt.Errorf("unable to save blob for descriptor %v: %w", expected, err)
 	}
 
@@ -262,10 +333,10 @@ func (s *repository) resolve(ctx context.Context, idx v1.Index, reference string
 	// looseref reads a bare tag as a repository name, which must be lower-case, so a valid tag such as
 	// "1.0.0-T0" fails to parse. Only in that case is the raw reference used as is.
 	if ref, err := looseref.ParseReference(reference); err != nil {
-		if (registry.Reference{Reference: reference}).ValidateReferenceAsTag() != nil {
+		if (properties.Reference{Tag: reference}).ValidateTag() != nil {
 			return ociImageSpecV1.Descriptor{}, fmt.Errorf("invalid reference %q: %w", reference, err)
 		}
-	} else if refOrTag := ref.ReferenceOrTag(); refOrTag != "" {
+	} else if refOrTag := ref.GetReference(); refOrTag != "" {
 		// If we have a valid digest or tag, use it instead of the reference.
 		reference = refOrTag
 	}
@@ -375,7 +446,7 @@ func artifactMetadataForReference(repo string, desc ociImageSpecV1.Descriptor, r
 	if err != nil {
 		// looseref reads a bare tag as a repository name, which must be
 		// lower-case, so a valid tag such as "1.0.0-T0" fails to parse.
-		if (registry.Reference{Reference: reference}).ValidateReferenceAsTag() != nil {
+		if (properties.Reference{Tag: reference}).ValidateTag() != nil {
 			return v1.ArtifactMetadata{}, fmt.Errorf("invalid reference %q: %w", reference, err)
 		}
 		return v1.ArtifactMetadata{
@@ -386,7 +457,8 @@ func artifactMetadataForReference(repo string, desc ociImageSpecV1.Descriptor, r
 		}, nil
 	}
 
-	if err := ref.ValidateReferenceAsTag(); err == nil {
+	// looseref already validated a non-empty tag and digest; a digest takes precedence.
+	if ref.Digest == "" && ref.Tag != "" {
 		return v1.ArtifactMetadata{
 			Repository: repo,
 			Tag:        ref.Tag,
@@ -394,7 +466,7 @@ func artifactMetadataForReference(repo string, desc ociImageSpecV1.Descriptor, r
 			MediaType:  desc.MediaType,
 		}, nil
 	}
-	if err := ref.ValidateReferenceAsDigest(); err == nil {
+	if ref.Digest != "" {
 		return v1.ArtifactMetadata{
 			Repository: repo,
 			Digest:     desc.Digest.String(),
@@ -404,8 +476,7 @@ func artifactMetadataForReference(repo string, desc ociImageSpecV1.Descriptor, r
 
 	// the reference is neither a full reference with a tag nor a digest;
 	// fall back to interpreting the raw string, e.g. a bare tag.
-	rawRef := registry.Reference{Reference: reference}
-	if err := rawRef.ValidateReferenceAsTag(); err == nil {
+	if (properties.Reference{Tag: reference}).ValidateTag() == nil {
 		return v1.ArtifactMetadata{
 			Repository: repo,
 			Tag:        reference,
@@ -413,7 +484,7 @@ func artifactMetadataForReference(repo string, desc ociImageSpecV1.Descriptor, r
 			MediaType:  desc.MediaType,
 		}, nil
 	}
-	if err := rawRef.ValidateReferenceAsDigest(); err == nil {
+	if (properties.Reference{Digest: reference}).ValidateDigest() == nil {
 		return v1.ArtifactMetadata{
 			Repository: repo,
 			Digest:     desc.Digest.String(),

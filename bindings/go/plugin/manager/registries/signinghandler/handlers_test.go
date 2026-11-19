@@ -3,7 +3,7 @@ package signinghandler
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -90,7 +90,7 @@ func TestHandleGetSignerIdentity(t *testing.T) {
 					},
 					Name: "sig",
 				}
-				body, err := json.Marshal(req)
+				body, err := json.Marshal(req, runtime.JSONOptions)
 				if err != nil {
 					return nil, err
 				}
@@ -155,7 +155,7 @@ func TestHandleVerifyAndSign(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 		var response v1.SignResponse
-		require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+		require.NoError(t, json.UnmarshalRead(resp.Body, &response))
 		require.Equal(t, "value", response.Signature.Value)
 	})
 }

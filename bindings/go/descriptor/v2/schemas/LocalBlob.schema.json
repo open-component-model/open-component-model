@@ -39,6 +39,14 @@
         {
           "deprecated": true,
           "const": "localBlob"
+        },
+        {
+          "deprecated": true,
+          "const": "localOciBlob/v1"
+        },
+        {
+          "deprecated": true,
+          "const": "localOciBlob"
         }
       ]
     }

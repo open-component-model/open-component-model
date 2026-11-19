@@ -4,6 +4,9 @@
   {{- errorf "schema-renderer shortcode: missing required 'url' parameter" -}}
 {{- end -}}
 {{- $schemaUrl := printf "/%s%s" $version $relUrl -}}
+{{- if not (resources.Get (strings.TrimPrefix "/" $schemaUrl)) -}}
+  {{- errorf "%s: schema-renderer: %s is not published in version %s" .Position $relUrl $version -}}
+{{- end -}}
 <div class="sr-root" data-schema-renderer data-schema-url="{{ $schemaUrl }}"></div>
 
 {{- $asset := resources.Get "js/schema/schema-renderer.tsx" -}}
