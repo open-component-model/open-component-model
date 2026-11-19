@@ -80,9 +80,9 @@ jobs:
           token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - name: Run
-        uses: jakobmoellerdev/deps@62afe8b1562bfe4effdee2f94b0a2fcff550352b # v0.18.0
+        uses: jakobmoellerdev/deps@a5f74e601e82dc6d693504ec39a20e309bc5fc43 # v0.18.2
         with:
-          version: v0.18.0
+          version: v0.18.2
           token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
           # Pull requests only check that the config still resolves and what it would do.
           dry-run: ${{ (github.event_name == 'pull_request' || inputs.dryRun) && 'true' || 'false' }}
