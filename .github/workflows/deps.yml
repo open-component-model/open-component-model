@@ -79,10 +79,67 @@ jobs:
           ref: ${{ github.event_name != 'pull_request' && github.ref || '' }}
           token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
 
+      # The action checks the downloaded binary only against checksums.txt of the same
+      # release, and releases are mutable: whoever can replace both assets would run code with
+      # the bot token. This step pins checksums.txt by SHA-256, checks its release-workflow
+      # attestation and the tarball against it, and puts the binary on PATH, where Run takes
+      # it as preinstalled instead of downloading. DEPS_VERSION must match the version comment
+      # of the Run step. deps bumps that comment but not this pin, so its own update PR fails
+      # here until a maintainer verifies the new release and updates both values.
+      - name: Install pinned deps
+        id: pin
+        env:
+          DEPS_VERSION: v0.18.2
+          # sha256 of checksums.txt of the DEPS_VERSION release
+          DEPS_CHECKSUMS_SHA256: 7503c90a046e0c379f9586c1870a900a3f166ea3cf11f35e862286b3348fa04c
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repo=jakobmoellerdev/deps
+          ref_version="$(sed -n 's|^ *uses: jakobmoellerdev/deps@[0-9a-f]\{40\} # \(v[^ ]*\)$|\1|p' .github/workflows/deps.yml)"
+          if [ -z "$ref_version" ]; then
+            echo "::error file=.github/workflows/deps.yml::Found no 'uses: $repo@<sha> # <version>' line"
+            exit 1
+          fi
+          if [ "$ref_version" != "$DEPS_VERSION" ]; then
+            echo "::error file=.github/workflows/deps.yml::The Run step uses deps $ref_version, but the 'Install pinned deps' step pins $DEPS_VERSION. Run 'gh release download $ref_version -R $repo -p checksums.txt && gh attestation verify checksums.txt --repo $repo --signer-workflow $repo/.github/workflows/release.yml --source-ref refs/tags/$ref_version', then set DEPS_VERSION to $ref_version and DEPS_CHECKSUMS_SHA256 to 'sha256sum checksums.txt'."
+            exit 1
+          fi
+          case "$(uname -m)" in
+            x86_64|amd64) arch=amd64 ;;
+            aarch64|arm64) arch=arm64 ;;
+            *) echo "::error::deps releases no linux binary for $(uname -m)"; exit 1 ;;
+          esac
+          asset="deps_linux_$arch.tar.xz"
+          dir="$(mktemp -d "$RUNNER_TEMP/deps.XXXXXX")"
+          gh release download "$DEPS_VERSION" -R "$repo" -D "$dir" -p checksums.txt -p "$asset"
+          actual="$(sha256sum "$dir/checksums.txt" | cut -d' ' -f1)"
+          if [ "$actual" != "$DEPS_CHECKSUMS_SHA256" ]; then
+            echo "::error file=.github/workflows/deps.yml::checksums.txt of deps $DEPS_VERSION has sha256 $actual, DEPS_CHECKSUMS_SHA256 pins $DEPS_CHECKSUMS_SHA256. The release changed after it was pinned; find out why before updating the pin."
+            exit 1
+          fi
+          gh attestation verify "$dir/checksums.txt" --repo "$repo" \
+            --signer-workflow "$repo/.github/workflows/release.yml" \
+            --source-ref "refs/tags/$DEPS_VERSION" > /dev/null
+          (cd "$dir" && awk -v f="$asset" '$2 == f' checksums.txt | sha256sum -c --strict -)
+          mkdir "$dir/bin"
+          tar -xJf "$dir/$asset" -C "$dir/bin" deps
+          # Run uses a deps on PATH only if it reports the requested version, else it downloads.
+          bin_version="$("$dir/bin/deps" version)"
+          if [ "$bin_version" != "$DEPS_VERSION" ]; then
+            echo "::error::$asset of deps $DEPS_VERSION reports version $bin_version"
+            exit 1
+          fi
+          echo "$dir/bin" >> "$GITHUB_PATH"
+          echo "version=$DEPS_VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Run
         uses: jakobmoellerdev/deps@a5f74e601e82dc6d693504ec39a20e309bc5fc43 # v0.18.2
         with:
-          version: v0.18.2
+          # From the pin, so Run looks for the binary the pin installed. deps bumps the
+          # version comment of `uses:`, which the pin step compares with DEPS_VERSION.
+          version: ${{ steps.pin.outputs.version }}
+          use-preinstalled: 'true'
           token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
           # Pull requests only check that the config still resolves and what it would do.
           dry-run: ${{ (github.event_name == 'pull_request' || inputs.dryRun) && 'true' || 'false' }}
