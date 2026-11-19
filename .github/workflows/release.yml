@@ -382,11 +382,14 @@ jobs:
   # PHASE 2: FINAL RELEASE (after environment gate)
   # ===========================================================================
 
-  # Attestation verifications:
-  #   CLI binaries (cli-release.yml)
-  #   CLI OCI image (cli-release.yml)
-  #   Controller image (controller-release.yml)
-  #   Controller chart (controller-release.yml)
+  # Attestation verifications, each pinned to the reusable workflow that signs it:
+  #   CLI binaries (cli.yml)
+  #   CLI OCI images (pipeline.yml)
+  #   Controller image (pipeline.yml)
+  #   Controller chart (pipeline.yml)
+  # Any workflow in the repository can create an attestation, so --repo alone would
+  # also accept one signed from another branch. The certificate identity of a reusable
+  # workflow carries the ref of the calling run, i.e. the release branch of this run.
   verify_attestations:
     name: Verify RC Attestations
     needs: [prepare, build_and_test, release_rc]
@@ -396,6 +399,9 @@ jobs:
     permissions:
       contents: read
       packages: read
+    env:
+      CLI_SIGNER: ${{ github.server_url }}/${{ github.repository }}/.github/workflows/cli.yml@${{ github.ref }}
+      PIPELINE_SIGNER: ${{ github.server_url }}/${{ github.repository }}/.github/workflows/pipeline.yml@${{ github.ref }}
     steps:
       - name: Compute image refs (lowercase owner)
         env:
@@ -424,7 +430,7 @@ jobs:
         run: |
           for file in ${{ runner.temp }}/binaries/ocm-*; do
             echo "Verifying $(basename "$file")..."
-            gh attestation verify "$file" --repo "$GH_REPO"
+            gh attestation verify "$file" --repo "$GH_REPO" --cert-identity "$CLI_SIGNER"
           done
 
       - name: Verify CLI OCI attestations
@@ -433,22 +439,22 @@ jobs:
           IMAGE_DIGEST: ${{ needs.build_and_test.outputs.cli_image_digest }}
           SLIM_IMAGE_DIGEST: ${{ needs.build_and_test.outputs.cli_slim_image_digest }}
         run: |
-          gh attestation verify "oci://$CLI_IMAGE@${IMAGE_DIGEST}" --repo "$GH_REPO"
-          gh attestation verify "oci://$CLI_IMAGE@${SLIM_IMAGE_DIGEST}" --repo "$GH_REPO"
+          gh attestation verify "oci://$CLI_IMAGE@${IMAGE_DIGEST}" --repo "$GH_REPO" --cert-identity "$PIPELINE_SIGNER"
+          gh attestation verify "oci://$CLI_IMAGE@${SLIM_IMAGE_DIGEST}" --repo "$GH_REPO" --cert-identity "$PIPELINE_SIGNER"
 
       - name: Verify controller image attestation
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           IMAGE_DIGEST: ${{ needs.build_and_test.outputs.controller_image_digest }}
         run: |
-          gh attestation verify "oci://$CONTROLLER_IMAGE@${IMAGE_DIGEST}" --repo "$GH_REPO"
+          gh attestation verify "oci://$CONTROLLER_IMAGE@${IMAGE_DIGEST}" --repo "$GH_REPO" --cert-identity "$PIPELINE_SIGNER"
 
       - name: Verify chart attestation
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CHART_DIGEST: ${{ needs.build_and_test.outputs.controller_chart_digest }}
         run: |
-          gh attestation verify "oci://$CONTROLLER_CHART@${CHART_DIGEST}" --repo "$GH_REPO"
+          gh attestation verify "oci://$CONTROLLER_CHART@${CHART_DIGEST}" --repo "$GH_REPO" --cert-identity "$PIPELINE_SIGNER"
 
   promote_and_release_final:
     name: Promote and Release Final

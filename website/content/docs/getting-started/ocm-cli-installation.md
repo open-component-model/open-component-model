@@ -318,8 +318,15 @@ The simplest method. Requires the [GitHub CLI](https://cli.github.com/) with aut
 gh auth login --hostname github.com
 # Set this to the binary you installed (adjust the path if you used a custom name or directory).
 binary="${HOME}/.local/bin/ocm"
-gh attestation verify "$binary" --repo open-component-model/open-component-model
+gh attestation verify "$binary" \
+  --repo open-component-model/open-component-model \
+  --cert-identity-regex \
+    '^https://github\.com/open-component-model/open-component-model/\.github/workflows/cli\.yml@refs/(heads/(main|releases/v[0-9]+\.[0-9]+)|tags/cli/v0\.7\.0)$'
 ```
+
+Any workflow in the repository can create an attestation, including one on an unreviewed branch, so `--repo`
+alone is too weak. `--cert-identity-regex` accepts only attestations signed by the CLI build workflow (`cli.yml`)
+on `main` or a `releases/vX.Y` branch. The tag `cli/v0.7.0` is listed because that release was signed from its tag.
 
 {{< /tab >}}
 {{< tab "Cosign (no GitHub auth)" >}}
@@ -347,11 +354,11 @@ cosign verify-blob-attestation \
   --type slsaprovenance1 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp \
-    '^https://github\.com/open-component-model/open-component-model/\.github/workflows/cli\.yml@refs/(heads/(main|releases/v[0-9]+\.[0-9]+)|tags/cli/v[0-9]+\.[0-9]+\.[0-9]+)' \
+    '^https://github\.com/open-component-model/open-component-model/\.github/workflows/cli\.yml@refs/(heads/(main|releases/v[0-9]+\.[0-9]+)|tags/cli/v0\.7\.0)$' \
   "$binary"
 ```
 
-A successful verification proves the binary was built by the project's GitHub Actions workflow and signed via Sigstore OIDC.
+A successful verification proves the binary was built by the CLI build workflow on `main` or a release branch and signed via Sigstore OIDC.
 
 {{< /tab >}}
 {{< tab "Manual SHA-256" >}}

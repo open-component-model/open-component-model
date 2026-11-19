@@ -21,6 +21,10 @@ if [[ "${BIN_FILE}" == */* || "${BIN_FILE}" == "." || "${BIN_FILE}" == ".." ]]; 
     exit 1
 fi
 GITHUB_REPO="open-component-model/open-component-model"
+# Any workflow in the repository can create an attestation, so only accept the
+# CLI build workflow on main or a release branch. Release 0.7.0 was signed from
+# its tag cli/v0.7.0.
+CLI_SIGNER_REGEX='^https://github\.com/open-component-model/open-component-model/\.github/workflows/cli\.yml@refs/(heads/(main|releases/v[0-9]+\.[0-9]+)|tags/cli/v0\.7\.0)$'
 
 usage() {
     cat <<EOF
@@ -268,7 +272,7 @@ print_verify_instructions() {
     warn "    1. Install gh: https://cli.github.com/"
     warn "    2. Authenticate against GitHub.com: gh auth login --hostname github.com"
     warn "    3. Verify the installed binary:"
-    warn "       GH_HOST=github.com gh attestation verify ${quoted_binary_path} --repo ${GITHUB_REPO}"
+    warn "       GH_HOST=github.com gh attestation verify ${quoted_binary_path} --repo ${GITHUB_REPO} --cert-identity-regex '${CLI_SIGNER_REGEX}'"
     warn ""
     warn "  Option B — Verify with cosign (no GitHub auth needed):"
     cat >&2 <<COSIGN_EOF
@@ -283,7 +287,7 @@ print_verify_instructions() {
       --type slsaprovenance1 \\
       --certificate-oidc-issuer https://token.actions.githubusercontent.com \\
       --certificate-identity-regexp \\
-        '^https://github\\.com/${GITHUB_REPO}/\\.github/workflows/cli\\.yml@refs/(heads/(main|releases/v[0-9]+\\.[0-9]+)|tags/cli/v[0-9]+\\.[0-9]+\\.[0-9]+)' \\
+        '${CLI_SIGNER_REGEX}' \\
       ${quoted_binary_path}
 
 COSIGN_EOF
@@ -324,7 +328,8 @@ verify_binary() {
     fi
 
     info "Verifying binary attestation..."
-    if GH_HOST=github.com gh attestation verify "${TMP_BIN}" --repo "${GITHUB_REPO}" 2>/dev/null; then
+    if GH_HOST=github.com gh attestation verify "${TMP_BIN}" --repo "${GITHUB_REPO}" \
+        --cert-identity-regex "${CLI_SIGNER_REGEX}" 2>/dev/null; then
         info "Attestation verification successful"
     else
         fatal "Attestation verification failed. The binary may have been tampered with."
