@@ -278,6 +278,7 @@ For the full version constraint syntax, see
 
 ## Related Documentation
 
+- [Key Differences Between OCM v1 and v2]({{< docref "docs/changelog/differences-v1-v2.md#data-compatibility" >}}) - Which OCM v1 data OCM v2 reads, and what fails
 - [Reference: Resolver Configuration Reference]({{< docref "docs/reference/configuration/resolver.md" >}}) - Full configuration
   schema and pattern syntax
 - [Concept: Resolvers]({{< docref "docs/concepts/resolvers.md" >}}) - The resolver model: glob matching, first-match ordering, specificity, and version constraints
