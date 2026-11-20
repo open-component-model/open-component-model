@@ -67,6 +67,14 @@
                         }
                     }
                 },
+                "configAccess": {
+                    "type": "object",
+                    "properties": {
+                        "reviewSameNamespace": {
+                            "type": "boolean"
+                        }
+                    }
+                },
                 "deployer": {
                     "type": "object",
                     "properties": {

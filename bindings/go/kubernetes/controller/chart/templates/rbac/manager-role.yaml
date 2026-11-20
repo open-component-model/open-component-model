@@ -34,6 +34,12 @@ rules:
     verbs:
       - create
   - apiGroups:
+      - authorization.k8s.io
+    resources:
+      - subjectaccessreviews
+    verbs:
+      - create
+  - apiGroups:
       - delivery.ocm.software
     resources:
       - components

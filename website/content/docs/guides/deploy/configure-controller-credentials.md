@@ -167,6 +167,10 @@ spec:
       name: ocm-secret
 ```
 
+The secret sits in the namespace of the `Repository`, so by default the controller reads it without further RBAC. A
+secret in another namespace needs a grant, see
+[Configuration Access]({{< relref "docs/concepts/ocm-controllers.md#configuration-access" >}}).
+
 Apply the resource:
 
 ```bash
@@ -312,6 +316,16 @@ spec:
    ```
 
 3. Ensure the `ocmConfig` field references the correct secret name in your resource.
+
+### Symptom: "secrets \"ocm-secret\" is forbidden: service account my-team/default may not get it in namespace shared"
+
+**Cause:** The object references or inherits a secret in another namespace, and its service account may not `get`
+it. The object is not ready with reason `GetConfigurationFailed`. A secret in the object's own namespace needs a
+grant only if the controller runs with `manager.configAccess.reviewSameNamespace`.
+
+**Fix:** In the namespace of the secret, bind a `Role` with `get` on it to the service account named in the message,
+see [Configuration Access]({{< relref "docs/concepts/ocm-controllers.md#configuration-access" >}}). The controller
+does not watch RBAC, so the object recovers on its next retry, at most 5 minutes later.
 
 ### Symptom: "failed to load configurations: secret does not contain supported keys [\".ocmconfig\" \".dockerconfigjson\"]"
 

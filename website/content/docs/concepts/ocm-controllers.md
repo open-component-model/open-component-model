@@ -181,6 +181,57 @@ it doesn't have credentials for. Use `Always` when namespaces MUST NOT share reg
 will verify access, before serving a cached blob.
 {{</callout>}}
 
+## Configuration Access
+
+The controller reads OCM configuration with its own identity, which can read every namespace. Two rules keep an
+object from reading another team's credentials through the controller:
+
+- **The object's own namespace is trusted.** An object reads the `Secrets`, `ConfigMaps` and OCM objects of its
+  namespace without any RBAC, the same way a `Pod` mounts a `Secret` of its namespace.
+- **Another namespace needs a grant.** Before it reads a reference into another namespace, the controller asks the
+  API server whether the object's service account may `get` the referenced object.
+
+Every namespaced kind (`Repository`, `Component`, `Resource`, `NamespacedDeployer`, `Discovery`, `Replication`) names
+that service account in its spec. It sits in the object's own namespace:
+
+```yaml
+spec:
+  serviceAccountName: my-team-reader
+  ocmConfig:
+    - kind: Secret
+      name: registry-credentials
+      namespace: shared-credentials
+```
+
+The check is a
+[SubjectAccessReview](https://kubernetes.io/docs/reference/access-authn-authz/authorization/#checking-api-access).
+It covers the object's own `ocmConfig` and everything it inherits through propagation. Therefore a `Component` that
+inherits a `Secret` in another namespace from its `Repository` needs `get` on that `Secret` as well. If any review
+fails, the object is not ready with reason `GetConfigurationFailed`.
+
+- **No service account set:** the `default` service account of the namespace is reviewed. On a fresh cluster it
+  usually has no permissions. Every pod that names no service account runs as `default`, so prefer a dedicated
+  service account for a grant into another namespace.
+- **The access review doesn't change anything:** the controller never acts as the service account to read
+  configuration. It only asks the API server "can this service account read this object?".
+- **`NamespacedDeployer`:** its service account also applies and prunes, and needs `list` and `watch` on every kind it
+  deploys, in its own namespace too, because the drift watches run with the controller's identity as well.
+- **`Deployer`:** it is cluster-scoped and has no service account, so its configuration is not reviewed.
+
+Reviews run on every reconcile, but the controller does not watch RBAC. A new `Role` or `RoleBinding` takes effect on
+the next retry, which backs off up to 5 minutes. Grant access before you create the object to avoid the wait.
+
+### Review the Same Namespace
+
+Trusting the namespace means that whoever may create an OCM object in a namespace can make the controller use the
+`Secrets` of that namespace. To review those references as well, set the Helm value
+`manager.configAccess.reviewSameNamespace` to `true`, which starts the controller with
+`--review-same-namespace-config`. The service account then needs `get` on the configuration in its own namespace too.
+
+The review checks the service account, not the user who created the object. Whoever may create an OCM object in a
+namespace can name any service account of that namespace in `spec.serviceAccountName`, and so use whatever that
+account may `get`. The same holds for references into other namespaces.
+
 ## Additional Status Fields
 
 The `Resource` object supports `additionalStatusFields`, a map of field names to [CEL](https://github.com/google/cel-spec) expressions evaluated against the resource descriptor:

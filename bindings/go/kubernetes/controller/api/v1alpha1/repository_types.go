@@ -24,6 +24,13 @@ type RepositorySpec struct {
 	// +optional
 	OCMConfig []OCMConfiguration `json:"ocmConfig,omitempty"`
 
+	// ServiceAccountName is the name of the service account in the same namespace that must be allowed to get
+	// every Secret, ConfigMap and OCM object in another namespace the effective OCM configuration references. Configuration in the same
+	// namespace is only reviewed if the controller is started with --review-same-namespace-config.
+	// If empty, the default service account of the namespace is used.
+	// +optional
+	ServiceAccountName string `json:"serviceAccountName,omitempty"`
+
 	// Interval at which the ocm repository specified by the RepositorySpec
 	// validated.
 	// +required
@@ -78,6 +85,11 @@ func (in *Repository) GetSpecifiedOCMConfig() []OCMConfiguration {
 
 func (in *Repository) GetEffectiveOCMConfig() []OCMConfiguration {
 	return in.Status.EffectiveOCMConfig
+}
+
+// GetServiceAccountName returns the service account named by the Repository, or empty if it names none.
+func (in *Repository) GetServiceAccountName() string {
+	return in.Spec.ServiceAccountName
 }
 
 // GetVID unique identifier of the object.
