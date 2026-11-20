@@ -92,16 +92,16 @@ func serviceAccountName(deployer deliveryv1alpha1.DeployerObject) string {
 	return defaultServiceAccount
 }
 
-// applyClient returns the client used to apply and prune the deployed objects. A Deployer applies with the
-// controller's own identity, a NamespacedDeployer always impersonates a service account.
-func (r *Reconciler) applyClient(ctx context.Context, deployer deliveryv1alpha1.DeployerObject) (client.Client, error) {
+// applyClient returns the client that applies and prunes the deployed objects, and the uncached reader for ApplySet
+// conflict detection. A NamespacedDeployer impersonates its service account in both, a Deployer uses its own identity.
+func (r *Reconciler) applyClient(ctx context.Context, deployer deliveryv1alpha1.DeployerObject) (client.Client, client.Reader, error) {
 	if !r.Namespaced {
-		return r.Client, nil
+		return r.Client, r.apiReader, nil
 	}
 
 	key := client.ObjectKey{Namespace: deployer.GetNamespace(), Name: serviceAccountName(deployer)}
 	if err := r.apiReader.Get(ctx, key, &corev1.ServiceAccount{}); err != nil {
-		return nil, fmt.Errorf("failed to get service account %s: %w", key, err)
+		return nil, nil, fmt.Errorf("failed to get service account %s: %w", key, err)
 	}
 
 	username := fmt.Sprintf("system:serviceaccount:%s:%s", key.Namespace, key.Name)
@@ -109,10 +109,10 @@ func (r *Reconciler) applyClient(ctx context.Context, deployer deliveryv1alpha1.
 	cfg.Impersonate = rest.ImpersonationConfig{UserName: username}
 	c, err := client.New(cfg, client.Options{Scheme: r.Scheme, Mapper: r.resourceRESTMapper})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create client impersonating %s: %w", username, err)
+		return nil, nil, fmt.Errorf("failed to create client impersonating %s: %w", username, err)
 	}
 
-	return c, nil
+	return c, c, nil
 }
 
 // blocksDeletion reports whether a forbidden request keeps the deployer from being deleted. Missing permissions can

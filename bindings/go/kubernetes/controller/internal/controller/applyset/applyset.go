@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"maps"
 	"sort"
@@ -154,7 +155,13 @@ func (m Metadata) PruneScope() *PruneScope {
 
 // Config for creating an ApplySet.
 type Config struct {
-	Client          client.Client
+	Client client.Client
+	// Reader reads the applied objects by name for conflict detection, as Client's identity. It must read live: a
+	// cache needs an informer per applied kind, which requires the watch permission and holds every object of that
+	// kind in memory. Required by Apply, and never defaulted to Client, which may be cached.
+	Reader client.Reader
+	// Members optionally spares Reader the applied objects a member cache shows as members of this ApplySet.
+	Members         MemberLister
 	RESTMapper      meta.RESTMapper
 	Log             logr.Logger
 	ParentNamespace string // fallback namespace for namespaced resources without namespace set
@@ -177,6 +184,8 @@ func New(cfg Config, parent interface {
 	applySetID := ID(parent)
 	return &ApplySet{
 		client:            cfg.Client,
+		reader:            cfg.Reader,
+		members:           cfg.Members,
 		restMapper:        cfg.RESTMapper,
 		log:               cfg.Log,
 		applySetID:        applySetID,
@@ -189,6 +198,8 @@ func New(cfg Config, parent interface {
 // ApplySet implements Interface for server-side apply with membership tracking.
 type ApplySet struct {
 	client            client.Client
+	reader            client.Reader
+	members           MemberLister
 	restMapper        meta.RESTMapper
 	log               logr.Logger
 	applySetID        string
@@ -235,6 +246,10 @@ func (a *ApplySet) Project(resources []Resource) (Metadata, error) {
 // Apply runs SSA on all resources.
 // Caller should call Prune separately after Apply succeeds, using Project() output for scope.
 func (a *ApplySet) Apply(ctx context.Context, resources []Resource, mode ApplyMode) (*ApplyResult, error) {
+	if a.reader == nil {
+		return nil, errors.New("apply needs a reader for conflict detection")
+	}
+
 	result := &ApplyResult{}
 
 	// Resources with resolved mappings, ready to apply
@@ -257,9 +272,7 @@ func (a *ApplySet) Apply(ctx context.Context, resources []Resource, mode ApplyMo
 		toApply = append(toApply, applyEntry{resource: r, mapping: mapping})
 	}
 
-	// Batch conflict detection: LIST per unique (GVK, namespace) instead of
-	// individual GETs per resource. This reduces N API calls to K (K = unique
-	// GVK+namespace combos).
+	// Conflict detection reads only the objects being applied, never every member of their kinds.
 	conflicts, err := a.detectConflicts(ctx, toApply)
 	if err != nil {
 		return nil, fmt.Errorf("conflict detection failed: %w", err)
@@ -439,43 +452,33 @@ type conflictKey struct {
 	name      string
 }
 
-// detectConflicts performs batch LIST calls per unique (GVK, namespace) to find
-// resources already owned by a different ApplySet. This replaces individual GET
-// calls per resource, reducing N GETs to K LISTs (K = unique GVK+namespace combos).
+// detectConflicts finds the applied resources that already belong to a different ApplySet, checking each
+// (GVK, namespace) in parallel.
 //
 // Returns a map from conflictKey to the owning ApplySet ID for any conflicts found.
 func (a *ApplySet) detectConflicts(ctx context.Context, entries []applyEntry) (map[conflictKey]string, error) {
-	// Group entries by unique (GVK, namespace) pairs to minimize LIST calls.
 	type listTask struct {
 		gvk       schema.GroupVersionKind
 		namespace string
 	}
-	tasks := sets.New[listTask]()
+	tasks := make(map[listTask][]conflictKey)
 	for _, e := range entries {
 		ns := ""
 		if e.mapping.Scope.Name() == meta.RESTScopeNameNamespace {
 			ns = a.resolveNamespace(e.resource.Object.GetNamespace())
 		}
-		tasks.Insert(listTask{gvk: e.resource.Object.GroupVersionKind(), namespace: ns})
+		task := listTask{gvk: e.resource.Object.GroupVersionKind(), namespace: ns}
+		tasks[task] = append(tasks[task], conflictKey{gvk: task.gvk, namespace: ns, name: e.resource.Object.GetName()})
 	}
 
 	conflicts := make(map[conflictKey]string)
 	var mu sync.Mutex
 
 	eg, egCtx := errgroup.WithContext(ctx)
-	for task := range tasks {
+	for task, applied := range tasks {
 		eg.Go(func() error {
-			list := &unstructured.UnstructuredList{}
-			list.SetGroupVersionKind(task.gvk.GroupVersion().WithKind(task.gvk.Kind + "List"))
-
-			listOpts := []client.ListOption{
-				client.HasLabels{ApplysetPartOfLabel},
-			}
-			if task.namespace != "" {
-				listOpts = append(listOpts, client.InNamespace(task.namespace))
-			}
-
-			if err := a.client.List(egCtx, list, listOpts...); err != nil {
+			owners, err := a.ownersOf(egCtx, task.gvk, task.namespace, applied)
+			if err != nil {
 				if task.namespace != "" {
 					return fmt.Errorf("conflict detection list %v in %s: %w", task.gvk, task.namespace, err)
 				}
@@ -484,14 +487,9 @@ func (a *ApplySet) detectConflicts(ctx context.Context, entries []applyEntry) (m
 
 			mu.Lock()
 			defer mu.Unlock()
-			for i := range list.Items {
-				ownerID := list.Items[i].GetLabels()[ApplysetPartOfLabel]
-				if ownerID != "" && ownerID != a.applySetID {
-					conflicts[conflictKey{
-						gvk:       task.gvk,
-						namespace: list.Items[i].GetNamespace(),
-						name:      list.Items[i].GetName(),
-					}] = ownerID
+			for _, key := range applied {
+				if ownerID := owners[key]; ownerID != "" && ownerID != a.applySetID {
+					conflicts[key] = ownerID
 				}
 			}
 			return nil
@@ -503,6 +501,83 @@ func (a *ApplySet) detectConflicts(ctx context.Context, entries []applyEntry) (m
 	}
 
 	return conflicts, nil
+}
+
+// ownersOf returns the owning ApplySet of each applied key of a kind in a namespace. It reads every key live by name
+// with Reader unless the member cache shows it as this ApplySet's own: the cache lags and reads as the controller,
+// while Apply forces ownership. A read by name is a single key on the API server and needs only the list permission.
+func (a *ApplySet) ownersOf(ctx context.Context, gvk schema.GroupVersionKind, namespace string, applied []conflictKey) (map[conflictKey]string, error) {
+	cached := a.cachedOwners(ctx, gvk, namespace)
+	owners := make(map[conflictKey]string, len(applied))
+	for _, key := range applied {
+		if cached[key] == a.applySetID {
+			owners[key] = a.applySetID
+			continue
+		}
+
+		live := newMemberList(gvk)
+		opts := []client.ListOption{client.MatchingFields{"metadata.name": key.name}}
+		if namespace != "" {
+			opts = append(opts, client.InNamespace(namespace))
+		}
+		if err := a.reader.List(ctx, live, opts...); err != nil {
+			return nil, fmt.Errorf("read %s: %w", key.name, err)
+		}
+		maps.Copy(owners, ownersIn(gvk, live))
+	}
+
+	return owners, nil
+}
+
+// cachedOwners returns the members the member cache holds of a kind in a namespace, or nil while it cannot answer.
+func (a *ApplySet) cachedOwners(ctx context.Context, gvk schema.GroupVersionKind, namespace string) map[conflictKey]string {
+	if a.members == nil {
+		return nil
+	}
+
+	var opts []client.ListOption
+	if namespace != "" {
+		opts = append(opts, client.InNamespace(namespace))
+	}
+	cached := newMemberList(gvk)
+	synced, err := a.members.ListSynced(ctx, cached, opts...)
+	if err != nil {
+		a.log.V(1).Info("reading the applied objects live after the member cache failed", "gvk", gvk.String(), "error", err)
+		return nil
+	}
+	if !synced {
+		return nil
+	}
+
+	return ownersIn(gvk, cached)
+}
+
+func newMemberList(gvk schema.GroupVersionKind) *metav1.PartialObjectMetadataList {
+	list := &metav1.PartialObjectMetadataList{}
+	list.SetGroupVersionKind(gvk.GroupVersion().WithKind(gvk.Kind + "List"))
+
+	return list
+}
+
+func ownersIn(gvk schema.GroupVersionKind, list *metav1.PartialObjectMetadataList) map[conflictKey]string {
+	owners := make(map[conflictKey]string, len(list.Items))
+	for i := range list.Items {
+		member := membershipOf(&list.Items[i])
+		owners[conflictKey{gvk: gvk, namespace: member.namespace, name: member.name}] = member.ownerID
+	}
+
+	return owners
+}
+
+// membership is what conflict detection reads from an ApplySet member, and all the member cache keeps of it.
+type membership struct {
+	namespace string
+	name      string
+	ownerID   string
+}
+
+func membershipOf(obj metav1.Object) membership {
+	return membership{namespace: obj.GetNamespace(), name: obj.GetName(), ownerID: obj.GetLabels()[ApplysetPartOfLabel]}
 }
 
 func (a *ApplySet) resolvedNamespace(mapping *meta.RESTMapping, obj *unstructured.Unstructured) (string, bool) {
