@@ -13,6 +13,9 @@ permissions:
 jobs:
   update:
     runs-on: ubuntu-latest
+    environment:
+      name: pull-requests
+      deployment: false
     permissions:
       contents: read
       pull-requests: write
@@ -38,8 +41,8 @@ jobs:
       id: generate_token
       uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
       with:
-        app-id: ${{ secrets.OCMBOT_APP_ID }}
-        private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+        client-id: ${{ secrets.PR_BOT_CLIENT_ID }}
+        private-key: ${{ secrets.PR_BOT_PRIVATE_KEY }}
         repositories: ${{ github.event.repository.name }}
         permission-pull-requests: write
         permission-contents: write
@@ -50,7 +53,7 @@ jobs:
         token: ${{ steps.generate_token.outputs.token }}
         title: "chore: renew security.txt expiry date"
         commit-message: "chore: renew security.txt expiry date"
-        branch: security/renew-security-txt
+        branch: automation/renew-security-txt
         delete-branch: true
         sign-commits: true
         labels: |

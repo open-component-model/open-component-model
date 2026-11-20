@@ -46,7 +46,7 @@ jobs:
   deps:
     runs-on: ubuntu-26.04-arm
     environment:
-      name: automation
+      name: ${{ github.event_name != 'pull_request' && !inputs.dryRun && github.repository_owner == 'open-component-model' && 'deps' || '' }}
       deployment: false
     steps:
       # A dry run pushes nothing, so it needs no App token: checkout and Run fall back to
@@ -55,8 +55,8 @@ jobs:
         id: generate_token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          client-id: ${{ secrets.OCMBOT_APP_ID }}
-          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          client-id: ${{ secrets.DEPS_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.DEPS_BOT_PRIVATE_KEY }}
           repositories: ${{ github.event.repository.name }}
           # Push update branches and create the commits through the API, so GitHub signs them.
           permission-contents: write
@@ -80,9 +80,9 @@ jobs:
           token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
 
       - name: Run
-        uses: jakobmoellerdev/deps@62afe8b1562bfe4effdee2f94b0a2fcff550352b # v0.18.0
+        uses: jakobmoellerdev/deps@a5f74e601e82dc6d693504ec39a20e309bc5fc43 # v0.18.2
         with:
-          version: v0.18.0
+          version: v0.18.2
           token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
           # Pull requests only check that the config still resolves and what it would do.
           dry-run: ${{ (github.event_name == 'pull_request' || inputs.dryRun) && 'true' || 'false' }}

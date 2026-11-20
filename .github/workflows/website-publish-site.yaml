@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-      - 'website/**'
     paths:
       - 'website/**'
       - '.github/workflows/website-publish-site.yaml'
@@ -26,33 +25,23 @@ on:
 permissions:
   contents: read
 
+# One deployment at a time; let a running deployment finish instead of cancelling it.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 env:
   OUTPUT_DIR: site-docs/
 
 jobs:
-  publish-site:
-    name: Publish Site
+  build:
+    name: Build Site
     # peaceiris/actions-hugo v3 produces wrong filename casing for Hugo >= v0.103.0 on ARM64.
     runs-on: ubuntu-latest
-    environment:
-      name: automation
-      deployment: false
-
     permissions:
-      contents: write
-      id-token: write
+      contents: read
 
     steps:
-      - name: Get OCMBot installation token
-        id: generate_token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        with:
-          app-id: ${{ secrets.OCMBOT_APP_ID }}
-          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
-          repositories: ${{ github.event.repository.name }}
-          # Push the built site to the gh-pages branch.
-          permission-contents: write
-
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -75,13 +64,26 @@ jobs:
           npm ci
           npm run build
 
-      - name: Publish as GitHub Pages
-        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
-        env:
-          COMMIT_MSG: ${{ github.event.head_commit.message }}
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          github_token: ${{ steps.generate_token.outputs.token }}
-          publish_dir: ./website/public
-          commit_message: ${{ env.COMMIT_MSG }}
-          user_name: 'GitHub Actions Bot'
-          user_email: '<41898282+github-actions[bot]@users.noreply.github.com>'
+          path: website/public
+          # Dotfiles are dropped by default; .well-known/security.txt must be published.
+          include-hidden-files: true
+
+  # Separate job so the npm/Hugo build never runs next to the Pages deploy credentials.
+  deploy:
+    name: Deploy Site
+    needs: build
+    runs-on: ubuntu-26.04-arm
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

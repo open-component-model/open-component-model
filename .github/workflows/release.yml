@@ -142,7 +142,7 @@ jobs:
     name: Create and Push RC Tags
     runs-on: ubuntu-26.04-arm
     environment:
-      name: automation
+      name: release-automation
       deployment: false
     needs: [prepare]
     if: ${{ github.event.inputs.dry_run == 'false' }}
@@ -155,8 +155,8 @@ jobs:
         id: get_token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ secrets.OCMBOT_APP_ID }}
-          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          client-id: ${{ secrets.RELEASE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
           repositories: ${{ github.event.repository.name }}
           # Push the RC tags (canonical + bindings/go side tag).
           permission-contents: write
@@ -247,20 +247,36 @@ jobs:
           name: ${{ needs.build_and_test.outputs.controller_chart_artifact_name }}
           path: ${{ runner.temp }}/chart-assets
 
+      # Releases are immutable (organization setting): assets can only be added
+      # before a release is published. With assets, `gh release create` creates
+      # a draft, uploads the assets and only then publishes it; if an upload
+      # fails, it deletes the draft. --verify-tag never creates the tag, which
+      # tag_rc pushed with the release bot.
       - name: Create RC pre-release
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
-        with:
-          name: OCM ${{ needs.prepare.outputs.new_version }}
-          tag_name: ${{ needs.prepare.outputs.new_tag }}
-          body_path: ${{ runner.temp }}/CHANGELOG.md
-          fail_on_unmatched_files: true
-          prerelease: true
-          files: |
-            ${{ runner.temp }}/cli-assets/bin/ocm-*
-            ${{ runner.temp }}/cli-assets/oci/*
-            ${{ runner.temp }}/chart-assets/chart-*.tgz
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.prepare.outputs.new_tag }}
+          TITLE: OCM ${{ needs.prepare.outputs.new_version }}
+          NOTES_FILE: ${{ runner.temp }}/CHANGELOG.md
+          CLI_ASSETS: ${{ runner.temp }}/cli-assets
+          CHART_ASSETS: ${{ runner.temp }}/chart-assets
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          bins=("${CLI_ASSETS}"/bin/ocm-*)
+          oci=("${CLI_ASSETS}"/oci/*)
+          charts=("${CHART_ASSETS}"/chart-*.tgz)
+          if (( ${#bins[@]} == 0 || ${#oci[@]} == 0 || ${#charts[@]} == 0 )); then
+            echo "::error::missing release assets: ${#bins[@]} binaries, ${#oci[@]} OCI archives, ${#charts[@]} charts"
+            exit 1
+          fi
+          gh release create "${TAG}" \
+            --verify-tag \
+            --prerelease \
+            --title "${TITLE}" \
+            --notes-file "${NOTES_FILE}" \
+            "${bins[@]}" "${oci[@]}" "${charts[@]}"
 
   # Publishes ocm.software/{cli,kubernetes/controller,ocm} for the RC, referencing
   # the just-pushed CLI image, controller image and chart by digest and the CLI
@@ -455,7 +471,7 @@ jobs:
     needs: [prepare, build_and_test, verify_attestations]
     runs-on: ubuntu-26.04-arm
     environment:
-      name: automation
+      name: release-automation
       deployment: false
     permissions:
       contents: write
@@ -483,8 +499,8 @@ jobs:
         id: get_token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ secrets.OCMBOT_APP_ID }}
-          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          client-id: ${{ secrets.RELEASE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
           repositories: ${{ github.event.repository.name }}
           # Push the final/promotion tags (canonical + bindings/go + website side tags).
           permission-contents: write
