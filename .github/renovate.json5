@@ -140,6 +140,18 @@
       ],
     },
     {
+      // deps' own action. Its update fails the 'Install pinned deps' step of
+      // deps.yml until a maintainer has verified the release and updated the
+      // pin there. In a group it would hold that week's other updates, or
+      // merge with them unverified: `deps` is not a required check. Kept
+      // below 'GitHub Actions' and 'Digest pins' to override both.
+      matchManagers: ['github-actions'],
+      matchPackageNames: ['jakobmoellerdev/deps'],
+      groupName: 'deps action',
+      groupSlug: 'deps-action',
+      automerge: false,
+    },
+    {
       // Actual Go toolchain version bumps (go.mod `toolchain go1.X.Y`, setup-go,
       // golang image tags). The go.mod `go 1.X` directive is deliberately NOT
       // bumped here. See the depType 'golang' rule at the end of packageRules.

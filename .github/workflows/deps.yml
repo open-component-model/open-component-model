@@ -81,11 +81,12 @@ jobs:
 
       # The action checks the downloaded binary only against checksums.txt of the same
       # release, and releases are mutable: whoever can replace both assets would run code with
-      # the bot token. This step pins checksums.txt by SHA-256, checks its release-workflow
-      # attestation and the tarball against it, and puts the binary on PATH, where Run takes
-      # it as preinstalled instead of downloading. DEPS_VERSION must match the version comment
-      # of the Run step. deps bumps that comment but not this pin, so its own update PR fails
-      # here until a maintainer verifies the new release and updates both values.
+      # the bot token. This step pins checksums.txt by SHA-256, requires its provenance to come
+      # from a tag push at the commit the Run step pins, checks the tarball against it and puts
+      # the binary on PATH, where Run takes it as preinstalled instead of downloading.
+      # DEPS_VERSION must match the version comment of the Run step. deps bumps that comment
+      # but not this pin, so its own update PR fails here until a maintainer verifies the new
+      # release and updates both values.
       - name: Install pinned deps
         id: pin
         env:
@@ -96,13 +97,19 @@ jobs:
         run: |
           set -euo pipefail
           repo=jakobmoellerdev/deps
-          ref_version="$(sed -n 's|^ *uses: jakobmoellerdev/deps@[0-9a-f]\{40\} # \(v[^ ]*\)$|\1|p' .github/workflows/deps.yml)"
-          if [ -z "$ref_version" ]; then
-            echo "::error file=.github/workflows/deps.yml::Found no 'uses: $repo@<sha> # <version>' line"
+          # The Run step of this run comes from the workflow's own revision. A write run checks
+          # out the tip of main, which can already carry the next deps bump.
+          ref="$(gh api -H 'Accept: application/vnd.github.raw' \
+            "repos/$GITHUB_REPOSITORY/contents/.github/workflows/deps.yml?ref=$GITHUB_WORKFLOW_SHA" \
+            | sed -n 's|^ *uses: jakobmoellerdev/deps@\([0-9a-f]\{40\}\) # \(v[^ ]*\)$|\1 \2|p')"
+          if [ -z "$ref" ] || [ "$(printf '%s\n' "$ref" | wc -l)" -ne 1 ]; then
+            echo "::error file=.github/workflows/deps.yml::Expected exactly one 'uses: $repo@<sha> # <version>' line"
             exit 1
           fi
+          ref_sha="${ref% *}"
+          ref_version="${ref#* }"
           if [ "$ref_version" != "$DEPS_VERSION" ]; then
-            echo "::error file=.github/workflows/deps.yml::The Run step uses deps $ref_version, but the 'Install pinned deps' step pins $DEPS_VERSION. Run 'gh release download $ref_version -R $repo -p checksums.txt && gh attestation verify checksums.txt --repo $repo --signer-workflow $repo/.github/workflows/release.yml --source-ref refs/tags/$ref_version', then set DEPS_VERSION to $ref_version and DEPS_CHECKSUMS_SHA256 to 'sha256sum checksums.txt'."
+            echo "::error file=.github/workflows/deps.yml::The Run step uses deps $ref_version, but the 'Install pinned deps' step pins $DEPS_VERSION. Run 'gh release download $ref_version -R $repo -p checksums.txt && gh attestation verify checksums.txt --repo $repo --signer-workflow $repo/.github/workflows/release.yml --source-ref refs/tags/$ref_version --source-digest $ref_sha', then set DEPS_VERSION to $ref_version and DEPS_CHECKSUMS_SHA256 to 'sha256sum checksums.txt'."
             exit 1
           fi
           case "$(uname -m)" in
@@ -118,9 +125,17 @@ jobs:
             echo "::error file=.github/workflows/deps.yml::checksums.txt of deps $DEPS_VERSION has sha256 $actual, DEPS_CHECKSUMS_SHA256 pins $DEPS_CHECKSUMS_SHA256. The release changed after it was pinned; find out why before updating the pin."
             exit 1
           fi
-          gh attestation verify "$dir/checksums.txt" --repo "$repo" \
+          # A manual dispatch of deps' release workflow attests the commit it runs on, but builds
+          # the ref its `tag` input names. Only a push of the tag builds the attested commit.
+          provenance="$(gh attestation verify "$dir/checksums.txt" --repo "$repo" \
             --signer-workflow "$repo/.github/workflows/release.yml" \
-            --source-ref "refs/tags/$DEPS_VERSION" > /dev/null
+            --source-ref "refs/tags/$DEPS_VERSION" --source-digest "$ref_sha" \
+            --deny-self-hosted-runners --format json \
+            --jq '.[].verificationResult.signature.certificate | "\(.buildTrigger) \(.sourceRepositoryRef) \(.sourceRepositoryDigest)"')"
+          if ! grep -qxF "push refs/tags/$DEPS_VERSION $ref_sha" <<< "$provenance"; then
+            echo "::error::checksums.txt of deps $DEPS_VERSION has no attestation from a push of the tag at $ref_sha"
+            exit 1
+          fi
           (cd "$dir" && awk -v f="$asset" '$2 == f' checksums.txt | sha256sum -c --strict -)
           mkdir "$dir/bin"
           tar -xJf "$dir/$asset" -C "$dir/bin" deps
@@ -140,6 +155,10 @@ jobs:
           # version comment of `uses:`, which the pin step compares with DEPS_VERSION.
           version: ${{ steps.pin.outputs.version }}
           use-preinstalled: 'true'
+          # Run takes the pinned binary or fails. If a later action stops accepting it, there
+          # is no cached copy to fall back to and nowhere to download one from.
+          cache: 'false'
+          repository: https://download-disabled.invalid/jakobmoellerdev/deps
           token: ${{ steps.generate_token.outputs.token || secrets.GITHUB_TOKEN }}
           # Pull requests only check that the config still resolves and what it would do.
           dry-run: ${{ (github.event_name == 'pull_request' || inputs.dryRun) && 'true' || 'false' }}
