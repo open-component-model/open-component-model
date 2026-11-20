@@ -21,8 +21,14 @@ var Base = slog.With(slog.String("realm", "compref"))
 
 const (
 	// ComponentRegex is the regular expression used to validate component names.
+	// It is a DNS-style name with an alphabetic top-level label, followed by one or
+	// more OCI repository path segments; path segments may start with or consist only of
+	// digits. This is syntactic alignment with the OCI repository path grammar, subject to
+	// OCM-specific restrictions such as the alphabetic top-level label. A match does not by
+	// itself guarantee storage: the full repository path length
+	// (<subPath>/component-descriptors/<name>) is enforced by the storage backend.
 	// For details see https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/02-elements-toplevel.md#component-identity
-	ComponentRegex = `^[a-z][-a-z0-9]*([.][a-z][-a-z0-9]*)*[.][a-z]{2,}(/[a-z][-a-z0-9_]*([.][a-z][-a-z0-9_]*)*)+$`
+	ComponentRegex = `^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*[.][a-z]{2,}(/[a-z0-9]+(([.]|_|__|-+)[a-z0-9]+)*)+$`
 	// VersionRegex is the regular expression used to validate semantic versioning in "loose" format.
 	// It allows for optional "v" prefix, and supports pre-release and build metadata.
 	// The regex is based on the semantic versioning specification (https://semver.org/spec/v2.0.0.html).
@@ -35,10 +41,17 @@ var (
 	componentRegex = regexp.MustCompile(ComponentRegex)
 	versionRegex   = regexp.MustCompile(VersionRegex)
 	digestRegex    = regexp.MustCompile(DigestRegex)
+	// reservedComponentSegmentRegex matches the "component-descriptors" path segment,
+	// which is reserved for the storage mapping and must not appear in a component name.
+	reservedComponentSegmentRegex = regexp.MustCompile(`(^|/)component-descriptors(/|$)`)
 )
 
 // DefaultPrefix is the default prefix used for component descriptors.
 const DefaultPrefix = "component-descriptors"
+
+// MaxComponentNameLength is the maximum length of a component name, matching the
+// maxLength of $defs.componentName in the descriptor v2 and constructor v1 schemas.
+const MaxComponentNameLength = 255
 
 // ctfArchiveExtensions is the list of archive file extensions that should be treated as CTF
 var ctfArchiveExtensions = [...]string{".tar.gz", ".tgz", ".tar"}
@@ -239,6 +252,12 @@ func Parse(input string, opts ...Option) (*Ref, error) {
 	// Step 5: Validate component name
 	if !componentRegex.MatchString(ref.Component) {
 		return nil, fmt.Errorf("invalid component name %q in %q, must match %q", ref.Component, originalInput, ComponentRegex)
+	}
+	if len(ref.Component) > MaxComponentNameLength {
+		return nil, fmt.Errorf("invalid component name %q in %q, must not exceed %d characters", ref.Component, originalInput, MaxComponentNameLength)
+	}
+	if reservedComponentSegmentRegex.MatchString(ref.Component) {
+		return nil, fmt.Errorf("invalid component name %q in %q, the %q segment is reserved for the storage mapping", ref.Component, originalInput, DefaultPrefix)
 	}
 
 	// Step 6: Build repository object using ParseRepository
