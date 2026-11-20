@@ -141,14 +141,8 @@ select the package `component-descriptors/ocm.software/ocm-k8s-toolkit/simple`, 
 Alternatively, if you want to keep your package private, configure credentials for the OCM Controllers:
 
 {{< details "Configure credentials for private registries" >}}
-Create a docker-registry secret with your registry credentials. For GitHub Container Registry, you can use a Personal Access Token or a short-lived token from the GitHub CLI:
-
-```shell
-kubectl create secret docker-registry ghcr-secret \
-  --docker-username=$GITHUB_USERNAME \
-  --docker-password="$(gh auth token)" \
-  --docker-server=ghcr.io
-```
+Create a `ghcr-secret` in the `default` namespace, where this guide creates the instance, as described in
+[Quickstart: GitHub Container Registry]({{< relref "/docs/guides/deploy/configure-controller-credentials.md#quickstart-github-container-registry" >}}).
 
 Keep this secret in mind — you will reference it later when you define the `ResourceGraphDefinition` in the [next section](#create-resourcegraphdefinition). Specifically, add `ocmConfig` to the Repository resource in your RGD as shown below. The credentials propagate automatically to Component, Resource, and Deployer objects that reference this Repository:
 
@@ -171,7 +165,6 @@ Keep this secret in mind — you will reference it later when you define the `Re
                 name: ghcr-secret
   ```
 
-For more details, see [Credentials for OCM Controllers]({{< relref "/docs/guides/deploy/configure-controller-credentials.md" >}}).
 {{< /details >}}
 
 {{< /step >}}
@@ -497,6 +490,7 @@ apiVersion: kro.run/v1alpha1
 kind: Simple
 metadata:
   name: simple
+  namespace: default
 spec:
   message: "Deployed with OCM!"
 EOF
