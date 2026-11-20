@@ -144,6 +144,30 @@ spec:
                     {{- end }}
                     {{- end }}
                     {{- end }}
+                    {{- /* Reconcile timeouts: hasKey, so an explicit "0s" still reaches the flag */}}
+                    {{- with .Values.manager.reconcileTimeout }}
+                    {{- if hasKey . "repository" }}
+                    - --repository-controller-reconcile-timeout={{ .repository }}
+                    {{- end }}
+                    {{- if hasKey . "component" }}
+                    - --component-controller-reconcile-timeout={{ .component }}
+                    {{- end }}
+                    {{- if hasKey . "resource" }}
+                    - --resource-controller-reconcile-timeout={{ .resource }}
+                    {{- end }}
+                    {{- if hasKey . "replication" }}
+                    - --replication-controller-reconcile-timeout={{ .replication }}
+                    {{- end }}
+                    {{- if hasKey . "discovery" }}
+                    - --discovery-controller-reconcile-timeout={{ .discovery }}
+                    {{- end }}
+                    {{- if hasKey . "deployer" }}
+                    - --deployer-controller-reconcile-timeout={{ .deployer }}
+                    {{- end }}
+                    {{- if hasKey . "namespacedDeployer" }}
+                    - --namespaced-deployer-controller-reconcile-timeout={{ .namespacedDeployer }}
+                    {{- end }}
+                    {{- end }}
                     {{- /* Cache */}}
                     {{- with .Values.manager.cache }}
                     {{- if .deployerDownloadSize }}

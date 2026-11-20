@@ -5,10 +5,12 @@ import (
 	"crypto/fips140"
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"log/slog"
 	"math"
 	"os"
 	"strconv"
+	"time"
 
 	// to ensure that exec-entrypoint and run can make use of them.
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -102,6 +104,14 @@ func main() {
 		namespacedDeployerRateLimitQPS string
 		enableDeployer                 bool
 		enableNamespacedDeployer       bool
+
+		repositoryReconcileTimeout         time.Duration
+		componentReconcileTimeout          time.Duration
+		resourceReconcileTimeout           time.Duration
+		replicationReconcileTimeout        time.Duration
+		discoveryReconcileTimeout          time.Duration
+		deployerReconcileTimeout           time.Duration
+		namespacedDeployerReconcileTimeout time.Duration
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metric endpoint binds to. "+
@@ -164,6 +174,23 @@ func main() {
 	flag.IntVar(&namespacedDeployerRateLimit.Burst, "namespaced-deployer-controller-rate-limit-burst", ocm.DefaultRateLimitBurst,
 		"Requeues the NamespacedDeployer controller admits at once before its qps applies. Must be at least 1.")
 
+	const reconcileTimeoutHelp = "Reconciliation timeout for the %s controller. Off by default (0). Timeout is reported as ReconcileTimeout and retried. " +
+		"Does not cancel a stalled manifest fetch shared through the OCI cache; set an HTTP timeout in spec.ocmConfig to bound that."
+	for _, t := range []struct {
+		dst  *time.Duration
+		flag string
+		kind string
+	}{
+		{&repositoryReconcileTimeout, "repository", "Repository"},
+		{&componentReconcileTimeout, "component", "Component"},
+		{&resourceReconcileTimeout, "resource", "Resource"},
+		{&replicationReconcileTimeout, "replication", "Replication"},
+		{&discoveryReconcileTimeout, "discovery", "Discovery"},
+		{&deployerReconcileTimeout, "deployer", "Deployer"},
+		{&namespacedDeployerReconcileTimeout, "namespaced-deployer", "NamespacedDeployer"},
+	} {
+		flag.DurationVar(t.dst, t.flag+"-controller-reconcile-timeout", 0, fmt.Sprintf(reconcileTimeoutHelp, t.kind))
+	}
 	flag.BoolVar(&enableDeployer, "enable-deployer", true,
 		"Run the controller for the cluster-scoped Deployer.")
 	flag.BoolVar(&enableNamespacedDeployer, "enable-namespaced-deployer", true,
@@ -213,6 +240,24 @@ func main() {
 	discoveryRateLimit.QPS = parseRateLimit("discovery", discoveryRateLimitQPS, discoveryRateLimit.Burst)
 	deployerRateLimit.QPS = parseRateLimit("deployer", deployerRateLimitQPS, deployerRateLimit.Burst)
 	namespacedDeployerRateLimit.QPS = parseRateLimit("namespaced-deployer", namespacedDeployerRateLimitQPS, namespacedDeployerRateLimit.Burst)
+
+	for _, t := range []struct {
+		controller string
+		timeout    time.Duration
+	}{
+		{"repository", repositoryReconcileTimeout},
+		{"component", componentReconcileTimeout},
+		{"resource", resourceReconcileTimeout},
+		{"replication", replicationReconcileTimeout},
+		{"discovery", discoveryReconcileTimeout},
+		{"deployer", deployerReconcileTimeout},
+		{"namespaced-deployer", namespacedDeployerReconcileTimeout},
+	} {
+		if t.timeout < 0 {
+			setupLog.Error(nil, "invalid flag value", "flag", t.controller+"-controller-reconcile-timeout", "value", t.timeout, "reason", "must be >= 0")
+			os.Exit(1)
+		}
+	}
 
 	var ociCacheConfig *ocicachev1alpha1.Config
 	if ocmConfigPath != "" {
@@ -314,6 +359,7 @@ func main() {
 			EventRecorder:    eventsRecorder,
 			NewPluginManager: newPluginManager,
 			RateLimit:        repositoryRateLimit,
+			ReconcileTimeout: repositoryReconcileTimeout,
 		},
 		Resolver: resolver,
 	}).SetupWithManager(ctx, mgr, repositoryConcurrency); err != nil {
@@ -327,6 +373,7 @@ func main() {
 			EventRecorder:    eventsRecorder,
 			NewPluginManager: newPluginManager,
 			RateLimit:        componentRateLimit,
+			ReconcileTimeout: componentReconcileTimeout,
 		},
 		Resolver: resolver,
 	}).SetupWithManager(ctx, mgr, componentConcurrency); err != nil {
@@ -341,6 +388,7 @@ func main() {
 			EventRecorder:    eventsRecorder,
 			NewPluginManager: newPluginManager,
 			RateLimit:        resourceRateLimit,
+			ReconcileTimeout: resourceReconcileTimeout,
 		},
 		Resolver: resolver,
 	}).SetupWithManager(ctx, mgr, resourceConcurrency); err != nil {
@@ -355,6 +403,7 @@ func main() {
 			EventRecorder:    eventsRecorder,
 			NewPluginManager: newPluginManager,
 			RateLimit:        replicationRateLimit,
+			ReconcileTimeout: replicationReconcileTimeout,
 		},
 		Resolver:         resolver,
 		RepositoryScheme: ocirepository.Scheme,
@@ -370,6 +419,7 @@ func main() {
 			EventRecorder:    eventsRecorder,
 			NewPluginManager: newPluginManager,
 			RateLimit:        discoveryRateLimit,
+			ReconcileTimeout: discoveryReconcileTimeout,
 		},
 	}).SetupWithManager(ctx, mgr, discoveryConcurrency); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Discovery")
@@ -382,11 +432,12 @@ func main() {
 	for _, d := range []struct {
 		kind       string
 		rateLimit  ocm.RateLimit
+		timeout    time.Duration
 		enabled    bool
 		namespaced bool
 	}{
-		{kind: v1alpha1.KindDeployer, rateLimit: deployerRateLimit, enabled: enableDeployer},
-		{kind: v1alpha1.KindNamespacedDeployer, rateLimit: namespacedDeployerRateLimit, enabled: enableNamespacedDeployer, namespaced: true},
+		{kind: v1alpha1.KindDeployer, rateLimit: deployerRateLimit, timeout: deployerReconcileTimeout, enabled: enableDeployer},
+		{kind: v1alpha1.KindNamespacedDeployer, rateLimit: namespacedDeployerRateLimit, timeout: namespacedDeployerReconcileTimeout, enabled: enableNamespacedDeployer, namespaced: true},
 	} {
 		if !d.enabled {
 			setupLog.Info("controller disabled", "controller", d.kind)
@@ -399,6 +450,7 @@ func main() {
 				EventRecorder:    eventsRecorder,
 				NewPluginManager: newPluginManager,
 				RateLimit:        d.rateLimit,
+				ReconcileTimeout: d.timeout,
 			},
 			Namespaced:           d.namespaced,
 			DownloadCache:        downloadCache,

@@ -76,6 +76,22 @@ manager:
       qps: 10 # @schema type:[number, string]
       # -- Requeues the NamespacedDeployer controller admits at once before qps applies. Must be at least 1.
       burst: 100 # @schema minimum:1
+  ## Reconcile timeout of every controller.
+  reconcileTimeout:
+    # -- Reconciliation timeout for the repository controller. Off by default (0). Timeout is reported as ReconcileTimeout and retried. Does not cancel a stalled manifest fetch shared through the OCI cache; set an HTTP timeout in spec.ocmConfig for that.
+    repository: 0s # @schema type:string
+    # -- Reconciliation timeout for the component controller. Off by default (0). Timeout is reported as ReconcileTimeout and retried. Does not cancel a stalled manifest fetch shared through the OCI cache; set an HTTP timeout in spec.ocmConfig for that.
+    component: 0s # @schema type:string
+    # -- Reconciliation timeout for the discovery controller. Off by default (0). Timeout is reported as ReconcileTimeout and retried. Does not cancel a stalled manifest fetch shared through the OCI cache; set an HTTP timeout in spec.ocmConfig for that.
+    discovery: 0s # @schema type:string
+    # -- Reconciliation timeout for the resource controller. Off by default (0). Timeout is reported as ReconcileTimeout and retried. Does not cancel a stalled manifest fetch shared through the OCI cache; set an HTTP timeout in spec.ocmConfig for that.
+    resource: 0s # @schema type:string
+    # -- Reconciliation timeout for the replication controller. Off by default (0). Timeout is reported as ReconcileTimeout and retried. Does not cancel a stalled manifest fetch shared through the OCI cache; set an HTTP timeout in spec.ocmConfig for that.
+    replication: 0s # @schema type:string
+    # -- Reconciliation timeout for the deployer controller. Off by default (0). Timeout is reported as ReconcileTimeout and retried. Does not cancel a stalled manifest fetch shared through the OCI cache; set an HTTP timeout in spec.ocmConfig for that.
+    deployer: 0s # @schema type:string
+    # -- Reconciliation timeout for the namespacedDeployer controller. Off by default (0). Timeout is reported as ReconcileTimeout and retried. Does not cancel a stalled manifest fetch shared through the OCI cache; set an HTTP timeout in spec.ocmConfig for that.
+    namespacedDeployer: 0s # @schema type:string
   ## Cache settings
   cache:
     # -- Maximum size of the deployer download object LRU cache
