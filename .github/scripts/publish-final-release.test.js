@@ -4,7 +4,9 @@ import path from "path";
 import os from "os";
 import {
   prepareReleaseNotes,
-  getOrCreateRelease,
+  findRelease,
+  getOrCreateDraftRelease,
+  publishRelease,
   uploadAssets,
   writeSummary,
 } from "./publish-final-release.js";
@@ -28,6 +30,7 @@ function mockGitHub(overrides = {}) {
     rest: {
       repos: {
         getReleaseByTag: overrides.getReleaseByTag || (() => { throw Object.assign(new Error("Not Found"), { status: 404 }); }),
+        listReleases: overrides.listReleases || (() => ({ data: [] })),
         createRelease: overrides.createRelease || (() => ({ data: { id: 1, html_url: "https://example.com/release/1" } })),
         updateRelease: overrides.updateRelease || (() => ({ data: { id: 1, html_url: "https://example.com/release/1" } })),
         listReleaseAssets: overrides.listReleaseAssets || (() => ({ data: [] })),
@@ -105,52 +108,70 @@ function mockCore() {
 }
 
 // ----------------------------------------------------------
-// getOrCreateRelease tests
+// getOrCreateDraftRelease / publishRelease tests
 // ----------------------------------------------------------
 
-// Creates release when none exists (404 path)
+const releaseOpts = { newReleaseTag: "v1.0.0", newReleaseVersion: "1.0.0", componentName: "OCM", notes: "notes" };
+
+// Creates a draft release when none exists
 {
   const calls = [];
   const gh = mockGitHub({
     createRelease: async (opts) => {
-      calls.push({ method: "create", opts });
+      calls.push(opts);
       return { data: { id: 42, html_url: "https://example.com/42" } };
     },
   });
-  const result = await getOrCreateRelease(gh, mockContext, {
-    newReleaseTag: "v1.0.0",
-    newReleaseVersion: "1.0.0",
-    componentName: "OCM",
-    notes: "notes",
-    isLatest: true,
-  });
+  const result = await getOrCreateDraftRelease(gh, mockContext, releaseOpts);
   assert.strictEqual(result.id, 42);
   assert.strictEqual(calls.length, 1);
-  assert.strictEqual(calls[0].opts.make_latest, "true");
-  assert.strictEqual(calls[0].opts.name, "OCM 1.0.0");
+  assert.strictEqual(calls[0].draft, true);
+  assert.strictEqual(calls[0].prerelease, false);
+  assert.strictEqual(calls[0].name, "OCM 1.0.0");
 }
 
-// Updates existing release when tag already exists
+// Reuses a draft left by an interrupted run (getReleaseByTag does not return drafts)
 {
-  const calls = [];
+  const updates = [];
+  let created = false;
   const gh = mockGitHub({
-    getReleaseByTag: async () => ({ data: { id: 10 } }),
+    listReleases: async () => ({ data: [
+      { id: 7, draft: false, tag_name: "v0.9.0" },
+      { id: 10, draft: true, tag_name: "v1.0.0" },
+    ] }),
+    createRelease: async () => { created = true; },
     updateRelease: async (opts) => {
-      calls.push({ method: "update", opts });
+      updates.push(opts);
       return { data: { id: 10, html_url: "https://example.com/10" } };
     },
   });
-  const result = await getOrCreateRelease(gh, mockContext, {
-    newReleaseTag: "v1.0.0",
-    newReleaseVersion: "1.0.0",
-    componentName: "OCM",
-    notes: "notes",
-    isLatest: false,
-  });
+  const result = await getOrCreateDraftRelease(gh, mockContext, releaseOpts);
   assert.strictEqual(result.id, 10);
-  assert.strictEqual(calls.length, 1);
-  assert.strictEqual(calls[0].opts.make_latest, "false");
-  assert.strictEqual(calls[0].opts.name, "OCM 1.0.0");
+  assert.strictEqual(created, false);
+  assert.strictEqual(updates.length, 1);
+  assert.strictEqual(updates[0].release_id, 10);
+  assert.strictEqual(updates[0].draft, true);
+  assert.strictEqual(updates[0].name, "OCM 1.0.0");
+}
+
+// Refuses a release that is already published: its assets are immutable
+{
+  let changed = false;
+  const gh = mockGitHub({
+    getReleaseByTag: async () => ({ data: { id: 10, draft: false, tag_name: "v1.0.0" } }),
+    createRelease: async () => { changed = true; },
+    updateRelease: async () => { changed = true; },
+  });
+  await assert.rejects(() => getOrCreateDraftRelease(gh, mockContext, releaseOpts), /already published/);
+  assert.strictEqual(changed, false);
+}
+
+// findRelease ignores published releases in the list and returns null without a draft
+{
+  const gh = mockGitHub({
+    listReleases: async () => ({ data: [{ id: 7, draft: false, tag_name: "v1.0.0" }] }),
+  });
+  assert.strictEqual(await findRelease(gh, mockContext.repo, "v1.0.0"), null);
 }
 
 // Rethrows non-404 errors
@@ -159,11 +180,26 @@ function mockCore() {
     getReleaseByTag: async () => { throw Object.assign(new Error("Server Error"), { status: 500 }); },
   });
   await assert.rejects(
-    () => getOrCreateRelease(gh, mockContext, {
-      newReleaseTag: "v1.0.0", newReleaseVersion: "1.0.0", componentName: "Test", notes: "", isLatest: false,
-    }),
+    () => getOrCreateDraftRelease(gh, mockContext, releaseOpts),
     (err) => err.status === 500,
   );
+}
+
+// publishRelease publishes the draft and sets "Latest"
+for (const isLatest of [true, false]) {
+  const calls = [];
+  const gh = mockGitHub({
+    updateRelease: async (opts) => {
+      calls.push(opts);
+      return { data: { id: 42, html_url: "https://example.com/tag/v1.0.0" } };
+    },
+  });
+  const result = await publishRelease(gh, mockContext, 42, isLatest);
+  assert.strictEqual(result.html_url, "https://example.com/tag/v1.0.0");
+  assert.strictEqual(calls.length, 1);
+  assert.strictEqual(calls[0].release_id, 42);
+  assert.strictEqual(calls[0].draft, false);
+  assert.strictEqual(calls[0].make_latest, isLatest ? "true" : "false");
 }
 
 // ----------------------------------------------------------
