@@ -20,6 +20,9 @@ func (k ComponentKey) String() string {
 
 // Graph is a fully resolved transitive component graph.
 type Graph struct {
+	// Root is the component the traversal started from. Reference paths are
+	// computed from it; a zero Root yields no reference paths.
+	Root ComponentKey
 	// Descriptors contains the resolved descriptors, including the root.
 	Descriptors []*descriptor.Descriptor
 }
@@ -40,6 +43,13 @@ type Filtered struct {
 	// EmptyStage names the selector stage that emptied the result, or is
 	// empty for an ordinary result. Its values are the Stage constants.
 	EmptyStage string
+
+	// root and unfiltered are the graph root and every descriptor of the graph
+	// before any selector. The referencePath and resourceIdentity bindings are
+	// computed from them, so a selector never cuts a path or hides a resource
+	// that an identity must be told apart from. Shared read-only.
+	root       ComponentKey
+	unfiltered map[ComponentKey]*descriptor.Descriptor
 }
 
 // Filter applies the reference, component, and resource selector stages of q
@@ -101,7 +111,7 @@ func (q *Query) Filter(ctx context.Context, graph Graph) (*Filtered, error) {
 	}
 
 	// Lexicographic order by (component.name, component.version).
-	return &Filtered{Descriptors: sortByComponentKey(filtered)}, nil
+	return &Filtered{Descriptors: sortByComponentKey(filtered), root: graph.Root, unfiltered: byKey}, nil
 }
 
 // filterReferences applies the reference selector stage. Without a selector all

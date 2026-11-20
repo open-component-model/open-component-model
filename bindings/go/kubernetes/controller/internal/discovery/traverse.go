@@ -41,6 +41,13 @@ func (rd *resolverAndDiscoverer) Resolve(ctx context.Context, key string) (*desc
 	if desc == nil {
 		return nil, fmt.Errorf("failed to resolve component %s: resolved descriptor is nil", key)
 	}
+	// References address what was requested, but the graph is keyed by what
+	// each descriptor names itself. A tag holding another component version
+	// would split the two and cut the component off from its parent.
+	if desc.Component.Name != name || desc.Component.Version != version {
+		return nil, fmt.Errorf("failed to resolve component %s: repository returned component version %s:%s",
+			key, desc.Component.Name, desc.Component.Version)
+	}
 
 	return desc, nil
 }
@@ -116,7 +123,7 @@ func Traverse(ctx context.Context, root ComponentKey, resolver resolvers.Compone
 	}
 
 	// Consume the discovered vertices only after the entire traversal succeeded.
-	graph := &Graph{}
+	graph := &Graph{Root: root}
 	if err := discoverer.Graph().WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
 		descriptors := make([]*descriptor.Descriptor, 0, len(d.Vertices))
 		for key, vertex := range d.Vertices {

@@ -4,6 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
+	"strconv"
+	"strings"
 
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -162,4 +166,64 @@ func IdentityFuncIgnoreVersion() runtime.IdentityMatchingChainFn {
 		}
 		return runtime.IdentityEqual(i, o)
 	}
+}
+
+// AddressableIdentities returns, for each element of ids, an identity that
+// matches exactly that element under IdentityFuncIgnoreVersion, so the first
+// match taken by ResolveReferencePath and the Resource controller is the only
+// one. It prefers the identity without its version, which keeps matching when
+// the element's version changes, and falls back to the full identity. An
+// element that no identity selects on its own, such as one of two equal
+// identities, gets nil. ids must be all elements the identity is matched
+// against, not a subset.
+func AddressableIdentities(ids []runtime.Identity) []runtime.Identity {
+	stripped := make([]runtime.Identity, len(ids))
+	strippedKeys := make([]string, len(ids))
+	fullKeys := make([]string, len(ids))
+	strippedCount := make(map[string]int, len(ids))
+	fullCount := make(map[string]int, len(ids))
+	for i, id := range ids {
+		stripped[i] = withoutVersion(id)
+		strippedKeys[i] = identityKey(stripped[i])
+		fullKeys[i] = identityKey(id)
+		strippedCount[strippedKeys[i]]++
+		fullCount[fullKeys[i]]++
+	}
+
+	out := make([]runtime.Identity, len(ids))
+	for i, id := range ids {
+		switch {
+		case strippedCount[strippedKeys[i]] == 1:
+			out[i] = stripped[i]
+		// Without a version the full identity is the stripped one, which
+		// IdentityFuncIgnoreVersion also matches against versioned siblings.
+		case id[descriptor.IdentityAttributeVersion] != "" && fullCount[fullKeys[i]] == 1:
+			out[i] = id.Clone()
+		}
+	}
+	return out
+}
+
+// identityKey encodes id so that two identities share a key exactly when they
+// are equal. runtime.Identity.String joins key=value pairs with commas, so
+// values containing "," or "=" can make different identities collide.
+func identityKey(id runtime.Identity) string {
+	var b strings.Builder
+	for _, k := range slices.Sorted(maps.Keys(id)) {
+		// Quoting escapes the separators, so the encoding is unambiguous.
+		b.WriteString(strconv.Quote(k))
+		b.WriteByte('=')
+		b.WriteString(strconv.Quote(id[k]))
+		b.WriteByte(',')
+	}
+	return b.String()
+}
+
+func withoutVersion(id runtime.Identity) runtime.Identity {
+	s := id.Clone()
+	if s == nil {
+		s = runtime.Identity{}
+	}
+	delete(s, descriptor.IdentityAttributeVersion)
+	return s
 }
