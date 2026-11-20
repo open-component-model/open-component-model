@@ -33,7 +33,7 @@ Lowercase-only is unchanged. Uppercase would need a new name mapping and is out 
 
 ## Compatibility with Legacy OCM (v1)
 
-- **Tightening OCI-invalid names is compatible:** the names rejected here (`acme.org/foo-`, `acme.org/a___b`, `acme-.org/x`, ...) could never be stored, so no working name is lost.
+- **Tightening OCI-invalid names is compatible under the `urlPath` mapping:** `urlPath` is the only mapping the new tooling implements, and under it the names rejected here (`acme.org/foo-`, `acme.org/a___b`, `acme-.org/x`, ...) could never be stored, so no working name is lost. Legacy OCM (v1) also offered a deprecated `sha256-digest` mapping that hashes the name into the repository path and could store such names; a component published only that way is no longer accepted by the new grammar, so audit for these names and rename them before you migrate.
 - **Reserving `component-descriptors` is a narrow exception:** a name such as `acme.org/component-descriptors` is a valid OCI path and passed the old grammar, but it collides with the storage prefix and is now rejected. Referencing such a name was already unreliable, because the reference parser splits on the last `component-descriptors` segment. If you published one, rename the component before you upgrade.
 - **Dropping the letter-first rule is not compatible:** legacy OCM (v1) rejects digit-led names such as `acme.org/1`. Digit-led and digit-only names are readable only by legacy tooling from the patch release that relaxes the letter-first rule in its embedded schemas.
 
@@ -43,4 +43,4 @@ Minimum legacy OCM (v1) version that reads digit-led component names: to be fill
 
 ## Action Required
 
-None for names that already work. If you adopt a digit-led or digit-only component name, make sure every consumer that still runs legacy OCM (v1) is on at least the minimum version above before you publish such a component.
+If you used the default `urlPath` mapping, names that already work keep working. If you used the deprecated `sha256-digest` mapping, audit for names the new grammar rejects (trailing or doubled separators, uppercase, or a `component-descriptors` segment) and rename them before migrating. If you adopt a digit-led or digit-only name, make sure every consumer still on legacy OCM (v1) is at least the minimum version above before you publish it.

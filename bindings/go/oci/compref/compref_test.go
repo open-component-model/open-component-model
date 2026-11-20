@@ -980,3 +980,20 @@ func Test_ComponentName_MaxLength(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "must not exceed")
 }
+
+// Test_ComponentName_Parse_Rejections exercises the grammar, length, and reserved-segment
+// checks through Parse (not just the raw regexes), so removing any of those branches fails here.
+func Test_ComponentName_Parse_Rejections(t *testing.T) {
+	cases := map[string]string{
+		"reserved segment":        "acme.org/component-descriptors",
+		"numeric top-level label": "acme.12/foo",
+		"malformed separators":    "acme.org/a_-b",
+		"uppercase":               "acme.org/Foo",
+	}
+	for desc, name := range cases {
+		t.Run(desc, func(t *testing.T) {
+			_, err := Parse("ctf::/tmp/ctfrepo/component-descriptors/" + name + ":1.0.0")
+			require.Error(t, err)
+		})
+	}
+}

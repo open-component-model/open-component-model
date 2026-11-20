@@ -22,9 +22,11 @@ var Base = slog.With(slog.String("realm", "compref"))
 const (
 	// ComponentRegex is the regular expression used to validate component names.
 	// It is a DNS-style name with an alphabetic top-level label, followed by one or
-	// more OCI repository path segments. Path segments may start with or consist only of
-	// digits. OCI-invalid names (trailing/leading separators, uppercase, forbidden separator
-	// runs) are rejected so a name can always be stored verbatim under the urlPath mapping.
+	// more OCI repository path segments; path segments may start with or consist only of
+	// digits. This is syntactic alignment with the OCI repository path grammar, subject to
+	// OCM-specific restrictions such as the alphabetic top-level label. A match does not by
+	// itself guarantee storage: the full repository path length
+	// (<subPath>/component-descriptors/<name>) is enforced by the storage backend.
 	// For details see https://github.com/open-component-model/ocm-spec/blob/main/doc/01-model/02-elements-toplevel.md#component-identity
 	ComponentRegex = `^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*[.][a-z]{2,}(/[a-z0-9]+(([.]|_|__|-+)[a-z0-9]+)*)+$`
 	// VersionRegex is the regular expression used to validate semantic versioning in "loose" format.
