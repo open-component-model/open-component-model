@@ -258,7 +258,7 @@ sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 --s
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
-                                              the interactive progress display needs a terminal and the text format; any other format prints its records in full instead
+                                              setting this flag disables the interactive progress display so logs are printed in the chosen format
                                            (must be one of [json text]) (default text)
       --loglevel enum                      sets the logging level
                                               debug: Show all logs including detailed debugging information
