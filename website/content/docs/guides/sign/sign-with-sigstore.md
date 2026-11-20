@@ -296,8 +296,15 @@ The OCM release workflow publishes a [GitHub artifact attestation](https://docs.
 
 ```bash
 gh attestation verify oci://ghcr.io/open-component-model/cli:0.6.0 \
-  --owner open-component-model
+  --repo open-component-model/open-component-model \
+  --cert-identity-regex \
+    '^https://github\.com/open-component-model/open-component-model/\.github/workflows/(cli|pipeline)\.yml@refs/(heads/(main|releases/v[0-9]+\.[0-9]+)|tags/cli/v0\.7\.0)$'
 ```
+
+The regex accepts only the workflows that build the image (`pipeline.yml`, or `cli.yml` before 0.8.0), running on
+`main`, a `releases/vX.Y` branch, or the tag `cli/v0.7.0` that release 0.7.0 was signed from. Any workflow in the
+repository can create an attestation, so checking only the repository or organization would also accept one signed
+from an unreviewed branch.
 
 {{< /details >}}
 
