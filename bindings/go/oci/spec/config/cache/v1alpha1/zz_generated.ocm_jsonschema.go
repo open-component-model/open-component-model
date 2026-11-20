@@ -9,15 +9,31 @@ import (
 	_ "embed"
 )
 
+//go:embed schemas/BlobCacheConfig.schema.json
+var schemaBlobCacheConfig []byte
+
 //go:embed schemas/Config.schema.json
 var schemaConfig []byte
+
+//go:embed schemas/ReferenceCacheConfig.schema.json
+var schemaReferenceCacheConfig []byte
 
 //go:embed schemas/RemotePolicy.schema.json
 var schemaRemotePolicy []byte
 
+// JSONSchema returns the JSON Schema for BlobCacheConfig.
+func (BlobCacheConfig) JSONSchema() []byte {
+	return schemaBlobCacheConfig
+}
+
 // JSONSchema returns the JSON Schema for Config.
 func (Config) JSONSchema() []byte {
 	return schemaConfig
+}
+
+// JSONSchema returns the JSON Schema for ReferenceCacheConfig.
+func (ReferenceCacheConfig) JSONSchema() []byte {
+	return schemaReferenceCacheConfig
 }
 
 // JSONSchema returns the JSON Schema for RemotePolicy.

@@ -37,23 +37,28 @@ type Options struct {
 	// the provider builds and shares across every OCI repository it hands
 	// out. The zero value [cache.Options]{} is sufficient for sane
 	// defaults — only Dir is auto-derived from TempDir when left empty.
-	// Leave nil to disable blob caching entirely.
+	// Leave nil to disable blob caching unless CacheConfig enables it.
 	BlobCacheOptions *cache.Options
 
 	// ReferenceCacheOptions, when non-nil, configures the reference
 	// cache the provider builds and shares across every OCI repository
 	// it hands out. The zero value [cache.Options]{} is sufficient for
 	// sane defaults — only Dir is auto-derived from TempDir when left
-	// empty. Leave nil to disable reference caching entirely.
+	// empty. Leave nil to disable reference caching unless CacheConfig
+	// enables it.
 	ReferenceCacheOptions *cache.Options
 
 	// CacheConfig, when non-nil, is applied on top of BlobCacheOptions and
-	// ReferenceCacheOptions. It does not enable a cache that is disabled.
+	// ReferenceCacheOptions. Its enabled fields turn a cache on or off.
 	CacheConfig *ocicachev1alpha1.Config
 
 	// BlobCache, when non-nil, is used instead of building a blob cache from
 	// BlobCacheOptions, so callers that create many providers can share one.
 	BlobCache *cache.BlobCache
+
+	// ReferenceCache, when non-nil, is used instead of building a reference cache from
+	// ReferenceCacheOptions, so callers that create many providers can share one.
+	ReferenceCache *cache.ReferenceCache
 }
 
 type Option func(*Options)
@@ -104,9 +109,11 @@ func WithBlobCacheOptions(opts *cache.Options) Option {
 	}
 }
 
-// WithOCICacheConfig applies cfg to both the blob and the reference cache.
-// The caches still have to be enabled with [WithBlobCacheOptions] and
-// [WithReferenceCacheOptions]; cfg does not apply to a cache set with [WithBlobCache].
+// WithOCICacheConfig applies cfg to the blob and the reference cache. The options of
+// [WithBlobCacheOptions] and [WithReferenceCacheOptions] are the defaults it applies to;
+// a cache without options is off unless cfg enables it. cfg only turns off a cache set with
+// [WithBlobCache] or [WithReferenceCache]. Under remotePolicy Always the provider uses no
+// reference cache, whatever cfg enables.
 func WithOCICacheConfig(cfg *ocicachev1alpha1.Config) Option {
 	return func(o *Options) {
 		o.CacheConfig = cfg
@@ -121,6 +128,14 @@ func WithBlobCache(bc *cache.BlobCache) Option {
 	}
 }
 
+// WithReferenceCache makes the provider use rc instead of building its own reference cache.
+// It takes precedence over [WithReferenceCacheOptions]. The caller owns rc.
+func WithReferenceCache(rc *cache.ReferenceCache) Option {
+	return func(o *Options) {
+		o.ReferenceCache = rc
+	}
+}
+
 // WithReferenceCacheOptions enables a shared reference cache across
 // every OCI repository the provider hands out. Pass [cache.Options]{}
 // for sane defaults; pass nil (the default) to disable. The cache
@@ -131,14 +146,4 @@ func WithReferenceCacheOptions(opts *cache.Options) Option {
 	return func(o *Options) {
 		o.ReferenceCacheOptions = opts
 	}
-}
-
-// applyCacheConfig returns a copy of opts so options shared between providers are not mutated.
-func applyCacheConfig(opts *cache.Options, cfg *ocicachev1alpha1.Config) *cache.Options {
-	if opts == nil || cfg == nil || cfg.RemotePolicy == "" {
-		return opts
-	}
-	applied := *opts
-	applied.RemotePolicy = cache.RemotePolicy(cfg.RemotePolicy)
-	return &applied
 }
