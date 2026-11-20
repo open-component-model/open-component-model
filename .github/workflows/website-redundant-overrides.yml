@@ -129,7 +129,7 @@ jobs:
           token: ${{ steps.token.outputs.token }}
           title: "chore: remove redundant npm overrides"
           commit-message: "chore: remove redundant npm overrides"
-          branch: chore/remove-redundant-overrides
+          branch: automation/remove-redundant-overrides
           delete-branch: true
           sign-commits: true
           labels: |

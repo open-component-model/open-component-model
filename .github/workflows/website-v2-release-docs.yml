@@ -111,7 +111,7 @@ jobs:
           commit-message: "[github-actions] automated change"
           add-paths: |
             website/config/
-          branch: website/version-release/${{ inputs.version }}
+          branch: automation/website-release-${{ inputs.version }}
           delete-branch: true
           sign-commits: true
           body: |

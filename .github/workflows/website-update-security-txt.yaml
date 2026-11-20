@@ -53,7 +53,7 @@ jobs:
         token: ${{ steps.generate_token.outputs.token }}
         title: "chore: renew security.txt expiry date"
         commit-message: "chore: renew security.txt expiry date"
-        branch: security/renew-security-txt
+        branch: automation/renew-security-txt
         delete-branch: true
         sign-commits: true
         labels: |
