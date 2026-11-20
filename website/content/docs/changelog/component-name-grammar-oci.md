@@ -43,4 +43,4 @@ Minimum legacy OCM (v1) version that reads digit-led component names: to be fill
 
 ## Action Required
 
-If you used the default `urlPath` mapping, names that already work keep working. If you used the deprecated `sha256-digest` mapping, audit for names the new grammar rejects (trailing or doubled separators, uppercase, or a `component-descriptors` segment) and rename them before migrating. If you adopt a digit-led or digit-only name, make sure every consumer still on legacy OCM (v1) is at least the minimum version above before you publish it.
+If you used the default `urlPath` mapping, names that already work keep working, except a name containing a `component-descriptors` segment (see the reserved-segment note above), which is now rejected and must be renamed. If you used the deprecated `sha256-digest` mapping, audit for names the new grammar rejects (trailing or doubled separators, uppercase, or a `component-descriptors` segment) and rename them before migrating. If you adopt a digit-led or digit-only name, make sure every consumer still on legacy OCM (v1) is at least the minimum version above before you publish it.

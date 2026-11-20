@@ -903,10 +903,11 @@ func Test_Ref_String(t *testing.T) {
 }
 
 // Test_ComponentName_Grammar pins the component-name grammar against the OCI
-// repository path grammar. Names that pass the grammar must be storable verbatim
-// under the urlPath mapping (<base>/component-descriptors/<name>); names that fail
-// cannot be stored. The grammar is asserted directly so the reserved
-// "component-descriptors" segment is not swallowed by the reference splitter.
+// repository path grammar. This is syntactic alignment subject to OCM-specific
+// restrictions (such as the alphabetic top-level label) and, for storage, the full
+// repository-path length; a grammar match alone does not guarantee storage, and the
+// reserved "component-descriptors" segment is rejected separately. The grammar and the
+// reservation are asserted directly here so the splitter does not swallow the segment.
 func Test_ComponentName_Grammar(t *testing.T) {
 	cases := []struct {
 		name     string
