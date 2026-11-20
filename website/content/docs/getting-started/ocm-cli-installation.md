@@ -358,7 +358,7 @@ cosign verify-blob-attestation \
   "$binary"
 ```
 
-A successful verification proves the binary was built by the CLI build workflow on `main` or a release branch and signed via Sigstore OIDC.
+A successful verification proves the binary was built by the CLI build workflow on `main`, a `releases/vX.Y` branch or the tag `cli/v0.7.0`, and signed via Sigstore OIDC.
 
 {{< /tab >}}
 {{< tab "Manual SHA-256" >}}
@@ -380,10 +380,10 @@ curl -sfL \
   | base64 --decode | jq '.subject[] | "\(.digest.sha256)  \(.name)"'
 ```
 
-If your binary's digest appears in the output, it matches the attested build artifact.
+If your binary's digest appears in the output, an attestation for this exact file exists in the repository.
 
 {{< callout title="Note" icon="outline/info-circle" >}}
-This verifies integrity (the file hasn't been corrupted) but not authenticity (it could theoretically be replaced along with the attestation by an attacker who compromises GitHub infrastructure). For full cryptographic proof, use the cosign method above.
+This check reads the attestation without verifying its signature or the workflow that signed it. Any workflow in the repository can create an attestation, so the result says nothing about where the binary came from. To verify the origin, use the GitHub CLI or cosign method.
 {{< /callout >}}
 
 {{< /tab >}}

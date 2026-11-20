@@ -292,7 +292,7 @@ print_verify_instructions() {
 
 COSIGN_EOF
     warn ""
-    warn "  Option C — Manual SHA-256 hash check (integrity only):"
+    warn "  Option C — Manual SHA-256 hash check (integrity only, says nothing about origin):"
     cat >&2 <<HASH_EOF
 
     DIGEST="sha256:\$(${hash_cmd} ${quoted_binary_path} | cut -d' ' -f1)"
