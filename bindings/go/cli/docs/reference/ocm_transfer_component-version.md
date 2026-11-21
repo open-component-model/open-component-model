@@ -68,9 +68,11 @@ How the graph is built:
   selected based on the source/target references:
     1. CTFGetComponentVersion -> OCIGetComponentVersion
     2. CTFAddComponentVersion -> OCIAddComponentVersion
-    3. GetOCIArtifact -> OCIAddLocalResource, or TransferOCIArtifact (OCI uploader)
-    4. GetHelmChart -> ConvertHelmToOCI -> OCIAddLocalResource / AddOCIArtifact (OCI uploader)
-    5. GetGitResource -> OCIAddLocalResource, or GetGitResource / OCIGetLocalResource -> AddGitResource (Git uploader)
+    3. Transfer{OCI,CTF}LocalBlobTo{OCI,CTF}LocalBlob (local blobs, streamed)
+    4. TransferOCIArtifactTo{OCI,CTF}LocalBlob (local blob uploader), or TransferOCIArtifact (OCI uploader)
+    5. GetHelmChart -> ConvertHelmToOCI -> OCIAddLocalResource / AddOCIArtifact (OCI uploader)
+    6. DownloadWgetResource / DownloadS3Resource -> OCIAddLocalResource
+    7. GetGitResource -> OCIAddLocalResource, or GetGitResource / OCIGetLocalResource -> AddGitResource (Git uploader)
 
 ```
 ocm transfer component-version {reference} {target} [flags]

@@ -248,10 +248,12 @@ rules.
 ### Download Behavior
 
 Sends a `GetObject` request for the bucket and the key of the access specification. If `version` is set, the request
-reads that version. OCM streams the body to a file under the `tempFolder` of the
-`filesystem.config.ocm.software/v1alpha1` configuration type. It does not hold the body in memory, and there is no size
-limit by default. The media type of the blob comes from `mediaType`. If `mediaType` is empty, OCM uses the
-`Content-Type` of the object, and then `application/octet-stream`.
+reads that version. The request is sent only when the body is read, and OCM streams the body to the consumer. It does
+not hold the body in memory or in a file of its own, and there is no size limit by default. A transfer that copies the
+object into the target as a local blob writes it to a temporary file first; see
+[Temporary Disk Usage]({{< relref "docs/reference/configuration/transfer-configuration/localblob-uploader.md#temporary-disk-usage" >}}).
+The media type of the blob comes from `mediaType`. If `mediaType` is empty, OCM uses the `Content-Type` of the object,
+and then `application/octet-stream`.
 
 Requests go through the shared OCM HTTP client, so timeouts, TLS settings and per-host overrides come from the
 [HTTP client configuration]({{< relref "http-client.md" >}}). The AWS SDK does the retries. It retries
