@@ -83,6 +83,57 @@ func Test_matchAnyNode_PrefersFewerPathWildcards(t *testing.T) {
 	}
 }
 
+func Test_matchAnyNode_CharacterClassStarIsNotAWildcard(t *testing.T) {
+	// A "*" inside a glob character class matches a literal "*" and is not a
+	// wildcard. "my-org/[*]" therefore has zero wildcard tokens and is more
+	// specific than "my-org/?" (one wildcard), even though its identity string
+	// sorts later. The lexical tie-break must not override the wildcard count.
+	dag := newSyncedDag()
+	literalStar := runtime.Identity{"type": "OCIRegistry", "hostname": "ghcr.io", "path": "my-org/[*]"}
+	singleChar := runtime.Identity{"type": "OCIRegistry", "hostname": "ghcr.io", "path": "my-org/?"}
+	require.NoError(t, dag.addIdentity(literalStar))
+	require.NoError(t, dag.addIdentity(singleChar))
+
+	lookup := runtime.Identity{"type": "OCIRegistry", "hostname": "ghcr.io", "path": "my-org/*"}
+	// Guard the premise: both entries match the literal-star lookup, and the
+	// literal-star identity sorts after the single-char one, so only the
+	// wildcard count can make it win.
+	require.True(t, lookup.Match(literalStar), "lookup must match the literal-star entry")
+	require.True(t, lookup.Match(singleChar), "lookup must match the single-char entry")
+	require.Greater(t, literalStar.String(), singleChar.String(), "test premise: literal-star glob sorts last")
+
+	for range 50 {
+		vertex, err := dag.matchAnyNode(lookup)
+		require.NoError(t, err)
+		assert.Equal(t, literalStar.String(), vertex.ID)
+	}
+}
+
+func Test_pathWildcards(t *testing.T) {
+	for _, tc := range []struct {
+		path string
+		want int
+	}{
+		{"", 0},
+		{"my-org/repo", 0},
+		{"my-org/*", 1},
+		{"*/*", 2},
+		{"my-org/?", 1},
+		{`my-org/\*`, 0},    // escaped star is a literal
+		{`my-org/\?`, 0},    // escaped question mark is a literal
+		{"my-org/[*]", 0},   // star inside a class is a literal
+		{"my-org/[?]", 0},   // question mark inside a class is a literal
+		{"my-org/[a*b]", 0}, // star inside a class is a literal
+		{"my-org/[!*]", 0},  // negated class, star is a literal member
+		{"my-org/*[*]", 1},  // the outer star counts, the class star does not
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			id := runtime.Identity{runtime.IdentityAttributePath: tc.path}
+			assert.Equal(t, tc.want, pathWildcards(id))
+		})
+	}
+}
+
 func Test_matchAnyNode_StableLexicalTieBreak(t *testing.T) {
 	// Two globs with the same attribute count and the same wildcard count both
 	// match. Only the lexical tie-break on the identity string decides, so the

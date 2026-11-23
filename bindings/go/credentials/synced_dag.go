@@ -175,16 +175,34 @@ func scopeAttributeCount(i runtime.Identity) int {
 
 // pathWildcards counts the glob wildcard tokens in the path attribute of an identity.
 // Both "*" and "?" are wildcards for the glob matcher. A backslash escapes the next
-// character, so "\*" and "\?" are literals and are not counted. An identity with no
-// path, or a path with no wildcards, counts as 0.
+// character, so "\*" and "\?" are literals and are not counted. Inside a character
+// class "[...]" the "*" and "?" lose their special meaning (for example "[*]" matches a
+// literal "*"), so they are not counted there either. An identity with no path, or a
+// path with no wildcards, counts as 0.
 func pathWildcards(i runtime.Identity) int {
 	path := i[runtime.IdentityAttributePath]
 	count := 0
+	inClass := false
 	for j := 0; j < len(path); j++ {
-		switch path[j] {
-		case '\\':
-			j++ // skip the escaped character
-		case '*', '?':
+		c := path[j]
+		switch {
+		case c == '\\':
+			j++ // skip the escaped character, whether inside a class or not
+		case inClass:
+			if c == ']' {
+				inClass = false
+			}
+		case c == '[':
+			inClass = true
+			// A leading "!" or "^" negates the class, and a "]" as the first class
+			// member is a literal "]"; neither closes the class, so skip them.
+			if j+1 < len(path) && (path[j+1] == '!' || path[j+1] == '^') {
+				j++
+			}
+			if j+1 < len(path) && path[j+1] == ']' {
+				j++
+			}
+		case c == '*', c == '?':
 			count++
 		}
 	}
