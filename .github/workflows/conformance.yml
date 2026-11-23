@@ -89,7 +89,7 @@ jobs:
         with:
           sparse-checkout: conformance/scenarios/sovereign
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: conformance/scenarios/sovereign/components/notes/go.mod
           cache-dependency-path: conformance/scenarios/sovereign/components/notes/go.sum
@@ -104,7 +104,7 @@ jobs:
         uses: azure/setup-helm@2f5e7bc67f1f9972ab16657bb795f36d8f04de0e # v5.1.0
         with:
           # renovate: datasource=github-releases depName=helm/helm
-          version: v4.3.1
+          version: v4.3.2
       - name: Setup Flux CLI
         uses: fluxcd/flux2/action@3fa784edd773d56630bb9f62645e08f70c2cff0a # v2.10.0
 
@@ -230,7 +230,7 @@ jobs:
           repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
           ref: ${{ inputs.ref || github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: bindings/go/go.mod
           cache-dependency-path: bindings/go/go.sum

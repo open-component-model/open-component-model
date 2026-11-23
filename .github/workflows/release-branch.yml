@@ -19,7 +19,7 @@ jobs:
     name: Create Release Branch from ${{ github.event.inputs.source_branch }} to ${{ github.event.inputs.target_branch }}
     runs-on: ubuntu-26.04-arm
     environment:
-      name: automation
+      name: release-automation
       deployment: false
     steps:
       - name: Checkout repository
@@ -32,8 +32,8 @@ jobs:
         id: get_token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ secrets.OCMBOT_APP_ID }}
-          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          client-id: ${{ secrets.RELEASE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
           repositories: ${{ github.event.repository.name }}
           # Create the release branch via GitHub API.
           permission-contents: write

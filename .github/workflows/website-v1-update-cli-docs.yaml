@@ -19,7 +19,7 @@ jobs:
     if: github.event.client_payload != '' || github.event.inputs.tag != ''
     runs-on: ubuntu-26.04-arm
     environment:
-      name: automation
+      name: pull-requests
       deployment: false
     env:
       TAG: ${{ github.event.inputs.tag || github.event.client_payload.tag }}
@@ -35,7 +35,7 @@ jobs:
           ref: ${{ env.REF }}
 
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: '${{ github.workspace }}/website/hack/generate-cli-docs/go.mod'
 
@@ -46,12 +46,12 @@ jobs:
           go mod tidy
           go run ./... --output-dir=${{ github.workspace }}/website/content_versioned/version-legacy/docs/reference/ocm-cli
 
-      - name: Get OCMBot installation token
+      - name: Get PR bot installation token
         id: generate_token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ secrets.OCMBOT_APP_ID }}
-          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          client-id: ${{ secrets.PR_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.PR_BOT_PRIVATE_KEY }}
           repositories: ${{ github.event.repository.name }}
           # Push the branch and create the signed commit via GraphQL.
           permission-contents: write
@@ -59,7 +59,7 @@ jobs:
           permission-pull-requests: write
 
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8.1.3
         with:
           base: main
           token: ${{ steps.generate_token.outputs.token }}
@@ -70,7 +70,7 @@ jobs:
             website/content_versioned/version-legacy/
             website/hack/generate-cli-docs/go.mod
             website/hack/generate-cli-docs/go.sum
-          branch: update-cli-docs/ocm-v1-e72ff582-a2c7-5517-9c87-12f3f4db2306
+          branch: automation/update-cli-docs-ocm-v1
           delete-branch: true
           sign-commits: true
           body: |
