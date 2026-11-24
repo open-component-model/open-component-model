@@ -22,10 +22,11 @@ Docker network and are published on `127.0.0.1:15001` and `127.0.0.1:15002`
 
 | Task | Expectation |
 | --- | --- |
-| `publish` | `ocm add cv --layout normalized` publishes `acme.org/cosign/normalized:1.0.0` with a local blob; the tag resolves to the `component-descriptor.normalized.v1` manifest. |
+| `config` | Writes an `oci.storage.config.ocm.software/v1alpha1` entry with `componentVersionLayout: normalized`, passed to every `ocm` command below via `--config`. |
+| `publish` | `ocm add cv` publishes `acme.org/cosign/normalized:1.0.0` with a local blob; the tag resolves to the `component-descriptor.normalized.v1` manifest. |
 | `cosign:sign` | `cosign sign` on the manifest digest succeeds and `cosign verify` passes on the source registry. |
-| `ocm:sign` | `ocm sign cv` adds an RSA signature; the tag still resolves to the same manifest digest, and both the cosign and the OCM signature verify. |
-| `transfer` | Source → CTF → target without `--layout`: the layout is inherited, the signature referrer is carried, and the target tag resolves to the same manifest digest. |
+| `ocm:sign` | `ocm sign cv` adds an RSA signature and rewrites the version in the configured normalized layout; the tag still resolves to the same manifest digest, and both the cosign and the OCM signature verify. |
+| `transfer` | Source → CTF → target with the normalized layout configured: the signature referrer is carried, and the target tag resolves to the same manifest digest. |
 | `verify:target` | `cosign verify` and `ocm verify cv` pass on the target; `ocm download resource` returns the original content. |
 
 Keys, configuration and the CTF live in `tmp/`; `task clean` removes them,

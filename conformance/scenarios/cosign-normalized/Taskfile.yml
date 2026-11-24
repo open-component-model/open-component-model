@@ -50,6 +50,7 @@ tasks:
       - task: clean
       - task: registries
       - task: keys
+      - task: config
       - task: publish
       - task: cosign:sign
       - task: ocm:sign
@@ -104,12 +105,24 @@ tasks:
                   {{ .ITEM }}_key_pem_file: {{ .WORK }}/keys/rsa-{{ .ITEM }}.pem
           EOF
 
+  config:
+    desc: Write the OCI storage configuration selecting the normalized layout
+    cmds:
+      - mkdir -p {{ .WORK }}
+      - |
+        cat > {{ .WORK }}/storage.ocmconfig <<EOF
+        type: generic.config.ocm.software/v1
+        configurations:
+        - type: oci.storage.config.ocm.software/v1alpha1
+          componentVersionLayout: normalized
+        EOF
+
   # === SCENARIO TASKS ===
   publish:
     desc: Publish the component version in the normalized layout and record its manifest digest
     cmds:
       - |
-        {{ .ocm }} add componentversion --layout normalized \
+        {{ .ocm }} add componentversion --config {{ .WORK }}/storage.ocmconfig \
           --repository oci::http://{{ .SOURCE }}:5000/ocm \
           --constructor component-constructor.yaml
       - |
@@ -131,9 +144,9 @@ tasks:
       - echo "✅ cosign signature verifies on the source registry"
 
   ocm:sign:
-    desc: An OCM signature must not move the tag off the cosign-signed manifest
+    desc: An OCM signature written in the normalized layout must not move the tag off the cosign-signed manifest
     cmds:
-      - '{{ .ocm }} sign componentversion --config {{ .WORK }}/private.ocmconfig {{ .SOURCE_CV }}'
+      - '{{ .ocm }} sign componentversion --config {{ .WORK }}/private.ocmconfig --config {{ .WORK }}/storage.ocmconfig {{ .SOURCE_CV }}'
       - |
         after=$({{ .tag_digest }} "http://127.0.0.1:{{ .SOURCE_PORT }}/v2/{{ .REPO }}/manifests/{{ .VERSION }}" \
           | awk 'tolower($1)=="docker-content-digest:" {print $2}' | tr -d '\r')
@@ -144,10 +157,10 @@ tasks:
       - echo "✅ ocm sign kept the normalized layout; cosign and OCM signatures both verify"
 
   transfer:
-    desc: Transfer source → CTF → target without layout flags; the layout and signature travel along
+    desc: Transfer source → CTF → target with the normalized layout configured; the signature travels along
     cmds:
-      - '{{ .ocm }} transfer componentversion {{ .SOURCE_CV }} ctf::{{ .CTF }}'
-      - '{{ .ocm }} transfer componentversion ctf::{{ .CTF }}//{{ .NAME }}:{{ .VERSION }} oci::http://{{ .TARGET }}:5000/ocm'
+      - '{{ .ocm }} transfer componentversion --config {{ .WORK }}/storage.ocmconfig {{ .SOURCE_CV }} ctf::{{ .CTF }}'
+      - '{{ .ocm }} transfer componentversion --config {{ .WORK }}/storage.ocmconfig ctf::{{ .CTF }}//{{ .NAME }}:{{ .VERSION }} oci::http://{{ .TARGET }}:5000/ocm'
       - |
         target=$({{ .tag_digest }} "http://127.0.0.1:{{ .TARGET_PORT }}/v2/{{ .REPO }}/manifests/{{ .VERSION }}" \
           | awk 'tolower($1)=="docker-content-digest:" {print $2}' | tr -d '\r')
