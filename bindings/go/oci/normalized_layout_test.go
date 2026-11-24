@@ -3,7 +3,7 @@ package oci_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"os"
 	"slices"
@@ -117,7 +117,7 @@ func pushAccessManifest(t *testing.T, ctx context.Context, store spec.Store, sub
 	if salt != "" {
 		m.Annotations["test.salt"] = salt
 	}
-	raw, err := json.Marshal(m)
+	raw, err := json.Marshal(m, runtime.JSONOptions)
 	r.NoError(err)
 	mDesc := content.NewDescriptorFromBytes(m.MediaType, raw)
 	mDesc.ArtifactType = m.ArtifactType
@@ -436,7 +436,7 @@ func pushReferrerManifest(t *testing.T, ctx context.Context, store spec.Store, s
 		Subject:      &subject,
 	}
 	m.SchemaVersion = 2
-	raw, err := json.Marshal(m)
+	raw, err := json.Marshal(m, runtime.JSONOptions)
 	r.NoError(err)
 	desc := content.NewDescriptorFromBytes(m.MediaType, raw)
 	desc.ArtifactType = artifactType
