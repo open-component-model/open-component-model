@@ -432,12 +432,15 @@ ocm --loglevel debug get cv ghcr.io/open-component-model//ocm.software/cli:{{< s
 ```
 
 Early in the output, before any registry request, OCM logs the resolved HTTP
-config. The `hosts` field reflects your per-host map, so a non-empty value proves
-the overrides were picked up:
+config. The `hosts` field lists the keys of your per-host map, so a non-empty
+value proves the overrides were picked up. With the
+[complete example](#complete-example) the line looks like this:
 
 ```text
-level=DEBUG msg="http config resolved" timeout=15s tlsHandshakeTimeout=10s hosts=map[artifactory.corp:5000:{...} ghcr.io:{...}]
+level=DEBUG msg="http config resolved" timeout=15s tlsHandshakeTimeout=10s hosts="map[artifactory.corp:5000:0x15afd40a91f0 mirror.airgap.local:0x15afd40a92d0 registry.kind.local:5001:0x15afd40a9340]"
 ```
+
+The value after each host key is a memory address that changes with every run.
 
 If `hosts=map[]` while you expected entries, the `hosts` block was not parsed,
 check the indentation and the host-key format. If the command exits with
