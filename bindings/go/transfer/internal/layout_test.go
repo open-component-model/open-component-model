@@ -39,52 +39,33 @@ func findTransformations(tgd *transformv1alpha1.TransformationGraphDefinition, t
 	return found
 }
 
-func TestBuildGraphDefinition_ComponentVersionLayout(t *testing.T) {
-	const (
-		normalized = layout.ComponentVersionLayoutNormalized
-		v2         = layout.ComponentVersionLayoutV2
-	)
+func TestBuildGraphDefinition_CarryComponentSignatures(t *testing.T) {
 	tests := []struct {
 		name         string
-		configured   layout.ComponentVersionLayout
 		target       runtime.Typed
 		sourceLayout layout.ComponentVersionLayout
-		wantLayout   any
 		wantCarry    *runtime.Type
 	}{
 		{
-			name:         "v2 source is written with the default layout and no carry",
+			name:         "v2 source has no carry",
 			target:       testOCIRepo("ghcr.io/target"),
-			sourceLayout: v2,
+			sourceLayout: layout.ComponentVersionLayoutV2,
 		},
 		{
-			name:         "normalized source is inherited by an OCI target",
+			name:   "source without layout detection has no carry",
+			target: testOCIRepo("ghcr.io/target"),
+		},
+		{
+			name:         "normalized source carries into an OCI target",
 			target:       testOCIRepo("ghcr.io/target"),
-			sourceLayout: normalized,
-			wantLayout:   string(normalized),
+			sourceLayout: layout.ComponentVersionLayoutNormalized,
 			wantCarry:    &ociv1alpha1.OCICarryComponentSignaturesV1alpha1,
 		},
 		{
-			name:         "normalized source is inherited by a CTF target",
+			name:         "normalized source carries into a CTF target",
 			target:       testCTFRepo("/tmp/archive"),
-			sourceLayout: normalized,
-			wantLayout:   string(normalized),
+			sourceLayout: layout.ComponentVersionLayoutNormalized,
 			wantCarry:    &ociv1alpha1.CTFCarryComponentSignaturesV1alpha1,
-		},
-		{
-			name:         "configured v2 overrides a normalized source",
-			configured:   v2,
-			target:       testOCIRepo("ghcr.io/target"),
-			sourceLayout: normalized,
-			wantLayout:   string(v2),
-		},
-		{
-			name:         "configured normalized applies to a v2 source",
-			configured:   normalized,
-			target:       testOCIRepo("ghcr.io/target"),
-			sourceLayout: v2,
-			wantLayout:   string(normalized),
-			wantCarry:    &ociv1alpha1.OCICarryComponentSignaturesV1alpha1,
 		},
 	}
 
@@ -93,7 +74,10 @@ func TestBuildGraphDefinition_ComponentVersionLayout(t *testing.T) {
 			r := require.New(t)
 			desc := testDescriptor("ocm.software/test", "1.0.0", nil, nil)
 			key := "ocm.software/test:1.0.0"
-			repo := &layoutCVRepo{mockCVRepo: mockCVRepo{descriptors: map[string]*descriptor.Descriptor{key: desc}}, layout: tt.sourceLayout}
+			var repo repository.ComponentVersionRepository = &mockCVRepo{descriptors: map[string]*descriptor.Descriptor{key: desc}}
+			if tt.sourceLayout != "" {
+				repo = &layoutCVRepo{mockCVRepo: mockCVRepo{descriptors: map[string]*descriptor.Descriptor{key: desc}}, layout: tt.sourceLayout}
+			}
 			resolver := &mockCVRepoResolver{
 				specs:      map[string]runtime.Typed{key: testOCIRepo("ghcr.io/source")},
 				repos:      map[string]repository.ComponentVersionRepository{key: repo},
@@ -101,15 +85,14 @@ func TestBuildGraphDefinition_ComponentVersionLayout(t *testing.T) {
 			}
 			roots := testTransferRoots("ocm.software/test", "1.0.0", tt.target, resolver)
 
-			tgd, err := BuildGraphDefinition(t.Context(), roots,
-				transferv1alpha1.Config{ComponentVersionLayout: tt.configured}, nil)
+			tgd, err := BuildGraphDefinition(t.Context(), roots, transferv1alpha1.Config{}, nil)
 			r.NoError(err)
 
 			uploads := findTransformations(tgd, ociv1alpha1.OCIAddComponentVersionV1alpha1, ociv1alpha1.CTFAddComponentVersionV1alpha1)
 			r.Len(uploads, 1)
 			uploadRepo, ok := uploads[0].Spec.Data["repository"].(map[string]any)
 			r.True(ok)
-			r.Equal(tt.wantLayout, uploadRepo["componentVersionLayout"])
+			r.NotContains(uploadRepo, "componentVersionLayout", "the layout is not part of the target repository specification")
 
 			carries := findTransformations(tgd, ociv1alpha1.OCICarryComponentSignaturesV1alpha1, ociv1alpha1.CTFCarryComponentSignaturesV1alpha1)
 			if tt.wantCarry == nil {

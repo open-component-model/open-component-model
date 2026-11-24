@@ -53,11 +53,12 @@ type RepositoryOptions struct {
 	// DescriptorEncodingMediaType is the media type of the descriptor encoding used for component versions.
 	DescriptorEncodingMediaType string
 
-	// Layout selects the OCI storage layout used when adding component versions.
-	// The default (LayoutAuto) keeps the layout of an already stored version and uses LayoutV2
-	// (the access-bearing v2 descriptor manifest as the tag target) for new versions.
-	// LayoutNormalized produces the cosign-signable normalized layout (a stable, access-free
-	// normalized manifest as the tag target, with the access-bearing descriptor as a referrer).
+	// Layout selects the OCI storage layout used when adding component versions. Every added
+	// version is written in this layout, also when it already exists in another layout (e.g. when
+	// a signature is persisted). The default LayoutV2 uses the access-bearing v2 descriptor
+	// manifest as the tag target. LayoutNormalized produces the cosign-signable normalized layout
+	// (a stable, access-free normalized manifest as the tag target, with the access-bearing
+	// descriptor as a referrer). Reading detects the layout of each version.
 	Layout Layout
 
 	// DescriptorUnmarshalFunc is used to unmarshal descriptors from OCI stores.

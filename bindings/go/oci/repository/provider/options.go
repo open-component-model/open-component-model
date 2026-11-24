@@ -4,6 +4,7 @@ import (
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/cache"
 	ocicachev1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/cache/v1alpha1"
+	ocistoragev1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/storage/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -50,6 +51,10 @@ type Options struct {
 	// CacheConfig, when non-nil, is applied on top of BlobCacheOptions and
 	// ReferenceCacheOptions. It does not enable a cache that is disabled.
 	CacheConfig *ocicachev1alpha1.Config
+
+	// StorageConfig, when non-nil, selects how component versions are stored by every
+	// repository the provider hands out. When nil, the v2 layout is used.
+	StorageConfig *ocistoragev1alpha1.Config
 
 	// BlobCache, when non-nil, is used instead of building a blob cache from
 	// BlobCacheOptions, so callers that create many providers can share one.
@@ -110,6 +115,15 @@ func WithBlobCacheOptions(opts *cache.Options) Option {
 func WithOCICacheConfig(cfg *ocicachev1alpha1.Config) Option {
 	return func(o *Options) {
 		o.CacheConfig = cfg
+	}
+}
+
+// WithOCIStorageConfig sets the storage configuration of every repository the provider hands out,
+// most notably the layout component versions are written in. Component versions are always
+// rewritten in that layout, also when they already exist in another one.
+func WithOCIStorageConfig(cfg *ocistoragev1alpha1.Config) Option {
+	return func(o *Options) {
+		o.StorageConfig = cfg
 	}
 }
 

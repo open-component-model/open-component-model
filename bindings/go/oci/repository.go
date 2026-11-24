@@ -148,11 +148,6 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		return fmt.Errorf("failed to validate local blobs: %w", err)
 	}
 
-	layout, err := repo.layoutForAdd(ctx, store, reference)
-	if err != nil {
-		return err
-	}
-
 	manifest, err := AddDescriptorToStore(ctx, store, descriptor, AddDescriptorOptions{
 		Scheme:                        repo.scheme,
 		Author:                        repo.creatorAnnotation,
@@ -160,7 +155,7 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		AdditionalLayers:              additionalLayers,
 		ReferrerTrackingPolicy:        repo.referrerTrackingPolicy,
 		DescriptorEncodingMediaType:   repo.descriptorEncodingMediaType,
-		Layout:                        layout,
+		Layout:                        repo.layout,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to add descriptor to store: %w", err)
@@ -192,23 +187,6 @@ func tagIdempotent(ctx context.Context, store spec.Store, desc ociImageSpecV1.De
 		return nil
 	}
 	return err
-}
-
-// layoutForAdd returns the layout a component version is added in. LayoutAuto keeps the layout of
-// the version already tagged with reference, so that rewriting a normalized version (e.g. when
-// persisting an OCM signature) does not move its tag off the cosign-signed normalized manifest.
-func (repo *Repository) layoutForAdd(ctx context.Context, store spec.Store, reference string) (Layout, error) {
-	if repo.layout != LayoutAuto {
-		return repo.layout, nil
-	}
-	layout, err := getStoredLayout(ctx, store, reference)
-	if errors.Is(err, errdef.ErrNotFound) {
-		return LayoutV2, nil
-	}
-	if err != nil {
-		return LayoutAuto, fmt.Errorf("failed to detect layout of existing component version %q: %w", reference, err)
-	}
-	return layout, nil
 }
 
 // GetComponentVersionLayout reports the storage layout of a stored component version as
@@ -856,7 +834,16 @@ func (repo *Repository) CarryComponentSignatures(ctx context.Context, source rep
 		return fmt.Errorf("resolve target component manifest: %w", err)
 	}
 	if srcDesc.Digest != dstDesc.Digest {
-		return fmt.Errorf("target component manifest %s differs from normalized source manifest %s, so its signatures cannot be carried (the target must use the normalized layout and the same referrer tracking policy)", dstDesc.Digest, srcDesc.Digest)
+		dstManifest, dstIndex, err := getDescriptorOCIImageManifest(ctx, dstStore, dstDesc)
+		if err != nil {
+			return fmt.Errorf("fetch target component manifest: %w", err)
+		}
+		if layoutOf(&dstManifest, dstIndex) != LayoutNormalized {
+			slogcontext.Warn(ctx, "target component version does not use the normalized layout, signatures of the normalized source are not carried",
+				slog.String("hint", "set componentVersionLayout: normalized in the oci.storage.config.ocm.software/v1alpha1 configuration to keep the normalized layout"))
+			return nil
+		}
+		return fmt.Errorf("target component manifest %s differs from normalized source manifest %s, so its signatures cannot be carried (the target must use the same referrer tracking policy)", dstDesc.Digest, srcDesc.Digest)
 	}
 
 	srcDesc.ArtifactType = descriptor2.ArtifactTypeNormalizedDescriptor

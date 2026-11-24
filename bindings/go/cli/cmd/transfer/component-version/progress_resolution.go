@@ -104,8 +104,8 @@ func (r *resolutionProgressRepository) ListComponentVersions(ctx context.Context
 	return versions, err
 }
 
-// GetComponentVersionLayout forwards layout detection, so the transfer can inherit the
-// source layout through this wrapper. A repository without layouts stores v2.
+// GetComponentVersionLayout forwards layout detection, so the transfer can carry the signatures
+// of a normalized source through this wrapper. A repository without layouts stores v2.
 func (r *resolutionProgressRepository) GetComponentVersionLayout(ctx context.Context, component, version string) (string, error) {
 	if detector, ok := r.ComponentVersionRepository.(repository.ComponentVersionLayoutDetector); ok {
 		return detector.GetComponentVersionLayout(ctx, component, version)

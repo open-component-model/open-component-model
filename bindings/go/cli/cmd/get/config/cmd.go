@@ -22,6 +22,7 @@ import (
 	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	ocicachev1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/cache/v1alpha1"
+	ocistoragev1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/storage/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
@@ -142,6 +143,12 @@ func getEffectiveConfig(cfg *genericv1.Config) (*effectiveConfig, error) {
 		return nil, fmt.Errorf("config lookup failed for oci cache: %w", err)
 	} else if ociCacheCfg != nil {
 		result.Configurations = append(result.Configurations, ociCacheCfg)
+	}
+
+	if ociStorageCfg, err := ocistoragev1alpha1.LookupConfig(cfg); err != nil {
+		return nil, fmt.Errorf("config lookup failed for oci storage: %w", err)
+	} else if ociStorageCfg != nil {
+		result.Configurations = append(result.Configurations, ociStorageCfg)
 	}
 
 	//nolint:staticcheck // displaying deprecated config for user visibility
