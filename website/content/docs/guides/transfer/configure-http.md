@@ -90,7 +90,7 @@ short so a hung server is detected quickly.
 Verify the settings are applied:
 
 ```bash
-ocm --loglevel debug get componentversion ghcr.io/open-component-model//ocm.software/demos/podinfo:6.8.0
+ocm --loglevel debug get componentversion ghcr.io/open-component-model//ocm.software/cli:{{< site-version "semver" >}}
 ```
 
 Look for a log line like:
@@ -147,7 +147,7 @@ environment variables.
 ```bash
 export HTTPS_PROXY=http://proxy.corp:3128
 export NO_PROXY=localhost,127.0.0.1,.corp,.svc.cluster.local
-ocm get cv ghcr.io/open-component-model//ocm.software/demos/podinfo:6.8.0
+ocm get cv ghcr.io/open-component-model//ocm.software/cli:{{< site-version "semver" >}}
 ```
 
 | Variable                      | Purpose                                                        |
@@ -428,7 +428,7 @@ run any command that initialises the CLI with debug logging and inspect the
 resolved config line:
 
 ```bash
-ocm --loglevel debug get cv ghcr.io/open-component-model//ocm.software/demos/podinfo:6.8.0
+ocm --loglevel debug get cv ghcr.io/open-component-model//ocm.software/cli:{{< site-version "semver" >}}
 ```
 
 Early in the output, before any registry request, OCM logs the resolved HTTP
