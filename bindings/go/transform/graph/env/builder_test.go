@@ -137,6 +137,10 @@ func TestCurrentEnv_CompilesAgainstRegisteredType(t *testing.T) {
 	r.True(found)
 }
 
+// CEL's YAML encoder uses a transitive YAML dependency independently of the
+// schema generator. Dependency updates can therefore pass generator checks while
+// corrupting transformation data: an unquoted literal "<<" key is decoded as a
+// merge directive, promoting its nested entries into the parent map.
 func TestCurrentEnv_YAMLRoundTripPreservesLiteralMergeKey(t *testing.T) {
 	r := require.New(t)
 	b, err := NewEnvBuilder(map[string]interface{}{})
