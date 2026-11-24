@@ -312,7 +312,7 @@ func TestNormalizedLayout_LocalBlobVerification(t *testing.T) {
 		_, err := repo.GetComponentVersion(ctx, normComponent, normVersion)
 		r.NoError(err)
 		_, _, err = repo.GetLocalResource(ctx, normComponent, normVersion, runtime.Identity{"name": "one"})
-		r.ErrorContains(err, "does not match the digest of resource")
+		r.ErrorContains(err, "digest mismatch")
 	})
 
 	t.Run("local reference to a blob outside the access referrer", func(t *testing.T) {

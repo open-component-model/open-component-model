@@ -120,7 +120,7 @@ func TestBuildGraphDefinition_ComponentVersionLayout(t *testing.T) {
 			r.Equal(*tt.wantCarry, carries[0].Type)
 			r.Equal(uploads[0].Spec.Data["repository"], carries[0].Spec.Data["repository"])
 
-			_, err = NewDefaultBuilder(nil, nil, nil, nil).BuildAndCheck(tgd)
+			_, err = NewDefaultBuilder(nil, nil, nil, nil, "").BuildAndCheck(tgd)
 			r.NoError(err, "the carry node must type-check against the upload node it depends on")
 		})
 	}

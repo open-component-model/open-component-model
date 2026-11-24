@@ -359,7 +359,7 @@ func addNormalizedLayout(ctx context.Context, store spec.Store, desc *descriptor
 
 // pushJSONManifest marshals a manifest or index and pushes it unless it already exists.
 func pushJSONManifest(ctx context.Context, store spec.Store, v any, mediaType, artifactType string, annos map[string]string) (ociImageSpecV1.Descriptor, error) {
-	raw, err := json.Marshal(v)
+	raw, err := json.Marshal(v, runtime.JSONOptions)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to marshal %s: %w", mediaType, err)
 	}
