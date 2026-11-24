@@ -8,10 +8,10 @@
   "properties": {
     "componentVersionLayout": {
       "type": "string",
-      "description": "ComponentVersionLayout selects the storage layout of every component version written to an\nOCI registry or CTF archive: v2 (default; the tag resolves to the manifest holding the full\ncomponent descriptor) or normalized (the tag resolves to a stable manifest holding only the\nnormalized descriptor, which can be signed with cosign or notary). Component versions are\nalways rewritten in this layout, including when a signature is added with \"ocm sign\ncomponent-version\". Reading detects the layout of each component version, so repositories\nmay contain both.",
+      "description": "ComponentVersionLayout selects the storage layout of every component version written to an\nOCI registry or CTF archive: default (the tag resolves to the manifest holding the full\ncomponent descriptor) or normalized (experimental; the tag resolves to a stable manifest holding\nonly the normalized descriptor, which can be signed with cosign or notary). Component versions are\nalways rewritten in this layout, including when a signature is added with \"ocm sign\ncomponent-version\". Reading detects the layout of each component version, so repositories\nmay contain both.",
       "oneOf": [
         {
-          "const": "v2"
+          "const": "default"
         },
         {
           "const": "normalized"

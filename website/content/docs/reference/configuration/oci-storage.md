@@ -19,12 +19,12 @@ configurations:
 
 ## Fields
 
-| Field                    | Type                 | Default | Description                                                         |
-|--------------------------|----------------------|---------|---------------------------------------------------------------------|
-| `componentVersionLayout` | `v2` or `normalized` | `v2`    | Layout of every component version written to OCI and CTF targets.   |
+| Field                    | Type                      | Default   | Description                                                       |
+|--------------------------|---------------------------|-----------|-------------------------------------------------------------------|
+| `componentVersionLayout` | `default` or `normalized` | `default` | Layout of every component version written to OCI and CTF targets. |
 
-- `v2`: the version tag points to an OCI manifest that contains the full component descriptor.
-- `normalized`: the version tag points to a manifest that contains only the normalized component descriptor. Its
+- `default`: the `v2` layout. The version tag points to an OCI manifest that contains the full component descriptor.
+- `normalized` (experimental): the version tag points to a manifest that contains only the normalized component descriptor. Its
   digest is identical in every registry, so you can sign it with `cosign` or `notary`. See
   [Signatures as OCI Referrers]({{< relref "docs/concepts/transfer-concept.md" >}}#signatures-as-oci-referrers-normalized-layout).
 

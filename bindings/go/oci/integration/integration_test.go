@@ -343,7 +343,7 @@ func Test_Integration_OCIRepository(t *testing.T) {
 					r.NoError(v2Repo.AddComponentVersion(ctx, desc))
 					stored, err := v2Repo.GetComponentVersionLayout(ctx, component, "v1.0.0")
 					r.NoError(err)
-					r.Equal("v2", stored)
+					r.Equal("default", stored)
 
 					versions, err := v2Repo.ListComponentVersions(ctx, component)
 					r.NoError(err)

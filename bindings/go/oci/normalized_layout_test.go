@@ -256,7 +256,7 @@ func TestNormalizedLayout_ReAddUsesConfiguredLayout(t *testing.T) {
 	r.NotEqual(original.Digest, rewritten.Digest, "the tag must move to the v2 manifest")
 	gotLayout, err := v2Repo.GetComponentVersionLayout(ctx, normComponent, normVersion)
 	r.NoError(err)
-	r.Equal(string(layout.ComponentVersionLayoutV2), gotLayout)
+	r.Equal(string(layout.ComponentVersionLayoutDefault), gotLayout)
 	got, err := v2Repo.GetComponentVersion(ctx, normComponent, normVersion)
 	r.NoError(err)
 	r.Len(got.Signatures, 1)

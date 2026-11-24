@@ -190,7 +190,7 @@ func tagIdempotent(ctx context.Context, store spec.Store, desc ociImageSpecV1.De
 }
 
 // GetComponentVersionLayout reports the storage layout of a stored component version as
-// "v2" or "normalized" (see speclayout.ComponentVersionLayout).
+// "default" or "normalized" (see speclayout.ComponentVersionLayout).
 func (repo *Repository) GetComponentVersionLayout(ctx context.Context, component, version string) (string, error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	reference, store, err := repo.getStore(ctx, component, version)

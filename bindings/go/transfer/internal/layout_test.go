@@ -49,7 +49,7 @@ func TestBuildGraphDefinition_CarryComponentSignatures(t *testing.T) {
 		{
 			name:         "v2 source has no carry",
 			target:       testOCIRepo("ghcr.io/target"),
-			sourceLayout: layout.ComponentVersionLayoutV2,
+			sourceLayout: layout.ComponentVersionLayoutDefault,
 		},
 		{
 			name:   "source without layout detection has no carry",
