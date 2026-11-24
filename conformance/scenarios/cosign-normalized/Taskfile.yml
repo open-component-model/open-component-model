@@ -55,6 +55,7 @@ tasks:
       - task: ocm:sign
       - task: transfer
       - task: verify:target
+      - task: verify:cosign-only
 
   check:
     silent: true
@@ -165,6 +166,34 @@ tasks:
           --identity name=notice --output {{ .WORK }}/notice.txt
         cmp -s {{ .WORK }}/notice.txt notice.txt || { echo "❌ downloaded content differs"; exit 1; }
       - echo "✅ signature made on the source verifies on the target without re-signing"
+
+  verify:cosign-only:
+    desc: A consumer with only cosign and plain registry HTTP (no ocm) authenticates and reads the component
+    cmds:
+      - |
+        # Resolve D_norm on the target without any OCM tooling.
+        d=$({{ .tag_digest }} "http://127.0.0.1:{{ .TARGET_PORT }}/v2/{{ .REPO }}/manifests/{{ .VERSION }}" \
+          | awk 'tolower($1)=="docker-content-digest:" {print $2}' | tr -d '\r')
+        # 1. cosign alone verifies the signature over the stable normalized manifest digest.
+        {{ .cosign }} verify --key {{ .WORK }}/keys/cosign.pub --insecure-ignore-tlog=true \
+          {{ .COSIGN_FLAGS }} {{ .TARGET }}:5000/{{ .REPO }}@"$d" >/dev/null
+        # 2. The verified manifest carries the access-free normalized descriptor as its only layer.
+        manifest=$(curl -sSf {{ .ACCEPT_MANIFEST }} "http://127.0.0.1:{{ .TARGET_PORT }}/v2/{{ .REPO }}/manifests/$d")
+        layer=$(echo "$manifest" | jq -r '.layers[0].digest')
+        descriptor=$(curl -sSf "http://127.0.0.1:{{ .TARGET_PORT }}/v2/{{ .REPO }}/blobs/$layer")
+        name=$(echo "$descriptor" | jq -r '.component.name')
+        [ "$name" = "{{ .NAME }}" ] || { echo "❌ signed descriptor is for '$name', expected {{ .NAME }}"; exit 1; }
+        [ "$(echo "$descriptor" | jq '[.component.resources[] | select(.access != null)] | length')" = "0" ] \
+          || { echo "❌ the signed descriptor must be access-free"; exit 1; }
+        # 3. Each content-digested resource's bytes are bound to the signature through its digest in the
+        #    signed descriptor: fetch the blob by that digest and re-hash it. Names are identifiers and
+        #    digests are hex, so the name=digest tokens are safe to iterate in the current shell.
+        for entry in $(echo "$descriptor" | jq -r '.component.resources[] | select(.digest.normalisationAlgorithm=="genericBlobDigest/v1") | .name + "=" + .digest.value'); do
+          rname=${entry%%=*}; rdigest=${entry##*=}
+          got=$(curl -sSf "http://127.0.0.1:{{ .TARGET_PORT }}/v2/{{ .REPO }}/blobs/sha256:$rdigest" | openssl dgst -sha256 -r | awk '{print $1}')
+          [ "$got" = "$rdigest" ] || { echo "❌ resource $rname content $got does not match signed digest $rdigest"; exit 1; }
+        done
+      - echo "✅ cosign alone authenticated the normalized descriptor and bound its content, with no OCM tooling"
 
   # === CLEANUP TASKS ===
   clean:

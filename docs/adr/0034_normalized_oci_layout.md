@@ -225,6 +225,18 @@ the normalized form: for the normalized layout and SHA-256, the component versio
   `cosign verify` establishes that `M` with digest `D_norm` is signed. `layers[0].digest` of that manifest is the
   digest of `N`, which is the OCM component version digest. Pinning the OCM command to it with the normalized pin
   form binds what OCM reads to the verified manifest without trusting the tag a second time.
+* **Standard-tooling-only verification.** Because `N` is the only layer of the signed manifest, a consumer with just
+  `cosign` and registry HTTP, and no OCM tooling, can both authenticate and read the component: `cosign verify` the
+  digest, read `N` out of the verified manifest, and re-hash each resource blob against the digest `N` records for it.
+
+  ```bash
+  cosign verify --key cosign.pub <registry>/<path>/component-descriptors/<component>@<D_norm>
+  layer=$(oras manifest fetch <registry>/<path>/component-descriptors/<component>@<D_norm> | jq -r .layers[0].digest)
+  oras blob fetch <registry>/<path>/component-descriptors/<component>@"$layer"   # the access-free descriptor N
+  # then, per resource: GET .../blobs/sha256:<digest recorded in N> and check its sha256 equals that digest
+  ```
+
+  The `verify:cosign-only` task of the `cosign-normalized` conformance scenario runs this chain end to end.
 * Verifying cosign signatures inside OCM, through the cosign executor of [ADR 0017](./0017_sigstore_integration.md) as a verifier for the normalized
   layout, is future work. Until then, a tag-only reference to a normalized component version gives integrity only.
 * OCM signatures in `signatures[]` remain available for both layouts and are independent of this ADR.

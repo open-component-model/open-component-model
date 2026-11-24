@@ -3,8 +3,9 @@
 Checks that a component version published in the normalized OCI layout
 ([ADR 0034](../../../docs/adr/0034_normalized_oci_layout.md)) can be signed with
 plain `cosign` like an image, and that the signature stays valid through
-`ocm sign` and `ocm transfer` without re-signing. `ocm` and `cosign` both come
-from the full OCM CLI image.
+`ocm sign` and `ocm transfer` without re-signing. It also shows the payoff: a
+consumer with only `cosign` and plain registry HTTP (no `ocm`) can authenticate
+and read the component. `ocm` and `cosign` both come from the full OCM CLI image.
 
 ## Run
 
@@ -27,6 +28,7 @@ Docker network and are published on `127.0.0.1:15001` and `127.0.0.1:15002`
 | `ocm:sign` | `ocm sign cv` adds an RSA signature; the tag still resolves to the same manifest digest, and both the cosign and the OCM signature verify. |
 | `transfer` | Source → CTF → target without `--layout`: the layout is inherited, the signature referrer is carried, and the target tag resolves to the same manifest digest. |
 | `verify:target` | `cosign verify` and `ocm verify cv` pass on the target; `ocm download resource` returns the original content. |
+| `verify:cosign-only` | Using only `cosign` and plain registry HTTP (no `ocm`): `cosign verify` the signature over `D_norm`, read the access-free descriptor from the signed manifest, and bind each resource's content to the signed digest. |
 
 Keys, configuration and the CTF live in `tmp/`; `task clean` removes them,
 the registries and the network.
