@@ -19,7 +19,7 @@ references point into the target, image references may be relocated) and the wri
 annotations such as `software.ocm.creator`. The descriptor bytes and therefore the manifest digest change on every
 copy. A signature over the manifest digest, such as a plain `cosign sign <ref>`, is invalidated by transport.
 
-OCM solves this for its own signatures (ADR 0008 and ADR 0017): `jsonNormalisation/v4alpha1` strips access,
+OCM solves this for its own signatures ([ADR 0008](./0008_signing_verification.md) and [ADR 0017](./0017_sigstore_integration.md)): `jsonNormalisation/v4alpha1` strips access,
 repository contexts, signatures and non-signing labels, and the signature over that normalised form is stored inside
 the descriptor's `signatures[]`. That signature travels with the descriptor, but it is invisible to the OCI ecosystem:
 `cosign verify`, policy controllers and admission webhooks that verify OCI referrers cannot use it.
@@ -37,13 +37,13 @@ that cosign can sign and verify like any image.
   explicitly versioned.
 * The OCM component version digest (the `jsonNormalisation/v4alpha1` digest that OCM signatures sign) must stay the
   single identity of a component version's content.
-* Transfer behaviour is controlled by the transfer configuration (ADR 0018) and is visible as transformation nodes
-  in the transfer graph (ADR 0005).
+* Transfer behaviour is controlled by the transfer configuration ([ADR 0018](./0018_transfer_configuration.md)) and is visible as transformation nodes
+  in the transfer graph ([ADR 0005](./0005_transformation.md)).
 
 ## Considered Options
 
 * Option 1: Normalized tag target with an access referrer ("normalized layout").
-* Option 2: Keep the v2 layout and verify Sigstore signatures only inside the descriptor (ADR 0017).
+* Option 2: Keep the v2 layout and verify Sigstore signatures only inside the descriptor ([ADR 0017](./0017_sigstore_integration.md)).
 * Option 3: Keep the v2 layout and re-sign the manifest digest after every transfer.
 
 ## Decision Outcome
@@ -116,7 +116,7 @@ repository and never signed:
 * With local blobs that are OCI artifacts (OCI image layouts, Helm charts as OCI artifacts), `A` is an image index with
   the same `artifactType` and `subject` whose manifests are an inner access-descriptor manifest (the manifest above,
   without `subject`) and the manifests or indexes of the OCI-native local blobs. This mirrors the index
-  representation of the v2 layout (ADR 0013), so OCI-native local blobs stay usable by OCI tools.
+  representation of the v2 layout ([ADR 0013](./0013_oci_format_compatibility.md)), so OCI-native local blobs stay usable by OCI tools.
 * `A` carries no `software.ocm.componentversion` annotation and is never listed as a component version.
 * `A` is additionally tagged `sha256-<hex(D_norm)>.acc`, following cosign's `sha256-<hex>.sig` convention, for
   registries without the referrers API.
@@ -225,7 +225,7 @@ the normalized form: for the normalized layout and SHA-256, the component versio
   `cosign verify` establishes that `M` with digest `D_norm` is signed. `layers[0].digest` of that manifest is the
   digest of `N`, which is the OCM component version digest. Pinning the OCM command to it with the normalized pin
   form binds what OCM reads to the verified manifest without trusting the tag a second time.
-* Verifying cosign signatures inside OCM, through the cosign executor of ADR 0017 as a verifier for the normalized
+* Verifying cosign signatures inside OCM, through the cosign executor of [ADR 0017](./0017_sigstore_integration.md) as a verifier for the normalized
   layout, is future work. Until then, a tag-only reference to a normalized component version gives integrity only.
 * OCM signatures in `signatures[]` remain available for both layouts and are independent of this ADR.
 
@@ -373,7 +373,7 @@ Cons:
 
 Pros:
 
-* No new representation; already implemented (ADR 0017).
+* No new representation; already implemented ([ADR 0017](./0017_sigstore_integration.md)).
 * Signatures travel inside the descriptor through any transport, including non-OCI repositories.
 
 Cons:
@@ -397,7 +397,7 @@ Cons:
 * The CLI reference and the concept documentation on ocm.software describe the layout and transfer behaviour; the
   `conformance/scenarios/cosign-normalized` scenario exercises it end to end with two registries.
 * The ocm-spec amendment above is proposed to the ocm-spec repository.
-* Future work: verification of cosign signatures on `D_norm` inside OCM through the cosign executor of ADR 0017, and
+* Future work: verification of cosign signatures on `D_norm` inside OCM through the cosign executor of [ADR 0017](./0017_sigstore_integration.md), and
   cleanup of superseded access referrers.
 
 ## Conclusion
