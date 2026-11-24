@@ -60,12 +60,19 @@ const (
 	LegacyDefaultArchiveName            = "transport-archive"
 )
 
+// ComponentVersionConflictPolicy is the value of the deprecated
+// --component-version-conflict-policy flag.
+//
+// Deprecated: checking first whether the version exists gives no guarantee,
+// because another client can write it between the check and our write.
+// The flag still parses, so old scripts keep running;
+// it will be removed in a later release.
 type ComponentVersionConflictPolicy string
 
 const (
+	ComponentVersionConflictPolicyReplace      ComponentVersionConflictPolicy = "replace"
 	ComponentVersionConflictPolicyAbortAndFail ComponentVersionConflictPolicy = "abort-and-fail"
 	ComponentVersionConflictPolicySkip         ComponentVersionConflictPolicy = "skip"
-	ComponentVersionConflictPolicyReplace      ComponentVersionConflictPolicy = "replace"
 )
 
 type ExternalComponentVersionCopyPolicy string
@@ -95,20 +102,20 @@ func ExternalComponentVersionCopyPolicies() []string {
 
 func (p ComponentVersionConflictPolicy) ToConstructorConflictPolicy() constructor.ComponentVersionConflictPolicy {
 	switch p {
-	case ComponentVersionConflictPolicyReplace:
-		return constructor.ComponentVersionConflictReplace
+	case ComponentVersionConflictPolicyAbortAndFail:
+		return constructor.ComponentVersionConflictAbortAndFail
 	case ComponentVersionConflictPolicySkip:
 		return constructor.ComponentVersionConflictSkip
 	default:
-		return constructor.ComponentVersionConflictAbortAndFail
+		return constructor.ComponentVersionConflictReplace
 	}
 }
 
 func ComponentVersionConflictPolicies() []string {
 	return []string{
+		string(ComponentVersionConflictPolicyReplace),
 		string(ComponentVersionConflictPolicyAbortAndFail),
 		string(ComponentVersionConflictPolicySkip),
-		string(ComponentVersionConflictPolicyReplace),
 	}
 }
 
@@ -204,7 +211,10 @@ add component-version --%[1]s localhost:5000/my-repo --%[2]s %[3]s.yaml
 Specifying repository types explicitly:
 
 add component-version --%[1]s ctf::./local/archive --%[2]s %[3]s.yaml
-add component-version --%[1]s oci::http://localhost:8080/my-repo --%[2]s %[3]s.yaml
+add component-version --%[1]s oci::localhost:8080/my-repo --%[2]s %[3]s.yaml
+
+A registry without TLS needs plainHTTP in the HTTP client configuration; an http:// prefix on the
+repository is deprecated and fails without it (see https://ocm.software/docs/changelog/migrate-from-http-prefixes/).
 
 Using environment variables in %[3]q files:
 
@@ -226,8 +236,13 @@ add component-version --%[1]s ./archive --%[2]s %[3]s.yaml
 	file.VarP(cmd.Flags(), FlagComponentConstructorPath, string(FlagComponentConstructorPath[0]), DefaultComponentConstructorBaseName+".yaml", "path to the component constructor file")
 	cmd.Flags().String(FlagBlobCacheDirectory, filepath.Join(".ocm", "cache"), "path to the blob cache directory")
 	enum.Var(cmd.Flags(), FlagComponentVersionConflictPolicy, ComponentVersionConflictPolicies(), "policy to apply when a component version already exists in the repository")
+	// MarkDeprecated prints a notice when a script still passes the flag, but it
+	// also hides the flag. Unhide it so --help and the generated reference keep
+	// listing it with a DEPRECATED note until it is removed.
+	_ = cmd.Flags().MarkDeprecated(FlagComponentVersionConflictPolicy, "existing versions are replaced by default; protect them with registry tag immutability. The flag will be removed")
+	cmd.Flags().Lookup(FlagComponentVersionConflictPolicy).Hidden = false
 	enum.Var(cmd.Flags(), FlagExternalComponentVersionCopyPolicy, ExternalComponentVersionCopyPolicies(), "policy to apply when a component reference to a component version outside of the constructor or target repository is encountered")
-	cmd.Flags().Bool(FlagSkipReferenceDigestProcessing, false, "skip digest processing for resources and sources. Any resource referenced via access type will not have their digest updated.")
+	cmd.Flags().Bool(FlagSkipReferenceDigestProcessing, false, "skip digest processing for resources. Any resource referenced via access type will not have their digest updated.")
 	layout.RegisterFlag(cmd.Flags(), FlagLayout, layout.FlagUsage+". When not set, a version that already exists keeps its layout and a new version uses v2")
 	enum.VarP(cmd.Flags(), FlagOutput, "o", []string{render.OutputFormatTable.String(), render.OutputFormatYAML.String(), render.OutputFormatJSON.String(), render.OutputFormatNDJSON.String(), render.OutputFormatTree.String()}, "output format of the component descriptors")
 	enum.VarP(cmd.Flags(), FlagDisplayMode, "", []string{render.StaticRenderMode, render.LiveRenderMode}, `static: print the output once the complete component graph is discovered
@@ -400,6 +415,7 @@ func AddComponentVersion(cmd *cobra.Command, _ []string) error {
 	err = renderComponents(cmd, constr, output, displayMode)
 	// Print the notice even when the build fails, so authors still see what to migrate.
 	renderDeprecatedTypeNotice(cmd.ErrOrStderr(), deprecationWarnings)
+	renderSourcesWarning(cmd.ErrOrStderr(), componentsWithSources(constructorSpec))
 	if err != nil {
 		return fmt.Errorf("failed to render components recursively: %w", err)
 	}

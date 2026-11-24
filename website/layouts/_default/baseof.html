@@ -1,3 +1,4 @@
+{{- partialCached "publish-schemas.html" . .Site.Version.Name -}}
 <!doctype html>
 <html lang="{{ .Site.Language.Locale | default "en" }}" data-bs-theme="{{ site.Params.doks.colorMode | default "auto" }}">
 {{ partial "head/head" . }}

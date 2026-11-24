@@ -1,7 +1,8 @@
 package runtime
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"strings"
 
@@ -101,22 +102,25 @@ func (t Type) IsEmpty() bool {
 	return t.Version == "" && t.Name == ""
 }
 
-// MarshalJSON converts Type to a JSON string.
-func (t Type) MarshalJSON() ([]byte, error) {
-	return json.Marshal(t.String())
+// MarshalJSONTo writes the Type as a JSON string.
+func (t Type) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return enc.WriteToken(jsontext.String(t.String()))
 }
 
-// UnmarshalJSON parses a JSON string into Type.
-func (t *Type) UnmarshalJSON(data []byte) error {
+// UnmarshalJSONFrom parses a JSON string into Type. For convenience an object carrying
+// a "type" member is accepted as well, so a whole typed object can be decoded into a Type.
+func (t *Type) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	var str string
-	if err := json.Unmarshal(data, &str); err != nil {
+	if dec.PeekKind() == '{' {
 		var typed struct {
 			Type string `json:"type"`
 		}
-		if err := json.Unmarshal(data, &typed); err != nil {
+		if err := json.UnmarshalDecode(dec, &typed); err != nil {
 			return fmt.Errorf("could not unmarshal type: %w", err)
 		}
 		str = typed.Type
+	} else if err := json.UnmarshalDecode(dec, &str); err != nil {
+		return fmt.Errorf("could not unmarshal type: %w", err)
 	}
 
 	parsed, err := TypeFromString(str)

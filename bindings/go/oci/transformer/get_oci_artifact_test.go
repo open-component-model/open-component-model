@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -91,8 +92,9 @@ func TestGetOCIArtifact_Transform_OCI(t *testing.T) {
 	require.NotNil(t, transformed.Output.Resource)
 
 	// Verify file was created
-	osPath := strings.ReplaceAll(transformed.Output.File.URI, "file://", "")
-	assert.FileExists(t, strings.ReplaceAll(osPath, "file://", ""))
+	osPath, err := filesystem.FilePathFromURI(transformed.Output.File.URI)
+	require.NoError(t, err)
+	assert.FileExists(t, osPath)
 
 	// Verify file content
 	fileContent, err := os.ReadFile(osPath)
@@ -168,7 +170,8 @@ func TestGetOCIArtifact_Transform_OCI_WithOutputPath(t *testing.T) {
 	require.NotNil(t, transformed.Output.Resource)
 
 	// Verify file was created in the output directory
-	outputFile := strings.ReplaceAll(transformed.Output.File.URI, "file://", "")
+	outputFile, err := filesystem.FilePathFromURI(transformed.Output.File.URI)
+	require.NoError(t, err)
 	assert.FileExists(t, outputFile)
 	assert.True(t, strings.HasPrefix(outputFile, tempDir))
 
@@ -242,8 +245,9 @@ func TestGetOCIArtifact_Transform_OCI_Should_Default_No_Ext(t *testing.T) {
 	require.NotNil(t, transformed.Output.Resource)
 
 	// Verify file was created
-	osPath := strings.ReplaceAll(transformed.Output.File.URI, "file://", "")
-	assert.FileExists(t, strings.ReplaceAll(osPath, "file://", ""))
+	osPath, err := filesystem.FilePathFromURI(transformed.Output.File.URI)
+	require.NoError(t, err)
+	assert.FileExists(t, osPath)
 
 	// Verify file content
 	fileContent, err := os.ReadFile(osPath)

@@ -2,13 +2,12 @@ package blobtransformer
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
+	"encoding/json/v2"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +20,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/internal/dummytype"
 	dummyv1 "ocm.software/open-component-model/bindings/go/plugin/internal/dummytype/v1"
+	"ocm.software/open-component-model/bindings/go/plugin/internal/osutil"
 	v1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/blobtransformer/v1"
 	mtypes "ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -39,31 +39,40 @@ func dummyCapability(schema []byte) v1.CapabilitySpec {
 }
 
 func TestPluginFlow(t *testing.T) {
-	path := filepath.Join("..", "..", "..", "tmp", "testdata", "test-plugin-blobtransformer")
+	path := filepath.Join("..", "..", "..", "tmp", "testdata", mtypes.ExecutableName("test-plugin-blobtransformer"))
 	_, err := os.Stat(path)
 	require.NoError(t, err, "test plugin not found, please build the plugin under tmp/testdata/test-plugin-blobtransformer first")
 	slog.SetLogLoggerLevel(slog.LevelDebug)
 
 	ctx := t.Context()
 
-	id := "test-plugin-blob-transformer" + time.Now().Format(time.RFC3339)
+	id := "test-plugin-blob-transformer" + strconv.FormatInt(time.Now().UnixNano(), 10)
 
 	scheme := runtime.NewScheme()
 	dummytype.MustAddToScheme(scheme)
 	registry := NewBlobTransformerRegistry(ctx)
 	config := mtypes.Config{
 		ID:         id,
-		Type:       mtypes.Socket,
+		Type:       osutil.ConnectionType(t.Context()),
 		PluginType: v1.BlobTransformerPluginType,
 	}
-	serialized, err := json.Marshal(config)
+	serialized, err := json.Marshal(config, runtime.JSONOptions)
 	require.NoError(t, err)
 
 	pluginCmd := exec.CommandContext(ctx, path, "--config", string(serialized))
 	t.Cleanup(func() {
-		assert.NoError(t, pluginCmd.Process.Kill())
-		err := os.Remove(fmt.Sprintf("/tmp/%s-plugin.socket", id))
-		assert.True(t, err == nil || errors.Is(err, os.ErrNotExist))
+		if pluginCmd.Process == nil {
+			return
+		}
+		// ctx is cancelled before cleanup functions run, so exec.CommandContext races this
+		// kill for the same process: whoever loses kills a plugin that already exited.
+		if err := osutil.Kill(pluginCmd.Process); err != nil {
+			assert.ErrorIs(t, err, os.ErrProcessDone)
+		}
+		// A killed plugin cannot unlink its own socket, and on windows the file can still be
+		// held while the process goes away, so the leftovers are removed best effort.
+		_ = os.Remove(osutil.SocketPath(id))
+		_ = os.Remove(osutil.SocketPath(id) + ".lock")
 	})
 	pipe, err := pluginCmd.StdoutPipe()
 	require.NoError(t, err)
@@ -199,7 +208,7 @@ func TestAddPluginDuplicate(t *testing.T) {
 		Path: "/path/to/plugin",
 		Config: mtypes.Config{
 			ID:         "test-plugin-duplicate",
-			Type:       mtypes.Socket,
+			Type:       osutil.ConnectionType(t.Context()),
 			PluginType: v1.BlobTransformerPluginType,
 		},
 	}

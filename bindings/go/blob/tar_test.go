@@ -35,7 +35,7 @@ func TestArchiveBlob(t *testing.T) {
 	var buf bytes.Buffer
 	tarWriter := tar.NewWriter(&buf)
 
-	err := blob.ArchiveBlob(name, size, digest, mockBlob, tarWriter, nil)
+	err := blob.ArchiveBlob(name, size, digest, mockBlob, tarWriter)
 	r.NoError(err, "unexpected error while archiving blob")
 	t.Cleanup(func() {
 		r.NoError(tarWriter.Close())
@@ -60,7 +60,7 @@ func TestArchiveBlob_ReadError(t *testing.T) {
 	var buf bytes.Buffer
 	tarWriter := tar.NewWriter(&buf)
 
-	err := blob.ArchiveBlob("test-blob", 10, "test-digest", mockBlob, tarWriter, nil)
+	err := blob.ArchiveBlob("test-blob", 10, "test-digest", mockBlob, tarWriter)
 	r.Error(err, "expected error, got nil")
 	r.Contains(err.Error(), "mock read error", "unexpected error message")
 }

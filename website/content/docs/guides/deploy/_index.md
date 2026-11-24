@@ -1,6 +1,6 @@
 ---
 title: "Deploy"
-description: "Deploy component versions to Kubernetes with the OCM Controllers — credentials, RBAC, discovery, deployers, and signature verification."
+description: "Deploy component versions to Kubernetes with the OCM Controllers: credentials, RBAC, discovery, deployers, and signature verification."
 icon: "🚀"
 weight: 40
 sidebar:

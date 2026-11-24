@@ -1,7 +1,7 @@
 package signinghandler
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 
@@ -30,10 +30,13 @@ func handleError(w http.ResponseWriter, err error, status int, message string) {
 
 // handleJSONResponse encodes the response as JSON and writes it to the http.ResponseWriter
 func handleJSONResponse(w http.ResponseWriter, response interface{}) {
-	if err := json.NewEncoder(w).Encode(response); err != nil {
+	data, err := plugins.MarshalJSON(response)
+	if err != nil {
 		handleError(w, err, http.StatusInternalServerError, "failed to encode response")
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data) //nolint:errcheck // the status is committed; a failed write leaves the client with a short body it will reject
 }
 
 // credentialsFromHeader extracts credentials from the Authorization header if present
@@ -56,7 +59,7 @@ func credentialsFromHeader(w http.ResponseWriter, h http.Header) (credentials ru
 func handleGetSignerIdentity[T runtime.Typed](plugin v1.SignerPluginContract[T]) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var request v1.GetSignerIdentityRequest[T]
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		if err := json.UnmarshalRead(r.Body, &request); err != nil {
 			handleError(w, err, http.StatusBadRequest, "failed to unmarshal request")
 			return
 		}
@@ -75,7 +78,7 @@ func handleGetSignerIdentity[T runtime.Typed](plugin v1.SignerPluginContract[T])
 func handleGetVerifierIdentity[T runtime.Typed](plugin v1.VerifierPluginContract[T]) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var request v1.GetVerifierIdentityRequest[T]
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		if err := json.UnmarshalRead(r.Body, &request); err != nil {
 			handleError(w, err, http.StatusBadRequest, "failed to unmarshal request")
 			return
 		}
@@ -99,7 +102,7 @@ func handleSign[T runtime.Typed](plugin v1.SignerPluginContract[T]) http.Handler
 		}
 
 		var request v1.SignRequest[T]
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		if err := json.UnmarshalRead(r.Body, &request); err != nil {
 			handleError(w, err, http.StatusBadRequest, "failed to unmarshal request")
 			return
 		}
@@ -123,7 +126,7 @@ func handleVerify[T runtime.Typed](plugin v1.VerifierPluginContract[T]) http.Han
 		}
 
 		var request v1.VerifyRequest[T]
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		if err := json.UnmarshalRead(r.Body, &request); err != nil {
 			handleError(w, err, http.StatusBadRequest, "failed to unmarshal request")
 			return
 		}

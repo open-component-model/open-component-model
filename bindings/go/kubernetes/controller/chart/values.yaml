@@ -12,7 +12,7 @@ manager:
     # -- Controller image repository
     repository: ghcr.io/open-component-model/kubernetes/controller
     # -- Controller image tag
-    tag: latest@sha256:31080f0528b5893778d598e9d605189858a4d5d3463a5b938127a5563638478f
+    tag: latest@sha256:712ecadea9ce9fd0261793cb56b8371d297c6a75cd953e7984202d64c1e169c3
     # -- Image pull policy
     pullPolicy: IfNotPresent
   ## Cluster-scoped Deployer
@@ -26,24 +26,65 @@ manager:
     enabled: true
   ## Controller concurrency settings
   concurrency:
+    # -- Number of active repository controller workers
+    repository: 4 # @schema minimum:1
+    # -- Number of active component controller workers
+    component: 4 # @schema minimum:1
     # -- Number of active resource controller workers
-    resource: 4
-  ## Resolver settings
-  resolver:
-    # -- Number of active resolver workers
-    workerCount: 10
-    # -- Maximum work items in queue for component version resolution
-    workerQueueLength: 1000
-    # -- Buffer size for each subscriber's event channel. Larger values reduce dropped resolution events under load. Monitor resolver_event_channel_drops_total metric.
-    subscriberBufferSize: 100
-    # -- The time-to-live (TTL) for the resolver cache entries in minutes. Setting TTL to less than 30 minutes is discouraged in productive use as it can lead to unintended performance issues.
-    cacheTTL: 30
+    resource: 4 # @schema minimum:1
+    # -- Number of active workers per enabled deployer controller (Deployer and NamespacedDeployer)
+    deployer: 4 # @schema minimum:1
+    # -- Number of active replication controller workers
+    replication: 4 # @schema minimum:1
+    # -- Number of active discovery controller workers
+    discovery: 4 # @schema minimum:1
+  ## Workqueue rate limiter of every controller.
+  ## New objects pass through it once, and so do retries after an error.
+  rateLimiter:
+    repository:
+      # -- (float) Requeues per second the Repository controller admits once its burst is used up. A float greater than 0, e.g. 0.1.
+      qps: 10 # @schema type:[number, string]
+      # -- Requeues the Repository controller admits at once before qps applies. Must be at least 1.
+      burst: 100 # @schema minimum:1
+    component:
+      # -- (float) Requeues per second the Component controller admits once its burst is used up. A float greater than 0, e.g. 0.1.
+      qps: 10 # @schema type:[number, string]
+      # -- Requeues the Component controller admits at once before qps applies. Must be at least 1.
+      burst: 100 # @schema minimum:1
+    resource:
+      # -- (float) Requeues per second the Resource controller admits once its burst is used up. A float greater than 0, e.g. 0.1.
+      qps: 10 # @schema type:[number, string]
+      # -- Requeues the Resource controller admits at once before qps applies. Must be at least 1.
+      burst: 100 # @schema minimum:1
+    replication:
+      # -- (float) Requeues per second the Replication controller admits once its burst is used up. A float greater than 0, e.g. 0.1.
+      qps: 10 # @schema type:[number, string]
+      # -- Requeues the Replication controller admits at once before qps applies. Must be at least 1.
+      burst: 100 # @schema minimum:1
+    discovery:
+      # -- (float) Requeues per second the Discovery controller admits once its burst is used up. A float greater than 0, e.g. 0.1.
+      qps: 10 # @schema type:[number, string]
+      # -- Requeues the Discovery controller admits at once before qps applies. Must be at least 1.
+      burst: 100 # @schema minimum:1
+    deployer:
+      # -- (float) Requeues per second the Deployer controller admits once its burst is used up. A float greater than 0, e.g. 0.1.
+      qps: 10 # @schema type:[number, string]
+      # -- Requeues the Deployer controller admits at once before qps applies. Must be at least 1.
+      burst: 100 # @schema minimum:1
+    namespacedDeployer:
+      # -- (float) Requeues per second the NamespacedDeployer controller admits once its burst is used up. A float greater than 0, e.g. 0.1.
+      qps: 10 # @schema type:[number, string]
+      # -- Requeues the NamespacedDeployer controller admits at once before qps applies. Must be at least 1.
+      burst: 100 # @schema minimum:1
   ## Cache settings
   cache:
     # -- Maximum size of the deployer download object LRU cache
     deployerDownloadSize: 1000
     # -- Maximum size of a single downloadable resource as a Kubernetes resource.Quantity (e.g. "2Mi", "512Ki"). "0" disables the limit.
     deployerDownloadMaxResourceSize: "2Mi"
+  # -- OCM configuration for the whole controller. Loaded _once_ at startup. Only `oci.cache.config.ocm.software` is accepted at the moment of this writing.
+  # `type` defaults to `generic.config.ocm.software/v1`. Example: `{configurations: [{type: oci.cache.config.ocm.software/v1alpha1, remotePolicy: Always}]}`
+  ocmConfig: {}
   ## Logging configuration (zap logger)
   logging:
     # -- Zap log level: 'debug', 'info', 'error', 'panic' or integer > 0
@@ -81,9 +122,9 @@ manager:
     # -- Period between readiness probes
     periodSeconds: 10
   metricsServer:
-    # -- Address the metric endpoint binds to. Set to "0" to disable
+    # -- Address the metric endpoint binds to, for example ":8443". "0" disables metrics. Required by prometheus.enable
     bindAddress: "0"
-    # -- Serve metrics endpoint securely
+    # -- Serve the metrics endpoint over TLS with a certificate the manager generates at startup. The ServiceMonitor then scrapes over https without verification
     secure: false
     # -- Enable HTTP/2 for metrics and webhook servers
     enableHttp2: false
@@ -145,7 +186,7 @@ crd:
 webhook:
   # -- Enable conversion webhook for CRD version conversion
   enable: false
-  # -- Secret name for webhook TLS certificates (when not using cert-manager, create this secret manually)
+  # -- Secret name for the webhook TLS certificate. With cert-manager the Certificate writes into it; without cert-manager, create it manually. Empty uses the chart default name.
   certSecret: ""
 ## Cert-manager integration
 certManager:
@@ -153,5 +194,5 @@ certManager:
   enable: false
 ## Prometheus ServiceMonitor
 prometheus:
-  # -- Enable Prometheus ServiceMonitor (requires prometheus-operator)
+  # -- Render a metrics Service and a Prometheus ServiceMonitor (requires prometheus-operator and manager.metricsServer.bindAddress)
   enable: false

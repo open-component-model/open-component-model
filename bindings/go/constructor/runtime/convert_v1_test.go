@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	v1 "ocm.software/open-component-model/bindings/go/constructor/spec/v1"
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	rt "ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -651,6 +652,75 @@ func TestConvertToRuntimeConstructor(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "constructor with resource source refs",
+			constructor: &v1.ComponentConstructor{
+				Components: []v1.Component{
+					{
+						ComponentMeta: v1.ComponentMeta{
+							ObjectMeta: v1.ObjectMeta{
+								Name:    "test-component",
+								Version: "1.0.0",
+							},
+						},
+						Provider: v1.Provider{
+							Name: "test-provider",
+						},
+						Resources: []v1.Resource{
+							{
+								ElementMeta: v1.ElementMeta{
+									ObjectMeta: v1.ObjectMeta{
+										Name:    "test-resource",
+										Version: "1.0.0",
+									},
+								},
+								Type:     "blob",
+								Relation: v1.LocalRelation,
+								SourceRefs: []v1.SourceRef{
+									{
+										IdentitySelector: map[string]string{"name": "src"},
+										Labels:           []v1.Label{{Name: "l", Value: []byte(`"v"`)}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			want: &ComponentConstructor{
+				Components: []Component{
+					{
+						ComponentMeta: ComponentMeta{
+							ObjectMeta: ObjectMeta{
+								Name:    "test-component",
+								Version: "1.0.0",
+							},
+						},
+						Provider: Provider{
+							Name: "test-provider",
+						},
+						Resources: []Resource{
+							{
+								ElementMeta: ElementMeta{
+									ObjectMeta: ObjectMeta{
+										Name:    "test-resource",
+										Version: "1.0.0",
+									},
+								},
+								Type:     "blob",
+								Relation: LocalRelation,
+								SourceRefs: []SourceRef{
+									{
+										IdentitySelector: map[string]string{"name": "src"},
+										Labels:           []Label{{Name: "l", Value: []byte(`"v"`)}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -684,6 +754,7 @@ func TestConvertToRuntimeConstructor(t *testing.T) {
 					assert.Equal(t, tt.want.Components[0].Resources[0].Version, got.Components[0].Resources[0].Version)
 					assert.Equal(t, tt.want.Components[0].Resources[0].Type, got.Components[0].Resources[0].Type)
 					assert.Equal(t, tt.want.Components[0].Resources[0].Relation, got.Components[0].Resources[0].Relation)
+					assert.Equal(t, tt.want.Components[0].Resources[0].SourceRefs, got.Components[0].Resources[0].SourceRefs)
 				}
 
 				// Check sources
@@ -1846,4 +1917,70 @@ func TestConvertResourceDigestFullChain(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, original, backToV1.Digest)
+}
+
+// TestConvertResourceSourceRefsFullChain proves resource srcRefs survive the entire
+// conversion chain v1 -> runtime -> descriptor -> runtime -> v1, and that the runtime
+// copy does not alias the source spec.
+func TestConvertResourceSourceRefsFullChain(t *testing.T) {
+	r := require.New(t)
+	v1res := v1.Resource{
+		ElementMeta: v1.ElementMeta{
+			ObjectMeta: v1.ObjectMeta{Name: "test-resource", Version: "1.0.0"},
+		},
+		Type:     "blob",
+		Relation: v1.LocalRelation,
+		SourceRefs: []v1.SourceRef{
+			{
+				IdentitySelector: map[string]string{"name": "src"},
+				Labels:           []v1.Label{{Name: "l", Value: []byte(`"v"`), Version: "v1"}},
+			},
+		},
+	}
+
+	runtimeRes := ConvertToRuntimeConstructorResource(v1res)
+	wantRuntime := []SourceRef{
+		{
+			IdentitySelector: map[string]string{"name": "src"},
+			Labels:           []Label{{Name: "l", Value: []byte(`"v"`), Version: "v1"}},
+		},
+	}
+	r.Equal(wantRuntime, runtimeRes.SourceRefs)
+
+	descRes := ConvertToDescriptorResource(&runtimeRes)
+	wantDesc := []descriptor.SourceRef{
+		{
+			IdentitySelector: map[string]string{"name": "src"},
+			Labels:           []descriptor.Label{{Name: "l", Value: []byte(`"v"`), Version: "v1"}},
+		},
+	}
+	r.Equal(wantDesc, descRes.SourceRefs)
+
+	backToRuntime := ConvertFromDescriptorResource(descRes)
+	r.Equal(wantRuntime, backToRuntime.SourceRefs)
+
+	backToV1, err := ConvertToV1Resource(backToRuntime)
+	r.NoError(err)
+	r.Equal(v1res.SourceRefs, backToV1.SourceRefs)
+
+	// Mutating the source spec must not leak into the already converted runtime copy.
+	v1res.SourceRefs[0].IdentitySelector["name"] = "mutated"
+	r.Equal(wantRuntime, runtimeRes.SourceRefs)
+}
+
+// label.version is part of what a signature covers (jsonNormalisation/v4alpha3),
+// so every label conversion between the constructor spec, its runtime form and
+// the descriptor must carry it.
+func TestConvertLabelVersionFullChain(t *testing.T) {
+	r := require.New(t)
+	in := []v1.Label{{Name: "sig", Value: []byte(`"v"`), Signing: true, Version: "v1"}}
+
+	runtimeLabels := ConvertFromV1Labels(in)
+	r.Equal([]Label{{Name: "sig", Value: []byte(`"v"`), Signing: true, Version: "v1"}}, runtimeLabels)
+
+	desc := ConvertToDescriptorLabels(runtimeLabels)
+	r.Equal([]descriptor.Label{{Name: "sig", Value: []byte(`"v"`), Signing: true, Version: "v1"}}, desc)
+
+	r.Equal(runtimeLabels, ConvertFromDescriptorLabels(desc))
+	r.Equal(in, ConvertToV1Labels(runtimeLabels))
 }

@@ -2,7 +2,7 @@ package integration
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,13 +15,12 @@ import (
 	"time"
 
 	git "github.com/go-git/go-git/v6"
-	"github.com/go-git/go-git/v6/plumbing"
 	godigest "github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3"
+	orasoci "github.com/oras-project/oras-go/v3/content/oci"
 	"github.com/stretchr/testify/require"
 	"helm.sh/helm/v4/pkg/chart/v2/loader"
-	"oras.land/oras-go/v2"
-	orasoci "oras.land/oras-go/v2/content/oci"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/compression"
@@ -41,18 +40,33 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
+	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
+// Test_Integration_DownloadUploadedGitResource verifies the full lifecycle of a Git
+// resource:
+//
+//  1. A local git INPUT (file:// URL, pinned to the first commit) is added to a CTF;
+//     the archive must contain README.md == "first\n".
+//  2. The Git/v1 ACCESS pointing at a remote HTTP server (NewServerFrom) produces the
+//     same archive digest as the downloaded blob.
+//  3. The downloaded blob is pushed back with UploadResource to a remote empty server
+//     (NewEmptyServer); the uploaded digest and pinned commit must match the source;
+//     the commit must land on refs/heads/main.
 func Test_Integration_DownloadUploadedGitResource(t *testing.T) {
 	r := require.New(t)
-	sourcePath, commit := newGitFixture(t)
-	targetPath := filepath.Join(t.TempDir(), "target.git")
-	target, err := git.PlainInit(targetPath, true)
-	r.NoError(err)
 
 	const componentName = "ocm.software/uploaded-git-resource"
 	const componentVersion = "v1.0.0"
-	constructor := fmt.Sprintf(`components:
+
+	// Build a local git fixture (two commits on main). newGitFixture returns the
+	// path and the hash of the FIRST commit; we pin the input to that commit so
+	// the archive is deterministic and README.md == "first\n".
+	gitPath, commit := newGitFixture(t)
+
+	ctfPath := filepath.Join(t.TempDir(), "ctf")
+	constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
+	constructorContent := fmt.Sprintf(`components:
 - name: %s
   version: %s
   provider:
@@ -61,18 +75,22 @@ func Test_Integration_DownloadUploadedGitResource(t *testing.T) {
   - name: git-repo
     version: v1.0.0
     type: directoryTree
+    relation: local
     input:
       type: Git/v1
       repository: file://%s
       ref: refs/heads/main
       commit: %s
-`, componentName, componentVersion, sourcePath, commit)
-	constructorPath := filepath.Join(t.TempDir(), "constructor.yaml")
-	r.NoError(os.WriteFile(constructorPath, []byte(constructor), 0o600))
-	ctfPath := filepath.Join(t.TempDir(), "ctf")
-	addCommand := cmd.New()
-	addCommand.SetArgs([]string{"add", "component-version", "--repository", "ctf::" + ctfPath, "--constructor", constructorPath})
-	r.NoError(addCommand.ExecuteContext(t.Context()))
+`, componentName, componentVersion, gitPath, commit)
+	r.NoError(os.WriteFile(constructorPath, []byte(constructorContent), 0o600))
+
+	addCMD := cmd.New()
+	addCMD.SetArgs([]string{
+		"add", "component-version",
+		"--repository", "ctf::" + ctfPath,
+		"--constructor", constructorPath,
+	})
+	r.NoError(addCMD.ExecuteContext(t.Context()), "add cv with a local git input must succeed")
 
 	output := filepath.Join(t.TempDir(), "git-repo.tgz")
 	downloadCommand := cmd.New()
@@ -85,34 +103,42 @@ func Test_Integration_DownloadUploadedGitResource(t *testing.T) {
 	r.NoError(downloadCommand.ExecuteContext(t.Context()))
 	archive, err := os.ReadFile(output)
 	r.NoError(err)
+	// The input is pinned to the first commit, so README.md must be "first\n".
 	assertGitArchiveAtFirstCommit(t, archive)
 
+	// A Git/v1 access rejects local paths, so the access reads the same fixture over HTTP.
+	remoteURL := testgit.Serve(t, gitPath)
 	tempFolder := t.TempDir()
 	gitRepo := gitrepository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &tempFolder})
 	source, err := gitRepo.ProcessResourceDigest(t.Context(), &descriptor.Resource{Access: &gitaccessv1.Git{
 		Type:       runtime.NewVersionedType(gitaccessv1.Type, gitaccessv1.Version),
-		Repository: sourcePath,
+		Repository: remoteURL,
 		Ref:        "refs/heads/main",
 		Commit:     commit,
 	}}, nil)
 	r.NoError(err)
-	r.Equal(source.Digest.Value, godigest.FromBytes(archive).Encoded(), "the input and the access archive the same carrier")
+	r.Equal(source.Digest.Value, godigest.FromBytes(archive).Encoded(), "the git input and the access archive the same carrier bytes")
 
+	// Push the downloaded archive to an empty repository and assert the commit lands.
+	targetPath, targetURL := newBareGitRepository(t)
 	localBlob, err := filesystem.GetBlobFromOSPath(output)
 	r.NoError(err)
 	uploadTarget := source.DeepCopy()
 	uploadTarget.Access = &gitaccessv1.Git{
 		Type:       runtime.NewVersionedType(gitaccessv1.Type, gitaccessv1.Version),
-		Repository: targetPath,
+		Repository: targetURL,
 		Ref:        "refs/heads/main",
 	}
 	uploaded, err := gitRepo.UploadResource(t.Context(), uploadTarget, localBlob, nil)
 	r.NoError(err)
-	r.Equal(source.Digest, uploaded.Digest)
-	r.Equal(commit, uploaded.Access.(*gitaccessv1.Git).Commit)
-	targetRef, err := target.Reference(plumbing.NewBranchReferenceName("main"), true)
+	r.Equal(source.Digest, uploaded.Digest, "uploaded digest must match the source digest")
+	r.Equal(commit, uploaded.Access.(*gitaccessv1.Git).Commit, "uploaded access must carry the pinned commit")
+
+	target, err := git.PlainOpen(targetPath)
 	r.NoError(err)
-	r.Equal(commit, targetRef.Hash().String())
+	targetRef, err := target.Reference("refs/heads/main", false)
+	r.NoError(err)
+	r.Equal(commit, targetRef.Hash().String(), "the commit must land on refs/heads/main")
 }
 
 func Test_Integration_OCIRepository(t *testing.T) {
@@ -139,7 +165,8 @@ configurations:
       properties:
         username: %[3]q
         password: %[4]q
-`, registry.Host, registry.Port, registry.User, registry.Password)
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`, registry.Host, registry.Port, registry.User, registry.Password)
 	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
 	r.NoError(os.WriteFile(cfgPath, []byte(cfg), os.ModePerm))
 
@@ -613,6 +640,13 @@ func Test_Integration_DownloadResource_HelmAccess(t *testing.T) {
 		"--skip-reference-digest-processing",
 	})
 	r.NoError(addCMD.ExecuteContext(ctx), "add component-version should succeed")
+	// The chart server runs without TLS, and an http:// URL alone no longer selects plain HTTP.
+	cfgPath := filepath.Join(tempDir, "ocmconfig.yaml")
+	r.NoError(os.WriteFile(cfgPath, []byte(`type: generic.config.ocm.software/v1
+configurations:
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true
+`), os.ModePerm))
 
 	output := filepath.Join(t.TempDir(), "downloaded-chart")
 	downloadCMD := cmd.New()
@@ -623,6 +657,7 @@ func Test_Integration_DownloadResource_HelmAccess(t *testing.T) {
 		"--identity", "name=mychart,version=0.1.0",
 		"--output", output,
 		"--extraction-policy", "disable",
+		"--config", cfgPath,
 	})
 	r.NoError(downloadCMD.ExecuteContext(ctx), "download resource with helm access should succeed")
 

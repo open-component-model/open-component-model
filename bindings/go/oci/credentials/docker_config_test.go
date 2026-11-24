@@ -1,11 +1,15 @@
 package credentials
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/oras-project/oras-go/v3/registry/remote/auth"
+	remotecredentials "github.com/oras-project/oras-go/v3/registry/remote/credentials"
+	"github.com/oras-project/oras-go/v3/registry/remote/properties"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2/registry/remote/auth"
 
 	credentialsv1 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	identityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
@@ -20,7 +24,7 @@ func TestCredentialFunc(t *testing.T) {
 		hostport    string
 		wantErr     bool
 		wantEmpty   bool
-		wantCred    *auth.Credential // if set, assert exact credential match
+		wantCred    *remotecredentials.Credential // if set, assert exact credential match
 	}{
 		{
 			name: "matching host and port",
@@ -96,7 +100,7 @@ func TestCredentialFunc(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			credFunc := CredentialFunc(tt.identity, tt.credentials)
-			cred, err := credFunc(t.Context(), tt.hostport)
+			cred, err := credFunc(t.Context(), properties.Resource{Registry: tt.hostport})
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -105,7 +109,7 @@ func TestCredentialFunc(t *testing.T) {
 
 			require.NoError(t, err)
 			if tt.wantEmpty {
-				assert.Equal(t, auth.EmptyCredential, cred)
+				assert.Equal(t, remotecredentials.EmptyCredential, cred)
 				return
 			}
 
@@ -126,12 +130,12 @@ func TestCredentialFromTyped(t *testing.T) {
 	tests := []struct {
 		name        string
 		credentials *credentialsv1.OCICredentials
-		expected    auth.Credential
+		expected    remotecredentials.Credential
 	}{
 		{
 			name:        "zero-value credentials",
 			credentials: &credentialsv1.OCICredentials{},
-			expected:    auth.Credential{},
+			expected:    remotecredentials.Credential{},
 		},
 		{
 			name: "all fields populated",
@@ -141,7 +145,7 @@ func TestCredentialFromTyped(t *testing.T) {
 				AccessToken:  "atoken",
 				RefreshToken: "rtoken",
 			},
-			expected: auth.Credential{
+			expected: remotecredentials.Credential{
 				Username:     "user",
 				Password:     "pass",
 				AccessToken:  "atoken",
@@ -154,7 +158,7 @@ func TestCredentialFromTyped(t *testing.T) {
 				Username: "user",
 				Password: "pass",
 			},
-			expected: auth.Credential{
+			expected: remotecredentials.Credential{
 				Username: "user",
 				Password: "pass",
 			},
@@ -164,7 +168,7 @@ func TestCredentialFromTyped(t *testing.T) {
 			credentials: &credentialsv1.OCICredentials{
 				AccessToken: "atoken",
 			},
-			expected: auth.Credential{
+			expected: remotecredentials.Credential{
 				AccessToken: "atoken",
 			},
 		},
@@ -397,4 +401,57 @@ func TestGetStore(t *testing.T) {
 			assert.NotNil(t, store)
 		})
 	}
+}
+
+// oras passes the credential function a canonical registry name (lower-cased,
+// docker.io for registry-1.docker.io) while the identity keeps the host as written
+// in the base URL; every spelling of the same registry must still match.
+func TestCredentialFunc_HostSpellings(t *testing.T) {
+	for _, tc := range []struct {
+		name, identityHost, requestHost string
+	}{
+		{"lower-case", "registry.example.com", "registry.example.com"},
+		{"upper-case", "REGISTRY.EXAMPLE.COM", "REGISTRY.EXAMPLE.COM"},
+		{"mixed-case", "Registry.Example.Com", "Registry.Example.Com"},
+		{"docker hub endpoint", "registry-1.docker.io", "registry-1.docker.io"},
+		{"docker hub name", "docker.io", "registry-1.docker.io"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			client := &auth.Client{
+				Cache: auth.NewCache(),
+				CredentialFunc: CredentialFunc(
+					&identityv1.OCIRegistryIdentity{Hostname: tc.identityHost},
+					&credentialsv1.OCICredentials{Username: "user", Password: "pass"},
+				),
+			}
+			r.True(sendsBasicAuth(t, client, tc.requestHost), "request went out unauthenticated")
+		})
+	}
+}
+
+// sendsBasicAuth sends one request addressed to host through client and
+// reports whether the registry received a basic credential.
+func sendsBasicAuth(t *testing.T, client *auth.Client, host string) bool {
+	t.Helper()
+	var saw bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if _, _, ok := req.BasicAuth(); ok {
+			saw = true
+			return
+		}
+		w.Header().Set("WWW-Authenticate", `Basic realm="test"`)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(srv.Close)
+	client.Client = srv.Client()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/v2/some/repo/manifests/latest", nil)
+	require.NoError(t, err)
+	// oras derives the credential lookup from the request host, not the dialled address.
+	req.Host = host
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	return saw
 }

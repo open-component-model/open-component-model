@@ -1,6 +1,6 @@
 ---
 title: "Download Resources"
-description: "Extract resources from OCM component versions to your local filesystem."
+description: "Extract resources from OCM component versions to your local filesystem using the CLI: select by type, identity, and version constraints."
 icon: "📥"
 weight: 60
 toc: true
@@ -29,6 +29,13 @@ flowchart LR
 ```
 
 The OCM CLI fetches a specific resource from a component version and saves it to your local filesystem.
+
+## Supported Access Types
+
+`ocm download resource` works natively, without any plugin, for every access type that has a
+built-in resource repository. Plugins extend OCM with support for additional, custom access types.
+See [Reference: Resource Repositories]({{< relref "/docs/reference/resource-repositories.md" >}})
+for the complete list of built-in types, including credential resolution and upload support.
 
 ## Prerequisites
 

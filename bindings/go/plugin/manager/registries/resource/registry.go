@@ -2,10 +2,7 @@ package resource
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"os"
-	"os/exec"
 	"sync"
 
 	"ocm.software/open-component-model/bindings/go/blob"
@@ -13,6 +10,7 @@ import (
 	resourcev1 "ocm.software/open-component-model/bindings/go/plugin/manager/contracts/resource/v1"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/plugins"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
+	"ocm.software/open-component-model/bindings/go/repository/integrity"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -37,6 +35,17 @@ type ResourceRegistry struct {
 	internalPlugins    map[runtime.Type]Repository
 	scheme             *runtime.Scheme
 	constructedPlugins map[string]*constructedPlugin // running plugins
+	// artifactVerifier verifies OCI artifacts plugins deliver as archives; without it
+	// content recorded with an OCI artifact digest is unverifiable.
+	artifactVerifier integrity.ArtifactVerifier
+}
+
+// SetArtifactVerifier sets the verifier for OCI artifacts that external plugins deliver
+// as archives. It must be set before plugins are used.
+func (r *ResourceRegistry) SetArtifactVerifier(v integrity.ArtifactVerifier) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.artifactVerifier = v
 }
 
 // ResourceScheme returns the scheme used by the Resource registry.
@@ -132,25 +141,20 @@ func (r *ResourceRegistry) RegisterInternalResourcePlugin(plugin BuiltinResource
 }
 
 type constructedPlugin struct {
-	Plugin resourcev1.ReadWriteResourcePluginContract
-	cmd    *exec.Cmd
+	Plugin  resourcev1.ReadWriteResourcePluginContract
+	process plugins.Process
 }
 
-// Shutdown will loop through all _STARTED_ plugins and will send an Interrupt signal to them.
-// All plugins should handle interrupt signals gracefully. For Go, this is done automatically by
-// the plugin SDK.
+// Shutdown shuts down all _STARTED_ plugins.
 func (r *ResourceRegistry) Shutdown(ctx context.Context) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	var errs error
+	processes := make([]plugins.Process, 0, len(r.constructedPlugins))
 	for _, p := range r.constructedPlugins {
-		// The plugins should handle the Interrupt signal for shutdowns.
-		if perr := p.cmd.Process.Signal(os.Interrupt); perr != nil && !errors.Is(perr, os.ErrProcessDone) {
-			errs = errors.Join(errs, perr)
-		}
+		processes = append(processes, p.process)
 	}
 
-	return errs
+	return plugins.ShutdownAll(ctx, processes)
 }
 
 func startAndReturnPlugin(ctx context.Context, r *ResourceRegistry, plugin *types.Plugin) (resourcev1.ReadWriteResourcePluginContract, error) {
@@ -168,8 +172,8 @@ func startAndReturnPlugin(ctx context.Context, r *ResourceRegistry, plugin *type
 
 	resourcePlugin := NewResourceRepositoryPlugin(client, plugin.ID, plugin.Path, plugin.Config, loc, r.capabilities[plugin.ID])
 	r.constructedPlugins[plugin.ID] = &constructedPlugin{
-		Plugin: resourcePlugin,
-		cmd:    plugin.Cmd,
+		Plugin:  resourcePlugin,
+		process: plugins.NewProcess(plugin, client, loc),
 	}
 
 	return resourcePlugin, nil

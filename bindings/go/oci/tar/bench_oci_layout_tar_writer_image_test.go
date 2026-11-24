@@ -6,10 +6,10 @@ import (
 	"testing"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2"
-	"oras.land/oras-go/v2/registry/remote"
-	"oras.land/oras-go/v2/registry/remote/auth"
-	"oras.land/oras-go/v2/registry/remote/credentials"
+	"github.com/oras-project/oras-go/v3"
+	"github.com/oras-project/oras-go/v3/registry/remote"
+	"github.com/oras-project/oras-go/v3/registry/remote/auth"
+	"github.com/oras-project/oras-go/v3/registry/remote/credentials"
 )
 
 // BenchmarkRealImage_CopyGraph benchmarks copying a real public OCI image
@@ -27,19 +27,19 @@ func BenchmarkRealImage_CopyGraph(b *testing.B) {
 	}
 	ref := "docker.io/library/alpine:3.20"
 
-	repo, err := remote.NewRepository(ref)
+	repo, err := remote.NewRepository("docker.io/library/alpine")
 	if err != nil {
 		b.Fatal(err)
 	}
-	store, err := credentials.NewStoreFromDocker(credentials.StoreOptions{
-		DetectDefaultNativeStore: true,
-	})
+	store, err := credentials.NewStoreFromDocker(credentials.StoreOptions{})
 	if err != nil {
 		b.Fatal(err)
 	}
-	clnt := auth.DefaultClient
-	clnt.Credential = store.Get
-	repo.Client = clnt
+	repo.Registry.Client = &auth.Client{
+		Client:         auth.DefaultClient.Client,
+		Header:         auth.DefaultClient.Header,
+		CredentialFunc: remote.NewCredentialFunc(store),
+	}
 
 	// Resolve the manifest descriptor once (outside the benchmark loop)
 	desc, err := repo.Resolve(b.Context(), "3.20")

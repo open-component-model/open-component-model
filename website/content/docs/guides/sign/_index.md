@@ -1,6 +1,6 @@
 ---
 title: "Sign"
-description: "Sign and verify component versions so consumers can trust their authenticity and integrity."
+description: "Sign and verify component versions so consumers can trust their authenticity and integrity: RSA, GPG, PEM certificates, and Sigstore."
 icon: "🔏"
 weight: 20
 aliases:

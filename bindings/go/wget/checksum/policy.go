@@ -51,7 +51,7 @@ func BuiltinSources() []Source {
 	}
 }
 
-// Input carries what a policy needs from a completed download.
+// Input carries what a policy needs from a download.
 type Input struct {
 	// URL is the artifact URL, used only for log context.
 	URL string
@@ -63,38 +63,42 @@ type Input struct {
 	Computed map[string]string
 }
 
-// Resolve walks policy.Sources and, for the first that yields an expected
-// checksum, verifies in.Computed against it. A mismatched checksum is a hard
-// error. A stream source (or Compute-on-missing exhaustion) yields (_, false,
-// nil), signalling "compute and store without verification".
+// Resolve verifies in.Computed against the checksum [Expect] yields from
+// in.Headers. A mismatched checksum is a hard error. When Expect yields none,
+// Resolve returns (_, false, nil), signalling "compute and store without
+// verification".
 func Resolve(ctx context.Context, policy Policy, in Input) (expected Expected, verified bool, err error) {
-	for i, src := range policy.Sources {
-		switch src.Type {
-		case SourceStream:
-			slog.DebugContext(ctx, "checksum: source is stream — no verification",
-				"url", in.URL, "index", i)
-			return Expected{}, false, nil
-		case SourceHTTPHeader:
-			candidates := FromHeaders(in.Headers, src.Headers)
-			if exp, ok := Select(candidates, src.Algorithms); ok {
-				if verr := Verify(in.Computed, exp); verr != nil {
-					return Expected{}, false, verr
-				}
-				return exp, true, nil
-			}
-			slog.DebugContext(ctx, "checksum: header source yielded no candidate",
-				"url", in.URL, "index", i, "candidates", len(candidates))
-		default:
-			return Expected{}, false, fmt.Errorf("unsupported checksum source type %q", src.Type)
-		}
+	exp, ok, err := Expect(ctx, policy, Input{URL: in.URL, Headers: in.Headers}, nil)
+	if err != nil || !ok {
+		return Expected{}, false, err
 	}
+	if err := Verify(in.Computed, exp); err != nil {
+		return Expected{}, false, err
+	}
+	return exp, true, nil
+}
 
-	if policy.OnMissing == Compute {
-		slog.DebugContext(ctx, "checksum: no source yielded a digest; onMissing=compute — no verification",
-			"url", in.URL)
-		return Expected{}, false, nil
+// Expect returns the checksum policy expects the content to have: the first
+// one a source advertises in in.Headers, restricted to prefer (empty means
+// [All]). ok is false when the policy accepts that none is advertised: a
+// stream source comes first, or OnMissing is Compute. When the policy requires
+// a checksum and none is advertised, Expect fails, so a response can be
+// rejected before its body is read.
+func Expect(ctx context.Context, policy Policy, in Input, prefer []Algorithm) (Expected, bool, error) {
+	exp, ok, err := ResolveAdvertised(ctx, policy, in, prefer)
+	if err != nil || ok || policy.OnMissing == Compute || hasStreamSource(policy) {
+		return exp, ok, err
 	}
 	return Expected{}, false, fmt.Errorf("no checksum could be obtained from any configured source and onMissing is %q", orFail(policy.OnMissing))
+}
+
+func hasStreamSource(policy Policy) bool {
+	for _, src := range policy.Sources {
+		if src.Type == SourceStream {
+			return true
+		}
+	}
+	return false
 }
 
 // RequiredAlgorithms returns the algorithms the caller must compute during the

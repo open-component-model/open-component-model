@@ -31,23 +31,67 @@ export function findDuplicateAdrNumbers(fileNames) {
 }
 
 /**
- * Scan a directory for ADR files and fail on duplicate ADR numbers.
+ * Find ADR numbers that are missing from the otherwise contiguous sequence.
+ *
+ * Gaps are reported for every integer that is absent between the lowest and
+ * the highest ADR number in use. The sequence is expected to run without
+ * holes, so a missing number signals a renumbering mistake or a deletion.
+ *
+ * @param {string[]} fileNames - Names of the files in the ADR directory.
+ * @returns {number[]} The missing ADR numbers, sorted ascending.
+ */
+export function findAdrNumberGaps(fileNames) {
+  const numbers = new Set();
+  for (const name of fileNames) {
+    const match = ADR_FILE_PATTERN.exec(name);
+    if (match) {
+      numbers.add(parseInt(match[1], 10));
+    }
+  }
+  if (numbers.size === 0) {
+    return [];
+  }
+  const min = Math.min(...numbers);
+  const max = Math.max(...numbers);
+  const gaps = [];
+  for (let number = min; number <= max; number++) {
+    if (!numbers.has(number)) {
+      gaps.push(number);
+    }
+  }
+  return gaps;
+}
+
+/**
+ * Scan a directory for ADR files and fail on duplicate or missing ADR numbers.
  *
  * @param {string} dir - Directory that contains the ADR files.
  */
 export default function checkAdrNumbers(dir = "docs/adr") {
-  const duplicates = findDuplicateAdrNumbers(readdirSync(dir));
-  if (duplicates.length === 0) {
-    console.log(`All ADR numbers in ${dir} are unique.`);
-    return;
-  }
+  const fileNames = readdirSync(dir);
+  const duplicates = findDuplicateAdrNumbers(fileNames);
+  const gaps = findAdrNumberGaps(fileNames);
+
   for (const { number, files } of duplicates) {
     console.error(`ADR number ${String(number).padStart(4, "0")} is used by multiple files:`);
     for (const file of files) {
       console.error(`  - ${file}`);
     }
   }
-  console.error("Rename the most recently merged ADR to the next free number.");
+  if (duplicates.length > 0) {
+    console.error("Rename the most recently merged ADR to the next free number.");
+  }
+
+  if (gaps.length > 0) {
+    const list = gaps.map((number) => String(number).padStart(4, "0")).join(", ");
+    console.error(`ADR numbers are not contiguous; missing: ${list}.`);
+    console.error("Close the gap by renumbering later ADRs down, or add the missing ADR.");
+  }
+
+  if (duplicates.length === 0 && gaps.length === 0) {
+    console.log(`All ADR numbers in ${dir} are unique and contiguous.`);
+    return;
+  }
   process.exitCode = 1;
 }
 

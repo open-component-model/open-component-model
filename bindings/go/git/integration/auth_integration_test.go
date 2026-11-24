@@ -119,10 +119,9 @@ func Test_Integration_GitHTTPSAuthentication(t *testing.T) {
 			t.Run("invalid credentials", func(t *testing.T) {
 				r := require.New(t)
 
-				b, err := newRepo(t).DownloadResource(t.Context(), resourceFor(url, "HEAD", ""), method.invalidCredentials)
+				err := downloadError(t.Context(), newRepo(t), resourceFor(url, "HEAD", ""), method.invalidCredentials)
 				r.ErrorContains(err, "authentication required")
 				r.NotContains(err.Error(), "wrong-secret")
-				r.Nil(b)
 			})
 		})
 	}
@@ -131,9 +130,8 @@ func Test_Integration_GitHTTPSAuthentication(t *testing.T) {
 		r := require.New(t)
 		url, _ := newHTTPSServer(t, path, "")
 
-		b, err := newRepo(t).DownloadResource(t.Context(), resourceFor(url, "HEAD", ""), nil)
+		err := downloadError(t.Context(), newRepo(t), resourceFor(url, "HEAD", ""), nil)
 		r.ErrorContains(err, "x509: certificate signed by unknown authority")
-		r.Nil(b)
 	})
 }
 
@@ -241,9 +239,8 @@ func Test_Integration_GitSSHAuthentication(t *testing.T) {
 		r.NoError(err)
 		creds := &credsv1.GitSSHCredentials{Type: runtime.NewVersionedType(credsv1.GitSSHCredentialsType, credsv1.Version), PrivateKeyPEM: string(pem.EncodeToMemory(block))}
 
-		b, err := newRepo(t, clientPublic).DownloadResource(t.Context(), resourceFor("HEAD", ""), creds)
+		err = downloadError(t.Context(), newRepo(t, clientPublic), resourceFor("HEAD", ""), creds)
 		r.ErrorContains(err, "ssh: host key mismatch")
-		r.Nil(b)
 	})
 
 	for _, encrypted := range []bool{false, true} {

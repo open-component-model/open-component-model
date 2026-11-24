@@ -157,10 +157,10 @@ func Test_Integration_TransferGitHub_CTFToOCI(t *testing.T) {
 	// 4. Build and execute the graph with the github resource repository.
 	ctx := t.Context()
 	credResolver := newCredResolver(t, registryCreds{registryAddr, user, password})
-	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()))
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig()))
 	resourceRepo := githubresource.NewResourceRepository()
 
-	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver)
+	b := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver, transfer.WithHTTPConfig(plainHTTPConfig()))
 	graph, err := b.BuildAndCheck(tgd)
 	r.NoError(err)
 	r.NoError(graph.Process(ctx))

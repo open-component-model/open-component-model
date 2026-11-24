@@ -126,12 +126,11 @@ type ComponentConstructionCallbacks struct {
 type ComponentVersionConflictPolicy int
 
 const (
-	// ComponentVersionConflictAbortAndFail will abort the construction process if a component version already exists in the target repository.
-	// This is the default policy.
-	ComponentVersionConflictAbortAndFail ComponentVersionConflictPolicy = iota
 	// ComponentVersionConflictReplace will replace the existing component version in the target repository with the new one.
-	// This will overwrite the existing component version.
-	ComponentVersionConflictReplace
+	// This will overwrite the existing component version. This is the default policy.
+	ComponentVersionConflictReplace ComponentVersionConflictPolicy = iota
+	// ComponentVersionConflictAbortAndFail will abort the construction process if a component version already exists in the target repository.
+	ComponentVersionConflictAbortAndFail
 	// ComponentVersionConflictSkip will skip the construction of the component version if it already exists in the target repository.
 	ComponentVersionConflictSkip
 )

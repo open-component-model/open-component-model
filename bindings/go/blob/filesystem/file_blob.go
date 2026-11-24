@@ -1,13 +1,11 @@
 package filesystem
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"sync/atomic"
 
 	"github.com/opencontainers/go-digest"
@@ -33,16 +31,6 @@ var (
 	_ blob.MediaTypeAware        = (*Blob)(nil)
 	_ blob.MediaTypeOverrideable = (*Blob)(nil)
 )
-
-func NewFileBlobFromPathWithFlag(path string, flag int) (*Blob, error) {
-	path = filepath.Clean(path)
-	dir, base := filepath.Dir(path), filepath.Base(path)
-	rofs, err := NewFS(dir, flag)
-	if err != nil {
-		return nil, fmt.Errorf("failed to setup filesystem in %q while trying to create file blob %q: %w", dir, base, err)
-	}
-	return NewFileBlob(rofs, base), nil
-}
 
 // NewFileBlob creates a new Blob from an underlying fs.FS.
 func NewFileBlob(fs fs.FS, path string) *Blob {
@@ -109,12 +97,11 @@ func (f *Blob) Digest() (string, bool) {
 	defer func() {
 		_ = data.Close()
 	}()
-	var buf bytes.Buffer
-	d, err := digest.FromReader(io.TeeReader(data, &buf))
-	if err != nil {
+	digester := digest.Canonical.Digester()
+	if _, err := blob.CopyReader(digester.Hash(), data); err != nil {
 		return "", false
 	}
-	return d.String(), true
+	return digester.Digest().String(), true
 }
 
 // MediaType returns the media type of the blob if known.
@@ -129,4 +116,17 @@ func (f *Blob) MediaType() (string, bool) {
 // SetMediaType overrides the media type of the blob.
 func (f *Blob) SetMediaType(mediaType string) {
 	f.mediaType.Store(&mediaType)
+}
+
+// Remove deletes the file backing the blob. It fails if the underlying filesystem
+// cannot remove files or is read-only; blobs from GetBlobFromOSPath cannot be removed.
+func (f *Blob) Remove() error {
+	rfs, ok := f.fileSystem.(RemoveFS)
+	if !ok {
+		return fmt.Errorf("filesystem %T does not support remove", f.fileSystem)
+	}
+	if err := rfs.Remove(f.path); err != nil {
+		return fmt.Errorf("unable to remove file %q: %w", f.path, err)
+	}
+	return nil
 }

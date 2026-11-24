@@ -101,7 +101,6 @@ tasks:
       - cmd: |
           {{ .ocm }} add componentversion \
             --repository {{.CTF}} \
-            --component-version-conflict-policy=replace \
             --constructor component-constructor.yaml
 
   build:postgres:
@@ -114,7 +113,6 @@ tasks:
     cmd: |
       {{ .ocm }} add componentversion \
         --repository {{.CTF}} \
-        --component-version-conflict-policy=replace \
         --constructor component-constructor.yaml
 
   build:product:
@@ -137,7 +135,6 @@ tasks:
       - cmd: |
           {{ .ocm }} add componentversion \
             --repository {{.CTF}} \
-            --component-version-conflict-policy=replace \
             --constructor component-constructor.yaml
       - task: sign
         vars:
@@ -313,6 +310,8 @@ tasks:
 
   cluster:import:
     desc: Transfer CTF archive to air-gapped cluster
+    env:
+      OCM_CONFIG: './config/plain-http.yaml'
     cmd: |
       {{ .ocm }} transfer cv \
         --copy-resources \

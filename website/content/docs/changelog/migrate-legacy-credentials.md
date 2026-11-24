@@ -1,6 +1,6 @@
 ---
 title: "Migrate Legacy Credentials"
-description: "Update your legacy OCM credential configuration to use modern field names and optional typed credentials."
+description: "Update your legacy OCM credential configuration to use the modern field names and optional typed credentials, covering the pathprefix to path rename."
 icon: "arrow-autofit-right"
 weight: 20
 toc: true
@@ -35,7 +35,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: OCIRegistry
+          type: OCIRegistry/v1
           hostname: ghcr.io
           pathprefix: open-component-model
         credentials:
@@ -62,7 +62,7 @@ every path below it; `path` is a glob pattern, so append `/**` to cover every pa
 ```yaml
     consumers:
       - identity:
-          type: OCIRegistry
+          type: OCIRegistry/v1
           hostname: ghcr.io
           path: open-component-model/**  # was: pathprefix: open-component-model
 ```
@@ -94,7 +94,7 @@ The new OCM still accepts the singular `identity` field, so this step is optiona
 ```yaml
     consumers:
       - identities: # was: identity (now a list)
-          - type: OCIRegistry
+          - type: OCIRegistry/v1
             hostname: ghcr.io
             path: open-component-model/**
 ```
@@ -146,7 +146,7 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identities:
-          - type: OCIRegistry
+          - type: OCIRegistry/v1
             hostname: ghcr.io
             path: open-component-model/**
         credentials:

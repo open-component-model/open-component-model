@@ -1,6 +1,6 @@
 ---
 title: "OCI Resource Digests"
-description: "How OCM records and verifies OCI manifest digests while preserving historical descriptors."
+description: "How OCM records and verifies OCI manifest digests while preserving historical descriptors and maintaining backward-compatible references."
 weight: 5
 toc: true
 ---

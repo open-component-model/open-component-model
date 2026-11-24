@@ -1,6 +1,6 @@
 ---
 title: "Verify Plain RSA"
-description: "Verify an RSA-signed component version using the signer's public key."
+description: "Verify an RSA-signed OCM component version using the signer's public key: run the verify command and understand the output and exit codes."
 weight: 90
 toc: true
 aliases:

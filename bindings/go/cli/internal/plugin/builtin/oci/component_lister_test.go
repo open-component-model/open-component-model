@@ -1,6 +1,9 @@
 package oci
 
 import (
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -23,10 +26,11 @@ func TestCTFComponentListerPlugin_Registration(t *testing.T) {
 
 	// Smoke test: try to retrieve a lister for a non-existing CTF repo.
 	// We expect "path does not exist" error, meaning that the plug-in was found and tried to read the CTF.
-	ctfSpec := &ctfv1.Repository{FilePath: "/non/existing/path"}
+	nonExisting := filepath.Join(t.TempDir(), "non", "existing", "path")
+	ctfSpec := &ctfv1.Repository{FilePath: nonExisting}
 	_, err := registry.GetComponentLister(ctx, ctfSpec, nil)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "path does not exist: /non/existing/path")
+	require.Contains(t, err.Error(), "path does not exist: "+nonExisting)
 }
 
 func TestCTFComponentListerPlugin_CredentialConsumerIdentity(t *testing.T) {
@@ -53,4 +57,32 @@ func TestCTFComponentListerPlugin_NotCTFSpec(t *testing.T) {
 	_, err := p.GetComponentLister(t.Context(), &ociv1.Repository{}, nil)
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrWrongUsage, "expected: %v, got: %v", ErrWrongUsage, err)
+}
+
+func TestCTFComponentListerPlugin_Archive(t *testing.T) {
+	root := getRepoRootBasedOnGit(t)
+	for _, name := range []string{"transport-archive.tar", "transport-archive.tar.gz"} {
+		t.Run(name, func(t *testing.T) {
+			r := require.New(t)
+			path := filepath.Join(root, "bindings", "go", "oci", "ctf", "testdata", "compatibility", "01", name)
+			lister, err := (&CTFComponentListerPlugin{}).GetComponentLister(t.Context(), &ctfv1.Repository{FilePath: path}, nil)
+			r.NoError(err)
+			var names []string
+			r.NoError(lister.ListComponents(t.Context(), "", func(found []string) error {
+				names = found
+				return nil
+			}))
+			r.Equal([]string{"github.com/acme.org/helloworld"}, names)
+		})
+	}
+}
+
+func getRepoRootBasedOnGit(t *testing.T) string {
+	t.Helper()
+	r := require.New(t)
+	git, err := exec.LookPath("git")
+	r.NoError(err, "git binary should be available in PATH to locate test data")
+	rootRaw, err := exec.CommandContext(t.Context(), git, "rev-parse", "--show-toplevel").Output()
+	r.NoError(err, "git rev-parse --show-toplevel must succeed to get repository root")
+	return strings.TrimSpace(string(rootRaw))
 }

@@ -110,6 +110,17 @@ The release name `ocm-k8s-toolkit` used above gives the controller's resources p
 The chart ships an opt-in NetworkPolicy for the controller. Add `--set manager.networkPolicy.enabled=true` to admit only the health-probe port (plus the metrics and conversion-webhook ports, if enabled) and allow egress only to DNS and TCP ports 443 and 6443 (HTTPS and the Kubernetes API). If the controller pulls from registries on other ports, such as `:5000` or plain HTTP, set `manager.networkPolicy.egress`; it replaces all default egress rules, so include DNS. It needs a CNI that enforces NetworkPolicy. For how the controller relates to FIPS 140-3 and other standards, see [Standards & Regulations]({{< relref "docs/reference/standards-and-regulations/_index.md" >}}).
 {{</callout>}}
 
+{{<callout context="tip" title="Controller fine-tuning" icon="outline/shield-check">}}
+Concurrency and rate-limiting can be set for each controller separately through `manager.concurrency.<controller>` and
+`manager.rateLimiter.<controller>.{qps,burst}` values respectively.
+The `manager.concurrency.deployer` setting applies to both the Deployer and NamespacedDeployer controllers.
+Configure their rate limits separately through `manager.rateLimiter.deployer.{qps,burst}` and
+`manager.rateLimiter.namespacedDeployer.{qps,burst}`, respectively.
+
+To read more about these settings, please consult the
+[README](https://github.com/open-component-model/open-component-model/blob/main/bindings/go/kubernetes/controller/chart/README.md) file of the helm chart.
+{{</callout>}}
+
 <details>
 <summary>You should see this output</summary>
 

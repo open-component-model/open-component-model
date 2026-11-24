@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sys/unix"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
@@ -58,7 +57,7 @@ func TestWriteAndRead(t *testing.T) {
 			},
 			setup: func(t *testing.T) error {
 				t.Helper()
-				return unix.Mkfifo(filepath.Join(tempDir, "pipe"), 0o666)
+				return mkfifo(filepath.Join(tempDir, "pipe"))
 			},
 			cleanup: func() error {
 				return os.Remove(filepath.Join(tempDir, "pipe"))
@@ -177,8 +176,6 @@ func TestWriteErrors(t *testing.T) {
 }
 
 func TestReadErrors(t *testing.T) {
-	r := require.New(t)
-
 	// Test cases for read errors
 	tests := []struct {
 		name        string
@@ -213,7 +210,15 @@ func TestReadErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := Read(tt.location)
+			r := require.New(t)
+			b, err := Read(tt.location)
+			if err == nil {
+				// A missing file is reported when the blob is read, not when it is created.
+				var rc io.ReadCloser
+				if rc, err = b.ReadCloser(); err == nil {
+					r.NoError(rc.Close())
+				}
+			}
 			if tt.expectError {
 				r.Error(err, "expected error but got none")
 			} else {

@@ -2,7 +2,7 @@ package discovery
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"math/rand"
 	"testing"
 
@@ -225,7 +225,7 @@ func TestProjectDeterminism(t *testing.T) {
 		rng.Shuffle(len(descriptors), func(i, j int) { descriptors[i], descriptors[j] = descriptors[j], descriptors[i] })
 
 		p := projectForSpec(t, spec, descriptors...)
-		marshaled, err := json.Marshal(p.Extracted)
+		marshaled, err := json.Marshal(p.Extracted, runtime.JSONOptions)
 		r.NoError(err)
 		if reference == nil {
 			reference = marshaled
@@ -365,7 +365,7 @@ func TestProjectRawWireFormatFidelity(t *testing.T) {
 	p := projectForSpec(t, &v1alpha1.DiscoverySpec{}, d)
 	r.Len(p.Components, 1)
 
-	expected, err := json.Marshal(mustConvertV2(t, d))
+	expected, err := json.Marshal(mustConvertV2(t, d), runtime.JSONOptions)
 	r.NoError(err)
 	r.JSONEq(string(expected), string(p.Components[0]), "raw bytes equal marshaling the typed v2 descriptor")
 
@@ -432,7 +432,7 @@ func TestProjectConsistencyAcrossModes(t *testing.T) {
 		"expression":  {ResourceSelector: &v1alpha1.Selector{MatchIdentity: map[string]string{"name": "keep"}}, Extract: &v1alpha1.Extract{Expression: `components.map(c, {"c": size(c.component.resources)})`}},
 	}
 
-	before, err := json.Marshal(mustConvertV2(t, d))
+	before, err := json.Marshal(mustConvertV2(t, d), runtime.JSONOptions)
 	r.NoError(err)
 
 	q, err := Compile(t.Context(), specs["raw"])
@@ -457,7 +457,7 @@ func TestProjectConsistencyAcrossModes(t *testing.T) {
 		}
 	}
 
-	after, err := json.Marshal(mustConvertV2(t, d))
+	after, err := json.Marshal(mustConvertV2(t, d), runtime.JSONOptions)
 	r.NoError(err)
 	r.JSONEq(string(before), string(after), "inputs unchanged across all projection modes")
 }

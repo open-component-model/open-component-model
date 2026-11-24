@@ -1,0 +1,33 @@
+{{- /*
+  Overrides @thulite/seo layouts/_partials/seo/description.html.
+
+  1. Resolves the description using the same priority chain as upstream:
+       .Params.seo.description > .Description > .Summary > .Params.summary > site description
+  2. Skips the length check for frozen versioned snapshots (site.Version.Name != "main")
+     and for pages listed in site.Params.seo.description.lengthIgnores (taxonomy pages,
+     CLI reference). Only main-version pages are checked.
+  3. Warns via warnf when the resolved description is outside the configured min/max range.
+
+  Intentionally omits the upstream errorLevel and summaryFallback config knobs: neither
+  is set in this repo, so behaviour is identical to the upstream defaults.
+*/ -}}
+{{- $desc := "" -}}
+{{- if .Params.seo.description -}}{{- $desc = .Params.seo.description -}}
+{{- else if .Description -}}{{- $desc = .Description -}}
+{{- else if .Summary -}}{{- $desc = .Summary | plainify -}}
+{{- else if .Params.summary -}}{{- $desc = .Params.summary | plainify -}}
+{{- else if site.Params.seo.description.siteParamsFallback -}}{{- $desc = site.Params.Description -}}{{- end -}}
+{{- $ignore := and site.Version.Name (ne site.Version.Name "main") -}}
+{{- if not $ignore -}}
+  {{- range site.Params.seo.description.lengthIgnores -}}
+    {{- if gt (len (findRE . $.Page.TranslationKey)) 0 -}}{{- $ignore = true -}}{{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- if not $ignore -}}
+  {{- $n := len $desc -}}
+  {{- $min := or site.Params.seo.description.length.min 110 -}}
+  {{- $max := or site.Params.seo.description.length.max 160 -}}
+  {{- if lt $n $min -}}{{- warnf "Description too short on page '%s'. %d characters is < %d" .Page.TranslationKey $n $min -}}
+  {{- else if gt $n $max -}}{{- warnf "Description too long on page '%s'. %d characters is > %d" .Page.TranslationKey $n $max -}}{{- end -}}
+{{- end -}}
+<meta name="description" content="{{ $desc }}">

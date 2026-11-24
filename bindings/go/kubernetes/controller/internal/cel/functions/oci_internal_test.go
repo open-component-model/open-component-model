@@ -35,7 +35,8 @@ func TestBuildImageReference(t *testing.T) {
 
 		ref, err := buildImageReference(blob, component)
 		require.NoError(t, err)
-		expected := "https://ghcr.io/myorg/component-descriptors/my-component@sha256:abc123"
+		// An OCI reference carries no scheme, so the https:// of the base URL is dropped.
+		expected := "ghcr.io/myorg/component-descriptors/my-component@sha256:abc123"
 		assert.Equal(t, expected, ref)
 	})
 

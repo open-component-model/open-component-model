@@ -187,7 +187,7 @@ configurations:
     copyMode: allResources
 `)
 		_, err := spec.LookupConfig(generic)
-		require.ErrorContains(t, err, `unknown field "copyMode"`)
+		require.ErrorContains(t, err, `unknown object member name "copyMode"`)
 	})
 
 	t.Run("recursive depth is rejected", func(t *testing.T) {
@@ -209,7 +209,7 @@ configurations:
     uploadType: ociArtifact
 `)
 		_, err := spec.LookupConfig(generic)
-		require.ErrorContains(t, err, `unknown field "uploadType"`)
+		require.ErrorContains(t, err, `unknown object member name "uploadType"`)
 	})
 
 	t.Run("unmatchedResourcePolicy is decoded", func(t *testing.T) {

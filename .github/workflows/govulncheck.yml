@@ -62,7 +62,7 @@ jobs:
           echo "ref=${ref}" >> "$GITHUB_OUTPUT"
 
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: bindings/go/go.mod
           cache-dependency-path: bindings/go/go.sum
@@ -80,9 +80,10 @@ jobs:
           GOARCH: ${{ matrix.arch }}
         run: '"${RUNNER_TEMP}/bin/govulncheck" -format openvex ./... > "${GITHUB_WORKSPACE}/tmp/vex/govulncheck.openvex.json"'
 
-      # govulncheck names the product "Unknown Product" and path-escapes module purls,
-      # so Trivy would match nothing. Scoping each statement to its binary's main module
-      # keeps it from covering the same module in another binary of the image.
+      # govulncheck names the product "Unknown Product", path-escapes module purls and
+      # omits "statements" entirely when it finds nothing, so Trivy would match nothing.
+      # Scoping each statement to its binary's main module keeps it from covering the
+      # same module in another binary of the image.
       - name: Build OpenVEX
         id: vex
         env:
@@ -98,7 +99,7 @@ jobs:
               | if .status == "affected" then .action_statement //= "The vulnerable code is called; see the govulncheck report." end;
             ($ENV.COSIGN_REF | split("@")[1]) as $digest
             | $govulncheck[0] + {"@id": $ENV.ID, author: $ENV.GITHUB_REPOSITORY}
-            | .statements |= map(scope($ENV.OCM_PRODUCT))
+            | .statements = [(.statements // [])[] | scope($ENV.OCM_PRODUCT)]
             | .statements += [$attested[][].verificationResult.statement.predicate.statements[]?
                 | .products |= map(select(."@id" | split("@")[1] // "" | split("?")[0] | sub("%3A"; ":") == $digest))
                 | select(any(.products[]; .subcomponents | length > 0))
@@ -112,7 +113,7 @@ jobs:
             tmp/vex/ocm.openvex.json >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload OpenVEX
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: openvex-${{ matrix.arch }}
           path: tmp/vex/

@@ -1,6 +1,6 @@
 ---
 title: "The OCM Community"
-description: "Communication channels, community calls, and ways to engage with the Open Component Model project."
+description: "Communication channels, community calls, and ways to engage with the Open Component Model project: join the conversation and contribute."
 toc: true
 hideChildren: true
 aliases:

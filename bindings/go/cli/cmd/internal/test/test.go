@@ -5,7 +5,8 @@ package test
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"os"
@@ -177,12 +178,12 @@ type JSONLogEntry struct {
 	Extras map[string]interface{} `json:"-"`
 }
 
-// UnmarshalJSON implements custom JSON unmarshaling for JSONLogEntry
+// UnmarshalJSONFrom implements custom JSON unmarshaling for JSONLogEntry
 // It handles both standard fields and additional dynamic fields
-func (l *JSONLogEntry) UnmarshalJSON(data []byte) error {
+func (l *JSONLogEntry) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	// Unmarshal into a temporary map
 	var raw map[string]interface{}
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := json.UnmarshalDecode(dec, &raw); err != nil {
 		return err
 	}
 

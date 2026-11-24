@@ -1,5 +1,5 @@
 // Package cache provides two disk-backed, TTL+LRU caches that layer
-// on top of an oras [*remote.Repository] via [Repository]:
+// on top of an oras [*remote.Repository] via [CachedStore] (see [Wrap]):
 //
 //   - [BlobCache] keys cached blobs by digest and stores each blob as
 //     a file under `<Options.Dir>/blobs/<algo>/<hex>`. Its primary
@@ -8,7 +8,7 @@
 //     reads from upstream and tees the bytes to disk; subsequent
 //     Fetches for the same digest serve the on-disk file. Push, Tag,
 //     Resolve, FetchReference, and Exists on the wrapping
-//     [Repository] are pure passthroughs.
+//     [CachedStore] are pure passthroughs.
 //
 //   - [ReferenceCache] keys cached resolves by (namespace, reference)
 //     so two repositories that happen to share a short reference
@@ -35,7 +35,11 @@
 //     content-addressed [BlobCache] does not need this scoping
 //     because blobs are identified by digest, but the tag-mutable
 //     [ReferenceCache] does — see the provider package for the
-//     canonical wiring.
+//     canonical wiring. As a consequence, under
+//     [RemotePolicyIfNotPresent] whoever knows a digest gets a cached
+//     blob. Under [RemotePolicyAlways] a [BlobCache] hit additionally
+//     requires that the caller's repository served the blob before
+//     and still allows access to it.
 //
 // Scope and intent:
 //
@@ -51,7 +55,8 @@
 // Lifecycle and isolation:
 //
 //   - Each cache owns one or more subdirectories of [Options.Dir]
-//     ([BlobCache]: `blobs/`; [ReferenceCache]: `refs/`). Sharing the
+//     ([BlobCache]: `blobs/`, under [RemotePolicyAlways] also
+//     `served/refs/`; [ReferenceCache]: `refs/`). Sharing the
 //     same Dir between both caches is therefore safe; they do not
 //     collide on the filesystem.
 //   - Cache directories are persistent: callers should pass a stable
@@ -61,7 +66,8 @@
 //   - Eviction (LRU overflow or TTL expiry) deletes the on-disk file
 //     for blobs and rewrites/removes the per-namespace snapshot for
 //     references.
-//   - All public methods are safe for concurrent use. Concurrent
+//   - All public methods are safe for concurrent use. Under
+//     [RemotePolicyIfNotPresent], concurrent
 //     [BlobCache.Fetch] calls for the same digest are collapsed via
 //     singleflight into a single upstream round-trip; the shared
 //     bytes are then persisted to disk (best-effort) and each waiter

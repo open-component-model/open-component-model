@@ -1,6 +1,6 @@
 ---
 title: "Verify a PEM Certificate Chain"
-description: "Verify a PEM-signed component version by pinning the signer's root CA as the trust anchor."
+description: "Verify a PEM-signed component version by pinning the signer's root CA as the trust anchor and validating the full certificate chain."
 weight: 100
 toc: true
 aliases:

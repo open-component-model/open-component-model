@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -93,10 +94,35 @@ type ReadOnlyIndexStore interface {
 // BlobStore provides access to the blobs of a CTF.
 type BlobStore interface {
 	ReadOnlyBlobStore
-	// SaveBlob saves the blob to the CTF.
+	// SaveBlob saves the blob to the CTF. The blob must be blob.DigestAware; its digest is
+	// only asked for after its content has been read and closed. Saving a blob that is
+	// already stored keeps the stored one, also when both saves run concurrently.
 	SaveBlob(ctx context.Context, blob blob.ReadOnlyBlob) (err error)
 	// DeleteBlob deletes the blob with the specified digest from the CTF.
 	DeleteBlob(ctx context.Context, digest string) (err error)
+}
+
+// BlobStager is implemented by a BlobStore that can store a blob in two steps. Callers
+// that serialize writes to the CTF stage outside their lock and publish under it, so a
+// slow blob source never holds the lock. Stores that do not implement it are written
+// with SaveBlob.
+type BlobStager interface {
+	// StageBlob reads and verifies the blob into the CTF without publishing it, under the
+	// same contract as SaveBlob. The returned StagedBlob must be discarded.
+	StageBlob(ctx context.Context, blob blob.ReadOnlyBlob) (StagedBlob, error)
+}
+
+// StagedBlob is blob content held by a CTF but not yet stored under its digest.
+type StagedBlob interface {
+	// Digest returns the digest of the staged content.
+	Digest() string
+	// Publish stores the staged content under its digest, keeping an already stored blob
+	// of that digest, also one published concurrently. It may be called once and not
+	// after Discard.
+	Publish() error
+	// Discard removes the staged content if it was not published. It is safe to call
+	// more than once and after Publish.
+	Discard() error
 }
 
 type ReadOnlyBlobStore interface {
@@ -142,6 +168,9 @@ func OpenCTF(ctx context.Context, opts OpenCTFOptions) (CTF, error) {
 		if errors.Is(err, os.ErrNotExist) && opts.Flag&O_CREATE != 0 {
 			return OpenCTFFromOSPath(tmp, opts.Flag)
 		}
+		if err != nil {
+			return nil, fmt.Errorf("unable to extract ctf archive: %w", errors.Join(err, os.RemoveAll(tmp)))
+		}
 		return ctf, nil
 	default:
 		return nil, ErrUnsupportedFormat
@@ -170,6 +199,14 @@ func OpenCTFByFileExtension(ctx context.Context, opts OpenCTFOptions) (CTF, File
 	archive, err := OpenCTF(ctx, opts)
 	if err != nil {
 		return nil, FormatUnknown, fmt.Errorf("failed to open CTF: %w", err)
+	}
+	if fileSystemArchive, ok := archive.(*FileSystemCTF); ok {
+		fileSystem := fileSystemArchive.FS()
+		if _, err := fs.Stat(fileSystem, "component-descriptor.yaml"); err == nil {
+			if _, indexErr := fs.Stat(fileSystem, v1.ArtifactIndexFileName); errors.Is(indexErr, fs.ErrNotExist) {
+				return nil, FormatUnknown, fmt.Errorf("component archive %q is not supported", opts.Path)
+			}
+		}
 	}
 
 	return archive, discovered, nil

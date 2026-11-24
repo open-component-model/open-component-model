@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	accessv1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
@@ -41,8 +42,8 @@ func TestFileCleanup_Transform(t *testing.T) {
 				require.NoError(t, os.WriteFile(f2, []byte("blob2"), 0o600))
 
 				return []*accessv1alpha1.File{
-					{URI: "file://" + f1},
-					{URI: "file://" + f2},
+					{URI: fileURI(t, f1)},
+					{URI: fileURI(t, f2)},
 				}
 			},
 			expectedCleaned: 2,
@@ -68,7 +69,7 @@ func TestFileCleanup_Transform(t *testing.T) {
 				return []*accessv1alpha1.File{
 					nil,
 					{URI: ""},
-					{URI: "file://" + f},
+					{URI: fileURI(t, f)},
 					nil,
 				}
 			},
@@ -83,7 +84,7 @@ func TestFileCleanup_Transform(t *testing.T) {
 				require.NoError(t, os.WriteFile(existing, []byte("data"), 0o600))
 
 				return []*accessv1alpha1.File{
-					{URI: "file://" + existing},
+					{URI: fileURI(t, existing)},
 					{URI: "file:///tmp/cleanup-nonexistent-xyz"},
 				}
 			},
@@ -160,7 +161,7 @@ func TestFileCleanup_Transform_VerifiesFilesRemoved(t *testing.T) {
 		ID:   "testCleanup",
 		Spec: &FileCleanupSpec{
 			Files: []*accessv1alpha1.File{
-				{URI: "file://" + f1},
+				{URI: fileURI(t, f1)},
 			},
 		},
 	}
@@ -237,4 +238,12 @@ func TestFileCleanupExpressions_ReferenceConsumerNotProducer(t *testing.T) {
 			}
 		})
 	}
+}
+
+// fileURI is the file:// URI of the absolute path p.
+func fileURI(t *testing.T, p string) string {
+	t.Helper()
+	uri, err := filesystem.URIFromFilePath(p)
+	require.NoError(t, err)
+	return uri
 }

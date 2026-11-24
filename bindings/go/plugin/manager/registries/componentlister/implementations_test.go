@@ -2,7 +2,7 @@ package componentlister
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -48,7 +48,7 @@ func TestListComponentsHandler(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == ListComponents && r.Method == http.MethodPost {
 			serverResponse := v1.ListComponentsResponse{List: []string{"test-component-1", "test-component-2"}}
-			err := json.NewEncoder(w).Encode(serverResponse)
+			err := json.MarshalWrite(w, serverResponse, runtime.JSONOptions)
 			assert.NoError(t, err)
 			return
 		}

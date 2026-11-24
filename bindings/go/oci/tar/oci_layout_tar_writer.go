@@ -4,7 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -17,10 +17,12 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/errdef"
+	"github.com/oras-project/oras-go/v3/content"
+	"github.com/oras-project/oras-go/v3/errdef"
 
+	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // NewOCILayoutWriter creates a new [oras.Target] that writes an OCI image layout in tar format.
@@ -150,7 +152,7 @@ func (s *OCILayoutWriter) Close() (closeErr error) {
 	var metaBuf bytes.Buffer
 	tw := tar.NewWriter(&metaBuf)
 
-	indexJSON, err := json.Marshal(s.index)
+	indexJSON, err := json.Marshal(s.index, runtime.JSONOptions)
 	if err != nil {
 		return fmt.Errorf("failed to marshal index: %w", err)
 	}
@@ -167,7 +169,7 @@ func (s *OCILayoutWriter) Close() (closeErr error) {
 	layout := ociImageSpecV1.ImageLayout{
 		Version: ociImageSpecV1.ImageLayoutVersion,
 	}
-	layoutJSON, err := json.Marshal(layout)
+	layoutJSON, err := json.Marshal(layout, runtime.JSONOptions)
 	if err != nil {
 		return fmt.Errorf("failed to marshal OCI layout file: %w", err)
 	}
@@ -196,7 +198,12 @@ func (s *OCILayoutWriter) Close() (closeErr error) {
 	if _, err := s.buf.Seek(0, io.SeekStart); err != nil {
 		return fmt.Errorf("failed to seek scratch buffer: %w", err)
 	}
-	if _, err := io.Copy(s.output, s.buf); err != nil {
+	// Unwrap the temp file so an *os.File output can use copy_file_range.
+	var scratch io.Reader = s.buf
+	if rc, ok := s.buf.(*removingCloser); ok {
+		scratch = rc.File
+	}
+	if _, err := blob.CopyReader(s.output, scratch); err != nil {
 		return fmt.Errorf("failed to copy scratch buffer to output: %w", err)
 	}
 
@@ -243,7 +250,9 @@ func (s *OCILayoutWriter) Push(ctx context.Context, expected ociImageSpecV1.Desc
 	dataOffset := offset + int64(len(headerBytes))
 	verify := content.NewVerifyReader(data, expected)
 
-	written, err := copyToWriterAt(s.buf, verify, dataOffset, expected.Size)
+	// Short content surfaces here as io.ErrUnexpectedEOF from the VerifyReader;
+	// trailing data and digest mismatches surface from Verify below.
+	written, err := blob.CopyReaderN(io.NewOffsetWriter(s.buf, dataOffset), verify, expected.Size)
 	if err != nil {
 		return fmt.Errorf("failed to write content to scratch buffer: %w", err)
 	}
@@ -375,39 +384,6 @@ func (s *OCILayoutWriter) updateIndex() error {
 var zeroPad [512]byte
 
 var _ content.Pusher = &OCILayoutWriter{}
-
-// copyBufPool reuses 32KB byte slices for copyToWriterAt.
-var copyBufPool = sync.Pool{
-	New: func() any {
-		b := make([]byte, 32*1024)
-		return &b
-	},
-}
-
-// copyToWriterAt copies up to size bytes from r into w starting at the given offset,
-// using a pooled buffer to avoid per-call allocations.
-func copyToWriterAt(w io.WriterAt, r io.Reader, offset, size int64) (int64, error) {
-	bufp := copyBufPool.Get().(*[]byte)
-	defer copyBufPool.Put(bufp)
-	buf := *bufp
-	var total int64
-	for total < size {
-		n, err := r.Read(buf[:min(int64(len(buf)), size-total)])
-		if n > 0 {
-			if _, ew := w.WriteAt(buf[:n], offset+total); ew != nil {
-				return total, ew
-			}
-			total += int64(n)
-		}
-		if err != nil {
-			if err == io.EOF {
-				return total, nil
-			}
-			return total, err
-		}
-	}
-	return total, nil
-}
 
 // headerBufPool reuses bytes.Buffer instances for tar header serialization.
 var headerBufPool = sync.Pool{

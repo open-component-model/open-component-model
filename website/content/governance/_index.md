@@ -1,6 +1,6 @@
 ---
 title: "Governance"
-description: "OCM project governance, Technical Steering Committee, and Special Interest Groups"
+description: "OCM project governance: the Technical Steering Committee, Special Interest Groups, decision-making process, and how to get involved."
 toc: true
 ---
 

@@ -1,6 +1,6 @@
 ---
 title: Plugin System
-description: "Learn about the Plugin System and how it can help you extend OCM's capabilities."
+description: "Learn about the OCM Plugin System: how plugins extend access types, upload handlers, and downloaders without modifying the core CLI."
 icon: "🔌"
 weight: 9
 toc: true

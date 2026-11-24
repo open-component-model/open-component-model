@@ -7,21 +7,21 @@ package oci
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"regexp"
-	"strings"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3"
+	"github.com/oras-project/oras-go/v3/content"
+	"github.com/oras-project/oras-go/v3/errdef"
+	"github.com/oras-project/oras-go/v3/registry"
 	slogcontext "github.com/veqryn/slog-context"
 	"golang.org/x/sync/errgroup"
-	"oras.land/oras-go/v2"
-	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/errdef"
-	"oras.land/oras-go/v2/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -29,7 +29,6 @@ import (
 	ociblob "ocm.software/open-component-model/bindings/go/oci/blob"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	internaldigest "ocm.software/open-component-model/bindings/go/oci/internal/digest"
-	"ocm.software/open-component-model/bindings/go/oci/internal/fetch"
 	"ocm.software/open-component-model/bindings/go/oci/internal/identity"
 	"ocm.software/open-component-model/bindings/go/oci/internal/introspection"
 	"ocm.software/open-component-model/bindings/go/oci/internal/lister"
@@ -46,6 +45,7 @@ import (
 	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
 	"ocm.software/open-component-model/bindings/go/repository"
+	"ocm.software/open-component-model/bindings/go/repository/integrity"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime/versioning"
 )
@@ -434,13 +434,13 @@ func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descript
 	}
 
 	var pinnedDigest digest.Digest
-	if dig, err := resolved.Digest(); err == nil {
+	if dig, err := resolved.GetDigest(); err == nil {
 		pinnedDigest = dig
 	}
 
 	var desc ociImageSpecV1.Descriptor
 	if pinnedDigest.String() == "" {
-		if desc, err = src.Resolve(ctx, resolved.ReferenceOrTag()); err != nil {
+		if desc, err = src.Resolve(ctx, resolved.GetReference()); err != nil {
 			return nil, fmt.Errorf("failed to resolve reference to process digest %q: %w", typed.ImageReference, err)
 		}
 	} else {
@@ -458,7 +458,7 @@ func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descript
 		if err := internaldigest.Complete(res.Digest, desc.Digest, internaldigest.OCIArtifactDigestV1); err != nil {
 			return nil, fmt.Errorf("failed to complete digest of resource %q: %w", res.ToIdentity(), err)
 		}
-	} else if err := internaldigest.VerifyOCIArtifact(res.Digest, desc.Digest); err != nil {
+	} else if err := integrity.VerifyOCIArtifact(ctx, res.Digest, desc.Digest, resourceLogAttrs(res)); err != nil {
 		return nil, fmt.Errorf("failed to verify digest of resource %q: %w", res.ToIdentity(), err)
 	}
 
@@ -466,7 +466,7 @@ func (repo *Repository) processOCIImageDigest(ctx context.Context, res *descript
 		return nil, fmt.Errorf("expected pinned digest %q (derived from %q) but got %q", pinnedDigest, resolved, desc.Digest)
 	}
 
-	resolved.Reference.Reference = desc.Digest.String()
+	resolved.Digest = desc.Digest.String()
 
 	// in any case, after successful processing, we can pin the access
 	typed.ImageReference = resolved.String()
@@ -583,20 +583,16 @@ func (repo *Repository) uploadAndUpdateLocalArtifact(
 		return err
 	}
 
-	if err := ociblob.UpdateArtifactWithInformationFromBlob(artifact, b); err != nil {
-		return fmt.Errorf("failed to update artifact with data from blob: %w", err)
-	}
-
 	artifactBlob, err := ociblob.NewArtifactBlob(artifact, b)
 	if err != nil {
 		return fmt.Errorf("failed to create resource blob: %w", err)
 	}
 
 	packOptions := pack.Options{
-		AccessScheme:       repo.scheme,
-		CopyGraphOptions:   repo.copyGraphOptions(),
-		BaseReference:      reference,
-		GlobalAccessPolicy: repo.globalAccessPolicy,
+		AccessScheme:             repo.scheme,
+		ExtendedCopyGraphOptions: repo.extendedCopyGraphOptions(),
+		BaseReference:            reference,
+		GlobalAccessPolicy:       repo.globalAccessPolicy,
 	}
 	_, err = pack.ArtifactBlob(slogcontext.With(ctx, slog.String("target", reference)), store, artifactBlob, packOptions)
 	if err != nil {
@@ -618,7 +614,7 @@ func (repo *Repository) GetLocalResource(ctx context.Context, component, version
 		done(err)
 	}()
 
-	var b fetch.LocalBlob
+	var b blob.ReadOnlyBlob
 	var artifact descriptor.Artifact
 	if b, artifact, err = repo.localArtifact(ctx, component, version, identity, annotations.ArtifactKindResource); err != nil {
 		if errors.Is(err, errdef.ErrNotFound) {
@@ -640,7 +636,7 @@ func (repo *Repository) GetLocalSource(ctx context.Context, component, version s
 		done(err)
 	}()
 
-	var b fetch.LocalBlob
+	var b blob.ReadOnlyBlob
 	var artifact descriptor.Artifact
 	if b, artifact, err = repo.localArtifact(ctx, component, version, identity, annotations.ArtifactKindSource); err != nil {
 		if errors.Is(err, errdef.ErrNotFound) {
@@ -651,12 +647,12 @@ func (repo *Repository) GetLocalSource(ctx context.Context, component, version s
 	return b, artifact.(*descriptor.Source), nil
 }
 
-func (repo *Repository) localArtifact(ctx context.Context, component, version string, identity runtime.Identity, kind annotations.ArtifactKind) (fetch.LocalBlob, descriptor.Artifact, error) {
+func (repo *Repository) localArtifact(ctx context.Context, component, version string, identity runtime.Identity, kind annotations.ArtifactKind) (blob.ReadOnlyBlob, descriptor.Artifact, error) {
 	cv, err := repo.readComponentVersion(ctx, component, version)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get component version: %w", err)
 	}
-	desc, store, reference := cv.descriptor, cv.store, cv.reference
+	desc, store := cv.descriptor, cv.store
 
 	var artifacts []descriptor.Artifact
 	switch kind {
@@ -675,6 +671,8 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 	}
 	artifact := candidates[0]
 	meta := artifact.GetElementMeta()
+	// sources carry no digest in the model, so they are verified against their OCI descriptors only.
+	res, _ := artifact.(*descriptor.Resource)
 
 	// now that we have a unique candidate, we should use its identity instead of the one requested, as
 	// the requested identity might not be fully qualified.
@@ -690,18 +688,15 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 		return nil, nil, fmt.Errorf("error converting resource access: %w", err)
 	}
 
-	var verifyAgainst *descriptor.Resource
-	if res, ok := artifact.(*descriptor.Resource); ok && cv.layout == LayoutNormalized {
-		// The normalized manifest binds resource content only through the resource digest, while
-		// the access referrer that locates the content is not signed.
-		verifyAgainst = res
-	}
 	switch typed := typed.(type) {
 	case *v2.LocalBlob:
-		b, err := repo.getLocalBlobFromIndexOrManifest(ctx, store, cv.index, cv.manifest, typed.LocalReference, meta.Version, verifyAgainst)
+		b, err := repo.getLocalBlobFromIndexOrManifest(
+			ctx, store, cv.index, cv.manifest, typed.LocalReference,
+			artifact.GetElementMeta().Version, res,
+		)
 		return b, artifact, err
 	case *accessv1.RelativeOCIReference:
-		b, err := repo.getRelativeOCIReference(ctx, reference, typed, verifyAgainst)
+		b, err := repo.getRelativeOCIReference(ctx, cv.reference, typed, res)
 		return b, artifact, err
 	default:
 		return nil, nil, fmt.Errorf("unsupported resource access type: %T", typed)
@@ -714,9 +709,8 @@ func (repo *Repository) localArtifact(ctx context.Context, component, version st
 // reference to form an absolute OCI image reference, which the existing OCIImage download
 // path resolves/credentials/streams via the same resolver. The materialised blob is the
 // OCI-layout tar, identical to the nested-manifest LocalBlob branch. The resolution base is
-// the registry root, never the OCM subPath. If verifyAgainst is set, the resolved artifact must
-// match its digest.
-func (repo *Repository) getRelativeOCIReference(ctx context.Context, reference string, typed *accessv1.RelativeOCIReference, verifyAgainst *descriptor.Resource) (fetch.LocalBlob, error) {
+// the registry root, never the OCM subPath.
+func (repo *Repository) getRelativeOCIReference(ctx context.Context, reference string, typed *accessv1.RelativeOCIReference, res *descriptor.Resource) (blob.ReadOnlyBlob, error) {
 	if err := typed.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid relative OCI reference: %w", err)
 	}
@@ -734,32 +728,24 @@ func (repo *Repository) getRelativeOCIReference(ctx context.Context, reference s
 	if err != nil {
 		return nil, err
 	}
-	if verifyAgainst != nil && signsContent(verifyAgainst.Digest) {
-		if err := internaldigest.VerifyOCIArtifact(verifyAgainst.Digest, stream.Root().Digest); err != nil {
-			return nil, fmt.Errorf("artifact %s does not match the digest of resource %q: %w", stream.Root().Digest, verifyAgainst.Name, err)
+	if res != nil {
+		if err := integrity.VerifyOCIArtifact(ctx, res.Digest, stream.Root().Digest, resourceLogAttrs(res)); err != nil {
+			return nil, fmt.Errorf("local resource %q: %w", res.Name, err)
 		}
 	}
-	b, err := stream.Materialize(ctx)
-	if err != nil {
-		return nil, err
-	}
-	local, ok := b.(fetch.LocalBlob)
-	if !ok {
-		return nil, fmt.Errorf("materialized relative OCI reference blob %T does not satisfy fetch.LocalBlob", b)
-	}
-	return local, nil
+	return stream.Materialize(ctx)
 }
 
 // getLocalBlobFromIndexOrManifest resolves and fetches a blob from either an
-// OCI index or a manifest. If verifyAgainst is set, the content must match its digest.
+// OCI index or a manifest. If res is set, the blob is bound to its digest.
 func (repo *Repository) getLocalBlobFromIndexOrManifest(
 	ctx context.Context,
 	store spec.Store,
 	index *ociImageSpecV1.Index,
 	manifest *ociImageSpecV1.Manifest,
 	ref, version string,
-	verifyAgainst *descriptor.Resource,
-) (LocalBlob, error) {
+	res *descriptor.Resource,
+) (blob.ReadOnlyBlob, error) {
 	descriptors := collectDescriptors(index, manifest)
 
 	artifact, err := findDescriptorFromReference(descriptors, ref)
@@ -767,75 +753,46 @@ func (repo *Repository) getLocalBlobFromIndexOrManifest(
 		return nil, fmt.Errorf("resolve artifact %q: %w", ref, err)
 	}
 
-	// Nested manifest: copy full OCI layout
+	// Nested manifest: an OCI layout of the full graph. Consumers that copy OCI
+	// graphs read the store directly; the layout tar is only built when read.
 	if index != nil && introspection.IsOCICompliantManifest(artifact) {
-		if verifyAgainst != nil && signsContent(verifyAgainst.Digest) {
-			// Copying the graph verifies every node against its digest, so checking the root
-			// digest binds the whole artifact.
-			if err := internaldigest.VerifyOCIArtifact(verifyAgainst.Digest, artifact.Digest); err != nil {
-				return nil, fmt.Errorf("local blob %s does not match the digest of resource %q: %w", artifact.Digest, verifyAgainst.Name, err)
+		if res != nil {
+			if err := integrity.VerifyOCIArtifact(ctx, res.Digest, artifact.Digest, resourceLogAttrs(res)); err != nil {
+				return nil, fmt.Errorf("local resource %q: %w", res.Name, err)
 			}
 		}
 		graph, ok := store.(content.ReadOnlyGraphStorage)
 		if !ok {
 			return nil, fmt.Errorf("store %T does not support predecessor walks", store)
 		}
-		return tar.CopyToOCILayoutInMemory(ctx, graph, artifact, tar.CopyToOCILayoutOptions{
-			ExtendedCopyGraphOptions: repo.extendedCopyGraphOptions(),
-			Tags:                     []string{version},
-			TempDir:                  repo.tempDir,
-		})
+		// The root is bound above; the graph is fetched by descriptor, whether it is
+		// copied directly or written into the layout tar on first read.
+		return ocistream.NewLayoutBlob(ctx, &ocistream.OCIResourceStream{
+			ReadOnlyGraphStorage: graph,
+			Descriptor:           artifact,
+			ExtendedCopyOpts:     repo.extendedCopyGraphOptions(),
+			TempDir:              repo.tempDir,
+			Tags:                 []string{version},
+		}), nil
 	}
 
-	if verifyAgainst != nil && signsContent(verifyAgainst.Digest) {
-		if err := verifyLayerDigest(verifyAgainst, artifact); err != nil {
-			return nil, err
+	// The layer is fetched on every read with the context of this call, so the blob holds
+	// no open stream and callers need not release it.
+	layer := ociblob.NewDescriptorBlob(blob.ReadOnlyBlobFunc(func() (io.ReadCloser, error) {
+		data, err := store.Fetch(ctx, artifact)
+		if err != nil {
+			return nil, fmt.Errorf("fetch layer: %w", err)
 		}
+		return data, nil
+	}), artifact)
+	if res == nil {
+		return layer, nil
 	}
-
-	data, err := store.Fetch(ctx, artifact)
+	verified, err := integrity.Verify(ctx, res.Digest, layer, integrity.WithArtifactVerifier(tar.LayoutVerifier{}), resourceLogAttrs(res))
 	if err != nil {
-		return nil, fmt.Errorf("fetch layer: %w", err)
+		return nil, fmt.Errorf("local resource %q: %w", res.Name, err)
 	}
-	// data cannot be closed, as it is used by the blob
-	b := ociblob.NewDescriptorBlob(data, artifact)
-	if actual, _ := b.Digest(); actual != artifact.Digest.String() {
-		return nil, fmt.Errorf("digest mismatch: expected %q, got %q", artifact.Digest, actual)
-	}
-	if verifyAgainst == nil {
-		return b, nil
-	}
-	verified, err := repository.VerifyDownload(ctx, verifyAgainst, b)
-	if err != nil {
-		return nil, err
-	}
-	local, ok := verified.(LocalBlob)
-	if !ok {
-		return nil, fmt.Errorf("verified blob %T does not satisfy LocalBlob", verified)
-	}
-	return local, nil
-}
-
-// signsContent reports whether d binds content, i.e. is set and not the exclusion marker.
-func signsContent(d *descriptor.Digest) bool {
-	return d != nil &&
-		!strings.EqualFold(d.HashAlgorithm, descriptor.NoDigest) &&
-		!strings.EqualFold(d.NormalisationAlgorithm, descriptor.ExcludeFromSignature)
-}
-
-// verifyLayerDigest rejects a plain local blob layer whose digest contradicts the resource digest
-// before any content is fetched; the content itself is verified while it is read.
-func verifyLayerDigest(res *descriptor.Resource, layer ociImageSpecV1.Descriptor) error {
-	if res.Digest.NormalisationAlgorithm != internaldigest.GenericBlobDigestV1 {
-		return fmt.Errorf("resource %q has digest normalisation %q, which cannot match plain local blob %s", res.Name, res.Digest.NormalisationAlgorithm, layer.Digest)
-	}
-	if layer.Digest.Algorithm() != digest.SHA256 || !strings.EqualFold(strings.ReplaceAll(res.Digest.HashAlgorithm, "-", ""), "sha256") {
-		return nil
-	}
-	if err := internaldigest.Verify(res.Digest, layer.Digest, internaldigest.GenericBlobDigestV1); err != nil {
-		return fmt.Errorf("local blob %s does not match the digest of resource %q: %w", layer.Digest, res.Name, err)
-	}
-	return nil
+	return verified, nil
 }
 
 func (repo *Repository) getStore(ctx context.Context, component string, version string) (ref string, store spec.Store, err error) {
@@ -950,7 +907,7 @@ func (repo *Repository) UploadResource(ctx context.Context, res *descriptor.Reso
 		res.Digest = &descriptor.Digest{}
 	}
 
-	_, access, err := repo.uploadOCIImage(ctx, res.Access, b, res.Digest)
+	_, access, err := repo.uploadOCIImage(ctx, res.Access, b, res.Digest, resourceLogAttrs(res))
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload resource as OCI image: %w", err)
 	}
@@ -980,7 +937,7 @@ func (repo *Repository) UploadSource(ctx context.Context, src *descriptor.Source
 	return src, nil
 }
 
-func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Typed, b blob.ReadOnlyBlob, resourceDigest *descriptor.Digest) (_ ociImageSpecV1.Descriptor, _ *accessv1.OCIImage, err error) {
+func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Typed, b blob.ReadOnlyBlob, resourceDigest *descriptor.Digest, opts ...integrity.Option) (_ ociImageSpecV1.Descriptor, _ *accessv1.OCIImage, err error) {
 	access, err := repo.targetOCIImageAccess(newAccess)
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, err
@@ -991,31 +948,28 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 		return ociImageSpecV1.Descriptor{}, nil, err
 	}
 
-	converted := b
-	if isArtifactSetBlob(b) {
-		layout, cleanup, err := repo.convertArtifactSetToOCILayout(ctx, b)
-		if err != nil {
-			return ociImageSpecV1.Descriptor{}, nil, err
+	var (
+		src  content.ReadOnlyGraphStorage
+		main ociImageSpecV1.Descriptor
+	)
+	if rs, ok := b.(ocistream.ResourceStream); ok {
+		// Copy from the source store instead of building and re-reading its layout tar.
+		src, main = rs, rs.Root()
+	} else {
+		var ociStore *tar.CloseableReadOnlyStore
+		if ociStore, err = tar.ReadOCILayout(slogcontext.With(ctx, slog.String("target", access.ImageReference)), b); err != nil {
+			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to read OCI layout: %w", err)
 		}
 		defer func() {
-			err = errors.Join(err, cleanup())
+			err = errors.Join(err, ociStore.Close())
 		}()
-		converted = layout
-	}
 
-	ociStore, err := tar.ReadOCILayout(ctx, converted)
-	if err != nil {
-		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to read OCI layout: %w", err)
+		mainArtifacts := ociStore.MainArtifacts(ctx)
+		if len(mainArtifacts) != 1 {
+			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("expected exactly one main artifact in OCI layout, but got %d", len(mainArtifacts))
+		}
+		src, main = ociStore, mainArtifacts[0]
 	}
-	defer func() {
-		err = errors.Join(err, ociStore.Close())
-	}()
-
-	mainArtifacts := ociStore.MainArtifacts(ctx)
-	if len(mainArtifacts) != 1 {
-		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("expected exactly one main artifact in OCI layout, but got %d", len(mainArtifacts))
-	}
-	main := mainArtifacts[0]
 	// A nil digest denotes a source. Resources must validate or complete their
 	// digest before any destination writes, including the incomplete-digest case.
 	if resourceDigest != nil {
@@ -1023,7 +977,7 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 			if err := internaldigest.Complete(resourceDigest, main.Digest, internaldigest.OCIArtifactDigestV1); err != nil {
 				return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to complete resource digest: %w", err)
 			}
-		} else if err := internaldigest.VerifyOCIArtifact(resourceDigest, main.Digest); err != nil {
+		} else if err := integrity.VerifyOCIArtifact(ctx, resourceDigest, main.Digest, opts...); err != nil {
 			return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to verify resource digest: %w", err)
 		}
 	}
@@ -1032,11 +986,11 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to parse target access image reference %q: %w", access.ImageReference, err)
 	}
-	if pinned, err := ref.Digest(); err == nil && pinned != main.Digest {
+	if pinned, err := ref.GetDigest(); err == nil && pinned != main.Digest {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("target access digest mismatch: expected %s, got %s", pinned, main.Digest)
 	}
 
-	if err := oras.ExtendedCopyGraph(slogcontext.With(ctx, slog.String("target", access.ImageReference)), ociStore, store, main, repo.extendedCopyGraphOptions()); err != nil {
+	if err := oras.ExtendedCopyGraph(slogcontext.With(ctx, slog.String("target", access.ImageReference)), src, store, main, repo.extendedCopyGraphOptions()); err != nil {
 		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to upload resource via copy: %w", err)
 	}
 
@@ -1050,8 +1004,8 @@ func (repo *Repository) uploadOCIImage(ctx context.Context, newAccess runtime.Ty
 	}
 
 	// if we don't have a pinned access we can pin it now.
-	if ref.Reference.Reference == "" {
-		ref.Reference.Reference = main.Digest.String()
+	if ref.GetReference() == "" {
+		ref.Digest = main.Digest.String()
 		access.ImageReference = ref.String()
 	}
 
@@ -1108,7 +1062,7 @@ func (repo *Repository) resolveOwnershipSubject(ctx context.Context, component, 
 		if err != nil {
 			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to parse image reference %q: %w", typed.ImageReference, err)
 		}
-		subject, err := store.Resolve(ctx, ref.ReferenceOrTag())
+		subject, err := store.Resolve(ctx, ref.GetReference())
 		if err != nil {
 			return nil, ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to resolve subject %q for ownership referrer: %w", typed.ImageReference, err)
 		}
@@ -1184,7 +1138,7 @@ func (repo *Repository) DownloadResource(ctx context.Context, res *descriptor.Re
 	if res.Access.GetType().IsEmpty() {
 		return nil, fmt.Errorf("resource access type is empty")
 	}
-	return repo.download(ctx, res.Access)
+	return repo.download(ctx, res.Access, res)
 }
 
 // DownloadSource downloads a [*descriptor.Source] from the repository.
@@ -1198,13 +1152,14 @@ func (repo *Repository) DownloadSource(ctx context.Context, src *descriptor.Sour
 	if src.Access.GetType().IsEmpty() {
 		return nil, fmt.Errorf("source access type is empty")
 	}
-	return repo.download(ctx, src.Access)
+	return repo.download(ctx, src.Access, nil)
 }
 
 // download downloads an artifact specified by an access from the repository into a blob.ReadOnlyBlob.
 // An OCI image layer is fetched as raw content. Everything else delegates to downloadStream
-// and materializes the result into a tar-based OCI layout blob.
-func (repo *Repository) download(ctx context.Context, access runtime.Typed) (data blob.ReadOnlyBlob, err error) {
+// and materializes the result into a tar-based OCI layout blob. If res is set, the result is
+// bound to its digest.
+func (repo *Repository) download(ctx context.Context, access runtime.Typed, res *descriptor.Resource) (data blob.ReadOnlyBlob, err error) {
 	typed, err := repo.scheme.NewObject(access.GetType())
 	if err != nil {
 		return nil, fmt.Errorf("error creating resource access: %w", err)
@@ -1213,13 +1168,43 @@ func (repo *Repository) download(ctx context.Context, access runtime.Typed) (dat
 		return nil, fmt.Errorf("error converting resource access: %w", err)
 	}
 	if layer, ok := typed.(*accessv1.OCIImageLayer); ok {
-		return repo.downloadLayer(ctx, layer)
+		if res != nil {
+			// A generic digest of the layer's algorithm must equal the layer digest; fail before fetching.
+			if alg, ok := integrity.PrecomputeAlgorithm(res.Digest); ok && alg == layer.Digest.Algorithm() {
+				want, err := integrity.ParseDigest(res.Digest)
+				if err != nil {
+					return nil, fmt.Errorf("resource %q: %w", res.Name, err)
+				}
+				if want != layer.Digest {
+					return nil, fmt.Errorf("resource %q: digest mismatch: expected %s, got %s", res.Name, want, layer.Digest)
+				}
+			}
+		}
+		b, err := repo.downloadLayer(ctx, layer)
+		if err != nil || res == nil {
+			return b, err
+		}
+		// fetchLayer verified the content against the layer digest while loading it.
+		verified, err := integrity.VerifyPrecomputed(ctx, res.Digest, layer.Digest, b, integrity.WithArtifactVerifier(tar.LayoutVerifier{}), resourceLogAttrs(res))
+		if err != nil {
+			return nil, fmt.Errorf("resource %q: %w", res.Name, err)
+		}
+		return verified, nil
 	}
 	stream, err := repo.downloadStream(ctx, typed)
 	if err != nil {
 		return nil, err
 	}
+	if res != nil {
+		if err := integrity.VerifyOCIArtifact(ctx, res.Digest, stream.Root().Digest, resourceLogAttrs(res)); err != nil {
+			return nil, fmt.Errorf("resource %q: %w", res.Name, err)
+		}
+	}
 	return stream.Materialize(ctx)
+}
+
+func resourceLogAttrs(res *descriptor.Resource) integrity.Option {
+	return integrity.WithLogAttrs(slog.Any("resource", res.ToIdentity()))
 }
 
 func (repo *Repository) downloadLayer(ctx context.Context, layer *accessv1.OCIImageLayer) (blob.ReadOnlyBlob, error) {
@@ -1230,7 +1215,7 @@ func (repo *Repository) downloadLayer(ctx context.Context, layer *accessv1.OCIIm
 	if err != nil {
 		return nil, err
 	}
-	return fetchLayer(ctx, src, layerDescriptor(layer))
+	return fetchLayer(ctx, src, layerDescriptor(layer)), nil
 }
 
 // targetOCIImageAccess converts an upload target access into an OCI image access.
@@ -1454,7 +1439,7 @@ func (repo *Repository) downloadStream(ctx context.Context, access runtime.Typed
 			return nil, fmt.Errorf("error parsing image reference %q: %w", typed.ImageReference, err)
 		}
 
-		reference := resolved.ReferenceOrTag()
+		reference := resolved.GetReference()
 
 		desc, err := src.Resolve(ctx, reference)
 		if err != nil {
@@ -1505,7 +1490,7 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse target access image reference %q: %w", access.ImageReference, err)
 	}
-	if pinned, err := ref.Digest(); err == nil && pinned != rs.Root().Digest {
+	if pinned, err := ref.GetDigest(); err == nil && pinned != rs.Root().Digest {
 		return nil, fmt.Errorf("target access digest mismatch: expected %s, got %s", pinned, rs.Root().Digest)
 	}
 
@@ -1522,7 +1507,7 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 		if err := internaldigest.Complete(res.Digest, rs.Root().Digest, internaldigest.OCIArtifactDigestV1); err != nil {
 			return nil, fmt.Errorf("failed to complete resource digest: %w", err)
 		}
-	} else if err := internaldigest.VerifyOCIArtifact(res.Digest, rs.Root().Digest); err != nil {
+	} else if err := integrity.VerifyOCIArtifact(ctx, res.Digest, rs.Root().Digest, resourceLogAttrs(res)); err != nil {
 		return nil, fmt.Errorf("failed to verify resource digest: %w", err)
 	}
 
@@ -1544,8 +1529,8 @@ func (repo *Repository) UploadResourceStream(ctx context.Context, res *descripto
 	}
 
 	// if we don't have a pinned access we can pin it now.
-	if ref.Reference.Reference == "" {
-		ref.Reference.Reference = rs.Root().Digest.String()
+	if ref.GetReference() == "" {
+		ref.Digest = rs.Root().Digest.String()
 	}
 
 	access.ImageReference = ref.String()

@@ -9,13 +9,14 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/oras-project/oras-go/v3/registry/remote/auth"
+	"github.com/oras-project/oras-go/v3/registry/remote/credentials"
+	"github.com/oras-project/oras-go/v3/registry/remote/retry"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/log"
 	"github.com/testcontainers/testcontainers-go/modules/registry"
 	"golang.org/x/crypto/bcrypt"
-	"oras.land/oras-go/v2/registry/remote/auth"
-	"oras.land/oras-go/v2/registry/remote/retry"
 
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -50,7 +51,7 @@ func CreateAuthClient(address, username, password string) *auth.Client {
 		Header: http.Header{
 			"User-Agent": []string{"ocm.software/integration-test"},
 		},
-		Credential: auth.StaticCredential(url.Host, auth.Credential{
+		CredentialFunc: credentials.StaticCredentialFunc(url.Host, credentials.Credential{
 			Username: username,
 			Password: password,
 		}),
@@ -112,9 +113,13 @@ func CreateOCMConfigForRegistry(t *testing.T, opts []ConfigOpts) (string, error)
 	t.Helper()
 
 	cfgPath := filepath.Join(t.TempDir(), "ocmconfig.yaml")
+	// The test registries run without TLS, and an http:// prefix alone no
+	// longer selects plain HTTP: the HTTP configuration must say so.
 	cfg := `
 type: generic.config.ocm.software/v1
 configurations:
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true
 - type: credentials.config.ocm.software
   consumers:`
 

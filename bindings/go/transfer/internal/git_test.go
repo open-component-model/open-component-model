@@ -168,7 +168,7 @@ func TestBuildGraphDefinition_GitResource(t *testing.T) {
 			r.Equal(ociv1alpha1.OCIAddLocalResourceV1alpha1, tgd.Transformations[1].Type)
 			r.Equal(FileCleanupVersionedType, tgd.Transformations[3].Type)
 			r.Equal([]any{"${" + tgd.Transformations[1].ID + ".spec.file}"}, tgd.Transformations[3].Spec.Data["files"])
-			_, err = NewDefaultBuilder(nil, nil, nil, nil).BuildAndCheck(tgd)
+			_, err = NewDefaultBuilder(nil, nil, nil, nil, "").BuildAndCheck(tgd)
 			r.NoError(err, "default builder must resolve GetGitResource and its output references")
 		})
 	}
@@ -183,7 +183,7 @@ func TestBuildGraphDefinition_GitResource_WithoutUploaderKeepsUnpinnedByReferenc
 	r.NoError(err)
 	r.Len(tgd.Transformations, 1)
 	r.Equal(ociv1alpha1.OCIAddComponentVersionV1alpha1, tgd.Transformations[0].Type)
-	_, err = NewDefaultBuilder(nil, nil, nil, nil).BuildAndCheck(tgd)
+	_, err = NewDefaultBuilder(nil, nil, nil, nil, "").BuildAndCheck(tgd)
 	r.NoError(err)
 }
 

@@ -1,6 +1,6 @@
 ---
 title: "Add HTTP Resources"
-description: "Add a file served over HTTP or HTTPS to a component version with the Wget input or access type, then understand media types, credentials, non-GET requests, download tuning, and v1 migration."
+description: "Add a file served over HTTP or HTTPS to a component version with the Wget input or access type: media types, credentials, non-GET requests, and v1 migration."
 weight: 20
 toc: true
 aliases:
@@ -218,8 +218,8 @@ That writes a single file you can inspect or unpack with `tar -tf ./ocm-cli.tar`
 ## Authenticate against a protected server
 
 The release asset above is public. When accessing the URL requires authentication (an artifact repository, or a private
-GitHub asset), [configure credentials]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) of type `WgetCredentials` instead of putting them in the specification. OCM matches them to the request
-by a consumer identity of type `Wget` derived from the URL.
+GitHub asset), [configure credentials]({{< relref "docs/guides/transfer/configure-registry-credentials.md" >}}) of type `HTTPCredentials/v1` instead of putting them in the specification. OCM derives a `Wget` lookup identity
+from the URL, and a consumer entry of type `HTTP/v1` matches it after canonicalization.
 Another silent cause: an entry that sets only certificateAuthority without certificate. In OCM v2, certificateAuthority is only evaluated alongside a client certificate. It is not applied for server-side certificate verification on its own.
 
 Write the credentials to `.ocmconfig`:
@@ -231,11 +231,11 @@ configurations:
   - type: credentials.config.ocm.software
     consumers:
       - identity:
-          type: Wget
+          type: HTTP/v1
           hostname: downloads.example.com
           scheme: https
         credentials:
-          - type: WgetCredentials/v1
+          - type: HTTPCredentials/v1
             username: my-user
             password: my-password
 EOF
@@ -398,15 +398,15 @@ OCM v2 does **not** guess the media type from the file extension in the URL. OCM
 
 Credentials are resolved through OCM's normal [credential system]({{< relref "docs/concepts/credential-system.md" >}}). Never add authentication to a URL directly. OCM
 builds a [consumer identity]({{< relref "docs/reference/configuration/credential-consumer-identities.md#wget" >}}) of type `Wget` from
-the URL and uses the matching consumer entry's credentials for the request. Because the input type and the access type
+the URL (an `HTTP/v1` entry matches it after canonicalization) and uses the matching consumer entry's credentials for the request. Because the input type and the access type
 build that identity the same way, one entry will work for both, building the component version, and downloading the resource.
 For how identities are matched and resolved, see [Understand Credential Resolution]({{< relref "docs/concepts/credential-resolution.md" >}}).
 
-Wget's credential type is: `WgetCredentials/v1`.
+The HTTP credential type is: `HTTPCredentials/v1` (also registered as the legacy `WgetCredentials/v1`).
 
 ### Authentication methods {#auth-methods}
 
-`WgetCredentials/v1` supports three methods:
+`HTTPCredentials/v1` supports three methods:
 
 | Method                   | Fields                                                           | Sets                      |
 |--------------------------|------------------------------------------------------------------|---------------------------|
@@ -457,10 +457,12 @@ resources:
 **Only successful responses are accepted.** OCM accepts a 2xx status and fails on anything else. Redirects are followed by
 default. If you set `noRedirect: true`, the request fails.
 
-**Downloads are streamed to disk, not held in memory.** The response body is written straight to a temporary file, so
-memory use stays flat no matter how big the file is. There is no size limit by default. That temporary file is created
-under the `tempFolder` of the `filesystem.config.ocm.software/v1alpha1` attribute in the .ocmconfig configuration file, falling back to the operating
-system's temp directory if no configuration is provided.
+**Downloads are streamed, not held in memory or on disk.** The response body flows straight to wherever OCM stores or
+uploads it, so memory use stays flat no matter how big the file is. There is no size limit by default. Checksum and
+digest checks run while the body is read, so a mismatch fails that read. The request is sent only when the body is
+read. When OCM needs the size, media type, or advertised checksum before reading, for example to pack the resource
+into an OCI layer, a `GET` download sends a single `HEAD` request first. If the server refuses `HEAD`, these stay
+unknown until the body is read.
 
 **Timeouts, retries, and per-host settings** come from the `http.config.ocm.software/v1alpha1` configuration and apply
 to every Wget request:
@@ -468,8 +470,6 @@ to every Wget request:
 ```yaml
 type: generic.config.ocm.software/v1
 configurations:
-  - type: filesystem.config.ocm.software/v1alpha1
-    tempFolder: /var/tmp/ocm
   - type: http.config.ocm.software/v1alpha1
     timeout: 2m
     retry:
@@ -481,6 +481,10 @@ configurations:
 
 See [HTTP Client Configuration]({{< relref "docs/reference/configuration/http-client.md" >}}) for the full schema,
 defaults, and how per-host settings are merged.
+
+Because the body is streamed, a per-host `timeout` on the source host covers reading the whole body, and that read runs
+for as long as the target takes to store or upload it. When you transfer a large file to a slow target, set the
+source host's `timeout` high enough for the entire transfer, not just the download.
 
 ## Verifying downloads against the source {#checksum-verification}
 
@@ -503,7 +507,7 @@ Identity matching has been updated.
 
 | Field             | OCM v1                             | OCM v2             | What to do                                                                               |
 |-------------------|------------------------------------|--------------------|------------------------------------------------------------------------------------------|
-| Consumer identity | `type: wget`                       | `type: Wget`       | Rename the type.                                                                         |
+| Consumer identity | `type: wget`                       | `type: HTTP/v1`    | Rename the type (`Wget` also works).                                                     |
 | Identity path     | `pathprefix`, longest-prefix match | `path`, glob match | Rename the attribute. `*` matches one path segment, `**` any depth; omit `path` for all. |
 
 Further matching changes:
@@ -540,12 +544,12 @@ needs an explicit `mediaType`.
 
 **Fix:** Check the credentials first, then check that the entry matches. `hostname` must equal the URL host; `scheme`,
 `port`, and `path` narrow the match only when set, so the broadest entry is the one that sets only `hostname`. See
-[Credential Consumer Identities: Wget]({{< relref "docs/reference/configuration/credential-consumer-identities.md#wget" >}}).
+[Credential Consumer Identities: HTTP]({{< relref "docs/reference/configuration/credential-consumer-identities.md#wget" >}}).
 
 ### `401 Unauthorized` right after migrating from OCM v1
 
-**Why:** Two identity attributes were renamed. `type: wget` MUST become `type: Wget`, and `pathprefix` is replaced by
-`path`. OCM v2 still converts `pathprefix` into `path` patterns, but the type has to be renamed.
+**Why:** Two identity attributes were renamed. `type: wget` MUST become `type: HTTP/v1` (the legacy `Wget` spelling also
+works), and `pathprefix` is replaced by `path`. OCM v2 still converts `pathprefix` into `path` patterns.
 
 **Fix:** Rename the type and replace `pathprefix` with `path`. Omitting `path` matches every path on the host. See
 [Credential changes](#credential-changes).
@@ -586,7 +590,7 @@ isn't, the content changed.
 - [Reference: Resource Repositories]({{< relref "docs/reference/resource-repositories.md" >}}) - Capabilities,
   credential resolution, and digest processing of the Wget resource repository
 - [Reference: Credential Consumer Identities]({{< relref "docs/reference/configuration/credential-consumer-identities.md#wget" >}}) -
-  Identity attributes and matching rules for `Wget` consumers
+  Identity attributes and matching rules for `HTTP/v1` consumers
 - [Reference: Credential Types]({{< relref "docs/reference/configuration/credential-types.md#wgetcredentialsv1" >}}) - Full field
   reference for `WgetCredentials/v1`
 - [Reference: HTTP Client Configuration]({{< relref "docs/reference/configuration/http-client.md" >}}) - Timeouts,

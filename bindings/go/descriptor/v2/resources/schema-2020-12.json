@@ -449,7 +449,8 @@
           "$ref": "#/$defs/ocmType"
         },
         "srcRefs": {
-          "description": "References to sources that produced this resource",
+          "description": "References to sources that produced this resource. DEPRECATED: sources are deprecated; link the resource to the resource it was built from with the ocm.software/artifact-references label instead. See https://ocm.software/docs/changelog/migrate-from-sources/",
+          "deprecated": true,
           "anyOf": [
             {
               "type": "array",
@@ -567,7 +568,8 @@
           ]
         },
         "sources": {
-          "description": "Sources that produced the component",
+          "description": "Sources that produced the component. DEPRECATED: sources carry no digest, so their content is not covered by the component version digest or any signature and can be replaced without detection. Declare the content as resources instead, see https://ocm.software/docs/changelog/migrate-from-sources/",
+          "deprecated": true,
           "anyOf": [
             {
               "type": "array",

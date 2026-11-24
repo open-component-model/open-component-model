@@ -19,7 +19,7 @@ type CTFGetComponentVersion struct {
 	Type   runtime.Type                  `json:"type"`
 	ID     string                        `json:"id,omitempty"`
 	Spec   *CTFGetComponentVersionSpec   `json:"spec"`
-	Output *CTFGetComponentVersionOutput `json:"output,omitempty"`
+	Output *CTFGetComponentVersionOutput `json:"output,omitzero"`
 }
 
 // CTFGetComponentVersionOutput is the output specification of the

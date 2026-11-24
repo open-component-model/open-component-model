@@ -51,7 +51,6 @@ resources:
 		"add", "cv",
 		"--constructor", constructor,
 		"--repository", archive,
-		"--component-version-conflict-policy", "replace",
 	))
 	r.NoError(err, "could not add component version")
 }
@@ -273,7 +272,8 @@ func Test_Pinned_Reference(t *testing.T) {
 				reference, _ = entry.Extras["reference"].(string)
 			}
 		}
-		r.True(strings.HasSuffix(reference, archive+"//"+pinComponent+":"+pinVersion+"@"+verified), "reference %q pins the verified artifact", reference)
+		// compref normalizes Windows path separators to forward slashes.
+		r.True(strings.HasSuffix(reference, filepath.ToSlash(archive)+"//"+pinComponent+":"+pinVersion+"@"+verified), "reference %q pins the verified artifact", reference)
 
 		// Tamper with the tag between verify and use: the reference still names the verified content.
 		addPinTestVersion(t, archive, "tampered", "third")

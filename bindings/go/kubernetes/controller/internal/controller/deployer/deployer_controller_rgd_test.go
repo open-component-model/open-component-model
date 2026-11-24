@@ -5,7 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"os"
 
@@ -104,7 +104,7 @@ func setupCTFWithResource(
 		FilePath:   ctfPath,
 		AccessMode: ctfv1.AccessModeReadOnly,
 	}
-	specData, err := json.Marshal(repoSpec)
+	specData, err := json.Marshal(repoSpec, runtime.JSONOptions)
 	if err != nil {
 		return "", nil, err
 	}

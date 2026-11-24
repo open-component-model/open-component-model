@@ -1,11 +1,10 @@
 package transformation_test
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -14,11 +13,12 @@ import (
 	"helm.sh/helm/v4/pkg/provenance"
 	"helm.sh/helm/v4/pkg/registry"
 
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	filesystemaccess "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access"
 	filev1alpha1 "ocm.software/open-component-model/bindings/go/blob/filesystem/spec/access/v1alpha1"
 	descv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/helm/spec/access"
-	"ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
+	v1 "ocm.software/open-component-model/bindings/go/helm/spec/access/v1"
 	"ocm.software/open-component-model/bindings/go/helm/transformation"
 	"ocm.software/open-component-model/bindings/go/helm/transformation/spec/v1alpha1"
 	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
@@ -71,7 +71,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 			ID:   "test-convert-helm-to-oci",
 			Spec: &v1alpha1.ConvertHelmToOCISpec{
 				ChartFile: filev1alpha1.File{
-					URI: "file://" + chartPath,
+					URI: fileURI(t, chartPath),
 				},
 				Resource: &descv2.Resource{
 					ElementMeta: descv2.ElementMeta{
@@ -101,11 +101,16 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 		r.Equal("ociArtifactDigest/v1", output.Output.Resource.Digest.NormalisationAlgorithm)
 
 		// Verify the output file was created
-		ociPath := strings.TrimPrefix(output.Output.File.URI, "file://")
+		ociPath := filePath(t, output.Output.File.URI)
 		assert.FileExists(t, ociPath)
 		t.Cleanup(func() {
 			_ = os.RemoveAll(ociPath)
 		})
+
+		// Only the output file stays behind: the layout is built in a temporary file first.
+		leftovers, err := filepath.Glob(filepath.Join(outputDir, "oci-layout-*"))
+		r.NoError(err)
+		r.Empty(leftovers)
 
 		// Verify it is a valid OCI layout with a helm chart layer
 		verifyOCILayout(t, ociPath, "mychart", "0.1.0", false)
@@ -133,7 +138,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 		helmAccessData, err := json.Marshal(map[string]string{
 			"helmRepository": "https://example.com",
 			"helmChart":      "mychart:0.1.0",
-		})
+		}, runtime.JSONOptions)
 		r.NoError(err)
 
 		spec := &v1alpha1.ConvertHelmToOCI{
@@ -141,10 +146,10 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 			ID:   "test-convert-helm-to-oci-prov",
 			Spec: &v1alpha1.ConvertHelmToOCISpec{
 				ChartFile: filev1alpha1.File{
-					URI: "file://" + chartPath,
+					URI: fileURI(t, chartPath),
 				},
 				ProvFile: &filev1alpha1.File{
-					URI: "file://" + provPath,
+					URI: fileURI(t, provPath),
 				},
 				Resource: &descv2.Resource{
 					ElementMeta: descv2.ElementMeta{
@@ -177,7 +182,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 		r.NotNil(output.Output.Resource.Digest)
 		r.NotEmpty(output.Output.Resource.Digest.Value)
 
-		ociPath := strings.TrimPrefix(output.Output.File.URI, "file://")
+		ociPath := filePath(t, output.Output.File.URI)
 		assert.FileExists(t, ociPath)
 		t.Cleanup(func() {
 			_ = os.RemoveAll(ociPath)
@@ -208,7 +213,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 		helmAccessData, err := json.Marshal(map[string]string{
 			"helmRepository": "https://example.com",
 			"helmChart":      "mychart:0.1.0",
-		})
+		}, runtime.JSONOptions)
 		r.NoError(err)
 
 		spec := &v1alpha1.ConvertHelmToOCI{
@@ -216,7 +221,7 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 			ID:   "test-convert-no-output-path",
 			Spec: &v1alpha1.ConvertHelmToOCISpec{
 				ChartFile: filev1alpha1.File{
-					URI: "file://" + chartPath,
+					URI: fileURI(t, chartPath),
 				},
 				Resource: &descv2.Resource{
 					ElementMeta: descv2.ElementMeta{
@@ -249,13 +254,69 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 		r.NotNil(output.Output.Resource.Digest)
 		r.NotEmpty(output.Output.Resource.Digest.Value)
 
-		ociPath := strings.TrimPrefix(output.Output.File.URI, "file://")
+		ociPath := filePath(t, output.Output.File.URI)
 		assert.FileExists(t, ociPath)
 		t.Cleanup(func() {
 			_ = os.RemoveAll(ociPath)
 		})
 
 		verifyOCILayout(t, ociPath, "mychart", "0.1.0", false)
+	})
+
+	t.Run("removes the buffered layout when a later step fails", func(t *testing.T) {
+		t.Parallel()
+		r := require.New(t)
+		ctx := t.Context()
+		tempDir := t.TempDir()
+
+		chartPath, err := filepath.Abs(filepath.Join(testDataDir, "mychart-0.1.0.tgz"))
+		r.NoError(err)
+
+		transform := &transformation.ConvertHelmChartToOCI{
+			Scheme:  scheme,
+			TempDir: tempDir,
+		}
+
+		// Without a chart name the OCI image reference cannot be constructed, which fails
+		// after the layout has been written to the buffered file.
+		helmAccessData, err := json.Marshal(map[string]string{
+			"helmRepository": "https://example.com",
+			"version":        "0.1.0",
+		}, runtime.JSONOptions)
+		r.NoError(err)
+
+		spec := &v1alpha1.ConvertHelmToOCI{
+			Type: runtime.NewVersionedType(v1alpha1.ConvertHelmToOCIType, v1alpha1.Version),
+			ID:   "test-convert-cleanup-on-error",
+			Spec: &v1alpha1.ConvertHelmToOCISpec{
+				ChartFile: filev1alpha1.File{
+					URI: fileURI(t, chartPath),
+				},
+				Resource: &descv2.Resource{
+					ElementMeta: descv2.ElementMeta{
+						ObjectMeta: descv2.ObjectMeta{
+							Name:    "mychart",
+							Version: "0.1.0",
+						},
+					},
+					Type: "helmChart",
+					Access: &runtime.Raw{
+						Type: runtime.Type{
+							Name:    "helm",
+							Version: "v1",
+						},
+						Data: helmAccessData,
+					},
+				},
+			},
+		}
+
+		_, err = transform.Transform(ctx, spec)
+		r.Error(err)
+
+		entries, err := os.ReadDir(tempDir)
+		r.NoError(err)
+		r.Empty(entries, "the buffered layout must not survive a failed transformation")
 	})
 
 	t.Run("fails when spec is nil", func(t *testing.T) {
@@ -304,7 +365,7 @@ func verifyOCILayout(t *testing.T, ociPath, expectedName, expectedVersion string
 	})
 
 	manifest := ociImageSpecV1.Manifest{}
-	r.NoError(json.NewDecoder(manifestRaw).Decode(&manifest))
+	r.NoError(json.UnmarshalRead(manifestRaw, &manifest))
 
 	// Verify config layer
 	assert.Equal(t, registry.ConfigMediaType, manifest.Config.MediaType)
@@ -316,7 +377,7 @@ func verifyOCILayout(t *testing.T, ociPath, expectedName, expectedVersion string
 		r.NoError(configRaw.Close())
 	})
 	var config map[string]string
-	r.NoError(json.NewDecoder(configRaw).Decode(&config))
+	r.NoError(json.UnmarshalRead(configRaw, &config))
 	assert.Equal(t, expectedName, config["name"])
 	assert.Equal(t, expectedVersion, config["version"])
 
@@ -357,7 +418,7 @@ func verifyProvenance(t *testing.T, ociPath, gpgKeyPath, keyID, chartFileName st
 	})
 
 	manifest := ociImageSpecV1.Manifest{}
-	r.NoError(json.NewDecoder(manifestRaw).Decode(&manifest))
+	r.NoError(json.UnmarshalRead(manifestRaw, &manifest))
 	r.Len(manifest.Layers, 2)
 
 	chartLayer, err := store.Fetch(ctx, manifest.Layers[0])
@@ -397,4 +458,12 @@ func openFileAsBlob(path string) (*fileBlob, error) {
 
 func (f *fileBlob) ReadCloser() (io.ReadCloser, error) {
 	return os.Open(f.path)
+}
+
+// fileURI is the file:// URI of the absolute path p.
+func fileURI(t *testing.T, p string) string {
+	t.Helper()
+	uri, err := filesystem.URIFromFilePath(p)
+	require.NoError(t, err)
+	return uri
 }

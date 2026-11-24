@@ -11,11 +11,13 @@ package v1
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2/content"
+	"github.com/oras-project/oras-go/v3/content"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // MediaType defines the media type for OCM Component Index.
@@ -90,7 +92,7 @@ func CreateIfNotExists(ctx context.Context, store Store) error {
 	}
 
 	// Create the index if it does not exist
-	indexRaw, err := json.Marshal(Manifest)
+	indexRaw, err := json.Marshal(Manifest, runtime.JSONOptions)
 	if err != nil {
 		return err
 	}

@@ -4,7 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -13,10 +13,10 @@ import (
 	"strings"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
-	"oras.land/oras-go/v2/content"
+	"github.com/oras-project/oras-go/v3/content"
 
 	"ocm.software/open-component-model/bindings/go/blob"
-	"ocm.software/open-component-model/bindings/go/blob/inmemory"
+	"ocm.software/open-component-model/bindings/go/blob/direct"
 	"ocm.software/open-component-model/bindings/go/blob/transformer"
 	"ocm.software/open-component-model/bindings/go/configuration/extract/v1alpha1/spec"
 	ocitar "ocm.software/open-component-model/bindings/go/oci/tar"
@@ -91,21 +91,13 @@ func (t *Transformer) extractOCIArtifact(ctx context.Context, store content.Fetc
 		err = errors.Join(err, manifestReader.Close())
 	}()
 
-	manifestData, err := io.ReadAll(manifestReader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read manifest data: %w", err)
-	}
-
 	var manifest ociImageSpecV1.Manifest
-	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+	if err := json.UnmarshalRead(manifestReader, &manifest); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal manifest: %w", err)
 	}
 
 	var tarBuffer bytes.Buffer
 	tarWriter := tar.NewWriter(&tarBuffer)
-	defer func() {
-		err = errors.Join(err, tarWriter.Close())
-	}()
 
 	// Helm is a special snowflake. The filename for the generated output needs to follow a specific naming convention.
 	// The filename needs to be chartname-version.tgz for charts and chartname-version.tgz.prov for provenance.
@@ -131,10 +123,11 @@ func (t *Transformer) extractOCIArtifact(ctx context.Context, store content.Fetc
 		}
 	}
 
-	resultBlob := inmemory.New(bytes.NewReader(tarBuffer.Bytes()))
-	resultBlob.SetMediaType("application/tar")
+	if err := tarWriter.Close(); err != nil {
+		return nil, fmt.Errorf("failed to finalize tar archive: %w", err)
+	}
 
-	return resultBlob, nil
+	return direct.NewFromBytes(tarBuffer.Bytes(), direct.WithMediaType("application/tar")), nil
 }
 
 // processRuleWithHelm processes layers that match the rule's selectors into a single tar file, with Helm-aware filename handling.
@@ -231,13 +224,8 @@ func (t *Transformer) extractHelmMetadata(ctx context.Context, store content.Fet
 	}
 	defer configReader.Close()
 
-	configData, err := io.ReadAll(configReader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read Helm config data: %w", err)
-	}
-
 	var metadata helmChartMetadata
-	if err := json.Unmarshal(configData, &metadata); err != nil {
+	if err := json.UnmarshalRead(configReader, &metadata); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal Helm config: %w", err)
 	}
 

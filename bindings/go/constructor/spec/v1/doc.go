@@ -1,11 +1,13 @@
 // Package v1 provides the core data structures for constructing components in the Open Component Model (OCM).
 //
 // The component constructor defines the structure for creating and managing components, including:
-// - Component metadata and identity
-// - Resources (delivery artifacts)
-// - Sources (artifacts used to generate resources)
-// - References to other components
-// - Access and input specifications
+//   - Component metadata and identity
+//   - Resources (delivery artifacts)
+//   - Sources (DEPRECATED: sources carry no digest, so their content is not covered by
+//     the component version digest or any signature; declare such content as resources,
+//     see https://ocm.software/docs/changelog/migrate-from-sources/)
+//   - References to other components
+//   - Access and input specifications
 //
 // This package implements the component constructor specification, which is differing
 // from the component descriptor specification.

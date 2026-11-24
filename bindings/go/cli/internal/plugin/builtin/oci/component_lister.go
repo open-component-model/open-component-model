@@ -34,7 +34,10 @@ func (l *CTFComponentListerPlugin) GetComponentLister(ctx context.Context, repos
 		return nil, errors.Join(ErrWrongUsage, fmt.Errorf("not a CTF repository type: %T", repositorySpecification))
 	}
 
-	archive, err := ctf.OpenCTFFromOSPath(ctfRepoSpec.FilePath, ctf.O_RDONLY)
+	archive, _, err := ctf.OpenCTFByFileExtension(ctx, ctf.OpenCTFOptions{
+		Path: ctfRepoSpec.FilePath,
+		Flag: ctf.O_RDONLY,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("error opening CTF archive: %w", err)
 	}

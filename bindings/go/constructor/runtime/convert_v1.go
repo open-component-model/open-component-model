@@ -21,6 +21,7 @@ func ConvertFromV1Labels(labels []v1.Label) []Label {
 			Name:    label.Name,
 			Value:   label.Value,
 			Signing: label.Signing,
+			Version: label.Version,
 		}
 	}
 	return result
@@ -38,6 +39,7 @@ func ConvertToV1Labels(labels []Label) []v1.Label {
 			Name:    label.Name,
 			Value:   label.Value,
 			Signing: label.Signing,
+			Version: label.Version,
 		}
 	}
 	return result
@@ -101,6 +103,34 @@ func ConvertToV1ResourceOptions(o ResourceOptions) *v1.ResourceOptions {
 	return &v1.ResourceOptions{OwnershipPolicy: v1.OwnershipPolicy(o.OwnershipPolicy)}
 }
 
+// ConvertFromV1SourceRefs converts v1 SourceRefs to runtime SourceRefs.
+// Returns nil if the input slice is nil.
+func ConvertFromV1SourceRefs(refs []v1.SourceRef) []SourceRef {
+	if refs == nil {
+		return nil
+	}
+	n := make([]SourceRef, len(refs))
+	for i := range refs {
+		n[i].IdentitySelector = maps.Clone(refs[i].IdentitySelector)
+		n[i].Labels = ConvertFromV1Labels(refs[i].Labels)
+	}
+	return n
+}
+
+// ConvertToV1SourceRefs converts runtime SourceRefs to v1 SourceRefs.
+// Returns nil if the input slice is nil.
+func ConvertToV1SourceRefs(refs []SourceRef) []v1.SourceRef {
+	if refs == nil {
+		return nil
+	}
+	n := make([]v1.SourceRef, len(refs))
+	for i := range refs {
+		n[i].IdentitySelector = maps.Clone(refs[i].IdentitySelector)
+		n[i].Labels = ConvertToV1Labels(refs[i].Labels)
+	}
+	return n
+}
+
 // ConvertFromV1Resource converts a v1 Resource to runtime Resource.
 // Returns an empty Resource if the input is nil.
 func ConvertFromV1Resource(resource *v1.Resource) Resource {
@@ -114,16 +144,7 @@ func ConvertFromV1Resource(resource *v1.Resource) Resource {
 		Relation:    ResourceRelation(resource.Relation),
 		Options:     ConvertFromV1ResourceOptions(resource.Options),
 		Digest:      ConvertFromV1Digest(resource.Digest),
-	}
-
-	if resource.SourceRefs != nil {
-		target.SourceRefs = make([]SourceRef, len(resource.SourceRefs))
-		for i, ref := range resource.SourceRefs {
-			target.SourceRefs[i] = SourceRef{
-				IdentitySelector: maps.Clone(ref.IdentitySelector),
-				Labels:           ConvertFromV1Labels(ref.Labels),
-			}
-		}
+		SourceRefs:  ConvertFromV1SourceRefs(resource.SourceRefs),
 	}
 
 	if resource.Access != nil {
@@ -149,16 +170,7 @@ func ConvertToV1Resource(resource *Resource) (*v1.Resource, error) {
 		Relation:    v1.ResourceRelation(resource.Relation),
 		Options:     ConvertToV1ResourceOptions(resource.Options),
 		Digest:      ConvertToV1Digest(resource.Digest),
-	}
-
-	if resource.SourceRefs != nil {
-		target.SourceRefs = make([]v1.SourceRef, len(resource.SourceRefs))
-		for i, ref := range resource.SourceRefs {
-			target.SourceRefs[i] = v1.SourceRef{
-				IdentitySelector: maps.Clone(ref.IdentitySelector),
-				Labels:           ConvertToV1Labels(ref.Labels),
-			}
-		}
+		SourceRefs:  ConvertToV1SourceRefs(resource.SourceRefs),
 	}
 
 	if resource.HasInput() {
@@ -319,6 +331,7 @@ func ConvertToRuntimeConstructorResource(resource v1.Resource) Resource {
 		Relation:    ResourceRelation(resource.Relation),
 		Options:     ConvertFromV1ResourceOptions(resource.Options),
 		Digest:      ConvertFromV1Digest(resource.Digest),
+		SourceRefs:  ConvertFromV1SourceRefs(resource.SourceRefs),
 	}
 
 	if resource.HasInput() {

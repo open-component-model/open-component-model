@@ -2,22 +2,25 @@ package oci
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3"
 	"helm.sh/helm/v4/pkg/registry"
-	"oras.land/oras-go/v2"
 
+	"ocm.software/open-component-model/bindings/go/blob/compression/gzippool"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/helm/internal"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/oci/tar"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // Result holds both the OCI layout blob and the manifest descriptor produced by CopyChartToOCILayout.
@@ -29,28 +32,52 @@ type Result struct {
 // CopyChartToOCILayout takes a ChartData helper object and creates an OCI layout from it.
 // Three OCI layers are expected: config, tgz contents and optionally a provenance file.
 // The result is tagged with the helm chart version.
-// The OCI layout is written to a temporary file in dir and returned as a file-backed blob.
+//
+// The OCI layout is written to the file at path, which is created or truncated, and
+// returned as a blob backed by it. Intermediate data is buffered in the directory of path.
+// The caller owns the file: it removes it when this call fails or the blob is no longer read.
 // See also: https://github.com/helm/community/blob/main/hips/hip-0006.md#2-support-for-provenance-files
-func CopyChartToOCILayout(ctx context.Context, chart *internal.ChartData, dir string) (*Result, error) {
-	tmpFile, err := os.CreateTemp(dir, "oci-layout-*.tar.gz")
+func CopyChartToOCILayout(ctx context.Context, chart *internal.ChartData, path string) (*Result, error) {
+	file, err := os.Create(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create temp file for OCI layout: %w", err)
+		return nil, fmt.Errorf("failed to open file for OCI layout: %w", err)
 	}
-	defer func(tmpFile *os.File) {
-		_ = tmpFile.Close()
-	}(tmpFile)
 
-	zippedBuf := gzip.NewWriter(tmpFile)
+	imgDesc, err := writeOCILayout(ctx, chart, file, filepath.Dir(path))
+	// The file is closed before it is handed out: an open file can be neither
+	// removed nor have its directory removed on windows.
+	if err = errors.Join(err, file.Close()); err != nil {
+		return nil, err
+	}
+
+	blob, err := filesystem.GetBlobFromOSPath(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create blob from OCI layout file: %w", err)
+	}
+	blob.SetMediaType(layout.MediaTypeOCIImageLayoutTarGzipV1)
+
+	return &Result{Blob: blob, Desc: &imgDesc}, nil
+}
+
+// writeOCILayout writes the chart as a gzipped OCI layout tagged with the chart version
+// to out, buffering the layout in dir.
+func writeOCILayout(ctx context.Context, chart *internal.ChartData, out io.Writer, dir string) (_ ociImageSpecV1.Descriptor, err error) {
+	zippedBuf := gzippool.Get(out)
+	defer gzippool.Put(zippedBuf)
 
 	target, err := tar.NewOCILayoutWriterWithTempFile(zippedBuf, dir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create OCI layout writer: %w", err)
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to create OCI layout writer: %w", err)
 	}
+	// Releases the buffer file on failure; after the explicit Close below this is a no-op.
+	defer func() {
+		err = errors.Join(err, target.Close())
+	}()
 
 	// Generate and push layers based on the chart to the OCI layout.
 	configLayer, chartLayer, provLayer, err := pushChartAndGenerateLayers(ctx, chart, target)
 	if err != nil {
-		return nil, fmt.Errorf("failed to push chart layers: %w", err)
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to push chart layers: %w", err)
 	}
 
 	layers := []ociImageSpecV1.Descriptor{*chartLayer}
@@ -64,24 +91,18 @@ func CopyChartToOCILayout(ctx context.Context, chart *internal.ChartData, dir st
 		Layers:           layers,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to create OCI image manifest: %w", err)
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to create OCI image manifest: %w", err)
 	}
 
 	if err := target.Tag(ctx, imgDesc, chart.Version); err != nil {
-		return nil, fmt.Errorf("failed to tag OCI image: %w", err)
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to tag OCI image: %w", err)
 	}
 
 	if err := errors.Join(target.Close(), zippedBuf.Close()); err != nil {
-		return nil, fmt.Errorf("failed to finalize OCI layout: %w", err)
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to finalize OCI layout: %w", err)
 	}
 
-	blob, err := filesystem.GetBlobFromOSPath(tmpFile.Name())
-	if err != nil {
-		return nil, fmt.Errorf("failed to create blob from OCI layout file: %w", err)
-	}
-	blob.SetMediaType(layout.MediaTypeOCIImageLayoutTarGzipV1)
-
-	return &Result{Blob: blob, Desc: &imgDesc}, nil
+	return imgDesc, nil
 }
 
 func pushChartAndGenerateLayers(ctx context.Context, chart *internal.ChartData, target oras.Target) (
@@ -116,7 +137,7 @@ func pushConfigLayer(ctx context.Context, name, version string, target oras.Targ
 	}
 
 	config := chartConfig{Name: name, Version: version}
-	jsonConfig, err := json.Marshal(config)
+	jsonConfig, err := json.Marshal(config, runtime.JSONOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal helm chart config to JSON: %w", err)
 	}

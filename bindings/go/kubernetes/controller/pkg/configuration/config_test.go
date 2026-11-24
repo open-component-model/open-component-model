@@ -2,6 +2,7 @@ package configuration
 
 import (
 	"context"
+	"encoding/json/v2"
 	"strings"
 	"testing"
 	"time"
@@ -682,7 +683,7 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 		}
 		for _, entry := range entries {
 			raw := &ocmruntime.Raw{}
-			require.NoError(t, raw.UnmarshalJSON([]byte(entry)))
+			require.NoError(t, json.Unmarshal([]byte(entry), raw))
 			cfg.Configurations = append(cfg.Configurations, raw)
 		}
 		return cfg
@@ -863,6 +864,21 @@ func TestFilterAllowedConfigTypes(t *testing.T) {
 		cfg := makeGenericConfig(
 			`{"type":"http.config.ocm.software/v1alpha1","timeout":"45s"}`,
 			`{"type":"filesystem.config.ocm.software/v1alpha1","tempFolder":"/etc","workingDirectory":"/etc"}`,
+		)
+		result, err := filterAllowedConfigTypes(t.Context(), cfg)
+		require.NoError(t, err)
+		require.Len(t, result.Configurations, 1)
+		assert.Equal(t,
+			ocmruntime.NewVersionedType(httpv1alpha1.ConfigType, httpv1alpha1.Version),
+			result.Configurations[0].GetType(),
+		)
+	})
+
+	t.Run("oci cache config is dropped", func(t *testing.T) {
+		cfg := makeGenericConfig(
+			`{"type":"http.config.ocm.software/v1alpha1","timeout":"45s"}`,
+			`{"type":"oci.cache.config.ocm.software/v1alpha1","remotePolicy":"IfNotPresent"}`,
+			`{"type":"oci.cache.config.ocm.software","remotePolicy":"IfNotPresent"}`,
 		)
 		result, err := filterAllowedConfigTypes(t.Context(), cfg)
 		require.NoError(t, err)

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"slices"
@@ -58,6 +58,7 @@ var allowedConfigTypes = slices.Concat(
 		transferspec.LocalBlobUploaderConfigType,
 		transferspec.ReferenceUploaderConfigType,
 	),
+	// oci.cache.config.ocm.software stays out: one blob cache serves every namespace (see --ocm-config).
 	[]runtime.Type{
 		runtime.NewVersionedType(httpv1alpha1.ConfigType, httpv1alpha1.Version),
 		runtime.NewUnversionedType(httpv1alpha1.ConfigType),
@@ -263,13 +264,10 @@ func LoadConfigurations(ctx context.Context, k8sClient client.Reader, namespace 
 		return nil, fmt.Errorf("failed to apply config type allowlist: %w", err)
 	}
 
-	content, err := json.Marshal(filtered)
-	if err != nil {
+	hasher := sha256.New()
+	if err := json.MarshalWrite(hasher, filtered, runtime.JSONOptions); err != nil {
 		return nil, err
 	}
-
-	hasher := sha256.New()
-	hasher.Write(content)
 	hash := hasher.Sum(nil)
 
 	result := Configuration{

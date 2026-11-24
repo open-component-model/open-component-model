@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -117,6 +118,40 @@ func TestResolveCommit_APIHostnameOverridesTheRepoHost(t *testing.T) {
 	assert.Equal(t, wantSHA, got)
 	assert.True(t, strings.HasPrefix(pathSeen, "/api/v3/"),
 		"the override host must be addressed as GitHub Enterprise, got %q", pathSeen)
+}
+
+// go-github's authenticated client follows redirects on API calls. The token
+// must reach the configured API origin but not a redirect target on another
+// origin. go-github v93 scopes the token to the configured origins; v92 sent it
+// on every hop, so this pins that behaviour against future go-github bumps.
+func TestResolveCommit_CrossOriginRedirectDropsToken(t *testing.T) {
+	const ref = "main"
+	const wantSHA = "7fd1a60b01f91b314f59955a4e4d4e80d8edf11d"
+
+	var foreignAuth []string
+	foreign := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		foreignAuth = r.Header.Values("Authorization")
+		_, _ = w.Write([]byte(wantSHA))
+	}))
+	defer foreign.Close()
+
+	var apiAuth []string
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/repos/octocat/Hello-World/commits/"+ref) {
+			apiAuth = r.Header.Values("Authorization")
+			http.Redirect(w, r, foreign.URL+r.URL.Path, http.StatusTemporaryRedirect)
+			return
+		}
+		http.Error(w, "unexpected path "+r.URL.Path, http.StatusNotFound)
+	}))
+	defer api.Close()
+
+	access := &v1.GitHub{RepoURL: api.URL + "/octocat/Hello-World", Ref: ref}
+	got, err := ResolveCommit(t.Context(), access, &credsv1.GitHubCredentials{Token: "ghp_secret"}, api.Client())
+	require.NoError(t, err)
+	assert.Equal(t, wantSHA, got)
+	assert.Equal(t, []string{"Bearer ghp_secret"}, apiAuth, "the configured API origin must receive the token")
+	assert.Nil(t, foreignAuth, "a redirect to another origin must not carry the token")
 }
 
 func TestResolveCommit_UnresolvableRef(t *testing.T) {
@@ -283,5 +318,9 @@ func TestFetch_DownloadErrorDoesNotLeakTheSignedArchiveLink(t *testing.T) {
 	assert.Contains(t, err.Error(), "octocat/Hello-World@"+commit,
 		"the commit coordinates must survive so the failure stays diagnosable")
 	assert.Contains(t, err.Error(), "token="+redactedToken, "the signed link's token must be visibly redacted, not silently dropped")
-	assert.ErrorContains(t, err, "connection refused", "the underlying cause must survive")
+	// The dial error's wording is OS specific ("connection refused" vs. "actively refused it").
+	var dialErr *net.OpError
+	require.ErrorAs(t, err, &dialErr, "the underlying cause must survive")
+	assert.Equal(t, "dial", dialErr.Op)
+	assert.ErrorContains(t, err, dialErr.Err.Error(), "the underlying cause must stay readable")
 }

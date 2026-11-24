@@ -101,7 +101,10 @@ add component-version --repository localhost:5000/my-repo --constructor componen
 Specifying repository types explicitly:
 
 add component-version --repository ctf::./local/archive --constructor component-constructor.yaml
-add component-version --repository oci::http://localhost:8080/my-repo --constructor component-constructor.yaml
+add component-version --repository oci::localhost:8080/my-repo --constructor component-constructor.yaml
+
+A registry without TLS needs plainHTTP in the HTTP client configuration; an http:// prefix on the
+repository is deprecated and fails without it (see https://ocm.software/docs/changelog/migrate-from-http-prefixes/).
 
 Using environment variables in "component-constructor" files:
 
@@ -114,23 +117,23 @@ add component-version --repository ./archive --constructor component-constructor
 ### Options
 
 ```
-      --blob-cache-directory string                   path to the blob cache directory (default ".ocm/cache")
-      --component-version-conflict-policy enum        policy to apply when a component version already exists in the repository
-                                                      (must be one of [abort-and-fail replace skip]) (default abort-and-fail)
-      --concurrency-limit int                         maximum number of component versions that can be constructed concurrently. (default 4)
-  -c, --constructor path                              path to the component constructor file (default component-constructor.yaml)
-      --display-mode enum                             static: print the output once the complete component graph is discovered
-                                                        live (experimental): continuously updates the output to represent the current construction state of the component graph
-                                                      (must be one of [live static]) (default static)
-      --external-component-version-copy-policy enum   policy to apply when a component reference to a component version outside of the constructor or target repository is encountered
-                                                      (must be one of [copy-or-fail skip]) (default skip)
-  -h, --help                                          help for component-version
-      --layout enum                                   component version storage layout: v2 (manifest with the full descriptor) or normalized (manifest with the normalized descriptor as its only layer; the manifest digest is stable across registries and can be signed with cosign). When not set, a version that already exists keeps its layout and a new version uses v2
-                                                      (must be one of [normalized v2])
-  -o, --output enum                                   output format of the component descriptors
-                                                      (must be one of [json ndjson table tree yaml]) (default table)
-  -r, --repository string                             repository ref (default "transport-archive")
-      --skip-reference-digest-processing              skip digest processing for resources and sources. Any resource referenced via access type will not have their digest updated.
+      --blob-cache-directory string                     path to the blob cache directory (default ".ocm/cache")
+      --component-version-conflict-policy enum          policy to apply when a component version already exists in the repository
+                                                        (must be one of [abort-and-fail replace skip]) (default replace) (DEPRECATED: existing versions are replaced by default; protect them with registry tag immutability. The flag will be removed)
+      --concurrency-limit int                           maximum number of component versions that can be constructed concurrently. (default 4)
+  -c, --constructor path                                path to the component constructor file (default component-constructor.yaml)
+      --display-mode enum                               static: print the output once the complete component graph is discovered
+                                                          live (experimental): continuously updates the output to represent the current construction state of the component graph
+                                                        (must be one of [live static]) (default static)
+      --external-component-version-copy-policy enum     policy to apply when a component reference to a component version outside of the constructor or target repository is encountered
+                                                        (must be one of [copy-or-fail skip]) (default skip)
+  -h, --help[=true|false]                               help for component-version
+      --layout enum                                     component version storage layout: v2 (manifest with the full descriptor) or normalized (manifest with the normalized descriptor as its only layer; the manifest digest is stable across registries and can be signed with cosign). When not set, a version that already exists keeps its layout and a new version uses v2
+                                                        (must be one of [normalized v2])
+  -o, --output enum                                     output format of the component descriptors
+                                                        (must be one of [json ndjson table tree yaml]) (default table)
+  -r, --repository string                               repository ref (default "transport-archive")
+      --skip-reference-digest-processing[=true|false]   skip digest processing for resources. Any resource referenced via access type will not have their digest updated.
 ```
 
 ### Options inherited from parent commands
@@ -161,6 +164,7 @@ add component-version --repository ./archive --constructor component-constructor
       --logformat enum                     set the log output format that is used to print individual logs
                                               json: Output logs in JSON format, suitable for machine processing
                                               text: Output logs in human-readable text format, suitable for console output
+                                              the interactive progress display needs a terminal and the text format; any other format prints its records in full instead
                                            (must be one of [json text]) (default text)
       --loglevel enum                      sets the logging level
                                               debug: Show all logs including detailed debugging information

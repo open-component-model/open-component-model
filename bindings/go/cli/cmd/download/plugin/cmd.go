@@ -3,7 +3,8 @@ package plugin
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"log/slog"
@@ -25,6 +26,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
+	"ocm.software/open-component-model/bindings/go/plugin/manager/types"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/types/spec"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -62,7 +64,7 @@ Resources can be accessed either locally or via a plugin that supports remote fe
 
 A reference can pin the component version with a digest: "{component}[:{version}]@sha256:<hex>" (OCI digest
 of the artifact the component version is stored as, which local resources are then read from) or
-"{component}:{version}@jsonNormalisation.v4alpha1+sha256:<hex>" (normalized: the digest signatures sign).
+"{component}:{version}@jsonNormalisation.v4alpha3+sha256:<hex>" (normalized: the digest signatures sign).
 See "ocm get cv --help" for when to use which. The plugin binary is then verified against its digest in the pinned descriptor.`,
 		Example: ` # Download a plugin binary with resource name '<my-plugin-component>' and version '<version>'
   ocm download plugin <oci-repository>//<my-plugin-component>:<version>
@@ -211,13 +213,14 @@ func DownloadPlugin(cmd *cobra.Command, args []string) error {
 		slog.String("type", res.Type),
 		slog.Any("identity", res.ToIdentity()))
 
-	data, err := shared.DownloadResourceData(ctx, pluginManager, credentialGraph, ref, desc, repo, res, resourceIdentity)
+	data, err := shared.DownloadResourceData(ctx, pluginManager, credentialGraph, desc, repo, res)
 	if err != nil {
 		return fmt.Errorf("downloading plugin resource for identity %q failed: %w", resourceIdentity, err)
 	}
 
 	// ocm.software/plugins/[my-plugin]
-	pluginFileName := path.Base(ref.Component)
+	// The plugin manager only discovers (and Windows only executes) plugins with the .exe extension there.
+	pluginFileName := types.ExecutableName(path.Base(ref.Component))
 	output = filepath.Join(output, pluginFileName)
 
 	if err := shared.SaveBlobToFile(data, output); err != nil {
@@ -275,7 +278,7 @@ func encodePluginInfo(res *descriptor.Resource, source, outputPath, format strin
 
 	switch format {
 	case "json":
-		data, err = json.MarshalIndent(info, "", "  ")
+		data, err = json.Marshal(info, ocmruntime.JSONOptions, jsontext.WithIndent("  "))
 		if err != nil {
 			return nil, 0, fmt.Errorf("marshaling plugin info as JSON failed: %w", err)
 		}

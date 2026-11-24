@@ -1,6 +1,6 @@
 ---
 title: "Sign with Sigstore (Keyless)"
-description: "Sign and verify a component version with your OIDC identity — no key pair to generate, no public key to distribute."
+description: "Sign and verify a component version with your OIDC identity, with no key pair to generate and no public key to distribute."
 weight: 80
 toc: true
 hasMermaid: true
@@ -209,7 +209,7 @@ What just happened, step by step:
 ```text
 digest:
   hashAlgorithm: SHA-256
-  normalisationAlgorithm: jsonNormalisation/v4alpha1
+  normalisationAlgorithm: jsonNormalisation/v4alpha3
   value: 4e376182b3d535143e8e009b1e467df3a5b0c1f912c71ae432200654c355606f
 name: default
 signature:
@@ -217,7 +217,7 @@ signature:
   mediaType: application/vnd.dev.sigstore.bundle.v0.3+json
   value: eyJtZWRpYVR5cGUiOiJhcHBsaWNhdGlvbi92bmQuZGV2LnNpZ3N0b3JlLmJ1bmRsZS52MC4z...
 
-time=2026-05-20T15:32:55.725+02:00 level=INFO msg="signed successfully" name=default digest=4e376182b3d535143e8e009b1e467df3a5b0c1f912c71ae432200654c355606f hashAlgorithm=SHA-256 normalisationAlgorithm=jsonNormalisation/v4alpha1
+time=2026-05-20T15:32:55.725+02:00 level=INFO msg="signed successfully" name=default digest=4e376182b3d535143e8e009b1e467df3a5b0c1f912c71ae432200654c355606f hashAlgorithm=SHA-256 normalisationAlgorithm=jsonNormalisation/v4alpha3
 ```
 
 </details>
@@ -340,7 +340,7 @@ You should see your signature with the recorded identity:
 name: default
 digest:
   hashAlgorithm: SHA-256
-  normalisationAlgorithm: jsonNormalisation/v4alpha1
+  normalisationAlgorithm: jsonNormalisation/v4alpha3
   value: 4e376182b3d535143e8e009b1e467df3a5b0c1f912c71ae432200654c355606f
 signature:
   algorithm: Sigstore/v1alpha1

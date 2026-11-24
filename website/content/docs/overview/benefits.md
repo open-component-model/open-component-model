@@ -1,6 +1,6 @@
 ---
 title: "Benefits of OCM"
-description: "Discover how OCM brings visibility, security, and adaptability to your software delivery."
+description: "Discover how OCM brings visibility, security, and adaptability to your software delivery pipeline across heterogeneous infrastructure targets."
 icon: "✨"
 weight: 2
 toc: true

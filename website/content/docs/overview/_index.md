@@ -1,6 +1,6 @@
 ---
 title: "Overview"
-description: "Understand what OCM is, why it exists, and how it supports your software delivery into sovereign clouds."
+description: "Understand what OCM is, why it exists, and how it supports software delivery across cloud boundaries, sovereign clouds, and air-gapped environments."
 icon: "🌐"
 weight: 10
 toc: true

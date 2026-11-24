@@ -1,6 +1,6 @@
 ---
 title: "Generate Signing Keys"
-description: "Create an RSA or GPG key pair for signing and verifying OCM component versions."
+description: "Create an RSA or GPG key pair for signing and verifying OCM component versions: key generation, storage, and configuration in .ocmconfig."
 weight: 10
 toc: true
 aliases:

@@ -1,6 +1,6 @@
 ---
 title: "OCM v2: A Fresh Foundation for Secure Software Delivery"
-description: "OCM v2 is a complete reboot — a new CLI, Kubernetes controllers, and Go library built from the ground up for modularity, security, and community."
+description: "OCM v2 is a complete reboot: a new CLI, Kubernetes controllers, and Go library built from the ground up for modularity, security, and community."
 date: 2026-03-30T10:00:00+02:00
 contributors: []
 tags: ["release", "community", "v2", "supply-chain", "kubernetes"]

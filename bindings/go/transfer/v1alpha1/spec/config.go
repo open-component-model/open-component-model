@@ -45,7 +45,7 @@ type Config struct {
 	// Recursive configures transferring component references with the parent
 	// component: -1 means infinite recursion, 0 means no recursion. Positive
 	// depths are reserved but not implemented yet. See [Recursive].
-	Recursive Recursive `json:"recursive,omitempty"`
+	Recursive Recursive `json:"recursive,omitzero"`
 
 	// ComponentVersionLayout selects the storage layout of every component
 	// version written to an OCI or CTF target and overrides the layout set on

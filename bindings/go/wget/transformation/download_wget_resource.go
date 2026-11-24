@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"os"
 
@@ -24,6 +23,9 @@ type DownloadWgetResource struct {
 	// ResourceRepository is used to download wget resources and resolve credential consumer identities.
 	ResourceRepository repository.ResourceRepository
 	CredentialProvider credentials.Resolver
+	// TempDir is the directory content is buffered in when the spec sets no output path.
+	// Empty means the default temporary directory of the operating system.
+	TempDir string
 }
 
 func (t *DownloadWgetResource) Transform(ctx context.Context, step runtime.Typed) (_ runtime.Typed, err error) {
@@ -42,11 +44,11 @@ func (t *DownloadWgetResource) Transform(ctx context.Context, step runtime.Typed
 		transformation.Output = &v1alpha1.DownloadWgetResourceOutput{}
 	}
 
-	outputPath, err := determineOutputPath(transformation.Spec.OutputPath, "wget")
+	outputPath, err := filesystem.BufferFile(transformation.Spec.OutputPath, t.TempDir, "wget")
 	if err != nil {
 		return nil, fmt.Errorf("error getting output path: %w", err)
 	}
-	// determineOutputPath creates the file; retain it on success for Output.File, remove it on failure.
+	// BufferFile creates the file; retain it on success for Output.File, remove it on failure.
 	defer func() {
 		if err != nil {
 			if removeErr := os.Remove(outputPath); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
@@ -69,16 +71,6 @@ func (t *DownloadWgetResource) Transform(ctx context.Context, step runtime.Typed
 	if err != nil {
 		return nil, fmt.Errorf("error downloading wget resource: %w", err)
 	}
-	// The downloaded blob is backed by a temporary file the repository hands over to
-	// us. Its content is copied to outputPath below, so release it afterwards instead
-	// of leaving a second copy behind.
-	defer func() {
-		if closer, ok := downloadedBlob.(io.Closer); ok {
-			if closeErr := closer.Close(); closeErr != nil {
-				slog.WarnContext(ctx, "failed to remove temporary wget download file", "err", closeErr)
-			}
-		}
-	}()
 
 	fileSpec, err := filesystem.BlobToSpec(downloadedBlob, outputPath)
 	if err != nil {

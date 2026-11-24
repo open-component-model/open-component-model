@@ -1,7 +1,8 @@
 package endpoints
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 
@@ -34,17 +35,16 @@ func NewEndpoints(scheme *runtime.Scheme) *EndpointBuilder {
 	}
 }
 
-// MarshalJSON returns the accumulated endpoints during Register* calls.
-func (c *EndpointBuilder) MarshalJSON() ([]byte, error) {
+// MarshalJSONTo writes the accumulated endpoints during Register* calls.
+func (c *EndpointBuilder) MarshalJSONTo(enc *jsontext.Encoder) error {
 	pluginSpec, err := pluginruntime.ConvertToSpec(&c.PluginSpec)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert to spec: %w", err)
+		return fmt.Errorf("failed to convert to spec: %w", err)
 	}
-	content, err := json.Marshal(pluginSpec)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal capabilities: %w", err)
+	if err := json.MarshalEncode(enc, pluginSpec, runtime.JSONOptions); err != nil {
+		return fmt.Errorf("failed to marshal capabilities: %w", err)
 	}
-	return content, nil
+	return nil
 }
 
 // GetHandlers returns all the Handlers that this plugin implemented during the registration of a capability.

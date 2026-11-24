@@ -13,8 +13,11 @@ const KindResource = "Resource"
 type VerificationPolicy string
 
 const (
-	// VerificationPolicyAlways attempts to verify resource digest using a digest processor plugin.
-	// If no suitable plugin is found, we only log this because the operator cannot resolve this
+	// VerificationPolicyAlways verifies the resource digest. Content is checked against what it is
+	// addressed by where possible (an OCI manifest, the digest a local blob is stored under, a Helm
+	// repository index, a checksum a wget server advertises) and downloaded otherwise, e.g. for
+	// git, gitHub and s3 accesses on every reconcile. A resource whose access type no digest
+	// processor supports fails.
 	VerificationPolicyAlways VerificationPolicy = "Always"
 	// VerificationPolicyNever skips resource digest verification unconditionally.
 	VerificationPolicyNever VerificationPolicy = "Never"
@@ -36,7 +39,8 @@ type ResourceSpec struct {
 	OCMConfig []OCMConfiguration `json:"ocmConfig,omitempty"`
 
 	// VerificationPolicy controls when resource digest verification is performed.
-	// Always (default): attempt to verify resource digest; if no processor plugin is found, log and continue.
+	// Always (default): verify the resource digest, downloading the content only if it cannot be
+	// checked against what it is addressed by; a resource that cannot be verified fails.
 	// Never: skip verification unconditionally.
 	// +kubebuilder:validation:Enum:="Always";"Never"
 	// +kubebuilder:default:="Always"
@@ -90,8 +94,12 @@ type ResourceStatus struct {
 // Resource is the Schema for the resources API.
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,description="Indicates if the Resource is Ready",priority=1
+// +kubebuilder:printcolumn:name="Component Ref",type=string,JSONPath=`.spec.componentRef.name`,description="Referenced Component"
+// +kubebuilder:printcolumn:name="Resource",type=string,JSONPath=`.status.resource.name`,description="Name of the OCM resource"
+// +kubebuilder:printcolumn:name="Version",type=string,JSONPath=`.status.resource.version`,description="Version of the OCM resource"
+// +kubebuilder:printcolumn:name="Ready",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].status`,description="Indicates if the Resource is Ready"
 // +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp",description="Displays the Age of the Resource"
+// +kubebuilder:printcolumn:name="Status",type=string,JSONPath=`.status.conditions[?(@.type=="Ready")].message`,description="Ready condition message"
 type Resource struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

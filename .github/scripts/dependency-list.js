@@ -10,6 +10,11 @@ import { pathToFileURL } from "node:url";
 import * as yaml from "js-yaml";
 
 const BINDING_PREFIX = "ocm.software/open-component-model/bindings/go/";
+// Test-only helper libraries are not part of the production dependency layering,
+// so they are excluded from the generated production dependency docs. The
+// "testutils-test-only" depguard rule keeps them out of non-test code; the
+// per-binding allow lists only grant their test files access.
+const TEST_ONLY_BINDINGS = new Set(["testutils"]);
 export const GENERATED_TABLE_START = "<!-- GENERATED PACKAGES TABLE:START (run 'task tools:dependency-list/generate' to update) -->";
 export const GENERATED_TABLE_END = "<!-- GENERATED PACKAGES TABLE:END -->";
 // Matches the marker lines regardless of their annotation text.
@@ -39,10 +44,14 @@ export function parseDepguardRules(configPath) {
         if (!match) continue;
 
         const binding = match[1];
+        // A test-only helper is never a production binding, even if it gains its own
+        // depguard rule, so it must not become a key in the dependency graph.
+        if (TEST_ONLY_BINDINGS.has(binding)) continue;
         const allows = (rule.allow ?? [])
             .filter((/** @type {string} */ a) => a.startsWith(BINDING_PREFIX))
             .map((/** @type {string} */ a) => a.slice(BINDING_PREFIX.length))
-            .filter((/** @type {string} */ a) => a !== binding);
+            .filter((/** @type {string} */ a) => a !== binding)
+            .filter((/** @type {string} */ a) => !TEST_ONLY_BINDINGS.has(a));
 
         deps.set(binding, allows.sort());
     }

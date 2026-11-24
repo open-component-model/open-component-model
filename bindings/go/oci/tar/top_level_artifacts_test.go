@@ -2,15 +2,17 @@ package tar
 
 import (
 	"bytes"
-	"encoding/json"
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/content"
+	"github.com/oras-project/oras-go/v3/content/memory"
 	"github.com/stretchr/testify/require"
-	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/content/memory"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestTopLevelArtifacts(t *testing.T) {
@@ -31,7 +33,7 @@ func TestTopLevelArtifacts(t *testing.T) {
 					},
 					MediaType: ociImageSpecV1.MediaTypeImageManifest,
 				}
-				childData, err := json.Marshal(child)
+				childData, err := json.Marshal(child, runtime.JSONOptions)
 				require.NoError(t, err)
 				childDesc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, childData)
 				require.NoError(t, fetcher.Push(t.Context(), childDesc, bytes.NewReader(childData)))
@@ -45,7 +47,7 @@ func TestTopLevelArtifacts(t *testing.T) {
 						childDesc,
 					},
 				}
-				parentData, err := json.Marshal(parent)
+				parentData, err := json.Marshal(parent, runtime.JSONOptions)
 				require.NoError(t, err)
 				parentDesc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageIndex, parentData)
 				require.NoError(t, fetcher.Push(t.Context(), parentDesc, bytes.NewReader(parentData)))
@@ -74,7 +76,7 @@ func TestTopLevelArtifacts(t *testing.T) {
 					},
 					MediaType: ociImageSpecV1.MediaTypeImageManifest,
 				}
-				manifestData, err := json.Marshal(manifest)
+				manifestData, err := json.Marshal(manifest, runtime.JSONOptions)
 				require.NoError(t, err)
 				manifestDesc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, manifestData)
 				require.NoError(t, fetcher.Push(t.Context(), manifestDesc, bytes.NewReader(manifestData)))
@@ -111,7 +113,7 @@ func TestTopLevelArtifacts(t *testing.T) {
 					},
 					MediaType: ociImageSpecV1.MediaTypeImageManifest,
 				}
-				manifest1Data, err := json.Marshal(manifest1)
+				manifest1Data, err := json.Marshal(manifest1, runtime.JSONOptions)
 				require.NoError(t, err)
 				manifest1Desc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, manifest1Data)
 				require.NoError(t, fetcher.Push(t.Context(), manifest1Desc, bytes.NewReader(manifest1Data)))
@@ -127,7 +129,7 @@ func TestTopLevelArtifacts(t *testing.T) {
 						Size:      7,
 					},
 				}
-				manifest2Data, err := json.Marshal(manifest2)
+				manifest2Data, err := json.Marshal(manifest2, runtime.JSONOptions)
 				require.NoError(t, err)
 				manifest2Desc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, manifest2Data)
 				require.NoError(t, fetcher.Push(t.Context(), manifest2Desc, bytes.NewReader(manifest2Data)))
@@ -160,7 +162,7 @@ func TestTopLevelArtifacts(t *testing.T) {
 					},
 					MediaType: ociImageSpecV1.MediaTypeImageManifest,
 				}
-				leafData, err := json.Marshal(leaf)
+				leafData, err := json.Marshal(leaf, runtime.JSONOptions)
 				require.NoError(t, err)
 				leafDesc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, leafData)
 				require.NoError(t, fetcher.Push(t.Context(), leafDesc, bytes.NewReader(leafData)))
@@ -174,7 +176,7 @@ func TestTopLevelArtifacts(t *testing.T) {
 						leafDesc,
 					},
 				}
-				middleData, err := json.Marshal(middle)
+				middleData, err := json.Marshal(middle, runtime.JSONOptions)
 				require.NoError(t, err)
 				middleDesc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageIndex, middleData)
 				require.NoError(t, fetcher.Push(t.Context(), middleDesc, bytes.NewReader(middleData)))
@@ -188,7 +190,7 @@ func TestTopLevelArtifacts(t *testing.T) {
 						middleDesc,
 					},
 				}
-				rootData, err := json.Marshal(root)
+				rootData, err := json.Marshal(root, runtime.JSONOptions)
 				require.NoError(t, err)
 				rootDesc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageIndex, rootData)
 				require.NoError(t, fetcher.Push(t.Context(), rootDesc, bytes.NewReader(rootData)))
@@ -220,7 +222,7 @@ func TestTopLevelArtifacts(t *testing.T) {
 					},
 					MediaType: ociImageSpecV1.MediaTypeImageManifest,
 				}
-				sharedData, err := json.Marshal(shared)
+				sharedData, err := json.Marshal(shared, runtime.JSONOptions)
 				require.NoError(t, err)
 				sharedDesc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageManifest, sharedData)
 				require.NoError(t, fetcher.Push(t.Context(), sharedDesc, bytes.NewReader(sharedData)))
@@ -238,7 +240,7 @@ func TestTopLevelArtifacts(t *testing.T) {
 						"example.com/annotation": "root1",
 					},
 				}
-				root1Data, err := json.Marshal(root1)
+				root1Data, err := json.Marshal(root1, runtime.JSONOptions)
 				require.NoError(t, err)
 				root1Desc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageIndex, root1Data)
 				require.NoError(t, fetcher.Push(t.Context(), root1Desc, bytes.NewReader(root1Data)))
@@ -255,7 +257,7 @@ func TestTopLevelArtifacts(t *testing.T) {
 						"example.com/annotation": "root2",
 					},
 				}
-				root2Data, err := json.Marshal(root2)
+				root2Data, err := json.Marshal(root2, runtime.JSONOptions)
 				require.NoError(t, err)
 				root2Desc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageIndex, root2Data)
 				require.NoError(t, fetcher.Push(t.Context(), root2Desc, bytes.NewReader(root2Data)))
@@ -299,7 +301,7 @@ func TestTopLevelArtifacts(t *testing.T) {
 						},
 					},
 				}
-				manifest1Data, err := json.Marshal(manifest1)
+				manifest1Data, err := json.Marshal(manifest1, runtime.JSONOptions)
 				require.NoError(t, err)
 				manifest1Desc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageIndex, manifest1Data)
 				require.NoError(t, fetcher.Push(t.Context(), manifest1Desc, bytes.NewReader(manifest1Data)))
@@ -317,7 +319,7 @@ func TestTopLevelArtifacts(t *testing.T) {
 						},
 					},
 				}
-				manifest2Data, err := json.Marshal(manifest2)
+				manifest2Data, err := json.Marshal(manifest2, runtime.JSONOptions)
 				require.NoError(t, err)
 				manifest2Desc := content.NewDescriptorFromBytes(ociImageSpecV1.MediaTypeImageIndex, manifest2Data)
 				require.NoError(t, fetcher.Push(t.Context(), manifest2Desc, bytes.NewReader(manifest2Data)))

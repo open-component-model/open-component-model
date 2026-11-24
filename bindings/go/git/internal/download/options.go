@@ -19,4 +19,8 @@ type Options struct {
 	HostKeyCallback ssh.HostKeyCallback
 	// HTTPClient serves http(s) repositories. Nil uses the shared OCM client defaults.
 	HTTPClient *http.Client
+	// AllowLocal permits file:// URLs and plain local paths. Only Git inputs set it:
+	// they archive a local repository into a local blob when the component version
+	// is created. Declared Git accesses must not read the local filesystem.
+	AllowLocal bool
 }

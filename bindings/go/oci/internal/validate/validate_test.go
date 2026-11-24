@@ -3,7 +3,7 @@ package validate_test
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -16,6 +16,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/internal/validate"
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	componentConfig "ocm.software/open-component-model/bindings/go/oci/spec/config/component"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 type mockFetcher struct {
@@ -50,7 +51,7 @@ func TestComponentVersionDescriptor(t *testing.T) {
 							annotations.OCMComponentVersion: annotations.NewComponentVersionAnnotation("example.com/component", "v1.0.0"),
 						},
 					}
-					data, err := json.Marshal(manifest)
+					data, err := json.Marshal(manifest, runtime.JSONOptions)
 					if err != nil {
 						return nil, err
 					}
@@ -73,7 +74,7 @@ func TestComponentVersionDescriptor(t *testing.T) {
 							annotations.OCMComponentVersion: annotations.NewComponentVersionAnnotation("example.com/component", "v2.0.0"),
 						},
 					}
-					data, err := json.Marshal(index)
+					data, err := json.Marshal(index, runtime.JSONOptions)
 					if err != nil {
 						return nil, err
 					}
@@ -96,7 +97,7 @@ func TestComponentVersionDescriptor(t *testing.T) {
 							annotations.OCMComponentVersion: annotations.NewComponentVersionAnnotation("example.com/component", "v1.5.0"),
 						},
 					}
-					data, err := json.Marshal(manifest)
+					data, err := json.Marshal(manifest, runtime.JSONOptions)
 					if err != nil {
 						return nil, err
 					}
@@ -119,7 +120,7 @@ func TestComponentVersionDescriptor(t *testing.T) {
 							MediaType: componentConfig.MediaType,
 						},
 					}
-					data, err := json.Marshal(manifest)
+					data, err := json.Marshal(manifest, runtime.JSONOptions)
 					if err != nil {
 						return nil, err
 					}
@@ -142,7 +143,7 @@ func TestComponentVersionDescriptor(t *testing.T) {
 							MediaType: componentConfig.LegacyMediaType,
 						},
 					}
-					data, err := json.Marshal(manifest)
+					data, err := json.Marshal(manifest, runtime.JSONOptions)
 					if err != nil {
 						return nil, err
 					}
@@ -165,7 +166,7 @@ func TestComponentVersionDescriptor(t *testing.T) {
 							MediaType: componentConfig.Legacy2MediaType,
 						},
 					}
-					data, err := json.Marshal(manifest)
+					data, err := json.Marshal(manifest, runtime.JSONOptions)
 					if err != nil {
 						return nil, err
 					}
@@ -197,7 +198,7 @@ func TestComponentVersionDescriptor(t *testing.T) {
 							MediaType: "application/vnd.oci.image.config.v1+json",
 						},
 					}
-					data, err := json.Marshal(manifest)
+					data, err := json.Marshal(manifest, runtime.JSONOptions)
 					if err != nil {
 						return nil, err
 					}
@@ -216,7 +217,7 @@ func TestComponentVersionDescriptor(t *testing.T) {
 			fetcher: &mockFetcher{
 				fetchFunc: func(ctx context.Context, desc ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
 					index := ociImageSpecV1.Index{}
-					data, err := json.Marshal(index)
+					data, err := json.Marshal(index, runtime.JSONOptions)
 					if err != nil {
 						return nil, err
 					}
@@ -239,7 +240,7 @@ func TestComponentVersionDescriptor(t *testing.T) {
 							annotations.OCMComponentVersion: annotations.NewComponentVersionAnnotation("example.com/different", "v1.0.0"),
 						},
 					}
-					data, err := json.Marshal(manifest)
+					data, err := json.Marshal(manifest, runtime.JSONOptions)
 					if err != nil {
 						return nil, err
 					}
@@ -262,7 +263,7 @@ func TestComponentVersionDescriptor(t *testing.T) {
 							annotations.OCMComponentVersion: "malformed-no-colon",
 						},
 					}
-					data, err := json.Marshal(manifest)
+					data, err := json.Marshal(manifest, runtime.JSONOptions)
 					if err != nil {
 						return nil, err
 					}

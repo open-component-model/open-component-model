@@ -1,6 +1,6 @@
 ---
 title: "Create Component Versions"
-description: "Learn how to create and store component versions using the OCM CLI."
+description: "Learn how to create and store component versions using the OCM CLI: write a constructor file, push to a registry, and inspect the result."
 icon: "📦"
 weight: 30
 toc: true

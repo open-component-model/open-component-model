@@ -1,6 +1,6 @@
 ---
 title: "Input and Access Types"
-description: "Reference for input and access types used to add resources to a component version."
+description: "Reference for input and access types used to add resources to a component version: supported types, fields, and configuration examples."
 weight: 3
 toc: true
 aliases:
@@ -295,6 +295,20 @@ the same as the fields of the access type.
 If you set neither `ref` nor `commit`, OCM archives the commit that the repository's `HEAD` points to, usually the default
 branch. The result then changes when the branch moves. Set `commit` for a reproducible build.
 
+The `repository` field accepts the same remote URL forms as the
+[`Git/v1` access type]({{< relref "input-and-access-types.md#git-url-forms" >}}), and also local repositories:
+
+| Form                | Example                                           |
+|---------------------|---------------------------------------------------|
+| HTTPS or HTTP       | `https://github.com/org/repo.git`                 |
+| SSH URL             | `ssh://git@git.example.com:2222/org/repo.git`     |
+| scp-style SSH       | `git@github.com:org/repo.git`                     |
+| Git protocol        | `git://git.example.com/org/repo.git`              |
+| Local (input only)  | `file:///srv/git/repo.git` or `/srv/git/repo.git` |
+
+A local path is resolved relative to the working directory unless it is absolute. scp-style SSH addresses are
+never treated as local paths.
+
 **Example**
 
 ```yaml
@@ -454,7 +468,7 @@ only supports HTTP/HTTPS-based chart repositories.
 
 {{< callout context="caution" >}}
 `GitHub/v1` is **deprecated** and will be removed in a future release. Use
-[`Git/v1`]({{< relref "docs/reference/input-and-access-types.md#gitv1-access" >}}) for new resources and sources. `ocm add componentversion` prints a
+[`Git/v1`]({{< relref "docs/reference/input-and-access-types.md#gitv1-access" >}}) for new resources. `ocm add componentversion` prints a
 warning when a constructor uses `GitHub/v1`. Existing component versions keep
 working, and a published resource must keep its type: see
 [`Git/v1` or `GitHub/v1`?]({{< relref "docs/reference/input-and-access-types.md#gitv1-or-githubv1" >}}).
@@ -467,8 +481,7 @@ REST API. Also usable unversioned as `GitHub`. Legacy aliases: `github`, `github
 {{< schema-renderer url="/schemas/bindings/go/access/github/v1/GitHub.schema.json" >}}
 
 At least one of `commit` or `ref` must be set. A resource may be authored with only a
-`ref`; its `commit` is pinned later during digest processing. A source is never pinned, so
-give it a `commit`.
+`ref`; its `commit` is pinned later during digest processing.
 
 **Example**
 
@@ -484,8 +497,9 @@ resources:
       commit: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2
 ```
 
-The same access works under `sources:`, where it stays a remote reference: sources carry no
-digest and no copy mode embeds them.
+Do not declare this access under `sources:`. Sources are deprecated: they carry no digest, so
+their content is not protected by the component version digest or a signature. Use a resource; see
+[Migrate from Sources to Resources]({{< relref "docs/changelog/migrate-from-sources.md" >}}).
 
 {{< callout context="note" >}}
 Any `repoUrl` host other than `github.com` is treated as GitHub Enterprise, with the REST API
@@ -507,7 +521,7 @@ Bitbucket and self-hosted servers, over HTTPS or SSH.
 {{< schema-renderer url="/schemas/bindings/go/access/git/v1/Git.schema.json" >}}
 
 At least one of `commit` or `ref` must be set. A resource may have only a `ref`. OCM adds the `commit` during digest
-processing. A source never goes through digest processing, so set its `commit` yourself.
+processing.
 
 **Example**
 
@@ -524,8 +538,9 @@ resources:
       commit: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2
 ```
 
-The same access works under `sources:`. A source always stays a remote reference. It has no digest, and a transfer
-never copies it into the component version.
+Do not declare this access under `sources:`. Sources are deprecated: they carry no digest, so their content is not
+protected by the component version digest or a signature. Use a resource; see
+[Migrate from Sources to Resources]({{< relref "docs/changelog/migrate-from-sources.md" >}}).
 
 #### Supported URL forms {#git-url-forms}
 
@@ -535,12 +550,17 @@ never copies it into the component version.
 | SSH URL       | `ssh://git@git.example.com:2222/org/repo.git`     |
 | scp-style SSH | `git@github.com:org/repo.git`                     |
 | Git protocol  | `git://git.example.com/org/repo.git`              |
-| Local         | `file:///srv/git/repo.git` or `/srv/git/repo.git` |
 
-{{< callout context="caution" >}}
-A URL needs a scheme, such as `https://github.com/org/repo`. Without one, OCM treats the value as a **local
-directory**, so `github.com/org/repo` points to a folder under the current working directory. scp-style SSH addresses
-such as `git@github.com:org/repo.git` are the exception and always mean SSH.
+{{< callout context="danger" title="Local repositories are not allowed" >}}
+A `Git/v1` access spec must use a remote URL. A `file://` URL or a plain path (such as `/srv/git/repo.git`)
+fails validation with an error containing `must not reference a local git repository`. No remote consumer can
+reach a local path, so OCM rejects such values at add, read, and transfer time.
+
+If you need to archive a local repository into the component version, use the
+[`Git/v1` input type]({{< relref "input-and-access-types.md#gitv1-input" >}}) instead: it clones the local
+repository once and stores the archive as a portable local blob.
+
+scp-style SSH addresses such as `git@github.com:org/repo.git` are **not** treated as local paths; they always mean SSH.
 {{< /callout >}}
 
 OCM checks the server's host key against your `~/.ssh/known_hosts`. Without a configured SSH key, OCM uses the SSH agent.
@@ -564,8 +584,10 @@ specifications with the types `git`, `git/v1alpha1` and `Git/v1alpha1` unchanged
 
 Two differences need attention:
 
-- **Scheme.** OCM v1 read `github.com/org/repo` as a remote repository. OCM v2 reads it as a local directory, so
-  add the scheme. scp-style SSH addresses such as `git@github.com:org/repo.git` are unaffected.
+- **Scheme.** OCM v1 read `github.com/org/repo` as a remote repository. OCM v2 rejects a schemeless or
+  local-path value for the `Git/v1` access with *"must not reference a local git repository"*, so add the scheme.
+  Local paths are valid only as `Git/v1` **input** (component creation), not as an access type stored in a
+  component descriptor. scp-style SSH addresses such as `git@github.com:org/repo.git` are unaffected.
 - **Credentials.** The consumer identity type is still `Git`. Use `path`, which supports glob patterns, instead of the
   OCM v1 `pathprefix` attribute. See
   [Credential Consumer Identities: Git]({{< relref "credential-consumer-identities.md" >}}#git).

@@ -42,9 +42,10 @@ var DefaultGenericPolicy = GenericPolicy{
 }
 
 // DefaultPredicate retries on 5xx errors, 429, 408, and transient network
-// failures (see IsTransientError): timeouts, connection resets, unexpected EOF
-// and HTTP/2 connection or stream loss. net/http retries a reset only on a
-// reused connection, so a reset on a fresh one has to be retried here.
+// failures (see IsTransientError): timeouts, connections that were reset or
+// closed, unexpected EOF and HTTP/2 connection or stream loss. net/http retries
+// a reset only on a reused connection, so a reset on a fresh one has to be
+// retried here.
 var DefaultPredicate Predicate = func(resp *http.Response, err error) (bool, error) {
 	if err != nil {
 		if isTransientRoundTripError(err) {

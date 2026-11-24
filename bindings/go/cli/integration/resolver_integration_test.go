@@ -42,7 +42,8 @@ configurations:
       properties:
         username: %q
         password: %q
-`, registryB.Host, registryB.Port, registryB.User, registryB.Password)
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`, registryB.Host, registryB.Port, registryB.User, registryB.Password)
 	cfgPathB := filepath.Join(t.TempDir(), "ocmconfig-b.yaml")
 	r.NoError(os.WriteFile(cfgPathB, []byte(cfgB), os.ModePerm))
 
@@ -77,7 +78,8 @@ configurations:
       type: OCIRepository/v1
       baseUrl: http://%[5]s:%[6]s
     componentNamePattern: "ocm.software/resolver-test/component-b"
-`, registryA.Host, registryA.Port, registryA.User, registryA.Password, registryB.Host, registryB.Port, registryB.User, registryB.Password)
+- type: http.config.ocm.software/v1alpha1
+  plainHTTP: true`, registryA.Host, registryA.Port, registryA.User, registryA.Password, registryB.Host, registryB.Port, registryB.User, registryB.Password)
 	resolverCfgPath := filepath.Join(t.TempDir(), "ocmconfig-resolver.yaml")
 	r.NoError(os.WriteFile(resolverCfgPath, []byte(resolverCfg), os.ModePerm))
 

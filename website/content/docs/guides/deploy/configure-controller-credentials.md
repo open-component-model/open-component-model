@@ -1,6 +1,6 @@
 ---
 title: "Configure Controller Credentials"
-description: "Configure authentication for OCM Controllers to access private OCM repositories."
+description: "Configure authentication for OCM Controllers to access private OCM repositories: credential types, .ocmconfig, and Kubernetes secrets."
 weight: 10
 toc: true
 aliases:
@@ -27,11 +27,51 @@ Configure credentials to allow OCM Controllers to access OCM components stored i
 - [kubectl](https://kubernetes.io/docs/tasks/tools/#kubectl) installed
 - Credentials for your private OCI registry (username and password, Docker config file, or OCM CLI config file)
 - The registry URL where your OCM components are stored
+- For the [GitHub Container Registry quickstart](#quickstart-github-container-registry) only: the
+  [GitHub CLI](https://cli.github.com/) (`gh`), logged in with `gh auth login`, or a classic personal access token
+  with the `read:packages` scope
 
 {{< callout context="caution" title="Security Warning" icon="outline/alert-triangle" >}}
 Kubernetes secrets are only base64-encoded, not encrypted.
 Ensure proper RBAC policies to restrict access to secrets containing credentials.
 {{< /callout >}}
+
+## Quickstart: GitHub Container Registry
+
+If your component versions live in a private package on GitHub Container Registry (`ghcr.io`), create a
+`docker-registry` secret from a token with the `read:packages` scope. A classic personal access token works, or
+the token of the GitHub CLI. The GitHub CLI does not request `read:packages` by default, so add it first:
+
+```shell
+gh auth refresh --scopes read:packages
+```
+
+Create the secret in the namespace of the `Repository` that will use it. An `ocmConfig` reference without a
+`namespace` resolves in the namespace of the resource that declares it. Set `GITHUB_USERNAME` to your GitHub user
+name. With a personal access token, pass the token instead of `$(gh auth token)`:
+
+```shell
+kubectl create secret docker-registry ghcr-secret \
+  --namespace <namespace-of-your-repository> \
+  --docker-username=$GITHUB_USERNAME \
+  --docker-password="$(gh auth token)" \
+  --docker-server=ghcr.io
+```
+
+Reference the secret from the `Repository`:
+
+```yaml
+spec:
+  ocmConfig:
+    - kind: Secret
+      name: ghcr-secret
+```
+
+`Component`, `Resource`, and `NamespacedDeployer` objects that reference this `Repository` inherit the
+credentials, unless they set their own `ocmConfig`. See
+[Credential inheritance for dependent resources](#credential-inheritance-for-dependent-resources).
+To pull the deployed images, the workload also needs `ghcr-secret` as an image pull secret. Where to set it depends
+on the deployment method; each deploy guide shows its own wiring.
 
 ## Configure and propagate credentials for OCM resources
 
@@ -142,18 +182,18 @@ repository.delivery.ocm.software/my-repository created
 </details>
 <br>
 
-Verify the resource is ready and can access your registry (due to the complex status field of OCM resources, to show the status, we need to use `custom-columns`)
+Verify the resource is ready and can access your registry:
 
 ```shell
-kubectl get repository my-repository -o 'custom-columns=NAME:.metadata.name,READY:.status.conditions[0].message,AGE:.metadata.creationTimestamp'
+kubectl get repository my-repository
 ```
 
 <details>
 <summary>You should see this output</summary>
 
 ```text
-NAME            READY                                    AGE
-my-repository   Successfully reconciled OCM repository   2026-02-25T15:45:49Z
+NAME            TYPE          READY   AGE   STATUS
+my-repository   OCIRegistry   True    45s   Successfully reconciled OCM repository
 ```
 </details>
 
@@ -199,18 +239,18 @@ component.delivery.ocm.software/my-component created
 </details>
 <br>
 
-Verify the resource is ready and can access your registry (due to the complex status field of OCM resources, to show the status, we need to use `custom-columns`)
+Verify the resource is ready and can access your registry:
 
 ```shell
-kubectl get component my-component -o 'custom-columns=NAME:.metadata.name,READY:.status.conditions[0].message,AGE:.metadata.creationTimestamp'
+kubectl get component my-component
 ```
 
 <details>
 <summary>You should see this output</summary>
 
 ```text
-NAME           READY                   AGE
-my-component   Applied version 1.0.0   2026-02-25T15:49:58Z
+NAME           COMPONENT                       VERSION   READY   AGE   STATUS
+my-component   <your-namespace>/my-component   1.0.0     True    30s   Applied version 1.0.0
 ```
 </details>
 

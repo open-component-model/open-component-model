@@ -1,12 +1,11 @@
 package runtime
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 
 	_ "embed"
-
-	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
 )
 
 // Raw is used to hold extensions in external versions.
@@ -19,7 +18,7 @@ import (
 // +k8s:deepcopy-gen=true
 type Raw struct {
 	Type `json:"type"`
-	Data []byte `json:"-"`
+	Data jsontext.Value `json:"-"`
 }
 
 func (u *Raw) String() string {
@@ -27,8 +26,8 @@ func (u *Raw) String() string {
 }
 
 var _ interface {
-	json.Marshaler
-	json.Unmarshaler
+	json.MarshalerTo
+	json.UnmarshalerFrom
 	Typed
 } = &Raw{}
 
@@ -40,25 +39,30 @@ func (u *Raw) GetType() Type {
 	return u.Type
 }
 
-func (u *Raw) MarshalJSON() ([]byte, error) {
-	return u.Data, nil
+func (u *Raw) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return enc.WriteValue(u.Data)
 }
 
-func (u *Raw) UnmarshalJSON(data []byte) error {
+func (u *Raw) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	data, err := dec.ReadValue()
+	if err != nil {
+		return fmt.Errorf("could not read data into raw: %w", err)
+	}
+	// ReadValue borrows the decoder's buffer, which the next read invalidates.
+	data = data.Clone()
+
 	t := &struct {
 		Type Type `json:"type"`
 	}{}
-	err := json.Unmarshal(data, t)
-	if err != nil {
+	if err := json.Unmarshal(data, t, dec.Options()); err != nil {
 		return fmt.Errorf("could not unmarshal data into raw: %w", err)
 	}
 	u.Type = t.Type
-	u.Data = data
 
-	u.Data, err = jsoncanonicalizer.Transform(u.Data)
-	if err != nil {
+	if err := data.Canonicalize(); err != nil {
 		return fmt.Errorf("could not canonicalize data: %w", err)
 	}
+	u.Data = data
 
 	return nil
 }
