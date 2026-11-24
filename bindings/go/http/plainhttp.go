@@ -39,4 +39,4 @@ func PlainHTTPFor(ctx context.Context, cfg *httpv1alpha1.Config, host, scheme st
 
 // plainHTTPGuide shows where plainHTTP is set. Callers such as the Helm
 // download pass the error on as it is, so the error itself must point there.
-const plainHTTPGuide = "https://ocm.software/docs/guides/transfer/configure-http/#use-plain-http-for-a-local-registry"
+const plainHTTPGuide = "https://ocm.software/docs/guides/transfer/configure-http-behaviour/#use-plain-http-for-a-local-registry"
