@@ -20,8 +20,8 @@ vars:
   TARGET_PORT: '{{ .TARGET_PORT | default "15002" }}'
   # Paths inside the registries and the references the CLI image uses on the scenario network.
   REPO: ocm/component-descriptors/{{ .NAME }}
-  SOURCE_CV: oci::http://{{ .SOURCE }}:5000/ocm//{{ .NAME }}:{{ .VERSION }}
-  TARGET_CV: oci::http://{{ .TARGET }}:5000/ocm//{{ .NAME }}:{{ .VERSION }}
+  SOURCE_CV: oci::{{ .SOURCE }}:5000/ocm//{{ .NAME }}:{{ .VERSION }}
+  TARGET_CV: oci::{{ .TARGET }}:5000/ocm//{{ .NAME }}:{{ .VERSION }}
   run: >-
     docker run --rm
     --user $(id -u):$(id -g)
@@ -107,15 +107,17 @@ tasks:
           EOF
 
   config:
-    desc: Write the OCI storage configuration selecting the normalized layout
+    desc: Write the scenario configuration (normalized layout, plain HTTP to the registries)
     cmds:
       - mkdir -p {{ .WORK }}
       - |
-        cat > {{ .WORK }}/storage.ocmconfig <<EOF
+        cat > {{ .WORK }}/scenario.ocmconfig <<EOF
         type: generic.config.ocm.software/v1
         configurations:
         - type: oci.storage.config.ocm.software/v1alpha1
           componentVersionLayout: normalized
+        - type: http.config.ocm.software/v1alpha1
+          plainHTTP: true
         EOF
 
   # === SCENARIO TASKS ===
@@ -123,8 +125,8 @@ tasks:
     desc: Publish the component version in the normalized layout and record its manifest digest
     cmds:
       - |
-        {{ .ocm }} add componentversion --config {{ .WORK }}/storage.ocmconfig \
-          --repository oci::http://{{ .SOURCE }}:5000/ocm \
+        {{ .ocm }} add componentversion --config {{ .WORK }}/scenario.ocmconfig \
+          --repository oci::{{ .SOURCE }}:5000/ocm \
           --constructor component-constructor.yaml
       - |
         manifest=$(curl -sSf {{ .ACCEPT_MANIFEST }} "http://127.0.0.1:{{ .SOURCE_PORT }}/v2/{{ .REPO }}/manifests/{{ .VERSION }}")
@@ -147,21 +149,21 @@ tasks:
   ocm:sign:
     desc: An OCM signature written in the normalized layout must not move the tag off the cosign-signed manifest
     cmds:
-      - '{{ .ocm }} sign componentversion --config {{ .WORK }}/private.ocmconfig --config {{ .WORK }}/storage.ocmconfig {{ .SOURCE_CV }}'
+      - '{{ .ocm }} sign componentversion --config {{ .WORK }}/private.ocmconfig --config {{ .WORK }}/scenario.ocmconfig {{ .SOURCE_CV }}'
       - |
         after=$({{ .tag_digest }} "http://127.0.0.1:{{ .SOURCE_PORT }}/v2/{{ .REPO }}/manifests/{{ .VERSION }}" \
           | awk 'tolower($1)=="docker-content-digest:" {print $2}' | tr -d '\r')
         [ "$after" = "$(cat {{ .WORK }}/d_norm)" ] \
           || { echo "❌ ocm sign moved the tag from $(cat {{ .WORK }}/d_norm) to $after"; exit 1; }
       - '{{ .cosign }} verify --key {{ .WORK }}/keys/cosign.pub --insecure-ignore-tlog=true {{ .COSIGN_FLAGS }} {{ .SOURCE }}:5000/{{ .REPO }}:{{ .VERSION }} >/dev/null'
-      - '{{ .ocm }} verify componentversion --config {{ .WORK }}/public.ocmconfig {{ .SOURCE_CV }}'
+      - '{{ .ocm }} verify componentversion --config {{ .WORK }}/public.ocmconfig --config {{ .WORK }}/scenario.ocmconfig {{ .SOURCE_CV }}'
       - echo "✅ ocm sign kept the normalized layout; cosign and OCM signatures both verify"
 
   transfer:
     desc: Transfer source → CTF → target with the normalized layout configured; the signature travels along
     cmds:
-      - '{{ .ocm }} transfer componentversion --config {{ .WORK }}/storage.ocmconfig {{ .SOURCE_CV }} ctf::{{ .CTF }}'
-      - '{{ .ocm }} transfer componentversion --config {{ .WORK }}/storage.ocmconfig ctf::{{ .CTF }}//{{ .NAME }}:{{ .VERSION }} oci::http://{{ .TARGET }}:5000/ocm'
+      - '{{ .ocm }} transfer componentversion --config {{ .WORK }}/scenario.ocmconfig {{ .SOURCE_CV }} ctf::{{ .CTF }}'
+      - '{{ .ocm }} transfer componentversion --config {{ .WORK }}/scenario.ocmconfig ctf::{{ .CTF }}//{{ .NAME }}:{{ .VERSION }} oci::{{ .TARGET }}:5000/ocm'
       - |
         target=$({{ .tag_digest }} "http://127.0.0.1:{{ .TARGET_PORT }}/v2/{{ .REPO }}/manifests/{{ .VERSION }}" \
           | awk 'tolower($1)=="docker-content-digest:" {print $2}' | tr -d '\r')
@@ -173,9 +175,9 @@ tasks:
     desc: The source's cosign and OCM signatures verify on the target; the download returns the signed content
     cmds:
       - '{{ .cosign }} verify --key {{ .WORK }}/keys/cosign.pub --insecure-ignore-tlog=true {{ .COSIGN_FLAGS }} {{ .TARGET }}:5000/{{ .REPO }}:{{ .VERSION }} >/dev/null'
-      - '{{ .ocm }} verify componentversion --config {{ .WORK }}/public.ocmconfig {{ .TARGET_CV }}'
+      - '{{ .ocm }} verify componentversion --config {{ .WORK }}/public.ocmconfig --config {{ .WORK }}/scenario.ocmconfig {{ .TARGET_CV }}'
       - |
-        {{ .ocm }} download resource "{{ .TARGET_CV }}" \
+        {{ .ocm }} download resource --config {{ .WORK }}/scenario.ocmconfig "{{ .TARGET_CV }}" \
           --identity name=notice --output {{ .WORK }}/notice.txt
         cmp -s {{ .WORK }}/notice.txt notice.txt || { echo "❌ downloaded content differs"; exit 1; }
       - echo "✅ signature made on the source verifies on the target without re-signing"
