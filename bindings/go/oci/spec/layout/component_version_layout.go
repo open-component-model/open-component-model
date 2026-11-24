@@ -3,8 +3,7 @@ package layout
 import "fmt"
 
 // ComponentVersionLayout selects how a component version is stored in an OCI repository.
-// The empty value means "auto": keep the layout of the version already stored under the
-// same tag, and use ComponentVersionLayoutV2 for new versions.
+// The empty value means ComponentVersionLayoutV2.
 type ComponentVersionLayout string
 
 const (

@@ -33,22 +33,16 @@ import (
 type Layout int
 
 const (
-	// LayoutAuto keeps the layout of the component version already stored under the same tag and
-	// uses LayoutV2 for new versions, so that rewriting a version (e.g. persisting a signature)
-	// never switches its layout implicitly. Store-level APIs without a tag treat it as LayoutV2.
-	LayoutAuto Layout = iota
-	// LayoutV2: the tag resolves to the access-bearing v2 descriptor manifest.
-	LayoutV2
+	// LayoutV2 (the default): the tag resolves to the access-bearing v2 descriptor manifest.
+	LayoutV2 Layout = iota
 	// LayoutNormalized is the cosign-signable layout: the tag resolves to a stable, access-free
 	// normalized descriptor manifest, with the access-bearing descriptor stored as a referrer.
 	LayoutNormalized
 )
 
-// String returns the layout name used in repository specifications.
+// String returns the layout name used in configurations.
 func (l Layout) String() string {
 	switch l {
-	case LayoutAuto:
-		return "auto"
 	case LayoutV2:
 		return string(speclayout.ComponentVersionLayoutV2)
 	case LayoutNormalized:
@@ -58,18 +52,16 @@ func (l Layout) String() string {
 	}
 }
 
-// LayoutFromSpec maps the layout of a repository specification to a Layout. The empty value maps
-// to LayoutAuto; unknown values are rejected.
-func LayoutFromSpec(l speclayout.ComponentVersionLayout) (Layout, error) {
+// ParseLayout maps a configured layout to a Layout. The empty value maps to LayoutV2; unknown
+// values are rejected.
+func ParseLayout(l speclayout.ComponentVersionLayout) (Layout, error) {
 	switch l {
-	case "":
-		return LayoutAuto, nil
-	case speclayout.ComponentVersionLayoutV2:
+	case "", speclayout.ComponentVersionLayoutV2:
 		return LayoutV2, nil
 	case speclayout.ComponentVersionLayoutNormalized:
 		return LayoutNormalized, nil
 	default:
-		return LayoutAuto, l.Validate()
+		return LayoutV2, l.Validate()
 	}
 }
 
@@ -407,11 +399,11 @@ func layoutOf(manifest *ociImageSpecV1.Manifest, index *ociImageSpecV1.Index) La
 func getStoredLayout(ctx context.Context, store spec.Store, reference string) (Layout, error) {
 	base, err := store.Resolve(ctx, reference)
 	if err != nil {
-		return LayoutAuto, err
+		return LayoutV2, err
 	}
 	manifest, index, err := getDescriptorOCIImageManifest(ctx, store, base)
 	if err != nil {
-		return LayoutAuto, fmt.Errorf("failed to get manifest: %w", err)
+		return LayoutV2, fmt.Errorf("failed to get manifest: %w", err)
 	}
 	return layoutOf(&manifest, index), nil
 }

@@ -98,6 +98,11 @@ func New() *cobra.Command {
 - The signer is configured in the OCM configuration (%[4]s), not on the command line
 - An entry with a "signature" field only applies to that signature, one without applies to all
 - --signer-spec is no longer supported and fails with an error
+- The signed component version is rewritten in the storage layout of the OCI storage configuration
+  (oci.storage.config.ocm.software/v1alpha1, componentVersionLayout, default v2), not in the layout
+  it is currently stored in. To keep a version in the normalized layout (and the cosign or notary
+  signatures attached to its normalized manifest reachable from its tag), configure
+  componentVersionLayout: normalized
 
 Use this command to establish provenance of component versions.`,
 			compref.DefaultPrefix,

@@ -334,18 +334,18 @@ func Test_Integration_OCIRepository(t *testing.T) {
 					uploadDownloadLocalSource(t, repo, component, "v1.0.0")
 					uploadDownloadLocalResourceOCILayout(t, repo, component, "v1.0.0")
 
-					// Re-adding through a repository without a configured layout keeps the version
-					// normalized, and the access referrer tags are never listed as versions.
-					auto, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithReferrerTrackingPolicy(policy), oci.WithTempDir(t.TempDir()))
+					// Re-adding through a repository without a configured layout rewrites the version
+					// in the v2 layout, and the access referrer tags are never listed as versions.
+					v2Repo, err := oci.NewRepository(oci.WithResolver(resolver), oci.WithReferrerTrackingPolicy(policy), oci.WithTempDir(t.TempDir()))
 					r.NoError(err)
-					desc, err := auto.GetComponentVersion(ctx, component, "v1.0.0")
+					desc, err := v2Repo.GetComponentVersion(ctx, component, "v1.0.0")
 					r.NoError(err)
-					r.NoError(auto.AddComponentVersion(ctx, desc))
-					stored, err := auto.GetComponentVersionLayout(ctx, component, "v1.0.0")
+					r.NoError(v2Repo.AddComponentVersion(ctx, desc))
+					stored, err := v2Repo.GetComponentVersionLayout(ctx, component, "v1.0.0")
 					r.NoError(err)
-					r.Equal("normalized", stored)
+					r.Equal("v2", stored)
 
-					versions, err := auto.ListComponentVersions(ctx, component)
+					versions, err := v2Repo.ListComponentVersions(ctx, component)
 					r.NoError(err)
 					r.Equal([]string{"v1.0.0"}, versions)
 				})

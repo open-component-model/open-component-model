@@ -32,7 +32,7 @@ type discoveryValue struct {
 	// Local resources are then read from the same artifact.
 	Pin string
 	// SourceLayout is the storage layout of the component version in its source repository.
-	// It is empty when layout detection was not requested or the source repository cannot report it.
+	// It is empty when the source repository cannot report it.
 	SourceLayout layout.ComponentVersionLayout
 }
 
@@ -49,9 +49,6 @@ type multiResolver struct {
 	rootPin func(key string) *descriptor.Digest
 	// expectedDigests returns the digests parents' component references expect for id.
 	expectedDigests func(id runtime.Identity) []descriptor.Digest
-	// detectLayout enables detecting the source layout of each component version, so that
-	// targets without an explicit layout can inherit it.
-	detectLayout bool
 }
 
 // Resolve fetches the component descriptor for the given key from the appropriate resolver.
@@ -141,16 +138,15 @@ func (r *multiResolver) Resolve(ctx context.Context, key string) (*discoveryValu
 	if pin != nil && pin.NormalisationAlgorithm == "" {
 		value.Pin = repository.FormatDigestPin(pin)
 	}
-	if r.detectLayout {
-		if detector, ok := repo.(repository.ComponentVersionLayoutDetector); ok {
-			sourceLayout, err := detector.GetComponentVersionLayout(ctx, component, version)
-			if err != nil {
-				return nil, fmt.Errorf("failed detecting storage layout of component version %s:%s: %w", component, version, err)
-			}
-			value.SourceLayout = layout.ComponentVersionLayout(sourceLayout)
-			slog.DebugContext(ctx, "detected source layout",
-				"component", component, "version", version, "layout", sourceLayout)
+	// The source layout decides whether signature referrers of a normalized source are carried.
+	if detector, ok := repo.(repository.ComponentVersionLayoutDetector); ok {
+		sourceLayout, err := detector.GetComponentVersionLayout(ctx, component, version)
+		if err != nil {
+			return nil, fmt.Errorf("failed detecting storage layout of component version %s:%s: %w", component, version, err)
 		}
+		value.SourceLayout = layout.ComponentVersionLayout(sourceLayout)
+		slog.DebugContext(ctx, "detected source layout",
+			"component", component, "version", version, "layout", sourceLayout)
 	}
 
 	return value, nil

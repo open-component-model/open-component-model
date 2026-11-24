@@ -21,6 +21,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ociresource "ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
+	ocistoragev1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/storage/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	ocirepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -117,12 +118,11 @@ func Test_Integration_TransferNormalized_OCIToOCI_CarriesSignatureReferrer(t *te
 		attestationDesc.Digest.String(): fetchAll(t, ctx, sourceRemote, attestationDesc),
 	}
 
-	// 5. Transfer source -> target without a layout flag: the target inherits the normalized layout
-	//    and the signature referrer is carried along.
+	// 5. Transfer source -> target with the normalized layout configured for the target: the
+	//    signature referrer is carried along.
 	sourceSpec := &ocirepospec.Repository{
-		Type:                   runtime.Type{Name: ocirepospec.Type, Version: "v1"},
-		BaseUrl:                fmt.Sprintf("http://%s", sourceAddr),
-		ComponentVersionLayout: layout.ComponentVersionLayoutNormalized,
+		Type:    runtime.Type{Name: ocirepospec.Type, Version: "v1"},
+		BaseUrl: fmt.Sprintf("http://%s", sourceAddr),
 	}
 	targetSpec := &ocirepospec.Repository{
 		Type:    runtime.Type{Name: ocirepospec.Type, Version: "v1"},
@@ -145,6 +145,7 @@ func Test_Integration_TransferNormalized_OCIToOCI_CarriesSignatureReferrer(t *te
 	)
 	repoProvider := provider.NewComponentVersionRepositoryProvider(
 		provider.WithTempDir(t.TempDir()), provider.WithHTTPConfig(plainHTTPConfig()),
+		provider.WithOCIStorageConfig(&ocistoragev1alpha1.Config{ComponentVersionLayout: layout.ComponentVersionLayoutNormalized}),
 	)
 	resourceRepo := ociresource.NewResourceRepository(nil, ociresource.WithHTTPConfig(plainHTTPConfig()))
 	builder := transfer.NewDefaultBuilder(repoProvider, resourceRepo, credResolver, transfer.WithHTTPConfig(plainHTTPConfig()))

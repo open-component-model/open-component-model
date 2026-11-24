@@ -77,7 +77,6 @@ func TestConfig_Validate(t *testing.T) {
 		{"valid policy Warn", spec.Config{UnmatchedResourcePolicy: spec.UnmatchedResourcePolicyWarn}, ""},
 		{"valid policy Fail", spec.Config{UnmatchedResourcePolicy: spec.UnmatchedResourcePolicyFail}, ""},
 		{"unknown policy", spec.Config{UnmatchedResourcePolicy: "Strict"}, "invalid unmatchedResourcePolicy"},
-		{"unknown layout", spec.Config{ComponentVersionLayout: "Normalized"}, "invalid componentVersionLayout"},
 	}
 
 	for _, tc := range tests {

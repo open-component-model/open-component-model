@@ -66,22 +66,39 @@ Justification:
 
 ##### Layout selection
 
-The layout is selected per repository and recorded on the stored manifest, never inferred from configuration alone
-when reading.
+The layout is a write-time storage policy configured for the OCM process, not a property of a repository. It is
+recorded on the stored manifest and never inferred from configuration when reading.
 
-* OCI and CTF repository specifications get the field `componentVersionLayout` with the values `v2` and `normalized`
-  (Go type `layout.ComponentVersionLayout` in `bindings/go/oci/spec/layout`). An empty value means *auto*. Unknown
-  values are rejected by the repository provider.
-* `oci.Layout` has three values: `LayoutAuto` (the zero value), `LayoutV2` and `LayoutNormalized`. With `LayoutAuto`,
-  `AddComponentVersion` resolves the version tag first: if it already points to a normalized manifest, the version
-  is written in the normalized layout again, otherwise in v2. An explicit `v2` or `normalized` always wins.
-  Read-modify-write commands such as `ocm sign` (which persists signatures by re-adding the descriptor) therefore
-  keep a normalized version normalized and do not move its tag away from the signed digest.
-* `ocm add component-version --layout v2|normalized` sets the layout of a newly added version. Without the flag, the
-  layout of a version already stored at the tag is kept, otherwise v2 is used.
-* Readers detect the layout from the `artifactType` of the manifest the tag resolves to.
-  `repository.ComponentVersionLayoutDetector` (implemented by `*oci.Repository`) exposes the detected layout
-  (`v2` or `normalized`) to callers such as the transfer graph builder.
+* A new configuration type `oci.storage.config.ocm.software/v1alpha1` (Go package
+  `bindings/go/oci/spec/config/storage/v1alpha1`) has the field `componentVersionLayout` with the values `v2`
+  (default) and `normalized` (Go type `layout.ComponentVersionLayout` in `bindings/go/oci/spec/layout`). Unknown
+  values are rejected when the configuration is looked up.
+
+  ```yaml
+  type: generic.config.ocm.software/v1
+  configurations:
+  - type: oci.storage.config.ocm.software/v1alpha1
+    componentVersionLayout: normalized
+  ```
+
+* The CLI passes the configuration to the OCI repository provider (`provider.WithOCIStorageConfig`), which sets
+  `oci.WithComponentVersionLayout` on every OCI and CTF repository it hands out. Repository specifications
+  (`OCIRepository/v1`, `CommonTransportFormat/v1`) do not carry a layout: they describe where component versions are
+  stored and are also used for reading (resolvers, controller resources, transfer specifications).
+* `oci.Layout` has two values: `LayoutV2` (the zero value) and `LayoutNormalized`. `AddComponentVersion` always writes
+  in the configured layout. It does not detect the layout of a version already stored at the tag: such a check races
+  with concurrent writers in the same way as conflict detection, and component versions are meant to be immutable.
+* Commands that rewrite a component version in place therefore also use the configured layout. `ocm sign` persists a
+  signature by re-adding the descriptor: without `componentVersionLayout: normalized`, signing a normalized version
+  rewrites it in the v2 layout, which moves its tag off the normalized manifest, so the cosign or notary signatures
+  attached to that manifest are no longer reachable from the tag. With the normalized layout configured, the
+  normalized manifest stays unchanged (signatures are not part of the normalized descriptor) and only the access
+  referrer is replaced. This is documented for `ocm sign`.
+* There is no CLI flag; the configuration is passed with `--config` (also from stdin). Selecting the layout per
+  component (for example by component name pattern, like resolvers) can be added to the configuration type later.
+* Readers detect the layout from the `artifactType` of the manifest the tag resolves to, so repositories can contain
+  both layouts. `repository.ComponentVersionLayoutDetector` (implemented by `*oci.Repository`) exposes the detected
+  layout (`v2` or `normalized`) to callers such as the transfer graph builder.
 
 ##### Normalized manifest `M`
 
@@ -160,8 +177,8 @@ signing are not verified. Sources carry no digest in OCM, so only the scoping ap
 3. Push `N`, the config and `M`, and tag `<version>` → `M`.
 4. Push the local blobs, `F` and `A` with `subject` = `M`, and tag `sha256-<hex(D_norm)>.acc` → `A`.
 
-Re-adding a version with unchanged signed content (for example `ocm sign`, which only adds to `signatures[]`)
-produces the same `M` and a new `A'`. Older access referrers are not deleted; the `.acc` tag moves to `A'` and is
+Re-adding a version with unchanged signed content in the normalized layout (for example `ocm sign` with the
+normalized layout configured, which only adds to `signatures[]`) produces the same `M` and a new `A'`. Older access referrers are not deleted; the `.acc` tag moves to `A'` and is
 authoritative on read, so the most recently written descriptor is returned.
 
 Listing component versions (`ListComponentVersions`) accepts both the v2 and the normalized `artifactType` in the
@@ -170,18 +187,12 @@ and never lists `.acc` tags or access referrers as versions.
 
 ##### Transfer
 
-* `transferv1alpha1.Config` (`transfer.config.ocm.software/v1alpha1`) gets `componentVersionLayout` (`v2` or
-  `normalized`). The effective layout of each component version on each OCI or CTF target is, in order of precedence:
-  the transfer configuration, the `componentVersionLayout` of the target repository specification, the layout
-  detected on the source component version (through `repository.ComponentVersionLayoutDetector`), and finally v2.
-  A normalized source therefore stays normalized unless the user explicitly asks for v2. The chosen layout is
-  written into the target repository specification of every node of that component version, so `--dry-run` output
-  and stored transfer specifications are self-contained.
-* `ocm transfer component-version --layout v2|normalized` sets the configuration entry (the flag wins over a
-  configuration file). With `--transfer-spec` the layout is already part of the specification and the flag is
-  ignored with a warning.
-* For every component version whose effective target layout is normalized and whose source is an OCI or CTF
-  repository, the graph contains a separate node `<id>Carry` of type `OCICarryComponentSignatures/v1alpha1` or
+* The transfer writes every component version in the layout of the OCI storage configuration, like any other write.
+  The transfer configuration, the transfer graph and the target repository specifications carry no layout, and the
+  layout of the source is not inherited.
+* For every component version whose source stores it in the normalized layout (detected through
+  `repository.ComponentVersionLayoutDetector`) and whose source and target are OCI or CTF repositories, the graph
+  contains a separate node `<id>Carry` of type `OCICarryComponentSignatures/v1alpha1` or
   `CTFCarryComponentSignatures/v1alpha1` after the upload node `<id>Upload`. Its specification has the fields
   `repository` (target), `sourceRepository`, `component` and `version`. It runs
   `repository.ComponentSignatureCarrier.CarryComponentSignatures`, which copies the referrers of the source `M`
@@ -189,10 +200,11 @@ and never lists `.acc` tags or access referrers as versions.
   except access referrers, to the target `M`. This covers cosign v3 bundles and other OCI 1.1 referrers; signatures
   that cosign stores only under its legacy tag scheme (`sha256-<hex>.sig`, `.att`) are not copied.
   `sourceRepository` is no longer part of the `AddComponentVersion` specifications.
-* The carry is strict. It is a no-op (with an info log) only when the source version is not in the normalized layout
-  or the source is not an OCI or CTF repository. A digest mismatch between source and target `M`, a failed referrer
-  discovery, or a failed copy fail the node and therefore the transfer, so a user who opted into the normalized
-  layout never gets a target without the signatures of the source.
+* The carry is a no-op with an info log when the source version is not in the normalized layout or the source is not
+  an OCI or CTF repository, and a no-op with a warning when the target was not written in the normalized layout
+  (the OCI storage configuration does not select it). A digest mismatch between a normalized source and target `M`, a
+  failed referrer discovery, or a failed copy fail the node and therefore the transfer, so a transfer into the
+  normalized layout never silently drops the signatures of the source.
 * `D_norm` includes the `subject` of `M`. Source and target must therefore use the same referrer tracking policy
   (the default, `None`, everywhere including CTF); otherwise the carry fails on the digest mismatch and the component
   version has to be signed again on the target.
@@ -271,10 +283,11 @@ tag <component>:<version>                tag sha256-<hex(D_norm)>.acc
 
 #### Contract
 
-* Go: `layout.ComponentVersionLayout` (`v2`, `normalized`, empty = auto); `oci.Layout` (`LayoutAuto`, `LayoutV2`,
-  `LayoutNormalized`); `repository.ComponentVersionLayoutDetector`; `repository.ComponentSignatureCarrier`.
-* Specifications: `componentVersionLayout` on `OCIRepository/v1` and `CommonTransportFormat/v1`;
-  `componentVersionLayout` on `transfer.config.ocm.software/v1alpha1`; transformations
+* Go: `layout.ComponentVersionLayout` (`v2`, `normalized`, empty = `v2`); `oci.Layout` (`LayoutV2`,
+  `LayoutNormalized`); `provider.WithOCIStorageConfig`; `repository.ComponentVersionLayoutDetector`;
+  `repository.ComponentSignatureCarrier`.
+* Specifications: configuration type `oci.storage.config.ocm.software/v1alpha1` with `componentVersionLayout`;
+  transformations
   `OCICarryComponentSignatures/v1alpha1` and `CTFCarryComponentSignatures/v1alpha1`.
 * Media types and annotations as listed above; constants in `bindings/go/oci/spec/descriptor` and
   `bindings/go/oci/spec/layout/normalized/v1`.

@@ -236,30 +236,40 @@ func TestNormalizedLayout_RepositoryRoundTrip(t *testing.T) {
 	r.Equal(srcContent, readAll(t, sb))
 }
 
-func TestNormalizedLayout_LayoutPreservedOnReAdd(t *testing.T) {
+func TestNormalizedLayout_ReAddUsesConfiguredLayout(t *testing.T) {
 	r := require.New(t)
 	ctx := t.Context()
 	ctfStore := newCTFStore(t)
 	normalized := Repository(t, ocictf.WithCTF(ctfStore), oci.WithComponentVersionLayout(oci.LayoutNormalized))
-	auto := Repository(t, ocictf.WithCTF(ctfStore))
+	v2Repo := Repository(t, ocictf.WithCTF(ctfStore))
 	store, ref := componentStore(t, ctx, ctfStore, normComponent, normVersion)
 
 	r.NoError(normalized.AddComponentVersion(ctx, normDescriptor()))
-	before, err := store.Resolve(ctx, ref)
+	original, err := store.Resolve(ctx, ref)
 	r.NoError(err)
 
-	// Persisting an OCM signature re-adds the version through a repository without a layout.
-	r.NoError(auto.AddComponentVersion(ctx, withSignature(normDescriptor(), "ocm-sig")))
-	after, err := store.Resolve(ctx, ref)
+	// Persisting an OCM signature through a repository with the default layout rewrites the
+	// version in the v2 layout.
+	r.NoError(v2Repo.AddComponentVersion(ctx, withSignature(normDescriptor(), "ocm-sig")))
+	rewritten, err := store.Resolve(ctx, ref)
 	r.NoError(err)
-	r.Equal(before.Digest, after.Digest, "the tag must stay on the normalized manifest")
+	r.NotEqual(original.Digest, rewritten.Digest, "the tag must move to the v2 manifest")
+	gotLayout, err := v2Repo.GetComponentVersionLayout(ctx, normComponent, normVersion)
+	r.NoError(err)
+	r.Equal(string(layout.ComponentVersionLayoutV2), gotLayout)
+	got, err := v2Repo.GetComponentVersion(ctx, normComponent, normVersion)
+	r.NoError(err)
+	r.Len(got.Signatures, 1)
 
-	got, err := auto.GetComponentVersion(ctx, normComponent, normVersion)
+	// Persisting it through a repository with the normalized layout restores the normalized
+	// manifest: signatures are not part of the normalized descriptor, so its digest is unchanged.
+	r.NoError(normalized.AddComponentVersion(ctx, withSignature(normDescriptor(), "ocm-sig")))
+	restored, err := store.Resolve(ctx, ref)
+	r.NoError(err)
+	r.Equal(original.Digest, restored.Digest, "the tag must be back on the original normalized manifest")
+	got, err = normalized.GetComponentVersion(ctx, normComponent, normVersion)
 	r.NoError(err)
 	r.Len(got.Signatures, 1, "the re-added descriptor must be read back, not the stale one")
-	gotLayout, err := auto.GetComponentVersionLayout(ctx, normComponent, normVersion)
-	r.NoError(err)
-	r.Equal(string(layout.ComponentVersionLayoutNormalized), gotLayout)
 }
 
 // tamperAccessReferrer replaces the tagged access referrer of the normalized version with one that
@@ -406,12 +416,30 @@ func TestNormalizedLayout_CarryComponentSignatures(t *testing.T) {
 		r.False(exists, "access referrers are regenerated per repository and must not be carried")
 	})
 
-	t.Run("digest mismatch is an error", func(t *testing.T) {
+	t.Run("v2 target is skipped", func(t *testing.T) {
 		r := require.New(t)
 		ctx := t.Context()
-		src, dst, srcCTF, _ := newRepos(t, oci.LayoutNormalized, oci.LayoutV2)
+		src, dst, srcCTF, dstCTF := newRepos(t, oci.LayoutNormalized, oci.LayoutV2)
 		r.NoError(src.AddComponentVersion(ctx, normDescriptor()))
 		r.NoError(dst.AddComponentVersion(ctx, normDescriptor()))
+		sig := pushSignature(t, ctx, srcCTF)
+
+		r.NoError(dst.CarryComponentSignatures(ctx, src, normComponent, normVersion))
+
+		dstStore, _ := componentStore(t, ctx, dstCTF, normComponent, normVersion)
+		exists, err := dstStore.Exists(ctx, sig)
+		r.NoError(err)
+		r.False(exists, "signatures must not be carried into a v2 target")
+	})
+
+	t.Run("normalized digest mismatch is an error", func(t *testing.T) {
+		r := require.New(t)
+		ctx := t.Context()
+		src, dst, srcCTF, _ := newRepos(t, oci.LayoutNormalized, oci.LayoutNormalized)
+		r.NoError(src.AddComponentVersion(ctx, normDescriptor()))
+		other := normDescriptor()
+		other.Component.Provider.Name = "someone-else"
+		r.NoError(dst.AddComponentVersion(ctx, other))
 		pushSignature(t, ctx, srcCTF)
 
 		r.ErrorContains(dst.CarryComponentSignatures(ctx, src, normComponent, normVersion), "differs from normalized source manifest")

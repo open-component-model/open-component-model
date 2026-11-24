@@ -76,8 +76,8 @@ type TransferRoot struct {
 //     - Get transformations for resources (fetching from source)
 //     - Add transformations for resources (uploading to target)
 //     - An AddComponentVersion upload transformation for the descriptor itself
-//     - A CarryComponentSignatures transformation after the upload, if the target stores the
-//     component version in the normalized layout (see resolveTargetLayout)
+//     - A CarryComponentSignatures transformation after the upload, if the source stores the
+//     component version in the normalized layout and the target is an OCI or CTF repository
 //
 // The returned graph definition can be validated and executed by a builder.Builder.
 func BuildGraphDefinition(
@@ -132,9 +132,6 @@ func BuildGraphDefinition(
 			}
 			return slices.Clone(disc.discoveredDigests[id.String()])
 		},
-		// An explicit layout in the transfer config applies to every target, so the source
-		// layout is only needed when targets may inherit it.
-		detectLayout: cfg.ComponentVersionLayout == "",
 	}
 
 	slog.DebugContext(ctx, "starting component discovery",
@@ -170,7 +167,7 @@ func BuildGraphDefinition(
 
 	// Phase 2: walk the discovered DAG and generate transformation nodes per (component, target) pair.
 	err := g.WithReadLock(func(d *dag.DirectedAcyclicGraph[string]) error {
-		return fillGraphDefinitionWithPrefetchedComponents(ctx, d, targetMap, tgd, uploaders, cfg.ComponentVersionLayout, cfg.UnmatchedResourcePolicy.Normalize())
+		return fillGraphDefinitionWithPrefetchedComponents(ctx, d, targetMap, tgd, uploaders, cfg.UnmatchedResourcePolicy.Normalize())
 	})
 	if err != nil {
 		return nil, err
@@ -209,12 +206,10 @@ func verifyReferenceDigests(ctx context.Context, d *dag.DirectedAcyclicGraph[str
 //     selects each resource, or by the baseline (see processResources).
 //  3. A final AddComponentVersion upload transformation is appended, referencing the processed
 //     resources via CEL expressions.
-//  4. For a target that stores the component version in the normalized layout, a
+//  4. For a source that stores the component version in the normalized layout, a
 //     CarryComponentSignatures transformation copies the source's signature referrers after
-//     the upload.
-//
-// configuredLayout is the layout from the transfer config; see resolveTargetLayout for how it
-// combines with the target spec and the source layout.
+//     the upload. The target is written in the layout of its OCI storage configuration; if
+//     that is not the normalized layout, the carry is skipped with a warning at execution.
 //
 // When a component has multiple targets, transformation IDs are suffixed (e.g., "T0", "T1")
 // to ensure uniqueness in the DAG. The environment descriptor is shared across targets
@@ -225,7 +220,6 @@ func fillGraphDefinitionWithPrefetchedComponents(
 	targetMap map[string][]runtime.Typed,
 	tgd *transformv1alpha1.TransformationGraphDefinition,
 	uploaders []transferv1alpha1.UploaderConfig,
-	configuredLayout layout.ComponentVersionLayout,
 	policy transferv1alpha1.UnmatchedResourcePolicy,
 ) error {
 	slog.DebugContext(ctx, "building transformations for discovered components",
@@ -267,12 +261,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 			return err
 		}
 
-		for targetIdx, configuredTarget := range targets {
-			target, targetLayout, err := resolveTargetLayout(configuredTarget, configuredLayout, val.SourceLayout)
-			if err != nil {
-				return fmt.Errorf("resolving component version layout for %s:%s: %w", component, version, err)
-			}
-
+		for targetIdx, target := range targets {
 			id := baseID
 			if len(targets) > 1 {
 				id = fmt.Sprintf("%sT%d", baseID, targetIdx)
@@ -294,7 +283,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 				return err
 			}
 
-			if targetLayout == layout.ComponentVersionLayoutNormalized {
+			if val.SourceLayout == layout.ComponentVersionLayoutNormalized && isOCIOrCTF(target) {
 				if err := addCarryTransformation(ctx, val, id, target, tgd,
 					carryLabel(&val.Descriptor.Component, target, targetIdx, len(targets))); err != nil {
 					return err
