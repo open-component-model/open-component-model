@@ -60,13 +60,21 @@ func TestOciTransfer(t *testing.T) {
 	component, version := "my.org/mycomponent", "1.0.0"
 
 	srcRegistry := newRegistry(t, nil)
-	targetRegistry := newRegistry(t, nil)
+
 	imageRegistryUsers := map[string]authn.Basic{
 		"project1": {Username: "user1", Password: "password1"},
 		"project2": {Username: "user2", Password: "password2"},
 	}
 	imageRegistry := newRegistry(t, imageRegistryUsers)
 	imageHost, imagePort, err := net.SplitHostPort(imageRegistry)
+	r.NoError(err)
+
+	targetRegistryUsers := map[string]authn.Basic{
+		"project1": {Username: "user3", Password: "password3"},
+		"project2": {Username: "user4", Password: "password4"},
+	}
+	targetRegistry := newRegistry(t, targetRegistryUsers)
+	targetHost, targetPort, err := net.SplitHostPort(targetRegistry)
 	r.NoError(err)
 
 	cfgYAML := fmt.Sprintf(`
@@ -78,7 +86,7 @@ configurations:
           - type: OCIRegistry/v1
             hostname: %[1]s
             port: "%[2]s"
-            path: project1/*
+            path: project1/**
         credentials:
           - type: Credentials/v1
             properties:
@@ -88,18 +96,39 @@ configurations:
           - type: OCIRegistry/v1
             hostname: %[1]s
             port: "%[2]s"
-            path: project2/*
+            path: project2/**
         credentials:
           - type: Credentials/v1
             properties:
               username: user2
               password: password2
+      - identities:
+          - type: OCIRegistry/v1
+            hostname: %[3]s
+            port: "%[4]s"
+            path: project1/**
+        credentials:
+          - type: Credentials/v1
+            properties:
+              username: user3
+              password: password3
+      - identities:
+          - type: OCIRegistry/v1
+            hostname: %[3]s
+            port: "%[4]s"
+            path: project2/**
+        credentials:
+          - type: Credentials/v1
+            properties:
+              username: user4
+              password: password4
+
   - type: http.config.ocm.software/v1alpha1
     hosts:
-      "%[3]s": {plainHTTP: true}
-      "%[4]s": {plainHTTP: true}
       "%[5]s": {plainHTTP: true}
-`, imageHost, imagePort, srcRegistry, targetRegistry, imageRegistry)
+      "%[6]s": {plainHTTP: true}
+      "%[7]s": {plainHTTP: true}
+`, imageHost, imagePort, targetHost, targetPort, srcRegistry, targetRegistry, imageRegistry)
 
 	var cfg genericv1.Config
 	r.NoError(genericv1.Scheme.Decode(strings.NewReader(cfgYAML), &cfg))
@@ -112,7 +141,7 @@ configurations:
 	r.NoError(err)
 	var resources []descriptor.Resource
 	for i, project := range []string{"project1", "project2"} {
-		ref := imageRegistry + "/" + project + "/hello:1.0.0"
+		ref := imageRegistry + "/" + project + "/myimage/hello:1.0.0"
 		user := imageRegistryUsers[project]
 		r.Error(crane.Push(img, ref, crane.Insecure), "push without credentials must be rejected")
 		r.NoError(crane.Push(img, ref, crane.Insecure, crane.WithAuth(&user)))
