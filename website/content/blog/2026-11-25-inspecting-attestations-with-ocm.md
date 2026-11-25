@@ -9,7 +9,7 @@ draft: false
 
 ## The Gap
 
-An [earlier post](../2026-07-28-shipping-sboms-with-your-components) described how SBOMs can travel
+An [earlier post]({{< relref "2026-07-28-shipping-sboms-with-your-components" >}}) described how SBOMs can travel
 *inside* an OCM component, linked to the resources they describe, signed alongside them. That covered
 the packaging side. What was still missing was the inspection side: a single command to answer the
 question *"what security evidence is actually attached to this component right now?"*
