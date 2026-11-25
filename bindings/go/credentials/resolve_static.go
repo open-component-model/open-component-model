@@ -3,6 +3,7 @@ package credentials
 import (
 	"context"
 	"maps"
+	"slices"
 
 	v1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -40,9 +41,20 @@ func NewStaticTypedCredentialsResolver(credMap map[string]runtime.Typed) *Static
 }
 
 func (s *StaticCredentialsResolver) Resolve(_ context.Context, identity runtime.Identity) (runtime.Typed, error) {
-	creds, ok := s.staticCredentialsStore[identity.String()]
-	if !ok {
-		return nil, ErrNotFound
+	if creds, ok := s.staticCredentialsStore[identity.String()]; ok {
+		return creds.DeepCopyTyped(), nil
 	}
-	return creds.DeepCopyTyped(), nil
+	// Fall back to matching like the credential graph: lookup identities can carry more
+	// attributes than the stored keys (e.g. an OCI image's repository as path), so an
+	// exact key lookup would miss entries scoped only to the registry.
+	for _, key := range slices.Sorted(maps.Keys(s.staticCredentialsStore)) {
+		stored, err := runtime.ParseIdentity(key)
+		if err != nil {
+			continue
+		}
+		if identity.Match(stored) {
+			return s.staticCredentialsStore[key].DeepCopyTyped(), nil
+		}
+	}
+	return nil, ErrNotFound
 }

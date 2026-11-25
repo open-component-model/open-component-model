@@ -1922,6 +1922,7 @@ func Test_Integration_OCIImageLayer(t *testing.T) {
 		"scheme":   "http",
 		"hostname": url.Hostname(),
 		"port":     url.Port(),
+		"path":     "layer-test",
 		"type":     "OCIRegistry",
 	}
 	creds := &credconfigv1.DirectCredentials{

@@ -151,8 +151,27 @@ func (p *ResourceRepository) getIdentity(obj runtime.Typed) (runtime.Identity, e
 	if err != nil {
 		return nil, fmt.Errorf("error parsing URL to identity: %w", err)
 	}
+	if repository := accessToRepository(obj); repository != "" {
+		identity[runtime.IdentityAttributePath] = repository
+	}
 	identity.SetType(credidentityv1.Type)
 	return identity, nil
+}
+
+// accessToRepository returns the repository of an access already validated by accessToBaseURL.
+func accessToRepository(access runtime.Typed) string {
+	var reference string
+	switch access := access.(type) {
+	case *v1.OCIImage:
+		reference = access.ImageReference
+	case *v1.OCIImageLayer:
+		reference = access.Reference
+	}
+	ref, err := looseref.ParseReference(reference)
+	if err != nil {
+		return ""
+	}
+	return ref.Repository
 }
 
 func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
