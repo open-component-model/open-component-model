@@ -6,12 +6,18 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/oras-project/oras-go/v3/content"
 	"github.com/oras-project/oras-go/v3/errdef"
+	slogcontext "github.com/veqryn/slog-context"
 
+	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/oci/internal/log"
 	ocidescriptor "ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
+	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
+	"ocm.software/open-component-model/bindings/go/repository"
 )
 
 // signatureGraph hides access referrers from every walk over the graph. What
@@ -64,6 +70,83 @@ func (g signatureGraph) Predecessors(ctx context.Context, desc ociImageSpecV1.De
 		kept = append(kept, p)
 	}
 	return kept, nil
+}
+
+// DownloadComponentVersionGraph returns the OCI graph a component version in the normalized layout
+// is stored as, without its access referrers: the normalized manifest as root, and its signature
+// referrers. Nothing is downloaded, the returned stream reads from the store of the repository.
+// If the repository is pinned to an artifact of component, that artifact is the root instead of
+// what the version tag resolves to.
+//
+// It fails for a component version that is not stored in the normalized layout.
+func (repo *Repository) DownloadComponentVersionGraph(ctx context.Context, component, version string) (_ ocistream.ResourceStream, err error) {
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
+	done := log.Operation(ctx, "download component version graph", slog.String("component", component), slog.String("version", version))
+	defer func() {
+		done(err)
+	}()
+
+	reference, store, err := repo.componentVersionStore(ctx, component, version)
+	if err != nil {
+		return nil, err
+	}
+	root, err := store.Resolve(ctx, reference)
+	if errors.Is(err, errdef.ErrNotFound) {
+		if pin := repo.pinFor(component); pin != nil {
+			return nil, repo.pinNotFoundError(ctx, pin, version, err)
+		}
+		return nil, errors.Join(repository.ErrNotFound, fmt.Errorf("component version %s:%s not found: %w", component, version, err))
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve reference %q: %w", reference, err)
+	}
+	manifest, index, err := getDescriptorOCIImageManifest(ctx, store, root)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get manifest: %w", err)
+	}
+	if layoutOf(&manifest, index) != LayoutNormalized {
+		return nil, fmt.Errorf("component version %s:%s is not stored in the %s layout, so it has no normalized manifest to transfer with its signature referrers", component, version, LayoutNormalized)
+	}
+
+	return &ocistream.OCIResourceStream{
+		ReadOnlyGraphStorage: signatureGraph{store},
+		Descriptor:           root,
+		ExtendedCopyOpts:     repo.extendedCopyGraphOptions(),
+		TempDir:              repo.tempDir,
+		Tags:                 []string{version},
+	}, nil
+}
+
+// AddComponentVersionFromGraph adds desc like [Repository.AddComponentVersion], but copies the
+// normalized manifest with its signature referrers from graph, the graph of that component
+// version in its source repository (see [Repository.DownloadComponentVersionGraph]), instead of
+// building the manifest. Signatures over the manifest digest, e.g. by cosign, stay valid that way.
+// The access referrer is still written by this repository, as it holds accesses of this repository.
+//
+// The copy fails before writing if desc does not normalize to the normalized manifest of graph, or
+// if that manifest does not fit the referrer tracking policy of this repository. The version is
+// tagged last, once its signature referrers and its access referrer exist.
+//
+// A repository that does not write the normalized layout cannot hold the normalized manifest. It
+// adds desc with AddComponentVersion and logs that the signature referrers are left behind.
+func (repo *Repository) AddComponentVersionFromGraph(ctx context.Context, desc *descriptor.Descriptor, graph ocistream.ResourceStream) (err error) {
+	if graph == nil {
+		return errors.New("the graph of the component version is required")
+	}
+	component, version := desc.Component.Name, desc.Component.Version
+	if repo.layout != LayoutNormalized {
+		repo.logger.WarnContext(ctx, "target repository does not write the normalized layout, signature referrers of the normalized source are not carried",
+			slog.String("component", component), slog.String("version", version), slog.String("layout", repo.layout.String()),
+			slog.String("hint", "set componentVersionLayout: normalized in the oci.storage.config.ocm.software/v1alpha1 configuration to keep the normalized layout"))
+		return repo.AddComponentVersion(ctx, desc)
+	}
+
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
+	done := log.Operation(ctx, "add component version from graph", slog.String("component", component), slog.String("version", version))
+	defer func() {
+		done(err)
+	}()
+	return repo.addComponentVersion(ctx, desc, graph)
 }
 
 // rejectAccessReferrers fails for a manifest or index that carries the access

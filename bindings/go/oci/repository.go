@@ -123,6 +123,14 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 	defer func() {
 		done(err)
 	}()
+	return repo.addComponentVersion(ctx, descriptor, nil)
+}
+
+// addComponentVersion adds descriptor to the repository and tags it with its version. Without
+// normalizedGraph every manifest is built from descriptor. With it, the normalized manifest and its
+// signature referrers are copied from that graph (see [Repository.AddComponentVersionFromGraph]).
+func (repo *Repository) addComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor, normalizedGraph ocistream.ResourceStream) error {
+	component, version := descriptor.Component.Name, descriptor.Component.Version
 
 	// Fail fast if the component version does not map to a valid OCI tag, rather
 	// than storing it under a mangled tag or hitting an opaque registry error.
@@ -148,7 +156,7 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		return fmt.Errorf("failed to validate local blobs: %w", err)
 	}
 
-	manifest, err := AddDescriptorToStore(ctx, store, descriptor, AddDescriptorOptions{
+	opts := AddDescriptorOptions{
 		Scheme:                        repo.scheme,
 		Author:                        repo.creatorAnnotation,
 		AdditionalDescriptorManifests: additionalManifests,
@@ -156,7 +164,12 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		ReferrerTrackingPolicy:        repo.referrerTrackingPolicy,
 		DescriptorEncodingMediaType:   repo.descriptorEncodingMediaType,
 		Layout:                        repo.layout,
-	})
+	}
+	if normalizedGraph != nil {
+		opts.NormalizedGraph = normalizedGraph
+		opts.NormalizedGraphCopyOptions = repo.extendedCopyGraphOptions()
+	}
+	manifest, err := AddDescriptorToStore(ctx, store, descriptor, opts)
 	if err != nil {
 		return fmt.Errorf("failed to add descriptor to store: %w", err)
 	}
