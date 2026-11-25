@@ -105,16 +105,39 @@ Resources that have no attestations in the registry (a local blob that is not an
 example) are skipped before resolving, so the command does not make a slow empty referrer probe for
 every resource.
 
+### Downloading the documents
+
+`ocm get attestations` is the inspector: it shows what is attached, without fetching any bytes.
+Once you know what is there, `ocm download attestation` fetches the actual documents.
+
+```shell
+# Download every SBOM across all resources, into ./attestations
+ocm download attestation ghcr.io/acme//acme.org/app:1.0.0 --all-resources --type sbom
+```
+
+Each document is written byte for byte as published, so digests and signatures over it still apply.
+The file name is a friendly label derived from the type, a short digest suffix, and a media-type
+extension (`sbom-cyclonedx-02ca56df.json`, `signature-cosign-f59d08c7.json`). The paths written are
+printed to stdout, one per line, so the output is pipeable:
+
+```shell
+ocm download attestation ghcr.io/acme//acme.org/app:1.0.0 --all-resources --type sbom \
+  | xargs -I{} trivy sbom {}
+```
+
+The scope flags mirror `get attestations`: `--identity name=X` narrows to one resource,
+`--all-resources` covers the whole component, `--recursive` descends into componentReferences.
+The default output directory is `./attestations`. `-o` overrides it.
+
 ---
 
 ## What's Next
 
-This is an EXPERIMENTAL command. The discovery model is in place and covers all three attachment
+Both commands are EXPERIMENTAL. The discovery model is in place and covers all three attachment
 channels, but a few things are still ahead:
 
-- **Downloading and verifying.** Right now the command is an inventory tool. The natural next step
-  is `ocm get attestation --download` for a single document and an `--verify` path that checks the
-  signature covering an attestation, following the same trust chain as `ocm verify`.
+- **Signature verification.** The next step after downloading is checking the signature covering
+  an attestation, following the same trust chain as `ocm verify`.
 - **The label convention.** `ocm.software/artifact-references` follows a spec convention being
   finalized in [ocm-spec#146](https://github.com/open-component-model/ocm-spec/pull/146). The exact
   value shape may still change, and the command will track it.
