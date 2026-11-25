@@ -391,6 +391,10 @@ Cons:
 * `D_norm` depends on the referrer tracking policy, so signatures are only portable between repositories that use
   the same policy.
 * Access referrers written by earlier re-adds remain in the repository until garbage-collected by other means.
+* Selection among several valid access referrers of the same `M` relies on their `org.opencontainers.image.created`
+  timestamp, which is wall-clock based. Sequential re-signs and transfers are deterministic, but under large clock
+  skew between concurrent writers on different hosts the "last writer" chosen on read is best-effort; ties and absent
+  timestamps fall back to the lowest manifest digest.
 
 ### [Option 2] In-Descriptor Sigstore Signatures Only
 
