@@ -86,7 +86,7 @@ func getNormalizedComponentVersion(ctx context.Context, store spec.Store, normal
 		if ctx.Err() != nil {
 			return fmt.Errorf("failed to read access referrer %s of normalized manifest %s: %w", candidate.Digest, normalized.Digest, err)
 		}
-		slogcontext.Log(ctx, slog.LevelWarn, "skipping invalid access referrer of normalized manifest",
+		slogcontext.Warn(ctx, "skipping invalid access referrer of normalized manifest",
 			log.DescriptorLogAttr(candidate),
 			slog.String("normalized", normalized.Digest.String()),
 			slog.Any("error", err))

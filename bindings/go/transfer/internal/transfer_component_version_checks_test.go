@@ -164,7 +164,7 @@ func TestTransferNormalizedComponentVersion_DefaultLayoutTargetLeavesSignaturesB
 	r.NoError(f.transfer(t, target))
 
 	r.Contains(target.logs.String(), "level=WARN")
-	r.Contains(target.logs.String(), "signature referrers of the normalized source are not carried")
+	r.Contains(target.logs.String(), "signature referrers of the normalized source are not copied")
 	r.Contains(target.logs.String(), "componentVersionLayout: normalized")
 	r.Contains(target.logs.String(), normalizedComponent)
 

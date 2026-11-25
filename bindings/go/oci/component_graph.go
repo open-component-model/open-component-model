@@ -141,14 +141,14 @@ func (repo *Repository) AddComponentVersionFromGraph(ctx context.Context, desc *
 		return errors.New("the graph of the component version is required")
 	}
 	component, version := desc.Component.Name, desc.Component.Version
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	if repo.layout != LayoutNormalized {
-		repo.logger.WarnContext(ctx, "target repository does not write the normalized layout, signature referrers of the normalized source are not carried",
+		slogcontext.Warn(ctx, "target repository does not write the normalized layout, signature referrers of the normalized source are not copied",
 			slog.String("component", component), slog.String("version", version), slog.String("layout", repo.layout.String()),
 			slog.String("hint", "set componentVersionLayout: normalized in the oci.storage.config.ocm.software/v1alpha1 configuration to keep the normalized layout"))
 		return repo.AddComponentVersion(ctx, desc)
 	}
 
-	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	done := log.Operation(ctx, "add component version from graph", slog.String("component", component), slog.String("version", version))
 	defer func() {
 		done(err)
