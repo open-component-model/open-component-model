@@ -12,7 +12,7 @@ sidebar:
 Get anything from OCM
 
 ```
-ocm get {component-version|component-versions|cv|cvs|config|cfg} [flags]
+ocm get {component-version|component-versions|cv|cvs|config|cfg|attestation|attestations} [flags]
 ```
 
 ### Options
@@ -70,6 +70,7 @@ ocm get {component-version|component-versions|cv|cvs|config|cfg} [flags]
 ### SEE ALSO
 
 * [ocm]({{< relref "ocm.md" >}})	 - The official Open Component Model (OCM) CLI
+* [ocm get attestation]({{< relref "ocm_get_attestation.md" >}})	 - Get the attestations describing a component version, its resources, or one resource
 * [ocm get component-version]({{< relref "ocm_get_component-version.md" >}})	 - Get component version(s) from an OCM repository
 * [ocm get config]({{< relref "ocm_get_config.md" >}})	 - Display the effective merged OCM configuration
 * [ocm get types]({{< relref "ocm_get_types.md" >}})	 - Describe OCM types and their configuration schema
