@@ -168,17 +168,18 @@ In the default (`v2`) OCI layout, the version tag of a component version points 
 
 The **normalized layout** is an opt-in storage layout for OCI registries and CTF archives in which the version tag points to a manifest that contains only the normalized descriptor. Its digest depends only on what the component version contains, not on where it is stored, so it is identical in every registry. You can sign it with `cosign sign` exactly like a container image, and cosign attaches the signature as an OCI referrer. The access information and the local blobs live in a separate, unsigned *access referrer* that OCM regenerates for each registry and checks against the signed manifest before it trusts it.
 
-When a normalized component version is transferred with the normalized layout configured, `ocm transfer`:
+When a normalized component version is transferred between OCI registries or CTF archives with the normalized layout configured, `ocm transfer` uploads it in a single step that:
 
-1. writes the same normalized manifest, with the same digest, to the target;
-2. writes a new access referrer for the target;
-3. copies the OCI referrers of the source manifest, such as cosign signatures and attestations, to the target in a separate step of the transfer.
+1. checks that the descriptor it is about to write still matches the signed manifest of the source, and that source and target track referrers in the same way. If a check fails, the transfer fails before the component version is written;
+2. copies the normalized manifest from the source to the target, together with the OCI referrers attached to it, such as cosign signatures and attestations. The manifest is copied unchanged, so it has the same digest on the target;
+3. writes a new access referrer for the target. Access referrers of the source are never copied;
+4. sets the version tag.
 
-The signature therefore verifies on the target with no re-signing. If copying the referrers fails, the transfer fails, so a transfer into the normalized layout never silently drops a signature.
+The signature therefore verifies on the target with no re-signing. The version tag is set last, so a component version that is visible on the target already has its signatures. If copying a referrer fails, the transfer fails, so a transfer into the normalized layout never silently drops a signature. The one exception is a referrer that the source still lists but no longer stores, for example after a retention policy removed it: it is skipped with a warning.
 
 The layout is set with the `componentVersionLayout` field of the [OCI storage configuration]({{< relref "docs/reference/configuration/oci-storage.md" >}}) (`default`, which is the `v2` layout, or `normalized`). It applies to every component version OCM writes, also to the transfer target and to `ocm sign`, which rewrites the component version in that layout. Configure `componentVersionLayout: normalized` for every OCM command that writes a normalized component version, otherwise it is rewritten as `v2` and its cosign signatures are no longer reachable from its tag. If the target of a transfer is not written in the normalized layout, the signatures of a normalized source are not copied and a warning is logged.
 
-Cosign signatures are only carried between repositories that track referrers in the same way, because that setting is part of the normalized manifest. Signatures that cosign stores only under its legacy `sha256-<digest>.sig` tag scheme are not carried; use cosign's OCI 1.1 referrer support.
+A normalized component version keeps its cosign signatures only between repositories that track referrers in the same way, because that setting is part of the normalized manifest; otherwise the transfer into the normalized layout fails. Signatures that cosign stores only under its legacy `sha256-<digest>.sig` tag scheme are not copied; use cosign's OCI 1.1 referrer support.
 
 ## Real-World Example
 

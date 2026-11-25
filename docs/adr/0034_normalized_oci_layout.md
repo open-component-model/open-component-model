@@ -144,13 +144,25 @@ repository and never signed:
    `...component-descriptor.normalized.v1` selects the normalized path. Manifests and indexes with the access
    `artifactType` are rejected as component version roots.
 2. Read `N` from `M.layers[0]`.
-3. Select the access referrer: collect the `access.v1` referrers of `M` (`Predecessors`) and discard any whose
-   `subject` is not `M`, that fail the bind check, or that fail the digest rules below. Reading fails if none
-   remains. Among the survivors the one with the most recent `org.opencontainers.image.created` annotation is
-   selected; ties, including referrers without that annotation, break by the lowest manifest digest for a
-   reproducible choice. Re-adding the version and third-party pushes leave several valid referrers of the same `M`,
-   so the newest reflects the last writer, and the digest rules plus the local-blob verification below still guard
-   the content a selected referrer points at.
+3. Select the access referrer, which is the newest valid one:
+   * The candidates are the referrers of `M` that the referrers listing reports with the `access.v1` `artifactType`
+     (the OCI referrers API filtered by `artifactType`, with the referrers tag schema `sha256-<hex>` as fallback, or
+     the CTF index). A listed entry without an `artifactType` is not considered. The listing does not grow with the
+     number of signatures, and no signature referrer is fetched.
+   * The candidates are ordered by the `org.opencontainers.image.created` annotation the listing reports for them,
+     newest first. A missing or malformed value sorts oldest; ties break by the lowest manifest digest for a
+     reproducible order.
+   * The candidates are fetched and validated in that order, and the first valid one is selected. A candidate is
+     valid if its manifest has the access `artifactType` and `M` as `subject`, passes the bind check and satisfies
+     the digest rules below. An invalid candidate is skipped with a warning that names its digest and the reason.
+     Reading fails if no candidate is listed or none is valid.
+
+   Re-adding the version, transfers and third-party pushes leave several valid referrers of the same `M`, so the
+   newest reflects the last writer, and the digest rules plus the local-blob verification below still guard the
+   content a selected referrer points at. With a valid newest candidate, exactly one access referrer is fetched.
+   An invalid candidate is skipped instead of failing the read, because a single referrer stamped with a time in
+   the future would otherwise make the version unreadable: later writes never sort before it, and registries often
+   cannot delete it.
 4. **Bind check**: `normalise(F, jsonNormalisation/v4alpha1)` must be byte-identical to `N`. On mismatch, reading
    fails with an error that names possible tampering.
 5. **Digest rules** on the bind-checked `F`: the rules of `signing.IsSafelyDigestible` and
@@ -189,24 +201,63 @@ and never lists access referrers as versions.
 * The transfer writes every component version in the layout of the OCI storage configuration, like any other write.
   The transfer configuration, the transfer graph and the target repository specifications carry no layout, and the
   layout of the source is not inherited.
-* For every component version whose source stores it in the normalized layout (detected through
-  `repository.ComponentVersionLayoutDetector`) and whose source and target are OCI or CTF repositories, the graph
-  contains a separate node `<id>Carry` of type `OCICarryComponentSignatures/v1alpha1` or
-  `CTFCarryComponentSignatures/v1alpha1` after the upload node `<id>Upload`. Its specification has the fields
-  `repository` (target), `sourceRepository`, `component` and `version`. It runs
-  `repository.ComponentSignatureCarrier.CarryComponentSignatures`, which copies the referrers of the source `M`
-  (`Predecessors`: the OCI referrers API with the referrers tag schema `sha256-<hex>` as fallback, or the CTF graph),
-  except access referrers, to the target `M`. This covers cosign v3 bundles and other OCI 1.1 referrers; signatures
-  that cosign stores only under its legacy tag scheme (`sha256-<hex>.sig`, `.att`) are not copied.
-  `sourceRepository` is no longer part of the `AddComponentVersion` specifications.
-* The carry is a no-op with an info log when the source version is not in the normalized layout or the source is not
-  an OCI or CTF repository, and a no-op with a warning when the target was not written in the normalized layout
-  (the OCI storage configuration does not select it). A digest mismatch between a normalized source and target `M`, a
-  failed referrer discovery, or a failed copy fail the node and therefore the transfer, so a transfer into the
-  normalized layout never silently drops the signatures of the source.
-* `D_norm` includes the `subject` of `M`. Source and target must therefore use the same referrer tracking policy
-  (the default, `None`, everywhere including CTF); otherwise the carry fails on the digest mismatch and the component
-  version has to be signed again on the target.
+* For every component version whose source stores it in the normalized layout and whose source and target are OCI
+  or CTF repositories, the upload node `<id>Upload` is a fused transformation instead of
+  `{OCI,CTF}AddComponentVersion`. There is one type per source and target repository kind, like the fused local
+  blob transfers: `TransferOCIComponentVersionToOCI/v1alpha1`, `TransferOCIComponentVersionToCTF/v1alpha1`,
+  `TransferCTFComponentVersionToOCI/v1alpha1` and `TransferCTFComponentVersionToCTF/v1alpha1`. Its specification
+  has the fields `source` (`repository`, `component`, `version`, `digest`), `repository` (target) and `descriptor`
+  (the same expression as for `AddComponentVersion`). Every other component version (v2 source, or a source or
+  target that is not an OCI or CTF repository) keeps `{OCI,CTF}AddComponentVersion`, which is unchanged and builds
+  every manifest from the descriptor. The same applies, with a warning, to a normalized version whose source
+  repository specification is unknown to the graph builder.
+* Discovery detects the layout (`repository.ComponentVersionLayoutDetector`) on the artifact the descriptor was read
+  from, and pins a normalized source to that artifact: `source.digest` is the OCI digest pin of a root component
+  version, or else the digest the version tag resolved to during discovery. The node opens the source pinned to that
+  digest (`repository.PinRepository`) and reads `M` and its referrers from that artifact without resolving the tag
+  again. Local blobs of the version are read from the same artifact. If the tag moves to other content while
+  discovery runs, the transfer fails: the pinned artifact is not a normalized manifest, or the bind check below does
+  not pass.
+* The node copies from the source store into the target store, without an intermediate file. The source hands out
+  its store as a graph with `M` as root (`DownloadComponentVersionGraph`), and the target adds the component version
+  from it (`AddComponentVersionFromGraph`) in this order:
+  1. **Bind check**: the transferred descriptor, normalized with `jsonNormalisation/v4alpha1`, must have the digest
+     and size of `layers[0]` of the source `M`. This needs only the manifest, not the layer. On mismatch the node
+     fails with an error that names the component version ("descriptor changed during transfer; source signatures
+     do not apply").
+  2. **Subject check**: `M` is copied unchanged and `D_norm` includes its `subject`, so `M` must have a `subject` if
+     and only if the target uses `ReferrerTrackingPolicyByIndexAndSubject`. Source and target must therefore use the
+     same referrer tracking policy (the default, `None`, everywhere including CTF).
+  3. One `oras.ExtendedCopyGraph` from `M` copies `M`, its config and `N`, the Component Index if it is the
+     `subject`, and every transitive referrer of `M` except access referrers: cosign signatures, attestations and
+     referrers of those. This covers cosign v3 bundles and other OCI 1.1 referrers (the OCI referrers API with the
+     referrers tag schema `sha256-<hex>` as fallback, or the CTF index); signatures that cosign stores only under
+     its legacy tag scheme (`sha256-<hex>.sig`, `.att`) are not copied.
+  4. The target writes its own access referrer `A` with `subject` = `M` and a new
+     `org.opencontainers.image.created` timestamp.
+  5. Tag `<version>` → `M`.
+
+  Both checks run before `M` or a referrer is written, and neither falls back to rebuilding `M`. The version is
+  tagged last, so a tagged version on the target always has its signature referrers and its access referrer.
+* Access referrers of the source, current or superseded, are never copied. They hold accesses of the source, and
+  their `created` timestamp comes from another writer's clock, so a copied one could be selected on the target.
+  Two guards enforce this:
+  * The source graph is a *signature view* of the source store that hides access referrers from every walk. A
+    referrer listed with an `artifactType` is decided from the listing, without a request. A manifest or index
+    listed without one is fetched to decide; a failed fetch fails the transfer, unless the content is missing (see
+    below).
+  * The target rejects any copied manifest or index whose body has the access `artifactType`, and the copy fails. A
+    referrers tag schema index is maintained by clients, so a listed `artifactType` can differ from the manifest.
+* Failing to open the source, to list or inspect its referrers, or to copy fails the node and therefore the
+  transfer, so a transfer into the normalized layout never silently drops the signatures of the source. The one
+  exception is a referrer that is listed but whose manifest no longer exists in the source (retention, garbage
+  collection): it is skipped with a warning, as in every other OCI copy.
+* If the target is not written in the normalized layout (the OCI storage configuration does not select it), the
+  node logs a warning with the `componentVersionLayout: normalized` hint and writes the component version like
+  `AddComponentVersion`. The signature referrers of the source are not copied; the transfer does not fail.
+* Every run writes a new access referrer, also a rerun into a target that already holds the version. `M` and its
+  signature referrers are unchanged by a rerun, and the read path selects the newest access referrer.
+* With several targets, each target's node reads the source graph itself.
 
 ##### Pinned component references
 
@@ -274,7 +325,7 @@ tag <component>:<version>                access referrer A (untagged; newest cre
 └───────────────▲───────────────┘         └──────────────────────────────────┘
                 │ subject
         ┌───────┴────────┐
-        │ cosign         │   copied by the <id>Carry transfer node
+        │ cosign         │   copied with M by the <id>Upload transfer node
         │ signatures,    │
         │ attestations   │
         └────────────────┘
@@ -284,10 +335,12 @@ tag <component>:<version>                access referrer A (untagged; newest cre
 
 * Go: `layout.ComponentVersionLayout` (`default`, `normalized`, empty = `default`); `oci.Layout` (`LayoutV2`,
   `LayoutNormalized`); `provider.WithOCIStorageConfig`; `repository.ComponentVersionLayoutDetector`;
-  `repository.ComponentSignatureCarrier`.
+  `(*oci.Repository).DownloadComponentVersionGraph` and `(*oci.Repository).AddComponentVersionFromGraph`, which the
+  `transformer.TransferComponentVersion` transformer requires of the source and the target repository (a provider
+  that wraps `*oci.Repository` has to forward them).
 * Specifications: configuration type `oci.storage.config.ocm.software/v1alpha1` with `componentVersionLayout`;
-  transformations
-  `OCICarryComponentSignatures/v1alpha1` and `CTFCarryComponentSignatures/v1alpha1`.
+  transformations `TransferOCIComponentVersionToOCI/v1alpha1`, `TransferOCIComponentVersionToCTF/v1alpha1`,
+  `TransferCTFComponentVersionToOCI/v1alpha1` and `TransferCTFComponentVersionToCTF/v1alpha1`.
 * Media types and annotations as listed above; constants in `bindings/go/oci/spec/descriptor` and
   `bindings/go/oci/spec/layout/normalized/v1`.
 
@@ -338,13 +391,16 @@ Before step 2, a reader **MUST** inspect the `artifactType` of the resolved mani
 
 * `application/vnd.ocm.software.component-descriptor.normalized.v1`: the reader **MUST** select the access
   referrer as follows and **MUST** fail if none is selected:
-  1. The reader **MUST** consider all access referrers of the normalized manifest and discard those that do not have
-     the access `artifactType` and the normalized manifest as `subject`, or that fail the checks below.
-  2. Of the remaining candidates the reader **MUST** select the one with the most recent
-     `org.opencontainers.image.created` annotation, breaking ties (including candidates without the annotation) by
-     the lowest manifest digest.
-* The checks are: `jsonNormalisation/v4alpha1` applied to the descriptor of the access referrer **MUST** be
-  byte-identical to the normalized layer, and the descriptor **MUST** satisfy the digest rules of §6.3.
+  1. The candidates are the referrers of the normalized manifest that the referrers listing reports with the access
+     `artifactType`. A listed referrer without an `artifactType` **MUST NOT** be considered.
+  2. The reader **MUST** order the candidates by the `org.opencontainers.image.created` annotation the listing
+     reports for them, most recent first. A missing or malformed value sorts oldest; ties **MUST** be broken by the
+     lowest manifest digest.
+  3. The reader **MUST** validate the candidates in that order and select the first one that passes the checks
+     below. A candidate that fails them **MUST** be skipped and **SHOULD** be reported as a warning.
+* The checks are: the candidate **MUST** have the access `artifactType` and the normalized manifest as `subject`,
+  `jsonNormalisation/v4alpha1` applied to its descriptor **MUST** be byte-identical to the normalized layer, and the
+  descriptor **MUST** satisfy the digest rules of §6.3. The selected referrer is therefore the newest valid one.
 * `application/vnd.ocm.software.component-descriptor.access.v1`: the artifact **MUST NOT** be interpreted as a
   component version root.
 * Readers that do not support the normalized representation **MUST** fail resolution instead of interpreting the
@@ -430,6 +486,6 @@ Cons:
 ## Conclusion
 
 The normalized layout makes the digest a tag resolves to a function of the signed content only. Standard cosign
-signatures and attestations on component versions therefore survive transfer, are carried by an explicit transfer
-node, and can be tied to OCM commands by pinning the OCM component version digest (#3889). The v2 layout stays the
-default and is unchanged.
+signatures and attestations on component versions therefore survive transfer, are copied together with the
+normalized manifest by the upload node of the transfer, and can be tied to OCM commands by pinning the OCM component
+version digest (#3889). The v2 layout stays the default and is unchanged.
