@@ -1,12 +1,13 @@
 package attestation
 
 import (
+	"cmp"
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
 	"io"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -31,7 +32,6 @@ const (
 	FlagResourceIdentity = "identity"
 	FlagType             = "type"
 	FlagOutput           = "output"
-	FlagComponent        = "component"
 	FlagConcurrencyLimit = "concurrency-limit"
 )
 
@@ -48,11 +48,11 @@ func New() *cobra.Command {
 		Long: `Discover and list the attestations attached to a component version: SBOMs, VEX documents,
 signatures, SLSA provenance, vulnerability reports, SARIF and anything else attached.
 
-By default every resource of the component is inspected and the referrers attached to the
-component version artifact itself are added, grouped by origin. Narrow it with:
+By default only the referrers attached to the component version artifact itself are listed.
+Widen or narrow the scope with:
 
   --identity name=X   only the attestations describing resource X.
-  --component         only the referrers attached to the component version artifact itself.
+  -o widetree         every resource of the component plus the component's own referrers.
 
 Per resource, attestations are merged from every source:
 
@@ -66,17 +66,17 @@ the documents or verify any signature, and it does not classify types into a fix
 TYPE column shows the raw type signal verbatim (in-toto predicate type, else artifact type, else
 media type). Use --type to filter: it matches a substring of any raw type signal, plus friendly
 aliases (for example "sbom" matches spdx and cyclonedx, "signature" matches cosign and notation).`,
-		Example: `  # Everything: every resource plus the component's own referrers
+		Example: `  # The component's own referrers
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0
 
-  # As a provenance tree
+  # The component's own referrers, as a provenance tree
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 -o tree
+
+  # Every resource plus the component's own referrers
+  ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 -o widetree
 
   # Only the "image" resource
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --identity name=image
-
-  # Only the component's own referrers
-  ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --component
 
   # Only SBOMs and VEX, as JSON
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --type sbom --type vex -o json`,
@@ -84,9 +84,8 @@ aliases (for example "sbom" matches spdx and cyclonedx, "signature" matches cosi
 		DisableAutoGenTag: true,
 	}
 
-	cmd.Flags().String(FlagResourceIdentity, "", "list only the attestations describing this one resource; mutually exclusive with --component")
-	cmd.Flags().Bool(FlagComponent, false, "list only the referrers attached to the component version artifact itself; mutually exclusive with --identity")
-	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum number of resources inspected in parallel when listing the whole component")
+	cmd.Flags().String(FlagResourceIdentity, "", "list only the attestations describing this one resource")
+	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum number of resources inspected in parallel when listing the whole component (-o widetree)")
 	cmd.Flags().StringSlice(FlagType, nil, "filter to attestations whose type contains any of these substrings or matches a friendly alias (sbom, vex, signature, provenance, spdx, ...); repeatable; empty lists all")
 	enum.VarP(cmd.Flags(), FlagOutput, "o",
 		[]string{
@@ -96,7 +95,7 @@ aliases (for example "sbom" matches spdx and cyclonedx, "signature" matches cosi
 			render.OutputFormatTree.String(),
 			render.OutputFormatWideTree.String(),
 		},
-		"output format")
+		"output format; tree lists the component's own referrers, widetree every resource too")
 
 	return cmd
 }
@@ -113,13 +112,6 @@ func GetAttestations(cmd *cobra.Command, args []string) error {
 	identityStr, err := cmd.Flags().GetString(FlagResourceIdentity)
 	if err != nil {
 		return fmt.Errorf("getting identity flag failed: %w", err)
-	}
-	componentOnly, err := cmd.Flags().GetBool(FlagComponent)
-	if err != nil {
-		return fmt.Errorf("getting component flag failed: %w", err)
-	}
-	if identityStr != "" && componentOnly {
-		return fmt.Errorf("use either --%s or --%s, not both", FlagResourceIdentity, FlagComponent)
 	}
 	concurrency, err := cmd.Flags().GetInt(FlagConcurrencyLimit)
 	if err != nil {
@@ -162,7 +154,7 @@ func GetAttestations(cmd *cobra.Command, args []string) error {
 		DiscoverComponent: componentDiscoverer,
 	}
 
-	groups, err := discoverGroups(ctx, baseReq, desc, identityStr, componentOnly, concurrency)
+	groups, err := discoverGroups(ctx, baseReq, desc, identityStr, format, concurrency)
 	if err != nil {
 		return err
 	}
@@ -171,17 +163,11 @@ func GetAttestations(cmd *cobra.Command, args []string) error {
 	return renderAttestations(ctx, cmd.OutOrStdout(), format, componentRef, filterGroups(groups, typeFilters))
 }
 
-// discoverGroups resolves the three selection modes to resource-labelled groups:
-// --component (only the component artifact), --identity (one resource), or the default
-// (every resource plus the component artifact, discovered in parallel).
-func discoverGroups(ctx context.Context, baseReq cliattestation.Request, desc *descriptor.Descriptor, identityStr string, componentOnly bool, concurrency int) ([]cliattestation.Group, error) {
+// discoverGroups resolves the selection to resource-labelled groups: --identity lists one
+// resource; -o widetree lists every resource plus the component artifact; every other output
+// lists only the component artifact's own referrers.
+func discoverGroups(ctx context.Context, baseReq cliattestation.Request, desc *descriptor.Descriptor, identityStr, format string, concurrency int) ([]cliattestation.Group, error) {
 	switch {
-	case componentOnly:
-		atts, err := cliattestation.Discover(ctx, baseReq)
-		if err != nil {
-			return nil, err
-		}
-		return []cliattestation.Group{{Attestations: atts}}, nil
 	case identityStr != "":
 		identity, err := runtime.ParseIdentity(identityStr)
 		if err != nil {
@@ -198,8 +184,14 @@ func discoverGroups(ctx context.Context, baseReq cliattestation.Request, desc *d
 			return nil, err
 		}
 		return []cliattestation.Group{{Label: identityStr, Attestations: atts}}, nil
+	case format == render.OutputFormatWideTree.String():
+		return cliattestation.DiscoverAll(ctx, baseReq, concurrency)
 	default:
-		return cliattestation.DiscoverAll(ctx, baseReq, concurrency), nil
+		atts, err := cliattestation.Discover(ctx, baseReq)
+		if err != nil {
+			return nil, err
+		}
+		return []cliattestation.Group{{Attestations: atts}}, nil
 	}
 }
 
@@ -308,15 +300,6 @@ func envelopeOf(a repository.Attestation) string {
 	}
 }
 
-func slicesContains(s []string, v string) bool {
-	for _, e := range s {
-		if e == v {
-			return true
-		}
-	}
-	return false
-}
-
 // filterByType keeps attestations whose raw type signals contain any of the given
 // substrings (case-insensitive) or whose friendly aliases match one exactly. An empty
 // filter keeps everything.
@@ -340,7 +323,7 @@ func filterByType(atts []repository.Attestation, filters []string) []repository.
 
 func anyFilterMatches(filters []string, haystack string, aliases []string) bool {
 	for _, f := range filters {
-		if strings.Contains(haystack, f) || slicesContains(aliases, f) {
+		if strings.Contains(haystack, f) || slices.Contains(aliases, f) {
 			return true
 		}
 	}
@@ -371,7 +354,7 @@ type row struct {
 func renderAttestations(ctx context.Context, w io.Writer, format, ref string, groups []cliattestation.Group) error {
 	switch format {
 	case render.OutputFormatTree.String(), render.OutputFormatWideTree.String():
-		return renderTree(ctx, w, format, ref, groups)
+		return renderTree(ctx, w, ref, groups)
 	}
 
 	var rows []row
@@ -396,19 +379,14 @@ func renderAttestations(ctx context.Context, w io.Writer, format, ref string, gr
 			})
 		}
 	}
-	sort.Slice(rows, func(i, j int) bool {
-		switch {
-		case rows[i].Resource != rows[j].Resource:
-			return rows[i].Resource < rows[j].Resource
-		case rows[i].Source != rows[j].Source:
-			return rows[i].Source < rows[j].Source
-		case rows[i].Type != rows[j].Type:
-			return rows[i].Type < rows[j].Type
-		case rows[i].Platform != rows[j].Platform:
-			return rows[i].Platform < rows[j].Platform
-		default:
-			return rows[i].ID < rows[j].ID
-		}
+	slices.SortFunc(rows, func(a, b row) int {
+		return cmp.Or(
+			cmp.Compare(a.Resource, b.Resource),
+			cmp.Compare(a.Source, b.Source),
+			cmp.Compare(a.Type, b.Type),
+			cmp.Compare(a.Platform, b.Platform),
+			cmp.Compare(a.ID, b.ID),
+		)
 	})
 
 	switch format {
@@ -446,12 +424,11 @@ func renderTable(w io.Writer, rows []row) error {
 }
 
 // renderTree prints the attestations as a provenance tree. Containment nests (reference
-// -> origin -> source); the orthogonal facets of each document (category, format,
-// platform, envelope, and in widetree the media type and creation time) are columns, not
-// nesting levels, so heterogeneous values never stack in a single column. Digests are
-// shown in full, like "oras discover". The whole structure is produced by the vertex
-// serializer from a single root vertex.
-func renderTree(ctx context.Context, w io.Writer, format, ref string, groups []cliattestation.Group) error {
+// -> origin -> source); the orthogonal facets of each document (category, format, platform,
+// envelope) are columns, not nesting levels, so heterogeneous values never stack in a single
+// column. Digests are shown in full, like "oras discover". The whole structure is produced
+// by the vertex serializer from a single root vertex.
+func renderTree(ctx context.Context, w io.Writer, ref string, groups []cliattestation.Group) error {
 	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
 	if err := graph.WithWriteLock(func(g *dag.DirectedAcyclicGraph[string]) error {
 		return g.AddVertex(ref, map[string]any{syncdag.AttributeValue: groups})
@@ -459,44 +436,35 @@ func renderTree(ctx context.Context, w io.Writer, format, ref string, groups []c
 		return fmt.Errorf("building attestation tree failed: %w", err)
 	}
 
-	wide := format == render.OutputFormatWideTree.String()
-	header := []string{"CATEGORY", "FORMAT", "PLATFORM", "ENV", "ID"}
-	if wide {
-		header = []string{"CATEGORY", "FORMAT", "PLATFORM", "ENV", "MEDIA-TYPE", "CREATED", "ID"}
-	}
-
 	renderer := tree.New(ctx, graph,
 		tree.WithRoots(ref),
-		tree.WithHeader[string](header...),
+		tree.WithHeader[string]("CATEGORY", "FORMAT", "PLATFORM", "ENV", "ID"),
 		tree.WithVertexSerializerFunc(func(v *dag.Vertex[string]) (tree.Row, error) {
-			gs, _ := v.Attributes[syncdag.AttributeValue].([]cliattestation.Group)
-			return rootTreeRow(v.ID, gs, wide), nil
+			gs, ok := v.Attributes[syncdag.AttributeValue].([]cliattestation.Group)
+			if !ok {
+				return tree.Row{}, fmt.Errorf("vertex %q has no %s attribute of type %T", v.ID, syncdag.AttributeValue, gs)
+			}
+			return rootTreeRow(v.ID, gs), nil
 		}),
 	)
 	return renderer.Render(ctx, w)
 }
 
-// treeCols is the number of data columns (after the nesting column) for the tree and
-// widetree layouts.
-func treeCols(wide bool) int {
-	if wide {
-		return 7
-	}
-	return 5
-}
+// treeColumns is the number of data columns (after the nesting column) of the tree layout.
+const treeColumns = 5
 
 // rootTreeRow nests reference -> origin -> source, each source holding a document leaf per
 // attestation.
-func rootTreeRow(ref string, groups []cliattestation.Group, wide bool) tree.Row {
+func rootTreeRow(ref string, groups []cliattestation.Group) tree.Row {
 	children := make([]tree.Row, 0, len(groups))
 	for _, g := range groups {
-		children = append(children, groupRow(displayLabel(g.Label), g.Attestations, wide))
+		children = append(children, groupRow(displayLabel(g.Label), g.Attestations))
 	}
-	return innerTreeRow(ref, children, wide)
+	return innerTreeRow(ref, children)
 }
 
 // groupRow nests one origin (a resource or the component) over its sources.
-func groupRow(label string, atts []repository.Attestation, wide bool) tree.Row {
+func groupRow(label string, atts []repository.Attestation) tree.Row {
 	bySource := map[repository.AttestationSource][]repository.Attestation{}
 	for _, a := range atts {
 		bySource[a.Source] = append(bySource[a.Source], a)
@@ -505,55 +473,45 @@ func groupRow(label string, atts []repository.Attestation, wide bool) tree.Row {
 	for s := range bySource {
 		keys = append(keys, string(s))
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	sources := make([]tree.Row, 0, len(keys))
 	for _, sk := range keys {
-		sources = append(sources, innerTreeRow(sk, leafRows(bySource[repository.AttestationSource(sk)], wide), wide))
+		sources = append(sources, innerTreeRow(sk, leafRows(bySource[repository.AttestationSource(sk)])))
 	}
-	return innerTreeRow(label, sources, wide)
+	return innerTreeRow(label, sources)
 }
 
 // leafRows renders one document leaf per attestation, sorted so multi-platform entries
 // cluster: by platform, then category, then format, then digest.
-func leafRows(atts []repository.Attestation, wide bool) []tree.Row {
-	sorted := make([]repository.Attestation, len(atts))
-	copy(sorted, atts)
-	sort.Slice(sorted, func(i, j int) bool {
-		ci, fi := classify(sorted[i])
-		cj, fj := classify(sorted[j])
-		switch {
-		case sorted[i].Platform.String() != sorted[j].Platform.String():
-			return sorted[i].Platform.String() < sorted[j].Platform.String()
-		case ci != cj:
-			return ci < cj
-		case fi != fj:
-			return fi < fj
-		default:
-			return sorted[i].ID < sorted[j].ID
-		}
+func leafRows(atts []repository.Attestation) []tree.Row {
+	sorted := slices.Clone(atts)
+	slices.SortFunc(sorted, func(a, b repository.Attestation) int {
+		ca, fa := classify(a)
+		cb, fb := classify(b)
+		return cmp.Or(
+			cmp.Compare(a.Platform.String(), b.Platform.String()),
+			cmp.Compare(ca, cb),
+			cmp.Compare(fa, fb),
+			cmp.Compare(a.ID, b.ID),
+		)
 	})
 	rows := make([]tree.Row, 0, len(sorted))
 	for _, a := range sorted {
-		rows = append(rows, leafTreeRow(a, wide))
+		rows = append(rows, leafTreeRow(a))
 	}
 	return rows
 }
 
 // leafTreeRow is a document leaf: its facets fill the columns, ending in the full digest.
-func leafTreeRow(a repository.Attestation, wide bool) tree.Row {
+func leafTreeRow(a repository.Attestation) tree.Row {
 	category, format := classify(a)
-	cells := []string{orDash(category), orDash(format), orDash(a.Platform.String()), orDash(envelopeOf(a))}
-	if wide {
-		cells = append(cells, orDash(a.MediaType), orDash(a.CreatedAt))
-	}
-	cells = append(cells, a.ID)
-	return tree.Row{Cells: cells}
+	return tree.Row{Cells: []string{orDash(category), orDash(format), orDash(a.Platform.String()), orDash(envelopeOf(a)), a.ID}}
 }
 
 // innerTreeRow is a containment node (reference, origin or source): its label sits in the
 // first column, the rest stay empty, and its children hang below.
-func innerTreeRow(label string, children []tree.Row, wide bool) tree.Row {
-	cells := make([]string, treeCols(wide))
+func innerTreeRow(label string, children []tree.Row) tree.Row {
+	cells := make([]string, treeColumns)
 	cells[0] = label
 	return tree.Row{Cells: cells, Children: children}
 }

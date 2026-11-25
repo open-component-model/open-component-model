@@ -8,6 +8,7 @@
 package referrer
 
 import (
+	"cmp"
 	"context"
 	"encoding/json/v2"
 	"fmt"
@@ -65,12 +66,12 @@ func fromReferrer(ctx context.Context, store spec.Store, subject, ref ociImageSp
 
 	return repository.Attestation{
 		Source:        repository.AttestationSourceOCIReferrer,
-		ArtifactType:  firstNonEmpty(ref.ArtifactType, manifest.ArtifactType),
+		ArtifactType:  cmp.Or(ref.ArtifactType, manifest.ArtifactType),
 		PredicateType: predicateTypeFromMetadata(ref, manifest),
 		MediaType:     documentMediaType(manifest),
 		Digest:        subject.Digest.String(),
 		ID:            ref.Digest.String(),
-		CreatedAt:     firstNonEmpty(manifest.Annotations[ociImageSpecV1.AnnotationCreated], ref.Annotations[ociImageSpecV1.AnnotationCreated]),
+		CreatedAt:     cmp.Or(manifest.Annotations[ociImageSpecV1.AnnotationCreated], ref.Annotations[ociImageSpecV1.AnnotationCreated]),
 		Annotations:   manifest.Annotations,
 	}, nil
 }
@@ -101,15 +102,6 @@ func documentMediaType(manifest ociImageSpecV1.Manifest) string {
 	for _, layer := range manifest.Layers {
 		if layer.MediaType != mediaTypeEmpty {
 			return layer.MediaType
-		}
-	}
-	return ""
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
 		}
 	}
 	return ""

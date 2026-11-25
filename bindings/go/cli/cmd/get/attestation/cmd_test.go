@@ -2,7 +2,6 @@ package attestation
 
 import (
 	"bytes"
-	"context"
 	"encoding/json/v2"
 	"testing"
 
@@ -27,7 +26,7 @@ func TestRenderAttestations_JSONProjectsGroupsAndProvenance(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, renderAttestations(context.Background(), &buf, "json", "ref", groups))
+	require.NoError(t, renderAttestations(t.Context(), &buf, "json", "ref", groups))
 
 	var rows []row
 	require.NoError(t, json.Unmarshal(buf.Bytes(), &rows))
@@ -49,7 +48,7 @@ func TestRenderTable_ShowsResourceAndFullDigest(t *testing.T) {
 		}},
 	}
 	var buf bytes.Buffer
-	require.NoError(t, renderAttestations(context.Background(), &buf, "table", "ref", groups))
+	require.NoError(t, renderAttestations(t.Context(), &buf, "table", "ref", groups))
 	out := buf.String()
 	assert.Contains(t, out, "name=app", "the table carries the resource origin")
 	assert.Contains(t, out, full, "the table shows the full digest, not a truncation")
@@ -122,7 +121,7 @@ func TestRenderTree_FacetedColumns(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, renderAttestations(context.Background(), &buf, "widetree", "my-ref", groups))
+	require.NoError(t, renderAttestations(t.Context(), &buf, "widetree", "my-ref", groups))
 	out := buf.String()
 
 	assert.Contains(t, out, "my-ref", "the reference is the tree root")
@@ -137,7 +136,8 @@ func TestRenderTree_FacetedColumns(t *testing.T) {
 	assert.Contains(t, out, "sbom", "category of the index spdx")
 	assert.Contains(t, out, "spdx", "format of the index spdx")
 	assert.Contains(t, out, "linux/amd64", "platform shows in the PLATFORM column")
-	assert.Contains(t, out, "2026-11-24T15:04:41Z", "the creation timestamp shows in widetree")
+	assert.NotContains(t, out, "2026-11-24T15:04:41Z", "tree and widetree no longer carry a CREATED column")
+	assert.NotContains(t, out, "MEDIA-TYPE", "the MEDIA-TYPE column is gone from the tree")
 	assert.Contains(t, out, bundleDigest, "the tree shows the full digest, like oras discover")
 	// The raw bundle artifactType and predicate URL are no longer nesting nodes; the
 	// friendly category/format replace them in the tree (raw stays in json/yaml).

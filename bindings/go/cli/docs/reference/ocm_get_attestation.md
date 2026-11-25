@@ -16,11 +16,11 @@ Get the attestations describing a component version, its resources, or one resou
 Discover and list the attestations attached to a component version: SBOMs, VEX documents,
 signatures, SLSA provenance, vulnerability reports, SARIF and anything else attached.
 
-By default every resource of the component is inspected and the referrers attached to the
-component version artifact itself are added, grouped by origin. Narrow it with:
+By default only the referrers attached to the component version artifact itself are listed.
+Widen or narrow the scope with:
 
   --identity name=X   only the attestations describing resource X.
-  --component         only the referrers attached to the component version artifact itself.
+  -o widetree         every resource of the component plus the component's own referrers.
 
 Per resource, attestations are merged from every source:
 
@@ -42,17 +42,17 @@ ocm get attestation {reference} [flags]
 ### Examples
 
 ```
-  # Everything: every resource plus the component's own referrers
+  # The component's own referrers
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0
 
-  # As a provenance tree
+  # The component's own referrers, as a provenance tree
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 -o tree
+
+  # Every resource plus the component's own referrers
+  ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 -o widetree
 
   # Only the "image" resource
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --identity name=image
-
-  # Only the component's own referrers
-  ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --component
 
   # Only SBOMs and VEX, as JSON
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --type sbom --type vex -o json
@@ -61,13 +61,12 @@ ocm get attestation {reference} [flags]
 ### Options
 
 ```
-      --component[=true|false]   list only the referrers attached to the component version artifact itself; mutually exclusive with --identity
-      --concurrency-limit int    maximum number of resources inspected in parallel when listing the whole component (default 4)
-  -h, --help[=true|false]        help for attestation
-      --identity string          list only the attestations describing this one resource; mutually exclusive with --component
-  -o, --output enum              output format
-                                 (must be one of [json table tree widetree yaml]) (default table)
-      --type strings             filter to attestations whose type contains any of these substrings or matches a friendly alias (sbom, vex, signature, provenance, spdx, ...); repeatable; empty lists all
+      --concurrency-limit int   maximum number of resources inspected in parallel when listing the whole component (-o widetree) (default 4)
+  -h, --help[=true|false]       help for attestation
+      --identity string         list only the attestations describing this one resource
+  -o, --output enum             output format; tree lists the component's own referrers, widetree every resource too
+                                (must be one of [json table tree widetree yaml]) (default table)
+      --type strings            filter to attestations whose type contains any of these substrings or matches a friendly alias (sbom, vex, signature, provenance, spdx, ...); repeatable; empty lists all
 ```
 
 ### Options inherited from parent commands

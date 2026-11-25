@@ -39,21 +39,26 @@ type Group struct {
 // are discovered concurrently, bounded by concurrency (<=0 applies defaultConcurrency).
 // Best-effort: a resource whose discovery fails is logged and skipped, never fatal and
 // never cancelling its siblings. Groups keep descriptor order, component first; empty
-// groups are dropped.
-func DiscoverAll(ctx context.Context, req Request, concurrency int) []Group {
+// groups are dropped. It errors only when every source failed and nothing was discovered,
+// so an empty success cannot mask a wholesale failure (bad credentials, registry down).
+func DiscoverAll(ctx context.Context, req Request, concurrency int) ([]Group, error) {
 	if concurrency <= 0 {
 		concurrency = defaultConcurrency
 	}
 	resources := req.Descriptor.Component.Resources
 	// Slot 0 is the component-level group; slot i+1 is resource i. Each goroutine writes
-	// its own slot, so no lock is needed.
+	// its own group slot and its own error slot, so no lock is needed.
 	slots := make([]Group, len(resources)+1)
+	errs := make([]error, len(resources)+1)
 
 	componentReq := req
 	componentReq.Resource = nil
 	if atts, err := Discover(ctx, componentReq); err != nil {
 		req.Logger.Warn("discovering component-level attestations failed, skipping",
+			slog.String("component", req.Descriptor.Component.Name),
+			slog.String("version", req.Descriptor.Component.Version),
 			slog.Any("error", err))
+		errs[0] = err
 	} else {
 		slots[0] = Group{Attestations: atts}
 	}
@@ -69,6 +74,7 @@ func DiscoverAll(ctx context.Context, req Request, concurrency int) []Group {
 				req.Logger.Warn("discovering resource attestations failed, skipping",
 					slog.String("resource", resReq.Resource.ToIdentity().String()),
 					slog.Any("error", err))
+				errs[i+1] = err
 				return nil // best-effort: a failed resource never cancels the others
 			}
 			slots[i+1] = Group{Label: resReq.Resource.ToIdentity().String(), Attestations: atts}
@@ -83,7 +89,15 @@ func DiscoverAll(ctx context.Context, req Request, concurrency int) []Group {
 			out = append(out, g)
 		}
 	}
-	return out
+	// Partial failure is tolerated, but an empty result paired with failures would be
+	// indistinguishable from "no attestations". Surface the joined error so the exit code
+	// and machine-readable output reflect a wholesale failure.
+	if len(out) == 0 {
+		if err := errors.Join(errs...); err != nil {
+			return nil, fmt.Errorf("discovering attestations failed for every source: %w", err)
+		}
+	}
+	return out, nil
 }
 
 const (
@@ -110,6 +124,12 @@ type Request struct {
 	Logger            *slog.Logger
 }
 
+// errAttachedDiscovery marks a failure to list the attestations attached in the registry
+// (OCI referrers, BuildKit in-toto). Discover demotes it to a warning when the resource
+// still has locally declared attestations; setup failures (plugin lookup, credential
+// resolution) are not wrapped with it and always propagate.
+var errAttachedDiscovery = errors.New("discovering attached attestations failed")
+
 // Discover lists every attestation describing the requested resource, merged across
 // sources and deduplicated. With Resource nil it lists the referrers on the component
 // version artifact instead. A failure to reach the registry does not discard the
@@ -133,7 +153,7 @@ func Discover(ctx context.Context, req Request) ([]repository.Attestation, error
 
 	attached, err := fromDiscoverer(ctx, req)
 	if err != nil {
-		if len(all) == 0 {
+		if len(all) == 0 || !errors.Is(err, errAttachedDiscovery) {
 			return nil, err
 		}
 		req.Logger.Warn("discovering attached attestations failed, returning locally declared ones only",
@@ -215,7 +235,11 @@ func fromDiscoverer(ctx context.Context, req Request) ([]repository.Attestation,
 		return nil, fmt.Errorf("getting credentials for resource %q failed: %w", req.Resource.ToIdentity(), err)
 	}
 
-	return discoverer.DiscoverAttestations(ctx, req.Resource, creds)
+	atts, err := discoverer.DiscoverAttestations(ctx, req.Resource, creds)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errAttachedDiscovery, err)
+	}
+	return atts, nil
 }
 
 // dedup removes attestations discovered through more than one source, keyed by the
