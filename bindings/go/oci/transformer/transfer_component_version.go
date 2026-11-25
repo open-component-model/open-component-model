@@ -7,6 +7,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	"ocm.software/open-component-model/bindings/go/repository"
@@ -37,6 +38,11 @@ type componentGraphSource interface {
 type componentGraphTarget interface {
 	AddComponentVersionFromGraph(ctx context.Context, desc *descriptor.Descriptor, graph ocistream.ResourceStream) error
 }
+
+var (
+	_ componentGraphSource = (*oci.Repository)(nil)
+	_ componentGraphTarget = (*oci.Repository)(nil)
+)
 
 func (t *TransferComponentVersion) Transform(ctx context.Context, step runtime.Typed) (runtime.Typed, error) {
 	transformation, err := t.Scheme.NewObject(step.GetType())
