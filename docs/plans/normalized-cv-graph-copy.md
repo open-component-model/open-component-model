@@ -43,8 +43,8 @@ Terms:
   image manifest, or an image index when OCI-native local blobs exist). It holds the access-bearing descriptor and the
   local blobs. It has no tag. Each write stamps it with an `org.opencontainers.image.created` annotation, and every
   write (re-add, e.g. `ocm sign`; a transfer) adds a new one while the older ones stay listed as referrers. Reads
-  (`getNormalizedComponentVersion`, `oci/store_normalized_read.go`) list all referrers, validate every access
-  referrer, and select the newest by `created` (ties: lowest digest).
+  select the newest by `created` from the referrers listing and validate only that one (see
+  [Read path](#read-path-select-the-access-referrer-from-the-listing)).
 - **signature referrers**: every other referrer of the normalized manifest, transitively (cosign signatures,
   attestations, referrers of those).
 
@@ -108,30 +108,65 @@ Decide per referrer, in this order:
    distribution-spec), for referrers-tag-schema indexes written by oras/OCM/cosign v3, and for CTF
    (`oci/ctf/referrers.go`, `referrerFromManifest`).
 2. **Otherwise peek**, only for image manifest / index media types. This is rare: a fallback index written by tooling
-   that omits `artifactType`. Return peek errors; never swallow them. With the CLI provider, peeking an access
-   referrer is a blob-cache hit, because discovery already fetched every access referrer manifest. Only a non-access
-   referrer without `artifactType` costs an extra GET.
+   that omits `artifactType`. Return peek errors; never swallow them. The read path ignores such entries, but the copy
+   must not: the target registry derives `artifactType` from the copied manifest, so an unpeeked access referrer would
+   become a selectable access referrer on the target.
 
 Net: no extra requests on conformant registries and CTF, versus 1 + 2·n on the branch.
 
 ### Source read cost (prefetch + transfer)
 
-Discovery already performs the full normalized read:
+With the read path below, discovery performs a constant normalized read, independent of the number of signatures,
+attestations and superseded access referrers:
 
-- resolve the tag, GET normalized manifest, GET normalized layer
-- list referrers
-- for every access referrer: GET manifest (+ inner manifest for the index form) and GET access descriptor layer
+1. resolve the version tag
+2. GET normalized manifest (needed to detect the layout and to find the normalized layer)
+3. GET normalized layer (needed for the bind check, for every reader)
+4. list referrers
+5. GET the newest access referrer's manifest (+ inner manifest for the index form)
+6. GET its access descriptor layer
 
-The fused node re-reads the normalized manifest, config and layer. With the CLI provider, these are blob/reference-cache
-hits: `cli/internal/plugin/builtin/oci/register.go` enables both caches, the cache's default accept list covers
-manifests, `componentConfig.MediaType` and the `component-descriptor` prefix, and discovery and the builder share
+The fused node re-reads the normalized manifest and layer. With the CLI provider, these are blob/reference-cache hits:
+`cli/internal/plugin/builtin/oci/register.go` enables both caches, the cache's default accept list covers manifests,
+`componentConfig.MediaType` and the `component-descriptor` prefix, and discovery and the builder share
 `pm.ComponentVersionRepositoryRegistry`.
 
 Remaining network cost per component version and target:
 
 - one more Referrers listing; `cache.CachedStore` does not cache `Referrers`/`Predecessors`, so discovery and the
   fused node each list once. The branch's carry also lists.
+- the normalized config, which the read never fetches
 - the signature referrers' manifests and layers, which are inherent to copying them
+
+### Read path: select the access referrer from the listing
+
+A separate change in `getNormalizedComponentVersion` (`oci/store_normalized_read.go`, the code from "Remove access
+tag"). It can land before or independently of the transfer rework. Today the read fetches every referrer manifest
+(`loadAccessReferrer` fetches before it checks `artifactType`), validates every access referrer, and falls back to
+the newest *valid* one. That costs 4 + (all referrers) + 1–2 per access referrer, and a broken or tampered newest
+write silently yields an older descriptor.
+
+Fixed requirements:
+
+1. **Select from the listing only.** Candidates are the referrer descriptors with `artifactType ==
+   ArtifactTypeAccessDescriptor`. Entries without `artifactType` are ignored. Every OCM write path sets it, and the
+   distribution-spec requires it in Referrers responses and referrers-tag-schema indexes, as does OCM's CTF index
+   (`oci/ctf/referrers.go`, `referrerFromManifest`).
+2. **Newest wins, from the listing's annotations.** Order by `org.opencontainers.image.created` taken from the
+   descriptor's annotations (required in Referrers responses: "The descriptors MUST include annotations from the image
+   manifest or index"). A missing or malformed value sorts oldest; ties break by lowest digest.
+3. **Validate only the selected one.** Fetch and validate the newest candidate as `loadAccessReferrer` does today
+   (subject, bind check, `ValidateDigests`). If it is invalid, the read fails with an error naming its digest. There is
+   no fallback to an older access referrer. The next write repairs the version by adding a newer one.
+4. **No access referrer** in the listing: fail as today ("no access referrer found").
+
+Tests: extend the existing `TestNormalizedLayout_AccessReferrerSelection` (`oci/normalized_layout_test.go`).
+
+- newest by `created` wins
+- an invalid newest one fails the read (no fallback)
+- an entry without `artifactType` is ignored
+- with a counting store, only the selected access referrer is fetched, not signature referrers or superseded access
+  referrers
 
 No caching work is in scope.
 
