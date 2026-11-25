@@ -14,7 +14,8 @@ type manifestHeader struct {
 	Config       struct {
 		MediaType string `json:"mediaType"`
 	} `json:"config"`
-	Subject *ociImageSpecV1.Descriptor `json:"subject"`
+	Subject     *ociImageSpecV1.Descriptor `json:"subject"`
+	Annotations map[string]string          `json:"annotations"`
 }
 
 func decodeManifestHeader(raw []byte) (manifestHeader, error) {

@@ -149,9 +149,11 @@ repository and never signed:
      (the OCI referrers API filtered by `artifactType`, with the referrers tag schema `sha256-<hex>` as fallback, or
      the CTF index). A listed entry without an `artifactType` is not considered. The listing does not grow with the
      number of signatures, and no signature referrer is fetched.
-   * The candidates are ordered by the `org.opencontainers.image.created` annotation the listing reports for them,
-     newest first. A missing or malformed value sorts oldest; ties break by the lowest manifest digest for a
-     reproducible order.
+   * The candidates are ordered by their `org.opencontainers.image.created` annotation, newest first. The listing
+     reports it, so ordering costs no request. A candidate that is listed without a parseable value, for example
+     by a registry or a referrers tag schema index that omits annotations, is fetched before ordering and the
+     annotation is read from its manifest or index. A value that is missing or malformed there as well sorts
+     oldest; ties break by the lowest manifest digest for a reproducible order.
    * The candidates are fetched and validated in that order, and the first valid one is selected. A candidate is
      valid if its manifest has the access `artifactType` and `M` as `subject`, passes the bind check and satisfies
      the digest rules below. An invalid candidate is skipped with a warning that names its digest and the reason.
@@ -159,10 +161,10 @@ repository and never signed:
 
    Re-adding the version, transfers and third-party pushes leave several valid referrers of the same `M`, so the
    newest reflects the last writer, and the digest rules plus the local-blob verification below still guard the
-   content a selected referrer points at. With a valid newest candidate, exactly one access referrer is fetched.
-   An invalid candidate is skipped instead of failing the read, because a single referrer stamped with a time in
-   the future would otherwise make the version unreadable: later writes never sort before it, and registries often
-   cannot delete it.
+   content a selected referrer points at. With a valid newest candidate and a listing that reports `created` for
+   every candidate, exactly one access referrer is fetched. An invalid candidate is skipped instead of failing the
+   read, because a single referrer stamped with a time in the future would otherwise make the version unreadable:
+   later writes never sort before it, and registries often cannot delete it.
 4. **Bind check**: `normalise(F, jsonNormalisation/v4alpha1)` must be byte-identical to `N`. On mismatch, reading
    fails with an error that names possible tampering.
 5. **Digest rules** on the bind-checked `F`: the rules of `signing.IsSafelyDigestible` and
