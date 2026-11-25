@@ -30,24 +30,24 @@ import (
 )
 
 // cosignSignatureArtifactType and cosignAttestationArtifactType are the artifact types cosign uses
-// for signatures and attestations. The test only needs non-access referrers that the carry copies
+// for signatures and attestations. The test only needs non-access referrers that the transfer copies
 // verbatim; the exact values stand in for real cosign artifacts.
 const (
 	cosignSignatureArtifactType   = "application/vnd.dev.cosign.artifact.sig.v1+json"
 	cosignAttestationArtifactType = "application/vnd.dev.cosign.artifact.sbom.v1+json"
 )
 
-// Test_Integration_TransferNormalized_OCIToOCI_CarriesSignatureReferrer proves the central promise
+// Test_Integration_TransferNormalized_OCIToOCI_CopiesSignatureReferrer proves the central promise
 // of the normalized OCI layout (ADR 0034) against two real registries: the tag resolves to a
 // stable, access-free normalized manifest whose digest (D_norm) is invariant across a
 // registry-to-registry transfer, and a cosign-style signature attached as a referrer of that
-// manifest is carried to the target verbatim. Because the signed bytes (the manifest at D_norm)
+// manifest is copied to the target verbatim. Because the signed bytes (the manifest at D_norm)
 // and the signature referrer are byte-identical on both registries, a signature made on the source
 // stays valid on the target without re-signing.
 //
 // A real cosign signature is exercised by the conformance scenario; here the signature is a
 // referrer manifest pushed directly, so the transfer mechanics can be asserted in Go.
-func Test_Integration_TransferNormalized_OCIToOCI_CarriesSignatureReferrer(t *testing.T) {
+func Test_Integration_TransferNormalized_OCIToOCI_CopiesSignatureReferrer(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 	ctx := t.Context()
@@ -102,7 +102,7 @@ func Test_Integration_TransferNormalized_OCIToOCI_CarriesSignatureReferrer(t *te
 	r.NotEmpty(dNormSource)
 
 	// 4. Attach cosign-style referrers (a signature and an attestation) to D_norm on the source.
-	//    Both are non-access referrers that the carry must copy verbatim.
+	//    Both are non-access referrers that the transfer must copy verbatim.
 	sourceRemote := newRemoteRepository(t, sourceAddr, componentName, sourceUser, sourcePwd)
 	dNormDesc, err := sourceRemote.Resolve(ctx, dNormSource)
 	r.NoError(err)

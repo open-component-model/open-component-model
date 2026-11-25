@@ -197,20 +197,3 @@ func parseCreated(value string) time.Time {
 	}
 	return t
 }
-
-// peekArtifactType fetches a manifest/index and returns its artifactType from the body. This is
-// needed because registries do not populate Descriptor.ArtifactType when resolving a tag; the value
-// lives inside the manifest JSON.
-func peekArtifactType(ctx context.Context, store spec.Store, target ociImageSpecV1.Descriptor) (string, error) {
-	raw, err := content.FetchAll(ctx, store, target)
-	if err != nil {
-		return "", err
-	}
-	var peek struct {
-		ArtifactType string `json:"artifactType"`
-	}
-	if err := json.Unmarshal(raw, &peek); err != nil {
-		return "", err
-	}
-	return peek.ArtifactType, nil
-}
