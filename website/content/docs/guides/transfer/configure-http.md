@@ -96,7 +96,7 @@ ocm --loglevel debug get componentversion ghcr.io/open-component-model//ocm.soft
 Look for a log line like:
 
 ```text
-level=DEBUG msg="http config resolved" timeout=15s tlsHandshakeTimeout=10s hosts=map[]
+level=DEBUG msg="http config resolved" timeout=15s tlsHandshakeTimeout=10s hosts=[]
 ```
 
 ## Tune the retry policy
@@ -437,12 +437,10 @@ value proves the overrides were picked up. With the
 [complete example](#complete-example) the line looks like this:
 
 ```text
-level=DEBUG msg="http config resolved" timeout=15s tlsHandshakeTimeout=10s hosts="map[artifactory.corp:5000:0x15afd40a91f0 mirror.airgap.local:0x15afd40a92d0 registry.kind.local:5001:0x15afd40a9340]"
+level=DEBUG msg="http config resolved" timeout=15s tlsHandshakeTimeout=10s hosts="[artifactory.corp:5000 mirror.airgap.local registry.kind.local:5001]"
 ```
 
-The value after each host key is a memory address that changes with every run.
-
-If `hosts=map[]` while you expected entries, the `hosts` block was not parsed,
+If `hosts=[]` while you expected entries, the `hosts` block was not parsed,
 check the indentation and the host-key format. If the command exits with
 `invalid http configuration: ...`, a field value is out of range, see
 [Troubleshooting](#troubleshooting). A malformed config fails fast at startup
