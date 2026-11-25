@@ -39,7 +39,7 @@ const (
 // DiscoverAttestations lists every referrer of subject in store and returns one
 // Attestation per referrer, read from metadata only. Referrers whose manifest cannot be
 // read are skipped with a warning so one bad entry never blocks the rest.
-func DiscoverAttestations(ctx context.Context, store spec.Store, subject ociImageSpecV1.Descriptor) ([]repository.Attestation, error) {
+func DiscoverAttestations(ctx context.Context, store spec.Store, subject ociImageSpecV1.Descriptor, opts ...repository.AttestationOption) ([]repository.Attestation, error) {
 	refs, err := registry.Referrers(ctx, store, subject, "")
 	if err != nil {
 		return nil, fmt.Errorf("listing referrers of %s failed: %w", subject.Digest, err)
@@ -47,7 +47,7 @@ func DiscoverAttestations(ctx context.Context, store spec.Store, subject ociImag
 
 	out := make([]repository.Attestation, 0, len(refs))
 	for _, ref := range refs {
-		att, err := fromReferrer(ctx, store, subject, ref)
+		att, err := fromReferrer(ctx, store, subject, ref, opts...)
 		if err != nil {
 			slog.WarnContext(ctx, "skipping unreadable referrer",
 				slog.String("referrer", ref.Digest.String()),
@@ -62,7 +62,7 @@ func DiscoverAttestations(ctx context.Context, store spec.Store, subject ociImag
 
 // fromReferrer reads one referrer's metadata into an Attestation. It fetches the small
 // referrer manifest (for its annotations and layer media type) but never the document.
-func fromReferrer(ctx context.Context, store spec.Store, subject, ref ociImageSpecV1.Descriptor) (repository.Attestation, error) {
+func fromReferrer(ctx context.Context, store spec.Store, subject, ref ociImageSpecV1.Descriptor, opts ...repository.AttestationOption) (repository.Attestation, error) {
 	var manifest ociImageSpecV1.Manifest
 	if err := fetchJSON(ctx, store, ref, &manifest); err != nil {
 		return repository.Attestation{}, fmt.Errorf("reading referrer manifest failed: %w", err)
@@ -78,11 +78,25 @@ func fromReferrer(ctx context.Context, store spec.Store, subject, ref ociImageSp
 		CreatedAt:     cmp.Or(manifest.Annotations[ociImageSpecV1.AnnotationCreated], ref.Annotations[ociImageSpecV1.AnnotationCreated]),
 		Annotations:   manifest.Annotations,
 	}
-	// The document layer digest is the content digest of the document bytes, read from
-	// the manifest alone. It reveals duplicates: byte-identical documents attached in
-	// different places share it, even though their referrer manifest digests differ.
-	if layer, ok := documentLayer(manifest); ok {
+	// The document layer digest is the content digest of the document bytes, read from the
+	// manifest alone. It reveals duplicates: byte-identical documents attached in different
+	// places share it, even though their referrer manifest digests differ.
+	layer, ok := documentLayer(manifest)
+	if ok {
 		att.ContentDigest = layer.Digest.String()
+	}
+
+	if repository.NewAttestationOptions(opts...).IncludeData {
+		if !ok {
+			slog.DebugContext(ctx, "referrer carries no document layer, leaving data empty",
+				slog.String("referrer", ref.Digest.String()))
+		} else {
+			data, err := content.FetchAll(ctx, store, layer)
+			if err != nil {
+				return repository.Attestation{}, fmt.Errorf("fetching referrer document layer %s failed: %w", layer.Digest, err)
+			}
+			att.Data = data
+		}
 	}
 	return att, nil
 }

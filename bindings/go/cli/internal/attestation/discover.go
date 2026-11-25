@@ -5,6 +5,7 @@
 package attestation
 
 import (
+	"bytes"
 	"context"
 	"encoding/json/v2"
 	"errors"
@@ -13,6 +14,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	ocmblob "ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	artifactref "ocm.software/open-component-model/bindings/go/descriptor/runtime/labels/artifactref/v1alpha1"
@@ -139,6 +141,26 @@ type Request struct {
 	// component-level mode (Resource nil); nil disables it.
 	DiscoverComponent repository.ComponentAttestationDiscoverer
 	Logger            *slog.Logger
+	// IncludeData asks discovery to fetch each attestation's document bytes and set
+	// Attestation.Data, rather than listing metadata only. A listing (get) leaves it false.
+	IncludeData bool
+	// Download reads the raw bytes of a resource, used to fetch the document of an
+	// ocm-local attestation (its document is the referenced resource blob). Taken as a
+	// function to avoid a dependency on cmd. Required when IncludeData is set and an
+	// ocm-local attestation is discovered; unused otherwise.
+	Download Downloader
+}
+
+// Downloader reads the raw bytes of a resource. Mirrors cli/internal/sbom.Downloader.
+type Downloader func(ctx context.Context, res *descriptor.Resource, identity runtime.Identity) (ocmblob.ReadOnlyBlob, error)
+
+// attestationOptions returns the discovery options implied by the request: data fetch
+// when IncludeData is set, nothing otherwise, so a listing stays metadata-only.
+func (req Request) attestationOptions() []repository.AttestationOption {
+	if req.IncludeData {
+		return []repository.AttestationOption{repository.WithAttestationData()}
+	}
+	return nil
 }
 
 // errAttachedDiscovery marks a failure to list the attestations attached in the registry
@@ -156,14 +178,14 @@ func Discover(ctx context.Context, req Request) ([]repository.Attestation, error
 		if req.DiscoverComponent == nil {
 			return nil, nil
 		}
-		atts, err := req.DiscoverComponent.DiscoverComponentAttestations(ctx, req.Descriptor.Component.Name, req.Descriptor.Component.Version)
+		atts, err := req.DiscoverComponent.DiscoverComponentAttestations(ctx, req.Descriptor.Component.Name, req.Descriptor.Component.Version, req.attestationOptions()...)
 		if err != nil {
 			return nil, err
 		}
 		return dedup(atts), nil
 	}
 
-	all, err := fromArtifactReferences(req)
+	all, err := fromArtifactReferences(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +208,7 @@ func Discover(ctx context.Context, req Request) ([]repository.Attestation, error
 // fromArtifactReferences lists the resources of the component that declare, through the
 // artifact reference label, that they describe the target. Metadata-only: it reads each
 // resource's declared type and blob media type without downloading the blob.
-func fromArtifactReferences(req Request) ([]repository.Attestation, error) {
+func fromArtifactReferences(ctx context.Context, req Request) ([]repository.Attestation, error) {
 	target := req.Resource.ToIdentity()
 
 	referring, err := artifactref.FindDescribingResources(req.Descriptor, target)
@@ -199,7 +221,7 @@ func fromArtifactReferences(req Request) ([]repository.Attestation, error) {
 
 	out := make([]repository.Attestation, 0, len(referring))
 	for _, candidate := range referring {
-		out = append(out, repository.Attestation{
+		att := repository.Attestation{
 			Source:       repository.AttestationSourceOCMLocal,
 			ArtifactType: candidate.Type,
 			MediaType:    accessMediaType(candidate),
@@ -212,7 +234,20 @@ func fromArtifactReferences(req Request) ([]repository.Attestation, error) {
 			// The local blob reference is the content digest of the document itself, so a
 			// local attestation shares it with a referrer carrying the same bytes.
 			ContentDigest: accessLocalReference(candidate),
-		})
+		}
+		if req.IncludeData {
+			// An ocm-local attestation's document is the referenced resource blob itself.
+			data, err := req.Download(ctx, candidate, candidate.ToIdentity())
+			if err != nil {
+				return nil, fmt.Errorf("downloading attestation resource %q failed: %w", candidate.ToIdentity(), err)
+			}
+			var buf bytes.Buffer
+			if err := ocmblob.Copy(&buf, data); err != nil {
+				return nil, fmt.Errorf("reading attestation resource %q failed: %w", candidate.ToIdentity(), err)
+			}
+			att.Data = buf.Bytes()
+		}
+		out = append(out, att)
 	}
 	return out, nil
 }
@@ -230,7 +265,7 @@ func fromDiscoverer(ctx context.Context, req Request) ([]repository.Attestation,
 		if req.DiscoverLocal == nil {
 			return nil, nil
 		}
-		return req.DiscoverLocal.DiscoverLocalAttestations(ctx, req.Descriptor.Component.Name, req.Descriptor.Component.Version, req.Resource.ToIdentity())
+		return req.DiscoverLocal.DiscoverLocalAttestations(ctx, req.Descriptor.Component.Name, req.Descriptor.Component.Version, req.Resource.ToIdentity(), req.attestationOptions()...)
 	}
 
 	plugin, err := req.PluginManager.ResourcePluginRegistry.GetResourcePlugin(ctx, access)
@@ -255,7 +290,7 @@ func fromDiscoverer(ctx context.Context, req Request) ([]repository.Attestation,
 		return nil, fmt.Errorf("getting credentials for resource %q failed: %w", req.Resource.ToIdentity(), err)
 	}
 
-	atts, err := discoverer.DiscoverAttestations(ctx, req.Resource, creds)
+	atts, err := discoverer.DiscoverAttestations(ctx, req.Resource, creds, req.attestationOptions()...)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errAttachedDiscovery, err)
 	}

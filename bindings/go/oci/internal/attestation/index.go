@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/content"
 
 	"ocm.software/open-component-model/bindings/go/oci/internal/identity"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
@@ -18,10 +19,12 @@ import (
 // predicate type from the layer annotation and the platform of the image it attests. It
 // returns nil for a plain manifest (no index to walk) and does not filter by predicate,
 // so SBOM and provenance and anything else BuildKit attached are all reported.
-func DiscoverAllFromRoot(ctx context.Context, store spec.Store, root ociImageSpecV1.Descriptor) ([]repository.Attestation, error) {
+func DiscoverAllFromRoot(ctx context.Context, store spec.Store, root ociImageSpecV1.Descriptor, opts ...repository.AttestationOption) ([]repository.Attestation, error) {
 	if !IsIndex(root.MediaType) {
 		return nil, nil
 	}
+
+	includeData := repository.NewAttestationOptions(opts...).IncludeData
 
 	var index ociImageSpecV1.Index
 	if err := fetchJSON(ctx, store, root, &index); err != nil {
@@ -57,7 +60,7 @@ func DiscoverAllFromRoot(ctx context.Context, store spec.Store, root ociImageSpe
 			if layer.MediaType != MediaTypeInTotoStatement {
 				continue
 			}
-			out = append(out, repository.Attestation{
+			a := repository.Attestation{
 				Source:        repository.AttestationSourceOCIIndex,
 				PredicateType: layer.Annotations[AnnotationInTotoPredicateType],
 				MediaType:     layer.MediaType,
@@ -67,7 +70,17 @@ func DiscoverAllFromRoot(ctx context.Context, store spec.Store, root ociImageSpe
 				ContentDigest: layer.Digest.String(),
 				CreatedAt:     createdAt,
 				Annotations:   manifest.Annotations,
-			})
+			}
+			if includeData {
+				// The full in-toto statement, byte-for-byte (envelope included), not just
+				// the predicate: a download must preserve exactly what was published.
+				data, err := content.FetchAll(ctx, store, layer)
+				if err != nil {
+					return nil, fmt.Errorf("fetching in-toto statement layer %s failed: %w", layer.Digest, err)
+				}
+				a.Data = data
+			}
+			out = append(out, a)
 		}
 	}
 	return out, nil

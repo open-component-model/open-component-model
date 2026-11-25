@@ -50,7 +50,7 @@ func TestRenderTree_RawStructure(t *testing.T) {
 				Source:        repository.AttestationSourceOCIReferrer,
 				ArtifactType:  artifactSigstoreBundle,
 				MediaType:     artifactSigstoreBundle,
-				PredicateType: predicateCosignSig,
+				PredicateType: "https://sigstore.dev/cosign/sign/v1",
 				ContentDigest: "sha256:sig",
 				ID:            "r1",
 			},
@@ -78,7 +78,7 @@ func TestRenderTree_RawStructure(t *testing.T) {
 	assert.Contains(t, out, repository.PredicateTypeSPDX, "the predicate type is a leaf under the envelope")
 	assert.Contains(t, out, "(linux/amd64)", "the platform is a suffix on the predicate leaf")
 	assert.Contains(t, out, artifactSigstoreBundle, "the DSSE bundle is a node named by its media type")
-	assert.Contains(t, out, predicateCosignSig, "the cosign predicate is a leaf under the bundle")
+	assert.Contains(t, out, "https://sigstore.dev/cosign/sign/v1", "the cosign predicate is a leaf under the bundle")
 	assert.Contains(t, out, repository.MediaTypeCycloneDXJSON, "the bare CycloneDX is a leaf named by its media type")
 	assert.Contains(t, out, "sbom", "the SPDX predicate carries the friendly sbom tag")
 	assert.Contains(t, out, "signature", "the cosign predicate carries the friendly signature tag")
@@ -165,47 +165,6 @@ func TestRenderTable_RawColumnsAndFullDigest(t *testing.T) {
 	assert.Contains(t, out, full, "the table shows the full digest, not a truncation")
 	assert.NotContains(t, out, "CATEGORY", "the CATEGORY column is renamed TYPE")
 	assert.NotContains(t, out, "ENVELOPE", "the ENVELOPE column is gone")
-}
-
-func TestTypeAliases(t *testing.T) {
-	cases := []struct {
-		name string
-		att  repository.Attestation
-		want []string
-	}{
-		{"spdx predicate", repository.Attestation{PredicateType: repository.PredicateTypeSPDX}, []string{"spdx", "sbom"}},
-		{"cyclonedx media", repository.Attestation{MediaType: repository.MediaTypeCycloneDXJSON}, []string{"cyclonedx", "sbom"}},
-		{"openvex predicate versioned", repository.Attestation{PredicateType: predicateOpenVEX + "/v0.2.0"}, []string{"openvex", "vex"}},
-		{"slsa provenance", repository.Attestation{PredicateType: predicateSLSA + "v1"}, []string{"slsa", "provenance"}},
-		{"cosign signature artifact type", repository.Attestation{ArtifactType: artifactCosignSig}, []string{"cosign", "signature"}},
-		{"notary signature artifact type", repository.Attestation{ArtifactType: artifactNotation}, []string{"notation", "signature"}},
-		{"ocm-local sbom resource type", repository.Attestation{ArtifactType: "sbom"}, []string{"sbom"}},
-		{"unknown has no aliases", repository.Attestation{ArtifactType: "application/vnd.acme.thing"}, nil},
-	}
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			assert.Equal(t, c.want, typeAliases(c.att))
-		})
-	}
-}
-
-func TestFilterByType(t *testing.T) {
-	spdx := repository.Attestation{PredicateType: repository.PredicateTypeSPDX, MediaType: mediaInTotoStatement}
-	cyclonedx := repository.Attestation{ArtifactType: repository.MediaTypeCycloneDXJSON, MediaType: repository.MediaTypeCycloneDXJSON}
-	openvex := repository.Attestation{PredicateType: predicateOpenVEX}
-	cosign := repository.Attestation{ArtifactType: artifactCosignSig}
-	notary := repository.Attestation{ArtifactType: artifactNotation}
-	atts := []repository.Attestation{spdx, cyclonedx, openvex, cosign, notary}
-
-	assert.Len(t, filterByType(atts, nil), 5, "an empty filter keeps everything")
-	assert.Len(t, filterByType(atts, []string{"sbom"}), 2, "the sbom group alias catches spdx and cyclonedx")
-	assert.Len(t, filterByType(atts, []string{"signature"}), 2, "the signature group alias catches cosign and notation")
-
-	got := filterByType(atts, []string{"cyclonedx"})
-	require.Len(t, got, 1)
-	assert.Equal(t, repository.MediaTypeCycloneDXJSON, got[0].Type())
-
-	assert.Len(t, filterByType(atts, []string{"SPDX", "openvex"}), 2, "case-insensitive, union across filters")
 }
 
 func TestRenderAttestations_RecursiveAddsComponentColumn(t *testing.T) {
@@ -300,7 +259,7 @@ func TestContentDigest_DuplicatesTagged(t *testing.T) {
 				Source:        repository.AttestationSourceOCIReferrer,
 				ArtifactType:  artifactSigstoreBundle,
 				MediaType:     artifactSigstoreBundle,
-				PredicateType: predicateOpenVEX,
+				PredicateType: "https://openvex.dev/ns",
 				ContentDigest: uniq,
 				ID:            "r2",
 			},

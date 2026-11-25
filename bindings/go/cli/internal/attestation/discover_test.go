@@ -21,7 +21,7 @@ type fakeComponentDiscoverer struct {
 	err  error
 }
 
-func (f fakeComponentDiscoverer) DiscoverComponentAttestations(_ context.Context, _, _ string) ([]repository.Attestation, error) {
+func (f fakeComponentDiscoverer) DiscoverComponentAttestations(_ context.Context, _, _ string, _ ...repository.AttestationOption) ([]repository.Attestation, error) {
 	return f.atts, f.err
 }
 

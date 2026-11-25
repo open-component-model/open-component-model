@@ -91,21 +91,47 @@ func (a Attestation) String() string {
 	return name
 }
 
+// AttestationOptions controls how an attestation is discovered. The zero value is the
+// default: metadata-only, leaving Attestation.Data nil.
+type AttestationOptions struct {
+	// IncludeData asks the implementation to fill Attestation.Data with the primary
+	// document layer's bytes, byte-for-byte. Default false keeps discovery metadata-only.
+	IncludeData bool
+}
+
+// AttestationOption configures AttestationOptions.
+type AttestationOption func(*AttestationOptions)
+
+// WithAttestationData makes discovery fetch each attestation's primary document layer and
+// set Attestation.Data to its bytes verbatim. Without it, Data stays nil.
+func WithAttestationData() AttestationOption {
+	return func(o *AttestationOptions) { o.IncludeData = true }
+}
+
+// NewAttestationOptions folds opts into a single AttestationOptions.
+func NewAttestationOptions(opts ...AttestationOption) *AttestationOptions {
+	o := &AttestationOptions{}
+	for _, f := range opts {
+		f(o)
+	}
+	return o
+}
+
 // AttestationDiscoverer retrieves the attestations attached to a resource's artifact
 // (OCI referrers plus any BuildKit in-toto attestations in its image index),
 // metadata-only. Credentials authenticate against the backing registry.
 type AttestationDiscoverer interface {
-	DiscoverAttestations(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) ([]Attestation, error)
+	DiscoverAttestations(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed, opts ...AttestationOption) ([]Attestation, error)
 }
 
 // LocalAttestationDiscoverer retrieves the attestations of a resource whose artifact was
 // copied into the component as a local blob (a by-value transfer, for example into a CTF).
 type LocalAttestationDiscoverer interface {
-	DiscoverLocalAttestations(ctx context.Context, component, version string, identity runtime.Identity) ([]Attestation, error)
+	DiscoverLocalAttestations(ctx context.Context, component, version string, identity runtime.Identity, opts ...AttestationOption) ([]Attestation, error)
 }
 
 // ComponentAttestationDiscoverer retrieves the referrers attached to the component
 // version artifact itself (describing the whole component rather than a single resource).
 type ComponentAttestationDiscoverer interface {
-	DiscoverComponentAttestations(ctx context.Context, component, version string) ([]Attestation, error)
+	DiscoverComponentAttestations(ctx context.Context, component, version string, opts ...AttestationOption) ([]Attestation, error)
 }

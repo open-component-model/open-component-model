@@ -26,7 +26,7 @@ var (
 // artifact backing res: the OCI referrers plus any BuildKit in-toto attestations in its
 // image index. Nothing is filtered or interpreted. Credentials are already held by the
 // resolver.
-func (repo *Repository) DiscoverAttestations(ctx context.Context, res *descriptor.Resource) ([]ocmrepository.Attestation, error) {
+func (repo *Repository) DiscoverAttestations(ctx context.Context, res *descriptor.Resource, opts ...ocmrepository.AttestationOption) ([]ocmrepository.Attestation, error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
 
 	if res.Access == nil || res.Access.GetType().IsEmpty() {
@@ -42,13 +42,13 @@ func (repo *Repository) DiscoverAttestations(ctx context.Context, res *descripto
 	if err != nil {
 		return nil, err
 	}
-	return discoverFromRoot(ctx, store, root)
+	return discoverFromRoot(ctx, store, root, opts...)
 }
 
 // DiscoverLocalAttestations discovers the attestations of a resource whose artifact was
 // copied into the component as a local blob (a by-value transfer, for example into a
 // CTF), entirely within the local store. Mirrors DiscoverLocalSBOM.
-func (repo *Repository) DiscoverLocalAttestations(ctx context.Context, component, version string, identity runtime.Identity) ([]ocmrepository.Attestation, error) {
+func (repo *Repository) DiscoverLocalAttestations(ctx context.Context, component, version string, identity runtime.Identity, opts ...ocmrepository.AttestationOption) ([]ocmrepository.Attestation, error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
 
 	cv, err := repo.readComponentVersion(ctx, component, version)
@@ -83,14 +83,14 @@ func (repo *Repository) DiscoverLocalAttestations(ctx context.Context, component
 	}
 	root.MediaType = local.MediaType
 
-	return discoverFromRoot(ctx, store, root)
+	return discoverFromRoot(ctx, store, root, opts...)
 }
 
 // DiscoverComponentAttestations returns the referrers attached to the component version
 // artifact itself (the subject the "component-descriptors/<component>:<version>" tag
 // resolves to). Component level is referrer-only: a component has neither a BuildKit
 // index nor per-resource labels.
-func (repo *Repository) DiscoverComponentAttestations(ctx context.Context, component, version string) ([]ocmrepository.Attestation, error) {
+func (repo *Repository) DiscoverComponentAttestations(ctx context.Context, component, version string, opts ...ocmrepository.AttestationOption) ([]ocmrepository.Attestation, error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
 
 	ref, store, err := repo.getStore(ctx, component, version)
@@ -101,7 +101,7 @@ func (repo *Repository) DiscoverComponentAttestations(ctx context.Context, compo
 	if err != nil {
 		return nil, err
 	}
-	return referrer.DiscoverAttestations(ctx, store, root)
+	return referrer.DiscoverAttestations(ctx, store, root, opts...)
 }
 
 // resolveRoot resolves reference to its store and artifact root descriptor.
@@ -129,15 +129,15 @@ func (repo *Repository) resolveRootIn(ctx context.Context, store spec.Store, ref
 // in-toto index. Both only exist on an OCI image manifest or index. A plain blob stored
 // by value (for example an SBOM document) can carry neither, and probing its referrers
 // triggers a slow fallback-tag lookup that always returns empty, so skip it entirely.
-func discoverFromRoot(ctx context.Context, store spec.Store, root ociImageSpecV1.Descriptor) ([]ocmrepository.Attestation, error) {
+func discoverFromRoot(ctx context.Context, store spec.Store, root ociImageSpecV1.Descriptor, opts ...ocmrepository.AttestationOption) ([]ocmrepository.Attestation, error) {
 	if !introspection.IsOCICompliantManifest(root) {
 		return nil, nil
 	}
-	out, err := referrer.DiscoverAttestations(ctx, store, root)
+	out, err := referrer.DiscoverAttestations(ctx, store, root, opts...)
 	if err != nil {
 		return nil, err
 	}
-	fromIndex, err := attestation.DiscoverAllFromRoot(ctx, store, root)
+	fromIndex, err := attestation.DiscoverAllFromRoot(ctx, store, root, opts...)
 	if err != nil {
 		return nil, err
 	}

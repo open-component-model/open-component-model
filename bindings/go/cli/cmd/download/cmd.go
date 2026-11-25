@@ -3,6 +3,7 @@ package download
 import (
 	"github.com/spf13/cobra"
 
+	"ocm.software/open-component-model/bindings/go/cli/cmd/download/attestation"
 	"ocm.software/open-component-model/bindings/go/cli/cmd/download/plugin"
 	"ocm.software/open-component-model/bindings/go/cli/cmd/download/resource"
 )
@@ -10,7 +11,7 @@ import (
 // New represents any command that is related to adding ( "add"ing ) objects
 func New() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "download {resource|resources|plugin|plugins}",
+		Use:   "download {resource|resources|plugin|plugins|attestation|attestations}",
 		Short: "Download anything from OCM",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return cmd.Help()
@@ -18,5 +19,6 @@ func New() *cobra.Command {
 	}
 	cmd.AddCommand(resource.New())
 	cmd.AddCommand(plugin.New())
+	cmd.AddCommand(attestation.New())
 	return cmd
 }

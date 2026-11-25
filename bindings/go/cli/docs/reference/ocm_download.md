@@ -12,7 +12,7 @@ sidebar:
 Download anything from OCM
 
 ```
-ocm download {resource|resources|plugin|plugins} [flags]
+ocm download {resource|resources|plugin|plugins|attestation|attestations} [flags]
 ```
 
 ### Options
@@ -70,6 +70,7 @@ ocm download {resource|resources|plugin|plugins} [flags]
 ### SEE ALSO
 
 * [ocm]({{< relref "ocm.md" >}})	 - The official Open Component Model (OCM) CLI
+* [ocm download attestation]({{< relref "ocm_download_attestation.md" >}})	 - Download the attestation documents describing a component version, its resources, or one resource
 * [ocm download plugin]({{< relref "ocm_download_plugin.md" >}})	 - Download plugin binaries from a component version.
 * [ocm download resource]({{< relref "ocm_download_resource.md" >}})	 - Download resources described in a component version in an OCM Repository
 

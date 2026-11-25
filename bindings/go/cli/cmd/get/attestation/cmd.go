@@ -284,7 +284,7 @@ func filterGroups(groups []cliattestation.Group, filters []string, contentDigest
 			out = append(out, g) // keep a failed origin visible regardless of the filters
 			continue
 		}
-		kept := filterByContentDigest(filterByType(g.Attestations, filters), contentDigest)
+		kept := filterByContentDigest(cliattestation.FilterByType(g.Attestations, filters), contentDigest)
 		if len(kept) > 0 {
 			out = append(out, cliattestation.Group{Label: g.Label, Attestations: kept})
 		}
@@ -335,69 +335,13 @@ func uniqueResource(desc *descriptor.Descriptor, identity runtime.Identity) (*de
 	return res, nil
 }
 
-// Friendly type vocabulary and envelope markers, inlined because the unopinionated model
-// defines no type constants of its own. Used only to widen --type matching and to shape
-// the provenance tree, never to classify or drop.
+// Envelope markers, inlined because the unopinionated model defines no type constants of
+// its own. Used only to shape the provenance tree (envelopeOf), never to classify or drop.
 const (
-	predicateOpenVEX       = "https://openvex.dev/ns"
-	predicateSLSA          = "https://slsa.dev/provenance/"
-	predicateCosignSig     = "https://sigstore.dev/cosign/sign/v1"
-	mediaOpenVEX           = "application/openvex+json"
-	mediaOpenVEXVnd        = "application/vnd.openvex+json"
-	mediaSARIF             = "application/sarif+json"
 	mediaInTotoStatement   = "application/vnd.in-toto+json"
-	artifactCosignSig      = "application/vnd.dev.cosign.artifact.sig.v1+json"
-	artifactNotation       = "application/vnd.cncf.notary.signature"
 	artifactSigstoreBundle = "application/vnd.dev.sigstore.bundle.v0.3+json"
 	annotationDSSEContent  = "dev.sigstore.bundle.content"
-	resourceTypeSBOM       = "sbom"
-	resourceTypeVEX        = "vex"
 )
-
-// classify derives the friendly category and format of an attestation from its raw type
-// signals. It is advisory display sugar for the tree and the --type aliases, never stored
-// and never a gate. An unrecognised attestation yields an empty category and its raw type
-// as the format, so nothing is hidden.
-func classify(a repository.Attestation) (category, format string) {
-	pt, at, mt := a.PredicateType, a.ArtifactType, a.MediaType
-	switch {
-	case pt == repository.PredicateTypeSPDX || mt == repository.MediaTypeSPDXJSON:
-		return "sbom", "spdx"
-	case pt == repository.PredicateTypeCycloneDX || mt == repository.MediaTypeCycloneDXJSON:
-		return "sbom", "cyclonedx"
-	case strings.HasPrefix(pt, predicateOpenVEX) || mt == mediaOpenVEX || mt == mediaOpenVEXVnd:
-		return "vex", "openvex"
-	case strings.HasPrefix(pt, predicateSLSA):
-		return "provenance", "slsa"
-	case at == artifactCosignSig || pt == predicateCosignSig:
-		return "signature", "cosign"
-	case at == artifactNotation:
-		return "signature", "notation"
-	case at == mediaSARIF || mt == mediaSARIF:
-		return "sarif", ""
-	case at == resourceTypeSBOM:
-		return "sbom", ""
-	case at == resourceTypeVEX:
-		return "vex", ""
-	default:
-		return "", a.Type()
-	}
-}
-
-// typeAliases lists the friendly filter tokens of an attestation (its format and
-// category), used only to widen --type matching. An unrecognised attestation yields none,
-// staying matchable by raw substring.
-func typeAliases(a repository.Attestation) []string {
-	category, format := classify(a)
-	var out []string
-	if format != "" && format != a.Type() {
-		out = append(out, format)
-	}
-	if category != "" {
-		out = append(out, category)
-	}
-	return out
-}
 
 // envelopeOf names the wrapper a document sits in, from metadata alone: a cosign DSSE
 // bundle, a plain in-toto statement, or none.
@@ -410,27 +354,6 @@ func envelopeOf(a repository.Attestation) string {
 	default:
 		return ""
 	}
-}
-
-// filterByType keeps attestations whose raw type signals contain any of the given
-// substrings (case-insensitive) or whose friendly aliases match one exactly. An empty
-// filter keeps everything.
-func filterByType(atts []repository.Attestation, filters []string) []repository.Attestation {
-	if len(filters) == 0 {
-		return atts
-	}
-	norm := make([]string, len(filters))
-	for i, f := range filters {
-		norm[i] = strings.ToLower(strings.TrimSpace(f))
-	}
-	kept := make([]repository.Attestation, 0, len(atts))
-	for _, a := range atts {
-		haystack := strings.ToLower(strings.Join([]string{a.Type(), a.ArtifactType, a.PredicateType, a.MediaType}, "\x00"))
-		if anyFilterMatches(norm, haystack, typeAliases(a)) {
-			kept = append(kept, a)
-		}
-	}
-	return kept
 }
 
 // filterByContentDigest keeps only attestations whose document content digest equals the
@@ -447,15 +370,6 @@ func filterByContentDigest(atts []repository.Attestation, digest string) []repos
 		}
 	}
 	return kept
-}
-
-func anyFilterMatches(filters []string, haystack string, aliases []string) bool {
-	for _, f := range filters {
-		if strings.Contains(haystack, f) || slices.Contains(aliases, f) {
-			return true
-		}
-	}
-	return false
 }
 
 // row is the table projection of one attestation. The table shows the raw type signals
@@ -537,7 +451,7 @@ func flattenRows(c component, showComponent bool) []row {
 	var rows []row
 	for _, g := range c.Groups {
 		for _, a := range g.Attestations {
-			category, _ := classify(a)
+			category, _ := cliattestation.Classify(a)
 			rows = append(rows, row{
 				Component:     c.Ref,
 				Resource:      resourceLabel(g.Label, c.Ref, showComponent),
@@ -698,7 +612,7 @@ func nodeRow(label string, children []tree.Row, p painter) tree.Row {
 // with any platform for an enveloped one), the friendly TYPE tag coloured, and the content
 // digest with its duplicate marker.
 func leafRow(label string, a repository.Attestation, p painter, marks dupMarks) tree.Row {
-	category, _ := classify(a)
+	category, _ := cliattestation.Classify(a)
 	return tree.Row{Cells: []string{
 		label,
 		p.paint(category, categoryColor(category)),
@@ -792,8 +706,8 @@ func groupSources(atts []repository.Attestation) []sourceBucket {
 }
 
 func comparePredicates(a, b repository.Attestation) int {
-	ca, _ := classify(a)
-	cb, _ := classify(b)
+	ca, _ := cliattestation.Classify(a)
+	cb, _ := cliattestation.Classify(b)
 	return cmp.Or(
 		cmp.Compare(ca, cb),
 		cmp.Compare(a.PredicateType, b.PredicateType),
@@ -885,7 +799,7 @@ func jsonOriginOf(g cliattestation.Group) jsonOrigin {
 }
 
 func rawDoc(a repository.Attestation) jsonDoc {
-	category, _ := classify(a)
+	category, _ := cliattestation.Classify(a)
 	return jsonDoc{
 		Type:          category,
 		MediaType:     a.MediaType,
@@ -901,7 +815,7 @@ func rawDoc(a repository.Attestation) jsonDoc {
 }
 
 func predicateDoc(a repository.Attestation) jsonDoc {
-	category, _ := classify(a)
+	category, _ := cliattestation.Classify(a)
 	return jsonDoc{
 		Type:          category,
 		ArtifactType:  a.ArtifactType,
