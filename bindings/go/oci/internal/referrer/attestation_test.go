@@ -135,6 +135,30 @@ func TestFromReferrer_InToto(t *testing.T) {
 	assert.Equal(t, repository.PredicateTypeSPDX, got.Type())
 }
 
+// TestFromReferrer_ManifestPredicateTypeAnnotation reads the plain predicateType manifest
+// annotation that oras attach and cosign write (the key oras discover shows), so an in-toto
+// wrapped SLSA provenance is recognised as provenance, not left as the bare in-toto type.
+func TestFromReferrer_ManifestPredicateTypeAnnotation(t *testing.T) {
+	store := memory.New()
+	subject := pushSubject(t, store)
+
+	const slsaProvenance = "https://slsa.dev/provenance/v1"
+	layer := push(t, store, ociattestation.MediaTypeInTotoStatement, []byte(`{"predicate":{}}`))
+	ref := pushManifest(t, store, ociImageSpecV1.Manifest{
+		MediaType:    ociImageSpecV1.MediaTypeImageManifest,
+		ArtifactType: ociattestation.MediaTypeInTotoStatement,
+		Annotations:  map[string]string{annotationPredicateType: slsaProvenance},
+		Config:       emptyConfig(t, store),
+		Layers:       []ociImageSpecV1.Descriptor{layer},
+		Subject:      &subject,
+	})
+
+	got, err := fromReferrer(t.Context(), store, subject, ref)
+	require.NoError(t, err)
+	assert.Equal(t, slsaProvenance, got.PredicateType, "the plain predicateType annotation is read")
+	assert.Equal(t, slsaProvenance, got.Type(), "the predicate type wins over the in-toto media type")
+}
+
 // TestDiscoverAttestations_KeepsEverything lists every referrer, signatures included, and
 // never drops or interprets them.
 func TestDiscoverAttestations_KeepsEverything(t *testing.T) {

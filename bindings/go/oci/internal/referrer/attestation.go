@@ -27,6 +27,10 @@ const (
 	// annotationSigstorePredicateType carries the in-toto predicate type on a cosign
 	// Sigstore bundle referrer manifest, without fetching the bundle blob.
 	annotationSigstorePredicateType = "dev.sigstore.bundle.predicateType"
+	// annotationPredicateType is the plain in-toto predicate type annotation that oras
+	// attach, cosign and BuildKit write on the referrer manifest, and that oras discover
+	// reads. Distinct from the in-toto.io/predicate-type layer key.
+	annotationPredicateType = "predicateType"
 	// mediaTypeEmpty is the OCI empty descriptor oras uses as a config placeholder; it
 	// is never the document layer.
 	mediaTypeEmpty = "application/vnd.oci.empty.v1+json"
@@ -76,20 +80,24 @@ func fromReferrer(ctx context.Context, store spec.Store, subject, ref ociImageSp
 	}, nil
 }
 
-// predicateTypeFromMetadata extracts the in-toto predicate type from annotations only:
-// the Sigstore bundle annotation, the in-toto annotation on the manifest, or the in-toto
-// annotation on a layer. Empty when the referrer carries none.
+// predicateTypeFromMetadata extracts the in-toto predicate type from annotations only: the
+// Sigstore bundle annotation, the plain predicateType annotation (manifest or ref), or the
+// in-toto.io/predicate-type annotation on the manifest or a layer. Empty when none is set.
 func predicateTypeFromMetadata(ref ociImageSpecV1.Descriptor, manifest ociImageSpecV1.Manifest) string {
 	for _, annotations := range []map[string]string{ref.Annotations, manifest.Annotations} {
-		if pt := annotations[annotationSigstorePredicateType]; pt != "" {
-			return pt
-		}
-		if pt := annotations[attestation.AnnotationInTotoPredicateType]; pt != "" {
+		if pt := cmp.Or(
+			annotations[annotationSigstorePredicateType],
+			annotations[annotationPredicateType],
+			annotations[attestation.AnnotationInTotoPredicateType],
+		); pt != "" {
 			return pt
 		}
 	}
 	for _, layer := range manifest.Layers {
-		if pt := layer.Annotations[attestation.AnnotationInTotoPredicateType]; pt != "" {
+		if pt := cmp.Or(
+			layer.Annotations[annotationPredicateType],
+			layer.Annotations[attestation.AnnotationInTotoPredicateType],
+		); pt != "" {
 			return pt
 		}
 	}
