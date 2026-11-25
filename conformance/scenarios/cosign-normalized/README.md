@@ -33,3 +33,28 @@ Docker network and are published on `127.0.0.1:15001` and `127.0.0.1:15002`
 
 Keys, configuration and the CTF live in `tmp/`; `task clean` removes them,
 the registries and the network.
+
+## Host-side walkthrough (`demo.sh`)
+
+`demo.sh` is the narrative companion to the Taskfile above: a single, self-contained
+script that tells the same story interactively, for live demos and as the basis of the
+blog post. It differs from the Taskfile in three ways:
+
+- it uses a local `ocm` binary (the CLI built from this checkout, `task bindings/go/cli:build`)
+  and a downloaded `cosign`, instead of the full CLI image;
+- it carries the component across an airgap as a CTF (`oci -> ctf -> oci`) and relocates an
+  external **OCIImage** resource (`podinfo`) into the transport, so you can watch the access
+  descriptor get rewritten while the signed digest `D_norm` stays identical;
+- it prints each command and waits for Enter (`PAUSE=0` runs straight through), showing the
+  CLI's live progress display.
+
+```bash
+conformance/scenarios/cosign-normalized/demo.sh          # Enter-stepped
+PAUSE=0 conformance/scenarios/cosign-normalized/demo.sh   # straight through
+```
+
+Requires Docker, `oras`, `curl`, `jq`, `openssl`; `cosign` is used from `PATH` or downloaded
+and cached under `$TMPDIR`. It starts its own two zot registries, removes them on exit, and
+prints a temporary work directory holding the keys, configs and CTF. `OCM`, `COSIGN`,
+`SOURCE_PORT`, `TARGET_PORT` and `PODINFO` are overridable via the environment. It is not run
+by CI; the Taskfile scenario is the conformance check.
