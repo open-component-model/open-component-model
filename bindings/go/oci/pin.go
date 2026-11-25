@@ -67,41 +67,48 @@ func (repo *Repository) ResolveComponentVersionDigest(ctx context.Context, compo
 	return desc.Digest.String(), nil
 }
 
+// pinFor returns the pin of the repository if it applies to component, nil otherwise.
+func (repo *Repository) pinFor(component string) *componentVersionPin {
+	if repo.pin == nil || repo.pin.component != component {
+		return nil
+	}
+	return repo.pin
+}
+
+// componentVersionStore returns the store of component and the reference its version is looked up
+// by in it: the pinned artifact if the repository is pinned to an artifact of component, else the
+// version tag.
+func (repo *Repository) componentVersionStore(ctx context.Context, component, version string) (reference string, store spec.Store, err error) {
+	if pin := repo.pinFor(component); pin != nil {
+		return repo.getPinnedStore(ctx, pin)
+	}
+	return repo.getStore(ctx, component, version)
+}
+
 // readComponentVersion reads the descriptor of component in version together with the OCI
 // artifact it is stored as. If the repository is pinned to an artifact of component, the
 // descriptor is read from that artifact instead of resolving the version tag.
 func (repo *Repository) readComponentVersion(ctx context.Context, component, version string) (*storedComponentVersion, error) {
-	pin := repo.pin
-	if pin == nil || pin.component != component {
-		reference, store, err := repo.getStore(ctx, component, version)
-		if err != nil {
-			return nil, err
-		}
-		cv, err := getDescriptorFromStore(ctx, store, reference, repo.unmarshalDescriptorFunc)
-		if err != nil {
-			return nil, err
-		}
-		cv.reference, cv.store = reference, store
-		return cv, nil
-	}
-
-	reference, store, err := repo.getPinnedStore(ctx, pin)
+	reference, store, err := repo.componentVersionStore(ctx, component, version)
 	if err != nil {
 		return nil, err
 	}
+	pin := repo.pinFor(component)
 	cv, err := getDescriptorFromStore(ctx, store, reference, repo.unmarshalDescriptorFunc)
 	if err != nil {
-		if errors.Is(err, errdef.ErrNotFound) {
+		if pin != nil && errors.Is(err, errdef.ErrNotFound) {
 			return nil, repo.pinNotFoundError(ctx, pin, version, err)
 		}
 		return nil, err
 	}
-	// The descriptor is part of the pinned artifact, so it authentically names what the artifact holds.
-	desc := cv.descriptor
-	for _, want := range []string{pin.version, version} {
-		if desc.Component.Name != component || want != "" && desc.Component.Version != want {
-			return nil, fmt.Errorf("artifact %s holds component version %s:%s, not %s%s",
-				pin.digest, desc.Component.Name, desc.Component.Version, component, versionSuffix(want))
+	if pin != nil {
+		// The descriptor is part of the pinned artifact, so it authentically names what the artifact holds.
+		desc := cv.descriptor
+		for _, want := range []string{pin.version, version} {
+			if desc.Component.Name != component || want != "" && desc.Component.Version != want {
+				return nil, fmt.Errorf("artifact %s holds component version %s:%s, not %s%s",
+					pin.digest, desc.Component.Name, desc.Component.Version, component, versionSuffix(want))
+			}
 		}
 	}
 	cv.reference, cv.store = reference, store
@@ -146,8 +153,8 @@ func (repo *Repository) pinNotFoundError(ctx context.Context, pin *componentVers
 // OCI distribution has no conditional tag update, so a tag moved between this check and the
 // write is still overwritten.
 func (repo *Repository) checkPinnedTag(ctx context.Context, store spec.Store, reference, component, version string) error {
-	pin := repo.pin
-	if pin == nil || pin.component != component {
+	pin := repo.pinFor(component)
+	if pin == nil {
 		return nil
 	}
 	current, err := store.Resolve(ctx, reference)
