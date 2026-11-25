@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 
+	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	transformv1alpha1 "ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1"
-	"ocm.software/open-component-model/bindings/go/transform/spec/v1alpha1/meta"
 )
 
 func isOCIOrCTF(spec runtime.Typed) bool {
@@ -26,67 +25,63 @@ func isOCIOrCTF(spec runtime.Typed) bool {
 	}
 }
 
-// chooseCarryType returns the carry transformation type for a target repository.
-func chooseCarryType(repo runtime.Typed) (runtime.Type, error) {
-	concreteRepo, err := convertToConcreteRepo(repo)
+// chooseTransferComponentVersionType returns the fused transformation that adds a component
+// version stored in the normalized layout in the source repository to the target repository.
+func chooseTransferComponentVersionType(source, target runtime.Typed) (runtime.Type, error) {
+	sourceOCI, err := isOCIRepository(source)
 	if err != nil {
-		return runtime.Type{}, fmt.Errorf("converting repository spec: %w", err)
+		return runtime.Type{}, fmt.Errorf("source repository: %w", err)
 	}
-	switch concreteRepo.(type) {
-	case *oci.Repository:
-		return ociv1alpha1.OCICarryComponentSignaturesV1alpha1, nil
-	case *ctfv1.Repository:
-		return ociv1alpha1.CTFCarryComponentSignaturesV1alpha1, nil
+	targetOCI, err := isOCIRepository(target)
+	if err != nil {
+		return runtime.Type{}, fmt.Errorf("target repository: %w", err)
+	}
+	switch {
+	case sourceOCI && targetOCI:
+		return ociv1alpha1.TransferOCIComponentVersionToOCIV1alpha1, nil
+	case sourceOCI:
+		return ociv1alpha1.TransferOCIComponentVersionToCTFV1alpha1, nil
+	case targetOCI:
+		return ociv1alpha1.TransferCTFComponentVersionToOCIV1alpha1, nil
 	default:
-		return runtime.Type{}, fmt.Errorf("unsupported repository type %T for carry component signatures operation", concreteRepo)
+		return ociv1alpha1.TransferCTFComponentVersionToCTFV1alpha1, nil
 	}
 }
 
-// addCarryTransformation appends the transformation copying the signature referrers of a
-// normalized component version from its source into the target. It depends on the upload
-// transformation of the same (component, target) pair through the CEL references to its spec.
-// Only OCI and CTF sources can hold signature referrers; for other sources nothing is added.
-func addCarryTransformation(ctx context.Context, val *discoveryValue, id string, toSpec runtime.Typed, tgd *transformv1alpha1.TransformationGraphDefinition, label string) error {
+// componentVersionGraphSource returns the source of the fused transformation that adds the
+// component version in val to the target toSpec by copying the OCI graph it is stored as, which
+// keeps its signature referrers. ok is false if the component version is added from its
+// descriptor alone instead: only a normalized source has a manifest that stays the same in every
+// repository, and only OCI and CTF repositories store such graphs.
+func componentVersionGraphSource(ctx context.Context, val *discoveryValue, toSpec runtime.Typed) (source map[string]any, ok bool, err error) {
+	if val.SourceLayout != layout.ComponentVersionLayoutNormalized || !isOCIOrCTF(toSpec) {
+		return nil, false, nil
+	}
 	component := val.Descriptor.Component.Name
 	version := val.Descriptor.Component.Version
 
 	if val.SourceRepository == nil {
-		slog.WarnContext(ctx, "the source repository specification is unknown, so signatures of the source component version are not carried to the normalized target",
+		slog.WarnContext(ctx, "the source repository specification is unknown, so signature referrers of the normalized source component version are not transferred",
 			"component", component, "version", version)
-		return nil
+		return nil, false, nil
 	}
 	if !isOCIOrCTF(val.SourceRepository) {
-		slog.DebugContext(ctx, "source repository cannot hold signature referrers, not carrying signatures",
+		slog.DebugContext(ctx, "source repository cannot hold signature referrers, adding the component version from its descriptor",
 			"component", component, "version", version, "sourceType", val.SourceRepository.GetType().String())
-		return nil
+		return nil, false, nil
 	}
 
-	carryType, err := chooseCarryType(toSpec)
+	sourceRepo, err := asUnstructured(val.SourceRepository)
 	if err != nil {
-		return fmt.Errorf("choosing carry type for target repository: %w", err)
+		return nil, false, fmt.Errorf("cannot convert source repository spec to unstructured: %w", err)
 	}
-	toRepo, err := asUnstructured(toSpec)
-	if err != nil {
-		return fmt.Errorf("cannot convert target spec to unstructured: %w", err)
+	source = map[string]any{
+		"repository": sourceRepo.Data,
+		"component":  component,
+		"version":    version,
 	}
-	fromRepo, err := asUnstructured(val.SourceRepository)
-	if err != nil {
-		return fmt.Errorf("cannot convert source spec to unstructured: %w", err)
+	if val.Pin != "" {
+		source["digest"] = val.Pin
 	}
-
-	uploadID := id + "Upload"
-	tgd.Transformations = append(tgd.Transformations, transformv1alpha1.GenericTransformation{
-		TransformationMeta: meta.TransformationMeta{
-			Type:  carryType,
-			ID:    id + "Carry",
-			Label: label,
-		},
-		Spec: &runtime.Unstructured{Data: map[string]any{
-			"repository":       toRepo.Data,
-			"sourceRepository": fromRepo.Data,
-			"component":        fmt.Sprintf("${%s.spec.descriptor.component.name}", uploadID),
-			"version":          fmt.Sprintf("${%s.spec.descriptor.component.version}", uploadID),
-		}},
-	})
-	return nil
+	return source, true, nil
 }

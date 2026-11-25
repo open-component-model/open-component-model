@@ -61,7 +61,7 @@ func targetName(toSpec runtime.Typed) string {
 	return targetKind(toSpec)
 }
 
-// uploadLabel renders the label for an AddComponentVersion transformation, naming
+// uploadLabel renders the label for the upload transformation of a component version, naming
 // the target kind and location, e.g. "my-app@1.0.0 [Upload to OCI ghcr.io/org]".
 // When a component is transferred to more than one target, the target index
 // (0-based) disambiguates the labels, mirroring the T<idx> suffix on the
@@ -71,15 +71,6 @@ func uploadLabel(c *descriptor.Component, toSpec runtime.Typed, targetIdx, numTa
 		return fmt.Sprintf("%s [Upload to %s \u2192 target %d]", componentLabel(c), targetName(toSpec), targetIdx+1)
 	}
 	return fmt.Sprintf("%s [Upload to %s]", componentLabel(c), targetName(toSpec))
-}
-
-// carryLabel renders the label for a CarryComponentSignatures transformation,
-// e.g. "my-app@1.0.0 [Carry signatures to OCI]", disambiguated like uploadLabel.
-func carryLabel(c *descriptor.Component, toSpec runtime.Typed, targetIdx, numTargets int) string {
-	if numTargets > 1 {
-		return fmt.Sprintf("%s [Carry signatures to %s \u2192 target %d]", componentLabel(c), targetKind(toSpec), targetIdx+1)
-	}
-	return fmt.Sprintf("%s [Carry signatures to %s]", componentLabel(c), targetKind(toSpec))
 }
 
 // getLabel renders the label for a resource Get transformation,
