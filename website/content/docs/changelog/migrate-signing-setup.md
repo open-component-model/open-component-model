@@ -211,11 +211,13 @@ while the certificate was valid. See
 ### 7. Run OCM v1 and v2 verifiers side by side
 
 While some verifiers still run OCM v1, give the component version two signatures: one created by OCM v1 for the v1
-verifiers, one created by OCM v2. Sign with OCM v1 first. OCM v1 cannot update a CTF archive that OCM v2 has written.
+verifiers, one created by OCM v2. Sign with OCM v1 first. OCM v1 cannot update a CTF archive that OCM v2 has written,
+so start from a component version that OCM v1 built into a new archive and that has no signature yet, here
+`./release-archive` with version `2.0.0`:
 
 ```bash
-ocm-v1 sign componentversions --signature acme-v1 --private-key rsa.priv ./transport-archive//acme.org/helloworld:1.0.0
-ocm sign cv --signature acme ./transport-archive//acme.org/helloworld:1.0.0
+ocm-v1 sign componentversions --signature acme-v1 --private-key rsa.priv ./release-archive//acme.org/helloworld:2.0.0
+ocm sign cv --signature acme ./release-archive//acme.org/helloworld:2.0.0
 ```
 
 Here `ocm-v1` is the OCM v1 CLI. Add an identity with `algorithm: RSASSA-PKCS1-V1_5` and `signature: acme-v1` to the

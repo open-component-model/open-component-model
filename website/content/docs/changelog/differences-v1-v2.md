@@ -117,7 +117,7 @@ part of a component version are gone. For all commands and flags, see the
 | `ocm hash componentversions`, `sign hash` | No command yet ([open-component-model#1227](https://github.com/open-component-model/open-component-model/issues/1227)) |
 | `ocm cache`, `clean cache` | No command. OCM v2 caches OCI metadata for 10 minutes in its temporary folder, see [Caching]({{< docref "docs/reference/configuration/caching.md" >}}). |
 | `ocm bootstrap`, TOI packages | No command ([ocm-project#839](https://github.com/open-component-model/ocm-project/issues/839)). Deploy with the [OCM controllers]({{< docref "docs/concepts/ocm-controllers.md" >}}). |
-| `ocm download cli` | No command ([ocm-project#1094](https://github.com/open-component-model/ocm-project/issues/1094)). See [Install the OCM CLI]({{< docref "docs/getting-started/ocm-cli-installation.md" >}}). |
+| `ocm download cli` | No command. See [Install the OCM CLI]({{< docref "docs/getting-started/ocm-cli-installation.md" >}}). |
 | `ocm get artifacts`, `transfer artifacts`, `show tags`, `oci ...` | No command. `ocm transfer cv` copies component versions only. Use an OCI tool such as `oras` for plain OCI artifacts. |
 | `ocm add routingslips`, `get routingslips`, `execute action`, `get pubsub`, `set pubsub`, `get credentials`, `get verified` | No command |
 
@@ -131,7 +131,9 @@ types and their fields. Configuration types are not listed; see
   `get`, `sign`, `verify` and `transfer`, but not for `add`. The resource aliases `res` and `r` are gone.
 - **Short flags changed meaning.** In `ocm add cv`, `-c` is `--constructor` (v1: `--create`) and `-r` is
   `--repository`. In `ocm get cv`, `-r` is gone and `--recursive` takes a depth. `-c`/`--constraints` is now
-  `--constraint`. In `sign` and `verify`, `-s` is gone and `--signature` takes one name.
+  `--constraint`. In `sign` and `verify`, `-s` is gone and `--signature` takes one name. In `transfer`, `-V`
+  (`--copy-resources`) and `-f` (`--overwrite`) are gone. The global `-l` (`--loglevel`) and `-v` (`--verbose`) are
+  gone as well.
 - **One reference per call.** `get`, `sign` and `verify` take one reference, and `sign` and `verify` need a version.
   `--repo` is gone: always pass the full reference, such as `ghcr.io/acme//acme.org/app:1.0.0` or
   `ctf::./archive//acme.org/app:1.0.0`. A reference can pin a digest, such as `...:1.0.0@sha256:<digest>`.
@@ -149,7 +151,7 @@ types and their fields. Configuration types are not listed; see
   `--logconfig` and `--logkeys` are gone.
 - **Transfer.** `--overwrite`, `--enforce`, `--script`, `--uploader`, `--copy-local-resources` and
   `--omit-access-types` are gone. Local blobs are copied by default, and uploader configurations decide what else is
-  copied. `--copy-resources` and `--upload-as` still work but are deprecated, see
+  copied. `--copy-resources` still works but is deprecated in favor of uploader configurations, see
   [Migrate --upload-as Flags]({{< docref "docs/changelog/migrate-from-upload-as.md" >}}). To review a transfer before it
   runs, write the plan to a file and replay it:
 
@@ -315,7 +317,7 @@ The following v1 data does not work in OCM v2:
 | Helm resources copied with `--copy-resources` or a local blob uploader | Digest is rewritten and v1 signatures fail. The new digest changes with every transfer. | [#1368](https://github.com/open-component-model/ocm-project/issues/1368), [#1435](https://github.com/open-component-model/ocm-project/issues/1435) |
 | Resources with the access type `git` or `git/v1alpha1` | Download and copy fail with a digest mismatch. Verify and transfer by reference work. | [#1433](https://github.com/open-component-model/ocm-project/issues/1433) |
 | Resources with the access types `npm`, `maven`, `ocm` or `none` | Cannot be downloaded or copied | [#1376](https://github.com/open-component-model/ocm-project/issues/1376) |
-| Resources with the access type `s3/v1` | `--copy-resources` keeps them by reference | [#1404](https://github.com/open-component-model/ocm-project/issues/1404) |
+| Resources with the access type `s3/v1` | `--copy-resources` keeps them by reference | [#1404](https://github.com/open-component-model/ocm-project/issues/1404) (closed, not planned) |
 | Sources stored as local blobs | The component version cannot be transferred | [Migrate from Sources to Resources]({{< docref "docs/changelog/migrate-from-sources.md" >}}) |
 | Label `merge` specifications | Dropped on read and transfer. Signatures over resource and component labels still verify. For reference labels, see the `merge` row above. | [#1371](https://github.com/open-component-model/ocm-project/issues/1371) |
 | Routing slips | Kept as a label and transferred, but OCM v2 has no commands for them | |
