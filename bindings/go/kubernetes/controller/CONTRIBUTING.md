@@ -122,15 +122,17 @@ task bindings/go/kubernetes/controller:test/e2e
 ```
 
 Select `kind-ocm-e2e` in your kubeconfig before running the suite; its kubectl helpers use the selected context.
-Setup provisions registries, FluxCD, kro, ArgoCD, and Crossplane. Each subsequent `test/e2e` invocation builds
+Setup provisions registries, FluxCD, kro, ArgoCD, and Crossplane. By default, each `test/e2e` invocation builds
 the current controller, loads the same `CONTROLLER_IMG` into Kind, installs it with `pullPolicy: Never`, and
 restarts only the manager Deployment before waiting for rollout and running Ginkgo. Reusing `latest` therefore
 does not reuse an old running pod. No changes to the chart's release image pins are required.
 
 Use `CONTROLLER_IMG=localhost:5000/dev/controller:changed task bindings/go/kubernetes/controller:test/e2e`
 for a custom tagged image. `VALUES` defaults to `chart/test-values.yaml` for e2e and can override non-image
-settings. CI uses `test/e2e/run` after loading its build artifact; that runner installs and restarts the
-specified image without building or loading it. Ordinary `helm/install` instead defaults to `chart/values.yaml`.
+settings. CI passes `IMAGE_ARCHIVE=tmp/docker/controller.tar` to the same `test/e2e` task, which loads that
+Docker archive instead of rebuilding. The archive path is relative to the controller directory (or absolute)
+and must contain the image tagged as `CONTROLLER_IMG`. Installation, restart, rollout wait, and testing are
+shared by both paths. Ordinary `helm/install` instead defaults to `chart/values.yaml`.
 
 The Kustomize localization scenario also requires [ORAS](https://oras.land/docs/installation).
 

@@ -90,27 +90,18 @@ tasks:
       - 'docker rm -f ocm-e2e-image-registry 2>/dev/null || true'
 
   test/e2e:
-    desc: "Build and load the current controller source, then run e2e against kind-ocm-e2e. Pass Ginkgo flags after --."
-    cmds:
-      - task: docker-build
-        vars:
-          LOAD: "true"
-          PUSH: "false"
-      - 'kind load docker-image "{{.CONTROLLER_IMG}}" --name ocm-e2e'
-      - task: test/e2e/run
-        vars:
-          CLI_ARGS: '{{.CLI_ARGS}}'
-          VALUES: '{{.VALUES | default "chart/test-values.yaml"}}'
-
-  test/e2e/run:
-    desc: "Install and restart the prebuilt CONTROLLER_IMG in kind-ocm-e2e, then run e2e without rebuilding. Pass Ginkgo flags after --."
+    desc: "Build/load current source or load IMAGE_ARCHIVE, then install/restart and test in kind-ocm-e2e. Pass Ginkgo flags after --."
     dotenv: [ '{{.TASKFILE_DIR}}/test/e2e/hacks/.env' ]
     vars:
+      IMAGE_ARCHIVE: '{{.IMAGE_ARCHIVE | default (env "IMAGE_ARCHIVE")}}'
       VALUES: '{{.VALUES | default "chart/test-values.yaml"}}'
       IMAGE_REPOSITORY:
         sh: 'image="{{.CONTROLLER_IMG}}"; printf "%s" "${image%:*}"'
       IMAGE_TAG:
         sh: 'image="{{.CONTROLLER_IMG}}"; printf "%s" "${image##*:}"'
+    env:
+      IMAGE_ARCHIVE: '{{.IMAGE_ARCHIVE}}'
+      CONTROLLER_IMG: '{{.CONTROLLER_IMG}}'
     preconditions:
       - sh: 'test "$(kubectl config current-context)" = kind-ocm-e2e'
         msg: "The selected kube-context must be kind-ocm-e2e."
@@ -120,6 +111,15 @@ tasks:
           case "${image##*/}" in ?*:?*) exit 0 ;; *) exit 1 ;; esac
         msg: "CONTROLLER_IMG must be a single repository:tag reference, not a digest or multiple tags."
     cmds:
+      - |
+          set -e
+          {{if .IMAGE_ARCHIVE}}
+          kind load image-archive "$IMAGE_ARCHIVE" --name ocm-e2e
+          {{else}}
+          task --dir "{{.TASKFILE_DIR}}" docker-build LOAD=true PUSH=false \
+            CONTROLLER_IMG="$CONTROLLER_IMG" CONTAINER_TOOL="{{.CONTAINER_TOOL}}"
+          kind load docker-image "$CONTROLLER_IMG" --name ocm-e2e
+          {{end}}
       - task: helm/install
         vars:
           VALUES: '{{.VALUES}}'

@@ -83,7 +83,6 @@ versions of certain components, please read the [Discovery Controller Documentat
 | `task test/e2e/setup/teardown` | Delete the `ocm-e2e` cluster and its registry container |
 | `task test/e2e` | Build/load current controller source, install with `pullPolicy: Never`, restart manager pods, then run e2e (4 parallel processes). Pass flags after `--`, e.g. `-- --focus=helm-simple --procs=1` |
 | `task test/e2e/fresh` | Tear down + setup + run in one shot. Accepts the same ginkgo flags |
-| `task test/e2e/run` | Install/restart an already loaded `CONTROLLER_IMG` and run e2e without rebuilding; used by CI |
 
 Run these tasks from this directory with the selected kube-context set to `kind-ocm-e2e`; the test helpers
 use that selected context. Provision once, then rerun `test/e2e` after source changes. Each run replaces manager
@@ -94,6 +93,16 @@ Set `CONTROLLER_IMG` to a single tagged image, including registry ports if neede
 ```bash
 CONTROLLER_IMG=localhost:5000/dev/controller:changed task test/e2e -- --focus=helm-simple --procs=1
 ```
+
+CI supplies its already-built Docker archive to the same task instead of rebuilding:
+
+```bash
+task test/e2e IMAGE_ARCHIVE=tmp/docker/controller.tar
+```
+
+`IMAGE_ARCHIVE` is relative to this directory (or an absolute path), and must contain the image tagged as
+`CONTROLLER_IMG`. The task loads it before installation; a missing archive fails without falling back to a
+build. `pullPolicy: Never` prevents a registry pull when the selected image is absent from Kind.
 
 E2e defaults to `chart/test-values.yaml`; `VALUES` overrides non-image settings. Image identity and pull policy
 are always overridden to match the loaded artifact. Ordinary `helm/install` defaults to `chart/values.yaml`
