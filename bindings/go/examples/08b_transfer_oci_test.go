@@ -137,7 +137,7 @@ configurations:
 	r.NoError(srcRepo.AddComponentVersion(ctx, &descriptor.Descriptor{
 		Meta: descriptor.Meta{Version: "v2"},
 		Component: descriptor.Component{
-			Provider:      descriptor.Provider{Name: "opendefense.cloud"},
+			Provider:      descriptor.Provider{Name: "ocm.software"},
 			ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: component, Version: version}},
 			Resources:     resources,
 		},
