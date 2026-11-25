@@ -174,8 +174,9 @@ func BuildGraphDefinition(
 }
 
 // verifyReferenceDigests verifies every digest a parent's component reference expects for a
-// discovered component version against its resolved descriptor. digests is keyed by the
-// string form of the component version identity.
+// discovered component version against its resolved descriptor, and marks the component versions
+// that have one (see discoveryValue.ReferenceDigest). digests is keyed by the string form of the
+// component version identity.
 func verifyReferenceDigests(ctx context.Context, d *dag.DirectedAcyclicGraph[string], digests map[string][]descruntime.Digest) error {
 	for _, key := range d.GetVertices() {
 		val := d.Vertices[key].Attributes[dagsync.AttributeValue].(*discoveryValue)
@@ -183,7 +184,9 @@ func verifyReferenceDigests(ctx context.Context, d *dag.DirectedAcyclicGraph[str
 			descruntime.IdentityAttributeName:    val.Descriptor.Component.Name,
 			descruntime.IdentityAttributeVersion: val.Descriptor.Component.Version,
 		}
-		for _, expected := range digests[id.String()] {
+		expectedDigests := digests[id.String()]
+		val.ReferenceDigest = len(expectedDigests) > 0
+		for _, expected := range expectedDigests {
 			if err := signing.VerifyDigestMatchesDescriptor(
 				ctx, val.Descriptor, descruntime.Signature{Digest: expected}, slog.Default(),
 			); err != nil {
@@ -446,10 +449,11 @@ func processResource(ctx context.Context, resource descriptorv2.Resource, access
 		}
 		return nil, nil
 	case *helmv1.Helm:
-		if err := processHelm(resource, id, val, tgd, toSpec, resourceTransformIDs, i, ""); err != nil {
+		exprs, err := processHelm(resource, id, val, tgd, toSpec, resourceTransformIDs, i, "")
+		if err != nil {
 			return nil, fmt.Errorf("cannot process Helm Chart resource: %w", err)
 		}
-		return helmFileExpressions(id, resourceID), nil
+		return exprs, nil
 	case *wgetv1.Wget:
 		// A wget resource is a plain blob: download it and embed it as a local blob in the
 		// target. There is no OCI-artifact representation.

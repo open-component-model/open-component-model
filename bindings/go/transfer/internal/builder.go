@@ -146,6 +146,9 @@ func NewDefaultBuilder(
 		Scheme:  transformerScheme,
 		TempDir: tempDir,
 	}
+	setHelmChartLayerAccess := &helmtransformer.SetHelmChartLayerAccess{
+		Scheme: transformerScheme,
+	}
 
 	// Wget transformer
 	downloadWget := &wgettransformer.DownloadWgetResource{
@@ -232,6 +235,7 @@ func NewDefaultBuilder(
 		WithTransformer(&ociv1alpha1.TransferOCIArtifactToCTFLocalBlob{}, transferOCIArtifactToLocalBlob).
 		WithTransformer(&helmv1alpha1.GetHelmChart{}, getHelmChart).
 		WithTransformer(&helmv1alpha1.ConvertHelmToOCI{}, convertHelmToOCI).
+		WithTransformer(&helmv1alpha1.SetHelmChartLayerAccess{}, setHelmChartLayerAccess).
 		WithTransformer(&wgetv1alpha1.DownloadWgetResource{}, downloadWget).
 		WithTransformer(&s3v1alpha1.DownloadS3Resource{}, downloadS3).
 		WithTransformer(&githubv1alpha1.GetGitHubCommit{}, getGitHubCommit).

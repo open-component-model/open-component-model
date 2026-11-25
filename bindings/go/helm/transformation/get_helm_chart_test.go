@@ -133,6 +133,53 @@ func TestGetHelmChart_Transform(t *testing.T) {
 			compareProvFiles(t, helmOutput)
 		})
 
+		t.Run("marks the chart file as a Helm chart archive", func(t *testing.T) {
+			t.Parallel()
+			r := require.New(t)
+
+			transform := &transformation.GetHelmChart{
+				Scheme:             scheme,
+				ResourceRepository: helmresource.NewResourceRepository(nil, helmresource.WithHTTPConfig(plainHTTPConfig())),
+			}
+
+			helmAccessData, err := json.Marshal(map[string]string{
+				"helmRepository": srv.URL,
+				"helmChart":      "mychart-0.1.0.tgz",
+			}, runtime.JSONOptions)
+			r.NoError(err)
+
+			spec := &v1alpha1.GetHelmChart{
+				Type: runtime.NewVersionedType(v1alpha1.GetHelmChartType, v1alpha1.Version),
+				ID:   "test-get-helm-chart-media-type",
+				Spec: &v1alpha1.GetHelmChartSpec{
+					Resource: &v2.Resource{
+						ElementMeta: v2.ElementMeta{
+							ObjectMeta: v2.ObjectMeta{Name: "mychart", Version: "0.1.0"},
+						},
+						Type: "helmChart",
+						Access: &runtime.Raw{
+							Type: runtime.Type{Name: "helm", Version: "v1"},
+							Data: helmAccessData,
+						},
+					},
+				},
+			}
+
+			result, err := transform.Transform(t.Context(), spec)
+			r.NoError(err)
+			output, ok := result.(*v1alpha1.GetHelmChart)
+			r.True(ok)
+			r.NotNil(output.Output)
+			t.Cleanup(func() {
+				_ = os.RemoveAll(filePath(t, output.Output.ChartFile.URI))
+				if output.Output.ProvFile != nil {
+					_ = os.RemoveAll(filePath(t, output.Output.ProvFile.URI))
+				}
+			})
+
+			r.Equal("application/vnd.cncf.helm.chart.content.v1.tar+gzip", output.Output.ChartFile.MediaType)
+		})
+
 		t.Run("downloads chart using helmChart and helmRepository fields", func(t *testing.T) {
 			t.Parallel()
 			r := require.New(t)

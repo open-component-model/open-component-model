@@ -9,6 +9,9 @@ import (
 	_ "embed"
 )
 
+//go:embed schemas/ChartLayer.schema.json
+var schemaChartLayer []byte
+
 //go:embed schemas/ConvertHelmToOCI.schema.json
 var schemaConvertHelmToOCI []byte
 
@@ -26,6 +29,20 @@ var schemaGetHelmChartOutput []byte
 
 //go:embed schemas/GetHelmChartSpec.schema.json
 var schemaGetHelmChartSpec []byte
+
+//go:embed schemas/SetHelmChartLayerAccess.schema.json
+var schemaSetHelmChartLayerAccess []byte
+
+//go:embed schemas/SetHelmChartLayerAccessOutput.schema.json
+var schemaSetHelmChartLayerAccessOutput []byte
+
+//go:embed schemas/SetHelmChartLayerAccessSpec.schema.json
+var schemaSetHelmChartLayerAccessSpec []byte
+
+// JSONSchema returns the JSON Schema for ChartLayer.
+func (ChartLayer) JSONSchema() []byte {
+	return schemaChartLayer
+}
 
 // JSONSchema returns the JSON Schema for ConvertHelmToOCI.
 func (ConvertHelmToOCI) JSONSchema() []byte {
@@ -55,4 +72,19 @@ func (GetHelmChartOutput) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for GetHelmChartSpec.
 func (GetHelmChartSpec) JSONSchema() []byte {
 	return schemaGetHelmChartSpec
+}
+
+// JSONSchema returns the JSON Schema for SetHelmChartLayerAccess.
+func (SetHelmChartLayerAccess) JSONSchema() []byte {
+	return schemaSetHelmChartLayerAccess
+}
+
+// JSONSchema returns the JSON Schema for SetHelmChartLayerAccessOutput.
+func (SetHelmChartLayerAccessOutput) JSONSchema() []byte {
+	return schemaSetHelmChartLayerAccessOutput
+}
+
+// JSONSchema returns the JSON Schema for SetHelmChartLayerAccessSpec.
+func (SetHelmChartLayerAccessSpec) JSONSchema() []byte {
+	return schemaSetHelmChartLayerAccessSpec
 }

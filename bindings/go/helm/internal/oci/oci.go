@@ -23,10 +23,14 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// Result holds both the OCI layout blob and the manifest descriptor produced by CopyChartToOCILayout.
+// Result holds the OCI layout blob, the manifest descriptor, and the chart layer descriptor
+// produced by CopyChartToOCILayout.
 type Result struct {
 	Blob *filesystem.Blob
 	Desc *ociImageSpecV1.Descriptor
+	// ChartLayer is the layer that holds the chart archive. Its digest is the digest of the
+	// archive, so a caller can keep a digest recorded for the archive.
+	ChartLayer *ociImageSpecV1.Descriptor
 }
 
 // CopyChartToOCILayout takes a ChartData helper object and creates an OCI layout from it.
@@ -43,7 +47,7 @@ func CopyChartToOCILayout(ctx context.Context, chart *internal.ChartData, path s
 		return nil, fmt.Errorf("failed to open file for OCI layout: %w", err)
 	}
 
-	imgDesc, err := writeOCILayout(ctx, chart, file, filepath.Dir(path))
+	imgDesc, chartLayer, err := writeOCILayout(ctx, chart, file, filepath.Dir(path))
 	// The file is closed before it is handed out: an open file can be neither
 	// removed nor have its directory removed on windows.
 	if err = errors.Join(err, file.Close()); err != nil {
@@ -56,18 +60,18 @@ func CopyChartToOCILayout(ctx context.Context, chart *internal.ChartData, path s
 	}
 	blob.SetMediaType(layout.MediaTypeOCIImageLayoutTarGzipV1)
 
-	return &Result{Blob: blob, Desc: &imgDesc}, nil
+	return &Result{Blob: blob, Desc: &imgDesc, ChartLayer: chartLayer}, nil
 }
 
 // writeOCILayout writes the chart as a gzipped OCI layout tagged with the chart version
-// to out, buffering the layout in dir.
-func writeOCILayout(ctx context.Context, chart *internal.ChartData, out io.Writer, dir string) (_ ociImageSpecV1.Descriptor, err error) {
+// to out, buffering the layout in dir. It returns the manifest descriptor and the chart layer descriptor.
+func writeOCILayout(ctx context.Context, chart *internal.ChartData, out io.Writer, dir string) (_ ociImageSpecV1.Descriptor, _ *ociImageSpecV1.Descriptor, err error) {
 	zippedBuf := gzippool.Get(out)
 	defer gzippool.Put(zippedBuf)
 
 	target, err := tar.NewOCILayoutWriterWithTempFile(zippedBuf, dir)
 	if err != nil {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to create OCI layout writer: %w", err)
+		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to create OCI layout writer: %w", err)
 	}
 	// Releases the buffer file on failure; after the explicit Close below this is a no-op.
 	defer func() {
@@ -77,7 +81,7 @@ func writeOCILayout(ctx context.Context, chart *internal.ChartData, out io.Write
 	// Generate and push layers based on the chart to the OCI layout.
 	configLayer, chartLayer, provLayer, err := pushChartAndGenerateLayers(ctx, chart, target)
 	if err != nil {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to push chart layers: %w", err)
+		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to push chart layers: %w", err)
 	}
 
 	layers := []ociImageSpecV1.Descriptor{*chartLayer}
@@ -91,18 +95,18 @@ func writeOCILayout(ctx context.Context, chart *internal.ChartData, out io.Write
 		Layers:           layers,
 	})
 	if err != nil {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to create OCI image manifest: %w", err)
+		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to create OCI image manifest: %w", err)
 	}
 
 	if err := target.Tag(ctx, imgDesc, chart.Version); err != nil {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to tag OCI image: %w", err)
+		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to tag OCI image: %w", err)
 	}
 
 	if err := errors.Join(target.Close(), zippedBuf.Close()); err != nil {
-		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to finalize OCI layout: %w", err)
+		return ociImageSpecV1.Descriptor{}, nil, fmt.Errorf("failed to finalize OCI layout: %w", err)
 	}
 
-	return imgDesc, nil
+	return imgDesc, chartLayer, nil
 }
 
 func pushChartAndGenerateLayers(ctx context.Context, chart *internal.ChartData, target oras.Target) (

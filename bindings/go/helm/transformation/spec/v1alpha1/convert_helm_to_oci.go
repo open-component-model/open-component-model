@@ -34,6 +34,21 @@ type ConvertHelmToOCIOutput struct {
 	File v1alpha1.File `json:"file"`
 	// Resource is the resource descriptor from the component
 	Resource *v2.Resource `json:"resource"`
+	// ChartLayer is the layer of the converted OCI image that holds the chart archive.
+	ChartLayer ChartLayer `json:"chartLayer"`
+}
+
+// ChartLayer describes the layer of a Helm OCI image that holds the chart archive.
+// +k8s:deepcopy-gen=true
+// +ocm:jsonschema-gen=true
+type ChartLayer struct {
+	// MediaType is the media type of the layer.
+	MediaType string `json:"mediaType"`
+	// Digest is the digest of the layer ("sha256:<hex>"). It is the digest of the chart archive.
+	Digest string `json:"digest"`
+	// Size is the size of the layer in bytes.
+	// +ocm:jsonschema-gen:minimum=0
+	Size int64 `json:"size"`
 }
 
 // ConvertHelmToOCISpec is the input specification for the ConvertHelmToOCI transformation.

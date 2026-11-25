@@ -346,6 +346,12 @@ time=2026-03-04T13:59:24.363+01:00 level=INFO msg="resource downloaded successfu
 ```
 </details>
 
+{{< callout context="note" title="Charts stored as a chart archive" icon="outline/info-circle" >}}
+The `helm` transformer is for a chart stored as an OCI artifact. A chart stored
+as a chart archive (`.tgz`) needs no transformer: `--extraction-policy disable`
+writes the `.tgz`.
+{{< /callout >}}
+
 {{< details "Inspect the Helm chart" >}}
 The downloaded archive is now a regular Helm chart archive:
 

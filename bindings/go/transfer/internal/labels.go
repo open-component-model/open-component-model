@@ -91,6 +91,12 @@ func convertLabel(c *descriptor.Component, resourceName string) string {
 	return fmt.Sprintf("%s [Convert %s to OCIArtifact]", componentLabel(c), resourceName)
 }
 
+// chartLayerLabel renders the label for the node that points a copied Helm chart at the chart
+// layer of its pushed image, e.g. "my-app@1.0.0 [Reference chart layer of chart]".
+func chartLayerLabel(c *descriptor.Component, resourceName string) string {
+	return fmt.Sprintf("%s [Reference chart layer of %s]", componentLabel(c), resourceName)
+}
+
 // transferLabel renders the label for a fused transformation that streams a resource
 // from its source into the target, e.g. "my-app@1.0.0 [Transfer icons as OCIArtifact to OCI ghcr.io/org]".
 // kind is what the resource is stored as in the target (LocalBlob or OCIArtifact).

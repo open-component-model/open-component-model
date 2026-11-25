@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"helm.sh/helm/v4/pkg/chart/v2/loader"
+	"helm.sh/helm/v4/pkg/registry"
 
 	"ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
@@ -163,6 +164,9 @@ func writeChartAndProvFiles(ctx context.Context, chartBlob *helmblob.ChartBlob, 
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed buffering chart blob to file: %w", err)
 	}
+	// A consumer that stores the file as it is records it as a Helm chart archive;
+	// ConvertHelmToOCI reads only the URI.
+	chartFileSpec.MediaType = registry.ChartLayerMediaType
 	slog.DebugContext(ctx, "Converted chart blob to file spec", "uri", chartFileSpec.URI)
 
 	provArchive, err := chartBlob.ProvFile()

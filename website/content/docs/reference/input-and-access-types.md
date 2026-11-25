@@ -382,6 +382,7 @@ resources:
 ### `OCIImageLayer/v1`
 
 References a single blob (layer) in an OCI repository by digest. Legacy alias: `ociBlob`.
+A transfer writes this access for a Helm chart that the OCI uploader pushed and whose chart digest it kept: the access points at the chart layer of the pushed image, and the optional `imageReference` names that image.
 
 {{< schema-renderer url="/schemas/bindings/go/access/oci/v1/OCIImageLayer.schema.json" >}}
 

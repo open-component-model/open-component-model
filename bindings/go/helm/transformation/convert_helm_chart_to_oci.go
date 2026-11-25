@@ -109,6 +109,9 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 	if result.Desc == nil {
 		return nil, fmt.Errorf("OCI layout descriptor is required but was not returned from OCI layout creation")
 	}
+	if result.ChartLayer == nil {
+		return nil, fmt.Errorf("chart layer descriptor is required but was not returned from OCI layout creation")
+	}
 
 	spec, err := filesystem.FileToSpec(result.Blob, outputPath)
 	if err != nil {
@@ -118,6 +121,11 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 	slog.InfoContext(ctx, "Got OCI manifest descriptor")
 
 	transformation.Output.File = *spec
+	transformation.Output.ChartLayer = v1alpha1.ChartLayer{
+		MediaType: result.ChartLayer.MediaType,
+		Digest:    result.ChartLayer.Digest.String(),
+		Size:      result.ChartLayer.Size,
+	}
 	transformation.Output.Resource = transformation.Spec.Resource
 	transformation.Output.Resource.Type = access.HelmRepositoryType
 

@@ -1,6 +1,8 @@
 package transformation_test
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json/v2"
 	"io"
 	"os"
@@ -317,6 +319,85 @@ func TestConvertHelmChartToOCI_Transform(t *testing.T) {
 		entries, err := os.ReadDir(tempDir)
 		r.NoError(err)
 		r.Empty(entries, "the buffered layout must not survive a failed transformation")
+	})
+
+	t.Run("reports the chart layer", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			name      string
+			chartPath string
+			provPath  string
+		}{
+			{
+				name:      "without provenance",
+				chartPath: filepath.Join(testDataDir, "mychart-0.1.0.tgz"),
+			},
+			{
+				name:      "with provenance",
+				chartPath: filepath.Join(testDataDir, "provenance", "mychart-0.1.0.tgz"),
+				provPath:  filepath.Join(testDataDir, "provenance", "mychart-0.1.0.tgz.prov"),
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+				r := require.New(t)
+
+				chartPath, err := filepath.Abs(tt.chartPath)
+				r.NoError(err)
+				chartData, err := os.ReadFile(chartPath)
+				r.NoError(err)
+				chartSum := sha256.Sum256(chartData)
+
+				helmAccess := v1.Helm{
+					Type:           runtime.Type{Name: "helm", Version: "v1"},
+					HelmRepository: "https://example.com",
+					HelmChart:      "mychart",
+					Version:        "0.1.0",
+				}
+				rawAccess := runtime.Raw{}
+				r.NoError(access.Scheme.Convert(&helmAccess, &rawAccess))
+
+				spec := &v1alpha1.ConvertHelmToOCI{
+					Type: runtime.NewVersionedType(v1alpha1.ConvertHelmToOCIType, v1alpha1.Version),
+					ID:   "test-chart-layer",
+					Spec: &v1alpha1.ConvertHelmToOCISpec{
+						ChartFile: filev1alpha1.File{URI: fileURI(t, chartPath)},
+						Resource: &descv2.Resource{
+							ElementMeta: descv2.ElementMeta{
+								ObjectMeta: descv2.ObjectMeta{Name: "mychart", Version: "0.1.0"},
+							},
+							Type:   "helmChart",
+							Access: &rawAccess,
+						},
+						OutputPath: t.TempDir(),
+					},
+				}
+				if tt.provPath != "" {
+					provPath, err := filepath.Abs(tt.provPath)
+					r.NoError(err)
+					spec.Spec.ProvFile = &filev1alpha1.File{URI: fileURI(t, provPath)}
+				}
+
+				transform := &transformation.ConvertHelmChartToOCI{Scheme: scheme}
+				result, err := transform.Transform(t.Context(), spec)
+				r.NoError(err)
+				output, ok := result.(*v1alpha1.ConvertHelmToOCI)
+				r.True(ok)
+				r.NotNil(output.Output)
+				t.Cleanup(func() {
+					_ = os.RemoveAll(filePath(t, output.Output.File.URI))
+				})
+
+				r.Equal(v1alpha1.ChartLayer{
+					MediaType: "application/vnd.cncf.helm.chart.content.v1.tar+gzip",
+					Digest:    "sha256:" + hex.EncodeToString(chartSum[:]),
+					Size:      int64(len(chartData)),
+				}, output.Output.ChartLayer)
+			})
+		}
 	})
 
 	t.Run("fails when spec is nil", func(t *testing.T) {

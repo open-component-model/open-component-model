@@ -92,7 +92,6 @@ func processOCIUploader(ctx context.Context, resource descriptorv2.Resource, acc
 		return nil, err
 	}
 
-	resourceID := identityToTransformationID(resource.ToIdentity())
 	switch access.(type) {
 	case *ociv1.OCIImage:
 		// Streaming (TransferOCIArtifact) produces no temp file, so there is nothing to clean up.
@@ -101,10 +100,11 @@ func processOCIUploader(ctx context.Context, resource descriptorv2.Resource, acc
 		}
 		return nil, nil
 	case *helmv1.Helm:
-		if err := processHelm(resource, id, val, tgd, toSpec, resourceTransformIDs, i, imageReference); err != nil {
+		exprs, err := processHelm(resource, id, val, tgd, toSpec, resourceTransformIDs, i, imageReference)
+		if err != nil {
 			return nil, fmt.Errorf("cannot process Helm Chart resource: %w", err)
 		}
-		return helmFileExpressions(id, resourceID), nil
+		return exprs, nil
 	default: // *descriptorv2.LocalBlob holding an OCI manifest or artifact set, or *ociv1.RelativeOCIReference
 		// Streamed (TransferLocalBlobToOCIArtifact): no file buffer to clean up.
 		if err := processLocalBlob(resource, id, val, tgd, toSpec, resourceTransformIDs, i, imageReference); err != nil {

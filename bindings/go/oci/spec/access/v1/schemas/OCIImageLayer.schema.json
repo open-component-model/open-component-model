@@ -10,6 +10,10 @@
       "type": "string",
       "description": "Digest is the digest of the targeted content."
     },
+    "imageReference": {
+      "type": "string",
+      "description": "ImageReference is the reference, with tag or digest, of a manifest in the repository\nof Reference that lists the layer, for example the Helm OCI image of a chart layer. It is\noptional and only tells where the layer came from: the layer is read by Digest.\nIt is not the repository of the layer, for which the OCM spec page of ociBlob uses\nthis name: this binding stores the repository in Reference."
+    },
     "mediaType": {
       "type": "string",
       "description": "MediaType is the media type of the object this schema refers to."

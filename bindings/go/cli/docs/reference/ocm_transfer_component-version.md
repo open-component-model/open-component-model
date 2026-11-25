@@ -70,7 +70,10 @@ How the graph is built:
     2. CTFAddComponentVersion -> OCIAddComponentVersion
     3. GetOCIArtifact -> OCIAddLocalResource, or TransferOCIArtifact (OCI uploader)
     4. GetHelmChart -> ConvertHelmToOCI -> OCIAddLocalResource / AddOCIArtifact (OCI uploader)
-    5. GetGitResource -> OCIAddLocalResource, or GetGitResource / OCIGetLocalResource -> AddGitResource (Git uploader)
+    5. GetHelmChart -> OCIAddLocalResource, or GetHelmChart -> ConvertHelmToOCI -> AddOCIArtifact ->
+       SetHelmChartLayerAccess (OCI uploader): a Helm chart whose recorded chart digest a signature
+       or a reference digest covers, so the digest is kept; fails when a signed digest cannot be kept
+    6. GetGitResource -> OCIAddLocalResource, or GetGitResource / OCIGetLocalResource -> AddGitResource (Git uploader)
 
 ```
 ocm transfer component-version {reference} {target} [flags]

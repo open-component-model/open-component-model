@@ -59,6 +59,7 @@ func TestResourceLabels(t *testing.T) {
 	r.Equal("test@0.1.0 [Add icons as LocalBlob to CTF ./out]", addLabel(c, "icons", "LocalBlob", ctfTgt))
 	r.Equal("test@0.1.0 [Add icons as OCIArtifact to OCI ghcr.io/t]", addLabel(c, "icons", "OCIArtifact", ociTgt))
 	r.Equal("test@0.1.0 [Convert chart to OCIArtifact]", convertLabel(c, "chart"))
+	r.Equal("test@0.1.0 [Reference chart layer of chart]", chartLayerLabel(c, "chart"))
 	r.Equal("test@0.1.0 [Transfer icons as OCIArtifact to OCI ghcr.io/t]", transferLabel(c, "icons", "OCIArtifact", ociTgt))
 	r.Equal("test@0.1.0 [Transfer icons as LocalBlob to CTF ./out]", transferLabel(c, "icons", "LocalBlob", ctfTgt))
 }
