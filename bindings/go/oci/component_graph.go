@@ -1,9 +1,11 @@
 package oci
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 
@@ -72,9 +74,28 @@ func (g signatureGraph) Predecessors(ctx context.Context, desc ociImageSpecV1.De
 	return kept, nil
 }
 
+// fetchedRoot serves the root of a graph from the body that was fetched to
+// open it, so that the checks before a copy and the copy itself do not request
+// it from the store again.
+//
+// Like [signatureGraph] it embeds the interface, so that a
+// registry.ReferrerLister of the store is not promoted.
+type fetchedRoot struct {
+	content.ReadOnlyGraphStorage
+	root storedRoot
+}
+
+func (s fetchedRoot) Fetch(ctx context.Context, desc ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
+	if desc.Digest == s.root.descriptor.Digest {
+		return io.NopCloser(bytes.NewReader(s.root.body)), nil
+	}
+	return s.ReadOnlyGraphStorage.Fetch(ctx, desc)
+}
+
 // DownloadComponentVersionGraph returns the OCI graph a component version in the normalized layout
 // is stored as, without its access referrers: the normalized manifest as root, and its signature
-// referrers. Nothing is downloaded, the returned stream reads from the store of the repository.
+// referrers. Only the normalized manifest is fetched, which tells the layout. The returned stream
+// serves it from memory and reads everything else from the store of the repository on demand.
 // If the repository is pinned to an artifact of component, that artifact is the root instead of
 // what the version tag resolves to.
 //
@@ -95,7 +116,7 @@ func (repo *Repository) DownloadComponentVersionGraph(ctx context.Context, compo
 	}
 
 	return &ocistream.OCIResourceStream{
-		ReadOnlyGraphStorage: signatureGraph{store},
+		ReadOnlyGraphStorage: signatureGraph{fetchedRoot{ReadOnlyGraphStorage: store, root: root}},
 		Descriptor:           root.descriptor,
 		ExtendedCopyOpts:     repo.extendedCopyGraphOptions(),
 		TempDir:              repo.tempDir,
