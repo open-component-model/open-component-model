@@ -43,7 +43,7 @@ func (g signatureGraph) Predecessors(ctx context.Context, desc ociImageSpecV1.De
 	kept := make([]ociImageSpecV1.Descriptor, 0, len(predecessors))
 	for _, p := range predecessors {
 		artifactType := p.ArtifactType
-		if artifactType == "" && isImageManifestOrIndex(p.MediaType) {
+		if artifactType == "" && declaresArtifactType(p.MediaType) {
 			raw, err := content.FetchAll(ctx, g.ReadOnlyGraphStorage, p)
 			// CTF stores report missing content as fs.ErrNotExist.
 			if errors.Is(err, errdef.ErrNotFound) || errors.Is(err, fs.ErrNotExist) {
@@ -160,7 +160,7 @@ func rejectAccessReferrers(next findSuccessorsFunc) findSuccessorsFunc {
 		next = content.Successors
 	}
 	return func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
-		if !isImageManifestOrIndex(desc.MediaType) {
+		if !declaresArtifactType(desc.MediaType) {
 			return next(ctx, fetcher, desc)
 		}
 		// The copy proxy caches this fetch, and content.Successors reads the manifest from that cache.
@@ -179,8 +179,16 @@ func rejectAccessReferrers(next findSuccessorsFunc) findSuccessorsFunc {
 	}
 }
 
-// isImageManifestOrIndex reports whether content of the media type can be an
-// access referrer: the read path selects no other media type as one.
-func isImageManifestOrIndex(mediaType string) bool {
-	return mediaType == ociImageSpecV1.MediaTypeImageManifest || mediaType == ociImageSpecV1.MediaTypeImageIndex
+// declaresArtifactType reports whether content of the media type declares the
+// artifact type registries list it by, so that it can be listed as an access
+// referrer. Besides image manifests and indexes that is the withdrawn OCI
+// artifact manifest: the read path never selects one, but it would be listed
+// as a candidate on every read of the target.
+func declaresArtifactType(mediaType string) bool {
+	switch mediaType {
+	case ociImageSpecV1.MediaTypeImageManifest, ociImageSpecV1.MediaTypeImageIndex, mediaTypeArtifactManifest:
+		return true
+	default:
+		return false
+	}
 }
