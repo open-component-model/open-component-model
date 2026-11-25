@@ -129,15 +129,14 @@ jobs:
       - name: Extract image for E2E testing
         # Skopeo can extract by platform (--override-arch) AND convert to docker-archive.
         # Skopeo is pre-installed on ubuntu-latest but may be missing on ARM runners.
-        # Set tag to "latest" to match the controller's Helm chart default for E2E testing
         working-directory: ${{ env.CONTROLLER_DIR }}
         env:
           VERSION: ${{ inputs.controller_version }}
         run: |
           mkdir -p tmp/docker
-          skopeo --override-arch ${{ matrix.arch }} --override-os linux copy \
-            oci:tmp/oci-dir:${VERSION} \
-            docker-archive:tmp/docker/controller.tar:${IMAGE_NAME}:latest
+          skopeo --override-arch "${{ matrix.arch }}" --override-os linux copy \
+            "oci:tmp/oci-dir:${VERSION}" \
+            "docker-archive:tmp/docker/controller.tar:${IMAGE_NAME}:${VERSION}"
           echo "CONTROLLER_IMG=${IMAGE_NAME}:${VERSION}" >> "$GITHUB_ENV"
 
       - name: Run E2E tests
@@ -145,7 +144,7 @@ jobs:
           set -a && source ${{ env.CONTROLLER_DIR }}/.env && set +a
           bash ${{ env.CONTROLLER_DIR }}/test/e2e/hacks/setup.sh
           kind load image-archive "${{ env.CONTROLLER_DIR }}/tmp/docker/controller.tar" --name ocm-e2e
-          task ${{ env.CONTROLLER_DIR }}:test/e2e
+          task ${{ env.CONTROLLER_DIR }}:test/e2e/run
 
       - name: Debug cluster state
         if: failure()

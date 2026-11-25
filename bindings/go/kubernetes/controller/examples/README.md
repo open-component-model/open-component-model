@@ -17,14 +17,24 @@ From the **repository root**:
 task bindings/go/cli:build
 export OCM_CLI="$PWD/bindings/go/cli/tmp/bin/ocm"
 task bindings/go/kubernetes/controller:test/e2e/setup/local
-task bindings/go/kubernetes/controller:helm/install KUBE_CONTEXT=kind-ocm-e2e
+export CONTROLLER_IMG=ghcr.io/open-component-model/kubernetes/controller:local-e2e
+task bindings/go/kubernetes/controller:docker-build LOAD=true PUSH=false
+kind load docker-image "$CONTROLLER_IMG" --name ocm-e2e
+task bindings/go/kubernetes/controller:helm/install KUBE_CONTEXT=kind-ocm-e2e \
+  VALUES=chart/test-values.yaml IMAGE_REPOSITORY="${CONTROLLER_IMG%:*}" \
+  IMAGE_TAG="${CONTROLLER_IMG##*:}" IMAGE_PULL_POLICY=Never
+kubectl --context=kind-ocm-e2e -n ocm-k8s-toolkit-system rollout restart deployment \
+  -l app.kubernetes.io/instance=ocm-k8s-toolkit,control-plane=controller-manager
+kubectl --context=kind-ocm-e2e -n ocm-k8s-toolkit-system rollout status deployment \
+  -l app.kubernetes.io/instance=ocm-k8s-toolkit,control-plane=controller-manager --timeout=120s
 export IMAGE_REGISTRY=http://ocm-e2e-image-registry:5000
 ```
 
 Setup creates the registries and Docker aliases, kro and its RBAC, Flux, ArgoCD, and Crossplane with its
 composition functions and RBAC. ArgoCD receives its default AppProject, plain-HTTP registry credential templates,
 and the Flux OCI layer-media-type allowlist. Setup may request sudo to add the registry hostname to `/etc/hosts`.
-It does **not** install the controller chart: the separate `helm/install` command does that for manual runs.
+Setup only provisions infrastructure. The separate build/load/install commands select the current controller
+source without changing release pins; rollout restart replaces pods even when `local-e2e` is reused.
 Do not recreate an existing cluster without checking who uses it.
 
 `OCM_CLI` must be a command on PATH or an absolute executable path. An installed current OCM v2 CLI can replace

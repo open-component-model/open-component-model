@@ -79,10 +79,26 @@ versions of certain components, please read the [Discovery Controller Documentat
 
 | Task | Description |
 |---|---|
-| `task test/e2e/setup/local` | Create `ocm-e2e` Kind cluster with kro, FluxCD, and ArgoCD installed |
+| `task test/e2e/setup/local` | Provision `ocm-e2e` Kind with registries, kro, FluxCD, ArgoCD, and Crossplane; no controller build/install |
 | `task test/e2e/setup/teardown` | Delete the `ocm-e2e` cluster and its registry container |
-| `task test/e2e` | Run e2e tests against the running cluster (4 parallel Ginkgo processes). Pass Ginkgo CLI flags after `--`, e.g. `task test/e2e -- --focus=helm-simple` |
+| `task test/e2e` | Build/load current controller source, install with `pullPolicy: Never`, restart manager pods, then run e2e (4 parallel processes). Pass flags after `--`, e.g. `-- --focus=helm-simple --procs=1` |
 | `task test/e2e/fresh` | Tear down + setup + run in one shot. Accepts the same ginkgo flags |
+| `task test/e2e/run` | Install/restart an already loaded `CONTROLLER_IMG` and run e2e without rebuilding; used by CI |
+
+Run these tasks from this directory with the selected kube-context set to `kind-ocm-e2e`; the test helpers
+use that selected context. Provision once, then rerun `test/e2e` after source changes. Each run replaces manager
+pods even when the image tag is reused. A missing loaded image fails instead of pulling a published binary.
+
+Set `CONTROLLER_IMG` to a single tagged image, including registry ports if needed:
+
+```bash
+CONTROLLER_IMG=localhost:5000/dev/controller:changed task test/e2e -- --focus=helm-simple --procs=1
+```
+
+E2e defaults to `chart/test-values.yaml`; `VALUES` overrides non-image settings. Image identity and pull policy
+are always overridden to match the loaded artifact. Ordinary `helm/install` defaults to `chart/values.yaml`
+and remains values-driven unless `IMAGE_REPOSITORY`, `IMAGE_TAG`, or `IMAGE_PULL_POLICY` is supplied. No release
+image-pin edits are needed for local e2e.
 
 ## Contributing
 

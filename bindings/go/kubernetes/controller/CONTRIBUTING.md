@@ -114,15 +114,25 @@ task bindings/go/kubernetes/controller:test
 E2E tests run against a real Kubernetes cluster using [Kind](https://kind.sigs.k8s.io/):
 
 ```bash
-# Set up a local Kind cluster with the controller loaded
+# Provision the cluster and engine prerequisites once (no controller build/install)
 task bindings/go/kubernetes/controller:test/e2e/setup/local
 
-# Run the E2E test suite
+# With kind-ocm-e2e selected, build/load/install current source and run the suite
 task bindings/go/kubernetes/controller:test/e2e
 ```
 
-The E2E setup creates a Kind cluster, installs FluxCD and kro, loads the locally built controller
-image, and installs the Helm chart.
+Select `kind-ocm-e2e` in your kubeconfig before running the suite; its kubectl helpers use the selected context.
+Setup provisions registries, FluxCD, kro, ArgoCD, and Crossplane. Each subsequent `test/e2e` invocation builds
+the current controller, loads the same `CONTROLLER_IMG` into Kind, installs it with `pullPolicy: Never`, and
+restarts only the manager Deployment before waiting for rollout and running Ginkgo. Reusing `latest` therefore
+does not reuse an old running pod. No changes to the chart's release image pins are required.
+
+Use `CONTROLLER_IMG=localhost:5000/dev/controller:changed task bindings/go/kubernetes/controller:test/e2e`
+for a custom tagged image. `VALUES` defaults to `chart/test-values.yaml` for e2e and can override non-image
+settings. CI uses `test/e2e/run` after loading its build artifact; that runner installs and restarts the
+specified image without building or loading it. Ordinary `helm/install` instead defaults to `chart/values.yaml`.
+
+The Kustomize localization scenario also requires [ORAS](https://oras.land/docs/installation).
 
 ### Test Framework
 

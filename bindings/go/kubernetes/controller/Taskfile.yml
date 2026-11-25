@@ -80,14 +80,8 @@ tasks:
 
   test/e2e/setup/local:
     desc: "Set up a local Kind cluster for E2E tests"
-    deps:
-      # We depend on a locally built image, so we need to load that into the local machine.
-      - task: docker-build
-        vars:
-          LOAD: "true"
     cmds:
       - 'KIND_NODE_IMAGE_VERSION={{.KIND_NODE_IMAGE_VERSION}} bash test/e2e/hacks/setup.sh'
-      - 'kind load docker-image {{.CONTROLLER_IMG}} --name ocm-e2e'
 
   test/e2e/setup/teardown:
     desc: "Delete the 'ocm-e2e' Kind cluster and its registry. Only affects resources created by test/e2e/setup/local."
@@ -96,10 +90,45 @@ tasks:
       - 'docker rm -f ocm-e2e-image-registry 2>/dev/null || true'
 
   test/e2e:
-    desc: "Run end-to-end tests against a running cluster, 4 specs in parallel. Pass Ginkgo CLI flags via `--`, e.g. `task test/e2e -- --focus=helm-simple`; `-- --procs=1` runs serially. Omit to run all scenarios."
+    desc: "Build and load the current controller source, then run e2e against kind-ocm-e2e. Pass Ginkgo flags after --."
+    cmds:
+      - task: docker-build
+        vars:
+          LOAD: "true"
+          PUSH: "false"
+      - 'kind load docker-image "{{.CONTROLLER_IMG}}" --name ocm-e2e'
+      - task: test/e2e/run
+        vars:
+          CLI_ARGS: '{{.CLI_ARGS}}'
+          VALUES: '{{.VALUES | default "chart/test-values.yaml"}}'
+
+  test/e2e/run:
+    desc: "Install and restart the prebuilt CONTROLLER_IMG in kind-ocm-e2e, then run e2e without rebuilding. Pass Ginkgo flags after --."
     dotenv: [ '{{.TASKFILE_DIR}}/test/e2e/hacks/.env' ]
+    vars:
+      VALUES: '{{.VALUES | default "chart/test-values.yaml"}}'
+      IMAGE_REPOSITORY:
+        sh: 'image="{{.CONTROLLER_IMG}}"; printf "%s" "${image%:*}"'
+      IMAGE_TAG:
+        sh: 'image="{{.CONTROLLER_IMG}}"; printf "%s" "${image##*:}"'
+    preconditions:
+      - sh: 'test "$(kubectl config current-context)" = kind-ocm-e2e'
+        msg: "The selected kube-context must be kind-ocm-e2e."
+      - sh: |
+          image="{{.CONTROLLER_IMG}}"
+          case "$image" in *[[:space:]@]*) exit 1 ;; esac
+          case "${image##*/}" in ?*:?*) exit 0 ;; *) exit 1 ;; esac
+        msg: "CONTROLLER_IMG must be a single repository:tag reference, not a digest or multiple tags."
     cmds:
       - task: helm/install
+        vars:
+          VALUES: '{{.VALUES}}'
+          KUBE_CONTEXT: kind-ocm-e2e
+          IMAGE_REPOSITORY: '{{.IMAGE_REPOSITORY}}'
+          IMAGE_TAG: '{{.IMAGE_TAG}}'
+          IMAGE_PULL_POLICY: Never
+      - kubectl --context kind-ocm-e2e -n ocm-k8s-toolkit-system rollout restart deployment -l app.kubernetes.io/instance=ocm-k8s-toolkit,control-plane=controller-manager
+      - kubectl --context kind-ocm-e2e -n ocm-k8s-toolkit-system rollout status deployment -l app.kubernetes.io/instance=ocm-k8s-toolkit,control-plane=controller-manager --timeout=120s
       - PROJECT_DIR='{{.TASKFILE_DIR}}' go run github.com/onsi/ginkgo/v2/ginkgo --procs=4 -v --timeout=30m {{.CLI_ARGS}} '{{.TASKFILE_DIR}}/test/e2e/'
 
   test/e2e/fresh:
@@ -327,9 +356,9 @@ tasks:
       - helm template ocm-k8s-toolkit chart/ --namespace ocm-k8s-toolkit-system -f chart/test-values.yaml > dist/generated.yaml
 
   helm/install:
-    desc: "Install the Helm chart into a namespace that enforces the restricted Pod Security Standard. VALUES and KUBE_CONTEXT override the values file and the target context."
+    desc: "Install the chart using chart/values.yaml. VALUES and KUBE_CONTEXT override values/context; IMAGE_REPOSITORY, IMAGE_TAG and IMAGE_PULL_POLICY optionally override the image."
     vars:
-      VALUES: '{{.VALUES | default "chart/test-values.yaml"}}'
+      VALUES: '{{.VALUES | default "chart/values.yaml"}}'
       # kubectl and Helm must target the same cluster, or the namespace lands on the current context.
       KUBECTL_CONTEXT: '{{if .KUBE_CONTEXT}}--context {{.KUBE_CONTEXT}}{{end}}'
     cmds:
@@ -340,7 +369,10 @@ tasks:
       - kubectl {{.KUBECTL_CONTEXT}} label namespace ocm-k8s-toolkit-system --overwrite pod-security.kubernetes.io/enforce=restricted pod-security.kubernetes.io/enforce-version=latest
       - |
         helm upgrade --install ocm-k8s-toolkit chart/ \
-          {{if .KUBE_CONTEXT}}--kube-context {{.KUBE_CONTEXT}} {{end}}-f {{.VALUES}} \
+          {{if .KUBE_CONTEXT}}--kube-context "{{.KUBE_CONTEXT}}" {{end}}-f "{{.VALUES}}" \
+          {{if .IMAGE_REPOSITORY}}--set-string manager.image.repository="{{.IMAGE_REPOSITORY}}" {{end}}\
+          {{if .IMAGE_TAG}}--set-string manager.image.tag="{{.IMAGE_TAG}}" {{end}}\
+          {{if .IMAGE_PULL_POLICY}}--set-string manager.image.pullPolicy="{{.IMAGE_PULL_POLICY}}" {{end}}\
           --namespace ocm-k8s-toolkit-system \
           --wait \
           --timeout 120s
