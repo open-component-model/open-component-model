@@ -34,13 +34,13 @@ type Config struct {
 	Type runtime.Type `json:"type"`
 
 	// ComponentVersionLayout selects the storage layout of every component version written to an
-	// OCI registry or CTF archive: v2 (default; the tag resolves to the manifest holding the full
-	// component descriptor) or normalized (the tag resolves to a stable manifest holding only the
-	// normalized descriptor, which can be signed with cosign or notary). Component versions are
+	// OCI registry or CTF archive: default (the tag resolves to the manifest holding the full
+	// component descriptor) or normalized (experimental; the tag resolves to a stable manifest holding
+	// only the normalized descriptor, which can be signed with cosign or notary). Component versions are
 	// always rewritten in this layout, including when a signature is added with "ocm sign
 	// component-version". Reading detects the layout of each component version, so repositories
 	// may contain both.
-	// +ocm:jsonschema-gen:enum=v2,normalized
+	// +ocm:jsonschema-gen:enum=default,normalized
 	ComponentVersionLayout layout.ComponentVersionLayout `json:"componentVersionLayout,omitempty"`
 }
 

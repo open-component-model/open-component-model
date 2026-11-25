@@ -64,9 +64,9 @@ configurations:
   - type: oci.storage.config.ocm.software/v1alpha1
     componentVersionLayout: normalized
   - type: oci.storage.config.ocm.software/v1alpha1
-    componentVersionLayout: v2
+    componentVersionLayout: default
 `,
-			expect: layout.ComponentVersionLayoutV2,
+			expect: layout.ComponentVersionLayoutDefault,
 		},
 		{
 			name: "an entry without the field keeps the earlier value",

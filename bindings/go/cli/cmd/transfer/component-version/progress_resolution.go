@@ -110,7 +110,7 @@ func (r *resolutionProgressRepository) GetComponentVersionLayout(ctx context.Con
 	if detector, ok := r.ComponentVersionRepository.(repository.ComponentVersionLayoutDetector); ok {
 		return detector.GetComponentVersionLayout(ctx, component, version)
 	}
-	return string(layout.ComponentVersionLayoutV2), nil
+	return string(layout.ComponentVersionLayoutDefault), nil
 }
 
 func resolutionState(err error) progress.State {

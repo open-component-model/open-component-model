@@ -302,8 +302,8 @@ func TestWithOCIStorageConfig_SelectsComponentVersionLayout(t *testing.T) {
 		want    string
 		wantErr string
 	}{
-		{name: "no config uses v2", want: "v2"},
-		{name: "empty layout uses v2", cfg: &ocistoragev1alpha1.Config{}, want: "v2"},
+		{name: "no config uses default", want: "default"},
+		{name: "empty layout uses default", cfg: &ocistoragev1alpha1.Config{}, want: "default"},
 		{name: "normalized", cfg: &ocistoragev1alpha1.Config{ComponentVersionLayout: layout.ComponentVersionLayoutNormalized}, want: "normalized"},
 		{name: "unknown layout", cfg: &ocistoragev1alpha1.Config{ComponentVersionLayout: "v3"}, wantErr: `unknown component version layout "v3"`},
 	}

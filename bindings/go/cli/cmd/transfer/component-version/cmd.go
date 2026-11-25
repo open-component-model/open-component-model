@@ -95,7 +95,7 @@ Component version layout and signatures:
   is stable across registries and can be signed with cosign; its only layer is the normalized
   descriptor, whose digest is the component version digest. Every transferred component version is
   written in the layout of the oci.storage.config.ocm.software/v1alpha1 entry of the OCM configuration
-  (componentVersionLayout, default v2). For a normalized source, a CarryComponentSignatures node copies
+  (componentVersionLayout: default or normalized). For a normalized source, a CarryComponentSignatures node copies
   the signatures attached to it; if the target is not written in the normalized layout, they are not
   copied and a warning is logged.
 

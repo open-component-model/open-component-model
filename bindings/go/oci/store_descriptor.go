@@ -45,7 +45,7 @@ const (
 func (l Layout) String() string {
 	switch l {
 	case LayoutV2:
-		return string(speclayout.ComponentVersionLayoutV2)
+		return string(speclayout.ComponentVersionLayoutDefault)
 	case LayoutNormalized:
 		return string(speclayout.ComponentVersionLayoutNormalized)
 	default:
@@ -57,7 +57,7 @@ func (l Layout) String() string {
 // values are rejected.
 func ParseLayout(l speclayout.ComponentVersionLayout) (Layout, error) {
 	switch l {
-	case "", speclayout.ComponentVersionLayoutV2:
+	case "", speclayout.ComponentVersionLayoutDefault:
 		return LayoutV2, nil
 	case speclayout.ComponentVersionLayoutNormalized:
 		return LayoutNormalized, nil

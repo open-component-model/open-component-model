@@ -70,8 +70,8 @@ The layout is a write-time storage policy configured for the OCM process, not a 
 recorded on the stored manifest and never inferred from configuration when reading.
 
 * A new configuration type `oci.storage.config.ocm.software/v1alpha1` (Go package
-  `bindings/go/oci/spec/config/storage/v1alpha1`) has the field `componentVersionLayout` with the values `v2`
-  (default) and `normalized` (Go type `layout.ComponentVersionLayout` in `bindings/go/oci/spec/layout`). Unknown
+  `bindings/go/oci/spec/config/storage/v1alpha1`) has the field `componentVersionLayout` with the values `default`
+  (the v2 layout) and `normalized` (experimental) (Go type `layout.ComponentVersionLayout` in `bindings/go/oci/spec/layout`). Unknown
   values are rejected when the configuration is looked up.
 
   ```yaml
@@ -98,7 +98,7 @@ recorded on the stored manifest and never inferred from configuration when readi
   component (for example by component name pattern, like resolvers) can be added to the configuration type later.
 * Readers detect the layout from the `artifactType` of the manifest the tag resolves to, so repositories can contain
   both layouts. `repository.ComponentVersionLayoutDetector` (implemented by `*oci.Repository`) exposes the detected
-  layout (`v2` or `normalized`) to callers such as the transfer graph builder.
+  layout (`default` or `normalized`) to callers such as the transfer graph builder.
 
 ##### Normalized manifest `M`
 
@@ -282,7 +282,7 @@ tag <component>:<version>                access referrer A (untagged; newest cre
 
 #### Contract
 
-* Go: `layout.ComponentVersionLayout` (`v2`, `normalized`, empty = `v2`); `oci.Layout` (`LayoutV2`,
+* Go: `layout.ComponentVersionLayout` (`default`, `normalized`, empty = `default`); `oci.Layout` (`LayoutV2`,
   `LayoutNormalized`); `provider.WithOCIStorageConfig`; `repository.ComponentVersionLayoutDetector`;
   `repository.ComponentSignatureCarrier`.
 * Specifications: configuration type `oci.storage.config.ocm.software/v1alpha1` with `componentVersionLayout`;
