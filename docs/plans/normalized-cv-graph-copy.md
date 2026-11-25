@@ -133,8 +133,10 @@ The fused node re-reads the normalized manifest and layer. With the CLI provider
 
 Remaining network cost per component version and target:
 
-- one more Referrers listing; `cache.CachedStore` does not cache `Referrers`/`Predecessors`, so discovery and the
-  fused node each list once. The branch's carry also lists.
+- Referrers listings: `cache.CachedStore` does not cache `Referrers`/`Predecessors`. Besides discovery's one listing,
+  each target's fused node lists the normalized manifest once and every signature referrer once (`findRoots` walks
+  predecessors transitively; those listings are usually empty), so 1 + s per target for s signature referrers. A
+  run-scoped in-memory memo could save those; it is deliberately left out for now.
 - the normalized config, which the read never fetches
 - the signature referrers' manifests and layers, which are inherent to copying them
 
