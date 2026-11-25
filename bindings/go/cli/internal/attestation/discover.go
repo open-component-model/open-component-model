@@ -241,7 +241,7 @@ func accessMediaType(res *descriptor.Resource) string {
 	if access == nil {
 		return ""
 	}
-	data, err := json.Marshal(access)
+	data, err := json.Marshal(access, runtime.JSONOptions)
 	if err != nil {
 		return ""
 	}

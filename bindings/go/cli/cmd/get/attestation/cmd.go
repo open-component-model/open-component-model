@@ -413,7 +413,7 @@ func renderAttestations(ctx context.Context, w io.Writer, format, ref string, gr
 
 	switch format {
 	case render.OutputFormatJSON.String():
-		data, err := json.Marshal(rows, jsontext.WithIndent("  "))
+		data, err := json.Marshal(rows, runtime.JSONOptions, jsontext.WithIndent("  "))
 		if err != nil {
 			return fmt.Errorf("marshalling attestations to json failed: %w", err)
 		}
