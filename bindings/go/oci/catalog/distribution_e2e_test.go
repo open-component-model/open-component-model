@@ -34,6 +34,9 @@ func TestDistributionCataloger_E2E(t *testing.T) {
 	subPath := os.Getenv("OCM_E2E_CATALOG_SUBPATH")
 	username := os.Getenv("OCM_E2E_CATALOG_USERNAME")
 	password := os.Getenv("OCM_E2E_CATALOG_PASSWORD")
+	// OCM_E2E_CATALOG_PLAIN_HTTP lets the test reach a registry over cleartext
+	// HTTP, for example a local registry:2 or zot instance.
+	plainHTTP := os.Getenv("OCM_E2E_CATALOG_PLAIN_HTTP") == "true"
 
 	spec := &ociv1.Repository{BaseUrl: host, SubPath: subPath}
 
@@ -65,6 +68,7 @@ func TestDistributionCataloger_E2E(t *testing.T) {
 		Host:       parsed.Host,
 		HTTPClient: http.DefaultClient,
 		AuthClient: authClient,
+		PlainHTTP:  plainHTTP,
 	})
 	require.NoError(t, err)
 
@@ -76,6 +80,8 @@ func TestDistributionCataloger_E2E(t *testing.T) {
 		return nil
 	})
 	require.NoError(t, err)
+
+	t.Logf("registry %q returned %d component name(s): %v", parsed.Host, len(names), names)
 
 	for _, name := range names {
 		assert.NotContains(t, name, "component-descriptors/", "name %q should not carry the component-descriptors prefix", name)
