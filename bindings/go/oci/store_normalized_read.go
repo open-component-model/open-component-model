@@ -119,12 +119,8 @@ func loadAccessReferrer(ctx context.Context, store spec.Store, target, normalize
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch: %w", err)
 	}
-	var header struct {
-		MediaType    string                     `json:"mediaType"`
-		ArtifactType string                     `json:"artifactType"`
-		Subject      *ociImageSpecV1.Descriptor `json:"subject"`
-	}
-	if err := json.Unmarshal(raw, &header); err != nil {
+	header, err := decodeManifestHeader(raw)
+	if err != nil {
 		return nil, fmt.Errorf("failed to decode: %w", err)
 	}
 	if header.ArtifactType != ocidescriptor.ArtifactTypeAccessDescriptor {

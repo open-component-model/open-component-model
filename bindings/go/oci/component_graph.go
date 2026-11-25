@@ -2,7 +2,6 @@ package oci
 
 import (
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -60,9 +59,11 @@ func (g signatureGraph) Predecessors(ctx context.Context, desc ociImageSpecV1.De
 				// access referrer on the target, so a failed fetch fails the walk.
 				return nil, fmt.Errorf("failed to inspect referrer %s of %s: %w", p.Digest, desc.Digest, err)
 			}
-			if artifactType, err = manifestArtifactType(p.MediaType, raw); err != nil {
+			header, err := decodeManifestHeader(raw)
+			if err != nil {
 				return nil, fmt.Errorf("failed to inspect referrer %s of %s: %w", p.Digest, desc.Digest, err)
 			}
+			artifactType = header.listedArtifactType(p.MediaType)
 		}
 		if artifactType == ocidescriptor.ArtifactTypeAccessDescriptor {
 			continue
@@ -167,11 +168,11 @@ func rejectAccessReferrers(next findSuccessorsFunc) findSuccessorsFunc {
 		if err != nil {
 			return nil, err
 		}
-		artifactType, err := manifestArtifactType(desc.MediaType, raw)
+		header, err := decodeManifestHeader(raw)
 		if err != nil {
 			return nil, fmt.Errorf("failed to inspect %s: %w", desc.Digest, err)
 		}
-		if artifactType == ocidescriptor.ArtifactTypeAccessDescriptor {
+		if artifactType := header.listedArtifactType(desc.MediaType); artifactType == ocidescriptor.ArtifactTypeAccessDescriptor {
 			return nil, fmt.Errorf("access referrer %s must not be copied: its artifact type %q is reserved for the access descriptor each repository generates itself", desc.Digest, artifactType)
 		}
 		return next(ctx, fetcher, desc)
@@ -182,23 +183,4 @@ func rejectAccessReferrers(next findSuccessorsFunc) findSuccessorsFunc {
 // access referrer: the read path selects no other media type as one.
 func isImageManifestOrIndex(mediaType string) bool {
 	return mediaType == ociImageSpecV1.MediaTypeImageManifest || mediaType == ociImageSpecV1.MediaTypeImageIndex
-}
-
-// manifestArtifactType returns the artifact type registries report for the
-// image manifest or image index raw. For an image manifest without
-// artifactType that is the media type of its config.
-func manifestArtifactType(mediaType string, raw []byte) (string, error) {
-	var manifest struct {
-		ArtifactType string `json:"artifactType"`
-		Config       struct {
-			MediaType string `json:"mediaType"`
-		} `json:"config"`
-	}
-	if err := json.Unmarshal(raw, &manifest); err != nil {
-		return "", err
-	}
-	if manifest.ArtifactType == "" && mediaType == ociImageSpecV1.MediaTypeImageManifest {
-		return manifest.Config.MediaType, nil
-	}
-	return manifest.ArtifactType, nil
 }
