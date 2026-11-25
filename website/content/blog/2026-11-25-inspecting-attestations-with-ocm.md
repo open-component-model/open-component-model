@@ -23,7 +23,7 @@ common use:
    image index as `attests` manifest entries, tied to individual platforms.
 3. **OCM-local resources.** The SBOM post introduced a resource-level label
    (`ocm.software/artifact-references`) that lets any resource inside the component declare itself as
-   describing another resource: an SBOM, a VEX document, a SARIF file — anything.
+   describing another resource: an SBOM, a VEX document, a SARIF file, or anything else.
 
 A cosign signature, a syft SBOM, a docker buildx provenance and an OCM-linked VEX document can all
 be attached to the same image. Before this work, no single query could surface all four at once.
@@ -49,7 +49,7 @@ ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 -o widetree
 # Only the resource named "image"
 ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --identity name=image
 
-# Follow componentReferences recursively — list a whole product, not just one component
+# Follow componentReferences recursively: list a whole product, not just one component
 ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --recursive -o widetree
 
 # Only SBOMs and VEX documents, as machine-readable JSON
@@ -60,11 +60,11 @@ ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --type sbom --type vex -o 
 
 Per resource the command merges attestations from all three channels and deduplicates them:
 
-- OCM-local resources whose `ocm.software/artifact-references` label points at this resource —
-  these travel in the component descriptor and work in air-gapped or transferred environments.
-- OCI referrers on the resource's artifact — discovered by walking the OCI Referrers API, covering
+- OCM-local resources whose `ocm.software/artifact-references` label points at this resource.
+  These travel in the component descriptor and work in air-gapped or transferred environments.
+- OCI referrers on the resource's artifact, discovered by walking the OCI Referrers API, covering
   anything pushed by cosign, syft, vexctl, notary or oras.
-- BuildKit in-toto attestations embedded in the artifact's image index — per-platform, without
+- BuildKit in-toto attestations embedded in the artifact's image index, per-platform, without
   fetching the manifest separately.
 
 For multi-component products, `--recursive` follows `componentReferences` to any depth (`-1` for
@@ -92,10 +92,10 @@ Five output formats serve different consumers:
 
 | Format        | Use case                                                                                      |
 |---------------|-----------------------------------------------------------------------------------------------|
-| `table`       | Default; each attestation is a flat row                                                       |
-| `tree`        | Provenance tree with full digests, grouped by source — mirrors `oras discover`'s output shape |
+| `table`       | Default: each attestation is a flat row                                                       |
+| `tree`        | Provenance tree with full digests, grouped by source. Mirrors `oras discover`'s output shape. |
 | `widetree`    | Same tree, but every resource of the component is a node                                      |
-| `json`/`yaml` | Machine-readable; carries raw type signals, creation timestamps, and the full annotation map  |
+| `json`/`yaml` | Machine-readable: carries raw type signals, creation timestamps, and the full annotation map  |
 
 The tree formats surface containment explicitly: *reference → origin (resource or component) → source (referrer / index / local) → platform → attestation*, each leaf carrying the full digest.
 
@@ -116,7 +116,7 @@ channels, but a few things are still ahead:
   is `ocm get attestation --download` for a single document and an `--verify` path that checks the
   signature covering an attestation, following the same trust chain as `ocm verify`.
 - **The label convention.** `ocm.software/artifact-references` follows a spec convention being
-  finalized in [ocm-spec#146](https://github.com/open-component-model/ocm-spec/pull/146); the exact
+  finalized in [ocm-spec#146](https://github.com/open-component-model/ocm-spec/pull/146). The exact
   value shape may still change, and the command will track it.
 - **Integration with OpenDeliveryGear.** The earlier SBOM post explored feeding the output to ODG
   for VEX-aware scanning. That path opens up once the download step is in place.
