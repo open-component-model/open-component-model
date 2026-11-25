@@ -546,24 +546,23 @@ func flattenRows(c component, showComponent bool) []row {
 func renderTable(w io.Writer, rows []row, showComponent bool, p painter) error {
 	t := table.NewWriter()
 	t.SetOutputMirror(w)
-	header := table.Row{"RESOURCE", "SOURCE", "CATEGORY", "FORMAT", "PLATFORM", "ENV", "ID"}
+	header := table.Row{"RESOURCE", "SOURCE", "CATEGORY", "FORMAT", "PLATFORM", "ENVELOPE", "ID"}
 	if showComponent {
 		header = append(table.Row{"COMPONENT"}, header...)
 	}
 	t.AppendHeader(header)
 	for _, r := range rows {
-		c := categoryColor(r.Category)
 		cells := table.Row{
-			p.paint(orDash(r.Resource), c, text.Bold),
-			p.paint(r.Source, c),
-			p.paint(orDash(r.Category), c),
-			p.paint(orDash(r.Format), c),
-			p.paint(orDash(r.Platform), c),
-			p.paint(orDash(r.Envelope), c),
-			p.paint(r.ID, c),
+			p.paint(orDash(r.Resource), text.Bold),
+			r.Source,
+			p.paint(orDash(r.Category), categoryColor(r.Category)),
+			orDash(r.Format),
+			orDash(r.Platform),
+			orDash(r.Envelope),
+			p.paint(r.ID, text.Faint),
 		}
 		if showComponent {
-			cells = append(table.Row{p.paint(r.Component, c, text.Bold)}, cells...)
+			cells = append(table.Row{p.paint(r.Component, text.Bold)}, cells...)
 		}
 		t.AppendRow(cells)
 	}
@@ -589,7 +588,7 @@ func renderTree(ctx context.Context, w io.Writer, root component, p painter) err
 
 	renderer := tree.New(ctx, graph,
 		tree.WithRoots(root.Ref),
-		tree.WithHeader[string]("CATEGORY", "FORMAT", "PLATFORM", "ENV", "ID"),
+		tree.WithHeader[string]("CATEGORY", "FORMAT", "PLATFORM", "ENVELOPE", "ID"),
 		tree.WithVertexSerializerFunc(func(v *dag.Vertex[string]) (tree.Row, error) {
 			c, ok := v.Attributes[syncdag.AttributeValue].(component)
 			if !ok {
@@ -661,16 +660,16 @@ func leafRows(atts []repository.Attestation, p painter) []tree.Row {
 }
 
 // leafTreeRow is a document leaf: its facets fill the columns, ending in the full digest.
-// The whole row shares the category colour, so one attestation reads as one coloured line.
+// Only the category carries colour (the one semantic token); the digest is dimmed and the
+// rest stays neutral, so a row reads as a single accent rather than a block of colour.
 func leafTreeRow(a repository.Attestation, p painter) tree.Row {
 	category, format := classify(a)
-	c := categoryColor(category)
 	return tree.Row{Cells: []string{
-		p.paint(orDash(category), c),
-		p.paint(orDash(format), c),
-		p.paint(orDash(a.Platform.String()), c),
-		p.paint(orDash(envelopeOf(a)), c),
-		p.paint(a.ID, c),
+		p.paint(orDash(category), categoryColor(category)),
+		orDash(format),
+		orDash(a.Platform.String()),
+		orDash(envelopeOf(a)),
+		p.paint(a.ID, text.Faint),
 	}}
 }
 
