@@ -73,11 +73,6 @@ func NewDefaultBuilder(
 		RepoProvider:       repoProvider,
 		CredentialProvider: credentialProvider,
 	}
-	ociCarry := &ocitransformer.CarryComponentSignatures{
-		Scheme:             transformerScheme,
-		RepoProvider:       repoProvider,
-		CredentialProvider: credentialProvider,
-	}
 
 	// Resource transformers
 	ociGetResource := &ocitransformer.GetLocalResource{
@@ -229,8 +224,6 @@ func NewDefaultBuilder(
 		WithTransformer(&ociv1alpha1.TransferOCIComponentVersionToCTF{}, transferComponentVersion).
 		WithTransformer(&ociv1alpha1.TransferCTFComponentVersionToOCI{}, transferComponentVersion).
 		WithTransformer(&ociv1alpha1.TransferCTFComponentVersionToCTF{}, transferComponentVersion).
-		WithTransformer(&ociv1alpha1.OCICarryComponentSignatures{}, ociCarry).
-		WithTransformer(&ociv1alpha1.CTFCarryComponentSignatures{}, ociCarry).
 		WithTransformer(&ociv1alpha1.OCIGetLocalResource{}, ociGetResource).
 		WithTransformer(&ociv1alpha1.OCIAddLocalResource{}, ociAddResource).
 		WithTransformer(&ociv1alpha1.CTFGetLocalResource{}, ociGetResource).
