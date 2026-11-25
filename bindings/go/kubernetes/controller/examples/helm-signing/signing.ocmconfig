@@ -1,8 +1,6 @@
-# This file is used by the e2e test harness for BOTH signing (with `ocm sign cv`) and verification
-# (mounted as a Kubernetes Secret and consumed by the controller). Signing needs the private key
-# material below; verification does not. For a real controller deployment, ship a config that
-# contains only the `verifier:` entries and the public-key credentials. Never hand a private key
-# to a production controller.
+# WARNING: Local test-only signing keys. Never commit production private keys or use these in
+# a real cluster. The controller receives only public-key material via configuration.yaml.
+# Pass this file exclusively to `ocm sign cv`; do not mount it in Kubernetes.
 type: generic.config.ocm.software/v1
 configurations:
   # --- RSA ---
@@ -12,8 +10,6 @@ configurations:
       type: RSASigningConfiguration/v1alpha1
       signatureAlgorithm: RSASSA-PSS
       signatureEncodingPolicy: Plain
-    verifier:
-      type: RSASigningConfiguration/v1alpha1
 
   - type: credentials.config.ocm.software
     consumers:
@@ -52,21 +48,10 @@ configurations:
                 PsyO1sfIf95N0zCPxi4RCUv4zqNE6/o2xmxmp4vLdXwQ67bW5lbOlOv5cmbPgqy+
                 cBDC2XpvASkmOnBuLLPhRFSxi7t8q1nVIqWxvyt6iziZu/N9nP+rKQ==
                 -----END RSA PRIVATE KEY-----
-              publicKeyPEM: |
-                -----BEGIN RSA PUBLIC KEY-----
-                MIIBCgKCAQEA29z+RRhfHTnjhSFwOEAp5KSyHoM5UNCN04nyjL+kZWqFxhwPbVQh
-                io81RUQ/vjR8UrfuNLH0/MSWASCbZXe1llnZlucRBNOxtaRt4pDv476uEmZTovf1
-                3wPUKV/t+NCipTOzcnAiz26DIOcm1yUGaD2kEoyZY5WLP8zIZkt3XWw7Fj5ATwXq
-                Dr85+NfTi8paZemS6T845NK/rOH6gLkNTTw9regq1uPalxSyDnEDcR0hJREL2CdR
-                5JoCzuJtqnG2pdfZFAkak4ox8nWA+fYA0vgVB+UFJNYwrbQSVu4wHR5Zo9x5UW4+
-                nKSVBYHJU9blVSIT2X5Xe58k+IsOLT1+QwIDAQAB
-                -----END RSA PUBLIC KEY-----
   # --- GPG ---
   - type: signing.config.ocm.software/v1alpha1
     signature: ocm.software.helm.signing.gpg
     signer:
-      type: GPGSigningConfiguration/v1alpha1
-    verifier:
       type: GPGSigningConfiguration/v1alpha1
 
   - type: credentials.config.ocm.software
@@ -140,36 +125,3 @@ configurations:
                 N/UK8lHwNHoK31pP
                 =BkDc
                 -----END PGP PRIVATE KEY BLOCK-----
-              publicKeyPGP: |
-                -----BEGIN PGP PUBLIC KEY BLOCK-----
-                
-                mQENBGq1DzUBCACkdn8n0wZsvQXo22VfX8b16bKeFIR7ezPfhfyUipxuvUn3Xu/x
-                e+cuhDTi0Zee601IJ82CNKKXKJ6i48BItBFKhe9Y25XhApZSGlfNY1MvPHEbZ899
-                nys5SvcVzsFxiyk5cljjUEWC8lGXZjDCbiLy3v0rQIAHYhLvQ+DbFuQEBIBI2oaZ
-                1fmUYwhnKqURUvi6k/0FYgcU9n8FCHgxBlxJVHAZTS3MZaAcSktseFdXyR28K9CY
-                XY2Sq+t1Cl2vo8wz94n6+/sODphIZKV8AwXinJSybqYKRBa27EcTLn5D7U9S1Wn0
-                +UQPw5u5R5hVNsIkKGylxi5LT2pBByD91prhABEBAAG0M29jbS5zb2Z0d2FyZSAo
-                T0NNIGUyZSB0ZXN0IGtleSkgPG9jbUBzb2Z0d2FyZS50ZXN0PokBbQQTAQgAVxYh
-                BE6G8guZFg4bULIEcPk3xF3+CN4NBQJqtQ81GxSAAAAAAAQADm1hbnUyLDIuNSsx
-                LjEyLDAsMwIbAwULCQgHAgIiAgYVCgkICwIEFgIDAQIeBwIXgAAKCRD5N8Rd/gje
-                Dd7NB/9XepAwwmE5y/SFS0VLzBAhvEJR9u2lrYYkqriv8V/lc4O2CL2goQ/xBeH5
-                z2X+cbSx13/A/fuK07hk2Og5Efb06h98qFydRxEVHJ83rizKwi0mSdOReTinxbgH
-                GX55q4I2X3FWRyWOgjhT/AEoO7Ik6JNQNtYyZCsbbDHP8D35IZhkc6iwkcsCIVmy
-                w86w2vhgJUOMW9zy9vGMQlhfM8yxtNQAu5cZ231nYL0JRX0Z9jsOug/kFycD5goU
-                0XyWH1+zjuAssgj8I5lPHn8fsBOWt9QNl9meciE4UPMs2psHIu/8+tFqhH2ekuUx
-                EJH2DS9ppH/V2EJf58a2W8xSKYN0uQENBGq1DzUBCADOPFhMnsQhJe0tGYzOYhM8
-                6v3HcikxPXJnN094HrkrmOVPqWV1PwHAWOFA97EQVkyxv6lbOVHQkTu7MtJOLcF0
-                U2Lg2YDnV8LDrRsMothaiZel1P6yNYZKGzC+lDRlG3u4ngn1iQFO9nSjHUY0SSI3
-                E+71TOvB2IlRa2uIGE7hubTrbtpKUVSAv20mBCcK2/xCpZxRKSg8EKtseGKhss1Z
-                39tRXc/naxJuJOX8MLYQHU44nSu8P8r3TbgmRWkl1GLe/uXJPGUZO7RwitqpaTMp
-                qWfSFgqTppKK8TbAiRSKc8E5xsyDtBBuWancMR0/1epobVFUQsT+hTVQCItTIebh
-                ABEBAAGJAVIEGAEIADwWIQROhvILmRYOG1CyBHD5N8Rd/gjeDQUCarUPNRsUgAAA
-                AAAEAA5tYW51MiwyLjUrMS4xMiwwLDMCGwwACgkQ+TfEXf4I3g1/Zgf+MHYreoUn
-                qLmhfoh+uWA8UXmIxzRupdg4xMlJHIQK+fp4bm+scoA3oCOvlfJpS6byXdzz1x0Q
-                6qWAexHsHnzGUkQeWXHeXJ9mJFsL66gwQeodWqTL+vsL4gWqC9U6oAmL84ykQma8
-                8QHFL5HE0rccTaeC3dhesvTdFbOTmKUnG+DaqXrVBOwJCRSw6/i9bSBcWuQlayoe
-                rJ2ESWe5qcrZe5V9TY6vdg8lw/R+N9q0EsERuXXAW7ZxFzDHzX5d8CwKnANXBwfE
-                EL1W748IY1TeC8zOJsSBZWrpc44uZTSBB7SnmgMJwBAmdilPgHvkeQJMTgiNijf1
-                CvJR8DR6Ct9aTw==
-                =NMcn
-                -----END PGP PUBLIC KEY BLOCK-----

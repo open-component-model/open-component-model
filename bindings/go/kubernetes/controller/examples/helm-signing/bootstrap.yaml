@@ -9,9 +9,9 @@ spec:
     type: OCIRegistry
   interval: 10m
   ocmConfig:
-    # Allows plain HTTP to the registry above (created by test/e2e/hacks/setup.sh).
+    # Allows plain HTTP to the registry above (created by configuration.yaml in this directory).
     - kind: ConfigMap
-      name: ocm-plain-http
+      name: helm-signing-plain-http
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Component
@@ -24,7 +24,7 @@ spec:
       kind: Secret
       name: helm-signing-ocmconfig
     - kind: ConfigMap
-      name: ocm-plain-http
+      name: helm-signing-plain-http
   repositoryRef:
     name: helm-signing-repository
   semver: 1.0.0

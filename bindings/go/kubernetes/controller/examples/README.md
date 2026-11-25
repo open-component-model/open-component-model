@@ -1,21 +1,40 @@
 # Examples
 
-This directory contains end-to-end examples demonstrating how to use the OCM Kubernetes Controller Toolkit. Each example is self-contained: it includes a component definition (`component-constructor.yaml`), a bootstrap manifest (`bootstrap.yaml`), a kro `ResourceGraphDefinition` (`rgd.yaml`) with an instance manifest (`kro-instance.yaml`), and — where present — a Crossplane Composition (`crossplane-composition.yaml`) with its instance (`crossplane-instance.yaml`) showing the same deployment driven by Crossplane.
+Each directory contains the component constructor, Kubernetes configuration, and a standalone `Taskfile.yml`
+needed to prepare that example. Most examples deploy through kro and Crossplane; the raw-manifest and replication
+examples use their own manifests. Follow the shared steps below and the example's section to run it without Go
+test code. The e2e suite uses these same recipes and configuration files.
 
 ## Prerequisites
 
-A local Kind cluster with kro, FluxCD, ArgoCD, and Crossplane installed. Use the Taskfile to set it up:
+The supported local route uses a dedicated `ocm-e2e` Kind cluster. Install Docker, Go (matching
+`bindings/go/go.mod`), Task, Flux CLI, Helm, jq, kind, and kubectl. Kustomize localization also needs
+[ORAS](https://oras.land/docs/installation). Image downloads require network access.
+
+From the **repository root**:
 
 ```bash
-task test/e2e/setup/local
+task bindings/go/cli:build
+export OCM_CLI="$PWD/bindings/go/cli/tmp/bin/ocm"
+task bindings/go/kubernetes/controller:test/e2e/setup/local
+task bindings/go/kubernetes/controller:helm/install KUBE_CONTEXT=kind-ocm-e2e
+export IMAGE_REGISTRY=http://ocm-e2e-image-registry:5000
 ```
 
-See the [installation notes in the root README](../README.md#installation) for details.
+Setup creates the registries and Docker aliases, kro and its RBAC, Flux, ArgoCD, and Crossplane with its
+composition functions and RBAC. ArgoCD receives its default AppProject, plain-HTTP registry credential templates,
+and the Flux OCI layer-media-type allowlist. Setup may request sudo to add the registry hostname to `/etc/hosts`.
+It does **not** install the controller chart: the separate `helm/install` command does that for manual runs.
+Do not recreate an existing cluster without checking who uses it.
 
-The in-cluster registry serves plain HTTP. OCM talks plain HTTP to a host only when the HTTP client
-configuration says so, so every `Repository` in the examples references the `ocm-plain-http` ConfigMap
-(`test/e2e/hacks/ocm-plain-http.yaml`, applied by the setup above) through `spec.ocmConfig`. Drop that entry
-when you point an example at a TLS registry.
+`OCM_CLI` must be a command on PATH or an absolute executable path. An installed current OCM v2 CLI can replace
+the local build. See the [controller installation notes](../README.md#installation) for other environments.
+
+Each example ships `configuration.yaml` with its own `<example>-plain-http` ConfigMap and `transfer.ocmconfig`
+with matching CLI HTTP settings. Both allow plain HTTP to the local registry while keeping ghcr.io on HTTPS.
+For a TLS registry, change the repository URLs in the manifests and `IMAGE_REGISTRY`, adjust matching credential
+identities, and remove the HTTP configuration entry from both files. Changing `IMAGE_REGISTRY` alone does not
+rewrite manifests or credentials.
 
 ## Example overview
 
@@ -32,8 +51,9 @@ when you point an example at a TLS registry.
 | [`k8s-manifest-simple`](#k8s-manifest-simple) | `NamespacedDeployer` | Applying a plain Kubernetes manifest from an OCM resource |
 | [`k8s-manifest-cross-namespace`](#k8s-manifest-cross-namespace) | `NamespacedDeployer` | Applying into a second namespace that granted the deployer's service account |
 | [`applyset-pruning`](#applyset-pruning) | `NamespacedDeployer` | Pruning orphaned resources with ApplySet |
+| [`replication-simple`](#replication-simple) | Replication controller | Copying a component into a protected registry |
 
-All examples deploy with the `NamespacedDeployer`, which applies with the
+Deployment examples use the `NamespacedDeployer`, which applies with the
 permissions of a service account defined in the example's bootstrap. The RGD examples bind that service account
 to a `ClusterRole` for `ResourceGraphDefinitions`, as RGDs are cluster-scoped. The cluster-scoped `Deployer` is
 discouraged because it applies with the controller's own permissions.
@@ -75,6 +95,102 @@ rules:
 On a shared cluster, scope this down to the groups and namespaces you actually use. The local e2e setup grants
 the same permissions from `test/e2e/hacks/rbac.yaml`.
 
+## Preparing a component
+
+From the example directory, `task prepare` builds, signs where applicable, and transfers the component into
+`IMAGE_REGISTRY`. Its temporary CTF is removed on exit. The example sections set `EXAMPLE` and show which
+deployment flow follows preparation.
+
+To execute the CLI steps directly instead, use this sequence from the same directory:
+
+```bash
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+"$OCM_CLI" add cv --repository "$work/ctf" --constructor ./component-constructor.yaml
+# For signed examples, run their explicit sign commands below before transferring.
+"$OCM_CLI" transfer cv "ctf::$work/ctf//ocm.software/ocm-k8s-toolkit/examples/$EXAMPLE" \
+  "$IMAGE_REGISTRY" --config ./transfer.ocmconfig
+```
+
+Run either the Task recipe or the direct sequence, not both. For Kustomize localization, use its complete
+[staged direct sequence](kustomize-configuration-localization/README.md#how-the-kustomize-artifact-is-built)
+instead of the generic construction and transfer commands above.
+Nested examples declare `recursive: -1` in a `transfer.config.ocm.software/v1alpha1` entry, replacing the need
+to pass `--recursive`. Both localization examples declare these uploaders, in order:
+
+```yaml
+- type: oci.uploader.transfer.config.ocm.software/v1alpha1
+- type: localblob.uploader.transfer.config.ocm.software/v1alpha1
+```
+
+The OCI uploader creates native OCI artifacts, and the local-blob uploader copies the remaining resources.
+These native configuration entries replace the deprecated `--copy-resources` flag. No options are inferred
+from the example name.
+
+## Deploying kro and Crossplane examples
+
+Use this flow for all six Helm examples and both Kustomize examples, after setting `EXAMPLE` and preparing
+the component from its directory. All commands explicitly target the dedicated cluster.
+
+```bash
+kubectl --context=kind-ocm-e2e -n default apply -f configuration.yaml
+kubectl --context=kind-ocm-e2e -n default apply -f bootstrap.yaml
+kubectl --context=kind-ocm-e2e wait "rgd/$EXAMPLE" --for=create --timeout=5m
+kubectl --context=kind-ocm-e2e wait "rgd/$EXAMPLE" --for=condition=Ready=true --timeout=5m
+kubectl --context=kind-ocm-e2e -n default apply -f kro-instance.yaml
+kubectl --context=kind-ocm-e2e -n default wait -f kro-instance.yaml --for=condition=Ready=true --timeout=5m
+
+XRD="$(printf '%s' "$EXAMPLE" | tr -d '-')crossplanes.examples.ocm.software"
+kubectl --context=kind-ocm-e2e wait "compositeresourcedefinitions.apiextensions.crossplane.io/$XRD" \
+  --for=create --timeout=5m
+kubectl --context=kind-ocm-e2e wait "compositeresourcedefinitions.apiextensions.crossplane.io/$XRD" \
+  --for=condition=Established=true --timeout=5m
+kubectl --context=kind-ocm-e2e -n default apply -f crossplane-instance.yaml
+kubectl --context=kind-ocm-e2e -n default wait -f crossplane-instance.yaml --for=condition=Ready=true --timeout=5m
+
+for namespace in default default-argocd; do
+  for name in "$EXAMPLE-podinfo" "$EXAMPLE-crossplane-podinfo"; do
+    kubectl --context=kind-ocm-e2e -n "$namespace" wait "deployment.apps/$name" --for=create --timeout=5m
+    kubectl --context=kind-ocm-e2e -n "$namespace" wait "deployment.apps/$name" --for=condition=Available --timeout=5m
+  done
+done
+for name in "$EXAMPLE" "$EXAMPLE-crossplane"; do
+  kubectl --context=kind-ocm-e2e -n argocd wait "applications.argoproj.io/$name" \
+    --for=jsonpath='{.status.sync.status}=Synced' --timeout=5m
+done
+```
+
+Bootstrap deploys the RGD and XRD/Composition **from the OCM resources**; do not separately apply `rgd.yaml`
+or `crossplane-composition.yaml`. Never use `kubectl apply -f .`: the directory also contains constructors,
+OCM configuration, and Taskfiles that are not Kubernetes manifests.
+
+## Deploying raw manifests
+
+For either `k8s-manifest-*` example, prepare the component and run:
+
+```bash
+kubectl --context=kind-ocm-e2e -n default apply -f configuration.yaml
+kubectl --context=kind-ocm-e2e -n default apply -f bootstrap.yaml
+kubectl --context=kind-ocm-e2e -n default wait "deployment.apps/$EXAMPLE-podinfo" --for=create --timeout=5m
+kubectl --context=kind-ocm-e2e -n default wait "deployment.apps/$EXAMPLE-podinfo" --for=condition=Available --timeout=5m
+```
+
+## Removing an example
+
+Keep configuration and deployer permissions present until finalization finishes. For kro/Crossplane examples,
+remove instances, then both deployers, then bootstrap and configuration:
+
+```bash
+kubectl --context=kind-ocm-e2e -n default delete -f kro-instance.yaml -f crossplane-instance.yaml --wait=true
+kubectl --context=kind-ocm-e2e -n default delete namespaceddeployers.delivery.ocm.software \
+  "$EXAMPLE-deployer" "$EXAMPLE-crossplane-deployer" --wait=true
+kubectl --context=kind-ocm-e2e -n default delete -f bootstrap.yaml --ignore-not-found --wait=true
+kubectl --context=kind-ocm-e2e -n default delete -f configuration.yaml --wait=true
+```
+
+For raw manifests, skip the instance deletion and delete only `"$EXAMPLE-deployer"` before the last two
+commands. Pruning and replication have their teardown commands in their own sections.
+
 ---
 
 ## helm-simple
@@ -89,9 +205,11 @@ FluxCD pins to the digest for secure pulls; ArgoCD references the tag (digest pi
 ArgoCD Helm OCI sources).
 
 ```bash
-# Run this example in isolation
-task test/e2e -- --focus=helm-simple
+EXAMPLE=helm-simple
+task prepare
 ```
+
+Then follow [Deploying kro and Crossplane examples](#deploying-kro-and-crossplane-examples).
 
 ---
 
@@ -112,14 +230,37 @@ resource:
       - name: nested-chart
 ```
 
+```bash
+EXAMPLE=helm-nested
+task prepare
+```
+
+Its `transfer.ocmconfig` declares recursive transfer. Then follow the
+[kro/Crossplane deployment flow](#deploying-kro-and-crossplane-examples).
+
 ---
 
 ## helm-nested-signed
 
 **Deployers:** FluxCD + ArgoCD + Crossplane
 
-Like `helm-nested`, but the OCM component version is signed. The `Resource` controller verifies the signature
-using the public key provided in `ocm.software.pub` before exposing the OCI artifact coordinates.
+Like `helm-nested`, but the component version is signed. The controller verifies it using the public-key-only
+Secret in `configuration.yaml` before exposing the OCI artifact coordinates. `signing.ocmconfig` contains a
+known test private key used **only locally** by the signing command; never apply it to Kubernetes.
+
+```bash
+EXAMPLE=helm-nested-signed
+task prepare
+```
+
+For the direct CLI sequence, insert this between construction and transfer:
+
+```bash
+"$OCM_CLI" sign cv "ctf::$work/ctf//ocm.software/ocm-k8s-toolkit/examples/helm-nested-signed:1.0.0" \
+  --signature ocm.software.helm.nested.signed.rsa --config ./signing.ocmconfig
+```
+
+Then follow the [kro/Crossplane deployment flow](#deploying-kro-and-crossplane-examples).
 
 ---
 
@@ -127,8 +268,26 @@ using the public key provided in `ocm.software.pub` before exposing the OCI arti
 
 **Deployers:** FluxCD + ArgoCD + Crossplane
 
-Demonstrates signature verification for a top-level (non-nested) OCM resource. The private key is used during
-`task test/e2e` to sign the component version during the test setup phase; the controller verifies it at runtime.
+Demonstrates RSA and GPG signature verification for a top-level OCM resource. `signing.ocmconfig` holds local
+test private keys; `configuration.yaml` ships the verifier-only Secret with public keys and no passphrase.
+These are intentionally published test keys, not production credentials.
+
+```bash
+EXAMPLE=helm-signing
+task prepare
+```
+
+For the direct CLI sequence, insert both commands between construction and transfer. The explicit signature
+names are required; the CLI's `default` signature does not select these credentials.
+
+```bash
+"$OCM_CLI" sign cv "ctf::$work/ctf//ocm.software/ocm-k8s-toolkit/examples/helm-signing:1.0.0" \
+  --signature ocm.software.helm.signing.rsa --config ./signing.ocmconfig
+"$OCM_CLI" sign cv "ctf::$work/ctf//ocm.software/ocm-k8s-toolkit/examples/helm-signing:1.0.0" \
+  --signature ocm.software.helm.signing.gpg --config ./signing.ocmconfig
+```
+
+Then follow the [kro/Crossplane deployment flow](#deploying-kro-and-crossplane-examples).
 
 ---
 
@@ -139,6 +298,13 @@ Demonstrates signature verification for a top-level (non-nested) OCM resource. T
 Shows how to surface additional fields from an OCM resource's access information using `additionalStatusFields`.
 Useful when the RGD needs to pass registry coordinates (registry, repository, digest, tag) to downstream
 deployer resources via kro's `${...}` CEL expressions.
+
+```bash
+EXAMPLE=helm-simple-nested-status
+task prepare
+```
+
+Then follow the [kro/Crossplane deployment flow](#deploying-kro-and-crossplane-examples).
 
 ---
 
@@ -157,8 +323,11 @@ FluxCD injects values through `HelmRelease.spec.values`; ArgoCD through
 arise with the string-based `values` field.
 
 ```bash
-task test/e2e -- --focus=helm-configuration-localization
+EXAMPLE=helm-configuration-localization
+task prepare
 ```
+
+Then follow the [kro/Crossplane deployment flow](#deploying-kro-and-crossplane-examples).
 
 ---
 
@@ -170,13 +339,21 @@ Deploys a Kustomize overlay sourced from a Git repository referenced through an 
 taken from `resource.status.resource.access.commit` and pinned in both the FluxCD `GitRepository` ref and the
 ArgoCD `Application.spec.source.targetRevision`.
 
+```bash
+EXAMPLE=kustomize-simple
+task prepare
+```
+
+Then follow the [kro/Crossplane deployment flow](#deploying-kro-and-crossplane-examples).
+
 ---
 
 ## kustomize-configuration-localization
 
 **Deployers:** FluxCD + ArgoCD + Crossplane
 
-Like `kustomize-simple`, but adds image localization and configuration via JSON Patch operations:
+Ships its Kustomize manifests as a Flux-consumable OCI artifact, unlike the Git-sourced `kustomize-simple`.
+It adds image localization and configuration via JSON Patch operations:
 
 - **Localization** — replaces `spec.template.spec.containers[0].image` with the transferred OCI image reference.
 - **Configuration** — injects `PODINFO_UI_MESSAGE` as an environment variable.
@@ -185,6 +362,15 @@ Like `kustomize-simple`, but adds image localization and configuration via JSON 
 > `${…}` CEL expression references inside ArgoCD `kustomize.patches`. The workaround is to express those
 > patches as inline JSON arrays (e.g. `'[{"op":"replace",…}]'`). Static patches (no CEL expressions) can
 > continue to use normal YAML block scalars. See the `rgd.yaml` in this example for the pattern.
+
+```bash
+EXAMPLE=kustomize-configuration-localization
+task prepare
+```
+
+ORAS is required. The recipe packs the layout in a temporary staging directory and uses the shipped OCI
+uploaders. See its [packaging instructions](kustomize-configuration-localization/README.md), then follow the
+[kro/Crossplane deployment flow](#deploying-kro-and-crossplane-examples).
 
 ---
 
@@ -195,6 +381,13 @@ Like `kustomize-simple`, but adds image localization and configuration via JSON 
 Applies a raw Kubernetes manifest stored as an OCM resource, without using kro or a GitOps deployer. Useful as
 a reference for the simplest possible OCM → cluster workflow. The `NamespacedDeployer` applies with the
 permissions of the `k8s-manifest-simple-deployer` service account.
+
+```bash
+EXAMPLE=k8s-manifest-simple
+task prepare
+```
+
+Then follow [Deploying raw manifests](#deploying-raw-manifests).
 
 ---
 
@@ -215,7 +408,16 @@ deletion waits with a `DeletionFailed` condition, and without the service accoun
 listed in a `DeletionFailed` warning event.
 
 ```bash
-task test/e2e -- --focus=k8s-manifest-cross-namespace
+EXAMPLE=k8s-manifest-cross-namespace
+task prepare
+```
+
+Follow [Deploying raw manifests](#deploying-raw-manifests), then verify the dashboard in the namespace and RBAC
+shipped by this bootstrap:
+
+```bash
+kubectl --context=kind-ocm-e2e -n k8s-manifest-cross-namespace-monitoring \
+  get configmap/k8s-manifest-cross-namespace-dashboard
 ```
 
 ---
@@ -229,12 +431,105 @@ Demonstrates how orphaned resources are pruned when an OCM component version is 
 GitOps deployer. This example has its own dedicated e2e test file (`test/e2e/e2e_applyset_test.go`) and is
 excluded from the generic examples test loop.
 
+From `applyset-pruning/`, publish v1 and deploy both workloads:
+
+```bash
+EXAMPLE=applyset-pruning
+task prepare
+kubectl --context=kind-ocm-e2e -n default apply -f configuration.yaml
+kubectl --context=kind-ocm-e2e -n default apply -f bootstrap.yaml
+kubectl --context=kind-ocm-e2e -n default apply -f bootstrap-deployer.yaml
+for name in applyset-pruning-podinfo applyset-pruning-podinfo-2; do
+  kubectl --context=kind-ocm-e2e -n default wait "deployment.apps/$name" --for=create --timeout=5m
+  kubectl --context=kind-ocm-e2e -n default wait "deployment.apps/$name" --for=condition=Available --timeout=5m
+done
+```
+
+Publish v2 with the same recipe and select it on the Component:
+
+```bash
+task prepare CONSTRUCTOR=component-constructor-2.yaml
+kubectl --context=kind-ocm-e2e -n default patch component.delivery.ocm.software/applyset-pruning-component \
+  --type=merge -p '{"spec":{"semver":"2.0.0"}}'
+kubectl --context=kind-ocm-e2e -n default wait component.delivery.ocm.software/applyset-pruning-component \
+  --for=jsonpath='{.status.component.version}=2.0.0' --timeout=5m
+kubectl --context=kind-ocm-e2e -n default wait deployment.apps/applyset-pruning-podinfo-2 \
+  --for=delete --timeout=5m
+kubectl --context=kind-ocm-e2e -n default wait deployment.apps/applyset-pruning-podinfo \
+  --for=condition=Available --timeout=5m
+```
+
+For direct CLI publication of v2 instead of the second Task invocation, use a fresh CTF:
+
+```bash
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+"$OCM_CLI" add cv --repository "$work/ctf" --constructor ./component-constructor-2.yaml
+"$OCM_CLI" transfer cv "ctf::$work/ctf//ocm.software/ocm-k8s-toolkit/examples/applyset-pruning:2.0.0" \
+  "$IMAGE_REGISTRY" --config ./transfer.ocmconfig
+```
+
+Only `applyset-pruning-podinfo-2` disappears; the first Deployment remains Available. Remove the example in
+dependency order:
+
+```bash
+kubectl --context=kind-ocm-e2e -n default delete namespaceddeployer.delivery.ocm.software/applyset-pruning-deployer \
+  --wait=true
+kubectl --context=kind-ocm-e2e -n default delete -f bootstrap-deployer.yaml -f bootstrap.yaml \
+  --ignore-not-found --wait=true
+kubectl --context=kind-ocm-e2e -n default delete -f configuration.yaml --wait=true
+```
+
+---
+
+## replication-simple
+
+Replicates a component into a protected registry using test credentials `admin/admin`. The shared setup
+creates the source registry's Docker alias `http://image-registry:5000`, the in-cluster target
+`http://protected-registry1-internal.default.svc.cluster.local:5002`, and its host NodePort
+`http://localhost:31002`. The source alias reaches the same registry as `IMAGE_REGISTRY`.
+
+From `replication-simple/`:
+
+```bash
+EXAMPLE=replication-simple
+task prepare
+kubectl --context=kind-ocm-e2e -n default apply -f configuration.yaml
+kubectl --context=kind-ocm-e2e -n default apply -f manifests.yaml
+kubectl --context=kind-ocm-e2e -n default wait component.delivery.ocm.software/replication-simple-component \
+  --for=condition=Ready=true --timeout=5m
+kubectl --context=kind-ocm-e2e -n default wait repository.delivery.ocm.software/replication-simple-target \
+  --for=condition=Ready=true --timeout=5m
+kubectl --context=kind-ocm-e2e -n default wait replication.delivery.ocm.software/replication-simple \
+  --for=condition=Ready=true --timeout=5m
+kubectl --context=kind-ocm-e2e -n default wait replication.delivery.ocm.software/replication-simple \
+  --for=jsonpath='{.status.lastTransferredVersion}=1.0.0' --timeout=5m
+"$OCM_CLI" --config ./.ocmconfig --config ./transfer.ocmconfig get cv \
+  'http://localhost:31002//ocm.software/ocm-k8s-toolkit/examples/replication-simple:1.0.0'
+```
+
+The final command prints the component name and version `1.0.0`. `manifests.yaml` ships the target credentials
+Secret; `.ocmconfig` contains host-side registry credentials, not signing keys. No signing or extra Secret
+creation is needed. For another target, update manifest URLs and both credential identities, not just the
+host-side CLI reference.
+
+Remove replication and its manifests before the HTTP configuration:
+
+```bash
+kubectl --context=kind-ocm-e2e -n default delete replication.delivery.ocm.software/replication-simple --wait=true
+kubectl --context=kind-ocm-e2e -n default delete -f manifests.yaml --ignore-not-found --wait=true
+kubectl --context=kind-ocm-e2e -n default delete -f configuration.yaml --wait=true
+```
+
 ---
 
 ## Running all examples
 
+Run these harness commands from `bindings/go/kubernetes/controller/`. The normal suite includes both dedicated
+examples as well as credential and migration scenarios, with four parallel processes.
+
 ```bash
-# Run every example in the generic loop (applyset-pruning is excluded — it has its own test)
+# Run all examples, including the dedicated pruning and replication tests
 task test/e2e
 
 # Teardown the cluster, rebuild from scratch, and run all examples

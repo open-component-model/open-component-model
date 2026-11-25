@@ -9,9 +9,9 @@ spec:
     type: OCIRegistry
   interval: 10m
   ocmConfig:
-    # Allows plain HTTP to the registry above (created by test/e2e/hacks/setup.sh).
+    # Allows plain HTTP to the registry above (see configuration.yaml).
     - kind: ConfigMap
-      name: ocm-plain-http
+      name: kustomize-simple-plain-http
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Component

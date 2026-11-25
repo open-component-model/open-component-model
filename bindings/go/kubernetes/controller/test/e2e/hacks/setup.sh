@@ -155,9 +155,9 @@ install_argocd() {
 
   # Widen argocd-repo-server's OCI layer mediaType allowlist to include
   # flux-native artifacts (application/vnd.cncf.flux.content.v1.tar+gzip),
-  # produced from ./kustomize by test/utils.buildKustomizeOCILayout for the
-  # kustomize-configuration-localization example. Defaults reproduced from
-  # argocd's cmd/argocd-repo-server/commands/argocd_repo_server.go.
+  # produced from ./kustomize by the kustomize-configuration-localization
+  # example's `task prepare` recipe (examples/kustomize-configuration-localization/Taskfile.yml).
+  # Defaults reproduced from argocd's cmd/argocd-repo-server/commands/argocd_repo_server.go.
   # Created before the install manifest; that manifest's argocd-cmd-params-cm declares no data, and a distinct field
   # manager keeps this key across its server-side apply.
   kubectl -n argocd create configmap argocd-cmd-params-cm \

@@ -1,13 +1,8 @@
 package utils
 
 import (
-	"archive/tar"
-	"bytes"
-	"compress/gzip"
 	"context"
 	"fmt"
-	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,21 +11,10 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 
-	"github.com/opencontainers/go-digest"
-	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
-	"github.com/oras-project/oras-go/v3"
-	ocistore "github.com/oras-project/oras-go/v3/content/oci"
 	"sigs.k8s.io/yaml"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	signingspec "ocm.software/open-component-model/bindings/go/signing/v1alpha1/spec"
-)
-
-const (
-	componentNamePrefix = "ocm.software/ocm-k8s-toolkit/examples/"
-	// signingVersion is the version stamped on every signed fixture today. Sign
-	// requires an exact name:version reference; transfer does not.
-	signingVersion = "1.0.0"
 )
 
 // OCMBinary returns the ocm CLI executable. Override via OCM_CLI when running
@@ -151,209 +135,35 @@ func WaitForResource(ctx context.Context, condition, timeout string, resource ..
 	return err
 }
 
-// PrepareOCMComponent creates an OCM component from a component-constructor file.
-// After creating the OCM component, the component is transferred to imageRegistry.
-//
-// When the example directory ships an .ocmconfig alongside the component-constructor.yaml,
-// PrepareOCMComponent signs the component with every signature configured in that file
-// (one `ocm sign cv` invocation per signing.config.ocm.software entry with a non-empty
-// signature name) and creates a Kubernetes Secret named <name>-ocmconfig in the default
-// namespace carrying the same file. The controller reads verification credentials from
-// that Secret via spec.ocmConfig on the Component CR. The Secret is deleted after the
-// test through DeferCleanup.
+// PrepareOCMComponent builds and transfers an OCM component for the named example
+// by running the example's Taskfile: `task --taskfile <Taskfile.yml> prepare`.
+// The constructor path, image registry, and OCM binary are forwarded as explicit
+// Task variables so the recipe is fully self-contained.
 func PrepareOCMComponent(ctx context.Context, name, componentConstructorPath, imageRegistry string) error {
-	ocm := OCMBinary()
+	By("preparing ocm component for " + name)
 
-	By("creating ocm component for " + name)
-	tmpDir := GinkgoT().TempDir()
-	ctfDir := filepath.Join(tmpDir, "ctf")
-
-	exampleDir := filepath.Dir(componentConstructorPath)
-	if _, err := os.Stat(filepath.Join(exampleDir, "kustomize")); err == nil {
-		if err := buildKustomizeOCILayout(ctx, exampleDir); err != nil {
-			return fmt.Errorf("could not build kustomize oci layout: %w", err)
-		}
+	absConstructor, err := filepath.Abs(componentConstructorPath)
+	if err != nil {
+		return fmt.Errorf("could not prepare ocm component %q: resolve constructor path: %w", name, err)
 	}
+	exampleDir := filepath.Dir(absConstructor)
+	taskfile := filepath.Join(exampleDir, "Taskfile.yml")
 
-	cmd := exec.CommandContext(ctx, ocm,
-		"add", "cv",
-		"--repository", ctfDir,
-		"--constructor", componentConstructorPath,
+	cmd := exec.CommandContext(ctx, "task",
+		"--taskfile", taskfile,
+		"prepare",
+		"CONSTRUCTOR="+absConstructor,
+		"IMAGE_REGISTRY="+imageRegistry,
+		"OCM_CLI="+OCMBinary(),
 	)
-	// OCM's dir/v1 input resolves paths relative to the process CWD (not the
-	// constructor's working directory), so run add cv from the example dir.
 	cmd.Dir = exampleDir
 	if _, err := Run(cmd); err != nil {
-		return fmt.Errorf("could not create ocm component: %w", err)
-	}
-
-	componentName := componentNamePrefix + filepath.Base(filepath.Dir(componentConstructorPath))
-	transferRef := fmt.Sprintf("ctf::%s//%s", ctfDir, componentName)
-
-	// If the example ships its own .ocmconfig, use it to sign each configured signature
-	// and materialize a Kubernetes Secret carrying the same file for the controller.
-	ocmConfigPath := filepath.Join(exampleDir, ".ocmconfig")
-	if _, err := os.Stat(ocmConfigPath); err == nil {
-		sigNames, err := SigningConfigSignatureNames(ocmConfigPath)
-		if err != nil {
-			return fmt.Errorf("could not read signature names from .ocmconfig: %w", err)
-		}
-		for _, sigName := range sigNames {
-			By(fmt.Sprintf("signing ocm component for %s with signature %q", name, sigName))
-			signRef := fmt.Sprintf("ctf::%s//%s:%s", ctfDir, componentName, signingVersion)
-			cmd = exec.CommandContext(ctx, ocm,
-				"sign", "cv",
-				signRef,
-				"--signature", sigName,
-				"--config", ocmConfigPath,
-			)
-			cmd.Dir = exampleDir
-			if _, err := Run(cmd); err != nil {
-				return fmt.Errorf("could not sign ocm component with signature %q: %w", sigName, err)
-			}
-		}
-
-		By("creating k8s Secret " + name + "-ocmconfig from .ocmconfig")
-		secretName := name + "-ocmconfig"
-		cmd = exec.CommandContext(ctx, "kubectl", "create", "secret", "generic", secretName,
-			"--namespace", "default",
-			"--from-file=.ocmconfig="+ocmConfigPath,
-		)
-		if _, err := Run(cmd); err != nil {
-			return fmt.Errorf("could not create ocmconfig secret: %w", err)
-		}
-		DeferCleanup(func(ctx SpecContext) error {
-			if _, err := Run(exec.CommandContext(ctx, "kubectl", "delete", "secret", secretName,
-				"--namespace", "default", "--ignore-not-found")); err != nil {
-				return fmt.Errorf("could not delete ocmconfig secret %q: %w", secretName, err)
-			}
-			return nil
-		})
-	}
-
-	By("transferring ocm component for " + name)
-	plainHTTPConfig, err := PlainHTTPConfig(tmpDir)
-	if err != nil {
-		return err
-	}
-	cmd = exec.CommandContext(ctx, ocm, "transfer", "cv", transferRef, imageRegistry, "--config", plainHTTPConfig)
-
-	if strings.Contains(name, "nested") {
-		cmd.Args = append(cmd.Args, "--recursive")
-	}
-
-	if strings.Contains(name, "localization") {
-		uploaderConfigPath := filepath.Join(tmpDir, "oci-uploader.ocmconfig")
-		uploaderConfig := "type: generic.config.ocm.software/v1\nconfigurations:\n- type: oci.uploader.transfer.config.ocm.software/v1alpha1\n"
-		if err := os.WriteFile(uploaderConfigPath, []byte(uploaderConfig), 0o600); err != nil {
-			return fmt.Errorf("could not write oci uploader ocmconfig: %w", err)
-		}
-		cmd.Args = append(cmd.Args, "--copy-resources", "--config", uploaderConfigPath)
-	}
-
-	if _, err := Run(cmd); err != nil {
-		return fmt.Errorf("could not transfer ocm component: %w", err)
-	}
-
-	return nil
-}
-
-// buildKustomizeOCILayout packages exampleDir/kustomize into an OCI image
-// layout at exampleDir/oci-layout so the constructor's dir/v1 input can embed
-// it as a native OCI manifest. The layer carries the flux content media type
-// so a Flux OCIRepository can consume the artifact after transfer.
-func buildKustomizeOCILayout(ctx context.Context, exampleDir string) error {
-	layoutDir := filepath.Join(exampleDir, "oci-layout")
-	if err := os.RemoveAll(layoutDir); err != nil {
-		return fmt.Errorf("clean layout dir: %w", err)
-	}
-	if err := os.MkdirAll(layoutDir, 0o755); err != nil {
-		return fmt.Errorf("create layout dir: %w", err)
-	}
-
-	store, err := ocistore.New(layoutDir)
-	if err != nil {
-		return fmt.Errorf("open oci store: %w", err)
-	}
-
-	var buf bytes.Buffer
-	if err := tarGzipDir(&buf, filepath.Join(exampleDir, "kustomize")); err != nil {
-		return fmt.Errorf("tar kustomize: %w", err)
-	}
-
-	layerDesc := ocispec.Descriptor{
-		MediaType: "application/vnd.cncf.flux.content.v1.tar+gzip",
-		Digest:    digest.FromBytes(buf.Bytes()),
-		Size:      int64(buf.Len()),
-	}
-	if err := store.Push(ctx, layerDesc, bytes.NewReader(buf.Bytes())); err != nil {
-		return fmt.Errorf("push layer: %w", err)
-	}
-
-	manifestDesc, err := oras.PackManifest(ctx, store, oras.PackManifestVersion1_1,
-		"application/vnd.cncf.flux.config.v1+json",
-		oras.PackManifestOptions{Layers: []ocispec.Descriptor{layerDesc}},
-	)
-	if err != nil {
-		return fmt.Errorf("pack manifest: %w", err)
-	}
-	if err := store.Tag(ctx, manifestDesc, "latest"); err != nil {
-		return fmt.Errorf("tag manifest: %w", err)
+		return fmt.Errorf("could not prepare ocm component %q: %w", name, err)
 	}
 	return nil
 }
 
-// tarGzipDir writes a gzip'd tar of dir's contents (paths relative to dir) to w.
-// Uses os.Root to avoid symlink TOCTOU.
-func tarGzipDir(w io.Writer, dir string) error {
-	root, err := os.OpenRoot(dir)
-	if err != nil {
-		return err
-	}
-	defer root.Close()
-
-	gw := gzip.NewWriter(w)
-	tw := tar.NewWriter(gw)
-	walkErr := fs.WalkDir(root.FS(), ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if path == "." {
-			return nil
-		}
-		info, err := d.Info()
-		if err != nil {
-			return err
-		}
-		hdr, err := tar.FileInfoHeader(info, "")
-		if err != nil {
-			return err
-		}
-		hdr.Name = filepath.ToSlash(path)
-		if err := tw.WriteHeader(hdr); err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		f, err := root.Open(path)
-		if err != nil {
-			return err
-		}
-		defer f.Close()
-		_, err = io.Copy(tw, f)
-		return err
-	})
-	if cerr := tw.Close(); walkErr == nil {
-		walkErr = cerr
-	}
-	if cerr := gw.Close(); walkErr == nil {
-		walkErr = cerr
-	}
-	return walkErr
-}
-
-// SigningConfigSignatureNames loads the .ocmconfig at path and returns the deduplicated list of
+// SigningConfigSignatureNames loads the signing configuration at path and returns the deduplicated list of
 // signature names found across all signing.config.ocm.software entries with a non-empty
 // signature field. Global entries (no signature field) are skipped: the CLI requires an
 // explicit --signature name per invocation.

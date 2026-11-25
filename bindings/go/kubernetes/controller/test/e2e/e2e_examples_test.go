@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"encoding/json/v2"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,18 +14,31 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	corev1 "k8s.io/api/core/v1"
+
+	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
+	credentialsv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/pkg/configuration"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/test/utils"
 	"ocm.software/open-component-model/bindings/go/oci/looseref"
+	"ocm.software/open-component-model/bindings/go/runtime"
+	signingspec "ocm.software/open-component-model/bindings/go/signing/v1alpha1/spec"
 )
 
 const (
-	ComponentConstructor  = "component-constructor.yaml"
-	Bootstrap             = "bootstrap.yaml"
-	Manifests             = "manifests.yaml"
-	Rgd                   = "rgd.yaml"
-	KroInstance           = "kro-instance.yaml"
-	K8sManifest           = "k8s-manifest.yaml"
-	OCMConfig             = ".ocmconfig"
+	ComponentConstructor = "component-constructor.yaml"
+	Bootstrap            = "bootstrap.yaml"
+	Manifests            = "manifests.yaml"
+	Rgd                  = "rgd.yaml"
+	KroInstance          = "kro-instance.yaml"
+	K8sManifest          = "k8s-manifest.yaml"
+	// SigningConfig is the per-example file holding private signing keys and
+	// signer configuration. It is never applied to the cluster; the controller
+	// reads verification credentials from the Secret in configuration.yaml.
+	SigningConfig = "signing.ocmconfig"
+	// Configuration is the per-example configuration.yaml that must be applied
+	// before bootstrap so the controller can read HTTP and verification config.
+	Configuration         = "configuration.yaml"
 	CrossplaneComposition = "crossplane-composition.yaml"
 	CrossplaneInstance    = "crossplane-instance.yaml"
 )
@@ -57,7 +71,7 @@ var _ = Describe("controller", func() {
 				continue
 			}
 
-			reqFiles := []string{ComponentConstructor, Bootstrap}
+			reqFiles := []string{ComponentConstructor, Bootstrap, Configuration}
 
 			It("should deploy the example "+example.Name(), func(ctx SpecContext) {
 				By("validating the example directory " + example.Name())
@@ -84,6 +98,9 @@ var _ = Describe("controller", func() {
 					filepath.Join(examplesDir, example.Name(), ComponentConstructor),
 					imageRegistry,
 				)).To(Succeed())
+
+				By("applying the example configuration")
+				Expect(utils.DeployResource(ctx, filepath.Join(examplesDir, example.Name(), Configuration))).To(Succeed())
 
 				By("bootstrapping the example")
 				Expect(utils.DeployResource(ctx, filepath.Join(examplesDir, example.Name(), Bootstrap))).To(Succeed())
@@ -189,13 +206,13 @@ var _ = Describe("controller", func() {
 					"pod", "-l", "app.kubernetes.io/name="+example.Name()+"-podinfo",
 				)).To(Succeed())
 
-				// Check for verifications
-				if slices.Contains(files, OCMConfig) {
-					// Every signature configured in the example's .ocmconfig must produce a
-					// "verified signature" log entry naming it. Ready alone doesn't prove the
-					// handler ran (the resolver cache could serve a warmed descriptor).
-					sigNames, err := utils.SigningConfigSignatureNames(filepath.Join(examplesDir, example.Name(), OCMConfig))
+				// Every example with a signing.ocmconfig must produce "verified signature" log
+				// entries for each configured signature name. Ready alone doesn't prove the
+				// handler ran (the resolver cache could serve a warmed descriptor).
+				if slices.Contains(files, SigningConfig) {
+					sigNames, err := utils.SigningConfigSignatureNames(filepath.Join(examplesDir, example.Name(), SigningConfig))
 					Expect(err).ToNot(HaveOccurred())
+					Expect(sigNames).NotTo(BeEmpty(), "signing.ocmconfig must configure at least one named signature")
 					for _, sig := range sigNames {
 						By(fmt.Sprintf("confirming signature %q was verified by the controller", sig))
 						// signature names are based on the example names, so this should be enough to make sure it got
@@ -225,6 +242,10 @@ var _ = Describe("controller", func() {
 							return logs
 						}, timeout).Should(MatchRegexp(expected))
 					}
+
+					By("verifying the " + example.Name() + "-ocmconfig Secret contains only public keys and no signers")
+					secretName := example.Name() + "-ocmconfig"
+					Expect(assertPublicOnlySecret(ctx, secretName, sigNames)).To(Succeed())
 				}
 
 				if strings.HasSuffix(example.Name(), "-cross-namespace") {
@@ -299,3 +320,90 @@ var _ = Describe("controller", func() {
 		}
 	})
 })
+
+// assertPublicOnlySecret checks the live configuration without exposing credential values on failure.
+func assertPublicOnlySecret(ctx SpecContext, secretName string, sigNames []string) error {
+	GinkgoHelper()
+
+	cmd := exec.CommandContext(ctx, "kubectl", "get", "secret", secretName, "-n", "default", "-o", "json")
+	out, err := utils.Run(cmd)
+	if err != nil {
+		return fmt.Errorf("could not fetch Secret %q: %w", secretName, err)
+	}
+
+	var secret corev1.Secret
+	if err := json.Unmarshal(out, &secret); err != nil {
+		return fmt.Errorf("could not decode Secret %q: %w", secretName, err)
+	}
+
+	cfg, err := configuration.GetConfigFromSecret(&secret)
+	if err != nil {
+		return fmt.Errorf("could not extract OCM config from Secret %q: %w", secretName, err)
+	}
+
+	signingEntries, err := genericv1.FilterForType[*signingspec.Config](signingspec.Scheme, cfg)
+	if err != nil {
+		return fmt.Errorf("could not filter signing entries in Secret %q: %w", secretName, err)
+	}
+	if len(signingEntries) != len(sigNames) {
+		return fmt.Errorf("Secret %q: expected %d signature entries, found %d", secretName, len(sigNames), len(signingEntries))
+	}
+	signingByName := make(map[string]struct{}, len(signingEntries))
+	for _, sc := range signingEntries {
+		if !slices.Contains(sigNames, sc.Signature) {
+			return fmt.Errorf("Secret %q: unexpected signature %q", secretName, sc.Signature)
+		}
+		if _, exists := signingByName[sc.Signature]; exists {
+			return fmt.Errorf("Secret %q: duplicate signature %q", secretName, sc.Signature)
+		}
+		signingByName[sc.Signature] = struct{}{}
+		if sc.Signer != nil || sc.Verifier == nil {
+			return fmt.Errorf("Secret %q: signature %q must contain only a verifier", secretName, sc.Signature)
+		}
+	}
+
+	credScheme := runtime.NewScheme()
+	credentialsv1.MustRegister(credScheme)
+	credConfigs, err := genericv1.FilterForType[*credentialsv1.Config](credScheme, cfg)
+	if err != nil {
+		return fmt.Errorf("could not filter credentials entries in Secret %q: %w", secretName, err)
+	}
+	if len(credConfigs) == 0 {
+		return fmt.Errorf("Secret %q: no public-key credentials found", secretName)
+	}
+	for i, cc := range credConfigs {
+		if len(cc.Repositories) > 0 {
+			return fmt.Errorf("Secret %q: credentials entry %d must not contain external repository references", secretName, i)
+		}
+		if len(cc.Consumers) == 0 {
+			return fmt.Errorf("Secret %q: credentials entry %d has no consumers", secretName, i)
+		}
+		for j, consumer := range cc.Consumers {
+			if len(consumer.Credentials) == 0 {
+				return fmt.Errorf("Secret %q: consumer %d in credentials entry %d has no credentials", secretName, j, i)
+			}
+			for k, raw := range consumer.Credentials {
+				direct := &credentialsv1.DirectCredentials{}
+				if err := credScheme.Convert(raw, direct); err != nil {
+					return fmt.Errorf("Secret %q: credential %d of consumer %d in entry %d could not be decoded: %w", secretName, k, j, i, err)
+				}
+				if len(direct.Properties) == 0 {
+					return fmt.Errorf("Secret %q: credential %d of consumer %d in entry %d has no properties", secretName, k, j, i)
+				}
+				for key, val := range direct.Properties {
+					if key != "publicKeyPEM" && key != "publicKeyPGP" {
+						return fmt.Errorf("Secret %q: credential property key %q is not allowed (only publicKeyPEM or publicKeyPGP)", secretName, key)
+					}
+					if val == "" {
+						return fmt.Errorf("Secret %q: credential property %q has an empty value", secretName, key)
+					}
+					if strings.Contains(val, "PRIVATE KEY") {
+						return fmt.Errorf("Secret %q: credential property %q contains private key material", secretName, key)
+					}
+				}
+			}
+		}
+	}
+
+	return nil
+}

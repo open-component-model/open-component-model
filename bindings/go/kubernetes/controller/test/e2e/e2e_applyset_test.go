@@ -33,7 +33,7 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 			example = e
 		}
 
-		reqFiles := []string{ComponentConstructor, Bootstrap, BootstrapDeployer}
+		reqFiles := []string{ComponentConstructor, Bootstrap, BootstrapDeployer, Configuration}
 
 		It("should deploy the example "+example.Name(), func(ctx SpecContext) {
 			By("validating the example directory " + example.Name())
@@ -60,6 +60,9 @@ var _ = Describe("ApplySet Pruning Tests", func() {
 				filepath.Join(examplesDir, example.Name(), ComponentConstructor),
 				imageRegistry,
 			)).To(Succeed())
+
+			By("applying the example configuration")
+			Expect(utils.DeployResource(ctx, filepath.Join(examplesDir, example.Name(), Configuration))).To(Succeed())
 
 			By("bootstrapping the example")
 			Expect(utils.DeployResource(ctx, filepath.Join(examplesDir, example.Name(), Bootstrap))).To(Succeed())

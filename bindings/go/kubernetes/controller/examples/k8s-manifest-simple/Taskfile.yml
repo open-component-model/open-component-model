@@ -1,0 +1,23 @@
+version: '3'
+
+vars:
+  OCM_CLI: '{{.OCM_CLI | default (env "OCM_CLI") | default "ocm"}}'
+  IMAGE_REGISTRY: '{{.IMAGE_REGISTRY | default (env "IMAGE_REGISTRY") | default "http://ocm-e2e-image-registry:5000"}}'
+  CONSTRUCTOR: '{{.CONSTRUCTOR | default (env "CONSTRUCTOR") | default "component-constructor.yaml"}}'
+
+tasks:
+  prepare:
+    desc: Build and transfer the k8s-manifest-simple component
+    dir: '{{.TASKFILE_DIR}}'
+    env:
+      OCM_CLI: '{{.OCM_CLI}}'
+      IMAGE_REGISTRY: '{{.IMAGE_REGISTRY}}'
+      CONSTRUCTOR: '{{.CONSTRUCTOR}}'
+    cmds:
+      - |
+        set -eu
+        work="$(mktemp -d)"
+        trap 'rm -rf "$work"' EXIT
+        "$OCM_CLI" add cv --repository "$work/ctf" --constructor "$CONSTRUCTOR"
+        "$OCM_CLI" transfer cv "ctf::$work/ctf//ocm.software/ocm-k8s-toolkit/examples/k8s-manifest-simple" \
+          "$IMAGE_REGISTRY" --config ./transfer.ocmconfig
