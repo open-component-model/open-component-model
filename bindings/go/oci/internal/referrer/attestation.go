@@ -1,0 +1,126 @@
+// Package referrer lists the attestations attached to an OCI artifact through the OCI
+// referrers API (cosign, vexctl, oras, syft, notary, ...).
+//
+// Discovery is metadata-only and unopinionated: it reads the referrers index and each
+// small referrer manifest, never the document blob, and records the raw type signals
+// (artifactType, in-toto predicate type from annotations, document media type) without
+// classifying or filtering them. Every referrer is returned, signatures included.
+package referrer
+
+import (
+	"context"
+	"encoding/json/v2"
+	"fmt"
+	"log/slog"
+
+	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/content"
+	"github.com/oras-project/oras-go/v3/registry"
+
+	"ocm.software/open-component-model/bindings/go/oci/internal/attestation"
+	"ocm.software/open-component-model/bindings/go/oci/spec"
+	"ocm.software/open-component-model/bindings/go/repository"
+)
+
+const (
+	// annotationSigstorePredicateType carries the in-toto predicate type on a cosign
+	// Sigstore bundle referrer manifest, without fetching the bundle blob.
+	annotationSigstorePredicateType = "dev.sigstore.bundle.predicateType"
+	// mediaTypeEmpty is the OCI empty descriptor oras uses as a config placeholder; it
+	// is never the document layer.
+	mediaTypeEmpty = "application/vnd.oci.empty.v1+json"
+)
+
+// DiscoverAttestations lists every referrer of subject in store and returns one
+// Attestation per referrer, read from metadata only. Referrers whose manifest cannot be
+// read are skipped with a warning so one bad entry never blocks the rest.
+func DiscoverAttestations(ctx context.Context, store spec.Store, subject ociImageSpecV1.Descriptor) ([]repository.Attestation, error) {
+	refs, err := registry.Referrers(ctx, store, subject, "")
+	if err != nil {
+		return nil, fmt.Errorf("listing referrers of %s failed: %w", subject.Digest, err)
+	}
+
+	out := make([]repository.Attestation, 0, len(refs))
+	for _, ref := range refs {
+		att, err := fromReferrer(ctx, store, subject, ref)
+		if err != nil {
+			slog.WarnContext(ctx, "skipping unreadable referrer",
+				slog.String("referrer", ref.Digest.String()),
+				slog.String("artifactType", ref.ArtifactType),
+				slog.Any("error", err))
+			continue
+		}
+		out = append(out, att)
+	}
+	return out, nil
+}
+
+// fromReferrer reads one referrer's metadata into an Attestation. It fetches the small
+// referrer manifest (for its annotations and layer media type) but never the document.
+func fromReferrer(ctx context.Context, store spec.Store, subject, ref ociImageSpecV1.Descriptor) (repository.Attestation, error) {
+	var manifest ociImageSpecV1.Manifest
+	if err := fetchJSON(ctx, store, ref, &manifest); err != nil {
+		return repository.Attestation{}, fmt.Errorf("reading referrer manifest failed: %w", err)
+	}
+
+	return repository.Attestation{
+		Source:        repository.AttestationSourceOCIReferrer,
+		ArtifactType:  firstNonEmpty(ref.ArtifactType, manifest.ArtifactType),
+		PredicateType: predicateTypeFromMetadata(ref, manifest),
+		MediaType:     documentMediaType(manifest),
+		Digest:        subject.Digest.String(),
+		ID:            ref.Digest.String(),
+		CreatedAt:     firstNonEmpty(manifest.Annotations[ociImageSpecV1.AnnotationCreated], ref.Annotations[ociImageSpecV1.AnnotationCreated]),
+		Annotations:   manifest.Annotations,
+	}, nil
+}
+
+// predicateTypeFromMetadata extracts the in-toto predicate type from annotations only:
+// the Sigstore bundle annotation, the in-toto annotation on the manifest, or the in-toto
+// annotation on a layer. Empty when the referrer carries none.
+func predicateTypeFromMetadata(ref ociImageSpecV1.Descriptor, manifest ociImageSpecV1.Manifest) string {
+	for _, annotations := range []map[string]string{ref.Annotations, manifest.Annotations} {
+		if pt := annotations[annotationSigstorePredicateType]; pt != "" {
+			return pt
+		}
+		if pt := annotations[attestation.AnnotationInTotoPredicateType]; pt != "" {
+			return pt
+		}
+	}
+	for _, layer := range manifest.Layers {
+		if pt := layer.Annotations[attestation.AnnotationInTotoPredicateType]; pt != "" {
+			return pt
+		}
+	}
+	return ""
+}
+
+// documentMediaType returns the media type of the first document layer, skipping the OCI
+// empty config placeholder.
+func documentMediaType(manifest ociImageSpecV1.Manifest) string {
+	for _, layer := range manifest.Layers {
+		if layer.MediaType != mediaTypeEmpty {
+			return layer.MediaType
+		}
+	}
+	return ""
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// fetchJSON reads a descriptor's content in full and decodes it as JSON. Used only for
+// small manifests, never for document blobs.
+func fetchJSON(ctx context.Context, store spec.Store, desc ociImageSpecV1.Descriptor, into any) error {
+	data, err := content.FetchAll(ctx, store, desc)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, into)
+}
