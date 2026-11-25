@@ -135,8 +135,8 @@ repository and never signed:
   without `subject`) and the manifests or indexes of the OCI-native local blobs. This mirrors the index
   representation of the v2 layout ([ADR 0013](./0013_oci_format_compatibility.md)), so OCI-native local blobs stay usable by OCI tools.
 * `A` carries no `software.ocm.componentversion` annotation and is never listed as a component version.
-* `A` is additionally tagged `sha256-<hex(D_norm)>.acc`, following cosign's `sha256-<hex>.sig` convention, for
-  registries without the referrers API.
+* `A` carries an `org.opencontainers.image.created` timestamp and is otherwise untagged. It is discovered on read as
+  a referrer of `M`; the timestamp lets the reader prefer the most recently written referrer when several exist.
 
 ##### Read path
 
@@ -144,14 +144,13 @@ repository and never signed:
    `...component-descriptor.normalized.v1` selects the normalized path. Manifests and indexes with the access
    `artifactType` are rejected as component version roots.
 2. Read `N` from `M.layers[0]`.
-3. Select the access referrer:
-   * If the tag `sha256-<hex(D_norm)>.acc` resolves, its target is authoritative. It must have the access
-     `artifactType`, `subject` = `M`, pass the bind check and the digest rules below; otherwise reading fails. There is
-     no fall-through to other referrers, so a pushed extra referrer cannot win over the tagged one.
-   * Only if the tag does not exist, collect the `access.v1` referrers of `M` (`Predecessors`). Candidates that fail
-     the bind check or the digest rules are discarded. The survivors must have byte-identical descriptor layers,
-     otherwise reading fails as ambiguous. Among identical survivors the lowest manifest digest is chosen only for
-     determinism.
+3. Select the access referrer: collect the `access.v1` referrers of `M` (`Predecessors`) and discard any whose
+   `subject` is not `M`, that fail the bind check, or that fail the digest rules below. Reading fails if none
+   remains. Among the survivors the one with the most recent `org.opencontainers.image.created` annotation is
+   selected; ties, including referrers without that annotation, break by the lowest manifest digest for a
+   reproducible choice. Re-adding the version and third-party pushes leave several valid referrers of the same `M`,
+   so the newest reflects the last writer, and the digest rules plus the local-blob verification below still guard
+   the content a selected referrer points at.
 4. **Bind check**: `normalise(F, jsonNormalisation/v4alpha1)` must be byte-identical to `N`. On mismatch, reading
    fails with an error that names possible tampering.
 5. **Digest rules** on the bind-checked `F`: the rules of `signing.IsSafelyDigestible` and
@@ -175,15 +174,15 @@ signing are not verified. Sources carry no digest in OCM, so only the scoping ap
 1. Validate `F` against the digest rules; publishing fails otherwise.
 2. With `ReferrerTrackingPolicyByIndexAndSubject`, ensure the Component Index exists (OCI spec §8.5.1).
 3. Push `N`, the config and `M`, and tag `<version>` → `M`.
-4. Push the local blobs, `F` and `A` with `subject` = `M`, and tag `sha256-<hex(D_norm)>.acc` → `A`.
+4. Push the local blobs and `F`, then push `A` with `subject` = `M` and an `org.opencontainers.image.created`
+   timestamp. `A` is not tagged.
 
 Re-adding a version with unchanged signed content in the normalized layout (for example `ocm sign` with the
-normalized layout configured, which only adds to `signatures[]`) produces the same `M` and a new `A'`. Older access referrers are not deleted; the `.acc` tag moves to `A'` and is
-authoritative on read, so the most recently written descriptor is returned.
+normalized layout configured, which only adds to `signatures[]`) produces the same `M` and a new `A'`. Older access referrers are not deleted; `A'` carries a newer `created` timestamp and is selected on read, so the most recently written descriptor is returned.
 
 Listing component versions (`ListComponentVersions`) accepts both the v2 and the normalized `artifactType` in the
 Component Index referrers, identifies normalized versions through their `software.ocm.componentversion` annotation,
-and never lists `.acc` tags or access referrers as versions.
+and never lists access referrers as versions.
 
 ##### Transfer
 
@@ -264,7 +263,7 @@ the version; this moves the tag away from `D_norm`, as any v2 re-publish would.
 #### High-level Architecture
 
 ```text
-tag <component>:<version>                tag sha256-<hex(D_norm)>.acc
+tag <component>:<version>                access referrer A (untagged; newest created wins)
           │                                          │
           ▼                                          ▼
 ┌───────────────────────────────┐ subject ┌──────────────────────────────────┐
@@ -325,7 +324,7 @@ An access referrer:
   representation of §6.1 (as the manifest itself, or as a manifest of the index).
 * **MUST** contain every `localBlob` of that descriptor as a layer of that manifest or as a manifest or index of the
   index, following §6.2.
-* **MUST** be tagged `sha256-<hex>.acc`, where `<hex>` is the hex digest of the normalized manifest.
+* **MUST** carry an `org.opencontainers.image.created` annotation whose value is an RFC 3339 timestamp.
 * **MUST NOT** carry the `software.ocm.componentversion` annotation.
 
 Writers **MUST** reject a component descriptor for the normalized representation unless every component reference
@@ -339,10 +338,11 @@ Before step 2, a reader **MUST** inspect the `artifactType` of the resolved mani
 
 * `application/vnd.ocm.software.component-descriptor.normalized.v1`: the reader **MUST** select the access
   referrer as follows and **MUST** fail if none is selected:
-  1. If the tag `sha256-<hex>.acc` exists, its target **MUST** be selected. Resolution **MUST** fail if it does not
-     have the access `artifactType` and the normalized manifest as `subject`, or if it fails the checks below.
-  2. Otherwise the reader **MUST** consider all access referrers of the normalized manifest, discard those that fail
-     the checks below, and **MUST** fail if the remaining candidates do not contain byte-identical descriptors.
+  1. The reader **MUST** consider all access referrers of the normalized manifest and discard those that do not have
+     the access `artifactType` and the normalized manifest as `subject`, or that fail the checks below.
+  2. Of the remaining candidates the reader **MUST** select the one with the most recent
+     `org.opencontainers.image.created` annotation, breaking ties (including candidates without the annotation) by
+     the lowest manifest digest.
 * The checks are: `jsonNormalisation/v4alpha1` applied to the descriptor of the access referrer **MUST** be
   byte-identical to the normalized layer, and the descriptor **MUST** satisfy the digest rules of §6.3.
 * `application/vnd.ocm.software.component-descriptor.access.v1`: the artifact **MUST NOT** be interpreted as a
@@ -368,8 +368,6 @@ Before step 2, a reader **MUST** inspect the `artifactType` of the resolved mani
 
 #### §12 Tag and Version Mapping Rules (amended)
 
-* Tags matching `sha256-<hex>.acc` are access tags. They **MUST NOT** be considered component versions and
-  **MUST NOT** be used as aliases (§12.1).
 * A component version reference with a normalized digest pin `@<normalisation>+<hash>:<hex>` (digest pinning,
   [#3889](https://github.com/open-component-model/open-component-model/pull/3889)) names the component version
   digest. For the normalized representation with `jsonNormalisation.v4alpha1+sha256`, this digest equals the digest

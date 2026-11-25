@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/errdef"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/oci/spec"
@@ -51,10 +51,8 @@ func GetNormalizedComponentVersion(ctx context.Context, store spec.Store, normal
 // rules of normalizedlayout.ValidateDigests. Normalisation drops signatures, accesses and
 // non-signing labels, so several valid referrers may carry different descriptors (e.g. after an
 // OCM signature was added by re-adding the version). Selection therefore never picks between them:
-//   - The fallback tag names the access referrer OCM wrote last. If it exists, its target is the
-//     only candidate and must be valid.
-//   - Without the tag, the valid referrers found via the referrers API must all carry the same
-//     descriptor bytes; otherwise the read fails as ambiguous.
+// the valid referrers found via the referrers API must all carry the same descriptor bytes;
+// otherwise the read fails as ambiguous.
 func getNormalizedComponentVersion(ctx context.Context, store spec.Store, normalized ociImageSpecV1.Descriptor, normManifest *ociImageSpecV1.Manifest, unmarshal ocidescriptor.UnmarshalFunc) (*storedComponentVersion, error) {
 	normalized.ArtifactType = ocidescriptor.ArtifactTypeNormalizedDescriptor
 	if len(normManifest.Layers) != 1 {
@@ -67,19 +65,6 @@ func getNormalizedComponentVersion(ctx context.Context, store spec.Store, normal
 	signedNormalized, err := content.FetchAll(ctx, store, normLayer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch normalized descriptor layer: %w", err)
-	}
-
-	fallbackTag := normalizedlayout.AccessFallbackTag(normalized.Digest.String())
-	tagged, err := store.Resolve(ctx, fallbackTag)
-	switch {
-	case err == nil:
-		ref, err := loadAccessReferrer(ctx, store, tagged, normalized, signedNormalized, unmarshal)
-		if err != nil {
-			return nil, fmt.Errorf("access referrer %s tagged %q for normalized manifest %s is invalid: %w", tagged.Digest, fallbackTag, normalized.Digest, err)
-		}
-		return ref.stored(), nil
-	case !errors.Is(err, errdef.ErrNotFound):
-		return nil, fmt.Errorf("failed to resolve access referrer tag %q: %w", fallbackTag, err)
 	}
 
 	predecessors, err := store.Predecessors(ctx, normalized)
@@ -105,20 +90,22 @@ func getNormalizedComponentVersion(ctx context.Context, store spec.Store, normal
 		}
 		return nil, fmt.Errorf("no valid access referrer found for normalized manifest %s: %w", normalized.Digest, errors.Join(rejected...))
 	}
-	for _, ref := range valid[1:] {
-		if !bytes.Equal(ref.descriptorBytes, valid[0].descriptorBytes) {
-			return nil, fmt.Errorf("normalized manifest %s has %d valid access referrers with differing descriptors and no %q tag selecting one", normalized.Digest, len(valid), fallbackTag)
+	// Re-adding a version (e.g. to persist a signature) and third-party pushes leave several valid
+	// access referrers of the same M; the most recently created one reflects the last writer. Ties
+	// (equal or absent timestamps) break by the lowest manifest digest for a reproducible choice.
+	slices.SortFunc(valid, func(a, b *accessReferrer) int {
+		if c := b.created.Compare(a.created); c != 0 {
+			return c
 		}
-	}
-	// The candidates carry the same descriptor and local blobs are verified against its digests;
-	// sorting only makes the choice of local-blob listing reproducible.
-	slices.SortFunc(valid, func(a, b *accessReferrer) int { return strings.Compare(a.digest, b.digest) })
+		return strings.Compare(a.digest, b.digest)
+	})
 	return valid[0].stored(), nil
 }
 
 // accessReferrer is a validated access referrer of a normalized manifest.
 type accessReferrer struct {
 	digest          string
+	created         time.Time
 	desc            *descriptor.Descriptor
 	descriptorBytes []byte
 	manifest        *ociImageSpecV1.Manifest
@@ -140,6 +127,7 @@ func loadAccessReferrer(ctx context.Context, store spec.Store, target, normalize
 		MediaType    string                     `json:"mediaType"`
 		ArtifactType string                     `json:"artifactType"`
 		Subject      *ociImageSpecV1.Descriptor `json:"subject"`
+		Annotations  map[string]string          `json:"annotations"`
 	}
 	if err := json.Unmarshal(raw, &header); err != nil {
 		return nil, fmt.Errorf("failed to decode: %w", err)
@@ -204,11 +192,22 @@ func loadAccessReferrer(ctx context.Context, store spec.Store, target, normalize
 	}
 	return &accessReferrer{
 		digest:          target.Digest.String(),
+		created:         parseCreated(header.Annotations[ociImageSpecV1.AnnotationCreated]),
 		desc:            full,
 		descriptorBytes: layerBytes,
 		manifest:        &manifest,
 		index:           index,
 	}, nil
+}
+
+// parseCreated parses an org.opencontainers.image.created annotation. An absent or malformed value
+// yields the zero time, which sorts oldest, so a stamped referrer always wins over an unstamped one.
+func parseCreated(value string) time.Time {
+	t, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return time.Time{}
+	}
+	return t
 }
 
 // peekArtifactType fetches a manifest/index and returns its artifactType from the body. This is

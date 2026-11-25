@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
@@ -248,8 +249,10 @@ It is used to store the component descriptor manifest and other related blob man
 // the local blobs are stored in an access referrer A whose subject is M: an image manifest listing
 // the descriptor and local-blob layers, or, if OCI-native local blobs exist, an image index whose
 // first manifest is that access manifest followed by the local-blob manifests (as in the v2 index).
-// A is also tagged with the fallback tag derived from M, which identifies the access referrer
-// written last by OCM.
+// A carries no tag of its own and is discovered on read as a referrer of M. It is stamped with an
+// org.opencontainers.image.created timestamp so the reader can pick the most recently written one
+// when several valid access referrers of the same M exist (e.g. after re-adding the version to
+// persist a signature, or after a third-party push).
 //
 // The returned descriptor is the normalized manifest descriptor M (untagged); the caller tags it as
 // the component reference, mirroring AddDescriptorToStore.
@@ -324,10 +327,14 @@ func addNormalizedLayout(ctx context.Context, store spec.Store, desc *descriptor
 	}
 	accessSubject := ociImageSpecV1.Descriptor{MediaType: mDesc.MediaType, Digest: mDesc.Digest, Size: mDesc.Size}
 
-	var aDesc ociImageSpecV1.Descriptor
+	// Stamp the access referrer with its creation time so a later writer's referrer is preferred on
+	// read. The timestamp makes A content-unique per write, which is intended: unlike M it is never
+	// signed and is regenerated per repository.
+	created := time.Now().UTC().Format(time.RFC3339Nano)
 	if len(opts.AdditionalDescriptorManifests) == 0 {
 		a := normalizedlayout.BuildAccessManifest(&accessSubject, configDesc, descLayer, opts.AdditionalLayers, component, version)
-		if aDesc, err = pushJSONManifest(ctx, store, a, a.MediaType, a.ArtifactType, a.Annotations); err != nil {
+		a.Annotations[ociImageSpecV1.AnnotationCreated] = created
+		if _, err := pushJSONManifest(ctx, store, a, a.MediaType, a.ArtifactType, a.Annotations); err != nil {
 			return nil, fmt.Errorf("unable to push access manifest: %w", err)
 		}
 	} else {
@@ -337,13 +344,10 @@ func addNormalizedLayout(ctx context.Context, store spec.Store, desc *descriptor
 			return nil, fmt.Errorf("unable to push access manifest: %w", err)
 		}
 		idx := normalizedlayout.BuildAccessIndex(accessSubject, innerDesc, opts.AdditionalDescriptorManifests, component, version)
-		if aDesc, err = pushJSONManifest(ctx, store, idx, idx.MediaType, idx.ArtifactType, idx.Annotations); err != nil {
+		idx.Annotations[ociImageSpecV1.AnnotationCreated] = created
+		if _, err := pushJSONManifest(ctx, store, idx, idx.MediaType, idx.ArtifactType, idx.Annotations); err != nil {
 			return nil, fmt.Errorf("unable to push access index: %w", err)
 		}
-	}
-
-	if err := store.Tag(ctx, aDesc, normalizedlayout.AccessFallbackTag(mDesc.Digest.String())); err != nil {
-		return nil, fmt.Errorf("unable to tag access referrer with fallback tag: %w", err)
 	}
 
 	return &mDesc, nil

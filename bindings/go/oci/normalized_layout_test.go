@@ -8,13 +8,13 @@ import (
 	"os"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/content/memory"
-	"oras.land/oras-go/v2/errdef"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
@@ -100,7 +100,9 @@ func pushIfAbsent(t *testing.T, ctx context.Context, store spec.Store, desc ociI
 }
 
 // pushAccessManifest pushes an access referrer of subject carrying desc and the given local blob
-// layers, the way a third party with push rights could. salt only varies the manifest digest.
+// layers, the way a third party with push rights could. It stamps a creation time one hour ahead so
+// the pushed referrer is strictly newer than one AddComponentVersion wrote and wins selection. salt
+// only varies the manifest digest.
 func pushAccessManifest(t *testing.T, ctx context.Context, store spec.Store, subject ociImageSpecV1.Descriptor, desc *descriptor.Descriptor, layers []ociImageSpecV1.Descriptor, salt string) ociImageSpecV1.Descriptor {
 	t.Helper()
 	r := require.New(t)
@@ -114,6 +116,7 @@ func pushAccessManifest(t *testing.T, ctx context.Context, store spec.Store, sub
 
 	subject = ociImageSpecV1.Descriptor{MediaType: subject.MediaType, Digest: subject.Digest, Size: subject.Size}
 	m := normalizedlayout.BuildAccessManifest(&subject, cfgDesc, layerDesc, layers, desc.Component.Name, desc.Component.Version)
+	m.Annotations[ociImageSpecV1.AnnotationCreated] = time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano)
 	if salt != "" {
 		m.Annotations["test.salt"] = salt
 	}
@@ -133,19 +136,7 @@ func fetchJSON(t *testing.T, ctx context.Context, store content.Fetcher, desc oc
 	require.NoError(t, json.Unmarshal(raw, v))
 }
 
-// hiddenTagStore simulates a registry without the access fallback tag.
-type hiddenTagStore struct {
-	spec.Store
-	hidden string
-}
-
-func (s hiddenTagStore) Resolve(ctx context.Context, reference string) (ociImageSpecV1.Descriptor, error) {
-	if reference == s.hidden {
-		return ociImageSpecV1.Descriptor{}, errdef.ErrNotFound
-	}
-	return s.Store.Resolve(ctx, reference)
-}
-
+// readAll drains a readable blob.
 func readAll(t *testing.T, b interface {
 	ReadCloser() (io.ReadCloser, error)
 },
@@ -164,30 +155,26 @@ func TestNormalizedLayout_AccessReferrerSelection(t *testing.T) {
 	tampered.Component.Provider.Name = "attacker"
 
 	for _, tc := range []struct {
-		name     string
-		referrer *descriptor.Descriptor
-		tagged   bool
-		wantErr  string
+		name string
+		// referrer is pushed as a strictly newer access referrer than the one AddDescriptorToStore wrote.
+		referrer      *descriptor.Descriptor
+		wantSignature bool
 	}{
-		{name: "tagged referrer failing the bind check", referrer: tampered, tagged: true, wantErr: "bind check failed"},
-		{name: "untagged differing valid referrers are ambiguous", referrer: withSignature(normDescriptor(), "ocm-sig"), wantErr: "differing descriptors"},
+		{name: "a newer valid referrer is selected", referrer: withSignature(normDescriptor(), "ocm-sig"), wantSignature: true},
+		{name: "a newer referrer failing the bind check is ignored", referrer: tampered, wantSignature: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			ctx := t.Context()
-			var store spec.Store = memory.New()
+			store := memory.New()
 			m, err := oci.AddDescriptorToStore(ctx, store, normDescriptor(), oci.AddDescriptorOptions{Scheme: testScheme, Layout: oci.LayoutNormalized})
 			r.NoError(err)
-			tag := normalizedlayout.AccessFallbackTag(m.Digest.String())
-			pushed := pushAccessManifest(t, ctx, store, *m, tc.referrer, nil, "")
-			if tc.tagged {
-				r.NoError(store.Tag(ctx, pushed, tag))
-			} else {
-				store = hiddenTagStore{Store: store, hidden: tag}
-			}
+			pushAccessManifest(t, ctx, store, *m, tc.referrer, nil, "")
 
-			_, err = oci.GetNormalizedComponentVersion(ctx, store, *m, ocidescriptor.DefaultDescriptorUnmarshalFunc)
-			r.ErrorContains(err, tc.wantErr)
+			got, err := oci.GetNormalizedComponentVersion(ctx, store, *m, ocidescriptor.DefaultDescriptorUnmarshalFunc)
+			r.NoError(err)
+			r.Equal("internal", got.Component.Provider.Name, "a bind-check failure must never win over the genuine referrer")
+			r.Equal(tc.wantSignature, len(got.Signatures) == 1)
 		})
 	}
 }
@@ -272,21 +259,40 @@ func TestNormalizedLayout_ReAddUsesConfiguredLayout(t *testing.T) {
 	r.Len(got.Signatures, 1, "the re-added descriptor must be read back, not the stale one")
 }
 
-// tamperAccessReferrer replaces the tagged access referrer of the normalized version with one that
-// carries desc and the local blob layers of the current access manifest.
+// accessReferrerOf returns the access referrer manifest of the normalized manifest m, found through
+// the referrers graph.
+func accessReferrerOf(t *testing.T, ctx context.Context, store spec.Store, m ociImageSpecV1.Descriptor) ociImageSpecV1.Descriptor {
+	t.Helper()
+	r := require.New(t)
+	predecessors, err := store.Predecessors(ctx, m)
+	r.NoError(err)
+	for _, p := range predecessors {
+		var header struct {
+			ArtifactType string `json:"artifactType"`
+		}
+		raw, err := content.FetchAll(ctx, store, p)
+		r.NoError(err)
+		r.NoError(json.Unmarshal(raw, &header))
+		if header.ArtifactType == ocidescriptor.ArtifactTypeAccessDescriptor {
+			return p
+		}
+	}
+	r.FailNow("no access referrer found for normalized manifest")
+	return ociImageSpecV1.Descriptor{}
+}
+
+// tamperAccessReferrer pushes a newer access referrer of the normalized version that carries desc
+// and the local blob layers of the current access manifest, so it wins selection on read.
 func tamperAccessReferrer(t *testing.T, ctx context.Context, store spec.Store, ref string, desc *descriptor.Descriptor) {
 	t.Helper()
 	r := require.New(t)
 	m, err := store.Resolve(ctx, ref)
 	r.NoError(err)
-	tag := normalizedlayout.AccessFallbackTag(m.Digest.String())
-	acc, err := store.Resolve(ctx, tag)
-	r.NoError(err)
+	acc := accessReferrerOf(t, ctx, store, m)
 	var accManifest ociImageSpecV1.Manifest
 	fetchJSON(t, ctx, store, acc, &accManifest)
 	layers := slices.Clone(accManifest.Layers[1:])
-	evil := pushAccessManifest(t, ctx, store, m, desc, layers, "tampered")
-	r.NoError(store.Tag(ctx, evil, tag))
+	pushAccessManifest(t, ctx, store, m, desc, layers, "tampered")
 }
 
 func TestNormalizedLayout_LocalBlobVerification(t *testing.T) {
@@ -402,8 +408,7 @@ func TestNormalizedLayout_CarryComponentSignatures(t *testing.T) {
 		srcStore, srcRef := componentStore(t, ctx, srcCTF, normComponent, normVersion)
 		m, err := srcStore.Resolve(ctx, srcRef)
 		r.NoError(err)
-		srcAcc, err := srcStore.Resolve(ctx, normalizedlayout.AccessFallbackTag(m.Digest.String()))
-		r.NoError(err)
+		srcAcc := accessReferrerOf(t, ctx, srcStore, m)
 
 		r.NoError(dst.CarryComponentSignatures(ctx, src, normComponent, normVersion))
 
