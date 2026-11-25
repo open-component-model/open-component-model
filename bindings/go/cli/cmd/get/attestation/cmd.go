@@ -7,6 +7,7 @@ import (
 	"encoding/json/v2"
 	"fmt"
 	"io"
+	"log/slog"
 	"slices"
 	"strings"
 
@@ -33,11 +34,14 @@ const (
 	FlagType             = "type"
 	FlagOutput           = "output"
 	FlagConcurrencyLimit = "concurrency-limit"
+	FlagRecursive        = "recursive"
 )
 
-// componentLabel is how the component version artifact itself is labelled in the output,
-// distinct from any resource name.
-const componentLabel = "(component)"
+// componentLevelLabel marks the group of referrers attached to the component version
+// artifact itself, as opposed to a resource of the component. The full component:version
+// name is shown in its own place (the COMPONENT column, or the tree root), so this label
+// only needs to say "this is the component level".
+const componentLevelLabel = "(component-level)"
 
 func New() *cobra.Command {
 	cmd := &cobra.Command{
@@ -53,6 +57,7 @@ Widen or narrow the scope with:
 
   --identity name=X   only the attestations describing resource X.
   -o widetree         every resource of the component plus the component's own referrers.
+  --recursive         also follow componentReferences and list their attestations (-1 = unlimited).
 
 Per resource, attestations are merged from every source:
 
@@ -78,6 +83,9 @@ aliases (for example "sbom" matches spdx and cyclonedx, "signature" matches cosi
   # Only the "image" resource
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --identity name=image
 
+  # Follow componentReferences and list their attestations too
+  ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --recursive -o widetree
+
   # Only SBOMs and VEX, as JSON
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --type sbom --type vex -o json`,
 		RunE:              GetAttestations,
@@ -86,6 +94,8 @@ aliases (for example "sbom" matches spdx and cyclonedx, "signature" matches cosi
 
 	cmd.Flags().String(FlagResourceIdentity, "", "list only the attestations describing this one resource")
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum number of resources inspected in parallel when listing the whole component (-o widetree)")
+	cmd.Flags().Int(FlagRecursive, 0, "recursively follow componentReferences and list their attestations too; depth of recursion (-1 for unlimited)")
+	cmd.Flags().Lookup(FlagRecursive).NoOptDefVal = "-1"
 	cmd.Flags().StringSlice(FlagType, nil, "filter to attestations whose type contains any of these substrings or matches a friendly alias (sbom, vex, signature, provenance, spdx, ...); repeatable; empty lists all")
 	enum.VarP(cmd.Flags(), FlagOutput, "o",
 		[]string{
@@ -125,6 +135,19 @@ func GetAttestations(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("getting output flag failed: %w", err)
 	}
+	recursive, err := cmd.Flags().GetInt(FlagRecursive)
+	if err != nil {
+		return fmt.Errorf("getting recursive flag failed: %w", err)
+	}
+	if identityStr != "" && recursive != 0 {
+		return fmt.Errorf("--%s cannot be combined with --%s", FlagResourceIdentity, FlagRecursive)
+	}
+	switch {
+	case recursive < -1:
+		return fmt.Errorf("invalid recursion depth %d: must be -1 (unlimited) or >= 0", recursive)
+	case recursive > 0:
+		return fmt.Errorf("recursion depth > 0 is not implemented yet, use -1 for unlimited")
+	}
 
 	ref, err := compref.Parse(args[0])
 	if err != nil {
@@ -143,24 +166,66 @@ func GetAttestations(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting component version failed: %w", err)
 	}
 
-	localDiscoverer, _ := repo.(repository.LocalAttestationDiscoverer)
-	componentDiscoverer, _ := repo.(repository.ComponentAttestationDiscoverer)
-	baseReq := cliattestation.Request{
-		Descriptor:        desc,
-		PluginManager:     pluginManager,
-		Credentials:       credentialGraph,
-		Logger:            logger,
-		DiscoverLocal:     localDiscoverer,
-		DiscoverComponent: componentDiscoverer,
+	// walk resolves a component to its attestation groups and, when recursing, descends
+	// into its componentReferences. A component already visited is emitted as a reference
+	// marker (Repeated) without re-discovery, so diamonds and cycles terminate.
+	visited := map[string]bool{}
+	var walk func(repo repository.ComponentVersionRepository, desc *descriptor.Descriptor) (component, error)
+	walk = func(repo repository.ComponentVersionRepository, desc *descriptor.Descriptor) (component, error) {
+		ref := fmt.Sprintf("%s:%s", desc.Component.Name, desc.Component.Version)
+		if visited[ref] {
+			return component{Ref: ref, Repeated: true}, nil
+		}
+		visited[ref] = true
+
+		req := cliattestation.Request{
+			Descriptor:    desc,
+			PluginManager: pluginManager,
+			Credentials:   credentialGraph,
+			Logger:        logger,
+		}
+		if ld, ok := repo.(repository.LocalAttestationDiscoverer); ok {
+			req.DiscoverLocal = ld
+		}
+		if cd, ok := repo.(repository.ComponentAttestationDiscoverer); ok {
+			req.DiscoverComponent = cd
+		}
+		groups, err := discoverGroups(ctx, req, desc, identityStr, format, concurrency)
+		if err != nil {
+			return component{}, err
+		}
+		node := component{Ref: ref, Groups: groups}
+
+		if recursive == -1 {
+			for i := range desc.Component.References {
+				r := &desc.Component.References[i]
+				childRepo, err := repoProvider.GetComponentVersionRepositoryForComponent(ctx, r.Component, r.Version)
+				if err != nil {
+					logger.Warn("resolving referenced component failed, skipping", slog.String("component", r.Component), slog.String("version", r.Version), slog.Any("error", err))
+					continue
+				}
+				childRepo, childDesc, err := repository.GetPinnedComponentVersion(ctx, childRepo, r.Component, r.Version, nil)
+				if err != nil {
+					logger.Warn("getting referenced component version failed, skipping", slog.String("component", r.Component), slog.String("version", r.Version), slog.Any("error", err))
+					continue
+				}
+				child, err := walk(childRepo, childDesc)
+				if err != nil {
+					logger.Warn("discovering attestations of referenced component failed, skipping", slog.String("component", r.Component), slog.String("version", r.Version), slog.Any("error", err))
+					continue
+				}
+				node.Children = append(node.Children, child)
+			}
+		}
+		return node, nil
 	}
 
-	groups, err := discoverGroups(ctx, baseReq, desc, identityStr, format, concurrency)
+	root, err := walk(repo, desc)
 	if err != nil {
 		return err
 	}
-
-	componentRef := fmt.Sprintf("%s:%s", desc.Component.Name, desc.Component.Version)
-	return renderAttestations(ctx, cmd.OutOrStdout(), format, componentRef, filterGroups(groups, typeFilters))
+	root, _ = filterTree(root, typeFilters)
+	return renderAttestations(ctx, cmd.OutOrStdout(), format, root)
 }
 
 // discoverGroups resolves the selection to resource-labelled groups: --identity lists one
@@ -205,6 +270,33 @@ func filterGroups(groups []cliattestation.Group, filters []string) []cliattestat
 		}
 	}
 	return out
+}
+
+// component is one node of the discovered tree: a component version, the attestation
+// groups discovered for it (component-level plus, in widetree, one per resource), and its
+// referenced components when recursing. Repeated marks a component already shown elsewhere
+// in the tree (a diamond or cycle), rendered as a reference without re-discovery.
+type component struct {
+	Ref      string
+	Groups   []cliattestation.Group
+	Children []component
+	Repeated bool
+}
+
+// filterTree applies the type filter to every component in the tree, dropping components
+// left with no attestations and no surviving descendants. The root is returned regardless
+// so an empty result still renders its header. Repeated markers are kept as navigation
+// aids even though they carry no attestations.
+func filterTree(c component, filters []string) (component, bool) {
+	c.Groups = filterGroups(c.Groups, filters)
+	kept := c.Children[:0]
+	for _, child := range c.Children {
+		if fc, ok := filterTree(child, filters); ok {
+			kept = append(kept, fc)
+		}
+	}
+	c.Children = kept
+	return c, len(c.Groups) > 0 || len(c.Children) > 0 || c.Repeated
 }
 
 func uniqueResource(desc *descriptor.Descriptor, identity runtime.Identity) (*descriptor.Resource, error) {
@@ -334,6 +426,7 @@ func anyFilterMatches(filters []string, haystack string, aliases []string) bool 
 // JSON and YAML carry the raw type signals, the creation timestamp and the full
 // annotation map too.
 type row struct {
+	Component     string            `json:"component,omitempty"`
 	Resource      string            `json:"resource,omitempty"`
 	Source        string            `json:"source"`
 	Type          string            `json:"type"`
@@ -351,36 +444,20 @@ type row struct {
 	Envelope string `json:"-"`
 }
 
-func renderAttestations(ctx context.Context, w io.Writer, format, ref string, groups []cliattestation.Group) error {
+func renderAttestations(ctx context.Context, w io.Writer, format string, root component) error {
 	switch format {
 	case render.OutputFormatTree.String(), render.OutputFormatWideTree.String():
-		return renderTree(ctx, w, ref, groups)
+		return renderTree(ctx, w, root)
 	}
 
-	var rows []row
-	for _, g := range groups {
-		for _, a := range g.Attestations {
-			cat, fmtLabel := classify(a)
-			rows = append(rows, row{
-				Resource:      displayLabel(g.Label),
-				Source:        string(a.Source),
-				Type:          a.Type(),
-				ArtifactType:  a.ArtifactType,
-				PredicateType: a.PredicateType,
-				MediaType:     a.MediaType,
-				CreatedAt:     a.CreatedAt,
-				Annotations:   a.Annotations,
-				Platform:      a.Platform.String(),
-				Subject:       a.Digest,
-				ID:            a.ID,
-				Category:      cat,
-				Format:        fmtLabel,
-				Envelope:      envelopeOf(a),
-			})
-		}
-	}
+	// Show the COMPONENT column only when more than one component carries attestations,
+	// i.e. under --recursive. For a single component the name lives in the component-level
+	// RESOURCE cell instead, keeping the common case narrow.
+	showComponent := componentsWithGroups(root) > 1
+	rows := flattenRows(root, showComponent)
 	slices.SortFunc(rows, func(a, b row) int {
 		return cmp.Or(
+			cmp.Compare(a.Component, b.Component),
 			cmp.Compare(a.Resource, b.Resource),
 			cmp.Compare(a.Source, b.Source),
 			cmp.Compare(a.Type, b.Type),
@@ -405,16 +482,71 @@ func renderAttestations(ctx context.Context, w io.Writer, format, ref string, gr
 		_, err = w.Write(data)
 		return err
 	default:
-		return renderTable(w, rows)
+		return renderTable(w, rows, showComponent)
 	}
 }
 
-func renderTable(w io.Writer, rows []row) error {
+// componentsWithGroups counts the components in the tree that carry at least one
+// attestation group, so the table can decide whether a COMPONENT column is warranted.
+func componentsWithGroups(c component) int {
+	n := 0
+	if len(c.Groups) > 0 {
+		n++
+	}
+	for _, child := range c.Children {
+		n += componentsWithGroups(child)
+	}
+	return n
+}
+
+// flattenRows projects the component tree into table rows depth-first. Each row is tagged
+// with its owning component; the RESOURCE cell is the resource identity, or, for the
+// component-level group, the component:version name when no COMPONENT column carries it
+// and (component-level) otherwise.
+func flattenRows(c component, showComponent bool) []row {
+	var rows []row
+	for _, g := range c.Groups {
+		for _, a := range g.Attestations {
+			cat, fmtLabel := classify(a)
+			rows = append(rows, row{
+				Component:     c.Ref,
+				Resource:      resourceLabel(g.Label, c.Ref, showComponent),
+				Source:        string(a.Source),
+				Type:          a.Type(),
+				ArtifactType:  a.ArtifactType,
+				PredicateType: a.PredicateType,
+				MediaType:     a.MediaType,
+				CreatedAt:     a.CreatedAt,
+				Annotations:   a.Annotations,
+				Platform:      a.Platform.String(),
+				Subject:       a.Digest,
+				ID:            a.ID,
+				Category:      cat,
+				Format:        fmtLabel,
+				Envelope:      envelopeOf(a),
+			})
+		}
+	}
+	for _, child := range c.Children {
+		rows = append(rows, flattenRows(child, showComponent)...)
+	}
+	return rows
+}
+
+func renderTable(w io.Writer, rows []row, showComponent bool) error {
 	t := table.NewWriter()
 	t.SetOutputMirror(w)
-	t.AppendHeader(table.Row{"RESOURCE", "SOURCE", "CATEGORY", "FORMAT", "PLATFORM", "ENV", "ID"})
+	header := table.Row{"RESOURCE", "SOURCE", "CATEGORY", "FORMAT", "PLATFORM", "ENV", "ID"}
+	if showComponent {
+		header = append(table.Row{"COMPONENT"}, header...)
+	}
+	t.AppendHeader(header)
 	for _, r := range rows {
-		t.AppendRow(table.Row{orDash(r.Resource), r.Source, orDash(r.Category), orDash(r.Format), orDash(r.Platform), orDash(r.Envelope), r.ID})
+		cells := table.Row{orDash(r.Resource), r.Source, orDash(r.Category), orDash(r.Format), orDash(r.Platform), orDash(r.Envelope), r.ID}
+		if showComponent {
+			cells = append(table.Row{r.Component}, cells...)
+		}
+		t.AppendRow(cells)
 	}
 	style := table.StyleLight
 	style.Options.DrawBorder = false
@@ -428,23 +560,23 @@ func renderTable(w io.Writer, rows []row) error {
 // envelope) are columns, not nesting levels, so heterogeneous values never stack in a single
 // column. Digests are shown in full, like "oras discover". The whole structure is produced
 // by the vertex serializer from a single root vertex.
-func renderTree(ctx context.Context, w io.Writer, ref string, groups []cliattestation.Group) error {
+func renderTree(ctx context.Context, w io.Writer, root component) error {
 	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
 	if err := graph.WithWriteLock(func(g *dag.DirectedAcyclicGraph[string]) error {
-		return g.AddVertex(ref, map[string]any{syncdag.AttributeValue: groups})
+		return g.AddVertex(root.Ref, map[string]any{syncdag.AttributeValue: root})
 	}); err != nil {
 		return fmt.Errorf("building attestation tree failed: %w", err)
 	}
 
 	renderer := tree.New(ctx, graph,
-		tree.WithRoots(ref),
+		tree.WithRoots(root.Ref),
 		tree.WithHeader[string]("CATEGORY", "FORMAT", "PLATFORM", "ENV", "ID"),
 		tree.WithVertexSerializerFunc(func(v *dag.Vertex[string]) (tree.Row, error) {
-			gs, ok := v.Attributes[syncdag.AttributeValue].([]cliattestation.Group)
+			c, ok := v.Attributes[syncdag.AttributeValue].(component)
 			if !ok {
-				return tree.Row{}, fmt.Errorf("vertex %q has no %s attribute of type %T", v.ID, syncdag.AttributeValue, gs)
+				return tree.Row{}, fmt.Errorf("vertex %q has no %s attribute of type %T", v.ID, syncdag.AttributeValue, c)
 			}
-			return rootTreeRow(v.ID, gs), nil
+			return componentTreeRow(c), nil
 		}),
 	)
 	return renderer.Render(ctx, w)
@@ -453,14 +585,21 @@ func renderTree(ctx context.Context, w io.Writer, ref string, groups []cliattest
 // treeColumns is the number of data columns (after the nesting column) of the tree layout.
 const treeColumns = 5
 
-// rootTreeRow nests reference -> origin -> source, each source holding a document leaf per
-// attestation.
-func rootTreeRow(ref string, groups []cliattestation.Group) tree.Row {
-	children := make([]tree.Row, 0, len(groups))
-	for _, g := range groups {
-		children = append(children, groupRow(displayLabel(g.Label), g.Attestations))
+// componentTreeRow nests one component over its attestation groups (component-level and,
+// in widetree, one per resource) and then its referenced components, so recursion deepens
+// the tree. A Repeated component is a leaf marker pointing at its earlier appearance.
+func componentTreeRow(c component) tree.Row {
+	if c.Repeated {
+		return innerTreeRow(c.Ref+"  (shown above)", nil)
 	}
-	return innerTreeRow(ref, children)
+	children := make([]tree.Row, 0, len(c.Groups)+len(c.Children))
+	for _, g := range c.Groups {
+		children = append(children, groupRow(treeGroupLabel(g.Label), g.Attestations))
+	}
+	for _, child := range c.Children {
+		children = append(children, componentTreeRow(child))
+	}
+	return innerTreeRow(c.Ref, children)
 }
 
 // groupRow nests one origin (a resource or the component) over its sources.
@@ -516,11 +655,26 @@ func innerTreeRow(label string, children []tree.Row) tree.Row {
 	return tree.Row{Cells: cells, Children: children}
 }
 
-func displayLabel(label string) string {
-	if label == "" {
-		return componentLabel
+// resourceLabel is the RESOURCE cell for a group: the resource identity, or for the
+// component-level group either the component:version name (when no COMPONENT column shows
+// it) or the (component-level) marker (when it does).
+func resourceLabel(groupLabel, ref string, showComponent bool) string {
+	if groupLabel != "" {
+		return groupLabel
 	}
-	return label
+	if showComponent {
+		return componentLevelLabel
+	}
+	return ref
+}
+
+// treeGroupLabel is the tree label for a group: the resource identity, or (component-level)
+// for the component-level group (the component:version name is the parent node).
+func treeGroupLabel(groupLabel string) string {
+	if groupLabel == "" {
+		return componentLevelLabel
+	}
+	return groupLabel
 }
 
 func orDash(value string) string {

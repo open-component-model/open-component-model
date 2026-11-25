@@ -21,6 +21,7 @@ Widen or narrow the scope with:
 
   --identity name=X   only the attestations describing resource X.
   -o widetree         every resource of the component plus the component's own referrers.
+  --recursive         also follow componentReferences and list their attestations (-1 = unlimited).
 
 Per resource, attestations are merged from every source:
 
@@ -54,6 +55,9 @@ ocm get attestation {reference} [flags]
   # Only the "image" resource
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --identity name=image
 
+  # Follow componentReferences and list their attestations too
+  ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --recursive -o widetree
+
   # Only SBOMs and VEX, as JSON
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --type sbom --type vex -o json
 ```
@@ -66,6 +70,7 @@ ocm get attestation {reference} [flags]
       --identity string         list only the attestations describing this one resource
   -o, --output enum             output format; tree lists the component's own referrers, widetree every resource too
                                 (must be one of [json table tree widetree yaml]) (default table)
+      --recursive int[=-1]      recursively follow componentReferences and list their attestations too; depth of recursion (-1 for unlimited)
       --type strings            filter to attestations whose type contains any of these substrings or matches a friendly alias (sbom, vex, signature, provenance, spdx, ...); repeatable; empty lists all
 ```
 

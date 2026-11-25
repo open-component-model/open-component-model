@@ -26,18 +26,20 @@ func TestRenderAttestations_JSONProjectsGroupsAndProvenance(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, renderAttestations(t.Context(), &buf, "json", "ref", groups))
+	require.NoError(t, renderAttestations(t.Context(), &buf, "json", component{Ref: "ref", Groups: groups}))
 
 	var rows []row
 	require.NoError(t, json.Unmarshal(buf.Bytes(), &rows))
 	require.Len(t, rows, 2)
 
-	// Sorted by resource: "(component)" sorts before "name=app".
-	assert.Equal(t, "(component)", rows[0].Resource, "the component group is labelled, not blank")
-	assert.Equal(t, "2026-11-24T15:04:40Z", rows[0].CreatedAt, "the creation timestamp travels in json")
-	assert.Equal(t, "name=app", rows[1].Resource)
-	assert.Equal(t, "sbom", rows[1].Type)
-	assert.Equal(t, repository.MediaTypeCycloneDXJSON, rows[1].MediaType)
+	// One component, so no COMPONENT column: the component-level group shows the
+	// component:version name in RESOURCE. "name=app" sorts before "ref".
+	assert.Equal(t, "name=app", rows[0].Resource)
+	assert.Equal(t, "sbom", rows[0].Type)
+	assert.Equal(t, repository.MediaTypeCycloneDXJSON, rows[0].MediaType)
+	assert.Equal(t, "ref", rows[1].Resource, "the component-level group shows the component:version name, not a placeholder")
+	assert.Equal(t, "ref", rows[1].Component, "every row is tagged with its owning component")
+	assert.Equal(t, "2026-11-24T15:04:40Z", rows[1].CreatedAt, "the creation timestamp travels in json")
 }
 
 func TestRenderTable_ShowsResourceAndFullDigest(t *testing.T) {
@@ -48,7 +50,7 @@ func TestRenderTable_ShowsResourceAndFullDigest(t *testing.T) {
 		}},
 	}
 	var buf bytes.Buffer
-	require.NoError(t, renderAttestations(t.Context(), &buf, "table", "ref", groups))
+	require.NoError(t, renderAttestations(t.Context(), &buf, "table", component{Ref: "ref", Groups: groups}))
 	out := buf.String()
 	assert.Contains(t, out, "name=app", "the table carries the resource origin")
 	assert.Contains(t, out, full, "the table shows the full digest, not a truncation")
@@ -121,7 +123,7 @@ func TestRenderTree_FacetedColumns(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, renderAttestations(t.Context(), &buf, "widetree", "my-ref", groups))
+	require.NoError(t, renderAttestations(t.Context(), &buf, "widetree", component{Ref: "my-ref", Groups: groups}))
 	out := buf.String()
 
 	assert.Contains(t, out, "my-ref", "the reference is the tree root")
@@ -142,4 +144,54 @@ func TestRenderTree_FacetedColumns(t *testing.T) {
 	// The raw bundle artifactType and predicate URL are no longer nesting nodes; the
 	// friendly category/format replace them in the tree (raw stays in json/yaml).
 	assert.NotContains(t, out, artifactSigstoreBundle, "the raw bundle artifactType is not a tree node")
+}
+
+func TestRenderAttestations_RecursiveAddsComponentColumn(t *testing.T) {
+	root := component{
+		Ref: "root:1.0.0",
+		Groups: []cliattestation.Group{
+			{Label: "", Attestations: []repository.Attestation{
+				{Source: repository.AttestationSourceOCIReferrer, ArtifactType: "sbom", MediaType: repository.MediaTypeCycloneDXJSON, ID: "sha256:root"},
+			}},
+		},
+		Children: []component{
+			{Ref: "child:2.0.0", Groups: []cliattestation.Group{
+				{Label: "", Attestations: []repository.Attestation{
+					{Source: repository.AttestationSourceOCIReferrer, ArtifactType: "vex", MediaType: mediaTypeOpenVEX, ID: "sha256:child"},
+				}},
+			}},
+		},
+	}
+	var buf bytes.Buffer
+	require.NoError(t, renderAttestations(t.Context(), &buf, "table", root))
+	out := buf.String()
+	assert.Contains(t, out, "COMPONENT", "more than one component adds the COMPONENT column")
+	assert.Contains(t, out, "root:1.0.0", "the root component is shown")
+	assert.Contains(t, out, "child:2.0.0", "the referenced component's attestations are listed too")
+	assert.Contains(t, out, "(component-level)", "with a COMPONENT column the component group is labelled (component-level)")
+}
+
+func TestRenderTree_ComponentLevelLabelAndRecursion(t *testing.T) {
+	root := component{
+		Ref: "root:1.0.0",
+		Groups: []cliattestation.Group{
+			{Label: "", Attestations: []repository.Attestation{
+				{Source: repository.AttestationSourceOCIReferrer, ArtifactType: "sbom", MediaType: repository.MediaTypeCycloneDXJSON, ID: "sha256:root"},
+			}},
+		},
+		Children: []component{
+			{Ref: "child:2.0.0", Groups: []cliattestation.Group{
+				{Label: "", Attestations: []repository.Attestation{
+					{Source: repository.AttestationSourceOCIReferrer, ArtifactType: "vex", MediaType: mediaTypeOpenVEX, ID: "sha256:child"},
+				}},
+			}},
+		},
+	}
+	var buf bytes.Buffer
+	require.NoError(t, renderAttestations(t.Context(), &buf, "tree", root))
+	out := buf.String()
+	assert.Contains(t, out, "root:1.0.0", "the root component:version is the tree root")
+	assert.Contains(t, out, "child:2.0.0", "the referenced component nests under the root")
+	assert.Contains(t, out, "(component-level)", "the component group is (component-level), the name is the parent node")
+	assert.NotContains(t, out, "(component)", "the bare (component) label is gone")
 }
