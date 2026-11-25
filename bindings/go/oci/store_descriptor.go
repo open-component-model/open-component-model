@@ -13,6 +13,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3"
 	"github.com/oras-project/oras-go/v3/content"
 	slogcontext "github.com/veqryn/slog-context"
 	"golang.org/x/sync/errgroup"
@@ -25,6 +26,7 @@ import (
 	ocidescriptor "ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
 	indexv1 "ocm.software/open-component-model/bindings/go/oci/spec/index/component/v1"
 	speclayout "ocm.software/open-component-model/bindings/go/oci/spec/layout"
+	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -73,6 +75,14 @@ type AddDescriptorOptions struct {
 	ReferrerTrackingPolicy        ReferrerTrackingPolicy
 	DescriptorEncodingMediaType   string
 	Layout                        Layout
+	// NormalizedGraph, if set, is the OCI graph of the component version in a source repository,
+	// rooted at its normalized manifest (see [Repository.DownloadComponentVersionGraph]). The
+	// normalized manifest and everything the graph reaches from it is then copied instead of
+	// being built from the descriptor, which keeps the referrers that sign that manifest. It
+	// requires LayoutNormalized.
+	NormalizedGraph ocistream.ResourceStream
+	// NormalizedGraphCopyOptions are the options NormalizedGraph is copied with.
+	NormalizedGraphCopyOptions oras.ExtendedCopyGraphOptions
 }
 
 // AddDescriptorToStore uploads a component descriptor to any given Store.
@@ -82,6 +92,9 @@ type AddDescriptorOptions struct {
 func AddDescriptorToStore(ctx context.Context, store spec.Store, descriptor *descriptor.Descriptor, opts AddDescriptorOptions) (*ociImageSpecV1.Descriptor, error) {
 	if opts.Layout == LayoutNormalized {
 		return addNormalizedLayout(ctx, store, descriptor, opts)
+	}
+	if opts.NormalizedGraph != nil {
+		return nil, fmt.Errorf("the graph of a normalized component version can only be added in the %s layout, not in the %s layout", LayoutNormalized, opts.Layout)
 	}
 
 	component, version := descriptor.Component.Name, descriptor.Component.Version

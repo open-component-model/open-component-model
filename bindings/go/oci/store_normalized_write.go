@@ -10,6 +10,7 @@ import (
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3"
 	slogcontext "github.com/veqryn/slog-context"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -40,7 +41,13 @@ func addNormalizedLayout(ctx context.Context, store spec.Store, desc *descriptor
 	if err := normalizedlayout.ValidateDigests(desc); err != nil {
 		return nil, err
 	}
-	mDesc, err := pushNormalizedManifest(ctx, store, desc, opts)
+	// M is either built from desc or copied with the referrers that sign it. Both end in the same
+	// manifest, to which this repository adds its own access referrer.
+	pushNormalized := pushNormalizedManifest
+	if opts.NormalizedGraph != nil {
+		pushNormalized = copyNormalizedGraph
+	}
+	mDesc, err := pushNormalized(ctx, store, desc, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -89,6 +96,55 @@ func pushNormalizedManifest(ctx context.Context, store spec.Store, desc *descrip
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("unable to push normalized manifest: %w", err)
 	}
 	return mDesc, nil
+}
+
+// copyNormalizedGraph copies the normalized manifest M of desc from opts.NormalizedGraph with
+// everything that graph reaches from it: its config and layer, its subject and, unlike
+// [pushNormalizedManifest], the referrers that sign it.
+//
+// M is copied as it is, so it has to be the normalized manifest of desc and fit the referrer
+// tracking policy of the target. Both are checked before the first write: the copy cannot be
+// undone, and signatures of a manifest that does not describe desc must not reach the target.
+func copyNormalizedGraph(ctx context.Context, store spec.Store, desc *descriptor.Descriptor, opts AddDescriptorOptions) (ociImageSpecV1.Descriptor, error) {
+	component, version := desc.Component.Name, desc.Component.Version
+	graph := opts.NormalizedGraph
+	root := graph.Root()
+
+	raw, err := fetchVerified(ctx, graph, ociImageSpecV1.Descriptor{MediaType: root.MediaType, Digest: root.Digest, Size: root.Size})
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to fetch normalized manifest %s of component version %s:%s: %w", root.Digest, component, version, err)
+	}
+	var manifest ociImageSpecV1.Manifest
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to unmarshal normalized manifest %s: %w", root.Digest, err)
+	}
+	if root.MediaType != ociImageSpecV1.MediaTypeImageManifest || manifest.ArtifactType != ocidescriptor.ArtifactTypeNormalizedDescriptor {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("%s (%s with artifact type %q) is not a normalized manifest", root.Digest, root.MediaType, manifest.ArtifactType)
+	}
+	if len(manifest.Layers) != 1 {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("normalized manifest %s must have exactly one layer, got %d", root.Digest, len(manifest.Layers))
+	}
+	if err := normalizedlayout.VerifyNormalizedLayerMatchesAccess(manifest.Layers[0], desc); err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("descriptor of component version %s:%s changed during transfer; source signatures do not apply: %w", component, version, err)
+	}
+
+	hasSubject := manifest.Subject != nil
+	if tracked := opts.ReferrerTrackingPolicy == ReferrerTrackingPolicyByIndexAndSubject; hasSubject != tracked {
+		found, expected := "no subject", "the component index as subject"
+		if hasSubject {
+			found, expected = "a subject", "no subject"
+		}
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("normalized manifest %s of component version %s:%s has %s, but the referrer tracking policy of the target requires %s: "+
+			"the manifest is copied unchanged, so source and target must use the same referrer tracking policy", root.Digest, component, version, found, expected)
+	}
+
+	copyOpts := opts.NormalizedGraphCopyOptions
+	copyOpts.FindSuccessors = rejectAccessReferrers(copyOpts.FindSuccessors)
+	slogcontext.Log(ctx, slog.LevelDebug, "copying normalized manifest with its signature referrers", log.DescriptorLogAttr(root))
+	if err := oras.ExtendedCopyGraph(ctx, graph, store, root, copyOpts); err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to copy normalized manifest %s with its signature referrers: %w", root.Digest, err)
+	}
+	return root, nil
 }
 
 // pushAccessReferrer pushes the access referrer A of the normalized manifest: the full,
