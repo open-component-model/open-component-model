@@ -263,19 +263,27 @@ func layoutOf(manifest *ociImageSpecV1.Manifest, index *ociImageSpecV1.Index) La
 	return LayoutV2
 }
 
-// getStoredLayout reports the layout of the component version tagged with reference. Errors
-// resolving the tag are returned unwrapped from the store, so callers can detect absence via
-// errdef.ErrNotFound.
-func getStoredLayout(ctx context.Context, store spec.Store, reference string) (Layout, error) {
+// storedRoot is the artifact a component version reference resolves to: an image manifest, or the
+// image index of a LayoutV2 component version with OCI-native local blobs.
+type storedRoot struct {
+	descriptor ociImageSpecV1.Descriptor
+	// body is the content of the artifact.
+	body   []byte
+	layout Layout
+}
+
+// getStoredLayout resolves reference and reports the artifact the component version is stored as
+// together with its layout. Absence is detectable via errdef.ErrNotFound.
+func getStoredLayout(ctx context.Context, store spec.Store, reference string) (storedRoot, error) {
 	base, err := store.Resolve(ctx, reference)
 	if err != nil {
-		return LayoutV2, err
+		return storedRoot{}, fmt.Errorf("failed to resolve reference %q: %w", reference, err)
 	}
-	manifest, index, err := getDescriptorOCIImageManifest(ctx, store, base)
+	body, manifest, index, err := getDescriptorOCIImageManifest(ctx, store, base)
 	if err != nil {
-		return LayoutV2, fmt.Errorf("failed to get manifest: %w", err)
+		return storedRoot{}, fmt.Errorf("failed to get manifest: %w", err)
 	}
-	return layoutOf(&manifest, index), nil
+	return storedRoot{descriptor: base, body: body, layout: layoutOf(&manifest, index)}, nil
 }
 
 // getDescriptorFromStore resolves reference once and retrieves the component descriptor for either
@@ -286,7 +294,7 @@ func getDescriptorFromStore(ctx context.Context, store spec.Store, reference str
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve reference %q: %w", reference, err)
 	}
-	manifest, index, err := getDescriptorOCIImageManifest(ctx, store, base)
+	_, manifest, index, err := getDescriptorOCIImageManifest(ctx, store, base)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get manifest: %w", err)
 	}

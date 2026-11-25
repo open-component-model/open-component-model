@@ -206,18 +206,11 @@ func tagIdempotent(ctx context.Context, store spec.Store, desc ociImageSpecV1.De
 // to an artifact of component, it reports the layout of that artifact, as that is what is read.
 func (repo *Repository) GetComponentVersionLayout(ctx context.Context, component, version string) (string, error) {
 	ctx = slogcontext.NewCtx(ctx, repo.logger)
-	reference, store, err := repo.componentVersionStore(ctx, component, version)
+	root, _, err := repo.storedRoot(ctx, component, version)
 	if err != nil {
 		return "", err
 	}
-	layout, err := getStoredLayout(ctx, store, reference)
-	if errors.Is(err, errdef.ErrNotFound) {
-		return "", errors.Join(repository.ErrNotFound, fmt.Errorf("component version %s/%s not found: %w", component, version, err))
-	}
-	if err != nil {
-		return "", err
-	}
-	return layout.String(), nil
+	return root.layout.String(), nil
 }
 
 func (repo *Repository) ListComponentVersions(ctx context.Context, component string) (_ []string, err error) {
@@ -1156,47 +1149,48 @@ func (repo *Repository) targetOCIImageAccess(access runtime.Typed) (*accessv1.OC
 }
 
 // getDescriptorOCIImageManifest fetches the manifest for an already resolved component version
-// descriptor from the store. It handles both OCI image indexes and OCI image manifests.
-func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, base ociImageSpecV1.Descriptor) (manifest ociImageSpecV1.Manifest, index *ociImageSpecV1.Index, err error) {
+// descriptor from the store. It handles both OCI image indexes and OCI image manifests. raw is the
+// content of base itself.
+func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, base ociImageSpecV1.Descriptor) (raw []byte, manifest ociImageSpecV1.Manifest, index *ociImageSpecV1.Index, err error) {
 	slogcontext.Log(ctx, slog.LevelDebug, "fetching descriptor", log.DescriptorLogAttr(base))
-	manifestRaw, err := fetchVerified(ctx, store, ociImageSpecV1.Descriptor{
+	raw, err = fetchVerified(ctx, store, ociImageSpecV1.Descriptor{
 		MediaType: base.MediaType,
 		Digest:    base.Digest,
 		Size:      base.Size,
 	})
 	if err != nil {
-		return ociImageSpecV1.Manifest{}, nil, err
+		return nil, ociImageSpecV1.Manifest{}, nil, err
 	}
 
 	switch base.MediaType {
 	case ociImageSpecV1.MediaTypeImageIndex:
-		if err := json.Unmarshal(manifestRaw, &index); err != nil {
-			return ociImageSpecV1.Manifest{}, nil, err
+		if err := json.Unmarshal(raw, &index); err != nil {
+			return nil, ociImageSpecV1.Manifest{}, nil, err
 		}
 		if len(index.Manifests) == 0 {
-			return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("index has no manifests")
+			return nil, ociImageSpecV1.Manifest{}, nil, fmt.Errorf("index has no manifests")
 		}
 		descriptorManifest := index.Manifests[0]
 		if descriptorManifest.MediaType != ociImageSpecV1.MediaTypeImageManifest {
-			return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("index manifest is not an OCI image manifest")
+			return nil, ociImageSpecV1.Manifest{}, nil, fmt.Errorf("index manifest is not an OCI image manifest")
 		}
 		slogcontext.Log(ctx, slog.LevelDebug, "fetching first manifest from index", log.DescriptorLogAttr(descriptorManifest))
 		indexManifestRaw, err := fetchVerified(ctx, store, descriptorManifest)
 		if err != nil {
-			return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("failed to fetch manifest: %w", err)
+			return nil, ociImageSpecV1.Manifest{}, nil, fmt.Errorf("failed to fetch manifest: %w", err)
 		}
 		if err := json.Unmarshal(indexManifestRaw, &manifest); err != nil {
-			return ociImageSpecV1.Manifest{}, nil, err
+			return nil, ociImageSpecV1.Manifest{}, nil, err
 		}
 	case ociImageSpecV1.MediaTypeImageManifest:
-		if err := json.Unmarshal(manifestRaw, &manifest); err != nil {
-			return ociImageSpecV1.Manifest{}, nil, err
+		if err := json.Unmarshal(raw, &manifest); err != nil {
+			return nil, ociImageSpecV1.Manifest{}, nil, err
 		}
 	default:
-		return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("unsupported media type %q", base.MediaType)
+		return nil, ociImageSpecV1.Manifest{}, nil, fmt.Errorf("unsupported media type %q", base.MediaType)
 	}
 
-	return manifest, index, nil
+	return raw, manifest, index, nil
 }
 
 func collectDescriptors(index *ociImageSpecV1.Index, manifest *ociImageSpecV1.Manifest) []ociImageSpecV1.Descriptor {

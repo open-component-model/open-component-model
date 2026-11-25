@@ -26,20 +26,11 @@ func appendGetLocalResourceTransform(tgd *transformv1alpha1.TransformationGraphD
 		return fmt.Errorf("choosing get local resource type for source repository: %w", err)
 	}
 
-	sourceRepoUnstructured, err := asUnstructured(val.SourceRepository)
+	spec, err := sourceComponentVersion(val)
 	if err != nil {
-		return fmt.Errorf("cannot convert source repository spec to unstructured: %w", err)
+		return err
 	}
-
-	spec := map[string]any{
-		"repository":       sourceRepoUnstructured.Data,
-		"component":        val.Descriptor.Component.Name,
-		"version":          val.Descriptor.Component.Version,
-		"resourceIdentity": resourceIdentityMap,
-	}
-	if val.Pin != "" {
-		spec["digest"] = val.Pin
-	}
+	spec["resourceIdentity"] = resourceIdentityMap
 	tgd.Transformations = append(tgd.Transformations, transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
 			Type:  getLocalResourceType,
@@ -61,23 +52,15 @@ func processLocalBlob(resource descriptorv2.Resource, id string, val *discoveryV
 	resourceIdentity := resource.ToIdentity()
 	transferID := fmt.Sprintf("%sTransfer%s", id, identityToTransformationID(resourceIdentity))
 
-	sourceRepo, err := asUnstructured(val.SourceRepository)
+	source, err := sourceComponentVersion(val)
 	if err != nil {
-		return fmt.Errorf("cannot convert source repository spec to unstructured: %w", err)
+		return err
 	}
 	identity := make(map[string]any, len(resourceIdentity))
 	for k, v := range resourceIdentity {
 		identity[k] = v
 	}
-	source := map[string]any{
-		"repository":       sourceRepo.Data,
-		"component":        val.Descriptor.Component.Name,
-		"version":          val.Descriptor.Component.Version,
-		"resourceIdentity": identity,
-	}
-	if val.Pin != "" {
-		source["digest"] = val.Pin
-	}
+	source["resourceIdentity"] = identity
 
 	var transform transformv1alpha1.GenericTransformation
 	if ociImageReference == "" {

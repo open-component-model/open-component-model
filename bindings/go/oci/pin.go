@@ -85,6 +85,28 @@ func (repo *Repository) componentVersionStore(ctx context.Context, component, ve
 	return repo.getStore(ctx, component, version)
 }
 
+// storedRoot returns the artifact component in version is stored as and the store that holds it:
+// the pinned artifact if the repository is pinned to an artifact of component, else what the
+// version tag resolves to. An artifact that does not exist is reported as [repository.ErrNotFound],
+// for a pinned repository together with what the pin missed.
+func (repo *Repository) storedRoot(ctx context.Context, component, version string) (storedRoot, spec.Store, error) {
+	reference, store, err := repo.componentVersionStore(ctx, component, version)
+	if err != nil {
+		return storedRoot{}, nil, err
+	}
+	root, err := getStoredLayout(ctx, store, reference)
+	if errors.Is(err, errdef.ErrNotFound) {
+		if pin := repo.pinFor(component); pin != nil {
+			err = repo.pinNotFoundError(ctx, pin, version, err)
+		}
+		return storedRoot{}, nil, errors.Join(repository.ErrNotFound, fmt.Errorf("component version %s/%s not found: %w", component, version, err))
+	}
+	if err != nil {
+		return storedRoot{}, nil, err
+	}
+	return root, store, nil
+}
+
 // readComponentVersion reads the descriptor of component in version together with the OCI
 // artifact it is stored as. If the repository is pinned to an artifact of component, the
 // descriptor is read from that artifact instead of resolving the version tag.

@@ -149,9 +149,11 @@ repository and never signed:
      (the OCI referrers API filtered by `artifactType`, with the referrers tag schema `sha256-<hex>` as fallback, or
      the CTF index). A listed entry without an `artifactType` is not considered. The listing does not grow with the
      number of signatures, and no signature referrer is fetched.
-   * The candidates are ordered by the `org.opencontainers.image.created` annotation the listing reports for them,
-     newest first. A missing or malformed value sorts oldest; ties break by the lowest manifest digest for a
-     reproducible order.
+   * The candidates are ordered by their `org.opencontainers.image.created` annotation, newest first. The listing
+     reports it, so ordering costs no request. A candidate that is listed without a parseable value, for example
+     by a registry or a referrers tag schema index that omits annotations, is fetched before ordering and the
+     annotation is read from its manifest or index. A value that is missing or malformed there as well sorts
+     oldest; ties break by the lowest manifest digest for a reproducible order.
    * The candidates are fetched and validated in that order, and the first valid one is selected. A candidate is
      valid if its manifest has the access `artifactType` and `M` as `subject`, passes the bind check and satisfies
      the digest rules below. An invalid candidate is skipped with a warning that names its digest and the reason.
@@ -159,10 +161,10 @@ repository and never signed:
 
    Re-adding the version, transfers and third-party pushes leave several valid referrers of the same `M`, so the
    newest reflects the last writer, and the digest rules plus the local-blob verification below still guard the
-   content a selected referrer points at. With a valid newest candidate, exactly one access referrer is fetched.
-   An invalid candidate is skipped instead of failing the read, because a single referrer stamped with a time in
-   the future would otherwise make the version unreadable: later writes never sort before it, and registries often
-   cannot delete it.
+   content a selected referrer points at. With a valid newest candidate and a listing that reports `created` for
+   every candidate, exactly one access referrer is fetched. An invalid candidate is skipped instead of failing the
+   read, because a single referrer stamped with a time in the future would otherwise make the version unreadable:
+   later writes never sort before it, and registries often cannot delete it.
 4. **Bind check**: `normalise(F, jsonNormalisation/v4alpha1)` must be byte-identical to `N`. On mismatch, reading
    fails with an error that names possible tampering.
 5. **Digest rules** on the bind-checked `F`: the rules of `signing.IsSafelyDigestible` and
@@ -212,12 +214,16 @@ and never lists access referrers as versions.
   every manifest from the descriptor. The same applies, with a warning, to a normalized version whose source
   repository specification is unknown to the graph builder.
 * Discovery detects the layout (`repository.ComponentVersionLayoutDetector`) on the artifact the descriptor was read
-  from, and pins a normalized source to that artifact: `source.digest` is the OCI digest pin of a root component
-  version, or else the digest the version tag resolved to during discovery. The node opens the source pinned to that
-  digest (`repository.PinRepository`) and reads `M` and its referrers from that artifact without resolving the tag
-  again. Local blobs of the version are read from the same artifact. If the tag moves to other content while
-  discovery runs, the transfer fails: the pinned artifact is not a normalized manifest, or the bind check below does
-  not pass.
+  from. It pins a normalized source to that artifact if the source repository can resolve a version to a digest
+  (`repository.DigestPinnableRepository`, which OCI registries and CTF archives implement): `source.digest` is the
+  OCI digest pin of a root component version, or else the digest the version tag resolved to during discovery. The
+  node opens the source pinned to that digest (`repository.PinRepository`) and reads `M` and its referrers from that
+  artifact without resolving the tag again. Local blobs of the version are read from the same artifact. If the tag
+  moves to other content while discovery runs, the transfer fails: the pinned artifact is not a normalized manifest,
+  or the bind check below does not pass.
+* A source repository that cannot resolve a digest, such as a wrapper around an OCI repository that does not
+  forward the capability, leaves `source.digest` empty. The node then reads `M` through the version tag. The bind
+  check below still guards that read: an `M` that does not describe the transferred descriptor fails the node.
 * The node copies from the source store into the target store, without an intermediate file. The source hands out
   its store as a graph with `M` as root (`DownloadComponentVersionGraph`), and the target adds the component version
   from it (`AddComponentVersionFromGraph`) in this order:

@@ -26,6 +26,9 @@ import (
 const (
 	cosignSignatureType = "application/vnd.dev.cosign.artifact.sig.v1+json"
 	attestationType     = "application/vnd.dev.sigstore.bundle.v0.3+json"
+	// artifactManifestType is the withdrawn OCI artifact manifest. Registries that still accept it
+	// list it as a referrer by its artifactType, like an image manifest.
+	artifactManifestType = "application/vnd.oci.artifact.manifest.v1+json"
 )
 
 // countingGraph counts the requests a walk issues against a graph storage, per digest. It embeds
@@ -142,6 +145,18 @@ func pushConfigTypedReferrerManifest(t *testing.T, ctx context.Context, store sp
 	return desc
 }
 
+// pushReferrerArtifactManifest pushes an OCI artifact manifest as referrer of subject.
+func pushReferrerArtifactManifest(t *testing.T, ctx context.Context, store spec.Store, subject ociImageSpecV1.Descriptor, artifactType string) ociImageSpecV1.Descriptor {
+	t.Helper()
+	desc := pushJSON(t, ctx, store, artifactManifestType, map[string]any{
+		"mediaType":    artifactManifestType,
+		"artifactType": artifactType,
+		"subject":      ociImageSpecV1.Descriptor{MediaType: subject.MediaType, Digest: subject.Digest, Size: subject.Size},
+	})
+	desc.ArtifactType = artifactType
+	return desc
+}
+
 // signatureGraphFixture is a normalized component version in a CTF with access and signature
 // referrers of its normalized manifest.
 type signatureGraphFixture struct {
@@ -232,6 +247,23 @@ func TestSignatureGraph_Predecessors(t *testing.T) {
 		r.ElementsMatch(digestsOf(f.signatures), digestsOf(got), "the body decides: manifest, index and config media type")
 		r.Equal(requestCounts(1, append(f.access, f.signatures...)...), src.fetches, "one fetch per untyped referrer")
 		r.Equal(requestCounts(1, f.signatures...), src.exists)
+	})
+
+	t.Run("access-typed artifact manifest listed without artifact type is hidden", func(t *testing.T) {
+		r := require.New(t)
+		ctx := t.Context()
+		store := memory.New()
+		subject := pushJSON(t, ctx, store, ociImageSpecV1.MediaTypeImageManifest, ociImageSpecV1.Manifest{MediaType: ociImageSpecV1.MediaTypeImageManifest})
+		access := pushReferrerArtifactManifest(t, ctx, store, subject, ocidescriptor.ArtifactTypeAccessDescriptor)
+		signature := pushReferrerArtifactManifest(t, ctx, store, subject, cosignSignatureType)
+		access.ArtifactType, signature.ArtifactType = "", ""
+		src := newCountingGraph(listedReferrers{ReadOnlyGraphStorage: store, referrers: []ociImageSpecV1.Descriptor{access, signature}})
+
+		got, err := oci.SignatureGraph(src).Predecessors(ctx, subject)
+		r.NoError(err)
+
+		r.Equal([]ociImageSpecV1.Descriptor{signature}, got, "a registry lists an artifact manifest by its artifactType, so the target would list it as access referrer")
+		r.Equal(requestCounts(1, access, signature), src.fetches)
 	})
 
 	t.Run("untyped referrer of another media type is kept without a fetch", func(t *testing.T) {
@@ -382,6 +414,10 @@ func TestRejectAccessReferrers(t *testing.T) {
 		{name: "image index", push: func(t *testing.T, store spec.Store, subject ociImageSpecV1.Descriptor) ociImageSpecV1.Descriptor {
 			t.Helper()
 			return pushReferrerIndex(t, t.Context(), store, subject, ocidescriptor.ArtifactTypeAccessDescriptor)
+		}},
+		{name: "artifact manifest", push: func(t *testing.T, store spec.Store, subject ociImageSpecV1.Descriptor) ociImageSpecV1.Descriptor {
+			t.Helper()
+			return pushReferrerArtifactManifest(t, t.Context(), store, subject, ocidescriptor.ArtifactTypeAccessDescriptor)
 		}},
 		{name: "image manifest typed by its config", push: func(t *testing.T, store spec.Store, subject ociImageSpecV1.Descriptor) ociImageSpecV1.Descriptor {
 			t.Helper()

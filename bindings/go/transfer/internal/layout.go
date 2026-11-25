@@ -2,13 +2,11 @@ package internal
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
-	ociv1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/transformation/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -22,29 +20,6 @@ func isOCIOrCTF(spec runtime.Typed) bool {
 		return true
 	default:
 		return false
-	}
-}
-
-// chooseTransferComponentVersionType returns the fused transformation that adds a component
-// version stored in the normalized layout in the source repository to the target repository.
-func chooseTransferComponentVersionType(source, target runtime.Typed) (runtime.Type, error) {
-	sourceOCI, err := isOCIRepository(source)
-	if err != nil {
-		return runtime.Type{}, fmt.Errorf("source repository: %w", err)
-	}
-	targetOCI, err := isOCIRepository(target)
-	if err != nil {
-		return runtime.Type{}, fmt.Errorf("target repository: %w", err)
-	}
-	switch {
-	case sourceOCI && targetOCI:
-		return ociv1alpha1.TransferOCIComponentVersionToOCIV1alpha1, nil
-	case sourceOCI:
-		return ociv1alpha1.TransferOCIComponentVersionToCTFV1alpha1, nil
-	case targetOCI:
-		return ociv1alpha1.TransferCTFComponentVersionToOCIV1alpha1, nil
-	default:
-		return ociv1alpha1.TransferCTFComponentVersionToCTFV1alpha1, nil
 	}
 }
 
@@ -71,17 +46,9 @@ func componentVersionGraphSource(ctx context.Context, val *discoveryValue, toSpe
 		return nil, false, nil
 	}
 
-	sourceRepo, err := asUnstructured(val.SourceRepository)
+	source, err = sourceComponentVersion(val)
 	if err != nil {
-		return nil, false, fmt.Errorf("cannot convert source repository spec to unstructured: %w", err)
-	}
-	source = map[string]any{
-		"repository": sourceRepo.Data,
-		"component":  component,
-		"version":    version,
-	}
-	if val.Pin != "" {
-		source["digest"] = val.Pin
+		return nil, false, err
 	}
 	return source, true, nil
 }

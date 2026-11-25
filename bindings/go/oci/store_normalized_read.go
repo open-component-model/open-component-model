@@ -51,13 +51,13 @@ func GetNormalizedComponentVersion(ctx context.Context, store spec.Store, normal
 // signatures, accesses and non-signing labels, so they may carry different descriptors. The read
 // returns the newest valid one.
 //
-// Candidates are the referrers listed with the access artifact type, ordered by the creation time
-// the listing reports for them, see compareCreated. They are fetched and validated in that order
-// until one is valid, see loadAccessReferrer. With a valid newest candidate the read costs the same
-// however many signatures and superseded access referrers the version has. An invalid candidate is
-// skipped with a warning instead of failing the read: otherwise a single referrer stamped with a
-// time in the future would make the version unreadable, since later writes never sort before it
-// and registries often cannot delete it.
+// Candidates are the referrers listed with the access artifact type, ordered by their creation
+// time, see newestFirst. They are fetched and validated in that order until one is valid, see
+// loadAccessReferrer. With a valid newest candidate the read costs the same however many signatures
+// and superseded access referrers the version has, as long as the listing reports the creation
+// times. An invalid candidate is skipped with a warning instead of failing the read: otherwise a
+// single referrer stamped with a time in the future would make the version unreadable, since later
+// writes never sort before it and registries often cannot delete it.
 func getNormalizedComponentVersion(ctx context.Context, store spec.Store, normalized ociImageSpecV1.Descriptor, normManifest *ociImageSpecV1.Manifest, unmarshal ocidescriptor.UnmarshalFunc) (*storedComponentVersion, error) {
 	if len(normManifest.Layers) != 1 {
 		return nil, fmt.Errorf("normalized manifest %s must have exactly one layer, got %d", normalized.Digest, len(normManifest.Layers))
@@ -71,61 +71,116 @@ func getNormalizedComponentVersion(ctx context.Context, store spec.Store, normal
 		return nil, fmt.Errorf("failed to fetch normalized descriptor layer: %w", err)
 	}
 
-	candidates, err := registry.Referrers(ctx, store, normalized, ocidescriptor.ArtifactTypeAccessDescriptor)
+	listed, err := registry.Referrers(ctx, store, normalized, ocidescriptor.ArtifactTypeAccessDescriptor)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list access referrers of normalized manifest %s: %w", normalized.Digest, err)
 	}
-	if len(candidates) == 0 {
+	if len(listed) == 0 {
 		return nil, fmt.Errorf("no access referrer found for normalized manifest %s", normalized.Digest)
 	}
-	slices.SortFunc(candidates, compareCreated)
 
 	var rejected []error
-	for _, candidate := range candidates {
-		cv, err := loadAccessReferrer(ctx, store, candidate, normalized, signedNormalized, unmarshal)
-		if err == nil {
-			return cv, nil
-		}
+	// skip records an invalid candidate. A cancelled read fails instead of moving on to a candidate
+	// that only looks older because the newer ones could not be read.
+	skip := func(candidate ociImageSpecV1.Descriptor, err error) error {
 		if ctx.Err() != nil {
-			return nil, fmt.Errorf("failed to read access referrer %s of normalized manifest %s: %w", candidate.Digest, normalized.Digest, err)
+			return fmt.Errorf("failed to read access referrer %s of normalized manifest %s: %w", candidate.Digest, normalized.Digest, err)
 		}
-		slogcontext.Log(ctx, slog.LevelWarn, "skipping invalid access referrer of normalized manifest",
+		slogcontext.Warn(ctx, "skipping invalid access referrer of normalized manifest",
 			log.DescriptorLogAttr(candidate),
 			slog.String("normalized", normalized.Digest.String()),
 			slog.Any("error", err))
 		rejected = append(rejected, fmt.Errorf("access referrer %s: %w", candidate.Digest, err))
+		return nil
+	}
+
+	candidates, err := newestFirst(ctx, store, listed, skip)
+	if err != nil {
+		return nil, err
+	}
+	for i := range candidates {
+		cv, err := loadAccessReferrer(ctx, store, &candidates[i], normalized, signedNormalized, unmarshal)
+		if err == nil {
+			return cv, nil
+		}
+		if err := skip(candidates[i].Descriptor, err); err != nil {
+			return nil, err
+		}
 	}
 	return nil, fmt.Errorf("no valid access referrer found for normalized manifest %s: %w", normalized.Digest, errors.Join(rejected...))
 }
 
-// compareCreated orders listed referrers by their org.opencontainers.image.created annotation,
-// newest first. Ties (equal or absent timestamps) break by the lowest digest for a reproducible
-// order.
-func compareCreated(a, b ociImageSpecV1.Descriptor) int {
-	createdA := parseCreated(a.Annotations[ociImageSpecV1.AnnotationCreated])
-	createdB := parseCreated(b.Annotations[ociImageSpecV1.AnnotationCreated])
-	if c := createdB.Compare(createdA); c != 0 {
-		return c
+// accessCandidate is a listed access referrer of a normalized manifest.
+type accessCandidate struct {
+	ociImageSpecV1.Descriptor
+	created time.Time
+	// body is the manifest or index of the candidate once it was fetched.
+	body []byte
+}
+
+// fetch returns the manifest or index of the candidate with its decoded header. The content is
+// requested at most once.
+func (c *accessCandidate) fetch(ctx context.Context, store spec.Store) ([]byte, manifestHeader, error) {
+	if c.body == nil {
+		body, err := content.FetchAll(ctx, store, c.Descriptor)
+		if err != nil {
+			return nil, manifestHeader{}, fmt.Errorf("failed to fetch: %w", err)
+		}
+		c.body = body
 	}
-	return strings.Compare(a.Digest.String(), b.Digest.String())
+	header, err := decodeManifestHeader(c.body)
+	if err != nil {
+		return nil, manifestHeader{}, fmt.Errorf("failed to decode: %w", err)
+	}
+	return c.body, header, nil
+}
+
+// newestFirst orders the listed access referrers by their org.opencontainers.image.created
+// annotation, newest first. Ties (equal or absent timestamps) break by the lowest digest for a
+// reproducible order.
+//
+// Listings have to report the annotations of a manifest, so the order usually costs no request. A
+// registry or a referrers tag schema index that omits them would make all candidates tie, and the
+// lowest digest would win over the newest write. A candidate listed without a creation time is
+// therefore fetched for the annotation of its manifest. One that cannot be read is handed to skip
+// and left out.
+func newestFirst(ctx context.Context, store spec.Store, listed []ociImageSpecV1.Descriptor, skip func(ociImageSpecV1.Descriptor, error) error) ([]accessCandidate, error) {
+	candidates := make([]accessCandidate, 0, len(listed))
+	for _, desc := range listed {
+		candidate := accessCandidate{Descriptor: desc}
+		created, ok := parseCreated(desc.Annotations[ociImageSpecV1.AnnotationCreated])
+		if !ok {
+			_, header, err := candidate.fetch(ctx, store)
+			if err != nil {
+				if err := skip(desc, err); err != nil {
+					return nil, err
+				}
+				continue
+			}
+			// A value that is absent or malformed in the manifest as well is the zero time, which
+			// sorts oldest, so a stamped referrer always wins over an unstamped one.
+			created, _ = parseCreated(header.Annotations[ociImageSpecV1.AnnotationCreated])
+		}
+		candidate.created = created
+		candidates = append(candidates, candidate)
+	}
+	slices.SortFunc(candidates, func(a, b accessCandidate) int {
+		if c := b.created.Compare(a.created); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Digest.String(), b.Digest.String())
+	})
+	return candidates, nil
 }
 
 // loadAccessReferrer fetches target and validates it as access referrer of normalized: its
 // artifact type is the access one, its subject is the normalized manifest, its descriptor
 // re-normalizes to the normalized layer signedNormalized (bind check), and that descriptor
 // satisfies the digest rules of normalizedlayout.ValidateDigests.
-func loadAccessReferrer(ctx context.Context, store spec.Store, target, normalized ociImageSpecV1.Descriptor, signedNormalized []byte, unmarshal ocidescriptor.UnmarshalFunc) (*storedComponentVersion, error) {
-	raw, err := content.FetchAll(ctx, store, target)
+func loadAccessReferrer(ctx context.Context, store spec.Store, target *accessCandidate, normalized ociImageSpecV1.Descriptor, signedNormalized []byte, unmarshal ocidescriptor.UnmarshalFunc) (*storedComponentVersion, error) {
+	raw, header, err := target.fetch(ctx, store)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch: %w", err)
-	}
-	var header struct {
-		MediaType    string                     `json:"mediaType"`
-		ArtifactType string                     `json:"artifactType"`
-		Subject      *ociImageSpecV1.Descriptor `json:"subject"`
-	}
-	if err := json.Unmarshal(raw, &header); err != nil {
-		return nil, fmt.Errorf("failed to decode: %w", err)
+		return nil, err
 	}
 	if header.ArtifactType != ocidescriptor.ArtifactTypeAccessDescriptor {
 		return nil, fmt.Errorf("artifact type is %q, expected %q", header.ArtifactType, ocidescriptor.ArtifactTypeAccessDescriptor)
@@ -188,12 +243,9 @@ func loadAccessReferrer(ctx context.Context, store spec.Store, target, normalize
 	return &storedComponentVersion{descriptor: full, manifest: &manifest, index: index, layout: LayoutNormalized}, nil
 }
 
-// parseCreated parses an org.opencontainers.image.created annotation. An absent or malformed value
-// yields the zero time, which sorts oldest, so a stamped referrer always wins over an unstamped one.
-func parseCreated(value string) time.Time {
+// parseCreated parses an org.opencontainers.image.created annotation. It reports false and the
+// zero time for an absent or malformed value.
+func parseCreated(value string) (time.Time, bool) {
 	t, err := time.Parse(time.RFC3339Nano, value)
-	if err != nil {
-		return time.Time{}
-	}
-	return t
+	return t, err == nil
 }

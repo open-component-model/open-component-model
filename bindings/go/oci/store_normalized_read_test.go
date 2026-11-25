@@ -6,6 +6,8 @@ import (
 	"encoding/json/v2"
 	"io"
 	"log/slog"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -50,6 +52,26 @@ func (s *fetchRecorder) Fetch(ctx context.Context, target ociImageSpecV1.Descrip
 
 func (s *fetchRecorder) Referrers(ctx context.Context, desc ociImageSpecV1.Descriptor, artifactType string, fn func([]ociImageSpecV1.Descriptor) error) error {
 	return s.Store.(registry.ReferrerLister).Referrers(ctx, desc, artifactType, fn)
+}
+
+// unannotatedReferrers lists referrers without their annotations, like a registry or a referrers tag
+// schema index that does not copy them from the manifests. With only set, just those referrers lose
+// their annotations.
+type unannotatedReferrers struct {
+	*fetchRecorder
+	only []digest.Digest
+}
+
+func (s unannotatedReferrers) Referrers(ctx context.Context, desc ociImageSpecV1.Descriptor, artifactType string, fn func([]ociImageSpecV1.Descriptor) error) error {
+	return s.fetchRecorder.Referrers(ctx, desc, artifactType, func(referrers []ociImageSpecV1.Descriptor) error {
+		listed := slices.Clone(referrers)
+		for i := range listed {
+			if len(s.only) == 0 || slices.Contains(s.only, listed[i].Digest) {
+				listed[i].Annotations = nil
+			}
+		}
+		return fn(listed)
+	})
 }
 
 // cancelOnFetch cancels the read once target is fetched.
@@ -260,6 +282,52 @@ func TestNormalizedLayout_AccessReferrerSelection(t *testing.T) {
 			r.NotContains(store.fetched, desc.Digest)
 		}
 		r.Len(store.fetched, 4, "normalized manifest and its layer, access manifest and its descriptor layer")
+	})
+
+	t.Run("a listing without annotations is ordered by the created of the manifests", func(t *testing.T) {
+		r := require.New(t)
+		ctx := t.Context()
+		recorder := &fetchRecorder{Store: ctfStore(t)}
+		m := add(t, recorder.Store)
+		newest := pushAccessReferrer(t, ctx, recorder.Store, m, signed("newest"), in(time.Hour))
+		// Candidates without created tie and the lowest digest wins, so the newest must not have it.
+		for salt := 0; ; salt++ {
+			older := pushAccessManifestWith(t, ctx, recorder.Store, m, signed("older"), nil, func(m *ociImageSpecV1.Manifest) {
+				m.Annotations[ociImageSpecV1.AnnotationCreated] = longAgo
+				m.Annotations["test.salt"] = strconv.Itoa(salt)
+			})
+			if older.Digest < newest.Digest {
+				break
+			}
+		}
+
+		got, err := oci.GetNormalizedComponentVersion(ctx, unannotatedReferrers{fetchRecorder: recorder}, m, ocidescriptor.DefaultDescriptorUnmarshalFunc)
+		r.NoError(err)
+		r.Equal("newest", selected(got))
+		fetched := slices.Clone(recorder.fetched)
+		slices.Sort(fetched)
+		r.Equal(slices.Compact(slices.Clone(fetched)), fetched, "a manifest fetched to order the candidates must not be fetched again to read it")
+	})
+
+	t.Run("only candidates listed without created are fetched to order them", func(t *testing.T) {
+		r := require.New(t)
+		ctx := t.Context()
+		recorder := &fetchRecorder{Store: ctfStore(t)}
+		m := add(t, recorder.Store)
+		notFetched := []ociImageSpecV1.Descriptor{
+			accessReferrerOf(t, ctx, recorder.Store, m),
+			pushAccessReferrer(t, ctx, recorder.Store, m, signed("superseded"), longAgo),
+		}
+		newest := pushAccessReferrer(t, ctx, recorder.Store, m, signed("newest"), in(time.Hour))
+
+		store := unannotatedReferrers{fetchRecorder: recorder, only: []digest.Digest{newest.Digest}}
+		got, err := oci.GetNormalizedComponentVersion(ctx, store, m, ocidescriptor.DefaultDescriptorUnmarshalFunc)
+		r.NoError(err)
+		r.Equal("newest", selected(got))
+		for _, desc := range notFetched {
+			r.NotContains(recorder.fetched, desc.Digest)
+		}
+		r.Len(recorder.fetched, 4, "normalized manifest and its layer, access manifest and its descriptor layer")
 	})
 
 	t.Run("a cancelled read does not fall back to an older access referrer", func(t *testing.T) {

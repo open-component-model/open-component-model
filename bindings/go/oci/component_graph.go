@@ -1,10 +1,11 @@
 package oci
 
 import (
+	"bytes"
 	"context"
-	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 
@@ -17,7 +18,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
 	ocidescriptor "ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
 	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
-	"ocm.software/open-component-model/bindings/go/repository"
 )
 
 // signatureGraph hides access referrers from every walk over the graph. What
@@ -44,7 +44,7 @@ func (g signatureGraph) Predecessors(ctx context.Context, desc ociImageSpecV1.De
 	kept := make([]ociImageSpecV1.Descriptor, 0, len(predecessors))
 	for _, p := range predecessors {
 		artifactType := p.ArtifactType
-		if artifactType == "" && isImageManifestOrIndex(p.MediaType) {
+		if artifactType == "" && declaresArtifactType(p.MediaType) {
 			raw, err := content.FetchAll(ctx, g.ReadOnlyGraphStorage, p)
 			// CTF stores report missing content as fs.ErrNotExist.
 			if errors.Is(err, errdef.ErrNotFound) || errors.Is(err, fs.ErrNotExist) {
@@ -60,9 +60,11 @@ func (g signatureGraph) Predecessors(ctx context.Context, desc ociImageSpecV1.De
 				// access referrer on the target, so a failed fetch fails the walk.
 				return nil, fmt.Errorf("failed to inspect referrer %s of %s: %w", p.Digest, desc.Digest, err)
 			}
-			if artifactType, err = manifestArtifactType(p.MediaType, raw); err != nil {
+			header, err := decodeManifestHeader(raw)
+			if err != nil {
 				return nil, fmt.Errorf("failed to inspect referrer %s of %s: %w", p.Digest, desc.Digest, err)
 			}
+			artifactType = header.listedArtifactType(p.MediaType)
 		}
 		if artifactType == ocidescriptor.ArtifactTypeAccessDescriptor {
 			continue
@@ -72,9 +74,28 @@ func (g signatureGraph) Predecessors(ctx context.Context, desc ociImageSpecV1.De
 	return kept, nil
 }
 
+// fetchedRoot serves the root of a graph from the body that was fetched to
+// open it, so that the checks before a copy and the copy itself do not request
+// it from the store again.
+//
+// Like [signatureGraph] it embeds the interface, so that a
+// registry.ReferrerLister of the store is not promoted.
+type fetchedRoot struct {
+	content.ReadOnlyGraphStorage
+	root storedRoot
+}
+
+func (s fetchedRoot) Fetch(ctx context.Context, desc ociImageSpecV1.Descriptor) (io.ReadCloser, error) {
+	if desc.Digest == s.root.descriptor.Digest {
+		return io.NopCloser(bytes.NewReader(s.root.body)), nil
+	}
+	return s.ReadOnlyGraphStorage.Fetch(ctx, desc)
+}
+
 // DownloadComponentVersionGraph returns the OCI graph a component version in the normalized layout
 // is stored as, without its access referrers: the normalized manifest as root, and its signature
-// referrers. Nothing is downloaded, the returned stream reads from the store of the repository.
+// referrers. Only the normalized manifest is fetched, which tells the layout. The returned stream
+// serves it from memory and reads everything else from the store of the repository on demand.
 // If the repository is pinned to an artifact of component, that artifact is the root instead of
 // what the version tag resolves to.
 //
@@ -86,31 +107,17 @@ func (repo *Repository) DownloadComponentVersionGraph(ctx context.Context, compo
 		done(err)
 	}()
 
-	reference, store, err := repo.componentVersionStore(ctx, component, version)
+	root, store, err := repo.storedRoot(ctx, component, version)
 	if err != nil {
 		return nil, err
 	}
-	root, err := store.Resolve(ctx, reference)
-	if errors.Is(err, errdef.ErrNotFound) {
-		if pin := repo.pinFor(component); pin != nil {
-			return nil, repo.pinNotFoundError(ctx, pin, version, err)
-		}
-		return nil, errors.Join(repository.ErrNotFound, fmt.Errorf("component version %s:%s not found: %w", component, version, err))
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve reference %q: %w", reference, err)
-	}
-	manifest, index, err := getDescriptorOCIImageManifest(ctx, store, root)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get manifest: %w", err)
-	}
-	if layoutOf(&manifest, index) != LayoutNormalized {
+	if root.layout != LayoutNormalized {
 		return nil, fmt.Errorf("component version %s:%s is not stored in the %s layout, so it has no normalized manifest to transfer with its signature referrers", component, version, LayoutNormalized)
 	}
 
 	return &ocistream.OCIResourceStream{
-		ReadOnlyGraphStorage: signatureGraph{store},
-		Descriptor:           root,
+		ReadOnlyGraphStorage: signatureGraph{fetchedRoot{ReadOnlyGraphStorage: store, root: root}},
+		Descriptor:           root.descriptor,
 		ExtendedCopyOpts:     repo.extendedCopyGraphOptions(),
 		TempDir:              repo.tempDir,
 		Tags:                 []string{version},
@@ -134,14 +141,14 @@ func (repo *Repository) AddComponentVersionFromGraph(ctx context.Context, desc *
 		return errors.New("the graph of the component version is required")
 	}
 	component, version := desc.Component.Name, desc.Component.Version
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	if repo.layout != LayoutNormalized {
-		repo.logger.WarnContext(ctx, "target repository does not write the normalized layout, signature referrers of the normalized source are not carried",
+		slogcontext.Warn(ctx, "target repository does not write the normalized layout, signature referrers of the normalized source are not copied",
 			slog.String("component", component), slog.String("version", version), slog.String("layout", repo.layout.String()),
 			slog.String("hint", "set componentVersionLayout: normalized in the oci.storage.config.ocm.software/v1alpha1 configuration to keep the normalized layout"))
 		return repo.AddComponentVersion(ctx, desc)
 	}
 
-	ctx = slogcontext.NewCtx(ctx, repo.logger)
 	done := log.Operation(ctx, "add component version from graph", slog.String("component", component), slog.String("version", version))
 	defer func() {
 		done(err)
@@ -159,7 +166,7 @@ func rejectAccessReferrers(next findSuccessorsFunc) findSuccessorsFunc {
 		next = content.Successors
 	}
 	return func(ctx context.Context, fetcher content.Fetcher, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
-		if !isImageManifestOrIndex(desc.MediaType) {
+		if !declaresArtifactType(desc.MediaType) {
 			return next(ctx, fetcher, desc)
 		}
 		// The copy proxy caches this fetch, and content.Successors reads the manifest from that cache.
@@ -167,38 +174,27 @@ func rejectAccessReferrers(next findSuccessorsFunc) findSuccessorsFunc {
 		if err != nil {
 			return nil, err
 		}
-		artifactType, err := manifestArtifactType(desc.MediaType, raw)
+		header, err := decodeManifestHeader(raw)
 		if err != nil {
 			return nil, fmt.Errorf("failed to inspect %s: %w", desc.Digest, err)
 		}
-		if artifactType == ocidescriptor.ArtifactTypeAccessDescriptor {
+		if artifactType := header.listedArtifactType(desc.MediaType); artifactType == ocidescriptor.ArtifactTypeAccessDescriptor {
 			return nil, fmt.Errorf("access referrer %s must not be copied: its artifact type %q is reserved for the access descriptor each repository generates itself", desc.Digest, artifactType)
 		}
 		return next(ctx, fetcher, desc)
 	}
 }
 
-// isImageManifestOrIndex reports whether content of the media type can be an
-// access referrer: the read path selects no other media type as one.
-func isImageManifestOrIndex(mediaType string) bool {
-	return mediaType == ociImageSpecV1.MediaTypeImageManifest || mediaType == ociImageSpecV1.MediaTypeImageIndex
-}
-
-// manifestArtifactType returns the artifact type registries report for the
-// image manifest or image index raw. For an image manifest without
-// artifactType that is the media type of its config.
-func manifestArtifactType(mediaType string, raw []byte) (string, error) {
-	var manifest struct {
-		ArtifactType string `json:"artifactType"`
-		Config       struct {
-			MediaType string `json:"mediaType"`
-		} `json:"config"`
+// declaresArtifactType reports whether content of the media type declares the
+// artifact type registries list it by, so that it can be listed as an access
+// referrer. Besides image manifests and indexes that is the withdrawn OCI
+// artifact manifest: the read path never selects one, but it would be listed
+// as a candidate on every read of the target.
+func declaresArtifactType(mediaType string) bool {
+	switch mediaType {
+	case ociImageSpecV1.MediaTypeImageManifest, ociImageSpecV1.MediaTypeImageIndex, mediaTypeArtifactManifest:
+		return true
+	default:
+		return false
 	}
-	if err := json.Unmarshal(raw, &manifest); err != nil {
-		return "", err
-	}
-	if manifest.ArtifactType == "" && mediaType == ociImageSpecV1.MediaTypeImageManifest {
-		return manifest.Config.MediaType, nil
-	}
-	return manifest.ArtifactType, nil
 }
