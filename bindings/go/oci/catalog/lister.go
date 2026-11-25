@@ -85,21 +85,6 @@ func componentNamesFromRepos(repos []string, subPath string) []string {
 	return names
 }
 
-// firstPathSegment returns the first path segment of an OCM subPath, or an
-// empty string when the subPath carries no segment. Vendor catalogers that
-// scope a listing to one namespace or owner use it to read that first segment
-// from the subPath.
-func firstPathSegment(subPath string) string {
-	trimmed := strings.Trim(subPath, "/")
-	if trimmed == "" {
-		return ""
-	}
-	if i := strings.Index(trimmed, "/"); i >= 0 {
-		return trimmed[:i]
-	}
-	return trimmed
-}
-
 // componentDescriptorPrefix returns the repository prefix that OCM component
 // descriptors live under for the given subPath, for example
 // "component-descriptors/" or "my/sub/component-descriptors/".

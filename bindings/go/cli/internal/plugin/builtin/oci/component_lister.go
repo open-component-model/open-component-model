@@ -134,20 +134,12 @@ func (l *OCIComponentListerPlugin) remoteComponentLister(ctx context.Context, sp
 		TokenFetcher: auth.NewCompositeTokenFetcher(l.httpClient, header, "", true),
 	}
 
-	consumerIdentity, err := identityv1.IdentityFromOCIRepository(spec)
-	if err != nil {
-		return nil, err
-	}
-
-	cataloger, err := catalog.CatalogerFor(catalog.CatalogerOptions{
-		Host:        host,
-		SubPath:     subPath,
-		HTTPClient:  l.httpClient,
-		AuthClient:  authClient,
-		Credentials: ociCredentials,
-		Identity:    consumerIdentity,
-		PlainHTTP:   plainHTTP,
-		Logger:      l.logger,
+	cataloger, err := catalog.NewDistributionCataloger(catalog.CatalogerOptions{
+		Host:       host,
+		HTTPClient: l.httpClient,
+		AuthClient: authClient,
+		PlainHTTP:  plainHTTP,
+		Logger:     l.logger,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("error creating cataloger for host %q: %w", host, err)

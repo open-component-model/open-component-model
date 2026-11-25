@@ -61,16 +61,10 @@ func TestDistributionCataloger_E2E(t *testing.T) {
 		TokenFetcher:   auth.NewCompositeTokenFetcher(http.DefaultClient, header, "", true),
 	}
 
-	consumerIdentity, err := identityv1.IdentityFromOCIRepository(spec)
-	require.NoError(t, err)
-
-	cataloger, err := CatalogerFor(CatalogerOptions{
-		Host:        parsed.Host,
-		SubPath:     subPath,
-		HTTPClient:  http.DefaultClient,
-		AuthClient:  authClient,
-		Credentials: creds,
-		Identity:    runtime.Identity(consumerIdentity),
+	cataloger, err := NewDistributionCataloger(CatalogerOptions{
+		Host:       parsed.Host,
+		HTTPClient: http.DefaultClient,
+		AuthClient: authClient,
 	})
 	require.NoError(t, err)
 

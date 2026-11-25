@@ -24,8 +24,7 @@ const defaultRepositoryListPageSize = 100
 
 // DistributionCataloger lists repository names through the standard
 // Distribution catalog endpoint (GET /v2/_catalog) with n and last pagination
-// and Link header following. It is the fallback cataloger that CatalogerFor
-// returns when no proprietary factory matches the host.
+// and Link header following. It is the only cataloger this package provides.
 type DistributionCataloger struct {
 	registry *remote.Registry
 	logger   *slog.Logger
@@ -34,8 +33,7 @@ type DistributionCataloger struct {
 var _ RepositoryCataloger = (*DistributionCataloger)(nil)
 
 // NewDistributionCataloger builds a DistributionCataloger from the given
-// options. It is also exported so standard-family registries and tests can use
-// it directly.
+// options.
 func NewDistributionCataloger(opts CatalogerOptions) (RepositoryCataloger, error) {
 	reg, err := remote.NewRegistry(opts.Host)
 	if err != nil {
