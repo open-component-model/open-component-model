@@ -5,6 +5,7 @@ import (
 	"encoding/json/v2"
 	"testing"
 
+	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -26,7 +27,7 @@ func TestRenderAttestations_JSONProjectsGroupsAndProvenance(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, renderAttestations(t.Context(), &buf, "json", component{Ref: "ref", Groups: groups}))
+	require.NoError(t, renderAttestations(t.Context(), &buf, "json", component{Ref: "ref", Groups: groups}, false))
 
 	var rows []row
 	require.NoError(t, json.Unmarshal(buf.Bytes(), &rows))
@@ -50,7 +51,7 @@ func TestRenderTable_ShowsResourceAndFullDigest(t *testing.T) {
 		}},
 	}
 	var buf bytes.Buffer
-	require.NoError(t, renderAttestations(t.Context(), &buf, "table", component{Ref: "ref", Groups: groups}))
+	require.NoError(t, renderAttestations(t.Context(), &buf, "table", component{Ref: "ref", Groups: groups}, false))
 	out := buf.String()
 	assert.Contains(t, out, "name=app", "the table carries the resource origin")
 	assert.Contains(t, out, full, "the table shows the full digest, not a truncation")
@@ -123,7 +124,7 @@ func TestRenderTree_FacetedColumns(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, renderAttestations(t.Context(), &buf, "widetree", component{Ref: "my-ref", Groups: groups}))
+	require.NoError(t, renderAttestations(t.Context(), &buf, "widetree", component{Ref: "my-ref", Groups: groups}, false))
 	out := buf.String()
 
 	assert.Contains(t, out, "my-ref", "the reference is the tree root")
@@ -163,7 +164,7 @@ func TestRenderAttestations_RecursiveAddsComponentColumn(t *testing.T) {
 		},
 	}
 	var buf bytes.Buffer
-	require.NoError(t, renderAttestations(t.Context(), &buf, "table", root))
+	require.NoError(t, renderAttestations(t.Context(), &buf, "table", root, false))
 	out := buf.String()
 	assert.Contains(t, out, "COMPONENT", "more than one component adds the COMPONENT column")
 	assert.Contains(t, out, "root:1.0.0", "the root component is shown")
@@ -188,10 +189,31 @@ func TestRenderTree_ComponentLevelLabelAndRecursion(t *testing.T) {
 		},
 	}
 	var buf bytes.Buffer
-	require.NoError(t, renderAttestations(t.Context(), &buf, "tree", root))
+	require.NoError(t, renderAttestations(t.Context(), &buf, "tree", root, false))
 	out := buf.String()
 	assert.Contains(t, out, "root:1.0.0", "the root component:version is the tree root")
 	assert.Contains(t, out, "child:2.0.0", "the referenced component nests under the root")
 	assert.Contains(t, out, "(component-level)", "the component group is (component-level), the name is the parent node")
 	assert.NotContains(t, out, "(component)", "the bare (component) label is gone")
+}
+
+func TestColorGate(t *testing.T) {
+	// painter is a pure pass-through when off, so --no-color, a pipe and json/yaml stay plain.
+	off := painter{on: false}
+	assert.Equal(t, "sbom", off.paint(text.FgGreen, "sbom"))
+	assert.Empty(t, off.paint(text.FgGreen, ""))
+
+	// When on, a non-empty cell is wrapped in ANSI (go-pretty colours forced on for the test,
+	// since it otherwise suppresses colour on a non-terminal).
+	text.EnableColors()
+	t.Cleanup(text.DisableColors)
+	on := painter{on: true}
+	assert.Contains(t, on.paint(text.FgGreen, "sbom"), "\x1b[", "an enabled painter emits ANSI")
+	assert.Empty(t, on.paint(text.FgGreen, ""), "an empty cell is never painted")
+
+	// colorEnabled gates on the writer and the flags: a buffer is never a terminal.
+	assert.False(t, colorEnabled(&bytes.Buffer{}, false), "a non-terminal writer never gets colour")
+	assert.False(t, colorEnabled(&bytes.Buffer{}, true), "--no-color disables colour")
+	t.Setenv("NO_COLOR", "1")
+	assert.False(t, colorEnabled(&bytes.Buffer{}, false), "NO_COLOR disables colour")
 }

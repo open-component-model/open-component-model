@@ -68,6 +68,7 @@ ocm get attestation {reference} [flags]
       --concurrency-limit int   maximum number of resources inspected in parallel when listing the whole component (-o widetree) (default 4)
   -h, --help[=true|false]       help for attestation
       --identity string         list only the attestations describing this one resource
+      --no-color[=true|false]   disable coloured output (also honoured via the NO_COLOR environment variable)
   -o, --output enum             output format; tree lists the component's own referrers, widetree every resource too
                                 (must be one of [json table tree widetree yaml]) (default table)
       --recursive int[=-1]      recursively follow componentReferences and list their attestations too; depth of recursion (-1 for unlimited)

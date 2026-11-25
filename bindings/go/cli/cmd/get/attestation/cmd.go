@@ -8,11 +8,14 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"slices"
 	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/jedib0t/go-pretty/v6/text"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 	sigyaml "sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/cli/cmd/download/shared"
@@ -35,6 +38,7 @@ const (
 	FlagOutput           = "output"
 	FlagConcurrencyLimit = "concurrency-limit"
 	FlagRecursive        = "recursive"
+	FlagNoColor          = "no-color"
 )
 
 // componentLevelLabel marks the group of referrers attached to the component version
@@ -97,6 +101,7 @@ aliases (for example "sbom" matches spdx and cyclonedx, "signature" matches cosi
 	cmd.Flags().Int(FlagRecursive, 0, "recursively follow componentReferences and list their attestations too; depth of recursion (-1 for unlimited)")
 	cmd.Flags().Lookup(FlagRecursive).NoOptDefVal = "-1"
 	cmd.Flags().StringSlice(FlagType, nil, "filter to attestations whose type contains any of these substrings or matches a friendly alias (sbom, vex, signature, provenance, spdx, ...); repeatable; empty lists all")
+	cmd.Flags().Bool(FlagNoColor, false, "disable coloured output (also honoured via the NO_COLOR environment variable)")
 	enum.VarP(cmd.Flags(), FlagOutput, "o",
 		[]string{
 			render.OutputFormatTable.String(),
@@ -134,6 +139,10 @@ func GetAttestations(cmd *cobra.Command, args []string) error {
 	format, err := enum.Get(cmd.Flags(), FlagOutput)
 	if err != nil {
 		return fmt.Errorf("getting output flag failed: %w", err)
+	}
+	noColor, err := cmd.Flags().GetBool(FlagNoColor)
+	if err != nil {
+		return fmt.Errorf("getting no-color flag failed: %w", err)
 	}
 	recursive, err := cmd.Flags().GetInt(FlagRecursive)
 	if err != nil {
@@ -225,7 +234,7 @@ func GetAttestations(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	root, _ = filterTree(root, typeFilters)
-	return renderAttestations(ctx, cmd.OutOrStdout(), format, root)
+	return renderAttestations(ctx, cmd.OutOrStdout(), format, root, colorEnabled(cmd.OutOrStdout(), noColor))
 }
 
 // discoverGroups resolves the selection to resource-labelled groups: --identity lists one
@@ -444,10 +453,11 @@ type row struct {
 	Envelope string `json:"-"`
 }
 
-func renderAttestations(ctx context.Context, w io.Writer, format string, root component) error {
+func renderAttestations(ctx context.Context, w io.Writer, format string, root component, color bool) error {
+	p := painter{on: color}
 	switch format {
 	case render.OutputFormatTree.String(), render.OutputFormatWideTree.String():
-		return renderTree(ctx, w, root)
+		return renderTree(ctx, w, root, p)
 	}
 
 	// Show the COMPONENT column only when more than one component carries attestations,
@@ -482,7 +492,7 @@ func renderAttestations(ctx context.Context, w io.Writer, format string, root co
 		_, err = w.Write(data)
 		return err
 	default:
-		return renderTable(w, rows, showComponent)
+		return renderTable(w, rows, showComponent, p)
 	}
 }
 
@@ -533,7 +543,7 @@ func flattenRows(c component, showComponent bool) []row {
 	return rows
 }
 
-func renderTable(w io.Writer, rows []row, showComponent bool) error {
+func renderTable(w io.Writer, rows []row, showComponent bool, p painter) error {
 	t := table.NewWriter()
 	t.SetOutputMirror(w)
 	header := table.Row{"RESOURCE", "SOURCE", "CATEGORY", "FORMAT", "PLATFORM", "ENV", "ID"}
@@ -542,9 +552,17 @@ func renderTable(w io.Writer, rows []row, showComponent bool) error {
 	}
 	t.AppendHeader(header)
 	for _, r := range rows {
-		cells := table.Row{orDash(r.Resource), r.Source, orDash(r.Category), orDash(r.Format), orDash(r.Platform), orDash(r.Envelope), r.ID}
+		cells := table.Row{
+			p.paint(text.Bold, orDash(r.Resource)),
+			r.Source,
+			p.paint(categoryColor(r.Category), orDash(r.Category)),
+			orDash(r.Format),
+			orDash(r.Platform),
+			p.paint(text.Faint, orDash(r.Envelope)),
+			p.paint(text.Faint, r.ID),
+		}
 		if showComponent {
-			cells = append(table.Row{r.Component}, cells...)
+			cells = append(table.Row{p.paint(text.Bold, r.Component)}, cells...)
 		}
 		t.AppendRow(cells)
 	}
@@ -560,7 +578,7 @@ func renderTable(w io.Writer, rows []row, showComponent bool) error {
 // envelope) are columns, not nesting levels, so heterogeneous values never stack in a single
 // column. Digests are shown in full, like "oras discover". The whole structure is produced
 // by the vertex serializer from a single root vertex.
-func renderTree(ctx context.Context, w io.Writer, root component) error {
+func renderTree(ctx context.Context, w io.Writer, root component, p painter) error {
 	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
 	if err := graph.WithWriteLock(func(g *dag.DirectedAcyclicGraph[string]) error {
 		return g.AddVertex(root.Ref, map[string]any{syncdag.AttributeValue: root})
@@ -576,7 +594,7 @@ func renderTree(ctx context.Context, w io.Writer, root component) error {
 			if !ok {
 				return tree.Row{}, fmt.Errorf("vertex %q has no %s attribute of type %T", v.ID, syncdag.AttributeValue, c)
 			}
-			return componentTreeRow(c), nil
+			return componentTreeRow(c, p), nil
 		}),
 	)
 	return renderer.Render(ctx, w)
@@ -588,22 +606,22 @@ const treeColumns = 5
 // componentTreeRow nests one component over its attestation groups (component-level and,
 // in widetree, one per resource) and then its referenced components, so recursion deepens
 // the tree. A Repeated component is a leaf marker pointing at its earlier appearance.
-func componentTreeRow(c component) tree.Row {
+func componentTreeRow(c component, p painter) tree.Row {
 	if c.Repeated {
-		return innerTreeRow(c.Ref+"  (shown above)", nil)
+		return innerTreeRow(c.Ref+"  (shown above)", nil, p)
 	}
 	children := make([]tree.Row, 0, len(c.Groups)+len(c.Children))
 	for _, g := range c.Groups {
-		children = append(children, groupRow(treeGroupLabel(g.Label), g.Attestations))
+		children = append(children, groupRow(treeGroupLabel(g.Label), g.Attestations, p))
 	}
 	for _, child := range c.Children {
-		children = append(children, componentTreeRow(child))
+		children = append(children, componentTreeRow(child, p))
 	}
-	return innerTreeRow(c.Ref, children)
+	return innerTreeRow(c.Ref, children, p)
 }
 
 // groupRow nests one origin (a resource or the component) over its sources.
-func groupRow(label string, atts []repository.Attestation) tree.Row {
+func groupRow(label string, atts []repository.Attestation, p painter) tree.Row {
 	bySource := map[repository.AttestationSource][]repository.Attestation{}
 	for _, a := range atts {
 		bySource[a.Source] = append(bySource[a.Source], a)
@@ -615,14 +633,14 @@ func groupRow(label string, atts []repository.Attestation) tree.Row {
 	slices.Sort(keys)
 	sources := make([]tree.Row, 0, len(keys))
 	for _, sk := range keys {
-		sources = append(sources, innerTreeRow(sk, leafRows(bySource[repository.AttestationSource(sk)])))
+		sources = append(sources, innerTreeRow(sk, leafRows(bySource[repository.AttestationSource(sk)], p), p))
 	}
-	return innerTreeRow(label, sources)
+	return innerTreeRow(label, sources, p)
 }
 
 // leafRows renders one document leaf per attestation, sorted so multi-platform entries
 // cluster: by platform, then category, then format, then digest.
-func leafRows(atts []repository.Attestation) []tree.Row {
+func leafRows(atts []repository.Attestation, p painter) []tree.Row {
 	sorted := slices.Clone(atts)
 	slices.SortFunc(sorted, func(a, b repository.Attestation) int {
 		ca, fa := classify(a)
@@ -636,22 +654,22 @@ func leafRows(atts []repository.Attestation) []tree.Row {
 	})
 	rows := make([]tree.Row, 0, len(sorted))
 	for _, a := range sorted {
-		rows = append(rows, leafTreeRow(a))
+		rows = append(rows, leafTreeRow(a, p))
 	}
 	return rows
 }
 
 // leafTreeRow is a document leaf: its facets fill the columns, ending in the full digest.
-func leafTreeRow(a repository.Attestation) tree.Row {
+func leafTreeRow(a repository.Attestation, p painter) tree.Row {
 	category, format := classify(a)
-	return tree.Row{Cells: []string{orDash(category), orDash(format), orDash(a.Platform.String()), orDash(envelopeOf(a)), a.ID}}
+	return tree.Row{Cells: []string{p.paint(categoryColor(category), orDash(category)), orDash(format), orDash(a.Platform.String()), p.paint(text.Faint, orDash(envelopeOf(a))), p.paint(text.Faint, a.ID)}}
 }
 
 // innerTreeRow is a containment node (reference, origin or source): its label sits in the
 // first column, the rest stay empty, and its children hang below.
-func innerTreeRow(label string, children []tree.Row) tree.Row {
+func innerTreeRow(label string, children []tree.Row, p painter) tree.Row {
 	cells := make([]string, treeColumns)
-	cells[0] = label
+	cells[0] = p.paint(text.Bold, label)
 	return tree.Row{Cells: cells, Children: children}
 }
 
@@ -682,4 +700,50 @@ func orDash(value string) string {
 		return "-"
 	}
 	return value
+}
+
+// painter paints a cell with an ANSI colour when enabled. The zero value (disabled) and
+// every empty string pass through untouched, so the non-terminal and --no-color paths, and
+// json/yaml, stay plain.
+type painter struct{ on bool }
+
+func (p painter) paint(c text.Color, s string) string {
+	if !p.on || s == "" {
+		return s
+	}
+	return c.Sprint(s)
+}
+
+// categoryColor maps a friendly attestation category to its display colour. Unknown or
+// empty categories render faint, like the other secondary cells.
+func categoryColor(category string) text.Color {
+	switch category {
+	case "sbom":
+		return text.FgGreen
+	case "signature":
+		return text.FgCyan
+	case "vex":
+		return text.FgYellow
+	case "provenance":
+		return text.FgMagenta
+	case "sarif":
+		return text.FgRed
+	default:
+		return text.Faint
+	}
+}
+
+// colorEnabled reports whether coloured output is wanted: only to a terminal, never when
+// --no-color is set or the NO_COLOR environment variable is present.
+func colorEnabled(w io.Writer, noColor bool) bool {
+	return !noColor && os.Getenv("NO_COLOR") == "" && isTerminal(w)
+}
+
+// isTerminal reports whether the writer is a terminal (mirrors describe/types).
+func isTerminal(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	return term.IsTerminal(int(f.Fd()))
 }
