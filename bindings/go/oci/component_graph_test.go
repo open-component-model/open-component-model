@@ -261,6 +261,50 @@ func TestSignatureGraph_Predecessors(t *testing.T) {
 		r.Empty(src.exists)
 	})
 
+	t.Run("untyped referrer without content is left to the missing referrer check", func(t *testing.T) {
+		r := require.New(t)
+		ctx := t.Context()
+		f := newSignatureGraphFixture(t)
+		// Retention can remove a manifest that a referrers tag schema index still lists.
+		ghost := ociImageSpecV1.Descriptor{MediaType: ociImageSpecV1.MediaTypeImageManifest, Digest: digest.FromString("removed referrer"), Size: 42}
+		src := newCountingGraph(ghostReferrer{ReadOnlyGraphStorage: f.store, subject: f.normalized, ghost: ghost})
+
+		listed, err := oci.SignatureGraph(src).Predecessors(ctx, f.normalized)
+		r.NoError(err, "a removed referrer must not block the walk")
+		r.ElementsMatch(digestsOf(append([]ociImageSpecV1.Descriptor{ghost}, f.signatures...)), digestsOf(listed))
+		r.Equal(requestCounts(1, ghost), src.fetches)
+
+		got, err := f.repo.ExtendedCopyGraphOptions().FindPredecessors(ctx, oci.SignatureGraph(src), f.normalized)
+		r.NoError(err)
+		r.ElementsMatch(digestsOf(f.signatures), digestsOf(got), "the copy skips the removed referrer")
+
+		dst := memory.New()
+		r.NoError(oras.ExtendedCopyGraph(ctx, oci.SignatureGraph(src), dst, f.normalized, f.repo.ExtendedCopyGraphOptions()))
+		for _, d := range f.signatures {
+			exists, err := dst.Exists(ctx, d)
+			r.NoError(err)
+			r.True(exists, "%s must be copied", d.Digest)
+		}
+		exists, err := dst.Exists(ctx, ghost)
+		r.NoError(err)
+		r.False(exists)
+	})
+
+	t.Run("untyped referrer a registry reports as not found is kept", func(t *testing.T) {
+		r := require.New(t)
+		ctx := t.Context()
+		// Unlike a CTF, the memory store reports missing content as errdef.ErrNotFound, like a registry.
+		store := memory.New()
+		subject := pushJSON(t, ctx, store, ociImageSpecV1.MediaTypeImageManifest, ociImageSpecV1.Manifest{MediaType: ociImageSpecV1.MediaTypeImageManifest})
+		ghost := ociImageSpecV1.Descriptor{MediaType: ociImageSpecV1.MediaTypeImageIndex, Digest: digest.FromString("removed referrer"), Size: 42}
+		src := newCountingGraph(listedReferrers{ReadOnlyGraphStorage: store, referrers: []ociImageSpecV1.Descriptor{ghost}})
+
+		got, err := oci.SignatureGraph(src).Predecessors(ctx, subject)
+		r.NoError(err)
+		r.Equal([]ociImageSpecV1.Descriptor{ghost}, got)
+		r.Equal(requestCounts(1, ghost), src.fetches)
+	})
+
 	t.Run("extended copy carries signatures only", func(t *testing.T) {
 		r := require.New(t)
 		ctx := t.Context()
@@ -303,6 +347,20 @@ type listedReferrers struct {
 
 func (l listedReferrers) Predecessors(context.Context, ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
 	return l.referrers, nil
+}
+
+// ghostReferrer additionally lists a referrer without artifact type and without content for subject.
+type ghostReferrer struct {
+	content.ReadOnlyGraphStorage
+	subject, ghost ociImageSpecV1.Descriptor
+}
+
+func (g ghostReferrer) Predecessors(ctx context.Context, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
+	predecessors, err := g.ReadOnlyGraphStorage.Predecessors(ctx, desc)
+	if err != nil || desc.Digest != g.subject.Digest {
+		return predecessors, err
+	}
+	return append(predecessors, g.ghost), nil
 }
 
 func TestRejectAccessReferrers(t *testing.T) {

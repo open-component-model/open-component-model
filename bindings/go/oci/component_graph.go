@@ -3,10 +3,13 @@ package oci
 import (
 	"context"
 	"encoding/json/v2"
+	"errors"
 	"fmt"
+	"io/fs"
 
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/oras-project/oras-go/v3/content"
+	"github.com/oras-project/oras-go/v3/errdef"
 
 	ocidescriptor "ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
 )
@@ -25,7 +28,8 @@ type signatureGraph struct{ content.ReadOnlyGraphStorage }
 // The artifact type a listing reports decides without a request. Listings
 // omit it for an image index that has none, and referrers tag schema indexes
 // are written by clients that may omit it, so a manifest or index listed
-// without one is fetched. That fetch is not shared with a later copy.
+// without one is fetched. That fetch is not shared with a later copy. Such a
+// referrer whose content does not exist is returned undecided.
 func (g signatureGraph) Predecessors(ctx context.Context, desc ociImageSpecV1.Descriptor) ([]ociImageSpecV1.Descriptor, error) {
 	predecessors, err := g.ReadOnlyGraphStorage.Predecessors(ctx, desc)
 	if err != nil {
@@ -35,10 +39,19 @@ func (g signatureGraph) Predecessors(ctx context.Context, desc ociImageSpecV1.De
 	for _, p := range predecessors {
 		artifactType := p.ArtifactType
 		if artifactType == "" && isImageManifestOrIndex(p.MediaType) {
-			// A referrer kept without inspection would become a selectable
-			// access referrer on the target, so a failed fetch fails the walk.
 			raw, err := content.FetchAll(ctx, g.ReadOnlyGraphStorage, p)
+			// CTF stores report missing content as fs.ErrNotExist.
+			if errors.Is(err, errdef.ErrNotFound) || errors.Is(err, fs.ErrNotExist) {
+				// Retention can remove a manifest that is still listed, which
+				// must not block a copy. Without content the referrer cannot
+				// reach a target, so it is kept for skipMissingReferrers to
+				// skip with its warning.
+				kept = append(kept, p)
+				continue
+			}
 			if err != nil {
+				// A referrer kept without inspection would become a selectable
+				// access referrer on the target, so a failed fetch fails the walk.
 				return nil, fmt.Errorf("failed to inspect referrer %s of %s: %w", p.Digest, desc.Digest, err)
 			}
 			if artifactType, err = manifestArtifactType(p.MediaType, raw); err != nil {
