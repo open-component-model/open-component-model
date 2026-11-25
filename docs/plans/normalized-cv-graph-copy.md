@@ -88,8 +88,8 @@ no intermediate file. This follows the fused local blob transfers (`oci/transfor
    the graph and writes like `AddComponentVersion`. It logs a warning that the signature referrers of the normalized
    source are not carried, with the `componentVersionLayout: normalized` hint. Do not fail.
 7. **Failure semantics.** Any failure to open the source, discover or filter referrers, or copy fails the transfer.
-8. **Request cost.** Filtering must not fetch a referrer manifest when its digest or descriptor already identifies it
-   (see below).
+8. **Request cost.** Filtering must not fetch a referrer manifest when its descriptor's `artifactType` already
+   identifies it (see below).
 9. **Pinning.** `source.digest` is set from `discoveryValue.Pin` when present, and the source is opened through
    `repository.PinRepository`, so the graph is read from the artifact the descriptor was read from.
 10. **Always write the access referrer.** Every run writes a new, timestamped access referrer, including reruns into a
@@ -143,24 +143,22 @@ Package `oci` (`bindings/go/oci`):
   - `func (repo *Repository) componentGraphCopyOptions() oras.ExtendedCopyGraphOptions` wraps
     `extendedCopyGraphOptions()` (`missing_subjects.go`: `skipMissingSubject` + `skipMissingReferrers`). Its
     `FindPredecessors` applies the two-step filter above.
-  - `func (repo *Repository) DownloadComponentVersionGraph(ctx, component, version string) (blob.ReadOnlyBlob, error)`:
-    `getStore` → `Resolve` → require `getStoredLayout == LayoutNormalized` → return
-    `ocistream.NewLayoutBlob(ctx, &ocistream.OCIResourceStream{ReadOnlyGraphStorage: graph, Descriptor:
-    normalizedManifest, ExtendedCopyOpts: repo.componentGraphCopyOptions(), TempDir: repo.tempDir, Tags:
-    []string{version}})`. This mirrors the
-    nested-manifest path of `DownloadResource`. The value implements `ocistream.ResourceStream`, so the target can
-    copy store to store without building a tar.
-  - `func (repo *Repository) AddComponentVersionFromGraph(ctx, desc *descriptor.Descriptor, graph blob.ReadOnlyBlob) error`:
-    same flow as `AddComponentVersion` (tag validation, `checkPinnedTag`, local blob scan, `tagIdempotent`), but
-    passes `AddDescriptorOptions.NormalizedGraph`. For `repo.layout != LayoutNormalized` it applies requirement 6 and
-    delegates to `AddComponentVersion`.
+  - `func (repo *Repository) DownloadComponentVersionGraph(ctx, component, version string)
+    (*ocistream.OCIResourceStream, error)`: `getStore` → `Resolve` → require `getStoredLayout == LayoutNormalized` →
+    return `&ocistream.OCIResourceStream{ReadOnlyGraphStorage: graph, Descriptor: normalizedManifest,
+    ExtendedCopyOpts: repo.componentGraphCopyOptions(), TempDir: repo.tempDir, Tags: []string{version}}`. The stream
+    is read in place by the target; no `LayoutBlob` and no tar.
+  - `func (repo *Repository) AddComponentVersionFromGraph(ctx, desc *descriptor.Descriptor, graph
+    ocistream.ResourceStream) error`: same flow as `AddComponentVersion` (tag validation, `checkPinnedTag`, local blob
+    scan, `tagIdempotent`), but passes `AddDescriptorOptions.NormalizedGraph`. For `repo.layout != LayoutNormalized`
+    it applies requirement 6 and delegates to `AddComponentVersion`.
 - `store_descriptor.go`:
-  - Add `AddDescriptorOptions.NormalizedGraph blob.ReadOnlyBlob`.
+  - Add `AddDescriptorOptions.NormalizedGraph ocistream.ResourceStream`.
   - Split `addNormalizedLayout` into `pushNormalizedManifest` (today's config/layer/manifest pushes, the rebuild path)
     and `pushAccessReferrer` (today's access manifest/index push, including the `created` stamp).
-  - Copy path: if the blob is an `ocistream.ResourceStream`, use its store and `Root()` with its `ExtendedCopyOpts`.
-    Otherwise use `tar.ReadOCILayout` with exactly one main artifact, as `uploadOCIImage` does. Then fetch the
-    normalized layer, apply requirements 2 and 3, run `oras.ExtendedCopyGraph`, then `pushAccessReferrer`.
+  - Copy path: fetch the normalized layer from `graph` (`graph.Root()` is the normalized manifest), apply
+    requirements 2 and 3, run `oras.ExtendedCopyGraph(ctx, graph, store, graph.Root(), <the stream's
+    ExtendedCopyOpts>)`, then `pushAccessReferrer`.
 - `repository.go`: delete `CarryComponentSignatures` and the `ComponentSignatureCarrier` assertion.
 
 Package `oci/spec/transformation/v1alpha1`:
@@ -205,6 +203,10 @@ Package `transfer/internal`:
 
 Pitfalls:
 
+- The copy must use the copy options the source stream carries (`OCIResourceStream.ExtendedCopyOpts`, i.e. the
+  source's `componentGraphCopyOptions()`), not the target's `extendedCopyGraphOptions()`. The existing fast path in
+  `uploadOCIImage` (`oci/repository.go`) copies a `ResourceStream` with the target's options. Copying the same way here
+  would drop the access-referrer filter and pull source access referrers onto the target.
 - `findRoots` walks predecessors transitively. The filter applies at every level.
 - One `ExtendedCopyGraph` from the normalized manifest copies the manifest, its blobs and all signature referrers. Do
   not loop `oras.CopyGraph` over referrers.
@@ -229,7 +231,7 @@ Seams (2):
    .BuildAndCheck(tgd)` → `graph.Process(ctx)`. This is the API of
    `transfer/integration/normalized_layout_integration_test.go`. Unit variant: CTF source → CTF target in
    `transfer/internal`, no Docker. Integration variant: the existing two-registry test.
-2. **Request count: `oci` package.** `componentGraphCopyOptions(acc).FindPredecessors` against a counting
+2. **Request count: `oci` package.** `componentGraphCopyOptions().FindPredecessors` against a counting
    `content.ReadOnlyGraphStorage` wrapper over a CTF store, because request cost is invisible at seam 1.
 
 Scenarios:
@@ -259,8 +261,9 @@ Scenarios:
   - Referrers with `artifactType` set, access and non-access: 0 fetches.
   - Empty `artifactType`: exactly 1 fetch.
   - A peek error is returned.
-- Replace `TestNormalizedLayout_CarryComponentSignatures` with `AddComponentVersionFromGraph` cases (copy path,
-  bind-check failure, subject mismatch, default-layout target).
+- Delete `TestNormalizedLayout_CarryComponentSignatures` (`oci/normalized_layout_test.go`) without a replacement at the
+  `oci` level. Its cases (copy, digest mismatch → bind-check failure, default-layout target) are covered at seam 1, and
+  `AddComponentVersionFromGraph` gets no tests of its own.
 - Existing integration test `Test_Integration_TransferNormalized_OCIToOCI_CarriesSignatureReferrer`: assertions
   unchanged, rename "Carries" → "Copies".
 
