@@ -249,7 +249,7 @@ file in the legacy Docker archive format, with a `manifest.json` but no `oci-lay
 | `meta.configuredSchemaVersion` | Fails: `additional properties 'meta' not allowed` | Remove it. OCM v2 writes schema version `v2`. |
 | `repositoryContexts` | Fails: `additional properties 'repositoryContexts' not allowed` | Remove it |
 | `mediaType` on a `utf8` input | Fails: `unknown object member name "mediaType"` | See step 3 |
-| Input paths outside the constructor directory, such as `../config.yaml` | Fails: `path escapes from parent` | Move the files, or set `--working-directory` to a directory that contains them |
+| Input paths outside the constructor directory, such as `../config.yaml` | Fails: `path escapes from parent` | Move the files, or set `--working-directory` to a directory that contains them and make the paths relative to it, such as `config.yaml` |
 | Several YAML documents separated by `---` | Builds the first document only, without an error | Put all components under `components:` |
 | `options.skipDigestGeneration` on a resource | Ignored. OCM v2 computes the digest. | Use `ocm add cv --skip-reference-digest-processing`. It applies to all resources with an access. |
 | `merge` on a label | Dropped from the descriptor | Remove it |

@@ -54,17 +54,19 @@ same namespace only, and a `NamespacedDeployer` applies objects without a namesp
 | ----------- | -------- | ----- |
 | `ComponentVersion` | `Repository` and `Component` | `spec.version.semver` becomes `spec.semver` |
 | `ComponentVersion` with `spec.destination` | `Repository` and `Replication` | |
-| `ComponentDescriptor` | None | The descriptor data is in the `Component` status |
+| `ComponentDescriptor` | None | The `Component` status holds only the resolved version and its digest. Read the descriptor with `ocm get cv` |
 | `Resource` | `Resource` | New schema. `sourceRef.resourceRef.referencePath` becomes `resource.byReference.referencePath` |
 | `Snapshot` | None | No in-cluster registry |
-| `FluxDeployer` with `kustomizationTemplate` | `NamespacedDeployer` | Applies manifests as they are |
+| `FluxDeployer` with `kustomizationTemplate` | `NamespacedDeployer` | Reads plain YAML or JSON, not a tar archive. See **FluxDeployer** below |
 | `FluxDeployer` with `helmReleaseTemplate` | Flux `OCIRepository` and `HelmRelease` | The `Resource` status publishes the chart location |
 | `Configuration`, `Localization` | None | See the end of this step |
 
-**Credentials.** A Secret with a `.dockerconfigjson` key works unchanged. Rename an `.ocmcredentialconfig` key to
-`.ocmconfig`. Replace a Secret with plain `username` and `password` keys by one from
-`kubectl create secret docker-registry`. There is no `serviceAccountName`: reference its image pull Secret in
-`ocmConfig` instead.
+**Credentials.** A Secret with a `.dockerconfigjson` key works unchanged. An `.ocmcredentialconfig` key holds a bare
+`credentials.config.ocm.software` document. Move it to an `.ocmconfig` key and wrap it in
+`type: generic.config.ocm.software/v1` with a `configurations` list, as in the `ocm-verification` Secret below. A
+renamed key without the wrapper loads no credentials and reports no error. Replace a Secret with plain `username` and
+`password` keys by one from `kubectl create secret docker-registry`. There is no `serviceAccountName`: reference its
+image pull Secret in `ocmConfig` instead.
 
 **Verification.** `spec.verify` moves to an OCM configuration in a Secret. The legacy key Secret stores the public key
 under the signature name:
@@ -275,7 +277,10 @@ spec:
 {{< /tabs >}}
 
 **FluxDeployer.** A `kustomizationTemplate` becomes a `NamespacedDeployer`, which applies with the service account
-you create in step 9. If the template uses `patches`, `images` or `postBuild`, keep the Flux `Kustomization` and
+you create in step 9. It reads the resource as one YAML or JSON stream and does not unpack archives. The resource of a
+`kustomizationTemplate` is usually a tar archive that Flux unpacked, so publish a new component version with the
+manifests as one YAML file, for example the output of `kustomize build`, and reference that version in step 1. If the
+template uses `patches`, `images` or `postBuild`, keep the Flux `Kustomization` and
 handle it like the Helm chart in step 9. Flux then needs the manifests as an OCI artifact, as in the
 [kustomize-configuration-localization example](https://github.com/open-component-model/open-component-model/tree/main/bindings/go/kubernetes/controller/examples/kustomize-configuration-localization).
 A `helmReleaseTemplate` has no OCM replacement: its `HelmRelease` stays, and step 9 points it at the chart in your
@@ -456,6 +461,16 @@ kubectl create role podinfo-deployer -n my-team \
 kubectl create rolebinding podinfo-deployer -n my-team --role=podinfo-deployer --serviceaccount=my-team:podinfo-deployer
 ```
 
+The controller watches the deployed objects with its own service account, and the chart grants it no access to them.
+Give it read access to the same kinds, see
+[Grant the controller read access]({{< docref "docs/guides/deploy/configure-custom-rbac.md#grant-the-controller-read-access" >}}):
+
+```bash
+kubectl create clusterrole ocm-controller-podinfo-read --verb=get,list,watch --resource=deployments.apps,services
+kubectl create clusterrolebinding ocm-controller-podinfo-read --clusterrole=ocm-controller-podinfo-read \
+  --serviceaccount=ocm-k8s-toolkit-system:ocm-k8s-toolkit-controller-manager
+```
+
 Apply the `NamespacedDeployer` and wait until it is ready:
 
 ```bash
@@ -486,8 +501,9 @@ Read the chart location from the `Resource`:
 kubectl get resource.delivery.ocm.software podinfo-chart -n my-team -o jsonpath='{.status.additional.oci}'
 ```
 
-Save the following as `ocirepository.yaml`, with `registry`, `repository` and `tag` from the output. It replaces the
-`OCIRepository` that pointed to the legacy registry.
+Save the following as `ocirepository.yaml`, with `registry`, `repository` and `digest` from the output. It replaces
+the `OCIRepository` that pointed to the legacy registry. A chart added with the v1 `helm` input is a local blob, so
+the output has a digest but no tag.
 
 ```yaml
 apiVersion: source.toolkit.fluxcd.io/v1
@@ -497,9 +513,9 @@ metadata:
   namespace: my-team
 spec:
   interval: 10m
-  url: oci://ghcr.io/my-org/components/charts/podinfo
+  url: oci://ghcr.io/my-org/components/component-descriptors/ocm.software/podinfo
   ref:
-    tag: 6.9.1
+    digest: sha256:<digest>
   layerSelector:
     mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
     operation: copy
@@ -527,7 +543,8 @@ kubectl wait helmreleases.helm.toolkit.fluxcd.io --all -n my-team --for=conditio
 ```
 
 You should see `condition met` for every object. Add `replications.delivery.ocm.software` if you created a
-`Replication`.
+`Replication`. Skip the second command if you migrated no Helm chart: without a `HelmRelease` it fails with
+`no matching resources found`.
 
 ## Troubleshooting
 

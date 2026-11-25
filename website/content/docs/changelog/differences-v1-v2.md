@@ -72,7 +72,7 @@ These changes can break a pipeline or change data without an error. Check them f
 | Copying Helm resources by value rewrites their digest | After `--copy-resources` or a local blob uploader, OCM v1 signatures fail in OCM v1 and OCM v2 ([ocm-project#1368](https://github.com/open-component-model/ocm-project/issues/1368)) | Transfer Helm resources by reference, or sign again after the transfer |
 | Some OCM v1 signatures do not verify | See [Data Compatibility](#data-compatibility) | Re-sign with OCM v2. See [Migrate Signing Setup]({{< docref "docs/changelog/migrate-signing-setup.md" >}}). |
 | OCM v1 cannot verify signatures that OCM v2 creates | OCM v2 signs with `jsonNormalisation/v4alpha3`, which OCM v1 does not know | Move all verifiers to OCM v2 before you sign with it |
-| Some OCM v1 configuration entries make every command fail | `HashiCorpVault`, `GardenerConfig` and `NPMConfig` credential repositories, an inline `dockerConfig` object, and resolvers with the repository type `OCIRegistry` | Remove or convert them, see [Configuration](#configuration) |
+| Some OCM v1 configuration entries make commands fail | `HashiCorpVault`, `GardenerConfig` and `NPMConfig` credential repositories and an inline `dockerConfig` object. Resolvers with the repository type `OCIRegistry` fail every command that reads a component version. | Remove or convert them, see [Configuration](#configuration) |
 | Most other OCM v1 configuration types are ignored without a message | For example `transport` with `recursive: true`: `ocm transfer cv` is then no longer recursive | Pass `--recursive` or use the v2 transfer configuration, see [Configuration](#configuration) |
 | Credential matching is stricter | A consumer without `port` no longer matches a request with a port, and one without `hostname` matches nothing | See [Credentials](#credentials) |
 | Script-facing output changed | `get cv` output formats, sort order and exit codes differ | See [Scripts and CI pipelines](#scripts-and-ci-pipelines) |
@@ -143,8 +143,8 @@ types and their fields. Configuration types are not listed; see
 - **Output.** `ocm get cv` prints a tree by default, newest version first. A script that takes the last line of the v1
   table now gets the oldest version. `-o json` prints a list instead of `{"items": [...]}`, and `-o yaml` prints one
   YAML list instead of one document per component version. `-o wide` is gone.
-- **Exit codes.** `ocm get cv` with no matching version, and `ocm verify cv` on a component version without
-  signatures, exit 1. OCM v1 exited 0.
+- **Exit codes.** `ocm get cv` with a `--constraint` that matches no version, and `ocm verify cv` on a component
+  version without signatures, exit 1. OCM v1 exited 0.
 - **Logging.** INFO messages go to stderr by default. Use `--loglevel warn` to quiet them. `--logfile`,
   `--logconfig` and `--logkeys` are gone.
 - **Transfer.** `--overwrite`, `--enforce`, `--script`, `--uploader`, `--copy-local-resources` and
@@ -197,7 +197,7 @@ search. On first start, OCM v2 writes `~/.ocm/config` with your Docker credentia
 | OCM v1 type | OCM v2 |
 | ----------- | ------ |
 | `credentials.config.ocm.software` | Works, with changes, see [Credentials](#credentials) |
-| `ocm.config.ocm.software` resolvers | Deprecated, still read. Use `resolvers.config.ocm.software/v1alpha1`, see [Migrate Legacy Resolvers]({{< docref "docs/changelog/migrate-legacy-resolvers.md" >}}). A resolver with `type: OCIRegistry` makes every command fail; use `OCIRepository`. |
+| `ocm.config.ocm.software` resolvers | Deprecated, still read. Use `resolvers.config.ocm.software/v1alpha1`, see [Migrate Legacy Resolvers]({{< docref "docs/changelog/migrate-legacy-resolvers.md" >}}). A resolver with `type: OCIRegistry` makes every command fail that reads a component version, such as `get`, `verify` and `transfer`; use `OCIRepository`. |
 | `http.config.ocm.software` | Works. The v2 type adds retries, TLS roots and per-host `plainHTTP`, see [HTTP Client]({{< docref "docs/reference/configuration/http-client.md" >}}). |
 | `transport.ocm.config.ocm.software`, `uploader.ocm.config.ocm.software`, `scripts.ocm.config.ocm.software`, `oci.uploader.config.ocm.software` | Ignored. Use `transfer.config.ocm.software/v1alpha1` and the uploader configurations, see [Transfer Configuration]({{< docref "docs/reference/configuration/transfer-configuration/_index.md" >}}). |
 | `keys.config.ocm.software` | Ignored. Keys are credentials, see [Configure Signing Credentials]({{< docref "docs/guides/sign/configure-signing-credentials.md" >}}). |
@@ -243,8 +243,8 @@ For the model behind it, see [Credential System]({{< docref "docs/concepts/crede
   [Transfer and Transport]({{< docref "docs/concepts/transfer-concept.md" >}}),
   [Transfer Configuration]({{< docref "docs/reference/configuration/transfer-configuration/_index.md" >}}) and
   [Vendor Repository Uploaders]({{< docref "docs/concepts/vendor-uploaders.md" >}}).
-- **Resources that are not copied.** `npm`, `maven`, `ocm`, `none` and `s3/v1` resources stay by reference with a
-  warning, and cannot be downloaded with OCM v2. Support for npm
+- **Resources that are not copied.** `npm`, `maven`, `ocm`, `none` and `s3/v1` resources stay by reference, with a
+  warning when you pass `--copy-resources`. `s3/v1` resources can be downloaded, the others cannot. Support for npm
   ([ocm-project#835](https://github.com/open-component-model/ocm-project/issues/835)) and Maven
   ([ocm-project#836](https://github.com/open-component-model/ocm-project/issues/836)) is planned. To publish Maven and
   npm packages during a transfer, see
@@ -270,10 +270,13 @@ For the model behind it, see [Credential System]({{< docref "docs/concepts/crede
   signatures fails.
 - **Signers.** RSA with plain keys or PEM certificate chains, GPG, and Sigstore keyless. See the guides under
   [Sign]({{< docref "docs/guides/sign/_index.md" >}}).
-- **Timestamps.** RFC 3161 timestamps from OCM v1 are checked without extra flags. Their time cannot prove when the
-  signature was made, because OCM v1 timestamps the descriptor digest. `ocm verify cv
-  --insecure-trust-legacy-timestamps` lets that time validate an expired signing certificate, so a signature created
-  after the certificate expired can pass. Use the flag only for component versions you know OCM v1 signed in time.
+- **Timestamps.** RFC 3161 timestamps from OCM v1 are checked without extra flags. Without TSA root certificates
+  (`TSA/v1alpha1` credentials) only their structure is checked, see
+  [Verifying signatures with an RFC 3161 timestamp]({{< docref "docs/guides/sign/verify-with-pem-certificate-chain.md#verifying-signatures-with-an-rfc-3161-timestamp" >}}).
+  Their time cannot prove when the signature was made, because OCM v1 timestamps the descriptor digest. With TSA
+  roots configured, `ocm verify cv --insecure-trust-legacy-timestamps` lets that time validate an expired signing
+  certificate, so a signature created after the certificate expired can pass. Use the flag only for component
+  versions you know OCM v1 signed in time.
 
 ## Data Compatibility
 
@@ -314,7 +317,7 @@ The following v1 data does not work in OCM v2:
 | Resources with the access types `npm`, `maven`, `ocm` or `none` | Cannot be downloaded or copied | [#1376](https://github.com/open-component-model/ocm-project/issues/1376) |
 | Resources with the access type `s3/v1` | `--copy-resources` keeps them by reference | [#1404](https://github.com/open-component-model/ocm-project/issues/1404) |
 | Sources stored as local blobs | The component version cannot be transferred | [Migrate from Sources to Resources]({{< docref "docs/changelog/migrate-from-sources.md" >}}) |
-| Label `merge` specifications | Dropped on read and transfer. Signatures still verify, because `merge` is not signed. | [#1371](https://github.com/open-component-model/ocm-project/issues/1371) |
+| Label `merge` specifications | Dropped on read and transfer. Signatures over resource and component labels still verify. For reference labels, see the `merge` row above. | [#1371](https://github.com/open-component-model/ocm-project/issues/1371) |
 | Routing slips | Kept as a label and transferred, but OCM v2 has no commands for them | |
 
 All tracking issues are in `open-component-model/ocm-project` and collected in the
@@ -339,8 +342,8 @@ The new controllers replace the legacy `ocm-controller`. Both use the API group 
 | `ComponentVersion` | `Repository` and `Component` |
 | `ComponentVersion` with `destination` | `Replication` |
 | `Resource` | `Resource`, with a new schema |
-| `FluxDeployer` | `NamespacedDeployer` for plain manifests. Helm charts stay with a Flux `HelmRelease`. |
-| `ComponentDescriptor`, `Snapshot` | None. The descriptor is in the `Component` status, and there is no in-cluster OCI registry. |
+| `FluxDeployer` | `NamespacedDeployer` for plain YAML or JSON manifests, not tar archives. Helm charts stay with a Flux `HelmRelease`. |
+| `ComponentDescriptor`, `Snapshot` | None. The `Component` status holds only the resolved version and its digest, and there is no in-cluster OCI registry. |
 | `Configuration`, `Localization` | None. Localize at build time or in the `HelmRelease` values. |
 
 `Discovery` is new, and the cluster-scoped `Deployer` is deprecated in favor of `NamespacedDeployer`. For the steps,

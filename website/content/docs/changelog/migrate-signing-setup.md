@@ -178,7 +178,9 @@ Verifiers configure the root certificate, `ca.cert`, as `publicKeyPEMFile` for t
 v1's `--ca-cert`. See [Verify a PEM Certificate Chain]({{< docref "docs/guides/sign/verify-with-pem-certificate-chain.md" >}}).
 
 OCM v1 also accepts `chain.pem`. Signatures that OCM v1 creates with
-`--private-key leaf.priv --public-key chain.pem --ca-cert ca.cert` verify in OCM v1 and OCM v2.
+`--private-key leaf.priv --public-key chain.pem --ca-cert ca.cert` verify in OCM v1 and OCM v2. In OCM v2 the
+verifier's identity needs `algorithm: RSASSA-PKCS1-V1_5`, the v1 default. With `RSASSA-PSS` the verification fails
+with an x509 error.
 
 v1's `--issuer` and `issuers` have no counterpart. OCM v2 trusts the root certificate you configure and checks that
 the `issuer` recorded in the signature names exactly the subject or the issuer of the leaf certificate. OCM v1 also
@@ -198,9 +200,10 @@ record the exact subject and are not affected.
 | Sigstore (`sigstore`, `sigstore-v2`) | Rejected. `ocm verify cv` without `--signature` then fails even if another signature is valid, so pass `--signature` for the others. Re-sign with the [Sigstore signer]({{< docref "docs/guides/sign/sign-with-sigstore.md" >}}). |
 | With an RFC 3161 timestamp | Verifies. See below. |
 
-OCM v2 checks timestamps created by OCM v1 without extra flags. They cover only the descriptor digest, so their time
-does not prove when the signature was made, and OCM v2 does not use it to accept an expired signing certificate.
-`ocm verify cv --insecure-trust-legacy-timestamps` turns that on. It is insecure: a signature created after the
+OCM v2 checks timestamps created by OCM v1 without extra flags. Without TSA root certificates (`TSA/v1alpha1`
+credentials) it checks only their structure. They cover only the descriptor digest, so their time does not prove when
+the signature was made, and OCM v2 does not use it to accept an expired signing certificate. With TSA roots
+configured, `ocm verify cv --insecure-trust-legacy-timestamps` turns that on. It is insecure: a signature created after the
 certificate expired can reuse the timestamp and pass. Use the flag only for component versions you know OCM v1 signed
 while the certificate was valid. See
 [Verify a PEM Certificate Chain]({{< docref "docs/guides/sign/verify-with-pem-certificate-chain.md#verifying-signatures-with-an-rfc-3161-timestamp" >}}).
@@ -260,9 +263,12 @@ signatures stored with it. OCM v1 kept them.
 
 ### Symptom: `signing failed: private key not found`
 
-**Cause:** The key file is missing, or it is a private key encrypted with `ocm create rsakeypair --encrypt`.
+**Cause:** No credential identity matches the signature name and the signer's algorithm, for example an identity
+with `algorithm: RSASSA-PKCS1-V1_5` while the signer uses the default `RSASSA-PSS`. A private key encrypted with
+`ocm create rsakeypair --encrypt` gives the same error. A missing key file gives `failed loading private key PEM`
+instead.
 
-**Fix:** Check the path, or create a new key pair (step 4).
+**Fix:** Match `signature` and `algorithm` in the identity to the signer (step 2), or create a new key pair (step 4).
 
 ### Symptom: `config type "signing.config.ocm.software/v1alpha1" is unknown`
 
