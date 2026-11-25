@@ -31,7 +31,7 @@ import (
 // repository prefix (e.g. "project1") to the basic-auth user and password it requires.
 func newRegistry(t *testing.T, users map[string]authn.Basic) string {
 	t.Helper()
-	reg := registry.New(registry.WithReferrersSupport(true))
+	reg := registry.New()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		for prefix, want := range users {
 			if strings.HasPrefix(r.URL.Path, "/v2/"+prefix+"/") {
@@ -48,11 +48,11 @@ func newRegistry(t *testing.T, users map[string]authn.Basic) string {
 	return server.Listener.Addr().String()
 }
 
-// TestOciTransfer tests building a CV referencing two OCI images stored in a remove registry,
-// the `imageRegistry`. This registry required authentication, and it requires different credentials
+// TestOciTransfer tests building a CV referencing two OCI images stored in a remote registry,
+// the `imageRegistry`. This registry requires authentication, and it requires different credentials
 // for the two images we want to include. The CV is added to the `srcRegistry` and then transported
 // to the `targetRegistry`, including the two OCI images from `imageRegistry`.
-// The test demonstrates setting up an OCM Configuration for authentication and http config (plainHTTP).
+// The test demonstrates setting up an OCM Configuration for authentication and http config (plainHTTP)
 // and transporting the CV.
 func TestOciTransfer(t *testing.T) {
 	ctx := t.Context()
@@ -61,11 +61,11 @@ func TestOciTransfer(t *testing.T) {
 
 	srcRegistry := newRegistry(t, nil)
 	targetRegistry := newRegistry(t, nil)
-	users := map[string]authn.Basic{
+	imageRegistryUsers := map[string]authn.Basic{
 		"project1": {Username: "user1", Password: "password1"},
 		"project2": {Username: "user2", Password: "password2"},
 	}
-	imageRegistry := newRegistry(t, users)
+	imageRegistry := newRegistry(t, imageRegistryUsers)
 	imageHost, imagePort, err := net.SplitHostPort(imageRegistry)
 	r.NoError(err)
 
@@ -107,13 +107,13 @@ configurations:
 	r.NoError(err)
 
 	// Push the image into the two projects on the `imageRegistry`, then prepare
-	// the resource descripter we're going to use in the CV descriptor later.
+	// the resource descriptor we're going to use in the CV descriptor later.
 	img, err := crane.Image(map[string][]byte{"hello.txt": []byte("hello world")})
 	r.NoError(err)
 	var resources []descriptor.Resource
 	for i, project := range []string{"project1", "project2"} {
 		ref := imageRegistry + "/" + project + "/hello:1.0.0"
-		user := users[project]
+		user := imageRegistryUsers[project]
 		r.Error(crane.Push(img, ref, crane.Insecure), "push without credentials must be rejected")
 		r.NoError(crane.Push(img, ref, crane.Insecure, crane.WithAuth(&user)))
 		resources = append(resources, descriptor.Resource{
