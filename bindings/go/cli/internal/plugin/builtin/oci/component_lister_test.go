@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	identityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -15,13 +16,13 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-func TestCTFComponentListerPlugin_Registration(t *testing.T) {
+func TestOCIComponentListerPlugin_Registration(t *testing.T) {
 	// Setup.
 	ctx := t.Context()
 	scheme := runtime.NewScheme()
 	repository.MustAddToScheme(scheme)
 	registry := componentlister.NewComponentListerRegistry(ctx)
-	p := &CTFComponentListerPlugin{}
+	p := NewComponentListerPlugin(nil, nil)
 	require.NoError(t, registry.RegisterInternalComponentListerPlugin(p))
 
 	// Smoke test: try to retrieve a lister for a non-existing CTF repo.
@@ -33,16 +34,16 @@ func TestCTFComponentListerPlugin_Registration(t *testing.T) {
 	require.Contains(t, err.Error(), "path does not exist: "+nonExisting)
 }
 
-func TestCTFComponentListerPlugin_CredentialConsumerIdentity(t *testing.T) {
+func TestOCIComponentListerPlugin_CTFCredentialConsumerIdentity(t *testing.T) {
 	// Setup.
 	ctx := t.Context()
 	scheme := runtime.NewScheme()
 	repository.MustAddToScheme(scheme)
 	registry := componentlister.NewComponentListerRegistry(ctx)
-	p := &CTFComponentListerPlugin{}
+	p := NewComponentListerPlugin(nil, nil)
 	require.NoError(t, registry.RegisterInternalComponentListerPlugin(p))
 
-	// Credentials not supported. An error expected.
+	// Credentials not supported for CTF. An error is expected.
 	ctfSpec := &ctfv1.Repository{}
 	id, err := registry.GetComponentListerCredentialConsumerIdentity(t.Context(), ctfSpec)
 	require.Nil(t, id)
@@ -50,22 +51,46 @@ func TestCTFComponentListerPlugin_CredentialConsumerIdentity(t *testing.T) {
 	require.ErrorIs(t, err, ErrWrongUsage, "expected: %v, got: %v", ErrWrongUsage, err)
 }
 
-func TestCTFComponentListerPlugin_NotCTFSpec(t *testing.T) {
-	p := &CTFComponentListerPlugin{}
+func TestOCIComponentListerPlugin_OCICredentialConsumerIdentity(t *testing.T) {
+	p := NewComponentListerPlugin(nil, nil)
+	ociSpec := &ociv1.Repository{BaseUrl: "ghcr.io", SubPath: "open-component-model/ocm"}
+	id, err := p.GetComponentListerCredentialConsumerIdentity(t.Context(), ociSpec)
+	require.NoError(t, err)
+	require.Equal(t, "ghcr.io", id[runtime.IdentityAttributeHostname])
+	require.Equal(t, "open-component-model/ocm", id[runtime.IdentityAttributePath])
+	require.Equal(t, identityv1.Type, id.GetType())
+}
 
-	// Try to get a lister for a non-CTF repository spec.
-	_, err := p.GetComponentLister(t.Context(), &ociv1.Repository{}, nil)
+func TestOCIComponentListerPlugin_OCISpecBuildsLister(t *testing.T) {
+	p := NewComponentListerPlugin(nil, nil)
+	// A valid OCI spec yields a lister without contacting the registry.
+	ociSpec := &ociv1.Repository{BaseUrl: "ghcr.io", SubPath: "open-component-model/ocm"}
+	lister, err := p.GetComponentLister(t.Context(), ociSpec, nil)
+	require.NoError(t, err)
+	require.NotNil(t, lister)
+}
+
+func TestOCIComponentListerPlugin_UnsupportedSpec(t *testing.T) {
+	p := NewComponentListerPlugin(nil, nil)
+	_, err := p.GetComponentLister(t.Context(), &unsupportedSpec{}, nil)
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrWrongUsage, "expected: %v, got: %v", ErrWrongUsage, err)
 }
 
-func TestCTFComponentListerPlugin_Archive(t *testing.T) {
+// unsupportedSpec is a runtime.Typed the lister plugin does not handle.
+type unsupportedSpec struct{}
+
+func (s *unsupportedSpec) GetType() runtime.Type        { return runtime.Type{} }
+func (s *unsupportedSpec) SetType(runtime.Type)         {}
+func (s *unsupportedSpec) DeepCopyTyped() runtime.Typed { return &unsupportedSpec{} }
+
+func TestOCIComponentListerPlugin_Archive(t *testing.T) {
 	root := getRepoRootBasedOnGit(t)
 	for _, name := range []string{"transport-archive.tar", "transport-archive.tar.gz"} {
 		t.Run(name, func(t *testing.T) {
 			r := require.New(t)
 			path := filepath.Join(root, "bindings", "go", "oci", "ctf", "testdata", "compatibility", "01", name)
-			lister, err := (&CTFComponentListerPlugin{}).GetComponentLister(t.Context(), &ctfv1.Repository{FilePath: path}, nil)
+			lister, err := NewComponentListerPlugin(nil, nil).GetComponentLister(t.Context(), &ctfv1.Repository{FilePath: path}, nil)
 			r.NoError(err)
 			var names []string
 			r.NoError(lister.ListComponents(t.Context(), "", func(found []string) error {
