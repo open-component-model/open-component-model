@@ -106,17 +106,7 @@ configurations:
           - type: OCIRegistry/v1
             hostname: %[3]s
             port: "%[4]s"
-            path: project1/**
-        credentials:
-          - type: Credentials/v1
-            properties:
-              username: user3
-              password: password3
-      - identities:
-          - type: OCIRegistry/v1
-            hostname: %[3]s
-            port: "%[4]s"
-            path: project1
+            path: "{project1,project1/**}"
         credentials:
           - type: Credentials/v1
             properties:
