@@ -552,17 +552,18 @@ func renderTable(w io.Writer, rows []row, showComponent bool, p painter) error {
 	}
 	t.AppendHeader(header)
 	for _, r := range rows {
+		c := categoryColor(r.Category)
 		cells := table.Row{
-			p.paint(text.Bold, orDash(r.Resource)),
-			r.Source,
-			p.paint(categoryColor(r.Category), orDash(r.Category)),
-			orDash(r.Format),
-			orDash(r.Platform),
-			p.paint(text.Faint, orDash(r.Envelope)),
-			p.paint(text.Faint, r.ID),
+			p.paint(orDash(r.Resource), c, text.Bold),
+			p.paint(r.Source, c),
+			p.paint(orDash(r.Category), c),
+			p.paint(orDash(r.Format), c),
+			p.paint(orDash(r.Platform), c),
+			p.paint(orDash(r.Envelope), c),
+			p.paint(r.ID, c),
 		}
 		if showComponent {
-			cells = append(table.Row{p.paint(text.Bold, r.Component)}, cells...)
+			cells = append(table.Row{p.paint(r.Component, c, text.Bold)}, cells...)
 		}
 		t.AppendRow(cells)
 	}
@@ -660,16 +661,24 @@ func leafRows(atts []repository.Attestation, p painter) []tree.Row {
 }
 
 // leafTreeRow is a document leaf: its facets fill the columns, ending in the full digest.
+// The whole row shares the category colour, so one attestation reads as one coloured line.
 func leafTreeRow(a repository.Attestation, p painter) tree.Row {
 	category, format := classify(a)
-	return tree.Row{Cells: []string{p.paint(categoryColor(category), orDash(category)), orDash(format), orDash(a.Platform.String()), p.paint(text.Faint, orDash(envelopeOf(a))), p.paint(text.Faint, a.ID)}}
+	c := categoryColor(category)
+	return tree.Row{Cells: []string{
+		p.paint(orDash(category), c),
+		p.paint(orDash(format), c),
+		p.paint(orDash(a.Platform.String()), c),
+		p.paint(orDash(envelopeOf(a)), c),
+		p.paint(a.ID, c),
+	}}
 }
 
 // innerTreeRow is a containment node (reference, origin or source): its label sits in the
 // first column, the rest stay empty, and its children hang below.
 func innerTreeRow(label string, children []tree.Row, p painter) tree.Row {
 	cells := make([]string, treeColumns)
-	cells[0] = p.paint(text.Bold, label)
+	cells[0] = p.paint(label, text.Bold)
 	return tree.Row{Cells: cells, Children: children}
 }
 
@@ -702,16 +711,16 @@ func orDash(value string) string {
 	return value
 }
 
-// painter paints a cell with an ANSI colour when enabled. The zero value (disabled) and
-// every empty string pass through untouched, so the non-terminal and --no-color paths, and
-// json/yaml, stay plain.
+// painter paints a cell with one or more ANSI attributes when enabled. The zero value
+// (disabled) and every empty string pass through untouched, so the non-terminal and
+// --no-color paths, and json/yaml, stay plain.
 type painter struct{ on bool }
 
-func (p painter) paint(c text.Color, s string) string {
-	if !p.on || s == "" {
+func (p painter) paint(s string, colors ...text.Color) string {
+	if !p.on || s == "" || len(colors) == 0 {
 		return s
 	}
-	return c.Sprint(s)
+	return text.Colors(colors).Sprint(s)
 }
 
 // categoryColor maps a friendly attestation category to its display colour. Unknown or

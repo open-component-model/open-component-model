@@ -200,16 +200,16 @@ func TestRenderTree_ComponentLevelLabelAndRecursion(t *testing.T) {
 func TestColorGate(t *testing.T) {
 	// painter is a pure pass-through when off, so --no-color, a pipe and json/yaml stay plain.
 	off := painter{on: false}
-	assert.Equal(t, "sbom", off.paint(text.FgGreen, "sbom"))
-	assert.Empty(t, off.paint(text.FgGreen, ""))
+	assert.Equal(t, "sbom", off.paint("sbom", text.FgGreen))
+	assert.Empty(t, off.paint("", text.FgGreen))
 
 	// When on, a non-empty cell is wrapped in ANSI (go-pretty colours forced on for the test,
 	// since it otherwise suppresses colour on a non-terminal).
 	text.EnableColors()
 	t.Cleanup(text.DisableColors)
 	on := painter{on: true}
-	assert.Contains(t, on.paint(text.FgGreen, "sbom"), "\x1b[", "an enabled painter emits ANSI")
-	assert.Empty(t, on.paint(text.FgGreen, ""), "an empty cell is never painted")
+	assert.Contains(t, on.paint("sbom", text.FgGreen), "\x1b[", "an enabled painter emits ANSI")
+	assert.Empty(t, on.paint("", text.FgGreen), "an empty cell is never painted")
 
 	// colorEnabled gates on the writer and the flags: a buffer is never a terminal.
 	assert.False(t, colorEnabled(&bytes.Buffer{}, false), "a non-terminal writer never gets colour")
