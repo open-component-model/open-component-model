@@ -217,3 +217,18 @@ func TestColorGate(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	assert.False(t, colorEnabled(&bytes.Buffer{}, false), "NO_COLOR disables colour")
 }
+
+// TestRenderTree_EmptyRendersHeaderOnly pins that a tree/widetree whose filter matched
+// nothing renders the header alone, exactly like the empty table, instead of a bare
+// component node with no attestations under it.
+func TestRenderTree_EmptyRendersHeaderOnly(t *testing.T) {
+	for _, format := range []string{"tree", "widetree"} {
+		t.Run(format, func(t *testing.T) {
+			var buf bytes.Buffer
+			require.NoError(t, renderAttestations(t.Context(), &buf, format, component{Ref: "example.com/app:1.0.0"}, false))
+			out := buf.String()
+			assert.Contains(t, out, "CATEGORY", "the header is still shown")
+			assert.NotContains(t, out, "example.com/app:1.0.0", "an empty result shows no component node")
+		})
+	}
+}

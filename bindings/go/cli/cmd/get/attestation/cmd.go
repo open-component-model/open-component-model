@@ -580,10 +580,15 @@ func renderTable(w io.Writer, rows []row, showComponent bool, p painter) error {
 // by the vertex serializer from a single root vertex.
 func renderTree(ctx context.Context, w io.Writer, root component, p painter) error {
 	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-	if err := graph.WithWriteLock(func(g *dag.DirectedAcyclicGraph[string]) error {
-		return g.AddVertex(root.Ref, map[string]any{syncdag.AttributeValue: root})
-	}); err != nil {
-		return fmt.Errorf("building attestation tree failed: %w", err)
+	// An empty result (nothing matched the filter) renders as the header alone, like the
+	// table and the json/yaml formats. Adding the root vertex anyway would print a bare
+	// component node with no attestations under it, which reads as a false positive.
+	if len(root.Groups) > 0 || len(root.Children) > 0 || root.Repeated {
+		if err := graph.WithWriteLock(func(g *dag.DirectedAcyclicGraph[string]) error {
+			return g.AddVertex(root.Ref, map[string]any{syncdag.AttributeValue: root})
+		}); err != nil {
+			return fmt.Errorf("building attestation tree failed: %w", err)
+		}
 	}
 
 	renderer := tree.New(ctx, graph,
