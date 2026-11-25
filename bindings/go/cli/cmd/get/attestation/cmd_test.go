@@ -96,12 +96,12 @@ func TestFilterByType(t *testing.T) {
 	assert.Len(t, filterByType(atts, []string{"SPDX", "openvex"}), 2, "case-insensitive, union across filters")
 }
 
-func TestRenderTree_EnvelopeChainAndProvenance(t *testing.T) {
+func TestRenderTree_FacetedColumns(t *testing.T) {
 	const bundleDigest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
 	const indexDigest = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
 	groups := []cliattestation.Group{
 		{Label: "name=app", Attestations: []repository.Attestation{
-			// cosign-signed OpenVEX: artifactType bundle, DSSE envelope, openvex predicate.
+			// cosign-signed OpenVEX: a DSSE bundle wrapping an openvex predicate.
 			{
 				Source:        repository.AttestationSourceOCIReferrer,
 				ArtifactType:  artifactSigstoreBundle,
@@ -128,11 +128,18 @@ func TestRenderTree_EnvelopeChainAndProvenance(t *testing.T) {
 	assert.Contains(t, out, "my-ref", "the reference is the tree root")
 	assert.Contains(t, out, "name=app", "the resource is a grouping level")
 	assert.Contains(t, out, "oci-referrer")
-	assert.Contains(t, out, artifactSigstoreBundle, "the outer OCI artifact type is a node")
-	assert.Contains(t, out, "dsse", "the DSSE envelope is a node, so the signed predicate stays visible")
-	assert.Contains(t, out, predicateOpenVEX, "the predicate of the signed document is shown")
-	assert.Contains(t, out, "2026-11-24T15:04:41Z", "the creation timestamp is shown in widetree")
-	assert.Contains(t, out, "linux/amd64", "oci-index attestations are grouped by platform")
-	assert.Contains(t, out, "in-toto", "the in-toto envelope is a node")
+	assert.Contains(t, out, "oci-index")
+	// Facets are columns, not stacked nesting levels.
+	assert.Contains(t, out, "dsse", "the DSSE envelope shows in the ENV column")
+	assert.Contains(t, out, "in-toto", "the in-toto envelope shows in the ENV column")
+	assert.Contains(t, out, "vex", "category of the signed openvex")
+	assert.Contains(t, out, "openvex", "format of the signed openvex")
+	assert.Contains(t, out, "sbom", "category of the index spdx")
+	assert.Contains(t, out, "spdx", "format of the index spdx")
+	assert.Contains(t, out, "linux/amd64", "platform shows in the PLATFORM column")
+	assert.Contains(t, out, "2026-11-24T15:04:41Z", "the creation timestamp shows in widetree")
 	assert.Contains(t, out, bundleDigest, "the tree shows the full digest, like oras discover")
+	// The raw bundle artifactType and predicate URL are no longer nesting nodes; the
+	// friendly category/format replace them in the tree (raw stays in json/yaml).
+	assert.NotContains(t, out, artifactSigstoreBundle, "the raw bundle artifactType is not a tree node")
 }

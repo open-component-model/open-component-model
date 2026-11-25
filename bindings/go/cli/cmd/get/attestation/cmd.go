@@ -1,7 +1,6 @@
 package attestation
 
 import (
-	"cmp"
 	"context"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
@@ -168,7 +167,8 @@ func GetAttestations(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	return renderAttestations(ctx, cmd.OutOrStdout(), format, args[0], filterGroups(groups, typeFilters))
+	componentRef := fmt.Sprintf("%s:%s", desc.Component.Name, desc.Component.Version)
+	return renderAttestations(ctx, cmd.OutOrStdout(), format, componentRef, filterGroups(groups, typeFilters))
 }
 
 // discoverGroups resolves the three selection modes to resource-labelled groups:
@@ -250,41 +250,62 @@ const (
 	resourceTypeVEX        = "vex"
 )
 
-// typeAliases derives friendly filter tokens from an attestation's raw type signals:
-// the concrete format (spdx, cyclonedx, openvex, slsa, cosign, notation, sarif) and the
-// broader group it belongs to (sbom, vex, signature, provenance). It is additive and
-// advisory, used only to widen --type matching, never to relabel or drop. Unknown
-// signals yield no aliases; the attestation stays matchable by raw substring.
-func typeAliases(a repository.Attestation) []string {
+// classify derives the friendly category and format of an attestation from its raw type
+// signals. It is advisory display sugar for the tree and the --type aliases, never stored
+// and never a gate. An unrecognised attestation yields an empty category and its raw type
+// as the format, so nothing is hidden.
+func classify(a repository.Attestation) (category, format string) {
 	pt, at, mt := a.PredicateType, a.ArtifactType, a.MediaType
-	var out []string
 	switch {
 	case pt == repository.PredicateTypeSPDX || mt == repository.MediaTypeSPDXJSON:
-		out = []string{"spdx", "sbom"}
+		return "sbom", "spdx"
 	case pt == repository.PredicateTypeCycloneDX || mt == repository.MediaTypeCycloneDXJSON:
-		out = []string{"cyclonedx", "sbom"}
+		return "sbom", "cyclonedx"
 	case strings.HasPrefix(pt, predicateOpenVEX) || mt == mediaOpenVEX || mt == mediaOpenVEXVnd:
-		out = []string{"openvex", "vex"}
+		return "vex", "openvex"
 	case strings.HasPrefix(pt, predicateSLSA):
-		out = []string{"slsa", "provenance"}
+		return "provenance", "slsa"
 	case at == artifactCosignSig || pt == predicateCosignSig:
-		out = []string{"cosign", "signature"}
+		return "signature", "cosign"
 	case at == artifactNotation:
-		out = []string{"notation", "signature"}
+		return "signature", "notation"
 	case at == mediaSARIF || mt == mediaSARIF:
-		out = []string{"sarif"}
+		return "sarif", ""
+	case at == resourceTypeSBOM:
+		return "sbom", ""
+	case at == resourceTypeVEX:
+		return "vex", ""
+	default:
+		return "", a.Type()
 	}
-	switch at {
-	case resourceTypeSBOM:
-		if !slicesContains(out, "sbom") {
-			out = append(out, "sbom")
-		}
-	case resourceTypeVEX:
-		if !slicesContains(out, "vex") {
-			out = append(out, "vex")
-		}
+}
+
+// typeAliases lists the friendly filter tokens of an attestation (its format and
+// category), used only to widen --type matching. An unrecognised attestation yields none,
+// staying matchable by raw substring.
+func typeAliases(a repository.Attestation) []string {
+	category, format := classify(a)
+	var out []string
+	if format != "" && format != a.Type() {
+		out = append(out, format)
+	}
+	if category != "" {
+		out = append(out, category)
 	}
 	return out
+}
+
+// envelopeOf names the wrapper a document sits in, from metadata alone: a cosign DSSE
+// bundle, a plain in-toto statement, or none.
+func envelopeOf(a repository.Attestation) string {
+	switch {
+	case a.ArtifactType == artifactSigstoreBundle || a.Annotations[annotationDSSEContent] == "dsse-envelope":
+		return "dsse"
+	case a.MediaType == mediaInTotoStatement:
+		return "in-toto"
+	default:
+		return ""
+	}
 }
 
 func slicesContains(s []string, v string) bool {
@@ -416,10 +437,12 @@ func renderTable(w io.Writer, rows []row) error {
 	return nil
 }
 
-// renderTree prints the attestations as a provenance tree: reference -> origin (resource
-// or the component) -> source -> [platform] -> envelope chain -> document. Digests are
-// shown in full, like "oras discover". The whole nested structure is produced by the
-// vertex serializer from a single root vertex.
+// renderTree prints the attestations as a provenance tree. Containment nests (reference
+// -> origin -> source); the orthogonal facets of each document (category, format,
+// platform, envelope, and in widetree the media type and creation time) are columns, not
+// nesting levels, so heterogeneous values never stack in a single column. Digests are
+// shown in full, like "oras discover". The whole structure is produced by the vertex
+// serializer from a single root vertex.
 func renderTree(ctx context.Context, w io.Writer, format, ref string, groups []cliattestation.Group) error {
 	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
 	if err := graph.WithWriteLock(func(g *dag.DirectedAcyclicGraph[string]) error {
@@ -429,9 +452,9 @@ func renderTree(ctx context.Context, w io.Writer, format, ref string, groups []c
 	}
 
 	wide := format == render.OutputFormatWideTree.String()
-	header := []string{"TYPE", "ID"}
+	header := []string{"CATEGORY", "FORMAT", "PLATFORM", "ENV", "ID"}
 	if wide {
-		header = []string{"TYPE", "MEDIA-TYPE", "CREATED", "ID"}
+		header = []string{"CATEGORY", "FORMAT", "PLATFORM", "ENV", "MEDIA-TYPE", "CREATED", "ID"}
 	}
 
 	renderer := tree.New(ctx, graph,
@@ -445,17 +468,27 @@ func renderTree(ctx context.Context, w io.Writer, format, ref string, groups []c
 	return renderer.Render(ctx, w)
 }
 
-// rootTreeRow builds the full nested row tree: a child per origin group, then source,
-// optional platform (oci-index), the envelope chain and the document leaf.
+// treeCols is the number of data columns (after the nesting column) for the tree and
+// widetree layouts.
+func treeCols(wide bool) int {
+	if wide {
+		return 7
+	}
+	return 5
+}
+
+// rootTreeRow nests reference -> origin -> source, each source holding a document leaf per
+// attestation.
 func rootTreeRow(ref string, groups []cliattestation.Group, wide bool) tree.Row {
 	children := make([]tree.Row, 0, len(groups))
 	for _, g := range groups {
-		children = append(children, innerTreeRow(displayLabel(g.Label), sourceRows(g.Attestations, wide), wide))
+		children = append(children, groupRow(displayLabel(g.Label), g.Attestations, wide))
 	}
 	return innerTreeRow(ref, children, wide)
 }
 
-func sourceRows(atts []repository.Attestation, wide bool) []tree.Row {
+// groupRow nests one origin (a resource or the component) over its sources.
+func groupRow(label string, atts []repository.Attestation, wide bool) tree.Row {
 	bySource := map[repository.AttestationSource][]repository.Attestation{}
 	for _, a := range atts {
 		bySource[a.Source] = append(bySource[a.Source], a)
@@ -465,104 +498,55 @@ func sourceRows(atts []repository.Attestation, wide bool) []tree.Row {
 		keys = append(keys, string(s))
 	}
 	sort.Strings(keys)
-
-	rows := make([]tree.Row, 0, len(keys))
+	sources := make([]tree.Row, 0, len(keys))
 	for _, sk := range keys {
-		group := bySource[repository.AttestationSource(sk)]
-		if sk == string(repository.AttestationSourceOCIIndex) && anyHasPlatform(group) {
-			byPlatform := map[string][]repository.Attestation{}
-			for _, a := range group {
-				byPlatform[a.Platform.String()] = append(byPlatform[a.Platform.String()], a)
-			}
-			platformKeys := make([]string, 0, len(byPlatform))
-			for p := range byPlatform {
-				platformKeys = append(platformKeys, p)
-			}
-			sort.Strings(platformKeys)
-			platformRows := make([]tree.Row, 0, len(platformKeys))
-			for _, pk := range platformKeys {
-				platformRows = append(platformRows, innerTreeRow(orDash(pk), envelopeRows(byPlatform[pk], wide), wide))
-			}
-			rows = append(rows, innerTreeRow(sk, platformRows, wide))
-		} else {
-			rows = append(rows, innerTreeRow(sk, envelopeRows(group, wide), wide))
-		}
+		sources = append(sources, innerTreeRow(sk, leafRows(bySource[repository.AttestationSource(sk)], wide), wide))
 	}
-	return rows
+	return innerTreeRow(label, sources, wide)
 }
 
-// envelopeRows renders one chain per attestation, sorted by type then ID. A plain blob is
-// a single leaf; a DSSE bundle or in-toto statement deepens into its wrapper so the signed
-// document's predicate stays visible (unlike oras discover, which collapses them).
-func envelopeRows(atts []repository.Attestation, wide bool) []tree.Row {
+// leafRows renders one document leaf per attestation, sorted so multi-platform entries
+// cluster: by platform, then category, then format, then digest.
+func leafRows(atts []repository.Attestation, wide bool) []tree.Row {
 	sorted := make([]repository.Attestation, len(atts))
 	copy(sorted, atts)
 	sort.Slice(sorted, func(i, j int) bool {
-		if sorted[i].Type() != sorted[j].Type() {
-			return sorted[i].Type() < sorted[j].Type()
+		ci, fi := classify(sorted[i])
+		cj, fj := classify(sorted[j])
+		switch {
+		case sorted[i].Platform.String() != sorted[j].Platform.String():
+			return sorted[i].Platform.String() < sorted[j].Platform.String()
+		case ci != cj:
+			return ci < cj
+		case fi != fj:
+			return fi < fj
+		default:
+			return sorted[i].ID < sorted[j].ID
 		}
-		return sorted[i].ID < sorted[j].ID
 	})
 	rows := make([]tree.Row, 0, len(sorted))
 	for _, a := range sorted {
-		rows = append(rows, chainRow(a, wide))
+		rows = append(rows, leafTreeRow(a, wide))
 	}
 	return rows
 }
 
-// chainRow turns one attestation into its wrapper chain, the document leaf last. The leaf
-// carries the media type, creation timestamp and digest; the wrapper nodes are structure.
-func chainRow(a repository.Attestation, wide bool) tree.Row {
-	labels := envelopeChain(a)
-	node := leafTreeRow(labels[len(labels)-1], a, wide)
-	for i := len(labels) - 2; i >= 0; i-- {
-		node = innerTreeRow(labels[i], []tree.Row{node}, wide)
-	}
-	return node
-}
-
-// envelopeChain lists the wrapper labels from outermost to the document, collapsing
-// trivial single-container cases (a plain blob is just its type).
-func envelopeChain(a repository.Attestation) []string {
-	switch {
-	case a.ArtifactType == artifactSigstoreBundle || a.Annotations[annotationDSSEContent] == "dsse-envelope":
-		return []string{a.ArtifactType, "dsse", cmp.Or(a.PredicateType, "attestation")}
-	case a.MediaType == mediaInTotoStatement:
-		labels := make([]string, 0, 3)
-		if a.ArtifactType != "" && a.ArtifactType != a.MediaType {
-			labels = append(labels, a.ArtifactType)
-		}
-		return append(labels, "in-toto", cmp.Or(a.PredicateType, a.MediaType))
-	default:
-		return []string{a.Type()}
-	}
-}
-
-func anyHasPlatform(atts []repository.Attestation) bool {
-	for _, a := range atts {
-		if a.Platform.String() != "" {
-			return true
-		}
-	}
-	return false
-}
-
-// leafTreeRow is a document leaf: its cells carry the type label, and (in widetree) the
-// media type and creation timestamp, plus the digest.
-func leafTreeRow(label string, a repository.Attestation, wide bool) tree.Row {
+// leafTreeRow is a document leaf: its facets fill the columns, ending in the full digest.
+func leafTreeRow(a repository.Attestation, wide bool) tree.Row {
+	category, format := classify(a)
+	cells := []string{orDash(category), orDash(format), orDash(a.Platform.String()), orDash(envelopeOf(a))}
 	if wide {
-		return tree.Row{Cells: []string{label, orDash(a.MediaType), orDash(a.CreatedAt), a.ID}}
+		cells = append(cells, orDash(a.MediaType), orDash(a.CreatedAt))
 	}
-	return tree.Row{Cells: []string{label, a.ID}}
+	cells = append(cells, a.ID)
+	return tree.Row{Cells: cells}
 }
 
-// innerTreeRow is a grouping node (reference, origin, source, platform or wrapper): its
-// label sits in the first column, the other columns stay empty, children hang below.
+// innerTreeRow is a containment node (reference, origin or source): its label sits in the
+// first column, the rest stay empty, and its children hang below.
 func innerTreeRow(label string, children []tree.Row, wide bool) tree.Row {
-	cells := []string{label, ""}
-	if wide {
-		cells = []string{label, "", "", ""}
-	}
+	cells := make([]string, treeCols(wide))
+	cells[0] = label
 	return tree.Row{Cells: cells, Children: children}
 }
 
