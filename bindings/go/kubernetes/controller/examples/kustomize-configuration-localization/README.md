@@ -22,7 +22,7 @@ set by the shared prerequisites:
 set -eu
 command -v oras >/dev/null 2>&1 || { echo "oras is required for kustomize-configuration-localization" >&2; exit 1; }
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+trap 'rm -r -- "$work"' EXIT
 cp ./component-constructor.yaml "$work/component-constructor.yaml"
 cp ./rgd.yaml ./crossplane-composition.yaml "$work/"
 COPYFILE_DISABLE=1 tar -czf "$work/kustomize.tar.gz" -C ./kustomize .

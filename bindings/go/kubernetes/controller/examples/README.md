@@ -105,7 +105,7 @@ To execute the CLI steps directly instead, use this sequence from the same direc
 
 ```bash
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+trap 'rm -r -- "$work"' EXIT
 "$OCM_CLI" add cv --repository "$work/ctf" --constructor ./component-constructor.yaml
 # For signed examples, run their explicit sign commands below before transferring.
 "$OCM_CLI" transfer cv "ctf::$work/ctf//ocm.software/ocm-k8s-toolkit/examples/$EXAMPLE" \
@@ -463,7 +463,7 @@ For direct CLI publication of v2 instead of the second Task invocation, use a fr
 
 ```bash
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+trap 'rm -r -- "$work"' EXIT
 "$OCM_CLI" add cv --repository "$work/ctf" --constructor ./component-constructor-2.yaml
 "$OCM_CLI" transfer cv "ctf::$work/ctf//ocm.software/ocm-k8s-toolkit/examples/applyset-pruning:2.0.0" \
   "$IMAGE_REGISTRY" --config ./transfer.ocmconfig
