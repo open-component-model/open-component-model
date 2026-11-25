@@ -54,7 +54,6 @@ var (
 	_            ComponentVersionRepository                = (*Repository)(nil)
 	_            repository.OwnershipAwareRepository       = (*Repository)(nil)
 	_            repository.DigestPinnableRepository       = (*Repository)(nil)
-	_            repository.ComponentSignatureCarrier      = (*Repository)(nil)
 	_            repository.ComponentVersionLayoutDetector = (*Repository)(nil)
 	versionRegex                                           = regexp.MustCompile(compref.VersionRegex)
 )
@@ -800,94 +799,6 @@ func (repo *Repository) getStore(ctx context.Context, component string, version 
 		return "", nil, fmt.Errorf("failed to get store for reference: %w", err)
 	}
 	return reference, store, nil
-}
-
-// CarryComponentSignatures copies the referrers of a normalized component version manifest
-// (e.g. cosign signatures and attestations) from source into this repository, except the access
-// referrers OCM regenerates per repository. It does nothing (and logs why) if source is not an
-// OCI repository or the source version does not use the normalized layout. Otherwise the target
-// version must resolve to the same normalized manifest digest, since the copied referrers sign
-// that digest; a mismatch, a failed referrer discovery or a failed copy is an error.
-func (repo *Repository) CarryComponentSignatures(ctx context.Context, source repository.ComponentVersionRepository, component, version string) (err error) {
-	ctx = slogcontext.NewCtx(ctx, repo.logger)
-	done := log.Operation(ctx, "carry component signatures",
-		slog.String("component", component),
-		slog.String("version", version))
-	defer func() {
-		done(err)
-	}()
-
-	src, ok := source.(*Repository)
-	if !ok {
-		slogcontext.Info(ctx, "source is not an OCI repository, no component signatures to carry", slog.String("source", fmt.Sprintf("%T", source)))
-		return nil
-	}
-	srcRef, srcStore, err := src.getStore(ctx, component, version)
-	if err != nil {
-		return fmt.Errorf("open source store: %w", err)
-	}
-	srcDesc, err := srcStore.Resolve(ctx, srcRef)
-	if err != nil {
-		return fmt.Errorf("resolve source component manifest: %w", err)
-	}
-	srcManifest, srcIndex, err := getDescriptorOCIImageManifest(ctx, srcStore, srcDesc)
-	if err != nil {
-		return fmt.Errorf("fetch source component manifest: %w", err)
-	}
-	if layoutOf(&srcManifest, srcIndex) != LayoutNormalized {
-		slogcontext.Info(ctx, "source component version does not use the normalized layout, no component signatures to carry")
-		return nil
-	}
-
-	dstRef, dstStore, err := repo.getStore(ctx, component, version)
-	if err != nil {
-		return fmt.Errorf("open target store: %w", err)
-	}
-	dstDesc, err := dstStore.Resolve(ctx, dstRef)
-	if err != nil {
-		return fmt.Errorf("resolve target component manifest: %w", err)
-	}
-	if srcDesc.Digest != dstDesc.Digest {
-		dstManifest, dstIndex, err := getDescriptorOCIImageManifest(ctx, dstStore, dstDesc)
-		if err != nil {
-			return fmt.Errorf("fetch target component manifest: %w", err)
-		}
-		if layoutOf(&dstManifest, dstIndex) != LayoutNormalized {
-			slogcontext.Warn(ctx, "target component version does not use the normalized layout, signatures of the normalized source are not carried",
-				slog.String("hint", "set componentVersionLayout: normalized in the oci.storage.config.ocm.software/v1alpha1 configuration to keep the normalized layout"))
-			return nil
-		}
-		return fmt.Errorf("target component manifest %s differs from normalized source manifest %s, so its signatures cannot be carried (the target must use the same referrer tracking policy)", dstDesc.Digest, srcDesc.Digest)
-	}
-
-	srcDesc.ArtifactType = descriptor2.ArtifactTypeNormalizedDescriptor
-	predecessors, err := srcStore.Predecessors(ctx, srcDesc)
-	if err != nil {
-		return fmt.Errorf("discover referrers of source component manifest %s: %w", srcDesc.Digest, err)
-	}
-	for _, p := range predecessors {
-		// Registries do not reliably report the artifactType in referrer descriptors.
-		at, err := peekArtifactType(ctx, srcStore, p)
-		if err != nil {
-			return fmt.Errorf("inspect referrer %s: %w", p.Digest, err)
-		}
-		if at == descriptor2.ArtifactTypeAccessDescriptor {
-			continue
-		}
-		exists, err := dstStore.Exists(ctx, p)
-		if err != nil {
-			return fmt.Errorf("check referrer %s in target: %w", p.Digest, err)
-		}
-		if exists {
-			continue
-		}
-		// The subject already exists on the target, so only the referrer's own graph is copied.
-		if err := oras.CopyGraph(ctx, srcStore, dstStore, p, repo.resourceCopyOptions.CopyGraphOptions); err != nil {
-			return fmt.Errorf("failed to carry component referrer %s: %w", p.Digest, err)
-		}
-		slogcontext.Info(ctx, "carried component referrer", slog.String("digest", p.Digest.String()), slog.String("artifactType", at))
-	}
-	return nil
 }
 
 // UploadResource uploads a [*descriptor.Resource] to the repository.
