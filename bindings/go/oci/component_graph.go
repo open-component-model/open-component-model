@@ -16,7 +16,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/internal/log"
 	ocidescriptor "ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
 	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
-	"ocm.software/open-component-model/bindings/go/repository"
 )
 
 // signatureGraph hides access referrers from every walk over the graph. What
@@ -87,31 +86,17 @@ func (repo *Repository) DownloadComponentVersionGraph(ctx context.Context, compo
 		done(err)
 	}()
 
-	reference, store, err := repo.componentVersionStore(ctx, component, version)
+	root, store, err := repo.storedRoot(ctx, component, version)
 	if err != nil {
 		return nil, err
 	}
-	root, err := store.Resolve(ctx, reference)
-	if errors.Is(err, errdef.ErrNotFound) {
-		if pin := repo.pinFor(component); pin != nil {
-			return nil, repo.pinNotFoundError(ctx, pin, version, err)
-		}
-		return nil, errors.Join(repository.ErrNotFound, fmt.Errorf("component version %s:%s not found: %w", component, version, err))
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve reference %q: %w", reference, err)
-	}
-	manifest, index, err := getDescriptorOCIImageManifest(ctx, store, root)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get manifest: %w", err)
-	}
-	if layoutOf(&manifest, index) != LayoutNormalized {
+	if root.layout != LayoutNormalized {
 		return nil, fmt.Errorf("component version %s:%s is not stored in the %s layout, so it has no normalized manifest to transfer with its signature referrers", component, version, LayoutNormalized)
 	}
 
 	return &ocistream.OCIResourceStream{
 		ReadOnlyGraphStorage: signatureGraph{store},
-		Descriptor:           root,
+		Descriptor:           root.descriptor,
 		ExtendedCopyOpts:     repo.extendedCopyGraphOptions(),
 		TempDir:              repo.tempDir,
 		Tags:                 []string{version},
