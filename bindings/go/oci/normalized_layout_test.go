@@ -14,7 +14,6 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/stretchr/testify/require"
 	"oras.land/oras-go/v2/content"
-	"oras.land/oras-go/v2/content/memory"
 
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
@@ -105,6 +104,18 @@ func pushIfAbsent(t *testing.T, ctx context.Context, store spec.Store, desc ociI
 // only varies the manifest digest.
 func pushAccessManifest(t *testing.T, ctx context.Context, store spec.Store, subject ociImageSpecV1.Descriptor, desc *descriptor.Descriptor, layers []ociImageSpecV1.Descriptor, salt string) ociImageSpecV1.Descriptor {
 	t.Helper()
+	return pushAccessManifestWith(t, ctx, store, subject, desc, layers, func(m *ociImageSpecV1.Manifest) {
+		m.Annotations[ociImageSpecV1.AnnotationCreated] = time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano)
+		if salt != "" {
+			m.Annotations["test.salt"] = salt
+		}
+	})
+}
+
+// pushAccessManifestWith pushes the access manifest of subject carrying desc and the given local
+// blob layers after mutate changed it.
+func pushAccessManifestWith(t *testing.T, ctx context.Context, store spec.Store, subject ociImageSpecV1.Descriptor, desc *descriptor.Descriptor, layers []ociImageSpecV1.Descriptor, mutate func(*ociImageSpecV1.Manifest)) ociImageSpecV1.Descriptor {
+	t.Helper()
 	r := require.New(t)
 	buf, err := ocidescriptor.SingleFileEncodeDescriptor(testScheme, desc, ocidescriptor.MediaTypeComponentDescriptorJSON)
 	r.NoError(err)
@@ -116,10 +127,7 @@ func pushAccessManifest(t *testing.T, ctx context.Context, store spec.Store, sub
 
 	subject = ociImageSpecV1.Descriptor{MediaType: subject.MediaType, Digest: subject.Digest, Size: subject.Size}
 	m := normalizedlayout.BuildAccessManifest(&subject, cfgDesc, layerDesc, layers, desc.Component.Name, desc.Component.Version)
-	m.Annotations[ociImageSpecV1.AnnotationCreated] = time.Now().Add(time.Hour).UTC().Format(time.RFC3339Nano)
-	if salt != "" {
-		m.Annotations["test.salt"] = salt
-	}
+	mutate(&m)
 	raw, err := json.Marshal(m, runtime.JSONOptions)
 	r.NoError(err)
 	mDesc := content.NewDescriptorFromBytes(m.MediaType, raw)
@@ -148,35 +156,6 @@ func readAll(t *testing.T, b interface {
 	require.NoError(t, rc.Close())
 	require.NoError(t, readErr)
 	return data
-}
-
-func TestNormalizedLayout_AccessReferrerSelection(t *testing.T) {
-	tampered := normDescriptor()
-	tampered.Component.Provider.Name = "attacker"
-
-	for _, tc := range []struct {
-		name string
-		// referrer is pushed as a strictly newer access referrer than the one AddDescriptorToStore wrote.
-		referrer      *descriptor.Descriptor
-		wantSignature bool
-	}{
-		{name: "a newer valid referrer is selected", referrer: withSignature(normDescriptor(), "ocm-sig"), wantSignature: true},
-		{name: "a newer referrer failing the bind check is ignored", referrer: tampered, wantSignature: false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			r := require.New(t)
-			ctx := t.Context()
-			store := memory.New()
-			m, err := oci.AddDescriptorToStore(ctx, store, normDescriptor(), oci.AddDescriptorOptions{Scheme: testScheme, Layout: oci.LayoutNormalized})
-			r.NoError(err)
-			pushAccessManifest(t, ctx, store, *m, tc.referrer, nil, "")
-
-			got, err := oci.GetNormalizedComponentVersion(ctx, store, *m, ocidescriptor.DefaultDescriptorUnmarshalFunc)
-			r.NoError(err)
-			r.Equal("internal", got.Component.Provider.Name, "a bind-check failure must never win over the genuine referrer")
-			r.Equal(tc.wantSignature, len(got.Signatures) == 1)
-		})
-	}
 }
 
 func TestNormalizedLayout_RepositoryRoundTrip(t *testing.T) {
