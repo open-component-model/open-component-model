@@ -45,6 +45,9 @@ var schemaCTFCarryComponentSignaturesOutput []byte
 //go:embed schemas/CTFCarryComponentSignaturesSpec.schema.json
 var schemaCTFCarryComponentSignaturesSpec []byte
 
+//go:embed schemas/CTFComponentVersionSource.schema.json
+var schemaCTFComponentVersionSource []byte
+
 //go:embed schemas/CTFGetComponentVersion.schema.json
 var schemaCTFGetComponentVersion []byte
 
@@ -102,6 +105,9 @@ var schemaOCICarryComponentSignaturesOutput []byte
 //go:embed schemas/OCICarryComponentSignaturesSpec.schema.json
 var schemaOCICarryComponentSignaturesSpec []byte
 
+//go:embed schemas/OCIComponentVersionSource.schema.json
+var schemaOCIComponentVersionSource []byte
+
 //go:embed schemas/OCIGetComponentVersion.schema.json
 var schemaOCIGetComponentVersion []byte
 
@@ -123,6 +129,18 @@ var schemaOCIGetLocalResourceSpec []byte
 //go:embed schemas/OCILocalBlobSource.schema.json
 var schemaOCILocalBlobSource []byte
 
+//go:embed schemas/TransferCTFComponentVersionToCTF.schema.json
+var schemaTransferCTFComponentVersionToCTF []byte
+
+//go:embed schemas/TransferCTFComponentVersionToCTFSpec.schema.json
+var schemaTransferCTFComponentVersionToCTFSpec []byte
+
+//go:embed schemas/TransferCTFComponentVersionToOCI.schema.json
+var schemaTransferCTFComponentVersionToOCI []byte
+
+//go:embed schemas/TransferCTFComponentVersionToOCISpec.schema.json
+var schemaTransferCTFComponentVersionToOCISpec []byte
+
 //go:embed schemas/TransferCTFLocalBlobToCTFLocalBlob.schema.json
 var schemaTransferCTFLocalBlobToCTFLocalBlob []byte
 
@@ -140,6 +158,9 @@ var schemaTransferCTFLocalBlobToOCILocalBlob []byte
 
 //go:embed schemas/TransferCTFLocalBlobToOCILocalBlobSpec.schema.json
 var schemaTransferCTFLocalBlobToOCILocalBlobSpec []byte
+
+//go:embed schemas/TransferComponentVersionOutput.schema.json
+var schemaTransferComponentVersionOutput []byte
 
 //go:embed schemas/TransferLocalBlobOutput.schema.json
 var schemaTransferLocalBlobOutput []byte
@@ -167,6 +188,18 @@ var schemaTransferOCIArtifactToOCILocalBlob []byte
 
 //go:embed schemas/TransferOCIArtifactToOCILocalBlobSpec.schema.json
 var schemaTransferOCIArtifactToOCILocalBlobSpec []byte
+
+//go:embed schemas/TransferOCIComponentVersionToCTF.schema.json
+var schemaTransferOCIComponentVersionToCTF []byte
+
+//go:embed schemas/TransferOCIComponentVersionToCTFSpec.schema.json
+var schemaTransferOCIComponentVersionToCTFSpec []byte
+
+//go:embed schemas/TransferOCIComponentVersionToOCI.schema.json
+var schemaTransferOCIComponentVersionToOCI []byte
+
+//go:embed schemas/TransferOCIComponentVersionToOCISpec.schema.json
+var schemaTransferOCIComponentVersionToOCISpec []byte
 
 //go:embed schemas/TransferOCILocalBlobToCTFLocalBlob.schema.json
 var schemaTransferOCILocalBlobToCTFLocalBlob []byte
@@ -244,6 +277,11 @@ func (CTFCarryComponentSignaturesOutput) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for CTFCarryComponentSignaturesSpec.
 func (CTFCarryComponentSignaturesSpec) JSONSchema() []byte {
 	return schemaCTFCarryComponentSignaturesSpec
+}
+
+// JSONSchema returns the JSON Schema for CTFComponentVersionSource.
+func (CTFComponentVersionSource) JSONSchema() []byte {
+	return schemaCTFComponentVersionSource
 }
 
 // JSONSchema returns the JSON Schema for CTFGetComponentVersion.
@@ -341,6 +379,11 @@ func (OCICarryComponentSignaturesSpec) JSONSchema() []byte {
 	return schemaOCICarryComponentSignaturesSpec
 }
 
+// JSONSchema returns the JSON Schema for OCIComponentVersionSource.
+func (OCIComponentVersionSource) JSONSchema() []byte {
+	return schemaOCIComponentVersionSource
+}
+
 // JSONSchema returns the JSON Schema for OCIGetComponentVersion.
 func (OCIGetComponentVersion) JSONSchema() []byte {
 	return schemaOCIGetComponentVersion
@@ -376,6 +419,26 @@ func (OCILocalBlobSource) JSONSchema() []byte {
 	return schemaOCILocalBlobSource
 }
 
+// JSONSchema returns the JSON Schema for TransferCTFComponentVersionToCTF.
+func (TransferCTFComponentVersionToCTF) JSONSchema() []byte {
+	return schemaTransferCTFComponentVersionToCTF
+}
+
+// JSONSchema returns the JSON Schema for TransferCTFComponentVersionToCTFSpec.
+func (TransferCTFComponentVersionToCTFSpec) JSONSchema() []byte {
+	return schemaTransferCTFComponentVersionToCTFSpec
+}
+
+// JSONSchema returns the JSON Schema for TransferCTFComponentVersionToOCI.
+func (TransferCTFComponentVersionToOCI) JSONSchema() []byte {
+	return schemaTransferCTFComponentVersionToOCI
+}
+
+// JSONSchema returns the JSON Schema for TransferCTFComponentVersionToOCISpec.
+func (TransferCTFComponentVersionToOCISpec) JSONSchema() []byte {
+	return schemaTransferCTFComponentVersionToOCISpec
+}
+
 // JSONSchema returns the JSON Schema for TransferCTFLocalBlobToCTFLocalBlob.
 func (TransferCTFLocalBlobToCTFLocalBlob) JSONSchema() []byte {
 	return schemaTransferCTFLocalBlobToCTFLocalBlob
@@ -404,6 +467,11 @@ func (TransferCTFLocalBlobToOCILocalBlob) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for TransferCTFLocalBlobToOCILocalBlobSpec.
 func (TransferCTFLocalBlobToOCILocalBlobSpec) JSONSchema() []byte {
 	return schemaTransferCTFLocalBlobToOCILocalBlobSpec
+}
+
+// JSONSchema returns the JSON Schema for TransferComponentVersionOutput.
+func (TransferComponentVersionOutput) JSONSchema() []byte {
+	return schemaTransferComponentVersionOutput
 }
 
 // JSONSchema returns the JSON Schema for TransferLocalBlobOutput.
@@ -449,6 +517,26 @@ func (TransferOCIArtifactToOCILocalBlob) JSONSchema() []byte {
 // JSONSchema returns the JSON Schema for TransferOCIArtifactToOCILocalBlobSpec.
 func (TransferOCIArtifactToOCILocalBlobSpec) JSONSchema() []byte {
 	return schemaTransferOCIArtifactToOCILocalBlobSpec
+}
+
+// JSONSchema returns the JSON Schema for TransferOCIComponentVersionToCTF.
+func (TransferOCIComponentVersionToCTF) JSONSchema() []byte {
+	return schemaTransferOCIComponentVersionToCTF
+}
+
+// JSONSchema returns the JSON Schema for TransferOCIComponentVersionToCTFSpec.
+func (TransferOCIComponentVersionToCTFSpec) JSONSchema() []byte {
+	return schemaTransferOCIComponentVersionToCTFSpec
+}
+
+// JSONSchema returns the JSON Schema for TransferOCIComponentVersionToOCI.
+func (TransferOCIComponentVersionToOCI) JSONSchema() []byte {
+	return schemaTransferOCIComponentVersionToOCI
+}
+
+// JSONSchema returns the JSON Schema for TransferOCIComponentVersionToOCISpec.
+func (TransferOCIComponentVersionToOCISpec) JSONSchema() []byte {
+	return schemaTransferOCIComponentVersionToOCISpec
 }
 
 // JSONSchema returns the JSON Schema for TransferOCILocalBlobToCTFLocalBlob.
