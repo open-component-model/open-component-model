@@ -1,6 +1,6 @@
 ---
 title: "Inspecting Every Attestation Attached to a Component"
-description: "A new 'ocm get attestations' command that merges OCI referrers, BuildKit in-toto attestations, and OCM-local resources into one metadata-only supply-chain inspector."
+description: "A new 'ocm get attestations' command merging OCI referrers, BuildKit in-toto, and OCM-local resources into one metadata-only supply-chain inspector."
 date: 2026-11-25T10:00:00+01:00
 contributors: []
 tags: ["supply-chain", "security", "cli", "attestation"]
