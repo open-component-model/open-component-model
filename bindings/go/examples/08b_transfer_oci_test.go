@@ -116,6 +116,16 @@ configurations:
           - type: OCIRegistry/v1
             hostname: %[3]s
             port: "%[4]s"
+            path: project1
+        credentials:
+          - type: Credentials/v1
+            properties:
+              username: user3
+              password: password3
+      - identities:
+          - type: OCIRegistry/v1
+            hostname: %[3]s
+            port: "%[4]s"
             path: project2/**
         credentials:
           - type: Credentials/v1
@@ -189,7 +199,7 @@ configurations:
 		Components: []transfer.ComponentID{{Component: component, Version: version}},
 		Target: &ocirepositoryspecv1.Repository{
 			Type:    runtime.NewVersionedType(ocirepositoryspecv1.Type, ocirepositoryspecv1.Version),
-			BaseUrl: targetRegistry,
+			BaseUrl: targetRegistry + "/project1", // store components in project1 so this will require authentication as well
 		},
 		Resolver: transfer.NewRepositoryResolver(srcRepo, srcSpec),
 	})
