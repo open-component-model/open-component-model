@@ -362,6 +362,10 @@ type row struct {
 	Platform      string            `json:"platform,omitempty"`
 	Subject       string            `json:"subject,omitempty"`
 	ID            string            `json:"id"`
+	// Derived facets for the table, kept out of json/yaml which carry the raw signals.
+	Category string `json:"-"`
+	Format   string `json:"-"`
+	Envelope string `json:"-"`
 }
 
 func renderAttestations(ctx context.Context, w io.Writer, format, ref string, groups []cliattestation.Group) error {
@@ -373,6 +377,7 @@ func renderAttestations(ctx context.Context, w io.Writer, format, ref string, gr
 	var rows []row
 	for _, g := range groups {
 		for _, a := range g.Attestations {
+			cat, fmtLabel := classify(a)
 			rows = append(rows, row{
 				Resource:      displayLabel(g.Label),
 				Source:        string(a.Source),
@@ -385,6 +390,9 @@ func renderAttestations(ctx context.Context, w io.Writer, format, ref string, gr
 				Platform:      a.Platform.String(),
 				Subject:       a.Digest,
 				ID:            a.ID,
+				Category:      cat,
+				Format:        fmtLabel,
+				Envelope:      envelopeOf(a),
 			})
 		}
 	}
@@ -426,9 +434,9 @@ func renderAttestations(ctx context.Context, w io.Writer, format, ref string, gr
 func renderTable(w io.Writer, rows []row) error {
 	t := table.NewWriter()
 	t.SetOutputMirror(w)
-	t.AppendHeader(table.Row{"RESOURCE", "SOURCE", "TYPE", "MEDIA-TYPE", "PLATFORM", "ID"})
+	t.AppendHeader(table.Row{"RESOURCE", "SOURCE", "CATEGORY", "FORMAT", "PLATFORM", "ENV", "ID"})
 	for _, r := range rows {
-		t.AppendRow(table.Row{orDash(r.Resource), r.Source, r.Type, orDash(r.MediaType), orDash(r.Platform), r.ID})
+		t.AppendRow(table.Row{orDash(r.Resource), r.Source, orDash(r.Category), orDash(r.Format), orDash(r.Platform), orDash(r.Envelope), r.ID})
 	}
 	style := table.StyleLight
 	style.Options.DrawBorder = false
