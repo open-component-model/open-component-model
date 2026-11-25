@@ -214,12 +214,16 @@ and never lists access referrers as versions.
   every manifest from the descriptor. The same applies, with a warning, to a normalized version whose source
   repository specification is unknown to the graph builder.
 * Discovery detects the layout (`repository.ComponentVersionLayoutDetector`) on the artifact the descriptor was read
-  from, and pins a normalized source to that artifact: `source.digest` is the OCI digest pin of a root component
-  version, or else the digest the version tag resolved to during discovery. The node opens the source pinned to that
-  digest (`repository.PinRepository`) and reads `M` and its referrers from that artifact without resolving the tag
-  again. Local blobs of the version are read from the same artifact. If the tag moves to other content while
-  discovery runs, the transfer fails: the pinned artifact is not a normalized manifest, or the bind check below does
-  not pass.
+  from. It pins a normalized source to that artifact if the source repository can resolve a version to a digest
+  (`repository.DigestPinnableRepository`, which OCI registries and CTF archives implement): `source.digest` is the
+  OCI digest pin of a root component version, or else the digest the version tag resolved to during discovery. The
+  node opens the source pinned to that digest (`repository.PinRepository`) and reads `M` and its referrers from that
+  artifact without resolving the tag again. Local blobs of the version are read from the same artifact. If the tag
+  moves to other content while discovery runs, the transfer fails: the pinned artifact is not a normalized manifest,
+  or the bind check below does not pass.
+* A source repository that cannot resolve a digest, such as a wrapper around an OCI repository that does not
+  forward the capability, leaves `source.digest` empty. The node then reads `M` through the version tag. The bind
+  check below still guards that read: an `M` that does not describe the transferred descriptor fails the node.
 * The node copies from the source store into the target store, without an intermediate file. The source hands out
   its store as a graph with `M` as root (`DownloadComponentVersionGraph`), and the target adds the component version
   from it (`AddComponentVersionFromGraph`) in this order:
