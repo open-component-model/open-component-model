@@ -31,13 +31,8 @@ func processRepositoryUploader(resource descriptorv2.Resource, access runtime.Ty
 		"version":   val.Descriptor.Component.Version,
 	}
 	if _, ok := access.(*descriptorv2.LocalBlob); ok {
-		sourceRepo, err := asUnstructured(val.SourceRepository)
-		if err != nil {
-			return fmt.Errorf("cannot convert source repository spec to unstructured: %w", err)
-		}
-		cv["repository"] = sourceRepo.Data
-		if val.Pin != "" {
-			cv["digest"] = val.Pin
+		if cv, err = sourceComponentVersion(val); err != nil {
+			return err
 		}
 	}
 	data := map[string]any{

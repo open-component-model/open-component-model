@@ -2,7 +2,6 @@ package internal
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
@@ -47,17 +46,9 @@ func componentVersionGraphSource(ctx context.Context, val *discoveryValue, toSpe
 		return nil, false, nil
 	}
 
-	sourceRepo, err := asUnstructured(val.SourceRepository)
+	source, err = sourceComponentVersion(val)
 	if err != nil {
-		return nil, false, fmt.Errorf("cannot convert source repository spec to unstructured: %w", err)
-	}
-	source = map[string]any{
-		"repository": sourceRepo.Data,
-		"component":  component,
-		"version":    version,
-	}
-	if val.Pin != "" {
-		source["digest"] = val.Pin
+		return nil, false, err
 	}
 	return source, true, nil
 }
