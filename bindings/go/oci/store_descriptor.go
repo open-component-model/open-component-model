@@ -260,20 +260,32 @@ func addNormalizedLayout(ctx context.Context, store spec.Store, desc *descriptor
 	if err := normalizedlayout.ValidateDigests(desc); err != nil {
 		return nil, err
 	}
+	mDesc, err := pushNormalizedManifest(ctx, store, desc, opts)
+	if err != nil {
+		return nil, err
+	}
+	if err := pushAccessReferrer(ctx, store, mDesc, desc, opts); err != nil {
+		return nil, err
+	}
+	return &mDesc, nil
+}
 
-	component, version := desc.Component.Name, desc.Component.Version
-
+// pushNormalizedManifest builds the normalized manifest M of desc and pushes it with its config
+// and its layer, the normalized descriptor. M depends only on the normalized descriptor (and the
+// referrer tracking policy), so re-adding a version (e.g. to persist an OCM signature) reproduces
+// it and its blobs: all pushes tolerate existing content.
+func pushNormalizedManifest(ctx context.Context, store spec.Store, desc *descriptor.Descriptor, opts AddDescriptorOptions) (ociImageSpecV1.Descriptor, error) {
 	var subject *ociImageSpecV1.Descriptor
 	if opts.ReferrerTrackingPolicy == ReferrerTrackingPolicyByIndexAndSubject {
 		if err := indexv1.CreateIfNotExists(ctx, store); err != nil {
-			return nil, fmt.Errorf("failed to create index: %w", err)
+			return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to create index: %w", err)
 		}
 		subject = &indexv1.Descriptor
 	}
 
 	normBytes, err := normalizedlayout.Normalize(desc)
 	if err != nil {
-		return nil, fmt.Errorf("failed to normalize descriptor: %w", err)
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to normalize descriptor: %w", err)
 	}
 	normLayer := ociImageSpecV1.Descriptor{
 		MediaType: ocidescriptor.MediaTypeComponentDescriptorNormalizedJSON,
@@ -282,8 +294,28 @@ func addNormalizedLayout(ctx context.Context, store spec.Store, desc *descriptor
 	}
 	normConfigRaw, normConfigDesc, err := normalizedlayout.NewNormalizedConfig(normLayer)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal normalized config: %w", err)
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to marshal normalized config: %w", err)
 	}
+	if err := pushIfNotExists(ctx, store, normLayer, normBytes); err != nil {
+		return ociImageSpecV1.Descriptor{}, err
+	}
+	if err := pushIfNotExists(ctx, store, normConfigDesc, normConfigRaw); err != nil {
+		return ociImageSpecV1.Descriptor{}, err
+	}
+
+	m := normalizedlayout.BuildNormalizedManifest(normLayer, normConfigDesc, subject, desc.Component.Name, desc.Component.Version)
+	mDesc, err := pushJSONManifest(ctx, store, m, m.MediaType, m.ArtifactType, m.Annotations)
+	if err != nil {
+		return ociImageSpecV1.Descriptor{}, fmt.Errorf("unable to push normalized manifest: %w", err)
+	}
+	return mDesc, nil
+}
+
+// pushAccessReferrer pushes the access referrer A of the normalized manifest: the full,
+// access-bearing desc with its config, listed together with the local blobs of opts in an image
+// manifest or, if OCI-native local blobs exist, in an image index. The subject of A is normalized.
+func pushAccessReferrer(ctx context.Context, store spec.Store, normalized ociImageSpecV1.Descriptor, desc *descriptor.Descriptor, opts AddDescriptorOptions) error {
+	component, version := desc.Component.Name, desc.Component.Version
 
 	descriptorMediaType := opts.DescriptorEncodingMediaType
 	if descriptorMediaType == "" {
@@ -291,7 +323,7 @@ func addNormalizedLayout(ctx context.Context, store spec.Store, desc *descriptor
 	}
 	descBuf, err := ocidescriptor.SingleFileEncodeDescriptor(opts.Scheme, desc, descriptorMediaType)
 	if err != nil {
-		return nil, fmt.Errorf("failed to encode descriptor: %w", err)
+		return fmt.Errorf("failed to encode descriptor: %w", err)
 	}
 	descBytes := descBuf.Bytes()
 	descLayer := ociImageSpecV1.Descriptor{
@@ -301,56 +333,41 @@ func addNormalizedLayout(ctx context.Context, store spec.Store, desc *descriptor
 	}
 	configRaw, configDesc, err := componentConfig.New(descLayer)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal component config: %w", err)
+		return fmt.Errorf("failed to marshal component config: %w", err)
+	}
+	if err := pushIfNotExists(ctx, store, descLayer, descBytes); err != nil {
+		return err
+	}
+	if err := pushIfNotExists(ctx, store, configDesc, configRaw); err != nil {
+		return err
 	}
 
-	// Re-adding a version (e.g. to persist an OCM signature) reproduces M and its blobs, so all
-	// pushes must tolerate existing content.
-	for _, b := range []struct {
-		desc ociImageSpecV1.Descriptor
-		raw  []byte
-	}{
-		{normLayer, normBytes},
-		{normConfigDesc, normConfigRaw},
-		{descLayer, descBytes},
-		{configDesc, configRaw},
-	} {
-		if err := pushIfNotExists(ctx, store, b.desc, b.raw); err != nil {
-			return nil, err
-		}
-	}
-
-	m := normalizedlayout.BuildNormalizedManifest(normLayer, normConfigDesc, subject, component, version)
-	mDesc, err := pushJSONManifest(ctx, store, m, m.MediaType, m.ArtifactType, m.Annotations)
-	if err != nil {
-		return nil, fmt.Errorf("unable to push normalized manifest: %w", err)
-	}
-	accessSubject := ociImageSpecV1.Descriptor{MediaType: mDesc.MediaType, Digest: mDesc.Digest, Size: mDesc.Size}
+	subject := ociImageSpecV1.Descriptor{MediaType: normalized.MediaType, Digest: normalized.Digest, Size: normalized.Size}
 
 	// Stamp the access referrer with its creation time so a later writer's referrer is preferred on
 	// read. The timestamp makes A content-unique per write, which is intended: unlike M it is never
 	// signed and is regenerated per repository.
 	created := time.Now().UTC().Format(time.RFC3339Nano)
 	if len(opts.AdditionalDescriptorManifests) == 0 {
-		a := normalizedlayout.BuildAccessManifest(&accessSubject, configDesc, descLayer, opts.AdditionalLayers, component, version)
+		a := normalizedlayout.BuildAccessManifest(&subject, configDesc, descLayer, opts.AdditionalLayers, component, version)
 		a.Annotations[ociImageSpecV1.AnnotationCreated] = created
 		if _, err := pushJSONManifest(ctx, store, a, a.MediaType, a.ArtifactType, a.Annotations); err != nil {
-			return nil, fmt.Errorf("unable to push access manifest: %w", err)
+			return fmt.Errorf("unable to push access manifest: %w", err)
 		}
-	} else {
-		inner := normalizedlayout.BuildAccessManifest(nil, configDesc, descLayer, opts.AdditionalLayers, component, version)
-		innerDesc, err := pushJSONManifest(ctx, store, inner, inner.MediaType, inner.ArtifactType, nil)
-		if err != nil {
-			return nil, fmt.Errorf("unable to push access manifest: %w", err)
-		}
-		idx := normalizedlayout.BuildAccessIndex(accessSubject, innerDesc, opts.AdditionalDescriptorManifests, component, version)
-		idx.Annotations[ociImageSpecV1.AnnotationCreated] = created
-		if _, err := pushJSONManifest(ctx, store, idx, idx.MediaType, idx.ArtifactType, idx.Annotations); err != nil {
-			return nil, fmt.Errorf("unable to push access index: %w", err)
-		}
+		return nil
 	}
 
-	return &mDesc, nil
+	inner := normalizedlayout.BuildAccessManifest(nil, configDesc, descLayer, opts.AdditionalLayers, component, version)
+	innerDesc, err := pushJSONManifest(ctx, store, inner, inner.MediaType, inner.ArtifactType, nil)
+	if err != nil {
+		return fmt.Errorf("unable to push access manifest: %w", err)
+	}
+	idx := normalizedlayout.BuildAccessIndex(subject, innerDesc, opts.AdditionalDescriptorManifests, component, version)
+	idx.Annotations[ociImageSpecV1.AnnotationCreated] = created
+	if _, err := pushJSONManifest(ctx, store, idx, idx.MediaType, idx.ArtifactType, idx.Annotations); err != nil {
+		return fmt.Errorf("unable to push access index: %w", err)
+	}
+	return nil
 }
 
 // pushJSONManifest marshals a manifest or index and pushes it unless it already exists.
