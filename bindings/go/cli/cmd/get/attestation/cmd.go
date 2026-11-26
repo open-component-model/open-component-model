@@ -70,17 +70,20 @@ Per resource, attestations are merged from every source:
   2. OCI referrers attached to the resource's artifact (cosign, vexctl, oras, syft, notary, ...).
   3. BuildKit in-toto attestations embedded in the artifact's image index.
 
-This is EXPERIMENTAL and read-only. It lists what exists from metadata only: it does not download
-the documents or verify any signature, and it does not classify types into a fixed vocabulary. The
-TYPE column shows the raw type signal verbatim (in-toto predicate type, else artifact type, else
-media type). Use --type to filter: it matches a substring of any raw type signal, plus friendly
-aliases (for example "sbom" matches spdx and cyclonedx, "signature" matches cosign and notation).
+This is EXPERIMENTAL and read-only. It lists what exists from metadata only: it does not
+download the documents or verify any signature.
 
-The CONTENT-DIGEST column is the digest of the document bytes, read from metadata. Documents with
-identical bytes attached in more than one place share it and are tagged with the same letter (and a
-matching grey tone when colour is on), so duplicates are easy to spot, and the table groups them too.
-The ENVELOPE column is the packaging: none (the bytes are the document itself), dsse (a signed
-DSSE/Sigstore envelope) or in-toto (an in-toto statement).`,
+The tree nests the raw structure: the component or a resource, then the discovery source
+(ocm-local, oci-referrer, oci-index), then each document. An enveloped document (an in-toto
+statement or a Sigstore bundle) is a node named by its envelope media type, with its
+predicate type(s) beneath it; a bare document is a leaf named by its media type. Each leaf
+also carries a friendly TYPE tag (sbom, vex, signature, provenance, sarif) and the digest of
+the document bytes. Documents with identical bytes attached in more than one place share that
+digest and are tagged with the same letter (and a matching grey tone when colour is on), so
+duplicates are easy to spot.
+
+Use --type to filter: it matches a substring of any raw type signal, plus friendly aliases
+(for example "sbom" matches spdx and cyclonedx, "signature" matches cosign and notation).`,
 		Example: `  # The component's own referrers
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0
 
@@ -441,28 +444,20 @@ func anyFilterMatches(filters []string, haystack string, aliases []string) bool 
 	return false
 }
 
-// row is the rendered projection of an Attestation. The table shows the curated columns;
-// JSON and YAML carry the raw type signals, the creation timestamp and the full
-// annotation map too.
+// row is the table projection of one attestation. The table shows the raw type signals
+// (media type, predicate type) plus the one friendly TYPE tag (the classified category),
+// never an aggregated format or envelope. JSON and YAML use the nested model instead.
 type row struct {
-	Component     string            `json:"component,omitempty"`
-	Resource      string            `json:"resource,omitempty"`
-	Source        string            `json:"source"`
-	Type          string            `json:"type"`
-	ArtifactType  string            `json:"artifactType,omitempty"`
-	PredicateType string            `json:"predicateType,omitempty"`
-	MediaType     string            `json:"mediaType,omitempty"`
-	CreatedAt     string            `json:"createdAt,omitempty"`
-	Annotations   map[string]string `json:"annotations,omitempty"`
-	Platform      string            `json:"platform,omitempty"`
-	Subject       string            `json:"subject,omitempty"`
-	ContentDigest string            `json:"contentDigest,omitempty"`
-	ID            string            `json:"id"`
-	Error         string            `json:"error,omitempty"`
-	// Derived facets for the table, kept out of json/yaml which carry the raw signals.
-	Category string `json:"-"`
-	Format   string `json:"-"`
-	Envelope string `json:"-"`
+	Component     string
+	Resource      string
+	Source        string
+	Type          string
+	PredicateType string
+	MediaType     string
+	Platform      string
+	ContentDigest string
+	ID            string
+	Error         string
 }
 
 func renderAttestations(ctx context.Context, w io.Writer, format string, root component, color bool) error {
@@ -471,6 +466,20 @@ func renderAttestations(ctx context.Context, w io.Writer, format string, root co
 	switch format {
 	case render.OutputFormatTree.String(), render.OutputFormatWideTree.String():
 		return renderTree(ctx, w, root, p, marks)
+	case render.OutputFormatJSON.String():
+		data, err := json.Marshal(jsonComponent(root), runtime.JSONOptions, jsontext.WithIndent("  "))
+		if err != nil {
+			return fmt.Errorf("marshalling attestations to json failed: %w", err)
+		}
+		_, err = fmt.Fprintln(w, string(data))
+		return err
+	case render.OutputFormatYAML.String():
+		data, err := sigyaml.Marshal(jsonComponent(root))
+		if err != nil {
+			return fmt.Errorf("marshalling attestations to yaml failed: %w", err)
+		}
+		_, err = w.Write(data)
+		return err
 	}
 
 	// Show the COMPONENT column only when more than one component carries attestations,
@@ -484,30 +493,13 @@ func renderAttestations(ctx context.Context, w io.Writer, format string, root co
 			cmp.Compare(a.Component, b.Component),
 			cmp.Compare(a.Resource, b.Resource),
 			cmp.Compare(a.Source, b.Source),
-			cmp.Compare(a.Type, b.Type),
+			cmp.Compare(a.MediaType, b.MediaType),
+			cmp.Compare(a.PredicateType, b.PredicateType),
 			cmp.Compare(a.Platform, b.Platform),
 			cmp.Compare(a.ID, b.ID),
 		)
 	})
-
-	switch format {
-	case render.OutputFormatJSON.String():
-		data, err := json.Marshal(rows, runtime.JSONOptions, jsontext.WithIndent("  "))
-		if err != nil {
-			return fmt.Errorf("marshalling attestations to json failed: %w", err)
-		}
-		_, err = fmt.Fprintln(w, string(data))
-		return err
-	case render.OutputFormatYAML.String():
-		data, err := sigyaml.Marshal(rows)
-		if err != nil {
-			return fmt.Errorf("marshalling attestations to yaml failed: %w", err)
-		}
-		_, err = w.Write(data)
-		return err
-	default:
-		return renderTable(w, rows, showComponent, p, marks)
-	}
+	return renderTable(w, rows, showComponent, p, marks)
 }
 
 // componentsWithGroups counts the components in the tree that carry at least one
@@ -531,24 +523,17 @@ func flattenRows(c component, showComponent bool) []row {
 	var rows []row
 	for _, g := range c.Groups {
 		for _, a := range g.Attestations {
-			cat, fmtLabel := classify(a)
+			category, _ := classify(a)
 			rows = append(rows, row{
 				Component:     c.Ref,
 				Resource:      resourceLabel(g.Label, c.Ref, showComponent),
 				Source:        string(a.Source),
-				Type:          a.Type(),
-				ArtifactType:  a.ArtifactType,
+				Type:          category,
 				PredicateType: a.PredicateType,
 				MediaType:     a.MediaType,
-				CreatedAt:     a.CreatedAt,
-				Annotations:   a.Annotations,
 				Platform:      a.Platform.String(),
-				Subject:       a.Digest,
-				ID:            a.ID,
 				ContentDigest: a.ContentDigest,
-				Category:      cat,
-				Format:        fmtLabel,
-				Envelope:      envelopeOf(a),
+				ID:            a.ID,
 			})
 		}
 		if g.Err != nil {
@@ -569,7 +554,7 @@ func flattenRows(c component, showComponent bool) []row {
 func renderTable(w io.Writer, rows []row, showComponent bool, p painter, marks dupMarks) error {
 	t := table.NewWriter()
 	t.SetOutputMirror(w)
-	header := table.Row{"RESOURCE", "SOURCE", "CATEGORY", "FORMAT", "PLATFORM", "ENVELOPE", "CONTENT-DIGEST"}
+	header := table.Row{"RESOURCE", "SOURCE", "TYPE", "MEDIA-TYPE", "PREDICATE-TYPE", "PLATFORM", "CONTENT-DIGEST"}
 	if showComponent {
 		header = append(table.Row{"COMPONENT"}, header...)
 	}
@@ -578,10 +563,10 @@ func renderTable(w io.Writer, rows []row, showComponent bool, p painter, marks d
 		cells := table.Row{
 			p.paint(orDash(r.Resource), text.Bold),
 			r.Source,
-			p.paint(orDash(r.Category), categoryColor(r.Category)),
-			orDash(displayFormat(r.Format)),
+			p.paint(orDash(r.Type), categoryColor(r.Type)),
+			orDash(r.MediaType),
+			orDash(r.PredicateType),
 			orDash(r.Platform),
-			envelopeLabel(r.Envelope),
 			contentDigestCell(r.ContentDigest, marks, p),
 		}
 		if r.Error != "" {
@@ -604,27 +589,30 @@ func renderTable(w io.Writer, rows []row, showComponent bool, p painter, marks d
 	return nil
 }
 
-// renderTree prints the attestations as a provenance tree. Containment nests (reference
-// -> origin -> source); the orthogonal facets of each document (category, format, platform,
-// envelope) are columns, not nesting levels, so heterogeneous values never stack in a single
-// column. Digests are shown in full, like "oras discover". The whole structure is produced
-// by the vertex serializer from a single root vertex.
+// renderTree prints the attestations as a pure provenance tree: component -> origin
+// (component-level or a resource) -> source -> document. An enveloped document is a node
+// named by its envelope media type with its predicate leaves below; a bare document is a
+// leaf named by its media type. The only columns after the nesting are the friendly TYPE
+// tag and the full content digest; there is no header. An empty result prints one line.
 func renderTree(ctx context.Context, w io.Writer, root component, p painter, marks dupMarks) error {
-	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
-	// An empty result (nothing matched the filter) renders as the header alone, like the
-	// table and the json/yaml formats. Adding the root vertex anyway would print a bare
-	// component node with no attestations under it, which reads as a false positive.
-	if len(root.Groups) > 0 || len(root.Children) > 0 || root.Repeated {
-		if err := graph.WithWriteLock(func(g *dag.DirectedAcyclicGraph[string]) error {
-			return g.AddVertex(root.Ref, map[string]any{syncdag.AttributeValue: root})
-		}); err != nil {
-			return fmt.Errorf("building attestation tree failed: %w", err)
-		}
+	if len(root.Groups) == 0 && len(root.Children) == 0 && !root.Repeated {
+		_, err := fmt.Fprintf(w, "no attestations found for %s\n", root.Ref)
+		return err
 	}
-
+	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
+	if err := graph.WithWriteLock(func(g *dag.DirectedAcyclicGraph[string]) error {
+		return g.AddVertex(root.Ref, map[string]any{syncdag.AttributeValue: root})
+	}); err != nil {
+		return fmt.Errorf("building attestation tree failed: %w", err)
+	}
+	// A pure provenance tree: no header, and no ● child indicator (every inner node is a
+	// grouping, so marking them adds noise rather than meaning).
+	style := tree.DefaultTreeStyle
+	style.CharChildIndicator = ""
 	renderer := tree.New(ctx, graph,
 		tree.WithRoots(root.Ref),
-		tree.WithHeader[string]("CATEGORY", "FORMAT", "PLATFORM", "ENVELOPE", "CONTENT-DIGEST"),
+		tree.WithoutHeader[string](),
+		tree.WithTreeStyle[string](style),
 		tree.WithVertexSerializerFunc(func(v *dag.Vertex[string]) (tree.Row, error) {
 			c, ok := v.Attributes[syncdag.AttributeValue].(component)
 			if !ok {
@@ -636,81 +624,281 @@ func renderTree(ctx context.Context, w io.Writer, root component, p painter, mar
 	return renderer.Render(ctx, w)
 }
 
-// treeColumns is the number of data columns (after the nesting column) of the tree layout.
-const treeColumns = 5
-
-// componentTreeRow nests one component over its attestation groups (component-level and,
-// in widetree, one per resource) and then its referenced components, so recursion deepens
-// the tree. A Repeated component is a leaf marker pointing at its earlier appearance.
+// componentTreeRow nests one component over its origins (component-level and, in widetree,
+// one per resource) and then its referenced components. A Repeated component is a leaf
+// marker pointing at its earlier appearance.
 func componentTreeRow(c component, p painter, marks dupMarks) tree.Row {
 	if c.Repeated {
-		return innerTreeRow(c.Ref+"  (shown above)", nil, p)
+		return nodeRow(c.Ref+"  (shown above)", nil, p)
 	}
 	children := make([]tree.Row, 0, len(c.Groups)+len(c.Children))
 	for _, g := range c.Groups {
-		if g.Err != nil {
-			children = append(children, errorGroupRow(treeGroupLabel(g.Label), g.Err, p))
-			continue
-		}
-		children = append(children, groupRow(treeGroupLabel(g.Label), g.Attestations, p, marks))
+		children = append(children, originRow(g, p, marks))
 	}
 	for _, child := range c.Children {
 		children = append(children, componentTreeRow(child, p, marks))
 	}
-	return innerTreeRow(c.Ref, children, p)
+	return nodeRow(c.Ref, children, p)
 }
 
-// groupRow nests one origin (a resource or the component) over its sources.
-func groupRow(label string, atts []repository.Attestation, p painter, marks dupMarks) tree.Row {
-	bySource := map[repository.AttestationSource][]repository.Attestation{}
-	for _, a := range atts {
-		bySource[a.Source] = append(bySource[a.Source], a)
+// originRow nests one origin (a resource or the component level) over its sources. A failed
+// origin shows a single warning leaf naming the image that could not be discovered.
+func originRow(g cliattestation.Group, p painter, marks dupMarks) tree.Row {
+	label := treeGroupLabel(g.Label)
+	if g.Err != nil {
+		return nodeRow(label, []tree.Row{failedLeaf(g, p)}, p)
 	}
-	keys := make([]string, 0, len(bySource))
-	for s := range bySource {
-		keys = append(keys, string(s))
+	buckets := groupSources(g.Attestations)
+	sources := make([]tree.Row, 0, len(buckets))
+	for _, sb := range buckets {
+		sources = append(sources, sourceRow(sb, p, marks))
 	}
-	slices.Sort(keys)
-	sources := make([]tree.Row, 0, len(keys))
-	for _, sk := range keys {
-		sources = append(sources, innerTreeRow(sk, leafRows(bySource[repository.AttestationSource(sk)], p, marks), p))
-	}
-	return innerTreeRow(label, sources, p)
+	return nodeRow(label, sources, p)
 }
 
-// leafRows renders one document leaf per attestation, sorted so multi-platform entries
-// cluster: by platform, then category, then format, then digest.
-func leafRows(atts []repository.Attestation, p painter, marks dupMarks) []tree.Row {
-	sorted := slices.Clone(atts)
-	slices.SortFunc(sorted, func(a, b repository.Attestation) int {
-		ca, fa := classify(a)
-		cb, fb := classify(b)
-		return cmp.Or(
-			cmp.Compare(a.Platform.String(), b.Platform.String()),
-			cmp.Compare(ca, cb),
-			cmp.Compare(fa, fb),
-			cmp.Compare(a.ID, b.ID),
-		)
-	})
-	rows := make([]tree.Row, 0, len(sorted))
-	for _, a := range sorted {
-		rows = append(rows, leafTreeRow(a, p, marks))
+// sourceRow nests one source over its documents: an envelope node (named by the envelope
+// media type) with its predicate leaves, or a bare document leaf.
+func sourceRow(sb sourceBucket, p painter, marks dupMarks) tree.Row {
+	children := make([]tree.Row, 0, len(sb.children))
+	for _, ch := range sb.children {
+		if ch.isRaw {
+			children = append(children, leafRow(orDash(ch.raw.MediaType), ch.raw, p, marks))
+			continue
+		}
+		preds := make([]tree.Row, 0, len(ch.predicates))
+		for _, a := range ch.predicates {
+			preds = append(preds, leafRow(predicateLabel(a), a, p, marks))
+		}
+		children = append(children, nodeRow(ch.mediaType, preds, p))
 	}
-	return rows
+	return nodeRow(sb.source, children, p)
 }
 
-// leafTreeRow is a document leaf: its facets fill the columns, ending in the full digest.
-// Only the category carries colour (the one semantic token); the digest is dimmed and the
-// rest stays neutral, so a row reads as a single accent rather than a block of colour.
-func leafTreeRow(a repository.Attestation, p painter, marks dupMarks) tree.Row {
-	category, format := classify(a)
+// nodeRow is a containment node (component, origin, source or envelope): its bold label in
+// the first column, the TYPE and CONTENT-DIGEST columns empty, children nested below.
+func nodeRow(label string, children []tree.Row, p painter) tree.Row {
+	return tree.Row{Cells: []string{p.paint(label, text.Bold), "", ""}, Children: children}
+}
+
+// leafRow is a document leaf: its label (media type for a bare document, predicate type
+// with any platform for an enveloped one), the friendly TYPE tag coloured, and the content
+// digest with its duplicate marker.
+func leafRow(label string, a repository.Attestation, p painter, marks dupMarks) tree.Row {
+	category, _ := classify(a)
 	return tree.Row{Cells: []string{
-		p.paint(orDash(category), categoryColor(category)),
-		orDash(displayFormat(format)),
-		orDash(a.Platform.String()),
-		envelopeLabel(envelopeOf(a)),
+		label,
+		p.paint(category, categoryColor(category)),
 		contentDigestCell(a.ContentDigest, marks, p),
 	}}
+}
+
+// predicateLabel is the label of a predicate leaf under an envelope: its predicate type,
+// with the platform appended in parentheses when the source carries one (so per-platform
+// in-toto statements stay distinct).
+func predicateLabel(a repository.Attestation) string {
+	label := orDash(a.PredicateType)
+	if plat := a.Platform.String(); plat != "" {
+		label += " (" + plat + ")"
+	}
+	return label
+}
+
+// failedLeaf is the warning leaf of an origin whose discovery failed: it names the image
+// reference that could not be reached (falling back to the ocm identity) and the concise
+// reason. The full error stays in the WARN log and the json/yaml "error" field.
+func failedLeaf(g cliattestation.Group, p painter) tree.Row {
+	msg := "⚠ attestation discovery failed"
+	if ref := cmp.Or(g.Reference, g.Label); ref != "" {
+		msg += " for " + ref
+	}
+	if g.Err != nil {
+		msg += ": " + conciseError(g.Err.Error())
+	}
+	return tree.Row{Cells: []string{p.paint(msg, text.FgYellow), "", ""}}
+}
+
+// sourceBucket is the documents of one source under an origin, as the ordered children the
+// tree and the json both render: either an envelope node (predicates grouped by envelope
+// media type) or a bare document leaf.
+type sourceBucket struct {
+	source   string
+	children []sourceChild
+}
+
+// sourceChild is one child of a source: an envelope (predicates non-empty, named by
+// mediaType) or a raw document leaf (isRaw, the attestation in raw).
+type sourceChild struct {
+	mediaType  string
+	predicates []repository.Attestation
+	raw        repository.Attestation
+	isRaw      bool
+}
+
+// groupSources partitions a group's attestations by source, then within each source splits
+// enveloped documents (envelopeOf != "", grouped under their envelope media type) from bare
+// documents (a leaf each). It is the single grouping the tree and the json share, so the
+// view and the machine output cannot disagree. Sources are sorted by name, children by
+// media type, predicates by (type, predicate type, platform).
+func groupSources(atts []repository.Attestation) []sourceBucket {
+	bySource := map[string][]repository.Attestation{}
+	var order []string
+	for _, a := range atts {
+		s := string(a.Source)
+		if _, ok := bySource[s]; !ok {
+			order = append(order, s)
+		}
+		bySource[s] = append(bySource[s], a)
+	}
+	slices.Sort(order)
+	buckets := make([]sourceBucket, 0, len(order))
+	for _, s := range order {
+		envByType := map[string][]repository.Attestation{}
+		var envOrder []string
+		var children []sourceChild
+		for _, a := range bySource[s] {
+			if envelopeOf(a) != "" {
+				label := cmp.Or(a.MediaType, a.ArtifactType)
+				if _, ok := envByType[label]; !ok {
+					envOrder = append(envOrder, label)
+				}
+				envByType[label] = append(envByType[label], a)
+				continue
+			}
+			children = append(children, sourceChild{mediaType: a.MediaType, raw: a, isRaw: true})
+		}
+		for _, mt := range envOrder {
+			preds := slices.Clone(envByType[mt])
+			slices.SortFunc(preds, comparePredicates)
+			children = append(children, sourceChild{mediaType: mt, predicates: preds})
+		}
+		slices.SortFunc(children, compareSourceChild)
+		buckets = append(buckets, sourceBucket{source: s, children: children})
+	}
+	return buckets
+}
+
+func comparePredicates(a, b repository.Attestation) int {
+	ca, _ := classify(a)
+	cb, _ := classify(b)
+	return cmp.Or(
+		cmp.Compare(ca, cb),
+		cmp.Compare(a.PredicateType, b.PredicateType),
+		cmp.Compare(a.Platform.String(), b.Platform.String()),
+		cmp.Compare(a.ID, b.ID),
+	)
+}
+
+func compareSourceChild(a, b sourceChild) int {
+	return cmp.Or(
+		cmp.Compare(a.mediaType, b.mediaType),
+		cmp.Compare(a.raw.ID, b.raw.ID),
+	)
+}
+
+// jsonTree mirrors the tree for json/yaml: a component over its origins, each origin over
+// its sources, each source over its documents. A document is either bare (its raw fields)
+// or an envelope (enveloped true, named by its media type, with its predicates). Nothing
+// aggregated is emitted beyond the one friendly "type" tag the view also shows.
+type jsonTree struct {
+	Component string       `json:"component"`
+	Repeated  bool         `json:"repeated,omitzero"`
+	Origins   []jsonOrigin `json:"origins,omitempty"`
+	Children  []jsonTree   `json:"children,omitempty"`
+}
+
+type jsonOrigin struct {
+	Origin    string       `json:"origin"`
+	Reference string       `json:"reference,omitempty"`
+	Error     string       `json:"error,omitempty"`
+	Sources   []jsonSource `json:"sources,omitempty"`
+}
+
+type jsonSource struct {
+	Source    string    `json:"source"`
+	Documents []jsonDoc `json:"documents"`
+}
+
+type jsonDoc struct {
+	Enveloped     bool              `json:"enveloped,omitzero"`
+	Type          string            `json:"type,omitempty"`
+	MediaType     string            `json:"mediaType,omitempty"`
+	ArtifactType  string            `json:"artifactType,omitempty"`
+	PredicateType string            `json:"predicateType,omitempty"`
+	Platform      string            `json:"platform,omitempty"`
+	Subject       string            `json:"subject,omitempty"`
+	ContentDigest string            `json:"contentDigest,omitempty"`
+	CreatedAt     string            `json:"createdAt,omitempty"`
+	Annotations   map[string]string `json:"annotations,omitempty"`
+	ID            string            `json:"id,omitempty"`
+	Predicates    []jsonDoc         `json:"predicates,omitempty"`
+}
+
+// jsonComponent builds the nested machine model from the component tree, using the same
+// groupSources partitioning as the tree view.
+func jsonComponent(c component) jsonTree {
+	out := jsonTree{Component: c.Ref, Repeated: c.Repeated}
+	for _, g := range c.Groups {
+		out.Origins = append(out.Origins, jsonOriginOf(g))
+	}
+	for _, child := range c.Children {
+		out.Children = append(out.Children, jsonComponent(child))
+	}
+	return out
+}
+
+func jsonOriginOf(g cliattestation.Group) jsonOrigin {
+	o := jsonOrigin{Origin: treeGroupLabel(g.Label), Reference: g.Reference}
+	if g.Err != nil {
+		o.Error = g.Err.Error()
+		return o
+	}
+	for _, sb := range groupSources(g.Attestations) {
+		s := jsonSource{Source: sb.source}
+		for _, ch := range sb.children {
+			if ch.isRaw {
+				s.Documents = append(s.Documents, rawDoc(ch.raw))
+				continue
+			}
+			doc := jsonDoc{Enveloped: true, MediaType: ch.mediaType}
+			for _, a := range ch.predicates {
+				doc.Predicates = append(doc.Predicates, predicateDoc(a))
+			}
+			s.Documents = append(s.Documents, doc)
+		}
+		o.Sources = append(o.Sources, s)
+	}
+	return o
+}
+
+func rawDoc(a repository.Attestation) jsonDoc {
+	category, _ := classify(a)
+	return jsonDoc{
+		Type:          category,
+		MediaType:     a.MediaType,
+		ArtifactType:  a.ArtifactType,
+		PredicateType: a.PredicateType,
+		Platform:      a.Platform.String(),
+		Subject:       a.Digest,
+		ContentDigest: a.ContentDigest,
+		CreatedAt:     a.CreatedAt,
+		Annotations:   a.Annotations,
+		ID:            a.ID,
+	}
+}
+
+func predicateDoc(a repository.Attestation) jsonDoc {
+	category, _ := classify(a)
+	return jsonDoc{
+		Type:          category,
+		ArtifactType:  a.ArtifactType,
+		PredicateType: a.PredicateType,
+		Platform:      a.Platform.String(),
+		Subject:       a.Digest,
+		ContentDigest: a.ContentDigest,
+		CreatedAt:     a.CreatedAt,
+		Annotations:   a.Annotations,
+		ID:            a.ID,
+	}
 }
 
 // dupMark is the visible marker a content digest gets when it appears more than once: a
@@ -788,40 +976,6 @@ func contentDigestCell(digest string, marks dupMarks, p painter) string {
 	return p.paint(digest, text.Faint)
 }
 
-// envelopeLabel names the packaging of a document for display: "none" for a bare document
-// (the bytes are the document itself), else the envelope kind (dsse, in-toto).
-func envelopeLabel(envelope string) string {
-	if envelope == "" {
-		return "none"
-	}
-	return envelope
-}
-
-// displayFormat is the FORMAT cell. It blanks the envelope's own media type (an in-toto
-// statement or a Sigstore bundle), which is not a document format and already shows in the
-// ENVELOPE column, so FORMAT never echoes the envelope when the inner format is unknown.
-func displayFormat(format string) string {
-	switch format {
-	case mediaInTotoStatement, artifactSigstoreBundle:
-		return ""
-	}
-	return format
-}
-
-// errorGroupRow renders an origin whose discovery failed: the origin label over a single
-// warning leaf, so the resource stays visible and the reason is in the tree, not only a log.
-func errorGroupRow(label string, err error, p painter) tree.Row {
-	return innerTreeRow(label, []tree.Row{errorLeafRow(err, p)}, p)
-}
-
-// errorLeafRow is a warning leaf carrying a concise discovery error in the first column.
-// The full error stays in the WARN log and in the json/yaml "error" field.
-func errorLeafRow(err error, p painter) tree.Row {
-	cells := make([]string, treeColumns)
-	cells[0] = p.paint("⚠ discovery failed: "+conciseError(err.Error()), text.FgYellow)
-	return tree.Row{Cells: cells}
-}
-
 // conciseError is the root-cause tail of a wrapped error (the last ": "-delimited segment),
 // so a long discovery error does not blow up a tree column or table cell. The full chain
 // remains in the log and the machine-readable output.
@@ -830,14 +984,6 @@ func conciseError(msg string) string {
 		return msg[i+2:]
 	}
 	return msg
-}
-
-// innerTreeRow is a containment node (reference, origin or source): its label sits in the
-// first column, the rest stay empty, and its children hang below.
-func innerTreeRow(label string, children []tree.Row, p painter) tree.Row {
-	cells := make([]string, treeColumns)
-	cells[0] = p.paint(label, text.Bold)
-	return tree.Row{Cells: cells, Children: children}
 }
 
 // resourceLabel is the RESOURCE cell for a group: the resource identity, or for the

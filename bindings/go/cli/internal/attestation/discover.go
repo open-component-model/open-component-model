@@ -32,6 +32,11 @@ const defaultConcurrency = 4
 type Group struct {
 	Label        string
 	Attestations []repository.Attestation
+	// Reference is the artifact location of a resource origin (the access
+	// imageReference), shown when its discovery fails so the failing image is
+	// named rather than only its ocm identity. Empty for the component-level
+	// group and for accesses that expose no image reference.
+	Reference string
 	// Err is set when discovery for this origin failed. The group is then kept with no
 	// attestations so the origin (a resource, or the component) stays visible and the
 	// failure is reported in the output rather than only in a log line.
@@ -75,16 +80,17 @@ func DiscoverAll(ctx context.Context, req Request, concurrency int) ([]Group, er
 		eg.Go(func() error {
 			resReq := req
 			resReq.Resource = &req.Descriptor.Component.Resources[i]
+			reference := accessReference(resReq.Resource)
 			atts, err := Discover(gctx, resReq)
 			if err != nil {
 				req.Logger.Warn("discovering resource attestations failed",
 					slog.String("resource", resReq.Resource.ToIdentity().String()),
 					slog.Any("error", err))
 				errs[i+1] = err
-				slots[i+1] = Group{Label: resReq.Resource.ToIdentity().String(), Err: err}
+				slots[i+1] = Group{Label: resReq.Resource.ToIdentity().String(), Reference: reference, Err: err}
 				return nil // best-effort: a failed resource never cancels the others
 			}
-			slots[i+1] = Group{Label: resReq.Resource.ToIdentity().String(), Attestations: atts}
+			slots[i+1] = Group{Label: resReq.Resource.ToIdentity().String(), Reference: reference, Attestations: atts}
 			return nil
 		})
 	}
@@ -311,4 +317,26 @@ func accessLocalReference(res *descriptor.Resource) string {
 		return ""
 	}
 	return probe.LocalReference
+}
+
+// accessReference reads the artifact location of a resource's access (the OCI
+// imageReference) from its metadata, without downloading the blob. Empty when the
+// access declares none (for example a local blob). It names the failing image when a
+// resource's attestation discovery fails.
+func accessReference(res *descriptor.Resource) string {
+	access := res.GetAccess()
+	if access == nil {
+		return ""
+	}
+	data, err := json.Marshal(access, runtime.JSONOptions)
+	if err != nil {
+		return ""
+	}
+	var probe struct {
+		ImageReference string `json:"imageReference"`
+	}
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return ""
+	}
+	return probe.ImageReference
 }

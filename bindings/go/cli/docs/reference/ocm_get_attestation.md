@@ -30,17 +30,20 @@ Per resource, attestations are merged from every source:
   2. OCI referrers attached to the resource's artifact (cosign, vexctl, oras, syft, notary, ...).
   3. BuildKit in-toto attestations embedded in the artifact's image index.
 
-This is EXPERIMENTAL and read-only. It lists what exists from metadata only: it does not download
-the documents or verify any signature, and it does not classify types into a fixed vocabulary. The
-TYPE column shows the raw type signal verbatim (in-toto predicate type, else artifact type, else
-media type). Use --type to filter: it matches a substring of any raw type signal, plus friendly
-aliases (for example "sbom" matches spdx and cyclonedx, "signature" matches cosign and notation).
+This is EXPERIMENTAL and read-only. It lists what exists from metadata only: it does not
+download the documents or verify any signature.
 
-The CONTENT-DIGEST column is the digest of the document bytes, read from metadata. Documents with
-identical bytes attached in more than one place share it and are tagged with the same letter (and a
-matching grey tone when colour is on), so duplicates are easy to spot, and the table groups them too.
-The ENVELOPE column is the packaging: none (the bytes are the document itself), dsse (a signed
-DSSE/Sigstore envelope) or in-toto (an in-toto statement).
+The tree nests the raw structure: the component or a resource, then the discovery source
+(ocm-local, oci-referrer, oci-index), then each document. An enveloped document (an in-toto
+statement or a Sigstore bundle) is a node named by its envelope media type, with its
+predicate type(s) beneath it; a bare document is a leaf named by its media type. Each leaf
+also carries a friendly TYPE tag (sbom, vex, signature, provenance, sarif) and the digest of
+the document bytes. Documents with identical bytes attached in more than one place share that
+digest and are tagged with the same letter (and a matching grey tone when colour is on), so
+duplicates are easy to spot.
+
+Use --type to filter: it matches a substring of any raw type signal, plus friendly aliases
+(for example "sbom" matches spdx and cyclonedx, "signature" matches cosign and notation).
 
 ```
 ocm get attestation {reference} [flags]

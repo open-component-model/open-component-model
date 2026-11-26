@@ -54,6 +54,8 @@ type Renderer[T cmp.Ordered] struct {
 	// The roots are optional. If not provided, the Renderer will
 	// dynamically determine the roots from the DirectedAcyclicGraph.
 	roots []T
+	// headerless suppresses the header row when set.
+	headerless bool
 	// The graph from which the tree is rendered.
 	graph *syncdag.SyncedDirectedAcyclicGraph[T]
 }
@@ -77,13 +79,19 @@ func New[T cmp.Ordered](ctx context.Context, graph *syncdag.SyncedDirectedAcycli
 		slog.DebugContext(ctx, "no roots provided, dynamically determining roots from graph")
 	}
 
+	style := DefaultTreeStyle
+	if options.TreeStyle != nil {
+		style = *options.TreeStyle
+	}
+
 	return &Renderer[T]{
 		tableWriter:      table.NewWriter(),
 		vertexSerializer: options.VertexSerializer,
 		header:           options.Header,
-		style:            DefaultTreeStyle,
+		style:            style,
 		tableStyle:       defaultTableStyle(),
 		roots:            options.Roots,
+		headerless:       options.Headerless,
 		graph:            graph,
 	}
 }
@@ -94,7 +102,9 @@ func (t *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
 	defer t.tableWriter.ResetHeaders()
 	defer t.tableWriter.ResetRows()
 	t.tableWriter.SetStyle(t.tableStyle)
-	t.tableWriter.AppendHeader(nestingRow(NestingColumn, t.header))
+	if !t.headerless {
+		t.tableWriter.AppendHeader(nestingRow(NestingColumn, t.header))
+	}
 
 	roots := t.roots
 	if len(roots) == 0 {
