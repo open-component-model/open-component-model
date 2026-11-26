@@ -1321,3 +1321,93 @@ func stripCertBlocks(pemWithChain string) string {
 	}
 	return strings.Join(out, "\n")
 }
+
+func Test_RSA_Sign_PEM_Records_Issuer(t *testing.T) {
+	h, err := New(v1alpha1.Scheme, false)
+	require.NoError(t, err)
+	d := digestHex(crypto.SHA256, []byte("hello world"))
+	c := buildChain(t)
+	rootPath := writeCertsPEM(t, t.TempDir(), "root.pem", c.root)
+
+	oidEmail := []int{1, 2, 840, 113549, 1, 9, 1}
+	oidUID := []int{0, 9, 2342, 19200300, 100, 1, 1}
+
+	// wantFull: the full subject must be recorded. wantOmitted: the issuer must
+	// be omitted. Neither: either outcome is acceptable as long as Verify passes.
+	tests := []struct {
+		name        string
+		subject     pkix.Name
+		wantFull    bool
+		wantOmitted bool
+	}{
+		{name: "plain", subject: pkix.Name{CommonName: "leaf"}, wantFull: true},
+		{name: "specials", subject: pkix.Name{CommonName: `a,b+c="d"\e<f>;#g `, Organization: []string{"Acme, Inc."}}, wantFull: true},
+		{name: "unicode", subject: pkix.Name{CommonName: "Jürgen 署名"}, wantFull: true},
+		{name: "serial and multi OU", subject: pkix.Name{CommonName: "x", SerialNumber: "42", OrganizationalUnit: []string{"a", "b"}}},
+		{name: "street and postal", subject: pkix.Name{CommonName: "x", StreetAddress: []string{"Main St 1"}, PostalCode: []string{"12345"}, Country: []string{"DE"}}},
+		{name: "emailAddress", subject: pkix.Name{CommonName: "x", ExtraNames: []pkix.AttributeTypeAndValue{{Type: oidEmail, Value: "a@b.c"}}}, wantFull: true},
+		{name: "uid", subject: pkix.Name{CommonName: "x", ExtraNames: []pkix.AttributeTypeAndValue{{Type: oidUID, Value: "jdoe"}}}, wantFull: true},
+		{name: "trailing space CN", subject: pkix.Name{CommonName: "signer "}},
+		{name: "trailing space last RDN", subject: pkix.Name{CommonName: "signer", Country: []string{"DE "}}},
+		{name: "non-string attribute", subject: pkix.Name{CommonName: "x", ExtraNames: []pkix.AttributeTypeAndValue{{Type: []int{1, 2, 3, 4}, Value: 42}}}, wantOmitted: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			leafKey := mustKey(t)
+			tmpl := &x509.Certificate{
+				SerialNumber: mustRand128(t),
+				Subject:      tc.subject,
+				NotBefore:    time.Now().Add(-time.Hour),
+				NotAfter:     time.Now().Add(24 * time.Hour),
+				KeyUsage:     x509.KeyUsageDigitalSignature,
+			}
+			der, err := x509.CreateCertificate(rand.Reader, tmpl, c.interm, &leafKey.PublicKey, c.intermKey)
+			require.NoError(t, err)
+			leaf, err := x509.ParseCertificate(der)
+			require.NoError(t, err)
+
+			dir := t.TempDir()
+			privPath := filepath.Join(dir, "leaf.key")
+			writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(leafKey))
+			creds := &rsacredentialsv1.RSACredentials{
+				Type:              rsacredentialsv1.VersionedType,
+				PrivateKeyPEMFile: privPath,
+				PublicKeyPEMFile:  writeCertsPEM(t, dir, "chain.pem", leaf, c.interm),
+			}
+
+			si, err := h.Sign(t.Context(), d, &v1alpha1.Config{
+				SignatureAlgorithm:      v1alpha1.AlgorithmRSASSAPSS,
+				SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
+			}, creds)
+			require.NoError(t, err)
+			switch {
+			case tc.wantFull:
+				require.Equal(t, leaf.Subject.String(), si.Issuer)
+				require.NotEqual(t, leaf.Issuer.String(), si.Issuer)
+			case tc.wantOmitted:
+				require.Empty(t, si.Issuer)
+			default:
+				require.Contains(t, []string{leaf.Subject.String(), ""}, si.Issuer)
+			}
+
+			require.NoError(t, h.Verify(t.Context(), descruntime.Signature{Digest: d, Signature: si}, nil,
+				&rsacredentialsv1.RSACredentials{Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: rootPath}))
+		})
+	}
+
+	t.Run("plain leaves issuer empty", func(t *testing.T) {
+		dir := t.TempDir()
+		privPath := filepath.Join(dir, "leaf.key")
+		writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
+		si, err := h.Sign(t.Context(), d, &v1alpha1.Config{
+			SignatureAlgorithm:      v1alpha1.AlgorithmRSASSAPSS,
+			SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPlain,
+		}, &rsacredentialsv1.RSACredentials{
+			Type:              rsacredentialsv1.VersionedType,
+			PrivateKeyPEMFile: privPath,
+			PublicKeyPEMFile:  writeCertsPEM(t, dir, "chain.pem", c.leaf, c.interm),
+		})
+		require.NoError(t, err)
+		require.Empty(t, si.Issuer)
+	})
+}

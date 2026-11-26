@@ -58,3 +58,36 @@ func TestMatch_CommonNameMismatch(t *testing.T) {
 	err := dn.Match(n, p)
 	require.EqualError(t, err, `common name "alice" does not match "bob"`)
 }
+
+func TestMatch_ExtraNamesAgainstParsedCertificateNames(t *testing.T) {
+	email := pkix.AttributeTypeAndValue{Type: []int{1, 2, 840, 113549, 1, 9, 1}, Value: "a@b.c"}
+	// A name parsed from a certificate carries non-standard attributes in Names only.
+	cert := pkix.Name{
+		CommonName: "x",
+		Names: []pkix.AttributeTypeAndValue{
+			{Type: []int{2, 5, 4, 3}, Value: "x"},
+			email,
+		},
+	}
+	p, err := dn.Parse("CN=x,1.2.840.113549.1.9.1=a@b.c")
+	require.NoError(t, err)
+	require.NoError(t, dn.Equal(p, cert))
+
+	other, err := dn.Parse("CN=x,1.2.840.113549.1.9.1=other@b.c")
+	require.NoError(t, err)
+	require.ErrorContains(t, dn.Match(cert, other), "missing extra attribute")
+}
+
+func TestEqual_CertificateExtraAttributesAreSymmetric(t *testing.T) {
+	cert := pkix.Name{
+		CommonName: "x",
+		Names: []pkix.AttributeTypeAndValue{
+			{Type: []int{2, 5, 4, 3}, Value: "x"},
+			{Type: []int{1, 2, 840, 113549, 1, 9, 1}, Value: "a@b.c"},
+		},
+	}
+	p, err := dn.Parse("CN=x")
+	require.NoError(t, err)
+	require.ErrorContains(t, dn.Equal(p, cert), "missing extra attribute")
+	require.ErrorContains(t, dn.Equal(cert, p), "missing extra attribute")
+}

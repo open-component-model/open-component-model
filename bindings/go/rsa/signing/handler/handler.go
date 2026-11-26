@@ -119,11 +119,17 @@ func (h *Handler) Sign(
 			return descruntime.SignatureInfo{}, fmt.Errorf("read certificate chain: %w", err)
 		}
 		pem := rsasignature.SignatureBytesToPem(string(algorithm), rawSig, chain...)
-		return descruntime.SignatureInfo{
+		info := descruntime.SignatureInfo{
 			Algorithm: string(algorithm),
 			MediaType: v1alpha1.MediaTypePEM,
 			Value:     string(pem),
-		}, nil
+		}
+		// Mirror OCM v1 and record the signer's identity (the leaf's subject DN),
+		// omitting it when the DN cannot round-trip through our own verifier.
+		if len(chain) > 0 {
+			info.Issuer = issuerForLeafCert(chain[0])
+		}
+		return info, nil
 	case v1alpha1.SignatureEncodingPolicyPlain:
 		fallthrough
 	default:
@@ -429,6 +435,23 @@ func verifyIssuerForLeafCert(signed descruntime.Signature, leaf *x509.Certificat
 
 	return fmt.Errorf("issuer mismatch: %q matches neither the subject %q nor the issuer %q of the signing certificate: %w",
 		want.String(), leaf.Subject.String(), leaf.Issuer.String(), subjectErr)
+}
+
+// issuerForLeafCert renders the leaf's Subject as the signature issuer,
+// mirroring OCM v1. The candidate is run through verifyIssuerForLeafCert itself,
+// and "" is returned when it does not round-trip (e.g. attribute values Go can
+// only render as hex, or escaped trailing spaces the verifier trims), so Sign
+// never records an issuer that this handler's own Verify rejects.
+func issuerForLeafCert(leaf *x509.Certificate) string {
+	iss := leaf.Subject.String()
+	if strings.TrimSpace(iss) == "" {
+		return ""
+	}
+	sig := descruntime.Signature{Signature: descruntime.SignatureInfo{Issuer: iss}}
+	if verifyIssuerForLeafCert(sig, leaf) != nil {
+		return ""
+	}
+	return iss
 }
 
 // baseIdentity builds a typed RSA credential consumer identity.

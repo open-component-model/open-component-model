@@ -155,8 +155,9 @@ func Equal(a, b pkix.Name) error {
 // All scalar fields (CommonName, SerialNumber) must match exactly if set
 // in p. All slice fields (Country, Province, Locality, PostalCode,
 // StreetAddress, Organization, OrganizationalUnit) must contain at least
-// the values listed in p. ExtraNames in p must all be present in n with
-// matching OIDs and values.
+// the values listed in p. Non-standard attributes of p (its ExtraNames or,
+// for names parsed from a certificate, its Names) must all be present in n
+// with matching OIDs and values.
 //
 // Match returns nil if n covers p, otherwise a descriptive error.
 // It does not require n and p to be identical; that check is provided by Equal.
@@ -187,9 +188,10 @@ func Match(n, p pkix.Name) error {
 		}
 	}
 
+	have := extraAttributes(n)
 outer:
-	for _, w := range p.ExtraNames {
-		for _, h := range n.ExtraNames {
+	for _, w := range extraAttributes(p) {
+		for _, h := range have {
 			if w.Type.Equal(h.Type) && w.Value == h.Value {
 				continue outer
 			}
@@ -197,6 +199,38 @@ outer:
 		return fmt.Errorf("missing extra attribute %v=%v", w.Type, w.Value)
 	}
 	return nil
+}
+
+// standardNameOIDs are the attributes crypto/x509/pkix maps onto dedicated
+// pkix.Name fields; every other attribute only appears in Names/ExtraNames.
+var standardNameOIDs = []asn1.ObjectIdentifier{
+	{2, 5, 4, 3},  // CN
+	{2, 5, 4, 5},  // serialNumber
+	{2, 5, 4, 6},  // C
+	{2, 5, 4, 7},  // L
+	{2, 5, 4, 8},  // ST
+	{2, 5, 4, 9},  // street
+	{2, 5, 4, 10}, // O
+	{2, 5, 4, 11}, // OU
+	{2, 5, 4, 17}, // postalCode
+}
+
+// extraAttributes returns the attributes of n that have no dedicated pkix.Name
+// field. A name parsed from a certificate carries them in Names (ExtraNames is
+// only populated for names built for marshaling), whereas a name produced by
+// Parse carries them in ExtraNames, so both must be consulted.
+func extraAttributes(n pkix.Name) []pkix.AttributeTypeAndValue {
+	out := append([]pkix.AttributeTypeAndValue(nil), n.ExtraNames...)
+names:
+	for _, a := range n.Names {
+		for _, std := range standardNameOIDs {
+			if a.Type.Equal(std) {
+				continue names
+			}
+		}
+		out = append(out, a)
+	}
+	return out
 }
 
 // stringToOID parses dotted decimal into asn1.ObjectIdentifier.
