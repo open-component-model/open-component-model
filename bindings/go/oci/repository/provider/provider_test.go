@@ -1,6 +1,7 @@
 package provider_test
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -284,4 +285,68 @@ func TestWithHTTPConfig_PerHostPlainHTTP(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestProvider_RejectsComponentNameMapping(t *testing.T) {
+	t.Parallel()
+	prov := provider.NewComponentVersionRepositoryProvider()
+
+	tests := []struct {
+		name    string
+		spec    runtime.Typed
+		wantErr string
+	}{
+		{
+			name: "typed sha256-digest",
+			spec: &ocirepospecv1.Repository{
+				Type:                 runtime.NewVersionedType(ocirepospecv1.Type, ocirepospecv1.Version),
+				BaseUrl:              "http://127.0.0.1:5055",
+				SubPath:              "ocm",
+				ComponentNameMapping: "sha256-digest",
+			},
+			wantErr: "sha256-digest",
+		},
+		{
+			name: "unstructured sha256-digest",
+			spec: &runtime.Unstructured{Data: map[string]any{
+				"type":                 "OCIRepository/v1",
+				"baseUrl":              "http://127.0.0.1:5055",
+				"subPath":              "ocm",
+				"componentNameMapping": "sha256-digest",
+			}},
+			wantErr: "sha256-digest",
+		},
+		{
+			name: "unknown mapping",
+			spec: &ocirepospecv1.Repository{
+				Type:                 runtime.NewVersionedType(ocirepospecv1.Type, ocirepospecv1.Version),
+				BaseUrl:              "http://127.0.0.1:5055",
+				ComponentNameMapping: "bogus",
+			},
+			wantErr: "bogus",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := prov.GetComponentVersionRepository(t.Context(), tt.spec, nil)
+			require.ErrorContains(t, err, tt.wantErr)
+			require.ErrorContains(t, err, "componentNameMapping")
+			require.ErrorIs(t, err, errors.ErrUnsupported)
+
+			_, err = prov.GetComponentVersionRepositoryCredentialConsumerIdentity(t.Context(), tt.spec)
+			require.ErrorContains(t, err, "componentNameMapping")
+			require.ErrorIs(t, err, errors.ErrUnsupported)
+		})
+	}
+
+	t.Run("urlPath accepted", func(t *testing.T) {
+		t.Parallel()
+		_, err := prov.GetComponentVersionRepository(t.Context(), &ocirepospecv1.Repository{
+			Type:                 runtime.NewVersionedType(ocirepospecv1.Type, ocirepospecv1.Version),
+			BaseUrl:              "http://127.0.0.1:5055",
+			ComponentNameMapping: "urlPath",
+		}, nil)
+		require.NoError(t, err)
+	})
 }

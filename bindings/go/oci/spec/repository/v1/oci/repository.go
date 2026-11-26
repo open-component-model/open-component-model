@@ -1,6 +1,9 @@
 package oci
 
 import (
+	"errors"
+	"fmt"
+
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -57,6 +60,34 @@ type Repository struct {
 	//     BaseUrl="ghcr.io/open-component-model/ocm" + SubPath=""
 	//     → Auto-extracts to: BaseUrl="ghcr.io", SubPath="open-component-model/ocm"
 	SubPath string `json:"subPath,omitempty"`
+	// ComponentNameMapping is accepted for compatibility with OCM v1 specifications.
+	// Only the default mapping (empty or "urlPath") is supported. The deprecated
+	// "sha256-digest" mapping is rejected, see [ComponentNameMappingSHA256Digest].
+	ComponentNameMapping string `json:"componentNameMapping,omitempty"`
+}
+
+const (
+	// ComponentNameMappingURLPath is the default mapping: component names are used as repository path.
+	ComponentNameMappingURLPath = "urlPath"
+	// ComponentNameMappingSHA256Digest is the deprecated OCM v1 mapping that stores components
+	// under the sha256 digest of their name. It is not supported.
+	ComponentNameMappingSHA256Digest = "sha256-digest"
+)
+
+// ValidateComponentNameMapping returns an error if the spec requests an unsupported component name mapping.
+// The error wraps [errors.ErrUnsupported], so that callers trying several repositories (such as fallback
+// resolvers) can skip this one instead of aborting.
+func (spec *Repository) ValidateComponentNameMapping() error {
+	switch spec.ComponentNameMapping {
+	case "", ComponentNameMappingURLPath:
+		return nil
+	case ComponentNameMappingSHA256Digest:
+		return fmt.Errorf("componentNameMapping %q: %w: it is a deprecated OCM v1 mapping that "+
+			"stores components under the sha256 digest of their name; re-transfer the component versions "+
+			"with the default %q mapping", spec.ComponentNameMapping, errors.ErrUnsupported, ComponentNameMappingURLPath)
+	default:
+		return fmt.Errorf("componentNameMapping %q: %w: only %q is supported", spec.ComponentNameMapping, errors.ErrUnsupported, ComponentNameMappingURLPath)
+	}
 }
 
 func (spec *Repository) String() string {
