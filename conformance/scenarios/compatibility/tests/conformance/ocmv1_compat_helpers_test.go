@@ -56,7 +56,7 @@ func runOCMv2Command(t *testing.T, configPath string, arguments ...string) []byt
 func readCompatDescriptor(t *testing.T, configPath, reference string) ocmv1Descriptor {
 	t.Helper()
 	r := require.New(t)
-	output := runOCMv2Command(t, configPath, "get", "cv", reference, "-o", "json")
+	output := runOCMv2Command(t, configPath, "get", "cv", reference, "--detail", "full", "-o", "json")
 	var descriptors []ocmv1Descriptor
 	r.NoError(json.Unmarshal(output, &descriptors))
 	r.Len(descriptors, 1)
