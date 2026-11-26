@@ -42,6 +42,11 @@ const (
 	// over versioned labels; mapping it to v4alpha3 (which filters reference
 	// labels signing-only) breaks verification of v3 signatures that carry
 	// reference labels.
+	//
+	// One difference remains: legacy v3 keeps null-valued entries such as a
+	// signed label with value: null, which v4alpha2 drops. v4alpha2 stays
+	// byte-frozen so its recorded digests keep verifying; Verify checks a
+	// digest recorded as LegacyV3 against v4alpha2.NormaliseLegacyV3 instead.
 	LegacyV3 = "jsonNormalisation/v3"
 )
 
@@ -87,7 +92,7 @@ func Hash(name string) (crypto.Hash, error) {
 // name.
 func Digest(desc *descruntime.Descriptor, normalisationAlgorithm, hashAlgorithm string) (*descruntime.Digest, error) {
 	normalisationAlgorithm, _ = Resolve(normalisationAlgorithm)
-	sum, hash, err := sum(desc, normalisationAlgorithm, hashAlgorithm)
+	sum, hash, err := sum(registered(normalisationAlgorithm), desc, hashAlgorithm)
 	if err != nil {
 		return nil, err
 	}
@@ -102,9 +107,30 @@ func Digest(desc *descruntime.Descriptor, normalisationAlgorithm, hashAlgorithm 
 // algorithms recorded in expected and compares it with expected.Value (hex,
 // case-insensitive). A mismatch, including a value that is not hex, wraps
 // ErrDigestMismatch.
+//
+// A digest recorded as LegacyV3 was minted by legacy OCM v1, which keeps
+// null-valued entries such as a signed label with value: null. It is verified
+// against v4alpha2.NormaliseLegacyV3, and, failing that, against the v4alpha2
+// bytes it has always been verified against, so no digest that verified before
+// stops verifying. The two differ only for a descriptor with a null-valued
+// entry. Digest never records LegacyV3 (it labels such digests v4alpha2), so
+// minting is unaffected.
 func Verify(desc *descruntime.Descriptor, expected descruntime.Digest) error {
-	normalisationAlgorithm, _ := Resolve(expected.NormalisationAlgorithm)
-	fresh, _, err := sum(desc, normalisationAlgorithm, expected.HashAlgorithm)
+	if expected.NormalisationAlgorithm == LegacyV3 {
+		err := verify(v4alpha2.NormaliseLegacyV3, desc, expected)
+		if !errors.Is(err, ErrDigestMismatch) {
+			return err
+		}
+		if fallback := verify(registered(v4alpha2.Algorithm), desc, expected); fallback == nil {
+			return nil
+		}
+		return err
+	}
+	return verify(registered(expected.NormalisationAlgorithm), desc, expected)
+}
+
+func verify(normalise normaliseFunc, desc *descruntime.Descriptor, expected descruntime.Digest) error {
+	fresh, _, err := sum(normalise, desc, expected.HashAlgorithm)
 	if err != nil {
 		return err
 	}
@@ -114,8 +140,18 @@ func Verify(desc *descruntime.Descriptor, expected descruntime.Digest) error {
 	return nil
 }
 
-func sum(desc *descruntime.Descriptor, normalisationAlgorithm, hashAlgorithm string) ([]byte, crypto.Hash, error) {
-	normalised, err := normalisation.Normalise(desc, normalisationAlgorithm)
+type normaliseFunc func(*descruntime.Descriptor) ([]byte, error)
+
+// registered returns the registered normalisation algorithm, alias resolved.
+func registered(normalisationAlgorithm string) normaliseFunc {
+	normalisationAlgorithm, _ = Resolve(normalisationAlgorithm)
+	return func(desc *descruntime.Descriptor) ([]byte, error) {
+		return normalisation.Normalise(desc, normalisationAlgorithm)
+	}
+}
+
+func sum(normalise normaliseFunc, desc *descruntime.Descriptor, hashAlgorithm string) ([]byte, crypto.Hash, error) {
+	normalised, err := normalise(desc)
 	if err != nil {
 		return nil, 0, fmt.Errorf("normalising component version failed: %w", err)
 	}

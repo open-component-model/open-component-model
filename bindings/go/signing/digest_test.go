@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"crypto/sha256"
 	"encoding/hex"
 	"log/slog"
 	"testing"
@@ -323,4 +324,33 @@ func TestVerifyDigestMatchesDescriptor_LegacyAliasDoesNotWarn(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	r.NoError(VerifyDigestMatchesDescriptor(t.Context(), d, descruntime.Signature{Name: "s", Digest: *dg}, logger))
 	r.Empty(logs.String())
+}
+
+// A signature OCM v1 minted with jsonNormalisation/v3 over a signed label with
+// value: null covers "value":null. It must verify; it did not while the v3
+// label was rewritten to v4alpha2 (which drops null values) before verifying.
+func TestVerifyDigestMatchesDescriptor_LegacyNullLabelValue(t *testing.T) {
+	r := require.New(t)
+	logger := slog.New(slog.DiscardHandler)
+	d := &descruntime.Descriptor{Component: descruntime.Component{
+		ComponentMeta: descruntime.ComponentMeta{ObjectMeta: descruntime.ObjectMeta{
+			Name: "acme.org/null", Version: "1.0.0",
+			Labels: []descruntime.Label{{Name: "foo", Value: []byte(`null`), Signing: true}},
+		}},
+		Provider: descruntime.Provider{Name: "p"},
+	}}
+
+	v1Bytes, err := v4alpha2.NormaliseLegacyV3(d)
+	r.NoError(err)
+	r.Contains(string(v1Bytes), `{"name":"foo","signing":true,"value":null}`)
+	sum := sha256.Sum256(v1Bytes)
+	v3 := descruntime.Digest{HashAlgorithm: crypto.SHA256.String(), NormalisationAlgorithm: LegacyNormalisationAlgo, Value: hex.EncodeToString(sum[:])}
+	r.NoError(VerifyDigestMatchesDescriptor(t.Context(), d, descruntime.Signature{Name: "v1", Digest: v3}, logger))
+
+	// A signature OCM v2 minted with the v3 alias records v4alpha2 and keeps verifying.
+	recorded, err := GenerateDigest(t.Context(), d, logger, LegacyNormalisationAlgo, crypto.SHA256.String())
+	r.NoError(err)
+	r.Equal(v4alpha2.Algorithm, recorded.NormalisationAlgorithm)
+	r.NotEqual(v3.Value, recorded.Value)
+	r.NoError(VerifyDigestMatchesDescriptor(t.Context(), d, descruntime.Signature{Name: "v2", Digest: *recorded}, logger))
 }

@@ -21,6 +21,14 @@
 // v4alpha2 is a separate registered algorithm; v4alpha1 stays frozen so existing
 // signatures keep verifying.
 //
+// Null values: legacy v3 keeps a null-valued map entry, such as a signed label
+// with value: null (at any depth of the value, and on reference labels), as
+// "name":null; the registered v4alpha2 algorithm drops it, as every
+// v4alpha* algorithm does. v4alpha2 is not changed, because OCM v2 records
+// digests minted with the jsonNormalisation/v3 alias as v4alpha2. Instead,
+// NormaliseLegacyV3 produces the v3 bytes, and only digests that record
+// "jsonNormalisation/v3" are verified against it (see algorithms.Verify).
+//
 // Known gap: legacy v3 emits reference labels unfiltered, so a reference
 // label's merge attribute is part of its signed bytes (at every other position
 // only name, version, value and signing are signed). Neither v2.Label nor

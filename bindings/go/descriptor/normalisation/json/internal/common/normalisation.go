@@ -27,13 +27,19 @@ const (
 // the shared three-step body of the v4 algorithm family; callers supply only the
 // version-specific rules.
 func Normalise(cd *descruntime.Descriptor, rules jcs.TransformationRules) ([]byte, error) {
+	return NormaliseWith(jcs.Type, cd, rules)
+}
+
+// NormaliseWith is Normalise with an explicit JCS normalisation instance, e.g.
+// jcs.KeepNulls.
+func NormaliseWith(n jcs.Normalisation, cd *descruntime.Descriptor, rules jcs.TransformationRules) ([]byte, error) {
 	scheme := runtime.NewScheme(runtime.WithAllowUnknown())
 	desc, err := descruntime.ConvertToV2(scheme, cd)
 	if err != nil {
 		return nil, err
 	}
 	defaultComponent(desc)
-	return jcs.Normalise(desc, rules)
+	return jcs.NormaliseWith(n, desc, rules)
 }
 
 // defaultComponent sets default values for various fields in the v2 descriptor

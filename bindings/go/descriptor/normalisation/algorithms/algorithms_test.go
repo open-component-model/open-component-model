@@ -254,3 +254,69 @@ func TestLogNonDefaultHonoursLevel(t *testing.T) {
 	algorithms.LogNonDefaultDigest(t.Context(), logger, slog.LevelInfo, v4alpha1)
 	r.Contains(buf.String(), "level=INFO")
 }
+
+// nullLabelDescriptor carries a signed label with value: null on the
+// component and on a component reference, as OCM v1 signs them.
+func nullLabelDescriptor() *descruntime.Descriptor {
+	null := []descruntime.Label{{Name: "foo", Value: []byte(`null`), Signing: true}}
+	return &descruntime.Descriptor{
+		Component: descruntime.Component{
+			ComponentMeta: descruntime.ComponentMeta{
+				ObjectMeta: descruntime.ObjectMeta{Name: "ocm.software/null", Version: "1.0.0", Labels: null},
+			},
+			Provider: descruntime.Provider{Name: "ocm.software"},
+			References: []descruntime.Reference{{
+				ElementMeta: descruntime.ElementMeta{ObjectMeta: descruntime.ObjectMeta{Name: "ref", Version: "1.0.0", Labels: null}},
+				Component:   "ocm.software/ref",
+			}},
+		},
+	}
+}
+
+// legacyV3NullBytes is what OCM v1 jsonNormalisation/v3 signs for
+// nullLabelDescriptor: "value":null is kept on both labels.
+const legacyV3NullBytes = `{"component":{"componentReferences":[{"componentName":"ocm.software/ref","labels":[{"name":"foo","signing":true,"value":null}],"name":"ref","version":"1.0.0"}],` +
+	`"labels":[{"name":"foo","signing":true,"value":null}],"name":"ocm.software/null","provider":{"name":"ocm.software"},"resources":[],"sources":[],"version":"1.0.0"}}`
+
+// TestVerifyNullLabelValue: a jsonNormalisation/v3 digest is verified over the
+// v1 bytes (null label values kept), while a digest v2 recorded as v4alpha2
+// over the same descriptor keeps verifying unchanged, and minting with the v3
+// alias still records v4alpha2.
+func TestVerifyNullLabelValue(t *testing.T) {
+	desc := nullLabelDescriptor()
+	sha := func(s string) string { return digest.SHA256.FromString(s).Encoded() }
+	v3 := func(value string) descruntime.Digest {
+		return descruntime.Digest{HashAlgorithm: crypto.SHA256.String(), NormalisationAlgorithm: algorithms.LegacyV3, Value: value}
+	}
+
+	recorded, err := algorithms.Digest(desc, algorithms.LegacyV3, crypto.SHA256.String())
+	require.NoError(t, err)
+	require.Equal(t, v4alpha2, recorded.NormalisationAlgorithm, "minting with the v3 alias must still record v4alpha2")
+	frozen, err := normalisation.Normalise(desc, v4alpha2)
+	require.NoError(t, err)
+	require.NotContains(t, string(frozen), `"value":null`, "v4alpha2 must stay byte-frozen")
+	require.Equal(t, sha(string(frozen)), recorded.Value)
+
+	tests := []struct {
+		name    string
+		digest  descruntime.Digest
+		wantErr error
+	}{
+		{name: "v1 v3 signature over null label values", digest: v3(sha(legacyV3NullBytes))},
+		{name: "recorded v4alpha2 digest", digest: *recorded},
+		{name: "v3 digest over the v4alpha2 bytes, as verified before", digest: v3(recorded.Value)},
+		{name: "v4alpha2 digest over the v3 bytes", digest: descruntime.Digest{HashAlgorithm: crypto.SHA256.String(), NormalisationAlgorithm: v4alpha2, Value: sha(legacyV3NullBytes)}, wantErr: algorithms.ErrDigestMismatch},
+		{name: "v3 mismatch", digest: v3(sha(legacyV3NullBytes + " ")), wantErr: algorithms.ErrDigestMismatch},
+		{name: "v3 unsupported hash", digest: descruntime.Digest{HashAlgorithm: "MD5", NormalisationAlgorithm: algorithms.LegacyV3, Value: sha(legacyV3NullBytes)}, wantErr: algorithms.ErrUnsupportedHash},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := algorithms.Verify(desc, tt.digest)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}

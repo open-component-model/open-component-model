@@ -23,7 +23,13 @@ import (
 //   - []byte: The canonicalized JSON representation
 //   - error: Any error that occurred during normalization
 func Normalise(v interface{}, rules TransformationRules) ([]byte, error) {
-	entries, err := PrepareNormalisation(Type, v, rules)
+	return NormaliseWith(Type, v, rules)
+}
+
+// NormaliseWith is Normalise with an explicit normalisation instance, e.g.
+// KeepNulls.
+func NormaliseWith(n Normalisation, v interface{}, rules TransformationRules) ([]byte, error) {
+	entries, err := PrepareNormalisation(n, v, rules)
 	if err != nil {
 		return nil, err
 	}
@@ -31,11 +37,21 @@ func Normalise(v interface{}, rules TransformationRules) ([]byte, error) {
 }
 
 // Type is the default normalisation instance implementing the JCS algorithm.
+// It drops map entries whose value is null.
 var Type = normalisation{}
+
+// KeepNulls is the JCS normalisation instance that keeps map entries whose
+// value is null as "name":null instead of dropping them, as legacy OCM v1
+// jsonNormalisation/v3 does. Normalising with it changes the bytes of any
+// input that has a null-valued map entry, so it must not back an algorithm
+// whose digests are already recorded with Type.
+var KeepNulls Normalisation = normalisation{keepNulls: true}
 
 // normalisation implements the Normalisation interface using JCS (RFC 8785).
 // It provides methods to create and work with normalized JSON structures.
-type normalisation struct{}
+type normalisation struct {
+	keepNulls bool
+}
 
 // New returns a new normalisation instance.
 // This allows creating multiple independent normalisation instances if needed.
@@ -294,6 +310,12 @@ func Prepare(n Normalisation, v interface{}, rules TransformationRules) (Normali
 	return result, nil
 }
 
+// keepsNulls reports whether n keeps null-valued map entries (see KeepNulls).
+func keepsNulls(n Normalisation) bool {
+	typed, ok := n.(normalisation)
+	return ok && typed.keepNulls
+}
+
 // prepareStruct normalizes a map by applying exclusion rules to each field.
 func prepareStruct(n Normalisation, v map[string]interface{}, rules TransformationRules) (Normalised, error) {
 	if v == nil {
@@ -310,8 +332,9 @@ func prepareStruct(n Normalisation, v map[string]interface{}, rules Transformati
 		return nil, fmt.Errorf("failed to create new map")
 	}
 
+	keepNulls := keepsNulls(n)
 	for key, value := range v {
-		if value == nil {
+		if value == nil && !keepNulls {
 			continue
 		}
 		name, mapped, prop := rules.Field(key, value)
@@ -321,11 +344,7 @@ func prepareStruct(n Normalisation, v map[string]interface{}, rules Transformati
 				return nil, fmt.Errorf("field %q: %w", key, err)
 			}
 			if nested != nil {
-				if nested == Null {
-					entries.SetField(name, nil)
-				} else {
-					entries.SetField(name, nested)
-				}
+				entries.SetField(name, nested)
 			}
 		}
 	}

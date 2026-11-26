@@ -76,3 +76,16 @@ type algo struct{}
 func (m algo) Normalise(cd *descruntime.Descriptor) ([]byte, error) {
 	return common.Normalise(cd, ExclusionRules)
 }
+
+// NormaliseLegacyV3 normalises cd the way legacy OCM v1 jsonNormalisation/v3
+// does: the v4alpha2 rules, but a null-valued map entry (such as a signed
+// label with value: null) is kept as "name":null instead of being dropped.
+//
+// It is not a registered algorithm and only serves to verify digests that
+// record "jsonNormalisation/v3" (see algorithms.Verify). The registered
+// v4alpha2 algorithm stays byte-frozen, so digests that OCM v2 recorded as
+// v4alpha2 (including those minted with the v3 alias) keep verifying. For a
+// descriptor without null-valued entries both produce identical bytes.
+func NormaliseLegacyV3(cd *descruntime.Descriptor) ([]byte, error) {
+	return common.NormaliseWith(jcs.KeepNulls, cd, ExclusionRules)
+}

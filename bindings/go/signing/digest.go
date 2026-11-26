@@ -21,8 +21,9 @@ const (
 	// flag default), see algorithms.Default.
 	DefaultNormalisationAlgorithm = algorithms.Default
 	// LegacyNormalisationAlgo identifies the deprecated v3 JSON normalisation
-	// algorithm. Calls using this value are transparently mapped to v4alpha2
-	// with a warning (see ensureNormalisationAlgo and algorithms.LegacyV3).
+	// algorithm. New digests requested with it are computed and recorded as
+	// v4alpha2 (see ensureNormalisationAlgo); digests recorded with it are
+	// verified as OCM v1 computed them (see algorithms.Verify).
 	LegacyNormalisationAlgo = algorithms.LegacyV3
 	// AccessTypeNone is the access type for resources without access.
 	// It is used to prevent meaningless digest claims.
@@ -77,19 +78,20 @@ func DigestHashAlgorithmsEnforced() bool {
 // signature’s claimed digest.
 //
 // Steps:
-//  1. Resolve the normalisation algorithm (legacy → v4alpha2 if required).
-//  2. Normalise the descriptor with that algorithm.
-//  3. Select the hash algorithm from supported list (SHA256, SHA512).
-//  4. Hash the normalised descriptor.
-//  5. Decode the digest value from the signature.
-//  6. Compare the freshly computed digest against the signature digest.
+// The digest is passed to algorithms.Verify with its recorded normalisation
+// algorithm unchanged: a legacy jsonNormalisation/v3 digest is verified the
+// way OCM v1 computed it (it keeps null label values), which v4alpha2 alone
+// does not reproduce. See algorithms.Verify.
 func VerifyDigestMatchesDescriptor(
 	ctx context.Context,
 	desc *descruntime.Descriptor,
 	signature descruntime.Signature,
 	logger *slog.Logger,
 ) error {
-	signature.Digest.NormalisationAlgorithm = ensureNormalisationAlgo(ctx, signature.Digest.NormalisationAlgorithm, logger)
+	if signature.Digest.NormalisationAlgorithm == LegacyNormalisationAlgo {
+		logger.DebugContext(ctx, "legacy normalisation algorithm detected, verifying with the legacy v3 form",
+			"legacy", LegacyNormalisationAlgo)
+	}
 	return algorithms.Verify(desc, signature.Digest)
 }
 
@@ -251,10 +253,10 @@ func hasUsableAccess(res descruntime.Resource) bool {
 	return res.Access != nil && res.Access.GetType().String() != AccessTypeNone
 }
 
-// ensureNormalisationAlgo resolves the effective normalisation algorithm.
-// If the provided value is the legacy v3 algorithm, it returns v4alpha2.Algorithm
-// instead, which reproduces legacy jsonNormalisation/v3 byte-for-byte, so
-// existing v3 (and old ocm v1 style) signatures keep verifying. The resolution
+// ensureNormalisationAlgo resolves the normalisation algorithm a new digest is
+// computed and recorded with. If the provided value is the legacy v3
+// algorithm, it returns v4alpha2.Algorithm instead. Verification does not use
+// it: see VerifyDigestMatchesDescriptor. The resolution
 // is logged at debug level only: callers that trust a digest already warn about
 // any non-default algorithm (see algorithms.LogNonDefaultDigest).
 func ensureNormalisationAlgo(ctx context.Context, algo string, logger *slog.Logger) string {
