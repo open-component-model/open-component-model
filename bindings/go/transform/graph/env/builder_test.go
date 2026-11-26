@@ -1,6 +1,7 @@
 package env
 
 import (
+	"reflect"
 	"testing"
 
 	"cel.dev/cel-go/cel"
@@ -134,4 +135,32 @@ func TestCurrentEnv_CompilesAgainstRegisteredType(t *testing.T) {
 	r.True(found)
 	_, found = provider2.FindDeclType(second.TypeName())
 	r.True(found)
+}
+
+// CEL's YAML encoder uses a transitive YAML dependency independently of the
+// schema generator. Dependency updates can therefore pass generator checks while
+// corrupting transformation data: an unquoted literal "<<" key is decoded as a
+// merge directive, promoting its nested entries into the parent map.
+func TestCurrentEnv_YAMLRoundTripPreservesLiteralMergeKey(t *testing.T) {
+	r := require.New(t)
+	b, err := NewEnvBuilder(map[string]interface{}{})
+	r.NoError(err)
+	b.RegisterEnvOption(cel.Variable("value", cel.DynType))
+	celEnv, _, err := b.CurrentEnv()
+	r.NoError(err)
+
+	ast, issues := celEnv.Compile(`yaml.parse(yaml.encode(value)).value()`)
+	r.NoError(issues.Err())
+	program, err := celEnv.Program(ast)
+	r.NoError(err)
+
+	original := map[string]any{
+		"<<":   map[string]any{"injected": "value"},
+		"name": "alice",
+	}
+	result, _, err := program.ContextEval(t.Context(), map[string]any{"value": original})
+	r.NoError(err)
+	roundTrip, err := result.ConvertToNative(reflect.TypeOf(original))
+	r.NoError(err)
+	r.Equal(original, roundTrip)
 }

@@ -22,13 +22,14 @@ jobs:
       # pushes to main: windows runners are billed at a premium, so windows-only
       # breakage is caught at merge time rather than on every PR push.
       run_windows: ${{ steps.compute.outputs.run_windows }}
+      run_govulncheck: ${{ steps.compute.outputs.run_govulncheck }}
       dependency_list_changed: ${{ steps.filter.outputs.dependency_list }}
       lint_changed: ${{ steps.filter.outputs.lint }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
           filters: |
@@ -42,6 +43,12 @@ jobs:
               - 'conformance/scenarios/sovereign/components/notes/**'
             ci:
               - '.github/workflows/ci.yml'
+            govulncheck:
+              - '.github/workflows/govulncheck.yml'
+            # Tool versions and build flags the jobs resolve at runtime; govulncheck
+            # reads GOVULNCHECK_VERSION and GOFIPS140 from here.
+            env:
+              - '.env'
             dependency_list:
               - 'golangci.yml'
               - 'tools.Taskfile.yml'
@@ -53,11 +60,13 @@ jobs:
               - 'bindings/go/**/doc.go'
       - name: Compute scopes
         id: compute
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           GO_CHANGED: ${{ steps.filter.outputs.go }}
           SHOULD_LINT: ${{ steps.filter.outputs.lint }}
           CI_CHANGED: ${{ steps.filter.outputs.ci }}
+          GOVULNCHECK_CHANGED: ${{ steps.filter.outputs.govulncheck }}
+          ENV_CHANGED: ${{ steps.filter.outputs.env }}
         with:
           script: |
             const isPush = context.eventName === 'push';
@@ -67,14 +76,21 @@ jobs:
 
             const runGo = isPush || ciChanged || goChanged;
             const runLint = runGo || shouldLint;
+            // The reusable workflow and the .env inputs it reads are only exercised
+            // by the PR that edits them.
+            const runGovulncheck = runGo
+              || process.env.GOVULNCHECK_CHANGED === 'true'
+              || process.env.ENV_CHANGED === 'true';
 
             core.setOutput('run_go', runGo);
             core.setOutput('run_lint', runLint);
             core.setOutput('run_windows', isPush);
+            core.setOutput('run_govulncheck', runGovulncheck);
             await core.summary
               .addRaw('### CI Scope\n\n')
               .addRaw(`**build/test bindings/go:** ${runGo}\n\n`)
               .addRaw(`**lint all Go modules:** ${runLint}\n\n`)
+              .addRaw(`**govulncheck:** ${runGovulncheck}\n\n`)
               .addRaw(`**native windows legs:** ${isPush}\n`)
               .write();
 
@@ -129,7 +145,7 @@ jobs:
             /.github/scripts/package.json
             /.github/scripts/package-lock.json
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 26
       - name: Install Task
@@ -178,7 +194,7 @@ jobs:
             .env
           persist-credentials: false
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: '${{ github.workspace }}/${{ matrix.module }}/go.mod'
           cache-dependency-path: '${{ github.workspace }}/${{ matrix.module }}/go.sum'
@@ -203,7 +219,7 @@ jobs:
             echo "pkgs=./..." >> "$GITHUB_OUTPUT"
           fi
       - name: golangci-lint ${{ matrix.module }} (GOOS=${{ matrix.goos }})
-        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         env:
           GOOS: ${{ matrix.goos }}
         with:
@@ -237,7 +253,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: '${{ github.workspace }}/bindings/go/go.mod'
           cache-dependency-path: '${{ github.workspace }}/bindings/go/go.sum'
@@ -273,7 +289,7 @@ jobs:
           awk -v p="$pct" -v f="$floor" 'BEGIN{exit (p+0 < f+0)}' \
             || { echo "::error::integration coverage ${pct}% is below the ${floor}% floor"; exit 1; }
       - name: Publish integration test report
-        uses: mikepenz/action-junit-report@6ef3fdcfcd5f0b5d14df3e659ef19b8c6820f93d # v6.6.1
+        uses: mikepenz/action-junit-report@a16be3a69023e9bd7e748ede768b3282ea7b30ce # v6.7.1
         if: always()
         with:
           report_paths: '${{ github.workspace }}/bindings/go/output/junit*.xml'
@@ -342,7 +358,7 @@ jobs:
             bindings/go
           persist-credentials: false
       - name: Setup Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: '${{ github.workspace }}/bindings/go/go.mod'
           cache-dependency-path: '${{ github.workspace }}/bindings/go/go.sum'
@@ -378,7 +394,7 @@ jobs:
   govulncheck:
     name: "govulncheck"
     needs: changes
-    if: ${{ needs.changes.outputs.run_go == 'true' }}
+    if: ${{ needs.changes.outputs.run_govulncheck == 'true' }}
     uses: $/.github/workflows/govulncheck.yml
 
   generate:
@@ -394,7 +410,7 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Setup Go (required by some generators)
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: ${{ github.workspace }}/bindings/go/go.mod
           cache-dependency-path: |

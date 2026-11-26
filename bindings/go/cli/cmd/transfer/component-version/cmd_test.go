@@ -5,6 +5,8 @@ import (
 	"crypto"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,6 +28,8 @@ import (
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
+	wgetaccess "ocm.software/open-component-model/bindings/go/wget/spec/access"
+	wgetv1 "ocm.software/open-component-model/bindings/go/wget/spec/access/v1"
 )
 
 // setupTestRepositoryWithDescriptorLibrary creates a test repository with the given component versions
@@ -935,4 +939,85 @@ func TestTransferUploaderConfig(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestTransferComponentVersion_BuffersInConfiguredTempFolder verifies that the configured
+// temporary folder reaches the transformations that buffer resource content to a file before
+// it is uploaded, instead of the temporary directory of the operating system.
+func TestTransferComponentVersion_BuffersInConfiguredTempFolder(t *testing.T) {
+	r := require.New(t)
+
+	const content = "wget resource content"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(content))
+	}))
+	t.Cleanup(srv.Close)
+
+	wgetAccess := &runtime.Raw{}
+	r.NoError(wgetaccess.Scheme.Convert(&wgetv1.Wget{
+		Type:      runtime.NewVersionedType(wgetaccess.WgetConsumerType, wgetv1.Version),
+		URL:       srv.URL + "/file.txt",
+		MediaType: "text/plain",
+	}, wgetAccess))
+
+	fromDesc := createTestDescriptor("ocm.software/temp-folder-test", "1.0.0")
+	fromDesc.Component.Resources = []descriptor.Resource{
+		{
+			ElementMeta: descriptor.ElementMeta{
+				ObjectMeta: descriptor.ObjectMeta{
+					Name:    "file",
+					Version: "1.0.0",
+				},
+			},
+			Type:     "blob",
+			Relation: descriptor.ExternalRelation,
+			Access:   wgetAccess,
+		},
+	}
+	fromPath, err := setupTestRepositoryWithDescriptorLibrary(t, fromDesc)
+	r.NoError(err)
+
+	// The folder does not exist yet: the transformation creates it.
+	tempFolder := filepath.Join(t.TempDir(), "buffer")
+	// The local blob uploader makes the wget resource a by-value transfer, which buffers its
+	// content to a file before it is embedded in the target.
+	configFile := filepath.Join(t.TempDir(), "config.yaml")
+	r.NoError(os.WriteFile(configFile, []byte(
+		"type: generic.config.ocm.software/v1\nconfigurations:\n"+
+			"  - type: localblob.uploader.transfer.config.ocm.software/v1alpha1\n"+
+			"  - type: filesystem.config.ocm.software/v1alpha1\n    tempFolder: "+tempFolder+"\n"), 0o644))
+
+	toPath := t.TempDir()
+	fromRef := compref.Ref{
+		Repository: &ctfv1.Repository{FilePath: fromPath},
+		Component:  fromDesc.Component.Name,
+		Version:    fromDesc.Component.Version,
+	}
+
+	logs := test.NewJSONLogReader()
+	_, err = test.OCM(t,
+		test.WithArgs("transfer", "component-version", fromRef.String(), fmt.Sprintf("ctf::%s", toPath),
+			"--config", configFile),
+		test.WithOutput(new(bytes.Buffer)),
+		test.WithErrorOutput(logs),
+	)
+	r.NoError(err)
+
+	desc, err := openCTFRepo(t, toPath).GetComponentVersion(t.Context(), fromDesc.Component.Name, fromDesc.Component.Version)
+	r.NoError(err)
+	r.Len(desc.Component.Resources, 1)
+	r.Equal("LocalBlob", desc.Component.Resources[0].Access.GetType().Name, "the wget resource must have been transferred by value")
+
+	entries, err := logs.List()
+	r.NoError(err)
+	var buffered []string
+	for _, e := range entries {
+		if e.Msg == "Going to use wget output path" {
+			path, ok := e.Extras["path"].(string)
+			r.True(ok, "wget output path log entry must carry the path")
+			buffered = append(buffered, path)
+		}
+	}
+	r.Len(buffered, 1, "the resource must be buffered exactly once")
+	r.Equal(tempFolder, filepath.Dir(buffered[0]), "content must be buffered in the configured temporary folder")
 }

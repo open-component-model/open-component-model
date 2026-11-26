@@ -37,7 +37,7 @@ jobs:
     permissions:
       contents: read
     environment:
-      name: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && 'automation' || '' }}
+      name: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && 'pull-requests' || '' }}
       deployment: false
     env:
       PUBLISH: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
@@ -52,7 +52,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: website/package.json
 
@@ -107,15 +107,15 @@ jobs:
             echo "_If a listed override is actually a non-security pin, do not merge: add it to the \`IGNORE\` set in \`.github/scripts/check-redundant-overrides.js\` and close this PR._"
           } > "${RUNNER_TEMP}/pr-body.md"
 
-      - name: Generate ocmbot token
+      - name: Generate PR bot token
         if: >-
           env.PUBLISH == 'true' &&
           steps.check.outputs.candidate-count != ''
         id: token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
-          app-id: ${{ secrets.OCMBOT_APP_ID }}
-          private-key: ${{ secrets.OCMBOT_PRIV_KEY }}
+          client-id: ${{ secrets.PR_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.PR_BOT_PRIVATE_KEY }}
           repositories: ${{ github.event.repository.name }}
           permission-pull-requests: write
           permission-contents: write
@@ -124,12 +124,12 @@ jobs:
         if: >-
           env.PUBLISH == 'true' &&
           steps.check.outputs.candidate-count != ''
-        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        uses: peter-evans/create-pull-request@3ffccacd46053766916f087ce41d627c0b8cf2d1 # v8.1.3
         with:
           token: ${{ steps.token.outputs.token }}
           title: "chore: remove redundant npm overrides"
           commit-message: "chore: remove redundant npm overrides"
-          branch: chore/remove-redundant-overrides
+          branch: automation/remove-redundant-overrides
           delete-branch: true
           sign-commits: true
           labels: |

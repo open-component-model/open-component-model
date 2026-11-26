@@ -38,7 +38,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: DavidAnson/markdownlint-cli2-action@21c1be1b93ad9ed58fa840aacc3f279cde2a72ff # v24
+      - uses: DavidAnson/markdownlint-cli2-action@696eb3f2509270d7b882d2aa68347bc676e7af34 # v25.0.0
         with:
           globs: |
             website/**/*.md
@@ -52,7 +52,6 @@ jobs:
     # binary on ARM runners — run on amd64 until upstream ships ARM support.
     runs-on: ubuntu-latest
     permissions:
-      checks: write
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -62,24 +61,27 @@ jobs:
       # Two passes: relative links are checked across the whole repo, while
       # external (http/https) links are only checked for changed files —
       # repo-wide external checks are slow and prone to flaky failures.
+      # reporter local: the github-[pr-]check reporters post findings through
+      # the check-runs API, which intermittently answers the completing PATCH
+      # with a bare 404 and fails the job with no link findings at all. The
+      # local reporter writes findings to the step log and still fails the job
+      # via fail_level, with no API call to flake on.
       # filter_mode nofilter: reviewdog's default "added" drops findings on
       # lines the PR did not touch (a dead link elsewhere in an edited file, a
       # link broken by a moved target), but on push it ignores the filter, so
       # those findings would only fail on main after merge.
       - name: Verify relative links (repo-wide)
-        uses: umbrelladocs/action-linkspector@568ec8d29fa92b31fd9ea5381e155c51e922af83 # v1
+        uses: umbrelladocs/action-linkspector@568ec8d29fa92b31fd9ea5381e155c51e922af83 # v1.5.5
         with:
-          github_token: ${{ secrets.github_token }}
-          reporter: github-pr-check
+          reporter: local
           fail_level: any
           filter_mode: nofilter
           config_file: .github/config/linkspector-all.yaml
           show_stats: true
       - name: Verify external links (changed files)
-        uses: umbrelladocs/action-linkspector@568ec8d29fa92b31fd9ea5381e155c51e922af83 # v1
+        uses: umbrelladocs/action-linkspector@568ec8d29fa92b31fd9ea5381e155c51e922af83 # v1.5.5
         with:
-          github_token: ${{ secrets.github_token }}
-          reporter: github-pr-check
+          reporter: local
           fail_level: any
           filter_mode: nofilter
           config_file: .github/config/linkspector-changed.yaml
@@ -91,7 +93,6 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     permissions:
-      checks: write
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -187,11 +188,13 @@ jobs:
 
       - name: Run linkspector
         if: steps.check_changes.outputs.has_website_changes == 'true'
-        uses: umbrelladocs/action-linkspector@568ec8d29fa92b31fd9ea5381e155c51e922af83 # v1
+        uses: umbrelladocs/action-linkspector@568ec8d29fa92b31fd9ea5381e155c51e922af83 # v1.5.5
         with:
-          github_token: ${{ secrets.github_token }}
-          reporter: github-pr-check
+          # reporter local + filter_mode nofilter: see verify-links above. The
+          # generated config limits the scan to modified files already.
+          reporter: local
           fail_level: any
+          filter_mode: nofilter
           config_file: .github/config/website-linkspector.yaml
           show_stats: true
 
@@ -202,7 +205,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       - name: Read tool versions
         id: versions
         run: |
@@ -212,7 +215,7 @@ jobs:
         env:
           MARKDOWNLINT_VERSION: ${{ steps.versions.outputs.markdownlint_cli2 }}
         run: npx "markdownlint-cli2@${MARKDOWNLINT_VERSION}" --config .github/config/.markdownlint-cli2.yaml "**/*.md"
-      - name: Check ADR numbers are unique
+      - name: Check ADR numbers are unique and contiguous
         run: node .github/scripts/check-adr-numbers.js docs/adr
 
   verify-redirects:
@@ -241,7 +244,7 @@ jobs:
           else
             echo "website=false" >> "$GITHUB_OUTPUT"
           fi
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: steps.changes.outputs.website == 'true'
         with:
           node-version-file: .github/scripts/package.json

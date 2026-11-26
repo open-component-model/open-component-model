@@ -1,3 +1,9 @@
+// Read by deps (https://github.com/jakobmoellerdev/deps) in Renovate
+// compatibility mode, see .github/workflows/deps.yml: deps translates this file
+// in memory on every run. Renovate itself no longer runs on this repository,
+// the file name and the Renovate schema stay. `deps plan --renovate --config
+// .github/renovate.json5` shows the effect of a change locally, and the deps
+// workflow dry-runs it on every pull request that touches this file.
 {
   $schema: 'https://docs.renovatebot.com/renovate-schema.json',
   extends: [
@@ -148,16 +154,6 @@
       ],
     },
     {
-      // k8s.io/kube-openapi is an untagged, indirect pseudo-version module.
-      // Renovate's digest updater would advance it to the latest branch
-      // commit, ahead of the k8s release train it belongs to. That caused
-      // a structured-merge-diff v6/v7 mismatch with apimachinery (PR #3770).
-      // Let `go mod tidy` float it to whatever the k8s minor group pins.
-      matchManagers: ['gomod'],
-      matchPackageNames: ['k8s.io/kube-openapi'],
-      enabled: false,
-    },
-    {
       matchManagers: [
         'gomod',
         'custom.regex',
@@ -291,6 +287,17 @@
       ]
     },
     {
+      // k8s.io/kube-openapi is an untagged, indirect pseudo-version module.
+      // Renovate's digest updater would advance it to the latest branch
+      // commit, ahead of the k8s release train it belongs to. That caused
+      // a structured-merge-diff v6/v7 mismatch with apimachinery (PR #3770).
+      // Let `go mod tidy` float it to whatever the k8s minor group pins.
+      // Keep this after the general Go enable rule so it stays disabled (#4373).
+      matchManagers: ['gomod'],
+      matchPackageNames: ['k8s.io/kube-openapi'],
+      enabled: false,
+    },
+    {
       // github.com/go-ini/ini renamed its module path to gopkg.in/ini.v1 at
       // v1.67.1 (the same commit is tagged on both paths). We still carry a
       // legacy `require github.com/go-ini/ini v1.67.0`, pulled in transitively
@@ -337,8 +344,10 @@
       // The internal org workflows repo is tracked on @main intentionally
       // (see .github/workflows/stale.yaml). Disable Renovate so it does not
       // re-pin the ref to a SHA and then bump it on every upstream commit.
+      // Renovate names this dependency by the repository, deps by the workflow
+      // file it points at; both names are listed so either tool skips it.
       matchManagers: ['github-actions'],
-      matchDepNames: ['open-component-model/.github'],
+      matchDepNames: ['open-component-model/.github', 'open-component-model/.github/**'],
       enabled: false,
     },
     {
@@ -380,6 +389,14 @@
         'rollback',
       ],
       minimumReleaseAge: null,
+    },
+    {
+      // Version-only .env fields have no digest capture, so custom.regex cannot
+      // apply pinDigest updates; one failure aborts the shared Digest pins branch.
+      // Existing currentDigest captures still receive digest updates.
+      matchManagers: ['custom.regex'],
+      matchDatasources: ['docker'],
+      pinDigests: false,
     },
   ],
   customDatasources: {
