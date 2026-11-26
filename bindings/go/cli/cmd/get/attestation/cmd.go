@@ -279,6 +279,10 @@ func discoverGroups(ctx context.Context, baseReq cliattestation.Request, desc *d
 func filterGroups(groups []cliattestation.Group, filters []string) []cliattestation.Group {
 	out := make([]cliattestation.Group, 0, len(groups))
 	for _, g := range groups {
+		if g.Err != nil {
+			out = append(out, g) // keep a failed origin visible regardless of the type filter
+			continue
+		}
 		kept := filterByType(g.Attestations, filters)
 		if len(kept) > 0 {
 			out = append(out, cliattestation.Group{Label: g.Label, Attestations: kept})
@@ -454,6 +458,7 @@ type row struct {
 	Subject       string            `json:"subject,omitempty"`
 	ContentDigest string            `json:"contentDigest,omitempty"`
 	ID            string            `json:"id"`
+	Error         string            `json:"error,omitempty"`
 	// Derived facets for the table, kept out of json/yaml which carry the raw signals.
 	Category string `json:"-"`
 	Format   string `json:"-"`
@@ -546,6 +551,14 @@ func flattenRows(c component, showComponent bool) []row {
 				Envelope:      envelopeOf(a),
 			})
 		}
+		if g.Err != nil {
+			rows = append(rows, row{
+				Component: c.Ref,
+				Resource:  resourceLabel(g.Label, c.Ref, showComponent),
+				Source:    "(unavailable)",
+				Error:     g.Err.Error(),
+			})
+		}
 	}
 	for _, child := range c.Children {
 		rows = append(rows, flattenRows(child, showComponent)...)
@@ -566,10 +579,18 @@ func renderTable(w io.Writer, rows []row, showComponent bool, p painter, marks d
 			p.paint(orDash(r.Resource), text.Bold),
 			r.Source,
 			p.paint(orDash(r.Category), categoryColor(r.Category)),
-			orDash(r.Format),
+			orDash(displayFormat(r.Format)),
 			orDash(r.Platform),
 			envelopeLabel(r.Envelope),
 			contentDigestCell(r.ContentDigest, marks, p),
+		}
+		if r.Error != "" {
+			cells = table.Row{
+				p.paint(orDash(r.Resource), text.Bold),
+				r.Source,
+				"-", "-", "-", "-",
+				p.paint("⚠ discovery failed: "+conciseError(r.Error), text.FgYellow),
+			}
 		}
 		if showComponent {
 			cells = append(table.Row{p.paint(r.Component, text.Bold)}, cells...)
@@ -627,6 +648,10 @@ func componentTreeRow(c component, p painter, marks dupMarks) tree.Row {
 	}
 	children := make([]tree.Row, 0, len(c.Groups)+len(c.Children))
 	for _, g := range c.Groups {
+		if g.Err != nil {
+			children = append(children, errorGroupRow(treeGroupLabel(g.Label), g.Err, p))
+			continue
+		}
 		children = append(children, groupRow(treeGroupLabel(g.Label), g.Attestations, p, marks))
 	}
 	for _, child := range c.Children {
@@ -681,7 +706,7 @@ func leafTreeRow(a repository.Attestation, p painter, marks dupMarks) tree.Row {
 	category, format := classify(a)
 	return tree.Row{Cells: []string{
 		p.paint(orDash(category), categoryColor(category)),
-		orDash(format),
+		orDash(displayFormat(format)),
 		orDash(a.Platform.String()),
 		envelopeLabel(envelopeOf(a)),
 		contentDigestCell(a.ContentDigest, marks, p),
@@ -770,6 +795,41 @@ func envelopeLabel(envelope string) string {
 		return "none"
 	}
 	return envelope
+}
+
+// displayFormat is the FORMAT cell. It blanks the envelope's own media type (an in-toto
+// statement or a Sigstore bundle), which is not a document format and already shows in the
+// ENVELOPE column, so FORMAT never echoes the envelope when the inner format is unknown.
+func displayFormat(format string) string {
+	switch format {
+	case mediaInTotoStatement, artifactSigstoreBundle:
+		return ""
+	}
+	return format
+}
+
+// errorGroupRow renders an origin whose discovery failed: the origin label over a single
+// warning leaf, so the resource stays visible and the reason is in the tree, not only a log.
+func errorGroupRow(label string, err error, p painter) tree.Row {
+	return innerTreeRow(label, []tree.Row{errorLeafRow(err, p)}, p)
+}
+
+// errorLeafRow is a warning leaf carrying a concise discovery error in the first column.
+// The full error stays in the WARN log and in the json/yaml "error" field.
+func errorLeafRow(err error, p painter) tree.Row {
+	cells := make([]string, treeColumns)
+	cells[0] = p.paint("⚠ discovery failed: "+conciseError(err.Error()), text.FgYellow)
+	return tree.Row{Cells: cells}
+}
+
+// conciseError is the root-cause tail of a wrapped error (the last ": "-delimited segment),
+// so a long discovery error does not blow up a tree column or table cell. The full chain
+// remains in the log and the machine-readable output.
+func conciseError(msg string) string {
+	if i := strings.LastIndex(msg, ": "); i >= 0 {
+		return msg[i+2:]
+	}
+	return msg
 }
 
 // innerTreeRow is a containment node (reference, origin or source): its label sits in the

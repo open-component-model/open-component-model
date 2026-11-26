@@ -3,6 +3,7 @@ package attestation
 import (
 	"bytes"
 	"encoding/json/v2"
+	"errors"
 	"strings"
 	"testing"
 
@@ -274,4 +275,37 @@ func TestContentDigest_DuplicatesTaggedSingletonsPlain(t *testing.T) {
 	assert.NotContains(t, out, "[b]", "only one duplicate group exists")
 	assert.Contains(t, out, "none", "a bare document reads as envelope none")
 	assert.Contains(t, out, "dsse", "the signed copy reads as envelope dsse")
+}
+
+// TestRenderTree_FormatDoesNotEchoEnvelope pins that an in-toto document of unknown inner
+// format shows FORMAT "-" (not the raw in-toto media type), since that media type is the
+// envelope and already lives in the ENVELOPE column.
+func TestRenderTree_FormatDoesNotEchoEnvelope(t *testing.T) {
+	groups := []cliattestation.Group{
+		{Label: "name=app", Attestations: []repository.Attestation{
+			{Source: repository.AttestationSourceOCIReferrer, MediaType: mediaInTotoStatement, ContentDigest: "sha256:abc"},
+		}},
+	}
+	var buf bytes.Buffer
+	require.NoError(t, renderAttestations(t.Context(), &buf, "widetree", component{Ref: "ref", Groups: groups}, false))
+	out := buf.String()
+	assert.Contains(t, out, "in-toto", "the in-toto envelope shows in the ENVELOPE column")
+	assert.NotContains(t, out, mediaInTotoStatement, "the in-toto media type is not echoed as a FORMAT")
+}
+
+// TestRenderAttestations_FailedGroupIsShown pins that an origin whose discovery failed
+// stays visible with its error, instead of vanishing, across tree, table and json.
+func TestRenderAttestations_FailedGroupIsShown(t *testing.T) {
+	groups := []cliattestation.Group{
+		{Label: "name=image", Err: errors.New("resolving image reference failed (not found)")},
+	}
+	for _, format := range []string{"widetree", "table", "json"} {
+		t.Run(format, func(t *testing.T) {
+			var buf bytes.Buffer
+			require.NoError(t, renderAttestations(t.Context(), &buf, format, component{Ref: "ref", Groups: groups}, false))
+			out := buf.String()
+			assert.Contains(t, out, "name=image", "the failed resource stays visible")
+			assert.Contains(t, out, "not found", "the discovery error is shown")
+		})
+	}
 }

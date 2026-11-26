@@ -32,15 +32,20 @@ const defaultConcurrency = 4
 type Group struct {
 	Label        string
 	Attestations []repository.Attestation
+	// Err is set when discovery for this origin failed. The group is then kept with no
+	// attestations so the origin (a resource, or the component) stays visible and the
+	// failure is reported in the output rather than only in a log line.
+	Err error
 }
 
 // DiscoverAll lists attestations across the whole component: a component-level group
 // (referrers on the component version artifact) plus one group per resource. Resources
 // are discovered concurrently, bounded by concurrency (<=0 applies defaultConcurrency).
 // Best-effort: a resource whose discovery fails is logged and skipped, never fatal and
-// never cancelling its siblings. Groups keep descriptor order, component first; empty
-// groups are dropped. It errors only when every source failed and nothing was discovered,
-// so an empty success cannot mask a wholesale failure (bad credentials, registry down).
+// never cancelling its siblings. Groups keep descriptor order, component first; a group
+// with no attestations and no error is dropped, but a failed group is kept carrying its
+// error so the origin stays visible. It errors only when nothing was discovered anywhere
+// and a source failed, so an empty success cannot mask a wholesale failure.
 func DiscoverAll(ctx context.Context, req Request, concurrency int) ([]Group, error) {
 	if concurrency <= 0 {
 		concurrency = defaultConcurrency
@@ -54,11 +59,12 @@ func DiscoverAll(ctx context.Context, req Request, concurrency int) ([]Group, er
 	componentReq := req
 	componentReq.Resource = nil
 	if atts, err := Discover(ctx, componentReq); err != nil {
-		req.Logger.Warn("discovering component-level attestations failed, skipping",
+		req.Logger.Warn("discovering component-level attestations failed",
 			slog.String("component", req.Descriptor.Component.Name),
 			slog.String("version", req.Descriptor.Component.Version),
 			slog.Any("error", err))
 		errs[0] = err
+		slots[0] = Group{Err: err}
 	} else {
 		slots[0] = Group{Attestations: atts}
 	}
@@ -71,10 +77,11 @@ func DiscoverAll(ctx context.Context, req Request, concurrency int) ([]Group, er
 			resReq.Resource = &req.Descriptor.Component.Resources[i]
 			atts, err := Discover(gctx, resReq)
 			if err != nil {
-				req.Logger.Warn("discovering resource attestations failed, skipping",
+				req.Logger.Warn("discovering resource attestations failed",
 					slog.String("resource", resReq.Resource.ToIdentity().String()),
 					slog.Any("error", err))
 				errs[i+1] = err
+				slots[i+1] = Group{Label: resReq.Resource.ToIdentity().String(), Err: err}
 				return nil // best-effort: a failed resource never cancels the others
 			}
 			slots[i+1] = Group{Label: resReq.Resource.ToIdentity().String(), Attestations: atts}
@@ -84,15 +91,19 @@ func DiscoverAll(ctx context.Context, req Request, concurrency int) ([]Group, er
 	_ = eg.Wait() // workers never return an error; Wait only joins them
 
 	out := make([]Group, 0, len(slots))
+	anyAttestations := false
 	for _, g := range slots {
 		if len(g.Attestations) > 0 {
+			anyAttestations = true
+		}
+		if len(g.Attestations) > 0 || g.Err != nil {
 			out = append(out, g)
 		}
 	}
-	// Partial failure is tolerated, but an empty result paired with failures would be
-	// indistinguishable from "no attestations". Surface the joined error so the exit code
-	// and machine-readable output reflect a wholesale failure.
-	if len(out) == 0 {
+	// Partial failures are kept per group and reported there. Only when nothing was
+	// discovered anywhere and a source failed is it a wholesale failure (bad credentials,
+	// registry down): surface the joined error so the exit code reflects it.
+	if !anyAttestations {
 		if err := errors.Join(errs...); err != nil {
 			return nil, fmt.Errorf("discovering attestations failed for every source: %w", err)
 		}
