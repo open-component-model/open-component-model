@@ -618,14 +618,11 @@ func renderTree(ctx context.Context, w io.Writer, root component, p painter, mar
 	}); err != nil {
 		return fmt.Errorf("building attestation tree failed: %w", err)
 	}
-	// A pure provenance tree: no header, and no ● child indicator (every inner node is a
-	// grouping, so marking them adds noise rather than meaning).
-	style := tree.DefaultTreeStyle
-	style.CharChildIndicator = ""
+	// A pure provenance tree: no header, but keep the default ● indicator on nodes with
+	// children, matching the tree of `ocm get cv`.
 	renderer := tree.New(ctx, graph,
 		tree.WithRoots(root.Ref),
 		tree.WithoutHeader[string](),
-		tree.WithTreeStyle[string](style),
 		tree.WithVertexSerializerFunc(func(v *dag.Vertex[string]) (tree.Row, error) {
 			c, ok := v.Attributes[syncdag.AttributeValue].(component)
 			if !ok {
