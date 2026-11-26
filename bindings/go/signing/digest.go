@@ -112,6 +112,9 @@ func SignableNormalisationAlgorithms() []string {
 // this, so verifying existing v1 signatures, pins and reference digests keeps
 // working. Any signing entry point must call it before producing a signature.
 func EnsureSignable(normalisationAlgorithm string) error {
+	if err := algorithms.CheckSupported(normalisationAlgorithm); err != nil {
+		return err
+	}
 	if algorithms.VerifyOnly(normalisationAlgorithm) {
 		return fmt.Errorf("%w: %q", ErrSigningUnsupported, normalisationAlgorithm)
 	}

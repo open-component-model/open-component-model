@@ -163,6 +163,7 @@ func TestVerify(t *testing.T) {
 		{name: "legacy v3 alias", digest: descruntime.Digest{HashAlgorithm: a2.HashAlgorithm, NormalisationAlgorithm: algorithms.LegacyV3, Value: a2.Value}},
 		{name: "mismatch", digest: descruntime.Digest{HashAlgorithm: a1.HashAlgorithm, NormalisationAlgorithm: a1.NormalisationAlgorithm, Value: a2.Value}, wantErr: algorithms.ErrDigestMismatch},
 		{name: "unknown normalisation", digest: descruntime.Digest{HashAlgorithm: a1.HashAlgorithm, NormalisationAlgorithm: "unknown", Value: a1.Value}, wantErr: normalisation.ErrUnknownNormalisationAlgorithm},
+		{name: "legacy v2 is rejected", digest: descruntime.Digest{HashAlgorithm: a1.HashAlgorithm, NormalisationAlgorithm: algorithms.LegacyV2, Value: a1.Value}, wantErr: algorithms.ErrUnsupportedNormalisation},
 		{name: "unsupported hash", digest: descruntime.Digest{HashAlgorithm: "MD5", NormalisationAlgorithm: a1.NormalisationAlgorithm, Value: a1.Value}, wantErr: algorithms.ErrUnsupportedHash},
 	}
 	for _, tt := range tests {
@@ -319,4 +320,13 @@ func TestVerifyNullLabelValue(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
+}
+
+func TestLegacyV2IsRejectedWithResignHint(t *testing.T) {
+	desc := &descruntime.Descriptor{}
+	_, err := algorithms.Digest(desc, algorithms.LegacyV2, crypto.SHA256.String())
+	require.ErrorIs(t, err, algorithms.ErrUnsupportedNormalisation)
+	require.ErrorIs(t, err, normalisation.ErrUnknownNormalisationAlgorithm)
+	require.ErrorContains(t, err, "jsonNormalisation/v2")
+	require.ErrorContains(t, err, "re-sign")
 }

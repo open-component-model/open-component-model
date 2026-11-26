@@ -48,11 +48,19 @@ const (
 	// byte-frozen so its recorded digests keep verifying; Verify checks a
 	// digest recorded as LegacyV3 against v4alpha2.NormaliseLegacyV3 instead.
 	LegacyV3 = "jsonNormalisation/v3"
+	// LegacyV2 is the deprecated jsonNormalisation/v2 algorithm of legacy OCM
+	// v1. It is neither computed nor verified: the spec only states that it
+	// differs from v3 by the legacy extra-identity defaulting, which is not
+	// reproduced here. Digest and Verify reject it with ErrUnsupportedNormalisation.
+	LegacyV2 = "jsonNormalisation/v2"
 )
 
 var (
 	// ErrUnsupportedHash is returned for a hash algorithm other than SHA-256 or SHA-512.
 	ErrUnsupportedHash = errors.New("unsupported hash algorithm")
+	// ErrUnsupportedNormalisation is returned for a normalisation algorithm that
+	// is known but no longer supported. It wraps normalisation.ErrUnknownNormalisationAlgorithm.
+	ErrUnsupportedNormalisation = fmt.Errorf("%w: unsupported", normalisation.ErrUnknownNormalisationAlgorithm)
 	// ErrDigestMismatch is returned by Verify when the descriptor does not match the digest.
 	ErrDigestMismatch = errors.New("digest mismatch")
 )
@@ -70,6 +78,16 @@ func Resolve(normalisationAlgorithm string) (string, bool) {
 // digests: no new signature or component reference digest may record it.
 func VerifyOnly(normalisationAlgorithm string) bool {
 	return normalisationAlgorithm == jsonv1.Algorithm //nolint:staticcheck // the deprecated v1 is the verify-only algorithm
+}
+
+// CheckSupported returns ErrUnsupportedNormalisation for an algorithm that is
+// known but can neither be verified nor created (jsonNormalisation/v2).
+func CheckSupported(normalisationAlgorithm string) error {
+	if normalisationAlgorithm == LegacyV2 {
+		return fmt.Errorf("%w: %q is deprecated and can neither be verified nor created; re-sign the component version with %q (see %s)",
+			ErrUnsupportedNormalisation, LegacyV2, Default, MigrationGuide)
+	}
+	return nil
 }
 
 // Hash resolves a hash algorithm name to SHA-256 or SHA-512. Case is ignored
@@ -91,6 +109,9 @@ func Hash(name string) (crypto.Hash, error) {
 // alias is labelled with the algorithm it resolves to) and the canonical hash
 // name.
 func Digest(desc *descruntime.Descriptor, normalisationAlgorithm, hashAlgorithm string) (*descruntime.Digest, error) {
+	if err := CheckSupported(normalisationAlgorithm); err != nil {
+		return nil, err
+	}
 	normalisationAlgorithm, _ = Resolve(normalisationAlgorithm)
 	sum, hash, err := sum(registered(normalisationAlgorithm), desc, hashAlgorithm)
 	if err != nil {
@@ -116,6 +137,9 @@ func Digest(desc *descruntime.Descriptor, normalisationAlgorithm, hashAlgorithm 
 // entry. Digest never records LegacyV3 (it labels such digests v4alpha2), so
 // minting is unaffected.
 func Verify(desc *descruntime.Descriptor, expected descruntime.Digest) error {
+	if err := CheckSupported(expected.NormalisationAlgorithm); err != nil {
+		return err
+	}
 	if expected.NormalisationAlgorithm == LegacyV3 {
 		err := verify(v4alpha2.NormaliseLegacyV3, desc, expected)
 		if !errors.Is(err, ErrDigestMismatch) {
