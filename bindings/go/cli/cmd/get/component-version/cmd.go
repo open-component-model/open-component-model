@@ -579,19 +579,18 @@ func processRepositoryReference(cmd *cobra.Command,
 }
 
 // listComponentsFromRepository lists component names from a given repository using the component lister interface.
-// Currently only CTF repositories are supported.
+// It resolves credentials for the repository through the credential graph, so registries that need login are reachable.
 func listComponentsFromRepository(ctx context.Context,
 	pluginManager *manager.PluginManager,
 	repository runtime.Typed,
-	_ credentials.Resolver,
+	credentialGraph credentials.Resolver,
 ) ([]string, error) {
-	// TODO(ikhandamirov): git rid of this type check. Use credentials in case of OCI.
-	_, ok := repository.(*ctfv1.Repository)
-	if !ok {
-		return nil, fmt.Errorf("component listing in repositories of type %T not supported", repository)
+	creds, err := resolveComponentListerCredentials(ctx, pluginManager, repository, credentialGraph)
+	if err != nil {
+		return nil, err
 	}
 
-	lister, err := pluginManager.ComponentListerRegistry.GetComponentLister(ctx, repository, nil)
+	lister, err := pluginManager.ComponentListerRegistry.GetComponentLister(ctx, repository, creds)
 	if err != nil {
 		return nil, fmt.Errorf("could not get component lister for repository %+v: %w", repository, err)
 	}
@@ -606,6 +605,33 @@ func listComponentsFromRepository(ctx context.Context,
 	}
 
 	return componentNames, nil
+}
+
+// resolveComponentListerCredentials resolves credentials for the component lister of the given repository.
+// It returns nil credentials (and no error) when the repository needs none or when none are configured.
+func resolveComponentListerCredentials(ctx context.Context,
+	pluginManager *manager.PluginManager,
+	repository runtime.Typed,
+	credentialGraph credentials.Resolver,
+) (runtime.Typed, error) {
+	identity, err := pluginManager.ComponentListerRegistry.GetComponentListerCredentialConsumerIdentity(ctx, repository)
+	if err != nil {
+		// A repository that needs no credentials (such as a CTF archive) returns an error here; list without them.
+		slog.DebugContext(ctx, "no credential consumer identity for component lister", "repository", repository, "error", err)
+		return nil, nil
+	}
+	if credentialGraph == nil {
+		return nil, nil
+	}
+	creds, err := credentialGraph.Resolve(ctx, identity)
+	if err != nil {
+		if errors.Is(err, credentials.ErrNotFound) {
+			slog.DebugContext(ctx, "no credentials found for component lister", "identity", identity)
+			return nil, nil
+		}
+		return nil, fmt.Errorf("resolving credentials for repository %+v failed: %w", repository, err)
+	}
+	return creds, nil
 }
 
 // getIDsForComponentsFromRepository gets versions for given component names and returns a list of component

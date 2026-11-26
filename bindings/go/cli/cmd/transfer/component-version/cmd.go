@@ -507,7 +507,7 @@ func resolveSource(
 	if sourceRepository != nil {
 		// Component names must be discovered before the resolver is built so they can
 		// be registered as high-priority patterns for the source repository.
-		if sourceComponents, err = listComponentsFromRepository(ctx, pm, sourceRepository); err != nil {
+		if sourceComponents, err = listComponentsFromRepository(ctx, pm, credGraph, sourceRepository); err != nil {
 			return nil, nil, nil, fmt.Errorf("could not list components in source repository: %w", err)
 		}
 		if len(sourceComponents) == 0 {
@@ -623,14 +623,23 @@ func collectComponentIDs(
 }
 
 // listComponentsFromRepository lists the component names contained in a repository.
-// Component listing currently supports CTF repositories only, which covers the common
-// "transfer a whole transport archive" case.
-func listComponentsFromRepository(ctx context.Context, pm *manager.PluginManager, repository runtime.Typed) ([]string, error) {
-	if _, ok := repository.(*ctfv1.Repository); !ok {
-		return nil, fmt.Errorf("component listing in repositories of type %T is not supported; specify a component in the source reference", repository)
+// It resolves credentials for the repository through the credential graph, so registries that need login are reachable.
+func listComponentsFromRepository(ctx context.Context, pm *manager.PluginManager, credGraph credentials.Resolver, repository runtime.Typed) ([]string, error) {
+	var creds runtime.Typed
+	identity, err := pm.ComponentListerRegistry.GetComponentListerCredentialConsumerIdentity(ctx, repository)
+	if err != nil {
+		// A repository that needs no credentials (such as a CTF archive) returns an error here; list without them.
+		slog.DebugContext(ctx, "no credential consumer identity for component lister", "repository", repository, "error", err)
+	} else if credGraph != nil {
+		if creds, err = credGraph.Resolve(ctx, identity); err != nil {
+			if !errors.Is(err, credentials.ErrNotFound) {
+				return nil, fmt.Errorf("resolving credentials for repository %+v failed: %w", repository, err)
+			}
+			creds = nil
+		}
 	}
 
-	lister, err := pm.ComponentListerRegistry.GetComponentLister(ctx, repository, nil)
+	lister, err := pm.ComponentListerRegistry.GetComponentLister(ctx, repository, creds)
 	if err != nil {
 		return nil, fmt.Errorf("could not get component lister: %w", err)
 	}

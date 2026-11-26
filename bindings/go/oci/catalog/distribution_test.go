@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sort"
 	"strings"
 	"testing"
 
@@ -13,22 +14,27 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// catalogServer serves the Distribution catalog endpoint with two pages. The
-// first page carries a Link header that points at the second page.
-func catalogServer(t *testing.T, page1, page2 []string) *httptest.Server {
+// sortedCatalogServer serves the Distribution catalog endpoint over a sorted
+// repository list. It honours the n and last query parameters the ORAS client
+// sends and sets a Link header while more entries remain, so the test drives
+// real cursor pagination.
+func sortedCatalogServer(t *testing.T, repos []string, pageSize int) *httptest.Server {
 	t.Helper()
+	sorted := append([]string(nil), repos...)
+	sort.Strings(sorted)
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v2/_catalog", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if r.URL.Query().Get("last") == "" {
-			// First page points at the second via the Link header.
-			next := fmt.Sprintf("/v2/_catalog?n=%s&last=%s",
-				r.URL.Query().Get("n"), url.QueryEscape(page1[len(page1)-1]))
+		last := r.URL.Query().Get("last")
+		start := sort.Search(len(sorted), func(i int) bool { return sorted[i] > last })
+		end := min(start+pageSize, len(sorted))
+		page := sorted[start:end]
+		if end < len(sorted) && len(page) > 0 {
+			next := fmt.Sprintf("/v2/_catalog?n=%d&last=%s", pageSize, url.QueryEscape(page[len(page)-1]))
 			w.Header().Set("Link", fmt.Sprintf("<%s>; rel=\"next\"", next))
-			writeCatalogPage(t, w, page1)
-			return
 		}
-		writeCatalogPage(t, w, page2)
+		writeCatalogPage(t, w, page)
 	})
 	return httptest.NewServer(mux)
 }
@@ -44,18 +50,18 @@ func writeCatalogPage(t *testing.T, w http.ResponseWriter, repos []string) {
 }
 
 func TestDistributionCataloger_ListComponentsAcrossPages(t *testing.T) {
-	page1 := []string{
+	// The server sorts these. With a small page size the matching block spans
+	// several pages, so the test drives cursor pagination and the early stop
+	// once the scan passes the block.
+	repos := []string{
 		"component-descriptors/componentB",
 		"component-descriptors/componentA",
-		"component-descriptors/componentA",
-		"not-a-component",
-	}
-	page2 := []string{
-		"my/sub/component-descriptors/skipped-without-subpath",
 		"component-descriptors/componentD",
 		"component-descriptors/componentC",
+		"my/sub/component-descriptors/after-the-block",
+		"not-a-component",
 	}
-	srv := catalogServer(t, page1, page2)
+	srv := sortedCatalogServer(t, repos, 2)
 	defer srv.Close()
 
 	cataloger, err := NewDistributionCataloger(CatalogerOptions{
@@ -72,19 +78,17 @@ func TestDistributionCataloger_ListComponentsAcrossPages(t *testing.T) {
 		return nil
 	})
 	require.NoError(t, err)
-	// Dedup and sort are per page, so the two pages concatenate in order.
 	assert.Equal(t, []string{"componentA", "componentB", "componentC", "componentD"}, result)
 }
 
 func TestDistributionCataloger_SubPathStripping(t *testing.T) {
-	page1 := []string{
-		"my/sub/component-descriptors/componentA",
+	repos := []string{
 		"component-descriptors/componentB",
-	}
-	page2 := []string{
+		"my/sub/component-descriptors/componentA",
 		"my/sub/component-descriptors/componentC",
+		"other/component-descriptors/after-the-block",
 	}
-	srv := catalogServer(t, page1, page2)
+	srv := sortedCatalogServer(t, repos, 2)
 	defer srv.Close()
 
 	cataloger, err := NewDistributionCataloger(CatalogerOptions{

@@ -8,8 +8,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/oras-project/oras-go/v3/registry/remote/auth"
-
 	"ocm.software/open-component-model/bindings/go/ctf"
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -47,9 +45,14 @@ var ErrWrongUsage = errors.New("wrong usage of OCI component lister plugin")
 // userAgent identifies this plug-in on authenticated OCI requests.
 const userAgent = "Builtin OCI Component Lister Plugin"
 
+// httpPrefixMigrationGuide explains how to replace a scheme prefix on a
+// registry URL with plainHTTP in the HTTP client configuration. It matches the
+// hint the OCI resolver gives, so both paths point the user at the same place.
+const httpPrefixMigrationGuide = "https://ocm.software/docs/changelog/migrate-from-http-prefixes/"
+
 // NewComponentListerPlugin creates an OCIComponentListerPlugin. httpConfig and
-// logger may be nil. httpClient must not be nil for remote OCI registries; it
-// is built from httpConfig when not provided.
+// logger may be nil. The shared HTTP client used for remote registries is
+// built from httpConfig.
 func NewComponentListerPlugin(httpConfig *httpv1alpha1.Config, logger *slog.Logger) *OCIComponentListerPlugin {
 	return &OCIComponentListerPlugin{
 		httpConfig: httpConfig,
@@ -67,9 +70,16 @@ func (l *OCIComponentListerPlugin) GetComponentVersionRepositoryScheme() *runtim
 
 // GetComponentLister returns a component lister for the given repository
 // specification. It supports *ctfv1.Repository (CTF archive) and
-// *ociv1.Repository (remote OCI registry).
+// *ociv1.Repository (remote OCI registry). A raw specification is converted
+// through the scheme first, so a spec that arrives as *runtime.Raw (from
+// configuration or a resolver) is handled like the typed one.
 func (l *OCIComponentListerPlugin) GetComponentLister(ctx context.Context, repositorySpecification runtime.Typed, creds runtime.Typed) (repository.ComponentLister, error) {
-	switch spec := repositorySpecification.(type) {
+	spec, err := getConvertedTypedSpec(repositorySpecification)
+	if err != nil {
+		return nil, err
+	}
+
+	switch spec := spec.(type) {
 	case *ctfv1.Repository:
 		archive, _, err := ctf.OpenCTFByFileExtension(ctx, ctf.OpenCTFOptions{
 			Path: spec.FilePath,
@@ -118,26 +128,23 @@ func (l *OCIComponentListerPlugin) remoteComponentLister(ctx context.Context, sp
 		subPath = strings.Trim(parsed.Path, "/")
 	}
 
-	plainHTTP, err := ocmhttp.PlainHTTPFor(ctx, l.httpConfig, host, parsed.Scheme, false)
-	if err != nil {
-		return nil, fmt.Errorf("failed to determine plain HTTP setting for host %q: %w", host, err)
+	// A scheme prefix on the base URL is deprecated input: it never changes the
+	// connection. Warn and point at the migration guide, exactly as the OCI
+	// resolver does, so the lister and the resolver behave the same way.
+	if parsed.Scheme != "" {
+		slog.WarnContext(ctx, "the scheme prefix on a registry URL is deprecated; drop it and set plainHTTP in the HTTP client configuration for hosts without TLS",
+			slog.String("host", host), slog.String("scheme", parsed.Scheme), slog.String("url", httpPrefixMigrationGuide))
 	}
 
-	header := http.Header{"User-Agent": {userAgent}}
-	authClient := &auth.Client{
-		Client:         l.httpClient,
-		Cache:          auth.NewCache(),
-		CredentialFunc: ocicreds.CredentialFunc(identity, ociCredentials),
-		Header:         header,
-		// Keep the distribution spec token flow for basic credentials instead
-		// of attempting OAuth2 first, which not all registries implement.
-		TokenFetcher: auth.NewCompositeTokenFetcher(l.httpClient, header, "", true),
+	plainHTTP, err := ocmhttp.PlainHTTPFor(ctx, l.httpConfig, host, parsed.Scheme, false)
+	if err != nil {
+		return nil, fmt.Errorf("%w and drop the prefix (see %s)", err, httpPrefixMigrationGuide)
 	}
 
 	cataloger, err := catalog.NewDistributionCataloger(catalog.CatalogerOptions{
 		Host:       host,
 		HTTPClient: l.httpClient,
-		AuthClient: authClient,
+		AuthClient: ocicreds.AuthClient(l.httpClient, identity, ociCredentials, userAgent),
 		PlainHTTP:  plainHTTP,
 		Logger:     l.logger,
 	})
@@ -151,9 +158,15 @@ func (l *OCIComponentListerPlugin) remoteComponentLister(ctx context.Context, sp
 // GetComponentListerCredentialConsumerIdentity retrieves the consumer identity
 // for the given repository specification. Remote OCI registries resolve to an
 // identity usable for credential lookup. CTF repositories do not need
-// credentials and return an error.
+// credentials and return an error. A raw specification is converted through the
+// scheme first.
 func (l *OCIComponentListerPlugin) GetComponentListerCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
-	switch spec := repositorySpecification.(type) {
+	spec, err := getConvertedTypedSpec(repositorySpecification)
+	if err != nil {
+		return nil, err
+	}
+
+	switch spec := spec.(type) {
 	case *ociv1.Repository:
 		return identityv1.IdentityFromOCIRepository(spec)
 	case *ctfv1.Repository:
@@ -161,4 +174,21 @@ func (l *OCIComponentListerPlugin) GetComponentListerCredentialConsumerIdentity(
 	default:
 		return nil, errors.Join(ErrWrongUsage, fmt.Errorf("unsupported repository type: %T", repositorySpecification))
 	}
+}
+
+// getConvertedTypedSpec converts any repository specification (including a
+// *runtime.Raw) to its typed object in the OCI repository scheme, so callers
+// can switch on the concrete type. It mirrors the conversion the OCI component
+// version provider does.
+func getConvertedTypedSpec(repositorySpecification runtime.Typed) (runtime.Typed, error) {
+	spec := repositorySpecification.DeepCopyTyped()
+	_, _ = ocirepository.Scheme.DefaultType(spec)
+	obj, err := ocirepository.Scheme.NewObject(spec.GetType())
+	if err != nil {
+		return nil, errors.Join(ErrWrongUsage, fmt.Errorf("unsupported repository type %q: %w", spec.GetType(), err))
+	}
+	if err := ocirepository.Scheme.Convert(spec, obj); err != nil {
+		return nil, errors.Join(ErrWrongUsage, fmt.Errorf("could not convert repository specification: %w", err))
+	}
+	return obj, nil
 }

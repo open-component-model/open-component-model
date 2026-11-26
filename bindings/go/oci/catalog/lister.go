@@ -3,8 +3,6 @@ package catalog
 import (
 	"context"
 	"errors"
-	"maps"
-	"slices"
 	"strings"
 
 	ocipath "ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
@@ -36,53 +34,62 @@ func NewComponentLister(c RepositoryCataloger, subPath string) *ComponentLister 
 	}
 }
 
+// errBlockComplete stops the catalog scan once it has passed the block of
+// matching repositories. It is swallowed by ListComponents.
+var errBlockComplete = errors.New("component descriptor block complete")
+
 // ListComponents lists OCM component names found in the registry. It calls fn
-// once per catalog page with the component names of that page, lexically
-// sorted and deduplicated. If the cataloger supports pagination, last is the
-// last component name of the previous page. ListComponents maps last back to
-// its repository name so the cataloger continues after it.
+// once per catalog page with the component names of that page. If the cataloger
+// supports pagination, last is the last component name of the previous page.
+//
+// The matching repositories live under a single prefix and form one
+// contiguous, lexically sorted block of the registry catalog (the catalog is
+// sorted, as required by the Distribution spec). ListComponents starts the
+// scan at that prefix and stops once it passes the block, so it does not scan
+// the whole catalog of a large registry.
 func (l *ComponentLister) ListComponents(ctx context.Context, last string, fn func(names []string) error) error {
 	if fn == nil {
 		return ErrFnNil
 	}
 
-	return l.cataloger.Repositories(ctx, repoCursorFor(l.subPath, last), func(repos []string) error {
-		names := componentNamesFromRepos(repos, l.subPath)
-		if len(names) == 0 {
-			return nil
+	prefix := componentDescriptorPrefix(l.subPath)
+
+	// Start at the prefix so repositories before the block are skipped. An empty
+	// last starts at the prefix itself; a non-empty last continues after the
+	// previous page's last component name.
+	cursor := prefix
+	if last != "" {
+		cursor += last
+	}
+
+	err := l.cataloger.Repositories(ctx, cursor, func(repos []string) error {
+		names := make([]string, 0, len(repos))
+		passed := false
+		for _, repository := range repos {
+			if name, ok := strings.CutPrefix(repository, prefix); ok {
+				names = append(names, name)
+				continue
+			}
+			// A repository that sorts after the prefix is past the block, so no
+			// further match can follow in the sorted catalog.
+			if repository > prefix {
+				passed = true
+			}
 		}
-		return fn(names)
+		if len(names) > 0 {
+			if err := fn(names); err != nil {
+				return err
+			}
+		}
+		if passed {
+			return errBlockComplete
+		}
+		return nil
 	})
-}
-
-// repoCursorFor maps a component name cursor back to its repository name so it
-// can be used as the last parameter of a catalog page request. An empty
-// component cursor stays empty so listing starts from the top.
-func repoCursorFor(subPath, last string) string {
-	if last == "" {
-		return ""
+	if err != nil && !errors.Is(err, errBlockComplete) {
+		return err
 	}
-	return componentDescriptorPrefix(subPath) + last
-}
-
-// componentNamesFromRepos maps raw repository names to OCM component names. It
-// keeps repositories that carry the component-descriptors/ segment under the
-// optional subPath prefix, strips both prefixes, and returns the remaining
-// component names deduplicated and lexically sorted.
-func componentNamesFromRepos(repos []string, subPath string) []string {
-	prefix := componentDescriptorPrefix(subPath)
-
-	accumulated := make(map[string]struct{})
-	for _, r := range repos {
-		if !strings.HasPrefix(r, prefix) {
-			continue
-		}
-		accumulated[strings.TrimPrefix(r, prefix)] = struct{}{}
-	}
-
-	names := slices.Collect(maps.Keys(accumulated))
-	slices.Sort(names)
-	return names
+	return nil
 }
 
 // componentDescriptorPrefix returns the repository prefix that OCM component

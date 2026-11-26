@@ -31,17 +31,6 @@ func (f *fakeCataloger) Repositories(ctx context.Context, last string, fn func(r
 }
 
 func TestComponentLister_ListComponents(t *testing.T) {
-	singlePage := []string{
-		"component-descriptors/componentC",
-		"component-descriptors/componentB",
-		"not-a-component",
-		"component-descriptors/duplicate",
-		"component-descriptors/componentD",
-		"component-descriptors/componentA",
-		"component-descriptors/duplicate",
-		"not-a-component-again",
-	}
-
 	tests := []struct {
 		name     string
 		subPath  string
@@ -49,9 +38,15 @@ func TestComponentLister_ListComponents(t *testing.T) {
 		expected []string
 	}{
 		{
-			name:     "keeps component-descriptors and strips the prefix",
-			pages:    [][]string{singlePage},
-			expected: []string{"componentA", "componentB", "componentC", "componentD", "duplicate"},
+			name: "keeps component-descriptors, skips repos before the block and stops after it",
+			pages: [][]string{{
+				"aaa/before-the-block",
+				"component-descriptors/componentA",
+				"component-descriptors/componentB",
+				"component-descriptors/componentC",
+				"not-a-component",
+			}},
+			expected: []string{"componentA", "componentB", "componentC"},
 		},
 		{
 			name:     "single component",
@@ -74,21 +69,21 @@ func TestComponentLister_ListComponents(t *testing.T) {
 			expected: []string{"foo/bar", "foo/bar/baz"},
 		},
 		{
-			name:    "subPath prefix is stripped",
+			name:    "subPath prefix is stripped and other prefixes are skipped",
 			subPath: "my/sub",
 			pages: [][]string{{
-				"my/sub/component-descriptors/componentA",
 				"component-descriptors/componentB",
+				"my/sub/component-descriptors/componentA",
 				"my/sub/component-descriptors/componentC",
 				"other/component-descriptors/componentD",
 			}},
 			expected: []string{"componentA", "componentC"},
 		},
 		{
-			name: "pages are sorted and deduped per page",
+			name: "matches accumulate across pages",
 			pages: [][]string{
-				{"component-descriptors/componentB", "component-descriptors/componentA"},
-				{"component-descriptors/componentD", "component-descriptors/componentC"},
+				{"component-descriptors/componentA", "component-descriptors/componentB"},
+				{"component-descriptors/componentC", "component-descriptors/componentD"},
 			},
 			expected: []string{"componentA", "componentB", "componentC", "componentD"},
 		},
@@ -110,6 +105,25 @@ func TestComponentLister_ListComponents(t *testing.T) {
 	}
 }
 
+func TestComponentLister_StopsScanAfterTheBlock(t *testing.T) {
+	// A page that sorts entirely after the block must stop the scan, so a later
+	// page is never requested.
+	cataloger := &fakeCataloger{pages: [][]string{
+		{"component-descriptors/componentA", "zzz-after-the-block"},
+		{"component-descriptors/componentB"},
+	}}
+	lister := NewComponentLister(cataloger, "")
+
+	var names []string
+	require.NoError(t, lister.ListComponents(t.Context(), "", func(found []string) error {
+		names = append(names, found...)
+		return nil
+	}))
+
+	// componentB from the second page is not listed because the scan stopped.
+	assert.Equal(t, []string{"componentA"}, names)
+}
+
 func TestComponentLister_ListComponentsFnNil(t *testing.T) {
 	cataloger := &fakeCataloger{}
 	var lister repo.ComponentLister = NewComponentLister(cataloger, "")
@@ -117,7 +131,7 @@ func TestComponentLister_ListComponentsFnNil(t *testing.T) {
 	assert.EqualError(t, err, ErrFnNil.Error())
 }
 
-func TestComponentLister_LastCursorIsMappedToRepositoryName(t *testing.T) {
+func TestComponentLister_StartCursorBeginsAtThePrefix(t *testing.T) {
 	tests := []struct {
 		name     string
 		subPath  string
@@ -125,12 +139,12 @@ func TestComponentLister_LastCursorIsMappedToRepositoryName(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "empty last stays empty",
+			name:     "empty last starts at the prefix",
 			last:     "",
-			expected: "",
+			expected: "component-descriptors/",
 		},
 		{
-			name:     "component cursor maps to component-descriptors repository",
+			name:     "component cursor continues after the component",
 			last:     "componentA",
 			expected: "component-descriptors/componentA",
 		},
@@ -139,6 +153,12 @@ func TestComponentLister_LastCursorIsMappedToRepositoryName(t *testing.T) {
 			subPath:  "my/sub",
 			last:     "componentA",
 			expected: "my/sub/component-descriptors/componentA",
+		},
+		{
+			name:     "empty last with subPath starts at the subPath prefix",
+			subPath:  "my/sub",
+			last:     "",
+			expected: "my/sub/component-descriptors/",
 		},
 	}
 	for _, tt := range tests {

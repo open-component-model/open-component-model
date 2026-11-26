@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/oras-project/oras-go/v3/errdef"
 	"github.com/oras-project/oras-go/v3/registry/remote"
 	"github.com/oras-project/oras-go/v3/registry/remote/errcode"
 )
@@ -60,11 +59,25 @@ func NewDistributionCataloger(opts CatalogerOptions) (RepositoryCataloger, error
 // Repositories lists repository names through the Distribution catalog
 // endpoint. It delegates to ORAS remote.Registry.Repositories and maps a
 // catalog-unsupported outcome (HTTP 404 or Distribution error code
-// UNSUPPORTED) to ErrCatalogUnsupported.
+// UNSUPPORTED) to ErrCatalogUnsupported. Errors returned by fn are passed
+// through unchanged, so a callback failure is never reported as a catalog
+// problem.
 func (c *DistributionCataloger) Repositories(ctx context.Context, last string, fn func(repos []string) error) error {
 	c.logger.DebugContext(ctx, "listing repositories via distribution catalog", "last", last)
 
-	err := c.registry.Repositories(ctx, last, fn)
+	var callbackErr error
+	err := c.registry.Repositories(ctx, last, func(repos []string) error {
+		if e := fn(repos); e != nil {
+			callbackErr = e
+			return e
+		}
+		return nil
+	})
+	// A callback error is the caller's own error, not a registry error, so
+	// return it unwrapped and do not classify it as catalog-unsupported.
+	if callbackErr != nil {
+		return callbackErr
+	}
 	if err == nil {
 		return nil
 	}
@@ -75,13 +88,9 @@ func (c *DistributionCataloger) Repositories(ctx context.Context, last string, f
 }
 
 // isCatalogUnsupported reports whether err indicates that the registry does
-// not implement the catalog endpoint. It matches an HTTP 404 response, the
-// Distribution error code UNSUPPORTED, and the ORAS not-found sentinel.
+// not implement the catalog endpoint. It matches an HTTP 404 response and the
+// Distribution error code UNSUPPORTED.
 func isCatalogUnsupported(err error) bool {
-	if errors.Is(err, errdef.ErrNotFound) {
-		return true
-	}
-
 	var errResp *errcode.ErrorResponse
 	if errors.As(err, &errResp) {
 		if errResp.StatusCode == http.StatusNotFound {
