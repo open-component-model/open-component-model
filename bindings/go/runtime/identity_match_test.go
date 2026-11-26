@@ -535,7 +535,7 @@ func TestIdentityMatchesURL(t *testing.T) {
 			true,
 		},
 		{
-			"no scheme but one has port - does not match",
+			"no scheme but explicit standard port 443 matches no scheme no port",
 			args{
 				a: runtime.Identity{
 					runtime.IdentityAttributeHostname: "example.com",
@@ -543,6 +543,150 @@ func TestIdentityMatchesURL(t *testing.T) {
 				},
 				b: runtime.Identity{
 					runtime.IdentityAttributeHostname: "example.com",
+				},
+			},
+			true,
+		},
+		{
+			"no scheme but explicit standard port 80 matches no scheme no port",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "80",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+				},
+			},
+			true,
+		},
+		{
+			"no scheme but explicit non-standard port does not match no scheme no port",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "8443",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+				},
+			},
+			false,
+		},
+		{
+			"no scheme port 443 does not match explicit http scheme",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "443",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributeScheme:   "http",
+				},
+			},
+			false,
+		},
+		{
+			"explicit ssh scheme on port 443 matches port-only entry (no inferred scheme conflict)",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "ssh.github.com",
+					runtime.IdentityAttributeScheme:   "ssh",
+					runtime.IdentityAttributePort:     "443",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "ssh.github.com",
+					runtime.IdentityAttributePort:     "443",
+				},
+			},
+			true,
+		},
+		{
+			"https on explicit port 80 matches port-only entry 80 (no inferred scheme conflict)",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributeScheme:   "https",
+					runtime.IdentityAttributePort:     "80",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "80",
+				},
+			},
+			true,
+		},
+		{
+			// Inference is one-directional (request-side port only), so a port-less
+			// identity does not collapse onto a port-scoped entry. This asymmetry is
+			// deliberate: it stops a hostname-only entry and the same host with
+			// port 443 from matching both ways, which the credential DAG would
+			// reject as a cycle.
+			"no scheme no port does not match explicit standard port 443 (one-directional inference)",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "443",
+				},
+			},
+			false,
+		},
+		{
+			"no scheme standard ports 443 and 80 do not match each other",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "443",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "80",
+				},
+			},
+			false,
+		},
+		{
+			"no scheme port 443 matches oci scheme without port",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "ghcr.io",
+					runtime.IdentityAttributePort:     "443",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "ghcr.io",
+					runtime.IdentityAttributeScheme:   "oci",
+				},
+			},
+			true,
+		},
+		{
+			"explicit port 443 does not match explicit ssh scheme without port",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "443",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributeScheme:   "ssh",
+				},
+			},
+			false,
+		},
+		{
+			"explicit port 80 does not match explicit https scheme without port",
+			args{
+				a: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributePort:     "80",
+				},
+				b: runtime.Identity{
+					runtime.IdentityAttributeHostname: "example.com",
+					runtime.IdentityAttributeScheme:   "https",
 				},
 			},
 			false,
@@ -751,6 +895,25 @@ func TestIdentity_Match_WithURLMatching(t *testing.T) {
 				runtime.IdentityAttributeHostname: "ghcr.io",
 				runtime.IdentityAttributeScheme:   "https",
 				runtime.IdentityAttributePath:     "org/*",
+			},
+			true,
+		},
+		{
+			// Crux of the well-known-port fix at the full-chain level: a
+			// scheme-less host:443 lookup that also carries a path matches a
+			// hostname-only entry (no path, no port, no scheme). The port 443
+			// infers https for default-port collapsing and the entry's missing
+			// path accepts any request path.
+			"path-bearing host:443 lookup matches hostname-only entry",
+			runtime.Identity{
+				runtime.IdentityAttributeType:     "OCIRegistry",
+				runtime.IdentityAttributeHostname: "ghcr.io",
+				runtime.IdentityAttributePort:     "443",
+				runtime.IdentityAttributePath:     "some-org",
+			},
+			runtime.Identity{
+				runtime.IdentityAttributeType:     "OCIRegistry",
+				runtime.IdentityAttributeHostname: "ghcr.io",
 			},
 			true,
 		},
