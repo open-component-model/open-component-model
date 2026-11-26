@@ -79,16 +79,11 @@ func New[T cmp.Ordered](ctx context.Context, graph *syncdag.SyncedDirectedAcycli
 		slog.DebugContext(ctx, "no roots provided, dynamically determining roots from graph")
 	}
 
-	style := DefaultTreeStyle
-	if options.TreeStyle != nil {
-		style = *options.TreeStyle
-	}
-
 	return &Renderer[T]{
 		tableWriter:      table.NewWriter(),
 		vertexSerializer: options.VertexSerializer,
 		header:           options.Header,
-		style:            style,
+		style:            DefaultTreeStyle,
 		tableStyle:       defaultTableStyle(),
 		roots:            options.Roots,
 		headerless:       options.Headerless,

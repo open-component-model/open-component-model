@@ -43,7 +43,7 @@ statement or a Sigstore bundle) is a node named by its envelope media type, with
 predicate type(s) beneath it; a bare document is a leaf named by its media type. Each leaf
 also carries a friendly TYPE tag (sbom, vex, signature, provenance, sarif) and the digest of
 the document bytes. Documents with identical bytes attached in more than one place share that
-digest and are tagged with the same letter (and a matching grey tone when colour is on), so
+digest and are tagged with the same letter, so
 duplicates are easy to spot.
 
 json emits an array of the decoded payloads (a bare object when a single document matches,

@@ -82,7 +82,7 @@ func DiscoverAll(ctx context.Context, req Request, concurrency int) ([]Group, er
 		eg.Go(func() error {
 			resReq := req
 			resReq.Resource = &req.Descriptor.Component.Resources[i]
-			reference := accessReference(resReq.Resource)
+			reference := accessStringField(resReq.Resource, "imageReference")
 			atts, err := Discover(gctx, resReq)
 			if err != nil {
 				req.Logger.Warn("discovering resource attestations failed",
@@ -224,7 +224,7 @@ func fromArtifactReferences(ctx context.Context, req Request) ([]repository.Atte
 		att := repository.Attestation{
 			Source:       repository.AttestationSourceOCMLocal,
 			ArtifactType: candidate.Type,
-			MediaType:    accessMediaType(candidate),
+			MediaType:    accessStringField(candidate, "mediaType"),
 			Platform: repository.Platform{
 				OS:           candidate.ExtraIdentity[attributeOS],
 				Architecture: candidate.ExtraIdentity[attributeArchitecture],
@@ -233,7 +233,7 @@ func fromArtifactReferences(ctx context.Context, req Request) ([]repository.Atte
 			ID: candidate.ToIdentity().String(),
 			// The local blob reference is the content digest of the document itself, so a
 			// local attestation shares it with a referrer carrying the same bytes.
-			ContentDigest: accessLocalReference(candidate),
+			ContentDigest: accessStringField(candidate, "localReference"),
 		}
 		if req.IncludeData {
 			// An ocm-local attestation's document is the referenced resource blob itself.
@@ -313,9 +313,12 @@ func dedup(in []repository.Attestation) []repository.Attestation {
 	return out
 }
 
-// accessMediaType reads the declared media type of a resource's access (for a local
-// blob) from its metadata, without downloading the blob. Empty when none is declared.
-func accessMediaType(res *descriptor.Resource) string {
+// accessStringField reads one string field from a resource's access metadata, without
+// downloading the blob. Empty when the resource has no access, the access does not
+// marshal, or the field is absent or not a string. It reads a declared location
+// (imageReference), a local blob reference (localReference, the document content digest)
+// or a media type (mediaType) without binding to a concrete access type.
+func accessStringField(res *descriptor.Resource, field string) string {
 	access := res.GetAccess()
 	if access == nil {
 		return ""
@@ -324,54 +327,10 @@ func accessMediaType(res *descriptor.Resource) string {
 	if err != nil {
 		return ""
 	}
-	var probe struct {
-		MediaType string `json:"mediaType"`
-	}
-	if err := json.Unmarshal(data, &probe); err != nil {
+	var fields map[string]any
+	if err := json.Unmarshal(data, &fields); err != nil {
 		return ""
 	}
-	return probe.MediaType
-}
-
-// accessLocalReference reads the local blob reference (the document content digest) of a
-// resource's access from its metadata, without downloading the blob. Empty when none is
-// declared (for example a non-local access).
-func accessLocalReference(res *descriptor.Resource) string {
-	access := res.GetAccess()
-	if access == nil {
-		return ""
-	}
-	data, err := json.Marshal(access, runtime.JSONOptions)
-	if err != nil {
-		return ""
-	}
-	var probe struct {
-		LocalReference string `json:"localReference"`
-	}
-	if err := json.Unmarshal(data, &probe); err != nil {
-		return ""
-	}
-	return probe.LocalReference
-}
-
-// accessReference reads the artifact location of a resource's access (the OCI
-// imageReference) from its metadata, without downloading the blob. Empty when the
-// access declares none (for example a local blob). It names the failing image when a
-// resource's attestation discovery fails.
-func accessReference(res *descriptor.Resource) string {
-	access := res.GetAccess()
-	if access == nil {
-		return ""
-	}
-	data, err := json.Marshal(access, runtime.JSONOptions)
-	if err != nil {
-		return ""
-	}
-	var probe struct {
-		ImageReference string `json:"imageReference"`
-	}
-	if err := json.Unmarshal(data, &probe); err != nil {
-		return ""
-	}
-	return probe.ImageReference
+	value, _ := fields[field].(string)
+	return value
 }

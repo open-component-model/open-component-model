@@ -89,9 +89,9 @@ func TestAccessMediaType(t *testing.T) {
 		Type:      descriptor.GetLocalBlobAccessType(),
 		MediaType: "application/spdx+json",
 	}
-	assert.Equal(t, "application/spdx+json", accessMediaType(res))
+	assert.Equal(t, "application/spdx+json", accessStringField(res, "mediaType"))
 
-	assert.Empty(t, accessMediaType(&descriptor.Resource{}), "no access means no media type")
+	assert.Empty(t, accessStringField(&descriptor.Resource{}, "mediaType"), "no access means no media type")
 }
 
 // resourceNamed is a minimal resource identified only by its name.

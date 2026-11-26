@@ -10,7 +10,6 @@ package referrer
 import (
 	"cmp"
 	"context"
-	"encoding/json/v2"
 	"fmt"
 	"log/slog"
 
@@ -64,7 +63,7 @@ func DiscoverAttestations(ctx context.Context, store spec.Store, subject ociImag
 // referrer manifest (for its annotations and layer media type) but never the document.
 func fromReferrer(ctx context.Context, store spec.Store, subject, ref ociImageSpecV1.Descriptor, opts ...repository.AttestationOption) (repository.Attestation, error) {
 	var manifest ociImageSpecV1.Manifest
-	if err := fetchJSON(ctx, store, ref, &manifest); err != nil {
+	if err := attestation.FetchJSON(ctx, store, ref, &manifest); err != nil {
 		return repository.Attestation{}, fmt.Errorf("reading referrer manifest failed: %w", err)
 	}
 
@@ -143,14 +142,4 @@ func documentMediaType(manifest ociImageSpecV1.Manifest) string {
 		return layer.MediaType
 	}
 	return ""
-}
-
-// fetchJSON reads a descriptor's content in full and decodes it as JSON. Used only for
-// small manifests, never for document blobs.
-func fetchJSON(ctx context.Context, store spec.Store, desc ociImageSpecV1.Descriptor, into any) error {
-	data, err := content.FetchAll(ctx, store, desc)
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(data, into)
 }

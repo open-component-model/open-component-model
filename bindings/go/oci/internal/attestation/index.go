@@ -27,25 +27,20 @@ func DiscoverAllFromRoot(ctx context.Context, store spec.Store, root ociImageSpe
 	includeData := repository.NewAttestationOptions(opts...).IncludeData
 
 	var index ociImageSpecV1.Index
-	if err := fetchJSON(ctx, store, root, &index); err != nil {
+	if err := FetchJSON(ctx, store, root, &index); err != nil {
 		return nil, fmt.Errorf("reading image index failed: %w", err)
 	}
 
-	images := make(map[string]ociImageSpecV1.Descriptor, len(index.Manifests))
-	var attestations []ociImageSpecV1.Descriptor
-	for _, entry := range index.Manifests {
-		if entry.Annotations[AnnotationDockerReferenceType] == ReferenceTypeAttestationManifest &&
-			entry.Annotations[AnnotationDockerReferenceDigest] != "" {
-			attestations = append(attestations, entry)
-			continue
-		}
-		images[entry.Digest.String()] = entry
+	imageList, attestations := partitionBuildKitIndex(index)
+	images := make(map[string]ociImageSpecV1.Descriptor, len(imageList))
+	for _, img := range imageList {
+		images[img.Digest.String()] = img
 	}
 
 	var out []repository.Attestation
 	for _, att := range attestations {
 		var manifest ociImageSpecV1.Manifest
-		if err := fetchJSON(ctx, store, att, &manifest); err != nil {
+		if err := FetchJSON(ctx, store, att, &manifest); err != nil {
 			return nil, fmt.Errorf("reading attestation manifest %s failed: %w", att.Digest, err)
 		}
 
@@ -84,4 +79,22 @@ func DiscoverAllFromRoot(ctx context.Context, store spec.Store, root ociImageSpe
 		}
 	}
 	return out, nil
+}
+
+// partitionBuildKitIndex splits the manifests of a BuildKit image index into the platform
+// images and the attestation manifests that describe them. An attestation manifest is one
+// tagged vnd.docker.reference.type=attestation-manifest; it is kept only when it also
+// carries the vnd.docker.reference.digest of the image it attests, so one without is
+// dropped rather than mistaken for an image.
+func partitionBuildKitIndex(index ociImageSpecV1.Index) (images, attestations []ociImageSpecV1.Descriptor) {
+	for _, entry := range index.Manifests {
+		if entry.Annotations[AnnotationDockerReferenceType] == ReferenceTypeAttestationManifest {
+			if entry.Annotations[AnnotationDockerReferenceDigest] != "" {
+				attestations = append(attestations, entry)
+			}
+			continue
+		}
+		images = append(images, entry)
+	}
+	return images, attestations
 }

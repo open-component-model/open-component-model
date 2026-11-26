@@ -30,9 +30,6 @@ type RendererOptions[T cmp.Ordered] struct {
 	// Headerless suppresses the header row entirely (including the NESTING
 	// heading), for a pure label tree with no column titles.
 	Headerless bool
-	// TreeStyle overrides the NESTING column drawing characters. Nil keeps
-	// DefaultTreeStyle.
-	TreeStyle *TreeStyle
 }
 
 // RendererOption is a function that modifies the RendererOptions.
@@ -57,13 +54,5 @@ func WithHeader[T cmp.Ordered](header ...string) RendererOption[T] {
 func WithoutHeader[T cmp.Ordered]() RendererOption[T] {
 	return func(opts *RendererOptions[T]) {
 		opts.Headerless = true
-	}
-}
-
-// WithTreeStyle overrides the NESTING column drawing characters (for example to drop
-// the child-node indicator for a plain tree).
-func WithTreeStyle[T cmp.Ordered](style TreeStyle) RendererOption[T] {
-	return func(opts *RendererOptions[T]) {
-		opts.TreeStyle = &style
 	}
 }

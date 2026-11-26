@@ -82,19 +82,11 @@ func DiscoverSBOMsFromRoot(ctx context.Context, store spec.Store, root ociImageS
 	reference := name
 
 	var index ociImageSpecV1.Index
-	if err := fetchJSON(ctx, store, root, &index); err != nil {
+	if err := FetchJSON(ctx, store, root, &index); err != nil {
 		return nil, fmt.Errorf("reading image index of %q failed: %w", reference, err)
 	}
 
-	var images, attestations []ociImageSpecV1.Descriptor
-	for _, entry := range index.Manifests {
-		switch {
-		case entry.Annotations[AnnotationDockerReferenceType] != ReferenceTypeAttestationManifest:
-			images = append(images, entry)
-		case entry.Annotations[AnnotationDockerReferenceDigest] != "":
-			attestations = append(attestations, entry)
-		}
-	}
+	images, attestations := partitionBuildKitIndex(index)
 
 	selected := selectPlatforms(images, o.Platform, o.AllPlatforms)
 	if len(selected) == 0 {
@@ -147,7 +139,7 @@ func sbomsFromAttestation(
 	image, attestation ociImageSpecV1.Descriptor,
 ) ([]repository.SBOM, error) {
 	var manifest ociImageSpecV1.Manifest
-	if err := fetchJSON(ctx, store, attestation, &manifest); err != nil {
+	if err := FetchJSON(ctx, store, attestation, &manifest); err != nil {
 		return nil, fmt.Errorf("reading attestation manifest %s failed: %w", attestation.Digest, err)
 	}
 
@@ -270,8 +262,10 @@ func IsIndex(mediaType string) bool {
 		mediaType == introspection.MediaTypeDockerManifestList
 }
 
-// fetchJSON reads a descriptor's content in full and decodes it.
-func fetchJSON(ctx context.Context, store spec.Store, desc ociImageSpecV1.Descriptor, into any) error {
+// FetchJSON reads a descriptor's content in full and decodes it as JSON. Shared by the
+// discoverers in this package and by the referrer discoverer; used only for small
+// manifests, never for document blobs.
+func FetchJSON(ctx context.Context, store spec.Store, desc ociImageSpecV1.Descriptor, into any) error {
 	raw, err := content.FetchAll(ctx, store, desc)
 	if err != nil {
 		return err
