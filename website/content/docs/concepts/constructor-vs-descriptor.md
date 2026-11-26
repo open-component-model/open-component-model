@@ -50,10 +50,12 @@ component version, such as a file (`File/v1`), a directory, a Helm chart, or a d
 resource is a reference, either to a local blob or to an external artifact.
 
 For an `input`, OCM reads the content and stores it as a local blob next to the component version. The descriptor
-records a `LocalBlob/v1` access and the digest of the content. The relation defaults to `local`.
+records a `LocalBlob/v1` access and the digest of the content. The relation defaults to `local`, and the resource
+version defaults to the component version.
 
-For an `access`, OCM takes the access over as given. The relation defaults to `external`. In both cases the resource
-version defaults to the component version. OCM computes the digest when it has a digest processor for the access type.
+For an `access`, OCM takes the access over as given. The relation defaults to `external`. The resource `version` has no
+default here: the constructor schema requires it on every `access` resource. OCM computes the digest when it has a
+digest processor for the access type.
 For an access type without a digest processor, OCM records the resource without checking it and logs a warning: a
 digest you set is kept as written, and an unset digest stays empty.
 
