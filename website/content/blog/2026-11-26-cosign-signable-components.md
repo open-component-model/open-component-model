@@ -39,7 +39,8 @@ access:
   localReference: sha256:bdb3d8b26f5e…
 ```
 
-When such a component moves to another registry, nothing in the descriptor has to change.
+Such a component version is a self-contained OCI artifact: the descriptor and all content are layers of one manifest.
+Nothing in it depends on the registry it is stored in. We can copy it like an image.
 
 First, we ask the source registry for the manifest digest of our component version:
 
@@ -55,31 +56,23 @@ cosign sign --key cosign.key \
   source.example.com/component-descriptors/acme.org/demo@sha256:f8e9c0b7e0df…
 ```
 
-Then we transfer the component to the target registry:
+Then we copy the component to the target registry with plain `oras`. The flag `-r` also copies the referrers of the
+manifest, and the cosign signature is one of them:
 
 ```bash
-ocm transfer componentversion \
-  oci::source.example.com//acme.org/demo:1.0.0 \
-  oci::target.example.com
+oras cp -r \
+  source.example.com/component-descriptors/acme.org/demo:1.0.0 \
+  target.example.com/component-descriptors/acme.org/demo:1.0.0
 ```
 
-The target registry reports the same digest, so the signature is still valid:
+The target registry reports the same digest:
 
 ```console
 $ oras resolve target.example.com/component-descriptors/acme.org/demo:1.0.0
 sha256:f8e9c0b7e0df…
 ```
 
-There is one gap today: `ocm transfer` moves the component, but not the cosign signature stored next to it. We have to
-copy the signature ourselves:
-
-```bash
-oras cp -r \
-  source.example.com/component-descriptors/acme.org/demo@sha256:f8e9c0b7e0df… \
-  target.example.com/component-descriptors/acme.org/demo
-```
-
-After that, cosign verifies the component in the target registry:
+So the signature is still valid, and cosign verifies the component in the target registry:
 
 ```bash
 cosign verify --key cosign.pub \
@@ -98,8 +91,9 @@ access:
   imageReference: source.example.com/stefanprodan/podinfo:6.7.1
 ```
 
-An air-gapped environment cannot reach `source.example.com`. So we let the transfer take the image along. OCM copies
-the image to the target registry and rewrites the access to point to the copy:
+An air-gapped environment cannot reach `source.example.com`. A byte-for-byte copy with `oras cp` does not help here:
+the copied descriptor would still point to the source registry. This is the job of `ocm transfer`. It copies the image
+to the target registry as well and rewrites the access to point to the copy:
 
 ```yaml
 name: podinfo
@@ -108,8 +102,7 @@ access:
   imageReference: target.example.com/stefanprodan/podinfo:6.7.1
 ```
 
-That is exactly what a transfer is for. But the descriptor changed, and with it the manifest digest. The source
-registry reports one digest:
+But now the descriptor changed, and with it the manifest digest. The source registry reports one digest:
 
 ```console
 $ oras resolve source.example.com/component-descriptors/acme.org/demo:1.0.0
@@ -211,7 +204,7 @@ $ oras resolve target.example.com/component-descriptors/acme.org/demo:1.0.0
 sha256:2a6ee1eb95e4…
 ```
 
-And `ocm transfer` carried the signature along, so cosign verifies the component in the target registry right away:
+And `ocm transfer` carried the signature along, so cosign verifies the component in the target registry:
 
 ```console
 $ cosign verify --key cosign.pub \
