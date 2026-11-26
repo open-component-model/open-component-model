@@ -63,6 +63,11 @@
 //     keeps 1.0.
 //   - HTML characters &, < and > are kept literal (Python json.dumps default);
 //     OCM v1 escapes them to \u0026, \u003c, \u003e.
+//   - Arrays are never descended into; OCM v1 also rewrites objects inside
+//     arrays.
+//
+// NormaliseGoJSON reproduces all three OCM v1 behaviours for the OCM v1
+// variant of json/v1.
 //
 // Field-selection divergences from OCM v1 (provider labels, duplicate-identity
 // injection, none-access resources, …) are decided in the json/v1 algorithm

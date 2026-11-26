@@ -94,3 +94,32 @@ func TestNormalise(t *testing.T) {
 		})
 	}
 }
+
+// TestNormaliseGoJSONMatchesEncodingJSONv1 pins NormaliseGoJSON to the scalar
+// spelling of Go's encoding/json (v1) json.Marshal, which the OCM v1 CLI signs
+// with.
+func TestNormaliseGoJSONMatchesEncodingJSONv1(t *testing.T) {
+	tests := []struct {
+		value any
+		want  string
+	}{
+		{"plain", `"plain"`},
+		{"a<b>&c", `"a\u003cb\u003e\u0026c"`},
+		{"line\u2028sep", `"line\u2028sep"`},
+		{"para\u2029sep", `"para\u2029sep"`},
+		{"ümlaut", "\"ümlaut\""},
+		{"tab\tquote\"", `"tab\tquote\""`},
+		{0.00001, `0.00001`},
+		{1e-7, `1e-7`},
+		{1e21, `1e+21`},
+		{1.5, `1.5`},
+		{9007199254740993.0, `9007199254740992`},
+		{-1.0, `-1`},
+		{0.0, `0`},
+	}
+	for _, tt := range tests {
+		got, err := entry.NormaliseGoJSON(map[string]any{"v": tt.value})
+		require.NoError(t, err)
+		require.Equal(t, `[{"v":`+tt.want+`}]`, string(got), "value %#v", tt.value)
+	}
+}

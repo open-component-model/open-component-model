@@ -136,6 +136,23 @@ func Digest(desc *descruntime.Descriptor, normalisationAlgorithm, hashAlgorithm 
 // stops verifying. The two differ only for a descriptor with a null-valued
 // entry. Digest never records LegacyV3 (it labels such digests v4alpha2), so
 // minting is unaffected.
+//
+// A digest recorded as jsonNormalisation/v1 is verified as cc-utils computes it
+// first and, failing that, as the OCM v1 CLI computes it (see
+// jsonv1.NormaliseOCMv1), so signatures of both tools verify. The OCM v1
+// fallback runs only when every number in the descriptor survives a float64
+// round trip exactly (jsonv1.OCMv1Applicable): OCM v1 maps different numbers
+// such as 2^53 and 2^53+1 to the same bytes, so trying it otherwise would let
+// a changed number pass a cc-utils signature. An OCM v1 signature over such a
+// number therefore fails with a re-sign error. Likewise the fallback is not
+// tried when dropping unsigned provider labels makes the OCM v1 form equal to
+// the cc-utils form of the descriptor without them
+// (jsonv1.ErrAmbiguousProviderLabels): those bytes could be a cc-utils
+// signature, and accepting them would let a provider label be injected. Nor is
+// it tried when a signed value holds an object inside an array
+// (jsonv1.ErrAmbiguousArrayObjects): OCM v1 rewrites such objects into the form
+// cc-utils gives a differently shaped value. In every failure case the error
+// wraps ErrDigestMismatch and points to re-signing.
 func Verify(desc *descruntime.Descriptor, expected descruntime.Digest) error {
 	if err := CheckSupported(expected.NormalisationAlgorithm); err != nil {
 		return err
@@ -149,6 +166,29 @@ func Verify(desc *descruntime.Descriptor, expected descruntime.Digest) error {
 			return nil
 		}
 		return err
+	}
+	if expected.NormalisationAlgorithm == jsonv1.Algorithm { //nolint:staticcheck // verify-only legacy algorithm
+		err := verify(registered(jsonv1.Algorithm), desc, expected) //nolint:staticcheck // verify-only legacy algorithm
+		if !errors.Is(err, ErrDigestMismatch) {
+			return err
+		}
+		if gate := jsonv1.OCMv1Applicable(desc); gate != nil {
+			if !errors.Is(gate, jsonv1.ErrInexactNumber) && !errors.Is(gate, jsonv1.ErrAmbiguousProviderLabels) &&
+				!errors.Is(gate, jsonv1.ErrAmbiguousArrayObjects) {
+				return fmt.Errorf("%w; checking the OCM v1 variant of %s failed: %w", err, jsonv1.Algorithm, gate) //nolint:staticcheck // see above
+			}
+			return fmt.Errorf("%w; %w, so the OCM v1 variant was not tried; if the signature was created with the OCM v1 CLI, re-sign the component version with %q (see %s)",
+				err, gate, Default, MigrationGuide)
+		}
+		fallback := verify(jsonv1.NormaliseOCMv1, desc, expected)
+		if fallback == nil {
+			return nil
+		}
+		if !errors.Is(fallback, ErrDigestMismatch) {
+			return fmt.Errorf("%w; computing the OCM v1 variant of %s failed: %w", err, jsonv1.Algorithm, fallback) //nolint:staticcheck // see above
+		}
+		return fmt.Errorf("%w; neither the cc-utils nor the OCM v1 variant of %s matches; a signature created with the OCM v1 CLI may use parts of the OCM v1 variant that are not reproduced here: re-sign the component version with %q (see %s)",
+			err, jsonv1.Algorithm, Default, MigrationGuide) //nolint:staticcheck // see above
 	}
 	return verify(registered(expected.NormalisationAlgorithm), desc, expected)
 }
