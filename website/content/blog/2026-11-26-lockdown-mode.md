@@ -43,12 +43,12 @@ ocm transfer cv --lockdown ctf::./airgap//acme.org/product:1.0.0 registry.intern
 
 1. **Verify.** Producer signature, reference digests, and every resource's bytes
    against the signed digests.
-2. **Copy.** Everything lands as an OCI artifact in the target registry, pinned by
-   digest.
-3. **Localize.** Image references in charts and manifests are rewritten to the new
+2. **Localize.** Image references in charts and manifests are rewritten to the new
    locations. Automatic, by convention: no rules to write. Each edit is proven by
    rendering the chart again, and the import fails if any image would still be pulled
-   from outside.
+   from outside. This happens before anything is written.
+3. **Copy.** Everything lands as an OCI artifact in the target registry, pinned by
+   digest. Charts and manifests arrive in their localized form only.
 4. **Sign every artifact** with the importer's key (cosign).
 5. **Lock down.** Sign each component version's stored descriptor, accesses included.
    Parents reference children by the digest of the stored artifact, so one signature

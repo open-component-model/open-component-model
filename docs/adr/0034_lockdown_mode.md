@@ -82,11 +82,16 @@ deployment wiring.
 *Import* is the informal name of the operation; *locked* describes the result.
 
 1. **Verify** the producer signature, reference digests, and resource bytes.
-2. **Copy** every resource into the target registry as an OCI artifact, pinned by digest.
-3. **Localize** charts and manifests, by convention.
+2. **Localize** charts and manifests, by convention. Nothing has been written yet.
+3. **Copy** every resource into the target registry as an OCI artifact, pinned by digest.
+   Deployables are pushed in their localized form only.
 4. **Sign every artifact** with the importer key (cosign).
 5. **Lock down**: sign each component version's stored OCI descriptor. Parents reference
    children by that digest, so the root signature covers the closure.
+
+Steps 1 and 2 are a *prepare* phase that only reads; steps 3 to 5 are a *commit* phase
+that writes. An unlocalized chart or manifest never reaches the target registry
+([§4.3](#43-localization-at-import)).
 
 Lockdown happens only at the final hop. Air gap: plain `ocm transfer` into a CTF
 (portable, producer-signed) → carry → `ocm transfer cv --lockdown` into the target
@@ -173,6 +178,27 @@ conversion. Within one component version the order is images → charts → mani
 
 Localization is **convention-based and automatic**. It is safe because import does not
 guess what an image is.
+
+#### Ordering: localize before anything is pushed
+
+Copy and localization are one pipeline per deployable: download → localize → convert →
+push. Pushing first and localizing afterwards is not possible, because target tags are
+immutable (§4.7), and not wanted, because an unlocalized deployable would sit in the
+registry.
+
+Localization does not need the images to be in the target registry. It needs two facts
+that are known beforehand:
+
+* the **target reference** of each image, which follows from the transfer configuration;
+* the **digest** of each image, which the copy preserves and step 1 has verified.
+
+So all deployables of the closure are localized and pass the render gate *before the
+first push*. A component that cannot be localized fails without leaving anything
+behind. Only then are images and localized deployables pushed and signed, and the
+descriptors last.
+
+A push that fails midway leaves artifacts without a descriptor. They are invisible to
+OCM, and a re-run produces the same digests and completes the import.
 
 #### Ground truth
 
