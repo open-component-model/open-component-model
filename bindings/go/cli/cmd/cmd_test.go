@@ -813,18 +813,14 @@ func Test_Get_Component_Version_CTF_Dir(t *testing.T) {
 	require.NoError(t, err)
 
 	tests := []struct {
-		name           string
-		args           []string
-		configYAML     string
-		expectedOutput string
-		expectedError  bool
+		name          string
+		args          []string
+		configYAML    string
+		expectedError bool
 	}{
 		{
-			name: "get cv from CTF dir - default",
-			args: []string{"get", "cv", archivePath, "--detail", "full"},
-			expectedOutput: `NESTING  COMPONENT            VERSION  PROVIDER      IDENTITY                               
- ├─       ocm.software/root-b  0.0.2    ocm.software  name=ocm.software/root-b,version=0.0.2 
- └─       ocm.software/root-a  0.0.1    ocm.software  name=ocm.software/root-a,version=0.0.1`,
+			name:          "get cv from CTF dir - default",
+			args:          []string{"get", "cv", archivePath, "--detail", "full"},
 			expectedError: false,
 		},
 		{
@@ -842,9 +838,6 @@ configurations:
       type: CommonTransportFormat/v1
       filePath: /does/not/exist
     componentNamePattern: ocm.software/*`,
-			expectedOutput: `NESTING  COMPONENT            VERSION  PROVIDER      IDENTITY                               
- ├─       ocm.software/root-b  0.0.2    ocm.software  name=ocm.software/root-b,version=0.0.2 
- └─       ocm.software/root-a  0.0.1    ocm.software  name=ocm.software/root-a,version=0.0.1`,
 			expectedError: false,
 		},
 	}
@@ -877,7 +870,7 @@ configurations:
 			r.NotEmpty(logEntries, "expected log entries to be present")
 
 			// The repository row (with its type) is the first data row, and the
-			// roots are drawn under it newest version first. The exact column
+			// roots are drawn under it in component-name order. The exact column
 			// widths depend on the temporary archive path, so assert structure
 			// rather than exact text.
 			got := strings.TrimSpace(result.String())

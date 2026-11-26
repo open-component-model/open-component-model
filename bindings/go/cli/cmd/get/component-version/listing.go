@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"slices"
-	"strings"
 	"sync"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -360,24 +358,11 @@ func collectComponentVersions(ctx context.Context,
 	}
 
 	// Order by component name, then version newest first with the configured
-	// registry, so the output is deterministic.
-	var cmpErr error
-	slices.SortStableFunc(entries, func(a, b componentVersionEntry) int {
-		if a.Component != b.Component {
-			return strings.Compare(a.Component, b.Component)
-		}
-		if cmpErr != nil {
-			return 0
-		}
-		c, err := reg.Compare(b.Version, a.Version)
-		if err != nil {
-			cmpErr = err
-			return 0
-		}
-		return c
-	})
-	if cmpErr != nil {
-		return nil, fmt.Errorf("sorting component versions failed: %w", cmpErr)
+	// registry, so the output is deterministic and matches the full tree order.
+	if err := ocm.SortByComponentThenVersion(reg, entries, func(e componentVersionEntry) (string, string) {
+		return e.Component, e.Version
+	}); err != nil {
+		return nil, err
 	}
 
 	return entries, nil
