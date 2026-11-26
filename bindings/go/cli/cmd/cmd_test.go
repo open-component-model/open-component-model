@@ -886,7 +886,7 @@ configurations:
 			rootA := strings.Index(got, "ocm.software/root-a")
 			r.GreaterOrEqual(rootB, 0, "root-b should be listed")
 			r.GreaterOrEqual(rootA, 0, "root-a should be listed")
-			r.Less(rootB, rootA, "root-b (0.0.2) should come before root-a (0.0.1)")
+			r.Less(rootA, rootB, "root-a should come before root-b in component-name order")
 			r.Contains(got, "0.0.2")
 			r.Contains(got, "0.0.1")
 		})

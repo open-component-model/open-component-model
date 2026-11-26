@@ -188,3 +188,33 @@ func SortDescriptorsDescending(reg *versioning.Registry, descs []*descriptor.Des
 	}
 	return nil
 }
+
+// SortDescriptorsByComponentThenVersion sorts descriptors in place by component
+// name ascending, then by version newest first using the versioning registry.
+// It is used to list the component versions of a repository under its
+// repository row, so the output reads as the contents of that repository. The
+// sort is stable, so equal keys keep their input order on every run.
+//
+// The registry must be the one built from the OCM configuration so custom
+// version schemes apply.
+func SortDescriptorsByComponentThenVersion(reg *versioning.Registry, descs []*descriptor.Descriptor) error {
+	var cmpErr error
+	slices.SortStableFunc(descs, func(a, b *descriptor.Descriptor) int {
+		if a.Component.Name != b.Component.Name {
+			return strings.Compare(a.Component.Name, b.Component.Name)
+		}
+		if cmpErr != nil {
+			return 0
+		}
+		c, err := reg.Compare(b.Component.Version, a.Component.Version)
+		if err != nil {
+			cmpErr = err
+			return 0
+		}
+		return c
+	})
+	if cmpErr != nil {
+		return fmt.Errorf("sorting component versions failed: %w", cmpErr)
+	}
+	return nil
+}

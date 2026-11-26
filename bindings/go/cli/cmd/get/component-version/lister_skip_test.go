@@ -178,7 +178,7 @@ func TestGetIDsForComponentsFromRepository_EqualVersionsOrderByNameDeterministic
 	}
 }
 
-func TestGetIDsForComponentsFromRepository_SortsNewestFirstAcrossComponents(t *testing.T) {
+func TestGetIDsForComponentsFromRepository_OrdersByComponentThenVersion(t *testing.T) {
 	captureLogs(t)
 
 	resolver := &fakeResolver{
@@ -190,12 +190,48 @@ func TestGetIDsForComponentsFromRepository_SortsNewestFirstAcrossComponents(t *t
 	}
 
 	roots, err := getIDsForComponentsFromRepository(t.Context(), nil, resolver,
-		[]string{"comp/a", "comp/b"}, Params{}, versioning.Default())
+		[]string{"comp/b", "comp/a"}, Params{}, versioning.Default())
 	require.NoError(t, err)
 	require.Len(t, roots, 3)
 
-	// Global order is newest version first across all components.
-	assert.Contains(t, roots[0], "version=2.0.0")
-	assert.Contains(t, roots[1], "version=1.10.0")
-	assert.Contains(t, roots[2], "version=1.9.0")
+	// Ordered by component name ascending, then version newest first.
+	assert.Contains(t, roots[0], "comp/a")
+	assert.Contains(t, roots[0], "1.10.0")
+	assert.Contains(t, roots[1], "comp/a")
+	assert.Contains(t, roots[1], "1.9.0")
+	assert.Contains(t, roots[2], "comp/b")
+	assert.Contains(t, roots[2], "2.0.0")
+}
+
+func TestGetIDsForComponentsFromRepository_OrdersByNameThenCustomScheme(t *testing.T) {
+	captureLogs(t)
+
+	// A scheme that orders by the minor group only, so 1.5 is newer than 2.1.
+	scheme := versioning.NewRegexScheme("minor-only",
+		regexp.MustCompile(`^(?P<x>\d+)\.(?P<y>\d+)$`), []string{"y"})
+	reg := versioning.NewRegistry(scheme)
+
+	resolver := &fakeResolver{
+		repos: map[string]repository.ComponentVersionRepository{
+			"comp/a": &fakeCVRepo{versions: []string{"2.1", "1.5"}},
+			"comp/b": &fakeCVRepo{versions: []string{"1.2", "1.9"}},
+		},
+	}
+
+	// Run several times to prove the order is stable.
+	for range 5 {
+		roots, err := getIDsForComponentsFromRepository(t.Context(), nil, resolver,
+			[]string{"comp/b", "comp/a"}, Params{}, reg)
+		require.NoError(t, err)
+		// Name ascending, then newest by the custom scheme (higher minor first).
+		require.Len(t, roots, 4)
+		assert.Contains(t, roots[0], "comp/a")
+		assert.Contains(t, roots[0], "1.5")
+		assert.Contains(t, roots[1], "comp/a")
+		assert.Contains(t, roots[1], "2.1")
+		assert.Contains(t, roots[2], "comp/b")
+		assert.Contains(t, roots[2], "1.9")
+		assert.Contains(t, roots[3], "comp/b")
+		assert.Contains(t, roots[3], "1.2")
+	}
 }

@@ -880,9 +880,11 @@ func getIDsForComponentsFromRepository(ctx context.Context,
 		slog.WarnContext(ctx, fmt.Sprintf("skipped %d of %d components that could not be read", len(skipped), len(componentNames)), "skipped", skippedList)
 	}
 
-	// Order the roots by version, descending, with the registry built from the
-	// OCM configuration so custom version schemes apply.
-	if err := ocm.SortDescriptorsDescending(registry, descriptors); err != nil {
+	// Order the roots by component name, then version newest first, with the
+	// registry built from the OCM configuration so custom version schemes apply.
+	// Under the repository row this reads as the contents of the repository, the
+	// same order as the versions table.
+	if err := ocm.SortDescriptorsByComponentThenVersion(registry, descriptors); err != nil {
 		return nil, err
 	}
 
