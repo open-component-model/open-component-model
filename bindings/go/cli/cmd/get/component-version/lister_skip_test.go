@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"log/slog"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,6 +14,7 @@ import (
 	ocidescriptor "ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
+	"ocm.software/open-component-model/bindings/go/runtime/versioning"
 )
 
 // fakeCVRepo implements the two repository.ComponentVersionRepository methods
@@ -92,7 +94,7 @@ func TestGetIDsForComponentsFromRepository_SkipsUnreadable(t *testing.T) {
 
 	roots, err := getIDsForComponentsFromRepository(t.Context(), resolver,
 		[]string{"ok/component", "no/access", "broken/schema", "empty/identity"},
-		Params{latestOnly: true}, nil)
+		Params{latestOnly: true}, versioning.Default())
 	require.NoError(t, err)
 	require.Len(t, roots, 1)
 	assert.Contains(t, roots[0], "ok/component")
@@ -115,7 +117,7 @@ func TestGetIDsForComponentsFromRepository_AllFail(t *testing.T) {
 	}
 
 	_, err := getIDsForComponentsFromRepository(t.Context(), resolver,
-		[]string{"a", "b"}, Params{latestOnly: true}, nil)
+		[]string{"a", "b"}, Params{latestOnly: true}, versioning.Default())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "a:")
 	assert.Contains(t, err.Error(), "b:")
@@ -126,6 +128,53 @@ func TestGetIDsForComponentsFromRepository_AllFail(t *testing.T) {
 type unauthorizedError struct{}
 
 func (*unauthorizedError) Error() string { return "401 unauthorized" }
+
+func TestGetIDsForComponentsFromRepository_UsesCustomVersionScheme(t *testing.T) {
+	captureLogs(t)
+
+	// A scheme that orders by the minor group only, so 1.5 is newer than 2.1,
+	// the opposite of semver.
+	scheme := versioning.NewRegexScheme("minor-only",
+		regexp.MustCompile(`^(?P<x>\d+)\.(?P<y>\d+)$`), []string{"y"})
+	reg := versioning.NewRegistry(scheme)
+
+	resolver := &fakeResolver{
+		repos: map[string]repository.ComponentVersionRepository{
+			"comp/a": &fakeCVRepo{versions: []string{"2.1", "1.5"}},
+		},
+	}
+
+	roots, err := getIDsForComponentsFromRepository(t.Context(), resolver,
+		[]string{"comp/a"}, Params{}, reg)
+	require.NoError(t, err)
+	require.Len(t, roots, 2)
+
+	// Under the custom scheme 1.5 (minor 5) sorts before 2.1 (minor 1).
+	assert.Contains(t, roots[0], "version=1.5")
+	assert.Contains(t, roots[1], "version=2.1")
+}
+
+func TestGetIDsForComponentsFromRepository_EqualVersionsOrderByNameDeterministically(t *testing.T) {
+	captureLogs(t)
+
+	resolver := &fakeResolver{
+		repos: map[string]repository.ComponentVersionRepository{
+			"comp/b": &fakeCVRepo{versions: []string{"1.0.0"}},
+			"comp/a": &fakeCVRepo{versions: []string{"1.0.0"}},
+		},
+	}
+
+	// Same version across components: the tie breaks by component name, the same
+	// on every run.
+	for range 5 {
+		roots, err := getIDsForComponentsFromRepository(t.Context(), resolver,
+			[]string{"comp/b", "comp/a"}, Params{}, versioning.Default())
+		require.NoError(t, err)
+		require.Len(t, roots, 2)
+		assert.Contains(t, roots[0], "comp/a")
+		assert.Contains(t, roots[1], "comp/b")
+	}
+}
 
 func TestGetIDsForComponentsFromRepository_SortsNewestFirstAcrossComponents(t *testing.T) {
 	captureLogs(t)
@@ -139,7 +188,7 @@ func TestGetIDsForComponentsFromRepository_SortsNewestFirstAcrossComponents(t *t
 	}
 
 	roots, err := getIDsForComponentsFromRepository(t.Context(), resolver,
-		[]string{"comp/a", "comp/b"}, Params{}, nil)
+		[]string{"comp/a", "comp/b"}, Params{}, versioning.Default())
 	require.NoError(t, err)
 	require.Len(t, roots, 3)
 

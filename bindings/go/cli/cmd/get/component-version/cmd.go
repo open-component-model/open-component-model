@@ -604,11 +604,6 @@ func getIDsForComponentsFromRepository(ctx context.Context,
 	constraint := params.constraint
 	latestOnly := params.latestOnly
 
-	reg := registry
-	if reg == nil {
-		reg = versioning.Default()
-	}
-
 	var (
 		descriptors []*descruntime.Descriptor
 		skipped     []string
@@ -679,10 +674,10 @@ func getIDsForComponentsFromRepository(ctx context.Context,
 		slog.WarnContext(ctx, fmt.Sprintf("skipped %d of %d components that could not be read", len(skipped), len(componentNames)), "skipped", skipped)
 	}
 
-	// Order the roots by version, descending, the same global order the previous
-	// single batch listing produced, so the output stays deterministic and
-	// unchanged.
-	if err := ocm.SortDescriptorsDescending(reg, descriptors); err != nil {
+	// Order the roots by version, descending, with the registry built from the
+	// OCM configuration so custom version schemes apply, the same global order
+	// the previous single batch listing produced.
+	if err := ocm.SortDescriptorsDescending(registry, descriptors); err != nil {
 		return nil, err
 	}
 

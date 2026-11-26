@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
@@ -159,11 +160,16 @@ func ListComponentVersions(ctx context.Context, repo repository.ComponentVersion
 
 // SortDescriptorsDescending sorts descriptors in place by component version,
 // newest first, using the versioning registry. Text sorting would order
-// "1.10.0" before "1.9.0", so the registry comparison is used instead. It is
-// shared so repository listing and the CLI produce the same global order.
+// "1.10.0" before "1.9.0", so the registry comparison is used instead. Ties
+// (equal versions, for example across components) break by component name so
+// the order is the same on every run. It is shared so repository listing and
+// the CLI produce the same global order.
+//
+// The registry must be the one built from the OCM configuration so custom
+// version schemes apply.
 func SortDescriptorsDescending(reg *versioning.Registry, descs []*descriptor.Descriptor) error {
 	var cmpErr error
-	slices.SortFunc(descs, func(a, b *descriptor.Descriptor) int {
+	slices.SortStableFunc(descs, func(a, b *descriptor.Descriptor) int {
 		if cmpErr != nil {
 			return 0
 		}
@@ -172,7 +178,10 @@ func SortDescriptorsDescending(reg *versioning.Registry, descs []*descriptor.Des
 			cmpErr = err
 			return 0
 		}
-		return c
+		if c != 0 {
+			return c
+		}
+		return strings.Compare(a.Component.Name, b.Component.Name)
 	})
 	if cmpErr != nil {
 		return fmt.Errorf("sorting component versions failed: %w", cmpErr)
