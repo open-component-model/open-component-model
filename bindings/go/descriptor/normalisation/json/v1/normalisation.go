@@ -111,7 +111,7 @@ func OCMv1Applicable(cd *descruntime.Descriptor) error {
 var ErrAmbiguousArrayObjects = errors.New("the OCM v1 variant of " + Algorithm + " rewrites objects inside arrays, and the result is also the cc-utils form of a descriptor holding the rewritten arrays")
 
 // checkNoObjectsInArrays rejects a descriptor with an object inside an array of
-// a signed value (a label value, an access, a digest). OCM v1 rewrites
+// a signed value (a label value, a digest). OCM v1 rewrites
 // [{"b":1,"a":2}] to [[{"a":2},{"b":1}]], which is also how cc-utils serialises
 // a descriptor holding [[{"a":2},{"b":1}]], so accepting the fallback would let
 // a cc-utils-signed value change shape. The element lists (resources,
@@ -156,9 +156,12 @@ func checkElementFields(path string, e any) error {
 	}
 	for k, v := range el {
 		var err error
-		if k == "labels" {
+		switch k {
+		case "access", "srcRefs":
+			// not part of the normalised bytes
+		case "labels":
 			err = checkLabels(path+".labels", v)
-		} else {
+		default:
 			err = checkValue(path+"."+k, v, false)
 		}
 		if err != nil {

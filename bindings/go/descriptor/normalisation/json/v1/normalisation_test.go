@@ -179,6 +179,8 @@ component:
     type: blob
     relation: local
     access: {type: localBlob/v1, localReference: sha256:abc, mediaType: application/octet-stream, extra: %s}
+    srcRefs:
+    - identitySelector: {name: src}
     labels:
     - {name: r, value: %s, signing: true}
   labels:
@@ -195,7 +197,7 @@ component:
 		{name: "sources are not normalised", provider: plain, source: objInArray, access: plain, res: plain, comp: plain},
 		{name: "component label value", provider: plain, source: plain, access: plain, res: plain, comp: objInArray, ambiguous: true},
 		{name: "resource label value nested", provider: plain, source: plain, access: plain, res: "{x: [[{a: 1}]]}", comp: plain, ambiguous: true},
-		{name: "resource access", provider: plain, source: plain, access: objInArray, res: plain, comp: plain, ambiguous: true},
+		{name: "resource access and srcRefs are not normalised", provider: plain, source: plain, access: objInArray, res: plain, comp: plain},
 		{name: "provider label value", provider: `[{"a":1}]`, source: plain, access: plain, res: plain, comp: plain, ambiguous: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
