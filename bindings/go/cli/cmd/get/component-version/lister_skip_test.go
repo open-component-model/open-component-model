@@ -33,11 +33,14 @@ func (f *fakeCVRepo) ListComponentVersions(_ context.Context, _ string) ([]strin
 	return f.versions, nil
 }
 
-func (f *fakeCVRepo) GetComponentVersion(_ context.Context, _, _ string) (*descriptor.Descriptor, error) {
+func (f *fakeCVRepo) GetComponentVersion(_ context.Context, name, version string) (*descriptor.Descriptor, error) {
 	if f.getErr != nil {
 		return nil, f.getErr
 	}
-	return f.descriptor, nil
+	if f.descriptor != nil {
+		return f.descriptor, nil
+	}
+	return descFor(name, version), nil
 }
 
 // fakeResolver returns a preconfigured repository (or error) per component. The
@@ -123,3 +126,25 @@ func TestGetIDsForComponentsFromRepository_AllFail(t *testing.T) {
 type unauthorizedError struct{}
 
 func (*unauthorizedError) Error() string { return "401 unauthorized" }
+
+func TestGetIDsForComponentsFromRepository_SortsNewestFirstAcrossComponents(t *testing.T) {
+	captureLogs(t)
+
+	resolver := &fakeResolver{
+		repos: map[string]repository.ComponentVersionRepository{
+			// Text sorting would order 1.10.0 before 1.9.0; the registry sort must not.
+			"comp/a": &fakeCVRepo{versions: []string{"1.9.0", "1.10.0"}},
+			"comp/b": &fakeCVRepo{versions: []string{"2.0.0"}},
+		},
+	}
+
+	roots, err := getIDsForComponentsFromRepository(t.Context(), resolver,
+		[]string{"comp/a", "comp/b"}, Params{}, nil)
+	require.NoError(t, err)
+	require.Len(t, roots, 3)
+
+	// Global order is newest version first across all components.
+	assert.Contains(t, roots[0], "version=2.0.0")
+	assert.Contains(t, roots[1], "version=1.10.0")
+	assert.Contains(t, roots[2], "version=1.9.0")
+}

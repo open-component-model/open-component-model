@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"slices"
 	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -647,16 +646,24 @@ func getIDsForComponentsFromRepository(ctx context.Context,
 			continue
 		}
 
+		// Keep the versions that decode to a real identity. A decoder that
+		// produced an empty descriptor would otherwise contribute an empty
+		// identity root that later breaks graph discovery. Each bad version is
+		// logged on its own line, but the component is counted as skipped only
+		// once, below, when none of its versions are readable.
+		valid := 0
 		for _, desc := range descs {
-			// Defence in depth: a decoder that produced an empty descriptor would
-			// otherwise contribute an empty identity root that later breaks graph
-			// discovery. Skip and count it as a failed component.
 			id := desc.Component.ToIdentity()
 			if len(id) == 0 || id.String() == "" {
-				skip(name, errors.New("empty component identity"))
+				slog.ErrorContext(ctx, "skipping component version with an empty identity",
+					"component", name, "version", desc.Component.Version)
 				continue
 			}
 			descriptors = append(descriptors, desc)
+			valid++
+		}
+		if valid == 0 {
+			skip(name, errors.New("no readable versions"))
 		}
 	}
 
@@ -675,20 +682,8 @@ func getIDsForComponentsFromRepository(ctx context.Context,
 	// Order the roots by version, descending, the same global order the previous
 	// single batch listing produced, so the output stays deterministic and
 	// unchanged.
-	var cmpErr error
-	slices.SortFunc(descriptors, func(a, b *descruntime.Descriptor) int {
-		if cmpErr != nil {
-			return 0
-		}
-		c, err := reg.Compare(b.Component.Version, a.Component.Version)
-		if err != nil {
-			cmpErr = err
-			return 0
-		}
-		return c
-	})
-	if cmpErr != nil {
-		return nil, fmt.Errorf("sorting component versions failed: %w", cmpErr)
+	if err := ocm.SortDescriptorsDescending(reg, descriptors); err != nil {
+		return nil, err
 	}
 
 	identities := make([]string, 0, len(descriptors))

@@ -149,23 +149,33 @@ func ListComponentVersions(ctx context.Context, repo repository.ComponentVersion
 
 	// Ensure deterministic global ordering across components and versions.
 	if options.sort {
-		reg := options.reg()
-		var cmpErr error
-		slices.SortFunc(result, func(a, b *descriptor.Descriptor) int {
-			if cmpErr != nil {
-				return 0
-			}
-			c, err := reg.Compare(b.Component.Version, a.Component.Version)
-			if err != nil {
-				cmpErr = err
-				return 0
-			}
-			return c
-		})
-		if cmpErr != nil {
-			return nil, fmt.Errorf("sorting component versions failed: %w", cmpErr)
+		if err := SortDescriptorsDescending(options.reg(), result); err != nil {
+			return nil, err
 		}
 	}
 
 	return result, nil
+}
+
+// SortDescriptorsDescending sorts descriptors in place by component version,
+// newest first, using the versioning registry. Text sorting would order
+// "1.10.0" before "1.9.0", so the registry comparison is used instead. It is
+// shared so repository listing and the CLI produce the same global order.
+func SortDescriptorsDescending(reg *versioning.Registry, descs []*descriptor.Descriptor) error {
+	var cmpErr error
+	slices.SortFunc(descs, func(a, b *descriptor.Descriptor) int {
+		if cmpErr != nil {
+			return 0
+		}
+		c, err := reg.Compare(b.Component.Version, a.Component.Version)
+		if err != nil {
+			cmpErr = err
+			return 0
+		}
+		return c
+	})
+	if cmpErr != nil {
+		return fmt.Errorf("sorting component versions failed: %w", cmpErr)
+	}
+	return nil
 }
