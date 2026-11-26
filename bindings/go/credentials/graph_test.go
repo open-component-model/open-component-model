@@ -401,6 +401,23 @@ func TestResolveCredentials(t *testing.T) {
 			require.NoError,
 		},
 		{
+			// A scheme-less "host:443" OCI reference yields a lookup identity with
+			// an explicit port 443 and no scheme. It must still resolve against a
+			// hostname-only consumer entry, just like a scheme-qualified request.
+			"oci lookup with explicit standard port 443 resolves hostname-only entry",
+			testYAML,
+			runtime.Identity{
+				"type":     "OCIRegistry",
+				"hostname": "docker.io",
+				"port":     "443",
+			},
+			map[string]string{
+				"username": "foo",
+				"password": "bar",
+			},
+			require.NoError,
+		},
+		{
 			"docker config based resolution",
 			testYAML,
 			runtime.Identity{
@@ -534,6 +551,141 @@ consumers:
 		require.True(t, ok, "expected *v1.DirectCredentials, got %T", typed)
 		require.Equal(t, want, dc.Properties)
 	}
+}
+
+// TestResolveOverlappingHostAndPortEntriesLoad pins that a config with a
+// hostname-only consumer entry plus the same host scoped to port 443 still
+// builds a graph (no DAG cycle) and resolves credentials. The one-directional
+// well-known-port scheme inference in IdentityMatchesURL must not make the two
+// entries match each other both ways.
+func TestResolveOverlappingHostAndPortEntriesLoad(t *testing.T) {
+	const overlapYAML = `
+type: credentials.config.ocm.software
+consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: ghcr.io
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: broad
+          password: abc
+  - identity:
+      type: OCIRegistry
+      hostname: ghcr.io
+      port: "443"
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: specific
+          password: xyz
+`
+	// Same two entries, declared in the opposite order, to pin that the single
+	// cyclic-only edge forms regardless of insertion order (no cycle either way).
+	const overlapYAMLReversed = `
+type: credentials.config.ocm.software
+consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: ghcr.io
+      port: "443"
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: specific
+          password: xyz
+  - identity:
+      type: OCIRegistry
+      hostname: ghcr.io
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: broad
+          password: abc
+`
+	// Port 80 variant, to pin that the http default behaves like the https one.
+	const overlapYAMLPort80 = `
+type: credentials.config.ocm.software
+consumers:
+  - identity:
+      type: OCIRegistry
+      hostname: registry.local
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: broad
+          password: abc
+  - identity:
+      type: OCIRegistry
+      hostname: registry.local
+      port: "80"
+    credentials:
+      - type: Credentials/v1
+        properties:
+          username: specific
+          password: xyz
+`
+	props := func(t *testing.T, typed runtime.Typed, err error) map[string]string {
+		t.Helper()
+		require.NoError(t, err)
+		dc, ok := typed.(*v1.DirectCredentials)
+		require.True(t, ok, "expected *v1.DirectCredentials, got %T", typed)
+		return dc.Properties
+	}
+
+	t.Run("loads and resolves, both insertion orders", func(t *testing.T) {
+		for name, y := range map[string]string{"host first": overlapYAML, "port first": overlapYAMLReversed} {
+			t.Run(name, func(t *testing.T) {
+				r := require.New(t)
+				graph, err := GetGraph(t, y)
+				r.NoError(err, "overlapping hostname-only and port-scoped entries must not form a cycle")
+
+				// A scheme-less host:443 lookup is an exact match for the port entry,
+				// so the exact-identity fast path in matchAnyNode returns it.
+				typed, err := graph.Resolve(t.Context(), runtime.Identity{
+					"type": "OCIRegistry", "hostname": "ghcr.io", "port": "443",
+				})
+				r.Equal(map[string]string{"username": "specific", "password": "xyz"}, props(t, typed, err))
+
+				// A port-less lookup is an exact match for the hostname-only entry.
+				typed, err = graph.Resolve(t.Context(), runtime.Identity{
+					"type": "OCIRegistry", "hostname": "ghcr.io",
+				})
+				r.Equal(map[string]string{"username": "broad", "password": "abc"}, props(t, typed, err))
+			})
+		}
+	})
+
+	t.Run("port 80 overlap loads and resolves", func(t *testing.T) {
+		r := require.New(t)
+		graph, err := GetGraph(t, overlapYAMLPort80)
+		r.NoError(err)
+		typed, err := graph.Resolve(t.Context(), runtime.Identity{
+			"type": "OCIRegistry", "hostname": "registry.local", "port": "80",
+		})
+		r.Equal(map[string]string{"username": "specific", "password": "xyz"}, props(t, typed, err))
+	})
+
+	t.Run("path-bearing lookup resolves one of the overlapping entries", func(t *testing.T) {
+		// A lookup that also carries a path (a sub-path registry reference) is not
+		// an exact match for either entry, so matchAnyNode falls back to its
+		// unordered fuzzy search. Both entries can match it (the hostname-only
+		// entry via well-known-port inference, proven in the runtime matcher test,
+		// and the port entry by exact port). First match wins and map iteration is
+		// unordered, so this asserts only that resolution succeeds with one of the
+		// two valid sets. This is why overlapping entries should not carry
+		// different credentials.
+		r := require.New(t)
+		graph, err := GetGraph(t, overlapYAML)
+		r.NoError(err)
+		typed, err := graph.Resolve(t.Context(), runtime.Identity{
+			"type": "OCIRegistry", "hostname": "ghcr.io", "port": "443", "path": "some-org",
+		})
+		r.Contains([]map[string]string{
+			{"username": "specific", "password": "xyz"},
+			{"username": "broad", "password": "abc"},
+		}, props(t, typed, err))
+	})
 }
 
 func TestResolveTypedCredentials(t *testing.T) {

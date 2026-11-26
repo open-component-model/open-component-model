@@ -72,6 +72,18 @@ OCM v1 scoped entries with a `pathprefix` attribute instead. OCM still accepts `
 `path: "{<prefix>,<prefix>/**}"`, and logs a warning. If an entry sets both, `path` wins. See
 [Migrate Legacy Credentials]({{< relref "docs/changelog/migrate-legacy-credentials.md" >}}).
 
+### Scheme and Port Matching {#scheme-and-port}
+
+For every identity type, the `scheme` and `port` attributes are compared by the shared URL matcher that the per-type matching sections below refer to:
+
+- `oci` is equivalent to `https`.
+- An omitted `scheme` matches any scheme; two explicit schemes must be equal.
+- When a `scheme` is set, its default port is applied (`https` and `oci` use `443`, `http` uses `80`), so `https://host` and `https://host:443` are equivalent.
+- When neither side sets a `scheme`, a well-known port on the request supplies it (`443` implies `https`, `80` implies `http`), so a scheme-less `host:443` request matches an entry with no port just like `https://host` does. This inference is request-side only, so an entry that sets `port: "443"` without a scheme does not match a request that omits the port; use a hostname-only entry to cover the default ports (443/80) on a host.
+- A non-standard port has no implied scheme and must be configured explicitly.
+
+Most identities are derived from a URL that already carries a scheme, so the well-known-port inference mainly affects scheme-less references such as OCM OCI references like `host:443//component`. Avoid giving a hostname-only entry and the same host scoped to `port: "443"` different credentials: a path-bearing `host:443` request can match either, and resolution between overlapping entries is not ordered.
+
 ---
 
 ## OCIRegistry
@@ -85,8 +97,8 @@ Used when OCM accesses an OCI registry — pushing, pulling, or resolving compon
 | `type`     | Yes      | Must be `OCIRegistry/v1`                                                                                                            |
 | `hostname` | Yes      | Registry hostname (e.g. `ghcr.io`, `registry.example.com`)                                                                          |
 | `path`     | No       | Repository path. Supports glob patterns (`*` matches one path segment). If omitted, matches any path on the hostname.               |
-| `scheme`   | No       | URL scheme (`https`, `http`, `oci`). `oci` and `https` are equivalent. If omitted or empty on the request side, matches any scheme. |
-| `port`     | No       | Port number as string. Default ports are applied when `scheme` is set: `https` and `oci` default to `443`, `http` defaults to `80`. |
+| `scheme`   | No       | URL scheme (`https`, `http`, `oci`). `oci` and `https` are equivalent. If omitted or empty, matches any scheme.                     |
+| `port`     | No       | Port as string. With `scheme`: `https`/`oci`=`443`, `http`=`80`; else a request's `443`/`80` imply the scheme.                      |
 
 ### Credential Properties
 
@@ -105,8 +117,7 @@ Matching runs three chained checks — all must pass:
 
 1. **Path matcher** — compares `path` as a glob ([Path Patterns](#path-patterns)). `*` matches within one segment,
    `**` matches across `/`. If the configured entry has no `path`, any request path is accepted.
-2. **URL matcher** — compares `scheme`, `hostname`, and `port`. Applies default ports when a scheme is present (
-   `https` → `443`, `http` → `80`, `oci` → `443` via normalization to `https`). A request with no scheme matches any configured scheme.
+2. **URL matcher** — compares `scheme`, `hostname`, and `port` as described in [Scheme and Port Matching](#scheme-and-port).
 3. **Equality matcher** — all remaining attributes (like `type`) must be exactly equal.
 
 When more than one entry matches a request, OCM selects the most specific one deterministically. An exact match on the full identity string always takes precedence. Otherwise OCM ranks the matches: first by more scope attributes (for example an explicit `port` or `path`; an empty `path` does not count), then, for an equal attribute count, by fewer path-glob wildcards, and finally by the lexicographically smaller identity string as a stable tie-break. The same request always resolves the same entry.
@@ -169,7 +180,7 @@ identity is derived from the Helm repository URL using the same URL-based attrib
 | `hostname` | Yes      | Repository hostname (e.g. `charts.example.com`, `registry.example.com`)        |
 | `path`     | No       | Repository path (e.g. `stable`). If omitted, matches any path on the hostname. |
 | `scheme`   | No       | URL scheme (`https`, `http`, `oci`). If omitted, matches any scheme.           |
-| `port`     | No       | Port number as string. If omitted, matches any port.                           |
+| `port`     | No       | Port number as string. See [Scheme and Port Matching](#scheme-and-port).       |
 
 ### Credential Properties
 
@@ -263,8 +274,7 @@ logs a warning and has no effect.
 
 ### Matching Behavior
 
-The same three chained checks as [`OCIRegistry`](#ociregistry) apply: path glob, URL (scheme, hostname, port with
-default-port handling), then exact equality on the remaining attributes.
+The same three chained checks as [`OCIRegistry`](#ociregistry) apply: path glob, URL ([Scheme and Port Matching](#scheme-and-port)), then exact equality on the remaining attributes.
 
 {{< callout context="caution" >}}
 Prefer `type: HTTP/v1`. The aliases `HTTP` (unversioned, deprecated), `http`, `http/v1`, `Wget`, and `Wget/v1` (the latter two are the legacy name of the
@@ -404,7 +414,7 @@ including their legacy aliases.
 The same three chained checks as [`OCIRegistry`](#ociregistry) apply:
 
 1. Glob match on the path.
-2. URL match on scheme, hostname and port, with default-port handling.
+2. URL match on scheme, hostname and port ([Scheme and Port Matching](#scheme-and-port)).
 3. Exact match on the remaining attributes.
 
 Two results of this are specific to S3:
@@ -615,7 +625,7 @@ so `path: org/repo` does not match `https://example.com/org/repo.git`. Use `org/
 
 ### Matching Behavior
 
-The same three chained checks as [`OCIRegistry`](#ociregistry) apply: path glob, URL (scheme, hostname, port), then
+The same three chained checks as [`OCIRegistry`](#ociregistry) apply: path glob, URL ([Scheme and Port Matching](#scheme-and-port)), then
 exact equality on the remaining attributes.
 
 {{< callout context="caution" >}}
@@ -801,8 +811,7 @@ When using the legacy `Credentials/v1` `properties:` map instead of `TSACredenti
 
 ### Matching Behavior
 
-The same three chained checks as [`OCIRegistry`](#ociregistry) apply: path glob, URL (scheme, hostname, port with
-default-port handling), then exact equality on the remaining attributes. A generic entry with no URL attributes matches
+The same three chained checks as [`OCIRegistry`](#ociregistry) apply: path glob, URL ([Scheme and Port Matching](#scheme-and-port)), then exact equality on the remaining attributes. A generic entry with no URL attributes matches
 any TSA URL; a URL-specific entry is preferred when its attributes match.
 
 ### Examples

@@ -61,7 +61,7 @@ flowchart TB
 Matching runs three chained matchers **in order** — all three must pass:
 
 1. **Path matcher** — compares `path` as a glob. If the configured entry has no `path`, any request path is accepted. `*` matches within exactly one segment (not across `/`), `**` matches across `/`. For the full syntax, see [Path Patterns]({{< relref "docs/reference/configuration/credential-consumer-identities.md#path-patterns" >}}).
-2. **URL matcher** — compares `scheme`, `hostname`, and `port`. Applies default ports: `https` → `443`, `http` → `80`. Schemes must be equal (if neither side specifies one, they match).
+2. **URL matcher** — compares `scheme`, `hostname`, and `port`. Applies default ports: `https` → `443`, `http` → `80`. Schemes match unless both sides set a different one, so an omitted scheme on either side still matches. When neither side sets a scheme, a well-known port **on the request** supplies the one used for port defaulting (`443` → `https`, `80` → `http`), so a scheme-less `host:443` request matches an entry that omits the port, just like `https://host` does. This inference is request-side only, so an entry with `port: "443"` and no scheme does not match a request that omits the port. An inferred scheme is only used for defaulting, never to override an explicit scheme, so `ssh://host:443` still matches an entry with only `port: "443"`.
 3. **Equality matcher** — all remaining attributes (like `type`) must be exactly equal.
 
 If any matcher fails, the entry is skipped. OCM first tries an exact match on the full identity string and uses it when present. When no exact match exists and more than one entry matches, OCM returns the **most specific** match, chosen deterministically in this order: first the entry with more scope attributes (for example an explicit `port` or `path`; an empty `path` does not count, it matches any path); then, for an equal attribute count, the path glob with fewer wildcards (for example `my-org/*` over `*/*`); and finally, as a stable tie-break, the lexicographically smaller identity string. The same request always resolves the same entry.
@@ -107,9 +107,10 @@ configurations:
 | --- | --- | --- |
 | `ghcr.io/my-org/my-repo` | ✅ `ghcr-user` | No `path` in config → accepts any path |
 | `ghcr.io/other-org/thing` | ✅ `ghcr-user` | Same — hostname matches, path is unrestricted |
+| `ghcr.io:443/my-org/my-repo` (no scheme) | ✅ `ghcr-user` | Standard port `443` implies `https`, whose default port is `443`, so it collapses against the port-less entry |
 | `docker.io/library/nginx` | ❌ No credentials | `docker.io` ≠ `ghcr.io` |
 
-**Takeaway:** A hostname-only entry is the broadest match. It catches every request to that host regardless of path, scheme, or port.
+**Takeaway:** A hostname-only entry is the broadest match. It catches every request to that host regardless of path, on the default ports (`https`/`443` and `http`/`80`), including a scheme-less `:443` or `:80`. A request on a non-standard port still needs that port configured.
 
 ### Example B: Glob Path Matching with Multiple Consumers
 
@@ -252,9 +253,9 @@ configurations:
 | `http://ghcr.io/repo` | ❌ No credentials | Scheme `http` ≠ `https` |
 | `ghcr.io/repo` (no scheme) | ✅ `secure-user` | Empty scheme on request matches any configured scheme — port `443` is applied via `https` config default |
 | `myregistry.local:5000/repo` | ✅ `local-user` | Port `5000` matches; no scheme on either side |
-| `myregistry.local/repo` (no port) | ❌ No credentials | No scheme means no default port — empty ≠ `5000` |
+| `myregistry.local/repo` (no port) | ❌ No credentials | No scheme and no well-known port means no default port — empty ≠ `5000` |
 
-**Takeaway:** Port defaults only apply when a `scheme` is present. A request with no scheme matches any configured scheme; the non-empty side's scheme is used for port defaulting.
+**Takeaway:** Port defaults apply when a `scheme` is present, and a well-known port (`443`, `80`) on the request supplies the scheme when both sides omit it. A request with no scheme matches any configured scheme; the non-empty side's scheme is used for port defaulting.
 
 ### Example D: The `oci` Scheme
 
