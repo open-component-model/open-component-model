@@ -11,6 +11,7 @@ import (
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
 
+	"ocm.software/open-component-model/bindings/go/cli/internal/componentlister"
 	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
 	"ocm.software/open-component-model/bindings/go/cli/internal/render"
@@ -537,7 +538,7 @@ func processRepositoryReference(cmd *cobra.Command,
 	displayMode := params.displayMode
 	ctx := cmd.Context()
 
-	componentNames, err := listComponentsFromRepository(ctx, pluginManager, repository, credentialGraph)
+	componentNames, err := componentlister.List(ctx, pluginManager, credentialGraph, repository)
 	if err != nil {
 		return fmt.Errorf("could not list components in repository %v: %w", repository, err)
 	}
@@ -576,62 +577,6 @@ func processRepositoryReference(cmd *cobra.Command,
 	}
 
 	return nil
-}
-
-// listComponentsFromRepository lists component names from a given repository using the component lister interface.
-// It resolves credentials for the repository through the credential graph, so registries that need login are reachable.
-func listComponentsFromRepository(ctx context.Context,
-	pluginManager *manager.PluginManager,
-	repository runtime.Typed,
-	credentialGraph credentials.Resolver,
-) ([]string, error) {
-	creds, err := resolveComponentListerCredentials(ctx, pluginManager, repository, credentialGraph)
-	if err != nil {
-		return nil, err
-	}
-
-	lister, err := pluginManager.ComponentListerRegistry.GetComponentLister(ctx, repository, creds)
-	if err != nil {
-		return nil, fmt.Errorf("could not get component lister for repository %+v: %w", repository, err)
-	}
-
-	var componentNames []string
-	err = lister.ListComponents(ctx, "", func(names []string) error {
-		componentNames = append(componentNames, names...)
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("could not list components in repository %+v: %w", repository, err)
-	}
-
-	return componentNames, nil
-}
-
-// resolveComponentListerCredentials resolves credentials for the component lister of the given repository.
-// It returns nil credentials (and no error) when the repository needs none or when none are configured.
-func resolveComponentListerCredentials(ctx context.Context,
-	pluginManager *manager.PluginManager,
-	repository runtime.Typed,
-	credentialGraph credentials.Resolver,
-) (runtime.Typed, error) {
-	identity, err := pluginManager.ComponentListerRegistry.GetComponentListerCredentialConsumerIdentity(ctx, repository)
-	if err != nil {
-		// A repository that needs no credentials (such as a CTF archive) returns an error here; list without them.
-		slog.DebugContext(ctx, "no credential consumer identity for component lister", "repository", repository, "error", err)
-		return nil, nil
-	}
-	if credentialGraph == nil {
-		return nil, nil
-	}
-	creds, err := credentialGraph.Resolve(ctx, identity)
-	if err != nil {
-		if errors.Is(err, credentials.ErrNotFound) {
-			slog.DebugContext(ctx, "no credentials found for component lister", "identity", identity)
-			return nil, nil
-		}
-		return nil, fmt.Errorf("resolving credentials for repository %+v failed: %w", repository, err)
-	}
-	return creds, nil
 }
 
 // getIDsForComponentsFromRepository gets versions for given component names and returns a list of component

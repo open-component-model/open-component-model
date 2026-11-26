@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/oras-project/oras-go/v3/registry/remote"
+	"github.com/oras-project/oras-go/v3/registry/remote/auth"
 	"github.com/oras-project/oras-go/v3/registry/remote/errcode"
 )
 
@@ -40,8 +41,18 @@ func NewDistributionCataloger(opts CatalogerOptions) (RepositoryCataloger, error
 	}
 	reg.PlainHTTP = opts.PlainHTTP
 	reg.RepositoryListPageSize = defaultRepositoryListPageSize
-	if opts.AuthClient != nil {
+	// Pick the client in this order: an explicit auth client (so the token flow
+	// and credentials apply), then the shared OCM HTTP client (so its TLS, proxy
+	// and timeout settings apply). When an auth client has no base HTTP client,
+	// back it with the shared one. Without either, ORAS uses its default client.
+	switch {
+	case opts.AuthClient != nil:
+		if opts.AuthClient.Client == nil && opts.HTTPClient != nil {
+			opts.AuthClient.Client = opts.HTTPClient
+		}
 		reg.Client = opts.AuthClient
+	case opts.HTTPClient != nil:
+		reg.Client = &auth.Client{Client: opts.HTTPClient, Cache: auth.NewCache()}
 	}
 
 	logger := opts.Logger

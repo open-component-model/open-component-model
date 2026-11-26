@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/cli/cmd/configuration"
+	"ocm.software/open-component-model/bindings/go/cli/internal/componentlister"
 	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
 	"ocm.software/open-component-model/bindings/go/cli/internal/render"
@@ -69,7 +70,8 @@ and the version may be omitted. With a normalized digest, "@jsonNormalisation.v4
 is specific to the source repository; a normalized digest also matches the transferred copy.
 When the version is omitted (and no OCI digest is given), all versions of the component are discovered and transferred.
 When the source is a repository reference (without a component), every component version
-the repository contains is transferred (component listing is currently CTF-only).
+the repository contains is transferred (component listing works for CTF archives and for
+OCI registries that implement the /v2/_catalog endpoint).
 Use --constraint to restrict which versions are selected, and --latest to transfer
 only the newest matching version. Both apply per component.
 
@@ -507,7 +509,7 @@ func resolveSource(
 	if sourceRepository != nil {
 		// Component names must be discovered before the resolver is built so they can
 		// be registered as high-priority patterns for the source repository.
-		if sourceComponents, err = listComponentsFromRepository(ctx, pm, credGraph, sourceRepository); err != nil {
+		if sourceComponents, err = componentlister.List(ctx, pm, credGraph, sourceRepository); err != nil {
 			return nil, nil, nil, fmt.Errorf("could not list components in source repository: %w", err)
 		}
 		if len(sourceComponents) == 0 {
@@ -620,39 +622,6 @@ func collectComponentIDs(
 	}
 
 	return componentIDs, nil
-}
-
-// listComponentsFromRepository lists the component names contained in a repository.
-// It resolves credentials for the repository through the credential graph, so registries that need login are reachable.
-func listComponentsFromRepository(ctx context.Context, pm *manager.PluginManager, credGraph credentials.Resolver, repository runtime.Typed) ([]string, error) {
-	var creds runtime.Typed
-	identity, err := pm.ComponentListerRegistry.GetComponentListerCredentialConsumerIdentity(ctx, repository)
-	if err != nil {
-		// A repository that needs no credentials (such as a CTF archive) returns an error here; list without them.
-		slog.DebugContext(ctx, "no credential consumer identity for component lister", "repository", repository, "error", err)
-	} else if credGraph != nil {
-		if creds, err = credGraph.Resolve(ctx, identity); err != nil {
-			if !errors.Is(err, credentials.ErrNotFound) {
-				return nil, fmt.Errorf("resolving credentials for repository %+v failed: %w", repository, err)
-			}
-			creds = nil
-		}
-	}
-
-	lister, err := pm.ComponentListerRegistry.GetComponentLister(ctx, repository, creds)
-	if err != nil {
-		return nil, fmt.Errorf("could not get component lister: %w", err)
-	}
-
-	var componentNames []string
-	if err := lister.ListComponents(ctx, "", func(names []string) error {
-		componentNames = append(componentNames, names...)
-		return nil
-	}); err != nil {
-		return nil, fmt.Errorf("could not list components: %w", err)
-	}
-
-	return componentNames, nil
 }
 
 func renderTGD(tgd *transformv1alpha1.TransformationGraphDefinition, format string) (io.ReadCloser, error) {

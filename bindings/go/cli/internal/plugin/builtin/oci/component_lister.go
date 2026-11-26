@@ -157,9 +157,10 @@ func (l *OCIComponentListerPlugin) remoteComponentLister(ctx context.Context, sp
 
 // GetComponentListerCredentialConsumerIdentity retrieves the consumer identity
 // for the given repository specification. Remote OCI registries resolve to an
-// identity usable for credential lookup. CTF repositories do not need
-// credentials and return an error. A raw specification is converted through the
-// scheme first.
+// identity usable for credential lookup. CTF repositories need no credentials,
+// so they return a nil identity and no error, which the caller reads as "list
+// without credentials". A raw specification is converted through the scheme
+// first.
 func (l *OCIComponentListerPlugin) GetComponentListerCredentialConsumerIdentity(ctx context.Context, repositorySpecification runtime.Typed) (runtime.Identity, error) {
 	spec, err := getConvertedTypedSpec(repositorySpecification)
 	if err != nil {
@@ -170,7 +171,7 @@ func (l *OCIComponentListerPlugin) GetComponentListerCredentialConsumerIdentity(
 	case *ociv1.Repository:
 		return identityv1.IdentityFromOCIRepository(spec)
 	case *ctfv1.Repository:
-		return nil, errors.Join(ErrWrongUsage, errors.New("credentials not supported for CTF repositories"))
+		return nil, nil
 	default:
 		return nil, errors.Join(ErrWrongUsage, fmt.Errorf("unsupported repository type: %T", repositorySpecification))
 	}

@@ -3,6 +3,8 @@ package catalog
 import (
 	"context"
 	"errors"
+	"log/slog"
+	"slices"
 	"strings"
 
 	ocipath "ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
@@ -42,11 +44,13 @@ var errBlockComplete = errors.New("component descriptor block complete")
 // once per catalog page with the component names of that page. If the cataloger
 // supports pagination, last is the last component name of the previous page.
 //
-// The matching repositories live under a single prefix and form one
-// contiguous, lexically sorted block of the registry catalog (the catalog is
-// sorted, as required by the Distribution spec). ListComponents starts the
-// scan at that prefix and stops once it passes the block, so it does not scan
-// the whole catalog of a large registry.
+// The matching repositories live under a single prefix and, when the catalog
+// is sorted (as the Distribution spec requires), form one contiguous block.
+// ListComponents starts the scan at that prefix and stops once a sorted page
+// proves the block is over, so it does not scan the whole catalog of a large
+// registry. Some registries sort under a different collation; the first page
+// that is not byte-sorted turns early stopping off, and the scan then reads
+// the whole catalog so no component is dropped.
 func (l *ComponentLister) ListComponents(ctx context.Context, last string, fn func(names []string) error) error {
 	if fn == nil {
 		return ErrFnNil
@@ -62,18 +66,21 @@ func (l *ComponentLister) ListComponents(ctx context.Context, last string, fn fu
 		cursor += last
 	}
 
+	earlyStop := true
+
 	err := l.cataloger.Repositories(ctx, cursor, func(repos []string) error {
+		// Early stopping relies on byte-sorted pages. The first page that is not
+		// sorted turns it off for the rest of the scan, so matches on later pages
+		// are not dropped on registries with a different catalog collation.
+		if earlyStop && !slices.IsSorted(repos) {
+			getLogger().DebugContext(ctx, "catalog page is not byte-sorted; disabling early stop and scanning the full catalog")
+			earlyStop = false
+		}
+
 		names := make([]string, 0, len(repos))
-		passed := false
 		for _, repository := range repos {
 			if name, ok := strings.CutPrefix(repository, prefix); ok {
 				names = append(names, name)
-				continue
-			}
-			// A repository that sorts after the prefix is past the block, so no
-			// further match can follow in the sorted catalog.
-			if repository > prefix {
-				passed = true
 			}
 		}
 		if len(names) > 0 {
@@ -81,8 +88,14 @@ func (l *ComponentLister) ListComponents(ctx context.Context, last string, fn fu
 				return err
 			}
 		}
-		if passed {
-			return errBlockComplete
+
+		// Stop only when a sorted page ends past the block: its last entry is not
+		// under the prefix and sorts after it, so no later page can hold a match.
+		if earlyStop && len(repos) > 0 {
+			lastRepo := repos[len(repos)-1]
+			if !strings.HasPrefix(lastRepo, prefix) && lastRepo > prefix {
+				return errBlockComplete
+			}
 		}
 		return nil
 	})
@@ -90,6 +103,10 @@ func (l *ComponentLister) ListComponents(ctx context.Context, last string, fn fu
 		return err
 	}
 	return nil
+}
+
+func getLogger() *slog.Logger {
+	return slog.Default().With(slog.String("realm", "oci-catalog-lister"))
 }
 
 // componentDescriptorPrefix returns the repository prefix that OCM component

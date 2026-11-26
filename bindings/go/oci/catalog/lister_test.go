@@ -16,6 +16,9 @@ type fakeCataloger struct {
 	pages [][]string
 	// last records the last cursor the lister passed in.
 	last string
+	// served counts how many pages were handed to the callback, so a test can
+	// assert that the scan stopped before requesting a later page.
+	served int
 }
 
 var _ RepositoryCataloger = (*fakeCataloger)(nil)
@@ -23,6 +26,7 @@ var _ RepositoryCataloger = (*fakeCataloger)(nil)
 func (f *fakeCataloger) Repositories(ctx context.Context, last string, fn func(repos []string) error) error {
 	f.last = last
 	for _, page := range f.pages {
+		f.served++
 		if err := fn(page); err != nil {
 			return err
 		}
@@ -122,6 +126,67 @@ func TestComponentLister_StopsScanAfterTheBlock(t *testing.T) {
 
 	// componentB from the second page is not listed because the scan stopped.
 	assert.Equal(t, []string{"componentA"}, names)
+	assert.Equal(t, 1, cataloger.served, "the second page must not be requested")
+}
+
+func TestComponentLister_UnsortedCatalogFallsBackToFullScan(t *testing.T) {
+	// The first page is not byte-sorted ("helm/chart" sorts after a later
+	// component-descriptors entry), so early stopping is turned off and every
+	// page is scanned. No match may be dropped.
+	cataloger := &fakeCataloger{pages: [][]string{
+		{"component-descriptors/a", "helm/chart", "component-descriptors/b"},
+		{"component-descriptors/c"},
+	}}
+	lister := NewComponentLister(cataloger, "")
+
+	var names []string
+	require.NoError(t, lister.ListComponents(t.Context(), "", func(found []string) error {
+		names = append(names, found...)
+		return nil
+	}))
+
+	assert.Equal(t, []string{"a", "b", "c"}, names)
+	assert.Equal(t, 2, cataloger.served, "every page must be scanned when a page is unsorted")
+}
+
+func TestComponentLister_BlockEndsExactlyAtPageEnd(t *testing.T) {
+	// The block ends exactly at the end of the first page, so the next page is
+	// requested and proves the block is over. All matches are returned.
+	cataloger := &fakeCataloger{pages: [][]string{
+		{"component-descriptors/a", "component-descriptors/b"},
+		{"zzz-after-the-block"},
+	}}
+	lister := NewComponentLister(cataloger, "")
+
+	var names []string
+	require.NoError(t, lister.ListComponents(t.Context(), "", func(found []string) error {
+		names = append(names, found...)
+		return nil
+	}))
+
+	assert.Equal(t, []string{"a", "b"}, names)
+	assert.Equal(t, 2, cataloger.served)
+}
+
+func TestComponentLister_SinglePageWithEverything(t *testing.T) {
+	// A cataloger that ignores last and returns the whole catalog in one sorted
+	// page must still produce the correct, duplicate-free result.
+	cataloger := &fakeCataloger{pages: [][]string{{
+		"aaa/before-the-block",
+		"component-descriptors/a",
+		"component-descriptors/b",
+		"zzz-after-the-block",
+	}}}
+	lister := NewComponentLister(cataloger, "")
+
+	var names []string
+	require.NoError(t, lister.ListComponents(t.Context(), "", func(found []string) error {
+		names = append(names, found...)
+		return nil
+	}))
+
+	assert.Equal(t, []string{"a", "b"}, names)
+	assert.Equal(t, 1, cataloger.served)
 }
 
 func TestComponentLister_ListComponentsFnNil(t *testing.T) {

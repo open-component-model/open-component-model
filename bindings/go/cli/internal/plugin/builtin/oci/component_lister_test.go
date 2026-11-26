@@ -1,13 +1,18 @@
 package oci
 
 import (
+	"encoding/json/v2"
+	"net/http"
+	"net/http/httptest"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	identityv1 "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
@@ -15,6 +20,49 @@ import (
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentlister"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+// TestOCIComponentListerPlugin_RawOCISpecListsViaCatalog drives the plugin with
+// an OCI spec delivered as *runtime.Raw, so the scheme conversion path runs,
+// and lists components from a fake /v2/_catalog registry. It covers the plugin,
+// the raw-spec conversion, the subPath filter and the catalog listing together.
+func TestOCIComponentListerPlugin_RawOCISpecListsViaCatalog(t *testing.T) {
+	repos := []string{
+		"aaa/before-the-block",
+		"my/org/component-descriptors/comp-a",
+		"my/org/component-descriptors/comp-b",
+		"zzz/after-the-block",
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.MarshalWrite(w, struct {
+			Repositories []string `json:"repositories"`
+		}{Repositories: repos})
+	}))
+	t.Cleanup(srv.Close)
+
+	host := strings.TrimPrefix(srv.URL, "http://")
+	plainHTTP := &httpv1alpha1.Config{ProtocolConfig: httpv1alpha1.ProtocolConfig{PlainHTTP: new(true)}}
+	p := NewComponentListerPlugin(plainHTTP, nil)
+
+	// Build the spec as *runtime.Raw, as it arrives from configuration.
+	spec := &ociv1.Repository{BaseUrl: host, SubPath: "my/org"}
+	_, _ = repository.Scheme.DefaultType(spec)
+	data, err := json.Marshal(spec, runtime.JSONOptions)
+	require.NoError(t, err)
+	raw := &runtime.Raw{}
+	require.NoError(t, json.Unmarshal(data, raw, runtime.JSONOptions))
+
+	lister, err := p.GetComponentLister(t.Context(), raw, nil)
+	require.NoError(t, err)
+
+	var names []string
+	require.NoError(t, lister.ListComponents(t.Context(), "", func(found []string) error {
+		names = append(names, found...)
+		return nil
+	}))
+
+	assert.Equal(t, []string{"comp-a", "comp-b"}, names)
+}
 
 func TestOCIComponentListerPlugin_Registration(t *testing.T) {
 	// Setup.
@@ -43,12 +91,12 @@ func TestOCIComponentListerPlugin_CTFCredentialConsumerIdentity(t *testing.T) {
 	p := NewComponentListerPlugin(nil, nil)
 	require.NoError(t, registry.RegisterInternalComponentListerPlugin(p))
 
-	// Credentials not supported for CTF. An error is expected.
+	// CTF archives need no credentials, so the identity is nil without an error.
+	// The caller reads a nil identity as "list without credentials".
 	ctfSpec := &ctfv1.Repository{}
 	id, err := registry.GetComponentListerCredentialConsumerIdentity(t.Context(), ctfSpec)
+	require.NoError(t, err)
 	require.Nil(t, id)
-	require.Error(t, err)
-	require.ErrorIs(t, err, ErrWrongUsage, "expected: %v, got: %v", ErrWrongUsage, err)
 }
 
 func TestOCIComponentListerPlugin_OCICredentialConsumerIdentity(t *testing.T) {

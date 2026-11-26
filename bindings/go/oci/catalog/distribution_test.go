@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/oras-project/oras-go/v3/registry/remote/errcode"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -124,3 +126,53 @@ func TestDistributionCataloger_NotFoundMapsToUnsupported(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrCatalogUnsupported, "expected ErrCatalogUnsupported, got: %v", err)
 }
+
+func TestDistributionCataloger_CallbackErrorIsNotCatalogUnsupported(t *testing.T) {
+	srv := sortedCatalogServer(t, []string{"component-descriptors/componentA"}, 100)
+	defer srv.Close()
+
+	cataloger, err := NewDistributionCataloger(CatalogerOptions{
+		Host:      strings.TrimPrefix(srv.URL, "http://"),
+		PlainHTTP: true,
+	})
+	require.NoError(t, err)
+
+	// A callback that fails with a not-found error must surface as the
+	// callback's own error, not as ErrCatalogUnsupported.
+	sentinel := errors.New("callback failed")
+	err = cataloger.Repositories(t.Context(), "", func(repos []string) error {
+		return errors.Join(sentinel, &errcode.ErrorResponse{StatusCode: http.StatusNotFound})
+	})
+	require.Error(t, err)
+	require.ErrorIs(t, err, sentinel)
+	assert.NotErrorIs(t, err, ErrCatalogUnsupported)
+}
+
+func TestDistributionCataloger_UsesHTTPClientWhenNoAuthClient(t *testing.T) {
+	var count int
+	srv := sortedCatalogServer(t, []string{"component-descriptors/componentA"}, 100)
+	defer srv.Close()
+
+	// A custom client with a counting transport proves the cataloger uses the
+	// provided HTTP client rather than the ORAS default when no auth client is
+	// given.
+	httpClient := &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		count++
+		return http.DefaultTransport.RoundTrip(req)
+	})}
+
+	cataloger, err := NewDistributionCataloger(CatalogerOptions{
+		Host:       strings.TrimPrefix(srv.URL, "http://"),
+		PlainHTTP:  true,
+		HTTPClient: httpClient,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, cataloger.Repositories(t.Context(), "", func(repos []string) error { return nil }))
+	assert.Positive(t, count, "the provided HTTP client must be used")
+}
+
+// roundTripFunc adapts a function to http.RoundTripper.
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
