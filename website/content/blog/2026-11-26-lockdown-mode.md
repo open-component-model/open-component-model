@@ -9,7 +9,7 @@ draft: true
 
 {{< callout context="note" title="This is a proposal" >}}
 Lockdown mode is a design under discussion, not a released feature. The full design is in
-[ADR 0035](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0035_lockdown_mode.md).
+[ADR 0034](https://github.com/open-component-model/open-component-model/blob/main/docs/adr/0034_lockdown_mode.md).
 {{< /callout >}}
 
 ## The problem

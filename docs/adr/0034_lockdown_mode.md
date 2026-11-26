@@ -226,7 +226,7 @@ resources:
   producer signature verified. A tampered mapping cannot redirect a chart.
 * Components built before the label exists need a rebuild or explicit override rules.
 
-[ADR 0033 (OCM-native deployment wrappers), PR #4101](https://github.com/open-component-model/open-component-model/pull/4101)
+[OCM-native deployment wrappers ADR, PR #4101](https://github.com/open-component-model/open-component-model/pull/4101)
 proposes a label with the same purpose, `ocm.software/localization`. The two must
 converge on one label, see [§7](#7-open-questions).
 
@@ -300,7 +300,7 @@ Before anything is signed, import verifies:
 * the producer signature on the root;
 * reference digests through the closure;
 * resource bytes against the **signed** resource digests. This is a gap today;
-  [ADR 0034](0034_resource_digest_rules.md) provides the digest rules.
+  [ADR 0033](0033_resource_digest_rules.md) provides the digest rules.
 
 ### 4.6 Runtime model
 
@@ -420,7 +420,7 @@ builder. The controllers consume the transfer configuration, not CLI verbs.
 * [ADR 0005](0005_transformation.md): transformation specification; the graph that
   lockdown extends.
 * [ADR 0026](0026_localization_at_transfer.md): wrapper charts and convention scanning.
-* [ADR 0033 (OCM-native deployment wrappers), PR #4101](https://github.com/open-component-model/open-component-model/pull/4101):
+* [OCM-native deployment wrappers ADR, PR #4101](https://github.com/open-component-model/open-component-model/pull/4101):
   convention-based localization at deploy time from a signed label, without kro. It
   solves the same matching problem at a different time; label and matcher should be
   shared.
@@ -433,7 +433,7 @@ builder. The controllers consume the transfer configuration, not CLI verbs.
 
 ## 7. Open Questions
 
-* **Label convergence.** ADR 0033 proposes `ocm.software/localization` (`v1`, signing, a
+* **Label convergence.** The deployment wrappers ADR (PR #4101) proposes `ocm.software/localization` (`v1`, signing, a
   single `matchKey` with split registry, repository, tag and digest, written by
   `ocm add cv --localize-hints`). This document proposes
   `ocm.software/original-locations` (a list of references as written, written by
