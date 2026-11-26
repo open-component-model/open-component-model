@@ -93,7 +93,26 @@ func (c *DistributionCataloger) Repositories(ctx context.Context, last string, f
 	if isCatalogUnsupported(err) {
 		return fmt.Errorf("%w: %w", ErrCatalogUnsupported, err)
 	}
+	if cursor, rejected := rejectedCatalogCursor(err); rejected {
+		return fmt.Errorf("the registry rejected the catalog cursor %q: %w", cursor, err)
+	}
 	return fmt.Errorf("failed to list repositories: %w", err)
+}
+
+// rejectedCatalogCursor reports whether err is a registry rejection (HTTP 400)
+// of a catalog cursor, and returns the last value of the page that failed. The
+// ORAS client paginates internally, so the failing page is identified by the
+// last query parameter on the error response URL, not by the cursor this call
+// started with. Some registries (such as ghcr.io) reject certain last values.
+func rejectedCatalogCursor(err error) (string, bool) {
+	var errResp *errcode.ErrorResponse
+	if !errors.As(err, &errResp) || errResp.StatusCode != http.StatusBadRequest {
+		return "", false
+	}
+	if errResp.URL == nil {
+		return "", true
+	}
+	return errResp.URL.Query().Get("last"), true
 }
 
 // isCatalogUnsupported reports whether err indicates that the registry does

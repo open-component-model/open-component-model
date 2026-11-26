@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -65,4 +66,38 @@ func ResolveCredentials(ctx context.Context, pm *manager.PluginManager, credGrap
 		return nil, fmt.Errorf("resolving credentials for repository %+v failed: %w", repository, err)
 	}
 	return creds, nil
+}
+
+// ComponentHint suggests a component reference when a repository reference very
+// likely meant one. A repository reference whose path has a segment that looks
+// like a component name (it contains a ".", for example "ocm.software/cli")
+// usually needs a "//" to separate the repository from the component. It
+// returns the suggested "<host>/<base>//<component>" reference, or "" when no
+// suggestion applies. A reference that already has "//" yields "".
+func ComponentHint(reference string) string {
+	ref := reference
+	if i := strings.Index(ref, "::"); i >= 0 {
+		ref = ref[i+2:]
+	}
+	for _, scheme := range []string{"https://", "http://", "oci://"} {
+		ref = strings.TrimPrefix(ref, scheme)
+	}
+	if strings.Contains(ref, "//") {
+		return ""
+	}
+
+	segments := strings.Split(ref, "/")
+	if len(segments) < 3 {
+		return ""
+	}
+	// Skip the host (segment 0, which also contains dots) and look for the
+	// first path segment that looks like a component name.
+	for i := 1; i < len(segments); i++ {
+		if strings.Contains(segments[i], ".") {
+			base := strings.Join(segments[:i], "/")
+			component := strings.Join(segments[i:], "/")
+			return base + "//" + component
+		}
+	}
+	return ""
 }

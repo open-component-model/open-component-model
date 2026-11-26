@@ -25,6 +25,7 @@ import (
 	syncdag "ocm.software/open-component-model/bindings/go/dag/sync"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
+	"ocm.software/open-component-model/bindings/go/oci/catalog"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -44,6 +45,9 @@ const (
 	FlagRecursive        = "recursive"
 	FlagDetail           = "detail"
 )
+
+// errNoComponentsFound reports that a repository reference held no components.
+var errNoComponentsFound = errors.New("no components found")
 
 func New() *cobra.Command {
 	cmd := &cobra.Command{
@@ -239,7 +243,16 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 		}
 		slog.DebugContext(cmd.Context(), "parsed repository reference", "reference", reference, "parsed", repository)
 
-		return processRepositoryReference(cmd, pluginManager, credentialGraph, config, params, repository)
+		if err := processRepositoryReference(cmd, pluginManager, credentialGraph, config, params, repository); err != nil {
+			// A repository reference that finds nothing, or gives up scanning, very
+			// likely meant a component reference missing its "//".
+			if hint := componentlister.ComponentHint(reference); hint != "" &&
+				(errors.Is(err, errNoComponentsFound) || errors.Is(err, catalog.ErrCatalogScanLimit)) {
+				return fmt.Errorf("%w; did you mean %q?", err, hint)
+			}
+			return err
+		}
+		return nil
 	}
 	slog.DebugContext(cmd.Context(), "parsed component reference", "reference", reference, "parsed", ref)
 
@@ -604,7 +617,7 @@ func processRepositoryReference(cmd *cobra.Command,
 	slog.DebugContext(ctx, "listed components from repository", "repository", repository, "components", componentNames, "detail", level)
 
 	if len(componentNames) == 0 {
-		return fmt.Errorf("no components found in repository %v", repository)
+		return fmt.Errorf("%w in repository %v", errNoComponentsFound, repository)
 	}
 
 	// The names level is a single catalog request; print the names and stop.

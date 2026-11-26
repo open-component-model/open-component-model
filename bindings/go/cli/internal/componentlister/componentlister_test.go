@@ -88,3 +88,25 @@ func TestResolveCredentials_IdentityErrorIsReturned(t *testing.T) {
 	require.Error(t, err)
 	assert.False(t, resolver.called, "credentials must not be resolved when the identity lookup fails")
 }
+
+func TestComponentHint(t *testing.T) {
+	tests := []struct {
+		name      string
+		reference string
+		want      string
+	}{
+		{"dotted component segment", "ghcr.io/open-component-model/ocm.software/cli", "ghcr.io/open-component-model//ocm.software/cli"},
+		{"single dotted segment", "ghcr.io/org/ocm.software", "ghcr.io/org//ocm.software"},
+		{"no dotted segment", "ghcr.io/org/sub", ""},
+		{"already a component reference", "ghcr.io/org//ocm.software/cli", ""},
+		{"type prefix stripped", "oci::ghcr.io/org/ocm.software/cli", "ghcr.io/org//ocm.software/cli"},
+		{"scheme stripped", "https://ghcr.io/org/ocm.software/cli", "ghcr.io/org//ocm.software/cli"},
+		{"host only", "ghcr.io", ""},
+		{"host and base only", "ghcr.io/org", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, componentlister.ComponentHint(tt.reference))
+		})
+	}
+}

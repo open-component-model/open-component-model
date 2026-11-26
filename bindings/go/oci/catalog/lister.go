@@ -3,8 +3,8 @@ package catalog
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
-	"slices"
 	"strings"
 
 	ocipath "ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
@@ -14,6 +14,16 @@ import (
 // ErrFnNil reports that ListComponents was called without a callback function.
 var ErrFnNil = errors.New("expected a valid callback function, but got nil")
 
+// ErrCatalogScanLimit reports that the scan read the configured number of
+// catalog pages without finding any matching repository. It usually means the
+// sub-path is wrong or the registry does not honour the catalog cursor.
+var ErrCatalogScanLimit = errors.New("catalog scan limit reached")
+
+// defaultScanPageLimit is the number of leading catalog pages scanned before
+// the first match before giving up. At the default page size (100) this is
+// about 2000 repositories.
+const defaultScanPageLimit = 20
+
 // ComponentLister implements repository.ComponentLister for remote OCI
 // registries. It gets raw repository names from a RepositoryCataloger and maps
 // them to OCM component names. The mapping keeps repositories that contain the
@@ -21,36 +31,73 @@ var ErrFnNil = errors.New("expected a valid callback function, but got nil")
 // component-descriptors/ prefix, and returns the remainder as the component
 // name.
 type ComponentLister struct {
-	cataloger RepositoryCataloger
-	subPath   string
+	cataloger     RepositoryCataloger
+	subPath       string
+	scanPageLimit int
 }
 
 var _ repo.ComponentLister = (*ComponentLister)(nil)
 
+// ComponentListerOption configures a ComponentLister.
+type ComponentListerOption func(*ComponentLister)
+
+// WithScanPageLimit sets how many leading catalog pages are scanned before the
+// first match before returning ErrCatalogScanLimit. A value <= 0 keeps the
+// default.
+func WithScanPageLimit(pages int) ComponentListerOption {
+	return func(l *ComponentLister) {
+		if pages > 0 {
+			l.scanPageLimit = pages
+		}
+	}
+}
+
 // NewComponentLister creates a ComponentLister for the given cataloger and
 // subPath. subPath is the OCM repository prefix and may be empty.
-func NewComponentLister(c RepositoryCataloger, subPath string) *ComponentLister {
-	return &ComponentLister{
-		cataloger: c,
-		subPath:   subPath,
+func NewComponentLister(c RepositoryCataloger, subPath string, opts ...ComponentListerOption) *ComponentLister {
+	l := &ComponentLister{
+		cataloger:     c,
+		subPath:       subPath,
+		scanPageLimit: defaultScanPageLimit,
 	}
+	for _, opt := range opts {
+		opt(l)
+	}
+	return l
 }
 
 // errBlockComplete stops the catalog scan once it has passed the block of
 // matching repositories. It is swallowed by ListComponents.
 var errBlockComplete = errors.New("component descriptor block complete")
 
+// errScanLimit stops the catalog scan once the page cap is reached with no
+// match seen yet. It is turned into ErrCatalogScanLimit by ListComponents.
+var errScanLimit = errors.New("catalog scan page cap reached")
+
+// blockState tracks where the scan is relative to the contiguous block of
+// matching repositories.
+type blockState int
+
+const (
+	beforeBlock blockState = iota
+	inBlock
+	afterBlock
+)
+
 // ListComponents lists OCM component names found in the registry. It calls fn
-// once per catalog page with the component names of that page. If the cataloger
-// supports pagination, last is the last component name of the previous page.
+// once per catalog page with the component names of that page.
 //
-// The matching repositories live under a single prefix and, when the catalog
-// is sorted (as the Distribution spec requires), form one contiguous block.
-// ListComponents starts the scan at that prefix and stops once a sorted page
-// proves the block is over, so it does not scan the whole catalog of a large
-// registry. Some registries sort under a different collation; the first page
-// that is not byte-sorted turns early stopping off, and the scan then reads
-// the whole catalog so no component is dropped.
+// The matching repositories share one prefix and are contiguous in the
+// registry's own catalog order. This holds for byte order, segment-wise order
+// and the owner-first order some registries (such as ghcr.io) use, because all
+// matches share the leading owner and prefix. ListComponents starts the scan
+// at the prefix and stops once it has passed the block, so it does not scan the
+// whole catalog of a large registry. If the block turns out not to be
+// contiguous, early stopping is turned off and the whole catalog is scanned so
+// no component is dropped.
+//
+// When no match is seen within the first scanPageLimit pages, ListComponents
+// stops with ErrCatalogScanLimit instead of scanning an entire large registry.
 func (l *ComponentLister) ListComponents(ctx context.Context, last string, fn func(names []string) error) error {
 	if fn == nil {
 		return ErrFnNil
@@ -66,39 +113,64 @@ func (l *ComponentLister) ListComponents(ctx context.Context, last string, fn fu
 		cursor += last
 	}
 
+	limit := l.scanPageLimit
+	if limit <= 0 {
+		limit = defaultScanPageLimit
+	}
+
+	state := beforeBlock
 	earlyStop := true
+	pages := 0
+	scanLimitHit := false
 
 	err := l.cataloger.Repositories(ctx, cursor, func(repos []string) error {
-		// Early stopping relies on byte-sorted pages. The first page that is not
-		// sorted turns it off for the rest of the scan, so matches on later pages
-		// are not dropped on registries with a different catalog collation.
-		if earlyStop && !slices.IsSorted(repos) {
-			getLogger().DebugContext(ctx, "catalog page is not byte-sorted; disabling early stop and scanning the full catalog")
-			earlyStop = false
-		}
+		pages++
 
 		names := make([]string, 0, len(repos))
 		for _, repository := range repos {
 			if name, ok := strings.CutPrefix(repository, prefix); ok {
+				// A match after the block has ended means the block is not
+				// contiguous in this registry's order. Disable early stopping and
+				// scan everything so no match is dropped.
+				if state == afterBlock {
+					if earlyStop {
+						getLogger().DebugContext(ctx, "catalog block is not contiguous; disabling early stop and scanning the full catalog")
+						earlyStop = false
+					}
+				} else {
+					state = inBlock
+				}
 				names = append(names, name)
+				continue
+			}
+			// A non-match while inside the block marks its end.
+			if state == inBlock {
+				state = afterBlock
 			}
 		}
+
 		if len(names) > 0 {
 			if err := fn(names); err != nil {
 				return err
 			}
 		}
 
-		// Stop only when a sorted page ends past the block: its last entry is not
-		// under the prefix and sorts after it, so no later page can hold a match.
-		if earlyStop && len(repos) > 0 {
-			lastRepo := repos[len(repos)-1]
-			if !strings.HasPrefix(lastRepo, prefix) && lastRepo > prefix {
-				return errBlockComplete
-			}
+		if earlyStop && state == afterBlock {
+			return errBlockComplete
+		}
+		// No match seen yet: stop after the page cap instead of scanning a whole
+		// large registry for a prefix that may not exist.
+		if state == beforeBlock && pages >= limit {
+			scanLimitHit = true
+			return errScanLimit
 		}
 		return nil
 	})
+
+	if scanLimitHit {
+		return fmt.Errorf("%w: no components found under %q within the first %d catalog pages; the sub-path may be wrong or the registry may not honour the catalog cursor",
+			ErrCatalogScanLimit, prefix, limit)
+	}
 	if err != nil && !errors.Is(err, errBlockComplete) {
 		return err
 	}

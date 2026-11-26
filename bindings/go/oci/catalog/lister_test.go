@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -235,4 +236,84 @@ func TestComponentLister_StartCursorBeginsAtThePrefix(t *testing.T) {
 			assert.Equal(t, tt.expected, cataloger.last)
 		})
 	}
+}
+
+// endlessCataloger returns non-matching pages forever (ignoring last) until the
+// callback stops it, to exercise the scan page cap.
+type endlessCataloger struct{ served int }
+
+func (e *endlessCataloger) Repositories(ctx context.Context, last string, fn func(repos []string) error) error {
+	for {
+		e.served++
+		if err := fn([]string{fmt.Sprintf("other/repo-%d", e.served)}); err != nil {
+			return err
+		}
+	}
+}
+
+func TestComponentLister_OwnerFirstOrderStopsAfterBlock(t *testing.T) {
+	// The pages are in a registry's owner-first order, which is not byte sorted
+	// ("open-contracting/x" before "open-contracting-automator/y"), but the
+	// matching repositories are contiguous, so early stopping still works.
+	cataloger := &fakeCataloger{pages: [][]string{
+		{"open-contracting/x", "open-contracting-automator/y"},
+		{"org/component-descriptors/a", "org/component-descriptors/b"},
+		{"zzz/after-the-block"},
+	}}
+	lister := NewComponentLister(cataloger, "org")
+
+	var names []string
+	require.NoError(t, lister.ListComponents(t.Context(), "", func(found []string) error {
+		names = append(names, found...)
+		return nil
+	}))
+
+	assert.Equal(t, []string{"a", "b"}, names)
+	assert.Equal(t, 3, cataloger.served, "scan must stop on the page that ends the block")
+}
+
+func TestComponentLister_NonContiguousBlockFullScan(t *testing.T) {
+	// A match appears after a non-match, so the block is not contiguous. No
+	// match may be dropped and the scan continues through every page.
+	cataloger := &fakeCataloger{pages: [][]string{
+		{"org/component-descriptors/a", "other/x", "org/component-descriptors/b"},
+		{"org/component-descriptors/c"},
+	}}
+	lister := NewComponentLister(cataloger, "org")
+
+	var names []string
+	require.NoError(t, lister.ListComponents(t.Context(), "", func(found []string) error {
+		names = append(names, found...)
+		return nil
+	}))
+
+	assert.Equal(t, []string{"a", "b", "c"}, names)
+	assert.Equal(t, 2, cataloger.served)
+}
+
+func TestComponentLister_ScanLimitWhenNothingMatches(t *testing.T) {
+	cataloger := &endlessCataloger{}
+	lister := NewComponentLister(cataloger, "org", WithScanPageLimit(3))
+
+	err := lister.ListComponents(t.Context(), "", func(found []string) error { return nil })
+	require.ErrorIs(t, err, ErrCatalogScanLimit)
+	assert.Equal(t, 3, cataloger.served, "scan must stop at the page cap")
+}
+
+func TestComponentLister_BlockFoundWhenCatalogerIgnoresLast(t *testing.T) {
+	// The fake cataloger ignores last and returns from the top; the block is
+	// still found as long as it is within the cap.
+	cataloger := &fakeCataloger{pages: [][]string{
+		{"aaa/before"},
+		{"org/component-descriptors/a"},
+		{"zzz/after"},
+	}}
+	lister := NewComponentLister(cataloger, "org", WithScanPageLimit(10))
+
+	var names []string
+	require.NoError(t, lister.ListComponents(t.Context(), "", func(found []string) error {
+		names = append(names, found...)
+		return nil
+	}))
+	assert.Equal(t, []string{"a"}, names)
 }
