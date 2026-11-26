@@ -3,7 +3,7 @@ manager:
   replicas: 1
   image:
     repository: ghcr.io/open-component-model/kubernetes/controller
-    tag: latest
+    tag: latest@sha256:712ecadea9ce9fd0261793cb56b8371d297c6a75cd953e7984202d64c1e169c3
   concurrency:
     resource: 10
   logging:

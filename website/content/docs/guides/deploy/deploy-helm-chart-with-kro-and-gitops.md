@@ -411,15 +411,8 @@ credentials for the OCM Controllers and Flux. You need to do the adjustments in
 the resourceGraphDefinition.yaml file BEFORE calling `ocm add cv`:
 
 {{< details "Configure credentials for private registries" >}}
-Create a docker-registry secret with your registry credentials. For GitHub Container Registry, you can use a Personal Access Token or a short-lived token from the GitHub CLI:
-
-```shell
-kubectl create secret docker-registry ghcr-secret \
-  --docker-username=$GITHUB_USERNAME \
-  --docker-password="$(gh auth token)" \
-  --docker-server=ghcr.io
-```
-
+Create a `ghcr-secret` in the `default` namespace, the namespace of the bootstrap resources, as described in
+[Quickstart: GitHub Container Registry]({{< relref "/docs/guides/deploy/configure-controller-credentials.md#quickstart-github-container-registry" >}}).
 Then update the resources to use credentials:
 
 1. **OCM Controller resources**: Add `ocmConfig` to the Repository in `bootstrap.yaml`. The credentials propagate
@@ -458,7 +451,6 @@ images. Add this to the HelmRelease values (Flux) or `valuesObject` (Argo CD) in
        - name: ghcr-secret
    ```
 
-For more details, see [Credentials for OCM Controllers]({{< relref "/docs/guides/deploy/configure-controller-credentials.md" >}}).
 {{< /details >}}
 {{< /step >}}
 

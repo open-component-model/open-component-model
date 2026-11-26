@@ -215,7 +215,7 @@ jobs:
         env:
           MARKDOWNLINT_VERSION: ${{ steps.versions.outputs.markdownlint_cli2 }}
         run: npx "markdownlint-cli2@${MARKDOWNLINT_VERSION}" --config .github/config/.markdownlint-cli2.yaml "**/*.md"
-      - name: Check ADR numbers are unique
+      - name: Check ADR numbers are unique and contiguous
         run: node .github/scripts/check-adr-numbers.js docs/adr
 
   verify-redirects:
