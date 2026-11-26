@@ -110,24 +110,57 @@ components:
 	const brokenComponent = "broken/unreadable"
 	pushUnreadableComponent(t, ctx, registry, "component-descriptors/"+brokenComponent, "v1.0.0")
 
-	t.Run("with credentials lists readable components and skips the unreadable one", func(t *testing.T) {
+	t.Run("names lists every component including the unreadable one", func(t *testing.T) {
 		r := require.New(t)
 		out := new(bytes.Buffer)
 		getCMD := cmd.New()
 		getCMD.SetOut(out)
 		getCMD.SetArgs([]string{
 			"get", "component-version", repoRef,
-			"--latest",
-			"--output", "json",
+			"--detail", "names", "--output", "json",
 			"--config", cfgPath,
 		})
-		r.NoError(getCMD.ExecuteContext(ctx), "get for a repository reference should succeed despite an unreadable component")
+		r.NoError(getCMD.ExecuteContext(ctx), "names should succeed; it does not read components")
+		printed := out.String()
+		r.Contains(printed, "ocm.software/app-a")
+		r.Contains(printed, "ocm.software/app-b")
+		// names does not validate, so the catalog-listed broken component appears.
+		r.Contains(printed, brokenComponent)
+	})
 
+	t.Run("versions lists readable components and skips the unreadable one", func(t *testing.T) {
+		r := require.New(t)
+		out := new(bytes.Buffer)
+		getCMD := cmd.New()
+		getCMD.SetOut(out)
+		getCMD.SetArgs([]string{
+			"get", "component-version", repoRef,
+			"--detail", "versions", "--output", "json",
+			"--config", cfgPath,
+		})
+		r.NoError(getCMD.ExecuteContext(ctx), "versions should succeed despite an unreadable component")
 		printed := out.String()
 		r.Contains(printed, "ocm.software/app-a")
 		r.Contains(printed, "ocm.software/app-b")
 		r.Contains(printed, "v1.0.0")
-		r.NotContains(printed, brokenComponent, "the unreadable component must be skipped, not rendered")
+		r.NotContains(printed, brokenComponent, "the unreadable component must be skipped")
+	})
+
+	t.Run("full fetches descriptors and skips the unreadable one", func(t *testing.T) {
+		r := require.New(t)
+		out := new(bytes.Buffer)
+		getCMD := cmd.New()
+		getCMD.SetOut(out)
+		getCMD.SetArgs([]string{
+			"get", "component-version", repoRef,
+			"--detail", "full", "--latest", "--output", "json",
+			"--config", cfgPath,
+		})
+		r.NoError(getCMD.ExecuteContext(ctx), "full should succeed despite an unreadable component")
+		printed := out.String()
+		r.Contains(printed, "ocm.software/app-a")
+		r.Contains(printed, "ocm.software/app-b")
+		r.NotContains(printed, brokenComponent, "the unreadable component must be skipped")
 	})
 
 	t.Run("without credentials the command fails with an auth error, not an empty result", func(t *testing.T) {

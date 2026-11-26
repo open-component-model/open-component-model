@@ -26,6 +26,7 @@ type fakeCVRepo struct {
 	descriptor *descriptor.Descriptor
 	listErr    error
 	getErr     error
+	getCalled  bool
 }
 
 func (f *fakeCVRepo) ListComponentVersions(_ context.Context, _ string) ([]string, error) {
@@ -36,6 +37,7 @@ func (f *fakeCVRepo) ListComponentVersions(_ context.Context, _ string) ([]strin
 }
 
 func (f *fakeCVRepo) GetComponentVersion(_ context.Context, name, version string) (*descriptor.Descriptor, error) {
+	f.getCalled = true
 	if f.getErr != nil {
 		return nil, f.getErr
 	}

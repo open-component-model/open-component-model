@@ -821,7 +821,7 @@ func Test_Get_Component_Version_CTF_Dir(t *testing.T) {
 	}{
 		{
 			name: "get cv from CTF dir - default",
-			args: []string{"get", "cv", archivePath},
+			args: []string{"get", "cv", archivePath, "--detail", "full"},
 			expectedOutput: `NESTING  COMPONENT            VERSION  PROVIDER      IDENTITY                               
  ├─       ocm.software/root-b  0.0.2    ocm.software  name=ocm.software/root-b,version=0.0.2 
  └─       ocm.software/root-a  0.0.1    ocm.software  name=ocm.software/root-a,version=0.0.1`,
@@ -832,7 +832,7 @@ func Test_Get_Component_Version_CTF_Dir(t *testing.T) {
 			// Therefore, the command would fail to find the components when doing rendering,
 			// if there were no dynamically added resolvers, that take precedence over the config file.
 			name: "get cv from CTF dir - override resolvers from config",
-			args: []string{"get", "cv", archivePath},
+			args: []string{"get", "cv", archivePath, "--detail", "full"},
 			configYAML: `
 type: generic.config.ocm.software/v1
 configurations:

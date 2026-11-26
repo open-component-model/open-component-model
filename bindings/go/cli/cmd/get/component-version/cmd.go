@@ -42,6 +42,7 @@ const (
 	FlagConcurrencyLimit = "concurrency-limit"
 	FlagLatest           = "latest"
 	FlagRecursive        = "recursive"
+	FlagDetail           = "detail"
 )
 
 func New() *cobra.Command {
@@ -81,6 +82,14 @@ If no type is given, the repository path is interpreted based on introspection a
 When the reference is a repository (no component), every component in the repository is listed. Components
 that cannot be read (for example missing pull permission or an unsupported descriptor schema) are reported
 and skipped; the command still succeeds unless no component can be read.
+
+The --detail level controls how much is fetched for a repository reference:
+  names (default): component names only, from the catalog (one request, fast);
+  versions: also list the versions of each component (one request per component);
+  full: fetch descriptors, needed for --recursive and the tree outputs.
+When --detail is not set, the cheapest level that satisfies the other flags is used: --latest or
+--constraint select versions; --recursive or -o tree|widetree select full. Listing a CTF archive now
+defaults to names too; pass --detail full for the previous descriptor output.
 `,
 			compref.DefaultPrefix,
 			strings.Join([]string{ociv1.Type, ctfv1.Type}, "|"),
@@ -94,6 +103,13 @@ get cv ./path/to/ctf//ocm.software/cli:0.12.0
 get cv ./path/to/ctf/component-descriptors/ocm.software/cli:0.12.0
 get cv ghcr.io/open-component-model//ocm.software/cli@sha256:<oci-digest>
 get cv ghcr.io/open-component-model//ocm.software/cli:0.12.0@jsonNormalisation.v4alpha3+sha256:<signed-digest>
+
+Listing components of a repository (no component in the reference):
+
+get cvs ghcr.io/open-component-model                         # component names (fast, default)
+get cvs ghcr.io/open-component-model --detail versions       # every version of every component
+get cvs ghcr.io/open-component-model --detail versions --latest
+get cvs ghcr.io/open-component-model --detail full -o yaml   # descriptors
 
 Listing many component versions:
 
@@ -128,6 +144,12 @@ repository is deprecated and fails without it (see https://ocm.software/docs/cha
 	cmd.Flags().Bool(FlagLatest, false, "if set, only the latest version of the component is returned")
 	cmd.Flags().Int(FlagRecursive, 0, "depth of recursion for resolving referenced component versions (0=none, -1=unlimited, >0=levels (not implemented yet))")
 	cmd.Flags().Lookup(FlagRecursive).NoOptDefVal = "-1"
+
+	enum.VarP(cmd.Flags(), FlagDetail, "", []string{detailNames, detailVersions, detailFull}, `detail level for a repository reference (ignored for a single component reference):
+  names (default): component names only, from the catalog (cheapest)
+  versions: also list the versions of each component (one request per component)
+  full: fetch descriptors; required for --recursive and the tree outputs
+When unset, the cheapest level that satisfies the other flags is used.`)
 
 	return cmd
 }
@@ -182,15 +204,24 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("getting recursive flag failed: %w", err)
 	}
+	detail, err := enum.Get(cmd.Flags(), FlagDetail)
+	if err != nil {
+		return fmt.Errorf("getting detail flag failed: %w", err)
+	}
 
 	config := ocmctx.FromContext(cmd.Context()).Configuration()
 
 	params := Params{
-		output:      output,
-		displayMode: displayMode,
-		constraint:  constraint,
-		latestOnly:  latestOnly,
-		recursive:   recursive,
+		output:        output,
+		displayMode:   displayMode,
+		constraint:    constraint,
+		latestOnly:    latestOnly,
+		recursive:     recursive,
+		detail:        detail,
+		detailSet:     cmd.Flags().Changed(FlagDetail),
+		latestSet:     cmd.Flags().Changed(FlagLatest),
+		constraintSet: cmd.Flags().Changed(FlagConstraint),
+		outputSet:     cmd.Flags().Changed(FlagOutput),
 	}
 
 	reference := args[0]
@@ -527,6 +558,12 @@ type Params struct {
 	constraint  string
 	latestOnly  bool
 	recursive   int
+	// detail is the raw --detail value; detailSet reports whether it was given.
+	detail        string
+	detailSet     bool
+	latestSet     bool
+	constraintSet bool
+	outputSet     bool
 }
 
 // processRepositoryReference implements the logic for the `get cv <ref>` command, where <ref> is a repository reference.
@@ -537,22 +574,42 @@ func processRepositoryReference(cmd *cobra.Command,
 	params Params,
 	repository runtime.Typed,
 ) error {
-	recursive := params.recursive
-	output := params.output
-	displayMode := params.displayMode
 	ctx := cmd.Context()
+
+	level, err := effectiveDetailLevel(detailSelection{
+		detailSet:     params.detailSet,
+		detail:        params.detail,
+		latestSet:     params.latestSet,
+		constraintSet: params.constraintSet,
+		recursive:     params.recursive,
+		output:        params.output,
+		outputSet:     params.outputSet,
+	})
+	if err != nil {
+		return err
+	}
+
+	// The names and versions levels are flat lists. The default output format
+	// (tree) is for the component graph, so fall back to a table for them when
+	// the user did not pick a format.
+	listOutput := params.output
+	if !params.outputSet {
+		listOutput = render.OutputFormatTable.String()
+	}
 
 	componentNames, err := componentlister.List(ctx, pluginManager, credentialGraph, repository)
 	if err != nil {
 		return err
 	}
-	slog.DebugContext(ctx, "listed components from repository", "repository", repository, "components", componentNames)
+	slog.DebugContext(ctx, "listed components from repository", "repository", repository, "components", componentNames, "detail", level)
 
-	// We found no components in the repository; this means that no roots will be found in the later calls.
-	// without this check the wildcard matches make no sense and also are potentially duplicated because there will be
-	// no roots, and we default add wildcard matches. User defined wildcard matches are still valid.
 	if len(componentNames) == 0 {
 		return fmt.Errorf("no components found in repository %v", repository)
+	}
+
+	// The names level is a single catalog request; print the names and stop.
+	if level == detailNames {
+		return renderNames(cmd.OutOrStdout(), listOutput, componentNames)
 	}
 
 	registry, err := versioningspec.RegistryFromConfig(config)
@@ -560,10 +617,8 @@ func processRepositoryReference(cmd *cobra.Command,
 		return fmt.Errorf("could not build versioning registry: %w", err)
 	}
 
-	// Build the repository resolver before the version lookup so both the
-	// version lookup and the later rendering go through the same resolver, which
-	// resolves credentials from the credential graph. Without this, the version
-	// lookup would read tags without credentials and fail on private components.
+	// Both the versions and the full level resolve each component through the
+	// same credential-bound resolver.
 	repoProvider, err := ocm.NewComponentRepositoryResolver(ctx,
 		pluginManager.ComponentVersionRepositoryRegistry,
 		credentialGraph,
@@ -574,13 +629,25 @@ func processRepositoryReference(cmd *cobra.Command,
 		return fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
 	}
 
+	// The versions level lists the versions of each component without fetching
+	// descriptors.
+	if level == detailVersions {
+		entries, err := collectComponentVersions(ctx, repoProvider, componentNames, params, registry)
+		if err != nil {
+			return err
+		}
+		return renderVersions(cmd.OutOrStdout(), listOutput, entries)
+	}
+
+	// The full level fetches descriptors, supports recursion and the tree
+	// outputs, and renders the component graph.
 	roots, err := getIDsForComponentsFromRepository(ctx, repoProvider, componentNames, params, registry)
 	if err != nil {
 		return fmt.Errorf("failed to get identities for components %v in repository %v: %w", componentNames, repository, err)
 	}
 	slog.DebugContext(ctx, "components versions", "roots", roots)
 
-	if err := renderComponents(cmd, repoProvider, roots, nil, output, displayMode, recursive); err != nil {
+	if err := renderComponents(cmd, repoProvider, roots, nil, params.output, params.displayMode, params.recursive); err != nil {
 		return fmt.Errorf("failed to render components recursively: %w", err)
 	}
 
