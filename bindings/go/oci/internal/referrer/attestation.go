@@ -68,7 +68,7 @@ func fromReferrer(ctx context.Context, store spec.Store, subject, ref ociImageSp
 		return repository.Attestation{}, fmt.Errorf("reading referrer manifest failed: %w", err)
 	}
 
-	return repository.Attestation{
+	att := repository.Attestation{
 		Source:        repository.AttestationSourceOCIReferrer,
 		ArtifactType:  cmp.Or(ref.ArtifactType, manifest.ArtifactType),
 		PredicateType: predicateTypeFromMetadata(ref, manifest),
@@ -77,7 +77,14 @@ func fromReferrer(ctx context.Context, store spec.Store, subject, ref ociImageSp
 		ID:            ref.Digest.String(),
 		CreatedAt:     cmp.Or(manifest.Annotations[ociImageSpecV1.AnnotationCreated], ref.Annotations[ociImageSpecV1.AnnotationCreated]),
 		Annotations:   manifest.Annotations,
-	}, nil
+	}
+	// The document layer digest is the content digest of the document bytes, read from
+	// the manifest alone. It reveals duplicates: byte-identical documents attached in
+	// different places share it, even though their referrer manifest digests differ.
+	if layer, ok := documentLayer(manifest); ok {
+		att.ContentDigest = layer.Digest.String()
+	}
+	return att, nil
 }
 
 // predicateTypeFromMetadata extracts the in-toto predicate type from annotations only: the
@@ -104,13 +111,22 @@ func predicateTypeFromMetadata(ref ociImageSpecV1.Descriptor, manifest ociImageS
 	return ""
 }
 
+// documentLayer returns the first document layer descriptor, skipping the OCI empty
+// config placeholder. The bool is false when a referrer carries no document layer.
+func documentLayer(manifest ociImageSpecV1.Manifest) (ociImageSpecV1.Descriptor, bool) {
+	for _, layer := range manifest.Layers {
+		if layer.MediaType != mediaTypeEmpty {
+			return layer, true
+		}
+	}
+	return ociImageSpecV1.Descriptor{}, false
+}
+
 // documentMediaType returns the media type of the first document layer, skipping the OCI
 // empty config placeholder.
 func documentMediaType(manifest ociImageSpecV1.Manifest) string {
-	for _, layer := range manifest.Layers {
-		if layer.MediaType != mediaTypeEmpty {
-			return layer.MediaType
-		}
+	if layer, ok := documentLayer(manifest); ok {
+		return layer.MediaType
 	}
 	return ""
 }

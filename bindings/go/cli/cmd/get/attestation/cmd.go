@@ -74,7 +74,13 @@ This is EXPERIMENTAL and read-only. It lists what exists from metadata only: it 
 the documents or verify any signature, and it does not classify types into a fixed vocabulary. The
 TYPE column shows the raw type signal verbatim (in-toto predicate type, else artifact type, else
 media type). Use --type to filter: it matches a substring of any raw type signal, plus friendly
-aliases (for example "sbom" matches spdx and cyclonedx, "signature" matches cosign and notation).`,
+aliases (for example "sbom" matches spdx and cyclonedx, "signature" matches cosign and notation).
+
+The CONTENT-DIGEST column is the digest of the document bytes, read from metadata. Documents with
+identical bytes attached in more than one place share it and are tagged with the same letter (and a
+matching grey tone when colour is on), so duplicates are easy to spot, and the table groups them too.
+The ENVELOPE column is the packaging: none (the bytes are the document itself), dsse (a signed
+DSSE/Sigstore envelope) or in-toto (an in-toto statement).`,
 		Example: `  # The component's own referrers
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0
 
@@ -446,6 +452,7 @@ type row struct {
 	Annotations   map[string]string `json:"annotations,omitempty"`
 	Platform      string            `json:"platform,omitempty"`
 	Subject       string            `json:"subject,omitempty"`
+	ContentDigest string            `json:"contentDigest,omitempty"`
 	ID            string            `json:"id"`
 	// Derived facets for the table, kept out of json/yaml which carry the raw signals.
 	Category string `json:"-"`
@@ -455,9 +462,10 @@ type row struct {
 
 func renderAttestations(ctx context.Context, w io.Writer, format string, root component, color bool) error {
 	p := painter{on: color}
+	marks := markDuplicates(root)
 	switch format {
 	case render.OutputFormatTree.String(), render.OutputFormatWideTree.String():
-		return renderTree(ctx, w, root, p)
+		return renderTree(ctx, w, root, p, marks)
 	}
 
 	// Show the COMPONENT column only when more than one component carries attestations,
@@ -467,6 +475,7 @@ func renderAttestations(ctx context.Context, w io.Writer, format string, root co
 	rows := flattenRows(root, showComponent)
 	slices.SortFunc(rows, func(a, b row) int {
 		return cmp.Or(
+			cmp.Compare(a.ContentDigest, b.ContentDigest),
 			cmp.Compare(a.Component, b.Component),
 			cmp.Compare(a.Resource, b.Resource),
 			cmp.Compare(a.Source, b.Source),
@@ -492,7 +501,7 @@ func renderAttestations(ctx context.Context, w io.Writer, format string, root co
 		_, err = w.Write(data)
 		return err
 	default:
-		return renderTable(w, rows, showComponent, p)
+		return renderTable(w, rows, showComponent, p, marks)
 	}
 }
 
@@ -531,6 +540,7 @@ func flattenRows(c component, showComponent bool) []row {
 				Platform:      a.Platform.String(),
 				Subject:       a.Digest,
 				ID:            a.ID,
+				ContentDigest: a.ContentDigest,
 				Category:      cat,
 				Format:        fmtLabel,
 				Envelope:      envelopeOf(a),
@@ -543,10 +553,10 @@ func flattenRows(c component, showComponent bool) []row {
 	return rows
 }
 
-func renderTable(w io.Writer, rows []row, showComponent bool, p painter) error {
+func renderTable(w io.Writer, rows []row, showComponent bool, p painter, marks dupMarks) error {
 	t := table.NewWriter()
 	t.SetOutputMirror(w)
-	header := table.Row{"RESOURCE", "SOURCE", "CATEGORY", "FORMAT", "PLATFORM", "ENVELOPE", "ID"}
+	header := table.Row{"RESOURCE", "SOURCE", "CATEGORY", "FORMAT", "PLATFORM", "ENVELOPE", "CONTENT-DIGEST"}
 	if showComponent {
 		header = append(table.Row{"COMPONENT"}, header...)
 	}
@@ -558,8 +568,8 @@ func renderTable(w io.Writer, rows []row, showComponent bool, p painter) error {
 			p.paint(orDash(r.Category), categoryColor(r.Category)),
 			orDash(r.Format),
 			orDash(r.Platform),
-			orDash(r.Envelope),
-			p.paint(r.ID, text.Faint),
+			envelopeLabel(r.Envelope),
+			contentDigestCell(r.ContentDigest, marks, p),
 		}
 		if showComponent {
 			cells = append(table.Row{p.paint(r.Component, text.Bold)}, cells...)
@@ -578,7 +588,7 @@ func renderTable(w io.Writer, rows []row, showComponent bool, p painter) error {
 // envelope) are columns, not nesting levels, so heterogeneous values never stack in a single
 // column. Digests are shown in full, like "oras discover". The whole structure is produced
 // by the vertex serializer from a single root vertex.
-func renderTree(ctx context.Context, w io.Writer, root component, p painter) error {
+func renderTree(ctx context.Context, w io.Writer, root component, p painter, marks dupMarks) error {
 	graph := syncdag.NewSyncedDirectedAcyclicGraph[string]()
 	// An empty result (nothing matched the filter) renders as the header alone, like the
 	// table and the json/yaml formats. Adding the root vertex anyway would print a bare
@@ -593,13 +603,13 @@ func renderTree(ctx context.Context, w io.Writer, root component, p painter) err
 
 	renderer := tree.New(ctx, graph,
 		tree.WithRoots(root.Ref),
-		tree.WithHeader[string]("CATEGORY", "FORMAT", "PLATFORM", "ENVELOPE", "ID"),
+		tree.WithHeader[string]("CATEGORY", "FORMAT", "PLATFORM", "ENVELOPE", "CONTENT-DIGEST"),
 		tree.WithVertexSerializerFunc(func(v *dag.Vertex[string]) (tree.Row, error) {
 			c, ok := v.Attributes[syncdag.AttributeValue].(component)
 			if !ok {
 				return tree.Row{}, fmt.Errorf("vertex %q has no %s attribute of type %T", v.ID, syncdag.AttributeValue, c)
 			}
-			return componentTreeRow(c, p), nil
+			return componentTreeRow(c, p, marks), nil
 		}),
 	)
 	return renderer.Render(ctx, w)
@@ -611,22 +621,22 @@ const treeColumns = 5
 // componentTreeRow nests one component over its attestation groups (component-level and,
 // in widetree, one per resource) and then its referenced components, so recursion deepens
 // the tree. A Repeated component is a leaf marker pointing at its earlier appearance.
-func componentTreeRow(c component, p painter) tree.Row {
+func componentTreeRow(c component, p painter, marks dupMarks) tree.Row {
 	if c.Repeated {
 		return innerTreeRow(c.Ref+"  (shown above)", nil, p)
 	}
 	children := make([]tree.Row, 0, len(c.Groups)+len(c.Children))
 	for _, g := range c.Groups {
-		children = append(children, groupRow(treeGroupLabel(g.Label), g.Attestations, p))
+		children = append(children, groupRow(treeGroupLabel(g.Label), g.Attestations, p, marks))
 	}
 	for _, child := range c.Children {
-		children = append(children, componentTreeRow(child, p))
+		children = append(children, componentTreeRow(child, p, marks))
 	}
 	return innerTreeRow(c.Ref, children, p)
 }
 
 // groupRow nests one origin (a resource or the component) over its sources.
-func groupRow(label string, atts []repository.Attestation, p painter) tree.Row {
+func groupRow(label string, atts []repository.Attestation, p painter, marks dupMarks) tree.Row {
 	bySource := map[repository.AttestationSource][]repository.Attestation{}
 	for _, a := range atts {
 		bySource[a.Source] = append(bySource[a.Source], a)
@@ -638,14 +648,14 @@ func groupRow(label string, atts []repository.Attestation, p painter) tree.Row {
 	slices.Sort(keys)
 	sources := make([]tree.Row, 0, len(keys))
 	for _, sk := range keys {
-		sources = append(sources, innerTreeRow(sk, leafRows(bySource[repository.AttestationSource(sk)], p), p))
+		sources = append(sources, innerTreeRow(sk, leafRows(bySource[repository.AttestationSource(sk)], p, marks), p))
 	}
 	return innerTreeRow(label, sources, p)
 }
 
 // leafRows renders one document leaf per attestation, sorted so multi-platform entries
 // cluster: by platform, then category, then format, then digest.
-func leafRows(atts []repository.Attestation, p painter) []tree.Row {
+func leafRows(atts []repository.Attestation, p painter, marks dupMarks) []tree.Row {
 	sorted := slices.Clone(atts)
 	slices.SortFunc(sorted, func(a, b repository.Attestation) int {
 		ca, fa := classify(a)
@@ -659,7 +669,7 @@ func leafRows(atts []repository.Attestation, p painter) []tree.Row {
 	})
 	rows := make([]tree.Row, 0, len(sorted))
 	for _, a := range sorted {
-		rows = append(rows, leafTreeRow(a, p))
+		rows = append(rows, leafTreeRow(a, p, marks))
 	}
 	return rows
 }
@@ -667,15 +677,99 @@ func leafRows(atts []repository.Attestation, p painter) []tree.Row {
 // leafTreeRow is a document leaf: its facets fill the columns, ending in the full digest.
 // Only the category carries colour (the one semantic token); the digest is dimmed and the
 // rest stays neutral, so a row reads as a single accent rather than a block of colour.
-func leafTreeRow(a repository.Attestation, p painter) tree.Row {
+func leafTreeRow(a repository.Attestation, p painter, marks dupMarks) tree.Row {
 	category, format := classify(a)
 	return tree.Row{Cells: []string{
 		p.paint(orDash(category), categoryColor(category)),
 		orDash(format),
 		orDash(a.Platform.String()),
-		orDash(envelopeOf(a)),
-		p.paint(a.ID, text.Faint),
+		envelopeLabel(envelopeOf(a)),
+		contentDigestCell(a.ContentDigest, marks, p),
 	}}
+}
+
+// dupMark is the visible marker a content digest gets when it appears more than once: a
+// short letter (the accessible primary cue) and an index into a grey ramp (reinforcement
+// when colour is on). Singleton content gets no mark.
+type dupMark struct {
+	letter string
+	grey   int
+}
+
+// dupMarks maps a content digest to its marker. Only digests that appear more than once
+// are present.
+type dupMarks map[string]dupMark
+
+// markDuplicates walks the filtered tree and assigns a marker to every content digest that
+// occurs more than once, in order of first appearance, so byte-identical documents attached
+// in different places share a letter and colour across the whole view.
+func markDuplicates(root component) dupMarks {
+	counts := map[string]int{}
+	var order []string
+	var walk func(c component)
+	walk = func(c component) {
+		for _, g := range c.Groups {
+			for _, a := range g.Attestations {
+				if a.ContentDigest == "" {
+					continue
+				}
+				if counts[a.ContentDigest] == 0 {
+					order = append(order, a.ContentDigest)
+				}
+				counts[a.ContentDigest]++
+			}
+		}
+		for _, child := range c.Children {
+			walk(child)
+		}
+	}
+	walk(root)
+
+	marks := dupMarks{}
+	next := 0
+	for _, digest := range order {
+		if counts[digest] < 2 {
+			continue
+		}
+		marks[digest] = dupMark{letter: dupLetter(next), grey: next}
+		next++
+	}
+	return marks
+}
+
+// dupLetter is the bijective base-26 label for index i: a, b, ..., z, aa, ab, ....
+func dupLetter(i int) string {
+	s := ""
+	for i >= 0 {
+		s = string(rune('a'+i%26)) + s
+		i = i/26 - 1
+	}
+	return s
+}
+
+// greyRamp holds ANSI 256-colour grey indices cycled across duplicate groups. The letter
+// stays the unambiguous marker, so repeating a grey for a later group is harmless.
+var greyRamp = []int{250, 244, 248, 241, 246}
+
+// contentDigestCell renders the CONTENT-DIGEST cell: a plain dimmed digest for unique
+// content, or a letter-tagged, grey-toned digest when the same bytes appear elsewhere.
+func contentDigestCell(digest string, marks dupMarks, p painter) string {
+	if digest == "" {
+		return p.paint("-", text.Faint)
+	}
+	if mark, dup := marks[digest]; dup {
+		return p.grey("["+mark.letter+"] "+digest, mark.grey)
+	}
+	return p.paint(digest, text.Faint)
+}
+
+// envelopeLabel names the packaging of a document for display: "none" for a bare document
+// (the bytes are the document itself), else the envelope kind (dsse, in-toto).
+func envelopeLabel(envelope string) string {
+	if envelope == "" {
+		return "none"
+	}
+	return envelope
 }
 
 // innerTreeRow is a containment node (reference, origin or source): its label sits in the
@@ -725,6 +819,15 @@ func (p painter) paint(s string, colors ...text.Color) string {
 		return s
 	}
 	return text.Colors(colors).Sprint(s)
+}
+
+// grey tints s with an ANSI 256-colour grey from greyRamp when colour is on, reinforcing
+// the letter marker of a duplicate. Plain pass-through when disabled or empty.
+func (p painter) grey(s string, index int) string {
+	if !p.on || s == "" {
+		return s
+	}
+	return fmt.Sprintf("\x1b[38;5;%dm%s\x1b[0m", greyRamp[index%len(greyRamp)], s)
 }
 
 // categoryColor maps a friendly attestation category to its display colour. Unknown or

@@ -64,6 +64,7 @@ func DiscoverAllFromRoot(ctx context.Context, store spec.Store, root ociImageSpe
 				Platform:      platform,
 				Digest:        image.Digest.String(),
 				ID:            layer.Digest.String(),
+				ContentDigest: layer.Digest.String(),
 				CreatedAt:     createdAt,
 				Annotations:   manifest.Annotations,
 			})

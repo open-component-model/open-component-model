@@ -3,6 +3,7 @@ package attestation
 import (
 	"bytes"
 	"encoding/json/v2"
+	"strings"
 	"testing"
 
 	"github.com/jedib0t/go-pretty/v6/text"
@@ -47,7 +48,7 @@ func TestRenderTable_ShowsResourceAndFullDigest(t *testing.T) {
 	const full = "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
 	groups := []cliattestation.Group{
 		{Label: "name=app", Attestations: []repository.Attestation{
-			{Source: repository.AttestationSourceOCIReferrer, PredicateType: repository.PredicateTypeSPDX, MediaType: mediaInTotoStatement, ID: full},
+			{Source: repository.AttestationSourceOCIReferrer, PredicateType: repository.PredicateTypeSPDX, MediaType: mediaInTotoStatement, ID: full, ContentDigest: full},
 		}},
 	}
 	var buf bytes.Buffer
@@ -111,6 +112,7 @@ func TestRenderTree_FacetedColumns(t *testing.T) {
 				Annotations:   map[string]string{annotationDSSEContent: "dsse-envelope"},
 				CreatedAt:     "2026-11-24T15:04:41Z",
 				ID:            bundleDigest,
+				ContentDigest: bundleDigest,
 			},
 			// BuildKit SPDX in the image index, platform-scoped.
 			{
@@ -119,6 +121,7 @@ func TestRenderTree_FacetedColumns(t *testing.T) {
 				MediaType:     mediaInTotoStatement,
 				Platform:      repository.Platform{OS: "linux", Architecture: "amd64"},
 				ID:            indexDigest,
+				ContentDigest: indexDigest,
 			},
 		}},
 	}
@@ -231,4 +234,44 @@ func TestRenderTree_EmptyRendersHeaderOnly(t *testing.T) {
 			assert.NotContains(t, out, "example.com/app:1.0.0", "an empty result shows no component node")
 		})
 	}
+}
+
+// TestContentDigest_DuplicatesTaggedSingletonsPlain pins the duplicate UX: byte-identical
+// documents attached in different places share one letter tag in the CONTENT-DIGEST column,
+// a unique document carries none, and the ENVELOPE column reads "none" for a bare document.
+func TestContentDigest_DuplicatesTaggedSingletonsPlain(t *testing.T) {
+	const dup = "sha256:dup0000000000000000000000000000000000000000000000000000000000"
+	const uniq = "sha256:uniq000000000000000000000000000000000000000000000000000000000"
+	plainVEX := func(digest string) repository.Attestation {
+		return repository.Attestation{
+			Source:        repository.AttestationSourceOCIReferrer,
+			ArtifactType:  mediaTypeOpenVEX,
+			MediaType:     mediaTypeOpenVEX,
+			ContentDigest: digest,
+		}
+	}
+	groups := []cliattestation.Group{
+		// Same bytes at component level and on a resource, plus one distinct signed copy.
+		{Label: "", Attestations: []repository.Attestation{plainVEX(dup)}},
+		{Label: "name=image", Attestations: []repository.Attestation{
+			plainVEX(dup),
+			{
+				Source:        repository.AttestationSourceOCIReferrer,
+				ArtifactType:  artifactSigstoreBundle,
+				PredicateType: predicateOpenVEX,
+				ContentDigest: uniq,
+			},
+		}},
+	}
+
+	var buf bytes.Buffer
+	require.NoError(t, renderAttestations(t.Context(), &buf, "table", component{Ref: "ref", Groups: groups}, false))
+	out := buf.String()
+
+	assert.Equal(t, 2, strings.Count(out, "[a] "+dup), "both copies of the duplicate carry the same letter tag")
+	assert.Contains(t, out, uniq, "the unique document is shown")
+	assert.NotContains(t, out, "[a] "+uniq, "the unique document carries no duplicate tag")
+	assert.NotContains(t, out, "[b]", "only one duplicate group exists")
+	assert.Contains(t, out, "none", "a bare document reads as envelope none")
+	assert.Contains(t, out, "dsse", "the signed copy reads as envelope dsse")
 }

@@ -36,6 +36,12 @@ TYPE column shows the raw type signal verbatim (in-toto predicate type, else art
 media type). Use --type to filter: it matches a substring of any raw type signal, plus friendly
 aliases (for example "sbom" matches spdx and cyclonedx, "signature" matches cosign and notation).
 
+The CONTENT-DIGEST column is the digest of the document bytes, read from metadata. Documents with
+identical bytes attached in more than one place share it and are tagged with the same letter (and a
+matching grey tone when colour is on), so duplicates are easy to spot, and the table groups them too.
+The ENVELOPE column is the packaging: none (the bytes are the document itself), dsse (a signed
+DSSE/Sigstore envelope) or in-toto (an in-toto statement).
+
 ```
 ocm get attestation {reference} [flags]
 ```

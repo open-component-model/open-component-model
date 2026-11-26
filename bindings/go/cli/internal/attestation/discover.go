@@ -192,6 +192,9 @@ func fromArtifactReferences(req Request) ([]repository.Attestation, error) {
 				Variant:      candidate.ExtraIdentity[attributeVariant],
 			},
 			ID: candidate.ToIdentity().String(),
+			// The local blob reference is the content digest of the document itself, so a
+			// local attestation shares it with a referrer carrying the same bytes.
+			ContentDigest: accessLocalReference(candidate),
 		})
 	}
 	return out, nil
@@ -276,4 +279,25 @@ func accessMediaType(res *descriptor.Resource) string {
 		return ""
 	}
 	return probe.MediaType
+}
+
+// accessLocalReference reads the local blob reference (the document content digest) of a
+// resource's access from its metadata, without downloading the blob. Empty when none is
+// declared (for example a non-local access).
+func accessLocalReference(res *descriptor.Resource) string {
+	access := res.GetAccess()
+	if access == nil {
+		return ""
+	}
+	data, err := json.Marshal(access, runtime.JSONOptions)
+	if err != nil {
+		return ""
+	}
+	var probe struct {
+		LocalReference string `json:"localReference"`
+	}
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return ""
+	}
+	return probe.LocalReference
 }

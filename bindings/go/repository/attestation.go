@@ -55,6 +55,13 @@ type Attestation struct {
 	// ID uniquely identifies the attestation within the subject: the referrer manifest
 	// digest, the in-toto layer digest, or the local resource identity.
 	ID string
+	// ContentDigest is the digest of the document bytes themselves (the referrer or
+	// in-toto document layer digest, or the ocm-local blob reference), as opposed to ID
+	// which identifies the wrapper or location. Two attestations carrying byte-identical
+	// documents share a ContentDigest even when attached in different places, so it is the
+	// signal that reveals duplicates. Read from metadata only (no blob fetch); empty when
+	// the source exposes no content digest.
+	ContentDigest string
 	// CreatedAt is the creation timestamp from the "org.opencontainers.image.created"
 	// annotation of the referrer / attestation manifest, verbatim (RFC 3339). Empty when
 	// the producer set none. It is the outer-container timestamp, readable from metadata
