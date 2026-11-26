@@ -2,7 +2,7 @@
 title: "Credential Resolution"
 description: "Learn how OCM resolves credentials by building a config and observing which credentials get picked for different requests."
 icon: "🔑"
-weight: 3
+weight: 4
 toc: true
 aliases:
   - /docs/tutorials/credential-resolution/

@@ -1,7 +1,7 @@
 ---
 title: "Transfer and Transport"
 description: "Understand how OCM moves component versions between repositories while preserving identity, integrity, and signatures."
-weight: 14
+weight: 15
 toc: true
 hasMermaid: true
 ---

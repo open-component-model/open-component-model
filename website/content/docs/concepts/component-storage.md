@@ -1,7 +1,7 @@
 ---
 title: "Component Version Storage"
 description: "How OCM persists component versions and their local blobs as OCI artifacts in registries and CTF archives, and why embedded images are natively pullable."
-weight: 16
+weight: 17
 toc: true
 hasMermaid: true
 ---

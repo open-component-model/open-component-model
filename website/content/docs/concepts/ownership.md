@@ -1,7 +1,7 @@
 ---
 title: "Ownership"
 description: "How OCM traces a resource back to the component version that owns it, without modifying the resource or its original content."
-weight: 8
+weight: 9
 toc: true
 hasMermaid: true
 ---

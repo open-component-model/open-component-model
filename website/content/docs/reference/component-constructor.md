@@ -11,6 +11,9 @@ The **OCM Component Constructor** defines the input format for building componen
 It describes how resources and sources are provided -- either via access specifications
 (referencing existing artifacts) or via input specifications (providing content directly).
 
+For how a constructor relates to the component descriptor it produces, see
+[Constructor and Descriptor]({{< relref "docs/concepts/constructor-vs-descriptor.md" >}}).
+
 The constructor schema accepts two formats:
 
 - **Variant 1** -- A wrapper object with a `components` list, allowing multiple components

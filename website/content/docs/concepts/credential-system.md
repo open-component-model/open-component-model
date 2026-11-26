@@ -2,7 +2,7 @@
 title: "Credential System"
 description: "Why OCM manages credentials centrally and how its resolution model resolves the right secret for each registry or remote service."
 icon: "🔑"
-weight: 4
+weight: 5
 toc: true
 ---
 
