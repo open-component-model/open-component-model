@@ -58,3 +58,20 @@ and cached under `$TMPDIR`. It starts its own two zot registries, removes them o
 prints a temporary work directory holding the keys, configs and CTF. `OCM`, `COSIGN`,
 `SOURCE_PORT`, `TARGET_PORT` and `PODINFO` are overridable via the environment. It is not run
 by CI; the Taskfile scenario is the conformance check.
+
+## Three-minute demo (`demo-short.sh`)
+
+`demo-short.sh` steps through exactly the commands of the "Sign, Transfer, Verify" section of the
+[blog post](../../../website/content/blog/2026-11-26-cosign-signable-components.md): publish a component
+version with an image reference, `cosign sign` it, `ocm transfer` it with the image to a second registry,
+and `cosign verify` it there. Shell wrappers add what only the local setup needs (plain HTTP, no
+transparency log), so the commands on screen are those of the post.
+
+```bash
+conformance/scenarios/cosign-normalized/demo-short.sh          # Enter-stepped
+PAUSE=0 conformance/scenarios/cosign-normalized/demo-short.sh   # straight through
+```
+
+Requires Docker, `oras`, `cosign`, `jq` and the CLI built from this checkout. The registries run on
+`source.localhost:5001` and `target.localhost:5002`. The `podinfo` image is cached under `$TMPDIR` after
+the first run, so later runs need no internet.
