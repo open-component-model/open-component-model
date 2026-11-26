@@ -391,9 +391,12 @@ repository.
 component version actually exists in the source repository.
 
 **Cause:** The message also contains
-`cannot copy the Helm chart of signed component version`. The config copies a
-Helm chart of a signed component version, and the copy would add or replace the
-chart's recorded digest, which breaks the signature. This happens for a chart
+`cannot copy the Helm chart of signed component version` or
+`cannot copy the Helm chart of component version referenced by digest`. The
+config copies a Helm chart of a component version that is signed, or that a
+parent references by digest, and the copy would add or replace the chart's
+recorded digest. That breaks the signature or the reference digest in the
+parent. This happens for a chart
 without a recorded digest or with an `ociArtifactDigest/v1` digest (see
 [Helm charts]({{< relref "docs/guides/transfer/upload-oci-images.md#charts-covered-by-a-signature" >}})).
 

@@ -145,8 +145,9 @@ func pinnedImageReference(id string) string {
 // A covered digest is kept when it is a genericBlobDigest/v1 digest, spelled as OCM writes it
 // (SHA-256, lower-case hex): it names the chart archive, and the target checks a stored file
 // against exactly this spelling. For any other digest the conversion would add or replace it.
-// In a signed component version that is an error: the transfer must never write a component
-// version that fails verification.
+// That is an error: the transfer must never write a component version that fails
+// verification, or a child that no longer matches the reference digest of its parent, which
+// the next recursive transfer rejects.
 func keepsChartDigest(val *discoveryValue, resource v2.Resource, pushed bool) (bool, error) {
 	desc := val.Descriptor
 	signed := len(desc.Signatures) > 0
@@ -181,9 +182,10 @@ func keepsChartDigest(val *discoveryValue, resource v2.Resource, pushed bool) (b
 				norm, dig.HashAlgorithm, descriptor.GenericBlobDigestV1, crypto.SHA256.String())
 		}
 	}
+	covered := "signed component version"
 	if !signed {
-		return false, nil
+		covered = "component version referenced by digest"
 	}
-	return false, fmt.Errorf("cannot copy the Helm chart of signed component version %s:%s: %s; keep the resource by reference (a reference.uploader entry that matches it) or transfer without copying it",
-		desc.Component.Name, desc.Component.Version, reason)
+	return false, fmt.Errorf("cannot copy the Helm chart of %s %s:%s: %s; keep the resource by reference (a reference.uploader entry that matches it) or transfer without copying it",
+		covered, desc.Component.Name, desc.Component.Version, reason)
 }

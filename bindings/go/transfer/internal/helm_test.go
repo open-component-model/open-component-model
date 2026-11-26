@@ -446,7 +446,7 @@ func TestKeepsChartDigest(t *testing.T) {
 			wantErr: `the target cannot store its digest with hash algorithm NO-DIGEST and normalisation algorithm "genericBlobDigest/v1"; exclude it with normalisation algorithm EXCLUDE-FROM-SIGNATURE`,
 		},
 		{name: "no digest, unsigned"},
-		{name: "no digest, referenced by digest", referenced: true},
+		{name: "no digest, referenced by digest", referenced: true, wantErr: "it has no recorded digest, and the copy would add one"},
 		{name: "no digest, signed", signed: true, wantErr: "it has no recorded digest, and the copy would add one"},
 		{
 			name:    "ociArtifactDigest, signed",
@@ -466,7 +466,19 @@ func TestKeepsChartDigest(t *testing.T) {
 			signed:  true,
 			wantErr: notChartDigest("genericBlobDigest/v1", "SHA-256"),
 		},
-		{name: "upper-case value, referenced by digest", digest: generic("SHA-256", strings.Repeat("A", 64)), referenced: true},
+		{
+			name:       "upper-case value, referenced by digest",
+			digest:     generic("SHA-256", strings.Repeat("A", 64)),
+			referenced: true,
+			wantErr:    notChartDigest("genericBlobDigest/v1", "SHA-256"),
+		},
+		{
+			name:       "ociArtifactDigest, signed and referenced by digest",
+			digest:     &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: descriptor.OCIArtifactDigestV1, Value: "x"},
+			signed:     true,
+			referenced: true,
+			wantErr:    notChartDigest("ociArtifactDigest/v1", "SHA-256"),
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -480,7 +492,11 @@ func TestKeepsChartDigest(t *testing.T) {
 
 			keep, err := keepsChartDigest(&discoveryValue{Descriptor: desc, ReferenceDigest: tc.referenced}, v2desc.Component.Resources[0], tc.pushed)
 			if tc.wantErr != "" {
-				r.EqualError(err, "cannot copy the Helm chart of signed component version ocm.software/test:1.0.0: "+tc.wantErr+
+				covered := "signed component version"
+				if !tc.signed {
+					covered = "component version referenced by digest"
+				}
+				r.EqualError(err, "cannot copy the Helm chart of "+covered+" ocm.software/test:1.0.0: "+tc.wantErr+
 					"; keep the resource by reference (a reference.uploader entry that matches it) or transfer without copying it")
 				return
 			}

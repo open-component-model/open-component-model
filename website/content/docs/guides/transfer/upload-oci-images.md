@@ -176,11 +176,14 @@ helm pull oci://ghcr.io/acme/ocm/podinfo/podinfo --version 6.17.0
 A digest that is excluded from the signature (normalisation algorithm
 `EXCLUDE-FROM-SIGNATURE`) also stays as it is.
 
-A signed component version cannot keep any other chart digest: a chart without a
+Such a component version cannot keep any other chart digest: a chart without a
 recorded digest (added with `--skip-reference-digest-processing`), or with an
 `ociArtifactDigest/v1` digest (from an `oci://` chart repository). The transfer
 then fails while the graph is built, with
-`cannot copy the Helm chart of signed component version ...`. To go on, keep the
+`cannot copy the Helm chart of signed component version ...` or
+`cannot copy the Helm chart of component version referenced by digest ...`.
+A converted chart would break the signature, or the reference digest in the
+parent, which the next recursive transfer rejects. To go on, keep the
 resource by reference with a `reference.uploader.transfer.config.ocm.software/v1alpha1`
 entry whose `match` selects it, placed before the catch-all (see E12 in the
 [selection examples]({{< relref "docs/reference/configuration/transfer-configuration/selection-examples.md" >}})),

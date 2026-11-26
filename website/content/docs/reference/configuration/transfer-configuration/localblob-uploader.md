@@ -26,8 +26,8 @@ for the full rule.
 
 Selecting an access type the local blob uploader cannot handle fails the transfer
 with `local blob uploader cannot copy access type …`. Copying a Helm chart whose
-digest would change fails the transfer of a signed component version with
-`cannot copy the Helm chart of signed component version …`.
+digest would change fails the transfer of a component version that is signed, or
+referenced by digest, with `cannot copy the Helm chart of …`.
 
 ## Schema
 

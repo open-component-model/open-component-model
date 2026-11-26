@@ -16,9 +16,9 @@ signature, or the reference digest in a parent component version, covers a
 recorded chart digest (`genericBlobDigest/v1`, `SHA-256`), the chart is pushed as
 a Helm OCI image instead: the descriptor keeps the digest and records an
 `ociBlob/v1` access to the chart layer of that image, with the image in
-`manifestReference`. A signed component version
-whose chart digest cannot be kept fails the transfer with
-`cannot copy the Helm chart of signed component version …`. See
+`manifestReference`. A component version that is signed, or referenced by
+digest, and whose chart digest cannot be kept fails the transfer with
+`cannot copy the Helm chart of …`. See
 [Helm charts]({{< relref "docs/guides/transfer/upload-oci-images.md#charts-covered-by-a-signature" >}})
 for the full rule.
 
