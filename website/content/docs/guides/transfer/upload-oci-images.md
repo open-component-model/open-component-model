@@ -158,14 +158,14 @@ resources:
       mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
       digest: sha256:d3d67f46...
       size: 18351
-      imageReference: ghcr.io/acme/ocm/podinfo/podinfo:6.17.0@sha256:5c1ae3b2...
+      manifestReference: ghcr.io/acme/ocm/podinfo/podinfo:6.17.0@sha256:5c1ae3b2...
     digest:
       hashAlgorithm: SHA-256
       normalisationAlgorithm: genericBlobDigest/v1
       value: d3d67f46...
 ```
 
-`digest` is the digest of the chart archive. `imageReference` names the pushed
+`digest` is the digest of the chart archive. `manifestReference` names the pushed
 Helm OCI image that holds it, with its tag and manifest digest. Pull the chart
 with that reference:
 

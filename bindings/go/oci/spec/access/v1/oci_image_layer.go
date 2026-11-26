@@ -42,12 +42,12 @@ type OCIImageLayer struct {
 	// Size specifies the size in bytes of the blob.
 	// +ocm:jsonschema-gen:minimum=0
 	Size int64 `json:"size"`
-	// ImageReference is the reference, with tag or digest, of a manifest in the repository
+	// ManifestReference is the reference, with tag or digest, of a manifest in the repository
 	// of Reference that lists the layer, for example the Helm OCI image of a chart layer. It is
 	// optional and only tells where the layer came from: the layer is read by Digest.
-	// It is not the repository of the layer, for which the OCM spec page of ociBlob uses
-	// this name: this binding stores the repository in Reference.
-	ImageReference string `json:"imageReference,omitempty"`
+	// It is not named imageReference, because the OCM spec page of ociBlob uses that name
+	// for the repository of the layer, which this binding stores in Reference.
+	ManifestReference string `json:"manifestReference,omitempty"`
 }
 
 // Validate checks the digest, nonnegative size, a reference without a tag, and that a manifest
@@ -72,13 +72,13 @@ func (t *OCIImageLayer) Validate() error {
 	if dig, err := ref.GetDigest(); err == nil && dig != t.Digest {
 		return fmt.Errorf("digest field value %q does not match digest contained in reference %q", t.Digest, t.Reference)
 	}
-	if t.ImageReference != "" {
-		manifest, err := looseref.ParseReference(t.ImageReference)
+	if t.ManifestReference != "" {
+		manifest, err := looseref.ParseReference(t.ManifestReference)
 		if err != nil {
-			return fmt.Errorf("invalid image reference %q: %w", t.ImageReference, err)
+			return fmt.Errorf("invalid manifest reference %q: %w", t.ManifestReference, err)
 		}
 		if manifest.Registry != ref.Registry || manifest.Repository != ref.Repository {
-			return fmt.Errorf("image reference %q is not in the repository of reference %q", t.ImageReference, t.Reference)
+			return fmt.Errorf("manifest reference %q is not in the repository of reference %q", t.ManifestReference, t.Reference)
 		}
 	}
 

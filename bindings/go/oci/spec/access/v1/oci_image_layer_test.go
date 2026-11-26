@@ -47,17 +47,17 @@ func TestOCIImageLayer_Validate(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:  "image reference in the same repository",
-			layer: OCIImageLayer{Reference: "example.com/repo", Digest: validDigest, Size: 100, ImageReference: "example.com/repo:1.0.0@" + digest.FromString("manifest").String()},
+			name:  "manifest reference in the same repository",
+			layer: OCIImageLayer{Reference: "example.com/repo", Digest: validDigest, Size: 100, ManifestReference: "example.com/repo:1.0.0@" + digest.FromString("manifest").String()},
 		},
 		{
-			name:    "image reference in another repository",
-			layer:   OCIImageLayer{Reference: "example.com/repo", Digest: validDigest, Size: 100, ImageReference: "example.com/other:1.0.0"},
+			name:    "manifest reference in another repository",
+			layer:   OCIImageLayer{Reference: "example.com/repo", Digest: validDigest, Size: 100, ManifestReference: "example.com/other:1.0.0"},
 			wantErr: true,
 		},
 		{
-			name:    "invalid image reference",
-			layer:   OCIImageLayer{Reference: "example.com/repo", Digest: validDigest, Size: 100, ImageReference: "example.com/repo@sha256:nope"},
+			name:    "invalid manifest reference",
+			layer:   OCIImageLayer{Reference: "example.com/repo", Digest: validDigest, Size: 100, ManifestReference: "example.com/repo@sha256:nope"},
 			wantErr: true,
 		},
 		{
@@ -187,9 +187,9 @@ func TestRelativeOCIReference_Validate(t *testing.T) {
 }
 
 // The OCM spec reserves imageReference for the repository of an ociBlob access, so the
-// image that lists the layer is written under another key. A layer without it must
+// image that lists the layer is written under manifestReference. A layer without it must
 // serialise exactly as before the field existed, or stored descriptors change.
-func TestOCIImageLayer_ImageReferenceJSON(t *testing.T) {
+func TestOCIImageLayer_ManifestReferenceJSON(t *testing.T) {
 	dig := digest.FromString("test")
 	for _, tt := range []struct {
 		name     string
@@ -197,23 +197,23 @@ func TestOCIImageLayer_ImageReferenceJSON(t *testing.T) {
 		wantJSON string
 	}{
 		{
-			name:     "without image reference",
+			name:     "without manifest reference",
 			wantJSON: `{"type":"ociBlob/v1","ref":"example.com/repo","digest":"` + dig.String() + `","size":100}`,
 		},
 		{
-			name:     "with image reference",
+			name:     "with manifest reference",
 			manifest: "example.com/repo:1.0.0",
-			wantJSON: `{"type":"ociBlob/v1","ref":"example.com/repo","digest":"` + dig.String() + `","size":100,"imageReference":"example.com/repo:1.0.0"}`,
+			wantJSON: `{"type":"ociBlob/v1","ref":"example.com/repo","digest":"` + dig.String() + `","size":100,"manifestReference":"example.com/repo:1.0.0"}`,
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			r := require.New(t)
 			layer := OCIImageLayer{
-				Type:           runtime.NewVersionedType(LegacyOCIBlobAccessType, LegacyOCIBlobAccessTypeVersion),
-				Reference:      "example.com/repo",
-				Digest:         dig,
-				Size:           100,
-				ImageReference: tt.manifest,
+				Type:              runtime.NewVersionedType(LegacyOCIBlobAccessType, LegacyOCIBlobAccessTypeVersion),
+				Reference:         "example.com/repo",
+				Digest:            dig,
+				Size:              100,
+				ManifestReference: tt.manifest,
 			}
 			data, err := json.Marshal(&layer, runtime.JSONOptions)
 			r.NoError(err)

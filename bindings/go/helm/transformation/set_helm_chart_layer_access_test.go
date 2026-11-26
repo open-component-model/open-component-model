@@ -183,7 +183,7 @@ func TestSetHelmChartLayerAccess_Transform(t *testing.T) {
 			r.Equal(layer.MediaType, layerAccess.MediaType)
 			r.Equal(layer.Digest, layerAccess.Digest.String())
 			r.Equal(layer.Size, layerAccess.Size)
-			r.Equal(tc.imageReference, layerAccess.ImageReference)
+			r.Equal(tc.imageReference, layerAccess.ManifestReference)
 
 			r.Equal(want.Name, got.Name)
 			r.Equal(want.Version, got.Version)

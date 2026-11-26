@@ -665,7 +665,7 @@ func Test_Integration_Transfer_HelmChart_KeepsDigest(t *testing.T) {
 		r.Equal(registry.ChartLayerMediaType, layer.MediaType)
 		r.Equal(chartDigest, layer.Digest)
 		r.Equal(int64(len(chartBytes)), layer.Size)
-		r.Contains(layer.ImageReference, targetRef+"/mychart:0.1.0@sha256:", "the access should name the pushed chart image")
+		r.Contains(layer.ManifestReference, targetRef+"/mychart:0.1.0@sha256:", "the access should name the pushed chart image")
 		r.Equal(chartBytes, downloadRawResource(t, targetCVRef, cfgPath), "the layer should hold the chart archive unchanged")
 
 		manifest := fetchRegistryManifest(t, targetRegistry, "helm-digest-oci/mychart", "0.1.0")

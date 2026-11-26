@@ -18,7 +18,7 @@ import (
 
 // SetHelmChartLayerAccess replaces the access of a Helm chart resource with an ociBlob/v1
 // access to the chart layer of the Helm OCI image the chart was pushed as. The access names
-// that image in imageReference.
+// that image in manifestReference.
 // It keeps the recorded digest of the resource: that digest names the chart archive, so a
 // copy that addresses the chart layer still matches it and the signature stays valid.
 type SetHelmChartLayerAccess struct {
@@ -62,7 +62,7 @@ func (t *SetHelmChartLayerAccess) Transform(_ context.Context, step runtime.Type
 		Size:      spec.ChartLayer.Size,
 		// The layer access cannot name the image, so a consumer that wants the Helm OCI image
 		// (helm pull, a deployer) finds it here.
-		ImageReference: spec.ImageReference,
+		ManifestReference: spec.ImageReference,
 	}
 	if err := layerAccess.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid chart layer access for resource %s: %w", spec.Resource.Name, err)
