@@ -1,10 +1,11 @@
 package examples
 
 import (
-	"encoding/json/v2"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"net"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -34,7 +35,7 @@ import (
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
-const zotImage = "ghcr.io/project-zot/zot:v2.1.23"
+const zotImage = "ghcr.io/project-zot/zot:%s"
 
 // startZot starts a zot registry and returns its host:port. users maps a repository
 // prefix (e.g. "project1") to the only basic-auth user allowed to access repositories
@@ -74,7 +75,8 @@ func startZot(t *testing.T, users map[string]orascreds.Credential) string {
 		Reader: strings.NewReader(string(config)), ContainerFilePath: "/etc/zot/config.json", FileMode: 0o644,
 	})
 
-	container, err := testcontainers.Run(t.Context(), zotImage,
+	r.NotEmpty(os.Getenv("ZOT_VERSION"), "the ZOT_VERSION environment variable must be set")
+	container, err := testcontainers.Run(t.Context(), fmt.Sprintf(zotImage, os.Getenv("ZOT_VERSION")),
 		testcontainers.WithExposedPorts("5000/tcp"),
 		testcontainers.WithFiles(files...),
 		testcontainers.WithWaitStrategy(wait.ForHTTP("/v2/").WithPort("5000/tcp").
