@@ -401,7 +401,7 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 				logger.InfoContext(egctx, "signature verification completed", "name", signature.Name, "duration", time.Since(start).String())
 			}()
 
-			if err := signing.VerifyDigestMatchesDescriptor(egctx, desc, signature, logger); err != nil {
+			if err := signing.VerifySignatureDigest(egctx, desc, signature, logger); err != nil {
 				return err
 			}
 

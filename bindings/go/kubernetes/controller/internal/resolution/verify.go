@@ -106,7 +106,7 @@ func verifySignatures(
 			return nil, fmt.Errorf("signature %s not found in component %s", v.Signature, desc.Component.Name)
 		}
 
-		if err := signing.VerifyDigestMatchesDescriptor(ctx, desc, *descSig, slog.New(logr.ToSlogHandler(logger))); err != nil {
+		if err := signing.VerifySignatureDigest(ctx, desc, *descSig, slog.New(logr.ToSlogHandler(logger))); err != nil {
 			return nil, fmt.Errorf("digest verification failed for signature %q: %w", descSig.Name, err)
 		}
 

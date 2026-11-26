@@ -95,6 +95,83 @@ func VerifyDigestMatchesDescriptor(
 	return algorithms.Verify(desc, signature.Digest)
 }
 
+// VerifySignatureDigest verifies that a descriptor matches the digest of one of
+// its signatures, like VerifyDigestMatchesDescriptor. Use it on signature
+// verification paths only; reference digest checks call
+// VerifyDigestMatchesDescriptor directly.
+//
+// On a digest mismatch it adds a hint for a known OCM v1 interop limit: every
+// OCM v1 signing run rewrites the component reference digests with its own hash
+// and normalisation algorithms, and OCM v1 recomputes them on verification. OCM
+// v2 verifies the stored reference digests, so of several OCM v1 signatures
+// with different algorithms only the one created last can be verified. The hint
+// is only added when the descriptor matches that pattern: another signature
+// uses the algorithms of all stored reference digests, its digest matches the
+// descriptor, and the failing signature uses other algorithms. The mismatch
+// stays an error either way.
+func VerifySignatureDigest(
+	ctx context.Context,
+	desc *descruntime.Descriptor,
+	signature descruntime.Signature,
+	logger *slog.Logger,
+) error {
+	err := VerifyDigestMatchesDescriptor(ctx, desc, signature, logger)
+	if !errors.Is(err, algorithms.ErrDigestMismatch) {
+		return err
+	}
+	if other := rewrittenReferencesSignature(desc, signature); other != nil {
+		return fmt.Errorf("%w (possible cause: if this component version was signed several times with OCM v1 "+
+			"using different hash or normalisation algorithms, OCM v1 rewrote its component reference digests "+
+			"with the algorithms of signature %q (%s/%s) when creating it; OCM v1 recomputes reference digests "+
+			"during verification, OCM v2 verifies the stored ones, so signature %q (%s/%s) cannot be verified "+
+			"by OCM v2)",
+			err, other.Name, other.Digest.NormalisationAlgorithm, other.Digest.HashAlgorithm,
+			signature.Name, signature.Digest.NormalisationAlgorithm, signature.Digest.HashAlgorithm)
+	}
+	return err
+}
+
+// rewrittenReferencesSignature returns another signature of desc whose
+// algorithms match all stored component reference digests and whose digest
+// matches desc, provided the given signature uses other algorithms than those
+// reference digests. It returns nil otherwise.
+func rewrittenReferencesSignature(desc *descruntime.Descriptor, signature descruntime.Signature) *descruntime.Signature {
+	refs := desc.Component.References
+	if len(refs) == 0 {
+		return nil
+	}
+	refsMatch := func(d descruntime.Digest) bool {
+		for _, r := range refs {
+			if !sameDigestAlgorithms(r.Digest, d) {
+				return false
+			}
+		}
+		return true
+	}
+	if refsMatch(signature.Digest) {
+		return nil
+	}
+	for i := range desc.Signatures {
+		other := &desc.Signatures[i]
+		if other.Name == signature.Name || sameDigestAlgorithms(other.Digest, signature.Digest) || !refsMatch(other.Digest) {
+			continue
+		}
+		if algorithms.Verify(desc, other.Digest) == nil {
+			return other
+		}
+	}
+	return nil
+}
+
+// sameDigestAlgorithms reports whether two digests use the same normalisation
+// (aliases resolved) and hash algorithm (SHA-256 and sha256 are equal).
+func sameDigestAlgorithms(a, b descruntime.Digest) bool {
+	na, _ := algorithms.Resolve(a.NormalisationAlgorithm)
+	nb, _ := algorithms.Resolve(b.NormalisationAlgorithm)
+	hash := func(h string) string { return strings.ToUpper(strings.ReplaceAll(h, "-", "")) }
+	return na == nb && hash(a.HashAlgorithm) == hash(b.HashAlgorithm)
+}
+
 // SignableNormalisationAlgorithms returns the normalisation algorithms a
 // signing entry point offers for new signatures, DefaultNormalisationAlgorithm
 // first. It excludes the verify-only jsonNormalisation/v1 and the legacy

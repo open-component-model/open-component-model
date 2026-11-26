@@ -12,8 +12,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/algorithms"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha2"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha3"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -353,4 +355,109 @@ func TestVerifyDigestMatchesDescriptor_LegacyNullLabelValue(t *testing.T) {
 	r.Equal(v4alpha2.Algorithm, recorded.NormalisationAlgorithm)
 	r.NotEqual(v3.Value, recorded.Value)
 	r.NoError(VerifyDigestMatchesDescriptor(t.Context(), d, descruntime.Signature{Name: "v2", Digest: *recorded}, logger))
+}
+
+const v1RewriteHint = "possible cause"
+
+func descriptorWithReference(refDigest descruntime.Digest) *descruntime.Descriptor {
+	return &descruntime.Descriptor{Component: descruntime.Component{
+		ComponentMeta: descruntime.ComponentMeta{ObjectMeta: descruntime.ObjectMeta{Name: "acme.org/app", Version: "1.0.0"}},
+		Provider:      descruntime.Provider{Name: "acme"},
+		References: []descruntime.Reference{{
+			ElementMeta: descruntime.ElementMeta{ObjectMeta: descruntime.ObjectMeta{Name: "base", Version: "1.0.0"}},
+			Component:   "acme.org/base",
+			Digest:      refDigest,
+		}},
+	}}
+}
+
+// signLikeOCMv1 mimics an OCM v1 signing run: it rewrites the reference
+// digests with the signing algorithms and then appends a signature digest.
+func signLikeOCMv1(t *testing.T, d *descruntime.Descriptor, name, norm, hash, refValue string) {
+	t.Helper()
+	for i := range d.Component.References {
+		d.Component.References[i].Digest = descruntime.Digest{HashAlgorithm: hash, NormalisationAlgorithm: norm, Value: refValue}
+	}
+	dg, err := GenerateDigest(t.Context(), d, slog.New(slog.DiscardHandler), norm, hash)
+	require.NoError(t, err)
+	d.Signatures = append(d.Signatures, descruntime.Signature{Name: name, Digest: *dg})
+}
+
+func TestVerifySignatureDigest_OCMv1RewrittenReferenceDigests(t *testing.T) {
+	logger := slog.New(slog.DiscardHandler)
+	ctx := t.Context()
+
+	d := descriptorWithReference(descruntime.Digest{})
+	signLikeOCMv1(t, d, "s1", v4alpha3.Algorithm, crypto.SHA256.String(), "aa")
+	signLikeOCMv1(t, d, "s2", v4alpha3.Algorithm, crypto.SHA512.String(), "bb")
+
+	require.NoError(t, VerifySignatureDigest(ctx, d, d.Signatures[1], logger), "the last signature verifies")
+
+	err := VerifySignatureDigest(ctx, d, d.Signatures[0], logger)
+	require.ErrorIs(t, err, algorithms.ErrDigestMismatch)
+	assert.Contains(t, err.Error(), v1RewriteHint)
+	assert.Contains(t, err.Error(), `signature "s2" (jsonNormalisation/v4alpha3/SHA-512)`)
+	assert.Contains(t, err.Error(), `signature "s1" (jsonNormalisation/v4alpha3/SHA-256)`)
+	assert.NotContains(t, err.Error(), "re-sign")
+
+	t.Run("reference digest checks never get the hint", func(t *testing.T) {
+		err := VerifyDigestMatchesDescriptor(t.Context(), d, d.Signatures[0], logger)
+		require.ErrorIs(t, err, algorithms.ErrDigestMismatch)
+		assert.NotContains(t, err.Error(), v1RewriteHint)
+	})
+
+	t.Run("tampered descriptor gets no hint", func(t *testing.T) {
+		tampered := d // last subtest: mutating d is fine
+		tampered.Component.Provider.Name = "mallory"
+		for _, sig := range tampered.Signatures {
+			err := VerifySignatureDigest(t.Context(), tampered, sig, logger)
+			require.ErrorIs(t, err, algorithms.ErrDigestMismatch)
+			assert.NotContains(t, err.Error(), v1RewriteHint)
+		}
+	})
+}
+
+func TestVerifySignatureDigest_NoHintWithoutOCMv1Pattern(t *testing.T) {
+	logger := slog.New(slog.DiscardHandler)
+
+	t.Run("single v2 signature with other algorithms than the reference digests, tampered", func(t *testing.T) {
+		d := descriptorWithReference(descruntime.Digest{HashAlgorithm: crypto.SHA256.String(), NormalisationAlgorithm: v4alpha3.Algorithm, Value: "aa"})
+		dg, err := GenerateDigest(t.Context(), d, logger, v4alpha3.Algorithm, crypto.SHA512.String())
+		require.NoError(t, err)
+		d.Signatures = []descruntime.Signature{{Name: "s", Digest: *dg}}
+		d.Component.Provider.Name = "mallory"
+
+		err = VerifySignatureDigest(t.Context(), d, d.Signatures[0], logger)
+		require.ErrorIs(t, err, algorithms.ErrDigestMismatch)
+		assert.NotContains(t, err.Error(), v1RewriteHint)
+	})
+
+	t.Run("signature with the reference digests' algorithms", func(t *testing.T) {
+		d := descriptorWithReference(descruntime.Digest{})
+		signLikeOCMv1(t, d, "s1", v4alpha3.Algorithm, crypto.SHA512.String(), "aa")
+		signLikeOCMv1(t, d, "s2", v4alpha3.Algorithm, crypto.SHA512.String(), "bb")
+
+		err := VerifySignatureDigest(t.Context(), d, d.Signatures[0], logger)
+		require.ErrorIs(t, err, algorithms.ErrDigestMismatch)
+		assert.NotContains(t, err.Error(), v1RewriteHint)
+	})
+
+	t.Run("normalisation differs only by the legacy v3 alias", func(t *testing.T) {
+		assert.True(t, sameDigestAlgorithms(
+			descruntime.Digest{NormalisationAlgorithm: LegacyNormalisationAlgo, HashAlgorithm: "sha256"},
+			descruntime.Digest{NormalisationAlgorithm: v4alpha2.Algorithm, HashAlgorithm: "SHA-256"},
+		))
+	})
+}
+
+func TestVerifySignatureDigest_OCMv1DifferentNormalisation(t *testing.T) {
+	logger := slog.New(slog.DiscardHandler)
+	d := descriptorWithReference(descruntime.Digest{})
+	signLikeOCMv1(t, d, "s1", v4alpha2.Algorithm, crypto.SHA256.String(), "aa")
+	signLikeOCMv1(t, d, "s2", v4alpha3.Algorithm, crypto.SHA256.String(), "bb")
+
+	require.NoError(t, VerifySignatureDigest(t.Context(), d, d.Signatures[1], logger))
+	err := VerifySignatureDigest(t.Context(), d, d.Signatures[0], logger)
+	require.ErrorIs(t, err, algorithms.ErrDigestMismatch)
+	assert.Contains(t, err.Error(), v1RewriteHint)
 }
