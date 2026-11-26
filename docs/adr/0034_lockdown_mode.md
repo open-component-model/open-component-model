@@ -338,8 +338,13 @@ deployment wiring.
 * The locked descriptor is the source of truth for locations. Import prints a location
   report: resource identity → `ref@digest`, plus the key reference for `spec.verify`.
 * Upgrade: import the new version, then bump the reference in the Flux objects.
-* What a `ResourceGraphDefinition` encoded (ordering, value wiring between charts)
-  becomes the user's Flux configuration.
+* The component's install recipe no longer travels with it. Today a component can ship
+  a `ResourceGraphDefinition` that decides which objects are created, in what order, and
+  with which values. In the sovereign scenario that is an `OCIRepository` and a
+  `HelmRelease` each for postgres and notes, postgres first, database settings passed to
+  both charts, all behind one `SovereignProduct` object. Without kro that recipe cannot
+  run, so the user writes those objects by hand: one `OCIRepository` and `HelmRelease`
+  per chart, `dependsOn` for the order, and the values each chart needs.
 * Trust chain in the cluster: Flux `OCIRepository.spec.verify` (importer key) →
   localized chart → pinned image digests → kubelet, with a Kyverno
   `ImageValidatingPolicy` on the importer key as backstop.
@@ -510,7 +515,8 @@ repository-context binding.
 * Producer signatures are dropped from every non-leaf and every localized component
   version. Provenance depends on keeping the transport archive.
 * A single importer key is a single point of compromise for the environment.
-* User-authored Flux wiring gives up the self-contained delivery that a
-  `ResourceGraphDefinition` provides.
+* The author's knowledge of how to install the product (objects, order, values) no
+  longer ships inside the component. Users write the Flux objects by hand and can get
+  them wrong.
 * New public surface: a transfer flag and configuration type, a verification path, a
   predefined label.

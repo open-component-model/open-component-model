@@ -87,8 +87,10 @@ image. No OCM component runs in the cluster.
   different content. It is an environment-bound derivative; transfer refuses it.
 - **Localization is convention-based.** It covers the common chart and manifest
   patterns and fails loudly on the rest. Explicit override rules exist for those.
-- **Deployment wiring moves to the user.** What a ResourceGraphDefinition encoded
-  becomes Flux configuration.
+- **You write the Flux objects yourself.** Today a component can ship its own install
+  recipe: which charts to install, in what order, with which values. That recipe needs
+  kro in the cluster, so in lockdown mode you write an `OCIRepository` and a
+  `HelmRelease` per chart, as for any other Helm chart.
 
 ## What it asks for
 
