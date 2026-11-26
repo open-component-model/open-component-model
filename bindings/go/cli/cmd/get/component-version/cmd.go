@@ -252,7 +252,7 @@ func GetComponentVersion(cmd *cobra.Command, args []string) error {
 		}
 		slog.DebugContext(cmd.Context(), "parsed repository reference", "reference", reference, "parsed", repository)
 
-		if err := processRepositoryReference(cmd, pluginManager, credentialGraph, config, params, repository); err != nil {
+		if err := processRepositoryReference(cmd, pluginManager, credentialGraph, config, params, repository, reference); err != nil {
 			// A repository reference that finds nothing, or gives up scanning, very
 			// likely meant a component reference missing its "//".
 			if hint := componentlister.ComponentHint(reference); hint != "" &&
@@ -363,14 +363,14 @@ func processComponentReference(cmd *cobra.Command,
 	}
 
 	// A pinned reference names exactly one component version, the only root.
-	if err := renderComponents(cmd, repoProvider, roots, pin, output, displayMode, recursive); err != nil {
+	if err := renderComponents(cmd, repoProvider, roots, pin, output, displayMode, recursive, nil); err != nil {
 		return fmt.Errorf("failed to render components: %w", err)
 	}
 
 	return nil
 }
 
-func renderComponents(cmd *cobra.Command, repoResolver resolvers.ComponentVersionRepositoryResolver, roots []string, pin *descruntime.Digest, format string, mode string, recursive int) error {
+func renderComponents(cmd *cobra.Command, repoResolver resolvers.ComponentVersionRepositoryResolver, roots []string, pin *descruntime.Digest, format string, mode string, recursive int, rootLabel []string) error {
 	pinned := make(map[string]*descruntime.Digest, len(roots))
 	if pin != nil {
 		for _, root := range roots {
@@ -387,7 +387,7 @@ func renderComponents(cmd *cobra.Command, repoResolver resolvers.ComponentVersio
 		Resolver:   &resAndDis,
 		Discoverer: &resAndDis,
 	})
-	renderer, err := buildRenderer(cmd.Context(), discoverer.Graph(), roots, format)
+	renderer, err := buildRenderer(cmd.Context(), discoverer.Graph(), roots, format, rootLabel)
 	if err != nil {
 		return fmt.Errorf("building renderer failed: %w", err)
 	}
@@ -424,7 +424,7 @@ func renderComponents(cmd *cobra.Command, repoResolver resolvers.ComponentVersio
 	return nil
 }
 
-func buildRenderer(ctx context.Context, dag *syncdag.SyncedDirectedAcyclicGraph[string], roots []string, format string) (render.Renderer, error) {
+func buildRenderer(ctx context.Context, dag *syncdag.SyncedDirectedAcyclicGraph[string], roots []string, format string, rootLabel []string) (render.Renderer, error) {
 	// Initialize renderer based on the requested output format.
 	switch format {
 	case render.OutputFormatJSON.String():
@@ -437,10 +437,11 @@ func buildRenderer(ctx context.Context, dag *syncdag.SyncedDirectedAcyclicGraph[
 		serializer := list.NewSerializer(list.WithVertexSerializer(list.VertexSerializerFunc[string](serializeVertexToDescriptor)), list.WithOutputFormat[string](render.OutputFormatYAML))
 		return list.New(ctx, dag, list.WithListSerializer(serializer), list.WithRoots(roots...)), nil
 	case render.OutputFormatTree.String():
-		return tree.New(ctx, dag, tree.WithRoots(roots...)), nil
+		return tree.New(ctx, dag, tree.WithRoots(roots...), tree.WithRootLabel[string](rootLabel...)), nil
 	case render.OutputFormatWideTree.String():
 		return tree.New(ctx, dag,
 			tree.WithRoots(roots...),
+			tree.WithRootLabel[string](rootLabel...),
 			tree.WithHeader[string](wideTreeHeader...),
 			tree.WithVertexSerializerFunc(serializeVertexToWideTreeRow),
 		), nil
@@ -627,6 +628,7 @@ func processRepositoryReference(cmd *cobra.Command,
 	config *genericv1.Config,
 	params Params,
 	repository runtime.Typed,
+	reference string,
 ) error {
 	ctx := cmd.Context()
 
@@ -709,7 +711,9 @@ func processRepositoryReference(cmd *cobra.Command,
 	tracker.Stop() // restore slog and clear the bar before rendering
 	slog.DebugContext(ctx, "components versions", "roots", roots)
 
-	if err := renderComponents(cmd, repoProvider, roots, nil, params.output, params.displayMode, params.recursive); err != nil {
+	// Show the source repository as the top row of the tree output.
+	rootLabel := []string{fmt.Sprintf("%s (%s)", reference, repository.GetType().Name)}
+	if err := renderComponents(cmd, repoProvider, roots, nil, params.output, params.displayMode, params.recursive, rootLabel); err != nil {
 		return fmt.Errorf("failed to render components recursively: %w", err)
 	}
 

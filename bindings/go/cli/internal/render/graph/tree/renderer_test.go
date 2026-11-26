@@ -433,3 +433,28 @@ func TestRenderOnceWithNestedRows(t *testing.T) {
 	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(writer)))
 	r.Equal(expected, buf.String())
 }
+
+func TestRenderOnceWithRootLabel(t *testing.T) {
+	ctx := t.Context()
+	r := require.New(t)
+
+	d := dag.NewDirectedAcyclicGraph[string]()
+	graph := syncdag.ToSyncedGraph(d)
+
+	buf := &bytes.Buffer{}
+	renderer := New(ctx, graph, WithRoots("A", "B"), WithRootLabel[string]("ghcr.io/org (OCIRepository)"))
+
+	r.NoError(d.AddVertex("A", withTestAttributes(syncdag.DiscoveryStateDiscovering, "comp-a", "v1.0.0", "acme")))
+	r.NoError(d.AddVertex("B", withTestAttributes(syncdag.DiscoveryStateDiscovering, "comp-b", "v2.0.0", "acme")))
+	r.NoError(d.AddVertex("C", withTestAttributes(syncdag.DiscoveryStateDiscovering, "comp-c", "v1.5.0", "other")))
+	r.NoError(d.AddEdge("A", "C"))
+
+	r.NoError(render.RenderOnce(ctx, renderer, render.WithWriter(buf)))
+	expected := ` NESTING   COMPONENT                    VERSION  PROVIDER  IDENTITY                   
+           ghcr.io/org (OCIRepository)                                                
+    ├─ ●   comp-a                       v1.0.0   acme      name=comp-a,version=v1.0.0 
+    │  └─  comp-c                       v1.5.0   other     name=comp-c,version=v1.5.0 
+    └─     comp-b                       v2.0.0   acme      name=comp-b,version=v2.0.0 
+`
+	r.Equal(expected, buf.String())
+}

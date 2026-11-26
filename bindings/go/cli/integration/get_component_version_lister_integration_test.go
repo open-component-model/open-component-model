@@ -163,6 +163,26 @@ components:
 		r.NotContains(printed, brokenComponent, "the unreadable component must be skipped")
 	})
 
+	t.Run("full tree output shows the repository as the first row", func(t *testing.T) {
+		r := require.New(t)
+		out := new(bytes.Buffer)
+		getCMD := cmd.New()
+		getCMD.SetOut(out)
+		getCMD.SetArgs([]string{
+			"get", "component-version", repoRef,
+			"--detail", "full", "--latest", "--output", "tree",
+			"--config", cfgPath,
+		})
+		r.NoError(getCMD.ExecuteContext(ctx))
+		printed := out.String()
+		// The repository row (with its type) is the first data row, above the components.
+		repoRow := strings.Index(printed, "(OCIRepository)")
+		compRow := strings.Index(printed, "ocm.software/app-a")
+		r.GreaterOrEqual(repoRow, 0, "repository row should be shown")
+		r.GreaterOrEqual(compRow, 0, "component should be shown")
+		r.Less(repoRow, compRow, "the repository row must come first")
+	})
+
 	t.Run("without credentials the command fails with an auth error, not an empty result", func(t *testing.T) {
 		r := require.New(t)
 		noCredsPath := filepath.Join(t.TempDir(), "nocreds.yaml")

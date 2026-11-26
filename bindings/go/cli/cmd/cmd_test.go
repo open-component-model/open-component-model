@@ -876,7 +876,19 @@ configurations:
 			r.NoError(err, "failed to list log entries")
 			r.NotEmpty(logEntries, "expected log entries to be present")
 
-			r.Equal(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected table output")
+			// The repository row (with its type) is the first data row, and the
+			// roots are drawn under it newest version first. The exact column
+			// widths depend on the temporary archive path, so assert structure
+			// rather than exact text.
+			got := strings.TrimSpace(result.String())
+			r.Contains(got, "(CommonTransportFormat)", "repository row should show the repository type")
+			rootB := strings.Index(got, "ocm.software/root-b")
+			rootA := strings.Index(got, "ocm.software/root-a")
+			r.GreaterOrEqual(rootB, 0, "root-b should be listed")
+			r.GreaterOrEqual(rootA, 0, "root-a should be listed")
+			r.Less(rootB, rootA, "root-b (0.0.2) should come before root-a (0.0.1)")
+			r.Contains(got, "0.0.2")
+			r.Contains(got, "0.0.1")
 		})
 	}
 }
