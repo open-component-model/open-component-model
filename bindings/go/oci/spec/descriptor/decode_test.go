@@ -203,3 +203,55 @@ func TestDescriptorFileFromTar_BrokenTar(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, r)
 }
+
+func TestSingleFileDecodeDescriptor_RejectsUnsupportedSchema(t *testing.T) {
+	// v3alpha1 ComponentVersion: decodes into an empty v2 descriptor and must be
+	// rejected with a schema-aware error, not returned as an empty descriptor.
+	v3alpha1 := []byte(`apiVersion: ocm.software/v3alpha1
+kind: ComponentVersion
+metadata:
+  name: ocm.software/modules
+  version: v0.6.0-test
+spec:
+  provider: ocm.software
+`)
+
+	tests := []struct {
+		name        string
+		input       []byte
+		errContains []string
+	}{
+		{
+			name:        "v3alpha1 component version",
+			input:       v3alpha1,
+			errContains: []string{"ocm.software/v3alpha1", "ComponentVersion"},
+		},
+		{
+			name:        "arbitrary yaml in neither format",
+			input:       []byte("foo: bar\nbaz: 1\n"),
+			errContains: []string{"no component name or version"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			desc, err := SingleFileDecodeDescriptor(bytes.NewReader(tt.input), MediaTypeComponentDescriptorYAML, DefaultDescriptorUnmarshalFunc)
+			require.Error(t, err)
+			require.ErrorIs(t, err, ErrUnsupportedDescriptorSchema)
+			for _, want := range tt.errContains {
+				assert.Contains(t, err.Error(), want)
+			}
+			assert.Nil(t, desc)
+		})
+	}
+}
+
+// A valid v2 descriptor still decodes through the default unmarshal func, which
+// also runs schema validation. A schema warning must not block a descriptor
+// that has a name and version.
+func TestSingleFileDecodeDescriptor_ValidV2ThroughDefaultUnmarshal(t *testing.T) {
+	desc, err := SingleFileDecodeDescriptor(bytes.NewReader(createV2DescriptorYAML()), MediaTypeComponentDescriptorYAML, DefaultDescriptorUnmarshalFunc)
+	require.NoError(t, err)
+	require.NotNil(t, desc)
+	assert.Equal(t, "github.com/ocm/test-component", desc.Component.Name)
+	assert.Equal(t, "1.0.0", desc.Component.Version)
+}
