@@ -94,7 +94,7 @@ EOF
 
 # --- the story -----------------------------------------------------------------
 note "opt in to the normalized layout"
-run "cat ocmconfig.yaml"
+run "cat ocmconfig.yaml | yq"
 
 note "publish the component: a local blob and an image in the source registry"
 run "ocm add componentversion --config ocmconfig.yaml --repository oci::$SOURCE --constructor component-constructor.yaml -o yaml"
