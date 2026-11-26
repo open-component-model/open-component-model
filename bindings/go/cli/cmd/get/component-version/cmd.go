@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/jedib0t/go-pretty/v6/table"
@@ -77,6 +78,10 @@ Two forms are accepted, each with sha256 or sha512:
   pinned to it must name the version.
 
 If no type is given, the repository path is interpreted based on introspection and heuristics.
+
+When the reference is a repository (no component), every component in the repository is listed. Components
+that cannot be read (for example missing pull permission or an unsupported descriptor schema) are reported
+and skipped; the command still succeeds unless no component can be read.
 `,
 			compref.DefaultPrefix,
 			strings.Join([]string{ociv1.Type, ctfv1.Type}, "|"),
@@ -586,6 +591,11 @@ func processRepositoryReference(cmd *cobra.Command,
 // getIDsForComponentsFromRepository gets versions for given component names and returns a list of component
 // identities. All components are located in the same repository, resolved through repoProvider, which
 // resolves credentials from the credential graph.
+//
+// Components that cannot be read are reported at ERROR level and skipped: a
+// repository catalog may list components the caller cannot pull, or components
+// in an unsupported descriptor schema. The function returns an error only when
+// no component could be read; otherwise it returns the identities it resolved.
 func getIDsForComponentsFromRepository(ctx context.Context,
 	repoProvider resolvers.ComponentVersionRepositoryResolver,
 	componentNames []string,
@@ -595,28 +605,69 @@ func getIDsForComponentsFromRepository(ctx context.Context,
 	constraint := params.constraint
 	latestOnly := params.latestOnly
 
-	// Every listed component lives in the same repository, so the resolver
-	// returns one credential-bound repository that serves them all.
-	repo, err := repoProvider.GetComponentVersionRepositoryForComponent(ctx, componentNames[0], "")
-	if err != nil {
-		return nil, fmt.Errorf("could not get component version repository for components in repository: %w", err)
-	}
-
-	descriptors, err := ocm.ListComponentVersions(ctx, repo,
-		ocm.WithComponentNames(componentNames),
-		ocm.WithSemverConstraint(constraint),
-		ocm.WithLatestOnly(latestOnly),
-		ocm.WithSort(),
-		ocm.WithVersioningRegistry(registry),
+	identities := make([]string, 0, len(componentNames))
+	var (
+		skipped  []string
+		failures []error
 	)
-	if err != nil {
-		return nil, fmt.Errorf("listing component versions failed: %w", err)
+
+	skip := func(name string, err error) {
+		slog.ErrorContext(ctx, "skipping component that could not be read", "component", name, "error", err)
+		skipped = append(skipped, name)
+		failures = append(failures, fmt.Errorf("%s: %w", name, err))
 	}
 
-	identities := make([]string, 0, len(descriptors))
-	for _, desc := range descriptors {
-		identities = append(identities, desc.Component.ToIdentity().String())
+	for _, name := range componentNames {
+		// The resolver caches by specification, so one lookup per component is
+		// cheap and is correct even if patterns sent names to different repositories.
+		repo, err := repoProvider.GetComponentVersionRepositoryForComponent(ctx, name, "")
+		if err != nil {
+			skip(name, err)
+			continue
+		}
+
+		descriptors, err := ocm.ListComponentVersions(ctx, repo,
+			ocm.WithComponentNames([]string{name}),
+			ocm.WithSemverConstraint(constraint),
+			ocm.WithLatestOnly(latestOnly),
+			ocm.WithSort(),
+			ocm.WithVersioningRegistry(registry),
+		)
+		if err != nil {
+			skip(name, err)
+			continue
+		}
+		if len(descriptors) == 0 {
+			skip(name, errors.New("no matching versions"))
+			continue
+		}
+
+		for _, desc := range descriptors {
+			// Defence in depth: a decoder that produced an empty descriptor would
+			// otherwise contribute an empty identity root that later breaks graph
+			// discovery. Skip and count it as a failed component.
+			id := desc.Component.ToIdentity()
+			if len(id) == 0 || id.String() == "" {
+				skip(name, errors.New("empty component identity"))
+				continue
+			}
+			identities = append(identities, id.String())
+		}
 	}
 
+	// Every component failed: surface the combined cause instead of an empty result.
+	if len(identities) == 0 {
+		if len(failures) > 0 {
+			return nil, fmt.Errorf("no components in the repository could be read: %w", errors.Join(failures...))
+		}
+		return nil, nil
+	}
+
+	if len(skipped) > 0 {
+		slog.WarnContext(ctx, fmt.Sprintf("skipped %d of %d components that could not be read", len(skipped), len(componentNames)), "skipped", skipped)
+	}
+
+	// Sort so the output order is deterministic regardless of per-component order.
+	slices.Sort(identities)
 	return identities, nil
 }

@@ -40,6 +40,10 @@ Two forms are accepted, each with sha256 or sha512:
 
 If no type is given, the repository path is interpreted based on introspection and heuristics.
 
+When the reference is a repository (no component), every component in the repository is listed. Components
+that cannot be read (for example missing pull permission or an unsupported descriptor schema) are reported
+and skipped; the command still succeeds unless no component can be read.
+
 
 ```
 ocm get component-version {reference} [flags]

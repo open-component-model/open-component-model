@@ -71,7 +71,9 @@ is specific to the source repository; a normalized digest also matches the trans
 When the version is omitted (and no OCI digest is given), all versions of the component are discovered and transferred.
 When the source is a repository reference (without a component), every component version
 the repository contains is transferred (component listing works for CTF archives and for
-OCI registries that implement the /v2/_catalog endpoint).
+OCI registries that implement the /v2/_catalog endpoint). If any listed component cannot
+be read, the transfer fails before it starts and names every unreadable component, so a
+mirror is never left incomplete.
 Use --constraint to restrict which versions are selected, and --latest to transfer
 only the newest matching version. Both apply per component.
 
@@ -590,10 +592,16 @@ func collectComponentIDs(
 	}
 
 	var componentIDs []transfer.ComponentID
+	var unreadable []error
 	for _, component := range components {
 		repo, err := repoProvider.GetComponentVersionRepositoryForComponent(ctx, component, "")
 		if err != nil {
-			return nil, fmt.Errorf("could not access ocm repository: %w", err)
+			if !repositorySource {
+				return nil, fmt.Errorf("could not access ocm repository: %w", err)
+			}
+			slog.ErrorContext(ctx, "component in source repository could not be read", "component", component, "error", err)
+			unreadable = append(unreadable, fmt.Errorf("%s: %w", component, err))
+			continue
 		}
 		versions, err := ocm.VersionsWithFiltering(ctx, component, repo, ocm.VersionOptions{
 			SemverConstraint: constraint,
@@ -601,12 +609,27 @@ func collectComponentIDs(
 			Registry:         registry,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("listing and filtering component versions failed: %w", err)
+			if !repositorySource {
+				return nil, fmt.Errorf("listing and filtering component versions failed: %w", err)
+			}
+			slog.ErrorContext(ctx, "component in source repository could not be read", "component", component, "error", err)
+			unreadable = append(unreadable, fmt.Errorf("%s: %w", component, err))
+			continue
 		}
 		for _, v := range versions {
 			componentIDs = append(componentIDs, transfer.ComponentID{Component: component, Version: v})
 		}
 	}
+
+	// A whole-registry transfer must not silently drop components. If any listed
+	// component could not be read, fail before transferring anything, naming
+	// every unreadable component, so the mirror is never left incomplete with a
+	// zero exit code.
+	if len(unreadable) > 0 {
+		return nil, fmt.Errorf("%d of %d components in the source repository could not be read; no transfer was started: %w",
+			len(unreadable), len(components), errors.Join(unreadable...))
+	}
+
 	if len(componentIDs) == 0 {
 		msg := "no versions found"
 		if !repositorySource {
