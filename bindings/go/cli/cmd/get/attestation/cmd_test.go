@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json/v2"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -18,16 +19,9 @@ import (
 // OpenVEX media type, inlined because the unopinionated model defines no type constants.
 const mediaTypeOpenVEX = "application/openvex+json"
 
-func findOrigin(t *testing.T, origins []jsonOrigin, name string) jsonOrigin {
-	t.Helper()
-	for _, o := range origins {
-		if o.Origin == name {
-			return o
-		}
-	}
-	require.Failf(t, "origin not found", "no origin %q in %v", name, origins)
-	return jsonOrigin{}
-}
+// discardLogger is the logger passed to renderAttestations in tests: the tree and table
+// views never log, and the content views only warn about skipped documents.
+func discardLogger() *slog.Logger { return slog.New(slog.DiscardHandler) }
 
 // TestRenderTree_RawStructure pins the raw provenance nesting: component -> origin ->
 // source -> {envelope media type -> predicate} | raw media type leaf, with the friendly
@@ -67,7 +61,7 @@ func TestRenderTree_RawStructure(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, renderAttestations(t.Context(), &buf, "tree", component{Ref: "comp:1.0.0", Groups: groups}, false))
+	require.NoError(t, renderAttestations(t.Context(), &buf, discardLogger(), "tree", component{Ref: "comp:1.0.0", Groups: groups}, false))
 	out := buf.String()
 
 	assert.Contains(t, out, "comp:1.0.0", "the component:version is the tree root")
@@ -92,58 +86,93 @@ func TestRenderTree_RawStructure(t *testing.T) {
 // TestRenderTree_EmptyPrintsLine pins that an empty result prints a single explanatory
 // line instead of a bare header (there is no header in the pure tree).
 func TestRenderTree_EmptyPrintsLine(t *testing.T) {
-	for _, format := range []string{"tree"} {
-		t.Run(format, func(t *testing.T) {
-			var buf bytes.Buffer
-			require.NoError(t, renderAttestations(t.Context(), &buf, format, component{Ref: "example.com/app:1.0.0"}, false))
-			assert.Equal(t, "no attestations found for example.com/app:1.0.0\n", buf.String())
-		})
-	}
+	var buf bytes.Buffer
+	require.NoError(t, renderAttestations(t.Context(), &buf, discardLogger(), "tree", component{Ref: "example.com/app:1.0.0"}, false))
+	assert.Equal(t, "no attestations found for example.com/app:1.0.0\n", buf.String())
 }
 
-// TestRenderAttestations_JSONNested pins that json mirrors the tree: nested origins ->
-// sources -> documents, where a bare document carries its raw fields and the friendly type
-// and an enveloped document carries its predicates.
-func TestRenderAttestations_JSONNested(t *testing.T) {
+// TestRenderContent_JSON pins that -o json emits the decoded inner documents: a bare
+// document unchanged and an in-toto statement reduced to its predicate, as a JSON array.
+func TestRenderContent_JSON(t *testing.T) {
+	vex := `{"@context":"https://openvex.dev/ns/v0.2.0","statements":[]}`
+	statement := `{"_type":"https://in-toto.io/Statement/v1","predicateType":"https://spdx.dev/Document","predicate":{"name":"the-sbom"}}`
 	groups := []cliattestation.Group{
 		{Label: "", Attestations: []repository.Attestation{
-			{Source: repository.AttestationSourceOCIReferrer, MediaType: mediaTypeOpenVEX, ArtifactType: mediaTypeOpenVEX, CreatedAt: "2026-11-24T15:04:40Z", ContentDigest: "sha256:vex", ID: "c1"},
+			{Source: repository.AttestationSourceOCIReferrer, MediaType: mediaTypeOpenVEX, ContentDigest: "sha256:vex", ID: "c1", Data: []byte(vex)},
 		}},
 		{Label: "name=image", Attestations: []repository.Attestation{
-			{Source: repository.AttestationSourceOCIIndex, PredicateType: repository.PredicateTypeSPDX, MediaType: mediaInTotoStatement, Platform: repository.Platform{OS: "linux", Architecture: "amd64"}, ContentDigest: "sha256:spdx", ID: "i1"},
+			{Source: repository.AttestationSourceOCIIndex, PredicateType: repository.PredicateTypeSPDX, MediaType: mediaInTotoStatement, ContentDigest: "sha256:spdx", ID: "i1", Data: []byte(statement)},
 		}},
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, renderAttestations(t.Context(), &buf, "json", component{Ref: "ref", Groups: groups}, false))
+	require.NoError(t, renderAttestations(t.Context(), &buf, discardLogger(), "json", component{Ref: "ref", Groups: groups}, false))
 
-	var out jsonTree
-	require.NoError(t, json.Unmarshal(buf.Bytes(), &out))
-	assert.Equal(t, "ref", out.Component)
-	require.Len(t, out.Origins, 2)
+	var docs []map[string]any
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &docs), "multiple documents are emitted as a json array")
+	require.Len(t, docs, 2)
 
-	comp := findOrigin(t, out.Origins, "(component-level)")
-	require.Len(t, comp.Sources, 1)
-	assert.Equal(t, "oci-referrer", comp.Sources[0].Source)
-	require.Len(t, comp.Sources[0].Documents, 1)
-	bare := comp.Sources[0].Documents[0]
-	assert.False(t, bare.Enveloped, "a bare document is not enveloped")
-	assert.Equal(t, "vex", bare.Type, "the friendly type travels in json")
-	assert.Equal(t, mediaTypeOpenVEX, bare.MediaType)
-	assert.Equal(t, "2026-11-24T15:04:40Z", bare.CreatedAt, "the creation timestamp travels in json")
-	assert.Empty(t, bare.Predicates, "a bare document has no predicates")
+	var sawVEX, sawPredicate bool
+	for _, d := range docs {
+		if d["@context"] == "https://openvex.dev/ns/v0.2.0" {
+			sawVEX = true
+		}
+		if d["name"] == "the-sbom" {
+			sawPredicate = true
+		}
+	}
+	assert.True(t, sawVEX, "the bare VEX document is emitted unchanged")
+	assert.True(t, sawPredicate, "the in-toto statement is reduced to its predicate")
+}
 
-	res := findOrigin(t, out.Origins, "name=image")
-	require.Len(t, res.Sources, 1)
-	assert.Equal(t, "oci-index", res.Sources[0].Source)
-	require.Len(t, res.Sources[0].Documents, 1)
-	env := res.Sources[0].Documents[0]
-	assert.True(t, env.Enveloped, "an in-toto statement is enveloped")
-	assert.Equal(t, mediaInTotoStatement, env.MediaType, "the envelope is named by its media type")
-	require.Len(t, env.Predicates, 1)
-	assert.Equal(t, repository.PredicateTypeSPDX, env.Predicates[0].PredicateType)
-	assert.Equal(t, "sbom", env.Predicates[0].Type)
-	assert.Equal(t, "linux/amd64", env.Predicates[0].Platform)
+// TestRenderContent_JSONSingleIsBareObject pins that exactly one matching document is a bare
+// object, not a one-element array (the shape --content-digest produces).
+func TestRenderContent_JSONSingleIsBareObject(t *testing.T) {
+	vex := `{"@context":"https://openvex.dev/ns/v0.2.0"}`
+	groups := []cliattestation.Group{
+		{Label: "", Attestations: []repository.Attestation{
+			{Source: repository.AttestationSourceOCIReferrer, MediaType: mediaTypeOpenVEX, ContentDigest: "sha256:vex", ID: "c1", Data: []byte(vex)},
+		}},
+	}
+	var buf bytes.Buffer
+	require.NoError(t, renderAttestations(t.Context(), &buf, discardLogger(), "json", component{Ref: "ref", Groups: groups}, false))
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &doc), "a single document is a bare object")
+	assert.Equal(t, "https://openvex.dev/ns/v0.2.0", doc["@context"])
+}
+
+// TestRenderContent_YAMLStream pins that -o yaml writes a document stream separated by the
+// yaml document marker.
+func TestRenderContent_YAMLStream(t *testing.T) {
+	groups := []cliattestation.Group{
+		{Label: "", Attestations: []repository.Attestation{
+			{Source: repository.AttestationSourceOCIReferrer, MediaType: mediaTypeOpenVEX, ContentDigest: "sha256:a", ID: "c1", Data: []byte(`{"doc":"a"}`)},
+			{Source: repository.AttestationSourceOCIReferrer, MediaType: mediaTypeOpenVEX, ContentDigest: "sha256:b", ID: "c2", Data: []byte(`{"doc":"b"}`)},
+		}},
+	}
+	var buf bytes.Buffer
+	require.NoError(t, renderAttestations(t.Context(), &buf, discardLogger(), "yaml", component{Ref: "ref", Groups: groups}, false))
+	out := buf.String()
+	assert.Contains(t, out, "doc: a")
+	assert.Contains(t, out, "doc: b")
+	assert.Contains(t, out, "---", "multiple documents are separated by a yaml document marker")
+}
+
+// TestRenderContent_SkipsUndecodable pins that a document with no fetched bytes or with
+// non-JSON bytes is skipped rather than corrupting the machine-readable output.
+func TestRenderContent_SkipsUndecodable(t *testing.T) {
+	groups := []cliattestation.Group{
+		{Label: "", Attestations: []repository.Attestation{
+			{Source: repository.AttestationSourceOCIReferrer, ContentDigest: "sha256:ok", ID: "c1", Data: []byte(`{"doc":"ok"}`)},
+			{Source: repository.AttestationSourceOCIReferrer, ContentDigest: "sha256:bin", ID: "c2", Data: []byte("\x00binary-signature")},
+			{Source: repository.AttestationSourceOCIReferrer, ContentDigest: "sha256:nil", ID: "c3"}, // no Data fetched
+		}},
+	}
+	var buf bytes.Buffer
+	require.NoError(t, renderAttestations(t.Context(), &buf, discardLogger(), "json", component{Ref: "ref", Groups: groups}, false))
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &doc), "only the one decodable document remains, as a bare object")
+	assert.Equal(t, "ok", doc["doc"])
 }
 
 func TestRenderTable_RawColumnsAndFullDigest(t *testing.T) {
@@ -154,7 +183,7 @@ func TestRenderTable_RawColumnsAndFullDigest(t *testing.T) {
 		}},
 	}
 	var buf bytes.Buffer
-	require.NoError(t, renderAttestations(t.Context(), &buf, "table", component{Ref: "ref", Groups: groups}, false))
+	require.NoError(t, renderAttestations(t.Context(), &buf, discardLogger(), "table", component{Ref: "ref", Groups: groups}, false))
 	out := buf.String()
 	assert.Contains(t, out, "MEDIA-TYPE", "the table carries the raw media type column")
 	assert.Contains(t, out, "PREDICATE-TYPE", "the table carries the raw predicate type column")
@@ -184,7 +213,7 @@ func TestRenderAttestations_RecursiveAddsComponentColumn(t *testing.T) {
 		},
 	}
 	var buf bytes.Buffer
-	require.NoError(t, renderAttestations(t.Context(), &buf, "table", root, false))
+	require.NoError(t, renderAttestations(t.Context(), &buf, discardLogger(), "table", root, false))
 	out := buf.String()
 	assert.Contains(t, out, "COMPONENT", "more than one component adds the COMPONENT column")
 	assert.Contains(t, out, "root:1.0.0", "the root component is shown")
@@ -209,7 +238,7 @@ func TestRenderTree_ComponentLevelLabelAndRecursion(t *testing.T) {
 		},
 	}
 	var buf bytes.Buffer
-	require.NoError(t, renderAttestations(t.Context(), &buf, "tree", root, false))
+	require.NoError(t, renderAttestations(t.Context(), &buf, discardLogger(), "tree", root, false))
 	out := buf.String()
 	assert.Contains(t, out, "root:1.0.0", "the root component:version is the tree root")
 	assert.Contains(t, out, "child:2.0.0", "the referenced component nests under the root")
@@ -267,7 +296,7 @@ func TestContentDigest_DuplicatesTagged(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, renderAttestations(t.Context(), &buf, "tree", component{Ref: "ref", Groups: groups}, false))
+	require.NoError(t, renderAttestations(t.Context(), &buf, discardLogger(), "tree", component{Ref: "ref", Groups: groups}, false))
 	out := buf.String()
 
 	assert.Equal(t, 2, strings.Count(out, "[a] "+dup), "both copies of the duplicate carry the same letter tag")
@@ -277,8 +306,7 @@ func TestContentDigest_DuplicatesTagged(t *testing.T) {
 }
 
 // TestRenderAttestations_FailedOriginNamesImage pins that an origin whose discovery failed
-// stays visible, names the image reference that failed, and reports the reason across tree,
-// table and json.
+// stays visible across the tree and table views, naming the image reference and the reason.
 func TestRenderAttestations_FailedOriginNamesImage(t *testing.T) {
 	const ref = "ghcr.io/acme/img@sha256:bad"
 	groups := []cliattestation.Group{
@@ -286,22 +314,14 @@ func TestRenderAttestations_FailedOriginNamesImage(t *testing.T) {
 	}
 
 	var tree bytes.Buffer
-	require.NoError(t, renderAttestations(t.Context(), &tree, "tree", component{Ref: "ref", Groups: groups}, false))
+	require.NoError(t, renderAttestations(t.Context(), &tree, discardLogger(), "tree", component{Ref: "ref", Groups: groups}, false))
 	assert.Contains(t, tree.String(), "attestation discovery failed for "+ref, "the tree names the failing image reference")
 	assert.Contains(t, tree.String(), "not found", "the concise reason is shown")
 
 	var tbl bytes.Buffer
-	require.NoError(t, renderAttestations(t.Context(), &tbl, "table", component{Ref: "ref", Groups: groups}, false))
+	require.NoError(t, renderAttestations(t.Context(), &tbl, discardLogger(), "table", component{Ref: "ref", Groups: groups}, false))
 	assert.Contains(t, tbl.String(), "name=image", "the failed resource stays visible in the table")
 	assert.Contains(t, tbl.String(), "not found", "the table shows the reason")
-
-	var js bytes.Buffer
-	require.NoError(t, renderAttestations(t.Context(), &js, "json", component{Ref: "ref", Groups: groups}, false))
-	var out jsonTree
-	require.NoError(t, json.Unmarshal(js.Bytes(), &out))
-	o := findOrigin(t, out.Origins, "name=image")
-	assert.Equal(t, ref, o.Reference, "json carries the failing image reference")
-	assert.Contains(t, o.Error, "not found", "json carries the error")
 }
 
 // TestFilterTree_ContentDigest pins that the content-digest filter keeps every copy of the

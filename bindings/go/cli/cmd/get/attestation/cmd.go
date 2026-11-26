@@ -18,6 +18,7 @@ import (
 	"golang.org/x/term"
 	sigyaml "sigs.k8s.io/yaml"
 
+	ocmblob "ocm.software/open-component-model/bindings/go/blob"
 	"ocm.software/open-component-model/bindings/go/cli/cmd/download/shared"
 	cliattestation "ocm.software/open-component-model/bindings/go/cli/internal/attestation"
 	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
@@ -72,8 +73,11 @@ Per resource, attestations are merged from every source:
   2. OCI referrers attached to the resource's artifact (cosign, vexctl, oras, syft, notary, ...).
   3. BuildKit in-toto attestations embedded in the artifact's image index.
 
-This is EXPERIMENTAL and read-only. It lists what exists from metadata only: it does not
-download the documents or verify any signature.
+This is EXPERIMENTAL and read-only. The table and tree views list what exists from metadata
+only, without downloading documents or verifying signatures. The json and yaml views instead
+emit the documents themselves: each matching attestation is fetched and reduced to its decoded
+inner payload (the real SBOM, VEX, provenance or other predicate, unwrapped from any in-toto
+statement or Sigstore bundle), ready to pipe into another tool.
 
 The tree nests the raw structure: the component or a resource, then the discovery source
 (ocm-local, oci-referrer, oci-index), then each document. An enveloped document (an in-toto
@@ -83,6 +87,10 @@ also carries a friendly TYPE tag (sbom, vex, signature, provenance, sarif) and t
 the document bytes. Documents with identical bytes attached in more than one place share that
 digest and are tagged with the same letter (and a matching grey tone when colour is on), so
 duplicates are easy to spot.
+
+json emits an array of the decoded payloads (a bare object when a single document matches,
+for example under --content-digest); yaml emits a stream separated by "---". Byte-identical
+documents are emitted once; a document whose bytes are not JSON (a binary signature) is skipped.
 
 Use --type to filter: it matches a substring of any raw type signal, plus friendly aliases
 (for example "sbom" matches spdx and cyclonedx, "signature" matches cosign and notation).`,
@@ -95,14 +103,14 @@ Use --type to filter: it matches a substring of any raw type signal, plus friend
   # Only the "image" resource
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --identity name=image
 
-  # One specific document, by its content digest
-  ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --content-digest sha256:abc123...
+  # Print one document, by its content digest (the decoded payload as json)
+  ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --content-digest sha256:abc123... -o json
 
   # Follow componentReferences and list their attestations too
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --recursive
 
-  # Only SBOMs and VEX, as JSON
-  ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --type sbom --type vex -o json`,
+  # Every SBOM and VEX document, as a yaml stream
+  ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --type sbom --type vex -o yaml`,
 		RunE:              GetAttestations,
 		DisableAutoGenTag: true,
 	}
@@ -190,6 +198,10 @@ func GetAttestations(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting component version failed: %w", err)
 	}
 
+	// For json and yaml the command emits the inner document of each attestation, so it
+	// must fetch the document bytes; the tree and table views stay metadata-only.
+	includeContent := format == render.OutputFormatJSON.String() || format == render.OutputFormatYAML.String()
+
 	// walk resolves a component to its attestation groups and, when recursing, descends
 	// into its componentReferences. A component already visited is emitted as a reference
 	// marker (Repeated) without re-discovery, so diamonds and cycles terminate.
@@ -213,6 +225,12 @@ func GetAttestations(cmd *cobra.Command, args []string) error {
 		}
 		if cd, ok := repo.(repository.ComponentAttestationDiscoverer); ok {
 			req.DiscoverComponent = cd
+		}
+		if includeContent {
+			req.IncludeData = true
+			req.Download = func(ctx context.Context, res *descriptor.Resource, _ runtime.Identity) (ocmblob.ReadOnlyBlob, error) {
+				return shared.DownloadResourceData(ctx, pluginManager, credentialGraph, desc, repo, res)
+			}
 		}
 		groups, err := discoverGroups(ctx, req, desc, identityStr, concurrency)
 		if err != nil {
@@ -249,7 +267,7 @@ func GetAttestations(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	root, _ = filterTree(root, typeFilters, contentDigest)
-	return renderAttestations(ctx, cmd.OutOrStdout(), format, root, colorEnabled(cmd.OutOrStdout(), noColor))
+	return renderAttestations(ctx, cmd.OutOrStdout(), logger, format, root, colorEnabled(cmd.OutOrStdout(), noColor))
 }
 
 // discoverGroups resolves the selection to resource-labelled groups: --identity lists one
@@ -388,26 +406,14 @@ type row struct {
 	Error         string
 }
 
-func renderAttestations(ctx context.Context, w io.Writer, format string, root component, color bool) error {
+func renderAttestations(ctx context.Context, w io.Writer, logger *slog.Logger, format string, root component, color bool) error {
 	p := painter{on: color}
 	marks := markDuplicates(root)
 	switch format {
 	case render.OutputFormatTree.String():
 		return renderTree(ctx, w, root, p, marks)
-	case render.OutputFormatJSON.String():
-		data, err := json.Marshal(jsonComponent(root), runtime.JSONOptions, jsontext.WithIndent("  "))
-		if err != nil {
-			return fmt.Errorf("marshalling attestations to json failed: %w", err)
-		}
-		_, err = fmt.Fprintln(w, string(data))
-		return err
-	case render.OutputFormatYAML.String():
-		data, err := sigyaml.Marshal(jsonComponent(root))
-		if err != nil {
-			return fmt.Errorf("marshalling attestations to yaml failed: %w", err)
-		}
-		_, err = w.Write(data)
-		return err
+	case render.OutputFormatJSON.String(), render.OutputFormatYAML.String():
+		return renderContent(w, logger, root, format)
 	}
 
 	// Show the COMPONENT column only when more than one component carries attestations,
@@ -428,6 +434,85 @@ func renderAttestations(ctx context.Context, w io.Writer, format string, root co
 		)
 	})
 	return renderTable(w, rows, showComponent, p, marks)
+}
+
+// renderContent emits the decoded inner documents of every attestation in the filtered
+// tree: the real SBOM, VEX, provenance and other predicates, stripped of the envelope they
+// were published in. Byte-identical documents are emitted once. An attestation whose bytes
+// could not be fetched, or carry no extractable JSON payload (a binary signature), is
+// skipped with a warning so it never corrupts the machine-readable output.
+func renderContent(w io.Writer, logger *slog.Logger, root component, format string) error {
+	withData := make([]repository.Attestation, 0)
+	for _, a := range collectAttestations(root) {
+		if a.Data == nil {
+			logger.Warn("attestation document could not be fetched, skipping",
+				slog.String("type", a.Type()), slog.String("id", a.ID), slog.String("source", string(a.Source)))
+			continue
+		}
+		withData = append(withData, a)
+	}
+	unique, _ := cliattestation.Dedup(withData)
+
+	payloads := make([]jsontext.Value, 0, len(unique))
+	for _, a := range unique {
+		payload, ok := cliattestation.Payload(a)
+		if !ok {
+			logger.Warn("attestation document carries no extractable JSON payload, skipping",
+				slog.String("type", a.Type()), slog.String("id", a.ID), slog.String("source", string(a.Source)))
+			continue
+		}
+		payloads = append(payloads, payload)
+	}
+	return writePayloads(w, payloads, format)
+}
+
+// collectAttestations flattens every attestation across the component tree depth-first.
+// Failed origins carry no attestations, so they contribute nothing.
+func collectAttestations(c component) []repository.Attestation {
+	var out []repository.Attestation
+	for _, g := range c.Groups {
+		out = append(out, g.Attestations...)
+	}
+	for _, child := range c.Children {
+		out = append(out, collectAttestations(child)...)
+	}
+	return out
+}
+
+// writePayloads serializes the decoded documents. JSON writes an indented array, collapsing
+// to a bare object for a single document and to [] for none. YAML writes a stream of
+// documents separated by "---", one re-serialized document each and nothing for none.
+func writePayloads(w io.Writer, payloads []jsontext.Value, format string) error {
+	switch format {
+	case render.OutputFormatJSON.String():
+		var value any = payloads
+		if len(payloads) == 1 {
+			value = payloads[0]
+		}
+		data, err := json.Marshal(value, runtime.JSONOptions, jsontext.WithIndent("  "))
+		if err != nil {
+			return fmt.Errorf("marshalling attestation documents to json failed: %w", err)
+		}
+		_, err = fmt.Fprintln(w, string(data))
+		return err
+	case render.OutputFormatYAML.String():
+		for i, payload := range payloads {
+			if i > 0 {
+				if _, err := fmt.Fprintln(w, "---"); err != nil {
+					return err
+				}
+			}
+			doc, err := sigyaml.JSONToYAML(payload)
+			if err != nil {
+				return fmt.Errorf("marshalling attestation document to yaml failed: %w", err)
+			}
+			if _, err := w.Write(doc); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return fmt.Errorf("unsupported content format %q", format)
 }
 
 // componentsWithGroups counts the components in the tree that carry at least one
@@ -721,112 +806,6 @@ func compareSourceChild(a, b sourceChild) int {
 		cmp.Compare(a.mediaType, b.mediaType),
 		cmp.Compare(a.raw.ID, b.raw.ID),
 	)
-}
-
-// jsonTree mirrors the tree for json/yaml: a component over its origins, each origin over
-// its sources, each source over its documents. A document is either bare (its raw fields)
-// or an envelope (enveloped true, named by its media type, with its predicates). Nothing
-// aggregated is emitted beyond the one friendly "type" tag the view also shows.
-type jsonTree struct {
-	Component string       `json:"component"`
-	Repeated  bool         `json:"repeated,omitzero"`
-	Origins   []jsonOrigin `json:"origins,omitempty"`
-	Children  []jsonTree   `json:"children,omitempty"`
-}
-
-type jsonOrigin struct {
-	Origin    string       `json:"origin"`
-	Reference string       `json:"reference,omitempty"`
-	Error     string       `json:"error,omitempty"`
-	Sources   []jsonSource `json:"sources,omitempty"`
-}
-
-type jsonSource struct {
-	Source    string    `json:"source"`
-	Documents []jsonDoc `json:"documents"`
-}
-
-type jsonDoc struct {
-	Enveloped     bool              `json:"enveloped,omitzero"`
-	Type          string            `json:"type,omitempty"`
-	MediaType     string            `json:"mediaType,omitempty"`
-	ArtifactType  string            `json:"artifactType,omitempty"`
-	PredicateType string            `json:"predicateType,omitempty"`
-	Platform      string            `json:"platform,omitempty"`
-	Subject       string            `json:"subject,omitempty"`
-	ContentDigest string            `json:"contentDigest,omitempty"`
-	CreatedAt     string            `json:"createdAt,omitempty"`
-	Annotations   map[string]string `json:"annotations,omitempty"`
-	ID            string            `json:"id,omitempty"`
-	Predicates    []jsonDoc         `json:"predicates,omitempty"`
-}
-
-// jsonComponent builds the nested machine model from the component tree, using the same
-// groupSources partitioning as the tree view.
-func jsonComponent(c component) jsonTree {
-	out := jsonTree{Component: c.Ref, Repeated: c.Repeated}
-	for _, g := range c.Groups {
-		out.Origins = append(out.Origins, jsonOriginOf(g))
-	}
-	for _, child := range c.Children {
-		out.Children = append(out.Children, jsonComponent(child))
-	}
-	return out
-}
-
-func jsonOriginOf(g cliattestation.Group) jsonOrigin {
-	o := jsonOrigin{Origin: treeGroupLabel(g.Label), Reference: g.Reference}
-	if g.Err != nil {
-		o.Error = g.Err.Error()
-		return o
-	}
-	for _, sb := range groupSources(g.Attestations) {
-		s := jsonSource{Source: sb.source}
-		for _, ch := range sb.children {
-			if ch.isRaw {
-				s.Documents = append(s.Documents, rawDoc(ch.raw))
-				continue
-			}
-			doc := jsonDoc{Enveloped: true, MediaType: ch.mediaType}
-			for _, a := range ch.predicates {
-				doc.Predicates = append(doc.Predicates, predicateDoc(a))
-			}
-			s.Documents = append(s.Documents, doc)
-		}
-		o.Sources = append(o.Sources, s)
-	}
-	return o
-}
-
-func rawDoc(a repository.Attestation) jsonDoc {
-	category, _ := cliattestation.Classify(a)
-	return jsonDoc{
-		Type:          category,
-		MediaType:     a.MediaType,
-		ArtifactType:  a.ArtifactType,
-		PredicateType: a.PredicateType,
-		Platform:      a.Platform.String(),
-		Subject:       a.Digest,
-		ContentDigest: a.ContentDigest,
-		CreatedAt:     a.CreatedAt,
-		Annotations:   a.Annotations,
-		ID:            a.ID,
-	}
-}
-
-func predicateDoc(a repository.Attestation) jsonDoc {
-	category, _ := cliattestation.Classify(a)
-	return jsonDoc{
-		Type:          category,
-		ArtifactType:  a.ArtifactType,
-		PredicateType: a.PredicateType,
-		Platform:      a.Platform.String(),
-		Subject:       a.Digest,
-		ContentDigest: a.ContentDigest,
-		CreatedAt:     a.CreatedAt,
-		Annotations:   a.Annotations,
-		ID:            a.ID,
-	}
 }
 
 // dupMark is the visible marker a content digest gets when it appears more than once: a

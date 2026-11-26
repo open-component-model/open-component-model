@@ -31,8 +31,11 @@ Per resource, attestations are merged from every source:
   2. OCI referrers attached to the resource's artifact (cosign, vexctl, oras, syft, notary, ...).
   3. BuildKit in-toto attestations embedded in the artifact's image index.
 
-This is EXPERIMENTAL and read-only. It lists what exists from metadata only: it does not
-download the documents or verify any signature.
+This is EXPERIMENTAL and read-only. The table and tree views list what exists from metadata
+only, without downloading documents or verifying signatures. The json and yaml views instead
+emit the documents themselves: each matching attestation is fetched and reduced to its decoded
+inner payload (the real SBOM, VEX, provenance or other predicate, unwrapped from any in-toto
+statement or Sigstore bundle), ready to pipe into another tool.
 
 The tree nests the raw structure: the component or a resource, then the discovery source
 (ocm-local, oci-referrer, oci-index), then each document. An enveloped document (an in-toto
@@ -42,6 +45,10 @@ also carries a friendly TYPE tag (sbom, vex, signature, provenance, sarif) and t
 the document bytes. Documents with identical bytes attached in more than one place share that
 digest and are tagged with the same letter (and a matching grey tone when colour is on), so
 duplicates are easy to spot.
+
+json emits an array of the decoded payloads (a bare object when a single document matches,
+for example under --content-digest); yaml emits a stream separated by "---". Byte-identical
+documents are emitted once; a document whose bytes are not JSON (a binary signature) is skipped.
 
 Use --type to filter: it matches a substring of any raw type signal, plus friendly aliases
 (for example "sbom" matches spdx and cyclonedx, "signature" matches cosign and notation).
@@ -62,14 +69,14 @@ ocm get attestation {reference} [flags]
   # Only the "image" resource
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --identity name=image
 
-  # One specific document, by its content digest
-  ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --content-digest sha256:abc123...
+  # Print one document, by its content digest (the decoded payload as json)
+  ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --content-digest sha256:abc123... -o json
 
   # Follow componentReferences and list their attestations too
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --recursive
 
-  # Only SBOMs and VEX, as JSON
-  ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --type sbom --type vex -o json
+  # Every SBOM and VEX document, as a yaml stream
+  ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --type sbom --type vex -o yaml
 ```
 
 ### Options
