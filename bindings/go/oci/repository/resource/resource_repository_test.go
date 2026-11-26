@@ -281,7 +281,7 @@ func TestNewResourceRepositoryHTTPConfig_InsecureSkipVerify(t *testing.T) {
 	}
 }
 
-func TestAccessToBaseURL(t *testing.T) {
+func TestAccessToReference(t *testing.T) {
 	for _, accessType := range []string{v1.OCIImageType, v1.OCIImageLayerType} {
 		t.Run(accessType, func(t *testing.T) {
 			for _, tt := range []struct {
@@ -309,14 +309,14 @@ func TestAccessToBaseURL(t *testing.T) {
 					} else {
 						access = &v1.OCIImageLayer{Reference: tt.reference}
 					}
-					baseURL, err := accessToBaseURL(access)
+					ref, err := accessToReference(access)
 					if wantErr != "" {
 						r.ErrorContains(err, wantErr)
 						r.ErrorContains(err, `field "ref"`)
 						return
 					}
 					r.NoError(err)
-					r.Equal(tt.wantURL, baseURL)
+					r.Equal(tt.wantURL, ref.RegistryWithScheme())
 				})
 			}
 		})

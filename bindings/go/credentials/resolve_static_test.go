@@ -59,32 +59,6 @@ func TestStaticCredentialsResolver(t *testing.T) {
 		r.Nil(creds)
 	})
 
-	t.Run("resolve by matching identity", func(t *testing.T) {
-		// The stored entry has no path, so it matches a lookup for any repository on the host.
-		identity := runtime.Identity{
-			"type":     "OCIRegistry",
-			"hostname": "docker.io",
-			"path":     "library/nginx",
-		}
-		creds, err := resolveMap(t, identity)
-		r.NoError(err)
-		r.Equal("testuser", creds["username"])
-	})
-
-	t.Run("resolve by path glob", func(t *testing.T) {
-		pathResolver := credentials.NewStaticCredentialsResolver(map[string]map[string]string{
-			"hostname=ghcr.io,path=org1/*,type=OCIRegistry": {"username": "user1"},
-			"hostname=ghcr.io,path=org2/*,type=OCIRegistry": {"username": "user2"},
-		})
-		for path, want := range map[string]string{"org1/app": "user1", "org2/app": "user2"} {
-			typed, err := pathResolver.Resolve(t.Context(), runtime.Identity{"type": "OCIRegistry", "hostname": "ghcr.io", "path": path})
-			r.NoError(err)
-			r.Equal(want, typed.(*v1.DirectCredentials).Properties["username"])
-		}
-		_, err := pathResolver.Resolve(t.Context(), runtime.Identity{"type": "OCIRegistry", "hostname": "ghcr.io", "path": "org3/app"})
-		r.ErrorIs(err, credentials.ErrNotFound)
-	})
-
 	t.Run("concurrent access", func(t *testing.T) {
 		var wg sync.WaitGroup
 		for i := 0; i < 1000; i++ {

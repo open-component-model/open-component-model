@@ -20,6 +20,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	credconfig "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
+	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	descriptorv2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
@@ -95,10 +97,16 @@ type registryCreds struct {
 	password string
 }
 
-// newCredResolver creates a credentials.StaticCredentialsResolver for one or more OCI registries.
-func newCredResolver(t *testing.T, registries ...registryCreds) *credentials.StaticCredentialsResolver {
+// newCredResolver creates a credential graph for one or more OCI registries. Each consumer is
+// scoped to the registry only, so it also matches lookups for any repository path on it.
+func newCredResolver(t *testing.T, registries ...registryCreds) credentials.Resolver {
 	t.Helper()
-	credMap := make(map[string]map[string]string)
+	return newCredGraph(t, registryConsumers(t, registries...)...)
+}
+
+func registryConsumers(t *testing.T, registries ...registryCreds) []credconfig.Consumer {
+	t.Helper()
+	consumers := make([]credconfig.Consumer, 0, len(registries))
 	for _, reg := range registries {
 		repo := &ocirepospec.Repository{
 			Type:    runtime.Type{Name: ocirepospec.Type, Version: "v1"},
@@ -106,12 +114,29 @@ func newCredResolver(t *testing.T, registries ...registryCreds) *credentials.Sta
 		}
 		identity, err := credidentity.IdentityFromOCIRepository(repo)
 		require.NoError(t, err)
-		credMap[identity.String()] = map[string]string{
+		consumers = append(consumers, directConsumer(identity, map[string]string{
 			"username": reg.username,
 			"password": reg.password,
-		}
+		}))
 	}
-	return credentials.NewStaticCredentialsResolver(credMap)
+	return consumers
+}
+
+func directConsumer(identity runtime.Identity, properties map[string]string) credconfig.Consumer {
+	return credconfig.Consumer{
+		Identities: []runtime.Identity{identity},
+		Credentials: []runtime.Typed{&credconfigv1.DirectCredentials{
+			Type:       runtime.NewVersionedType(credconfigv1.DirectCredentialsType, credconfigv1.Version),
+			Properties: properties,
+		}},
+	}
+}
+
+func newCredGraph(t *testing.T, consumers ...credconfig.Consumer) credentials.Resolver {
+	t.Helper()
+	graph, err := credentials.ToGraph(t.Context(), &credconfig.Config{Consumers: consumers}, credentials.Options{})
+	require.NoError(t, err)
+	return graph
 }
 
 // createCTFRepository creates a CTF-backed OCI repository at the given path.

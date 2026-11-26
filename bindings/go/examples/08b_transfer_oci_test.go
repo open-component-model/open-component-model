@@ -1,17 +1,23 @@
 package examples
 
 import (
+	"encoding/json/v2"
 	"fmt"
+	"maps"
 	"net"
-	"net/http"
-	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
-	"github.com/google/go-containerregistry/pkg/authn"
-	"github.com/google/go-containerregistry/pkg/crane"
-	"github.com/google/go-containerregistry/pkg/registry"
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3"
+	"github.com/oras-project/oras-go/v3/registry/remote"
+	"github.com/oras-project/oras-go/v3/registry/remote/auth"
+	orascreds "github.com/oras-project/oras-go/v3/registry/remote/credentials"
 	"github.com/stretchr/testify/require"
+	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
+	"golang.org/x/crypto/bcrypt"
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
@@ -28,25 +34,76 @@ import (
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 
-// newRegistry starts an in-memory registry and returns its host:port. users maps a
-// repository prefix (e.g. "project1") to the basic-auth user and password it requires.
-func newRegistry(t *testing.T, users map[string]authn.Basic) string {
+const zotImage = "ghcr.io/project-zot/zot:v2.1.23"
+
+// startZot starts a zot registry and returns its host:port. users maps a repository
+// prefix (e.g. "project1") to the only basic-auth user allowed to access repositories
+// below it. Without users the registry accepts anonymous access.
+func startZot(t *testing.T, users map[string]orascreds.Credential) string {
 	t.Helper()
-	reg := registry.New()
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		for prefix, want := range users {
-			if strings.HasPrefix(r.URL.Path, "/v2/"+prefix+"/") {
-				if u, p, ok := r.BasicAuth(); !ok || u != want.Username || p != want.Password {
-					w.Header().Set("WWW-Authenticate", `Basic realm="registry"`)
-					http.Error(w, "unauthorized", http.StatusUnauthorized)
-					return
-				}
-			}
+	r := require.New(t)
+
+	httpConfig := map[string]any{"address": "0.0.0.0", "port": "5000"}
+	var files []testcontainers.ContainerFile
+	if len(users) > 0 {
+		var htpasswd strings.Builder
+		repositories := map[string]any{}
+		for _, prefix := range slices.Sorted(maps.Keys(users)) {
+			user := users[prefix]
+			hash, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+			r.NoError(err)
+			fmt.Fprintf(&htpasswd, "%s:%s\n", user.Username, hash)
+			repositories[prefix+"/**"] = map[string]any{"policies": []any{map[string]any{
+				"users":   []string{user.Username},
+				"actions": []string{"read", "create", "update", "delete"},
+			}}}
 		}
-		reg.ServeHTTP(w, r)
-	}))
-	t.Cleanup(server.Close)
-	return server.Listener.Addr().String()
+		httpConfig["auth"] = map[string]any{"htpasswd": map[string]any{"path": "/etc/zot/htpasswd"}}
+		httpConfig["accessControl"] = map[string]any{"repositories": repositories}
+		files = append(files, testcontainers.ContainerFile{
+			Reader: strings.NewReader(htpasswd.String()), ContainerFilePath: "/etc/zot/htpasswd", FileMode: 0o644,
+		})
+	}
+	config, err := json.Marshal(map[string]any{
+		"distSpecVersion": "1.1.1",
+		"storage":         map[string]any{"rootDirectory": "/var/lib/registry"},
+		"http":            httpConfig,
+	})
+	r.NoError(err)
+	files = append(files, testcontainers.ContainerFile{
+		Reader: strings.NewReader(string(config)), ContainerFilePath: "/etc/zot/config.json", FileMode: 0o644,
+	})
+
+	container, err := testcontainers.Run(t.Context(), zotImage,
+		testcontainers.WithExposedPorts("5000/tcp"),
+		testcontainers.WithFiles(files...),
+		testcontainers.WithWaitStrategy(wait.ForHTTP("/v2/").WithPort("5000/tcp").
+			WithStatusCodeMatcher(func(status int) bool { return status < 500 })),
+	)
+	testcontainers.CleanupContainer(t, container)
+	r.NoError(err)
+	endpoint, err := container.PortEndpoint(t.Context(), "5000/tcp", "")
+	r.NoError(err)
+	return endpoint
+}
+
+// pushImage pushes a minimal OCI image to repository:tag over plain HTTP with the given credentials.
+func pushImage(t *testing.T, repository, tag string, credential orascreds.Credential) error {
+	t.Helper()
+	repo, err := remote.NewRepository(repository)
+	require.NoError(t, err)
+	repo.Registry.PlainHTTP = true
+	repo.Registry.Client = &auth.Client{CredentialFunc: orascreds.StaticCredentialFunc(repo.Registry.Reference.Registry, credential)}
+
+	layer, err := oras.PushBytes(t.Context(), repo, "text/plain", []byte("hello world"))
+	if err != nil {
+		return err
+	}
+	manifest, err := oras.PackManifest(t.Context(), repo, oras.PackManifestVersion1_1, "application/vnd.example.hello", oras.PackManifestOptions{Layers: []ocispec.Descriptor{layer}})
+	if err != nil {
+		return err
+	}
+	return repo.Tag(t.Context(), manifest, tag)
 }
 
 // TestOciTransfer tests building a CV referencing two OCI images stored in a remote registry,
@@ -55,26 +112,31 @@ func newRegistry(t *testing.T, users map[string]authn.Basic) string {
 // to the `targetRegistry`, including the two OCI images from `imageRegistry`.
 // The test demonstrates setting up an OCM Configuration for authentication and http config (plainHTTP)
 // and transporting the CV.
+//
+// This test is skipped with -short because it requires Docker to spin up zot registries.
 func TestOciTransfer(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping OCI registry test in short mode (requires Docker)")
+	}
 	ctx := t.Context()
 	r := require.New(t)
 	component, version := "my.org/mycomponent", "1.0.0"
 
-	srcRegistry := newRegistry(t, nil)
+	srcRegistry := startZot(t, nil)
 
-	imageRegistryUsers := map[string]authn.Basic{
+	imageRegistryUsers := map[string]orascreds.Credential{
 		"project1": {Username: "user1", Password: "password1"},
 		"project2": {Username: "user2", Password: "password2"},
 	}
-	imageRegistry := newRegistry(t, imageRegistryUsers)
+	imageRegistry := startZot(t, imageRegistryUsers)
 	imageHost, imagePort, err := net.SplitHostPort(imageRegistry)
 	r.NoError(err)
 
-	targetRegistryUsers := map[string]authn.Basic{
+	targetRegistryUsers := map[string]orascreds.Credential{
 		"project1": {Username: "user3", Password: "password3"},
 		"project2": {Username: "user4", Password: "password4"},
 	}
-	targetRegistry := newRegistry(t, targetRegistryUsers)
+	targetRegistry := startZot(t, targetRegistryUsers)
 	targetHost, targetPort, err := net.SplitHostPort(targetRegistry)
 	r.NoError(err)
 
@@ -138,21 +200,18 @@ configurations:
 
 	// Push the image into the two projects on the `imageRegistry`, then prepare
 	// the resource descriptor we're going to use in the CV descriptor later.
-	img, err := crane.Image(map[string][]byte{"hello.txt": []byte("hello world")})
-	r.NoError(err)
 	var resources []descriptor.Resource
 	for i, project := range []string{"project1", "project2"} {
-		ref := imageRegistry + "/" + project + "/myimage/hello:1.0.0"
-		user := imageRegistryUsers[project]
-		r.Error(crane.Push(img, ref, crane.Insecure), "push without credentials must be rejected")
-		r.NoError(crane.Push(img, ref, crane.Insecure, crane.WithAuth(&user)))
+		repository := imageRegistry + "/" + project + "/myimage/hello"
+		r.Error(pushImage(t, repository, "1.0.0", orascreds.EmptyCredential), "push without credentials must be rejected")
+		r.NoError(pushImage(t, repository, "1.0.0", imageRegistryUsers[project]))
 		resources = append(resources, descriptor.Resource{
 			Name: fmt.Sprintf("hello%d", i+1), Version: "1.0.0",
 			Relation: descriptor.ExternalRelation,
 			Type:     "ociImage",
 			Access: &accessv1.OCIImage{
 				Type:           runtime.NewVersionedType(accessv1.OCIImageType, accessv1.Version),
-				ImageReference: ref,
+				ImageReference: repository + ":1.0.0",
 			},
 		})
 	}

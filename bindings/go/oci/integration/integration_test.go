@@ -44,6 +44,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob/inmemory"
 	filesystemv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/filesystem/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
+	credconfig "ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
 	credconfigv1 "ocm.software/open-component-model/bindings/go/credentials/spec/config/v1"
 	"ocm.software/open-component-model/bindings/go/ctf"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -1104,7 +1105,7 @@ func transformGetOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 			"password": password,
 		},
 	}
-	credsResolver := credentials.NewStaticCredentialsResolver(credsMap)
+	credsResolver := newCredentialGraph(t, toIdentity, credsMap[toIdentity.String()])
 	creds := credsMap[toIdentity.String()]
 	r.NotNil(creds)
 
@@ -1203,7 +1204,7 @@ func transformAddOCIArtifact(t *testing.T, repo repository.ResourceRepository, u
 			"password": password,
 		},
 	}
-	credsResolver := credentials.NewStaticCredentialsResolver(credsMap)
+	credsResolver := newCredentialGraph(t, toIdentity, credsMap[toIdentity.String()])
 
 	combinedScheme := ocmruntime.NewScheme()
 	v2.MustAddToScheme(combinedScheme)
@@ -2043,4 +2044,19 @@ func Test_Integration_OCIImageLayer(t *testing.T) {
 			inmemory.New(bytes.NewReader(layerData)), creds)
 		r.ErrorContains(err, "as upload target")
 	})
+}
+
+// newCredentialGraph resolves credentials the way the CLI does: a consumer scoped to a
+// registry also matches lookups for any repository path on it.
+func newCredentialGraph(t *testing.T, identity ocmruntime.Identity, properties map[string]string) credentials.Resolver {
+	t.Helper()
+	graph, err := credentials.ToGraph(t.Context(), &credconfig.Config{Consumers: []credconfig.Consumer{{
+		Identities: []ocmruntime.Identity{identity},
+		Credentials: []ocmruntime.Typed{&credconfigv1.DirectCredentials{
+			Type:       ocmruntime.NewVersionedType(credconfigv1.DirectCredentialsType, credconfigv1.Version),
+			Properties: properties,
+		}},
+	}}}, credentials.Options{})
+	require.NoError(t, err)
+	return graph
 }
