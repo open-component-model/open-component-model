@@ -540,7 +540,7 @@ func processRepositoryReference(cmd *cobra.Command,
 
 	componentNames, err := componentlister.List(ctx, pluginManager, credentialGraph, repository)
 	if err != nil {
-		return fmt.Errorf("could not list components in repository %v: %w", repository, err)
+		return err
 	}
 	slog.DebugContext(ctx, "listed components from repository", "repository", repository, "components", componentNames)
 
@@ -555,13 +555,11 @@ func processRepositoryReference(cmd *cobra.Command,
 	if err != nil {
 		return fmt.Errorf("could not build versioning registry: %w", err)
 	}
-	roots, err := getIDsForComponentsFromRepository(ctx, pluginManager, repository, componentNames, params, registry, credentialGraph)
-	if err != nil {
-		return fmt.Errorf("failed to get identities for components %v in repository %v: %w", componentNames, repository, err)
-	}
-	slog.DebugContext(ctx, "components versions", "roots", roots)
 
-	// Create a component reference wrapper for the repository to use the standard provider function
+	// Build the repository resolver before the version lookup so both the
+	// version lookup and the later rendering go through the same resolver, which
+	// resolves credentials from the credential graph. Without this, the version
+	// lookup would read tags without credentials and fail on private components.
 	repoProvider, err := ocm.NewComponentRepositoryResolver(ctx,
 		pluginManager.ComponentVersionRepositoryRegistry,
 		credentialGraph,
@@ -572,6 +570,12 @@ func processRepositoryReference(cmd *cobra.Command,
 		return fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
 	}
 
+	roots, err := getIDsForComponentsFromRepository(ctx, repoProvider, componentNames, params, registry)
+	if err != nil {
+		return fmt.Errorf("failed to get identities for components %v in repository %v: %w", componentNames, repository, err)
+	}
+	slog.DebugContext(ctx, "components versions", "roots", roots)
+
 	if err := renderComponents(cmd, repoProvider, roots, nil, output, displayMode, recursive); err != nil {
 		return fmt.Errorf("failed to render components recursively: %w", err)
 	}
@@ -580,22 +584,22 @@ func processRepositoryReference(cmd *cobra.Command,
 }
 
 // getIDsForComponentsFromRepository gets versions for given component names and returns a list of component
-// identities. All components are located in the same repository.
+// identities. All components are located in the same repository, resolved through repoProvider, which
+// resolves credentials from the credential graph.
 func getIDsForComponentsFromRepository(ctx context.Context,
-	pluginManager *manager.PluginManager,
-	repository runtime.Typed,
+	repoProvider resolvers.ComponentVersionRepositoryResolver,
 	componentNames []string,
 	params Params,
 	registry *versioning.Registry,
-	_ credentials.Resolver,
 ) ([]string, error) {
 	constraint := params.constraint
 	latestOnly := params.latestOnly
 
-	// TODO(ikhandamirov): call with credentials in case of OCI.
-	repo, err := pluginManager.ComponentVersionRepositoryRegistry.GetComponentVersionRepository(ctx, repository, nil)
+	// Every listed component lives in the same repository, so the resolver
+	// returns one credential-bound repository that serves them all.
+	repo, err := repoProvider.GetComponentVersionRepositoryForComponent(ctx, componentNames[0], "")
 	if err != nil {
-		return nil, fmt.Errorf("could not get component version repository for reference %+v", repository)
+		return nil, fmt.Errorf("could not get component version repository for components in repository: %w", err)
 	}
 
 	descriptors, err := ocm.ListComponentVersions(ctx, repo,

@@ -43,13 +43,11 @@ func NewDistributionCataloger(opts CatalogerOptions) (RepositoryCataloger, error
 	reg.RepositoryListPageSize = defaultRepositoryListPageSize
 	// Pick the client in this order: an explicit auth client (so the token flow
 	// and credentials apply), then the shared OCM HTTP client (so its TLS, proxy
-	// and timeout settings apply). When an auth client has no base HTTP client,
-	// back it with the shared one. Without either, ORAS uses its default client.
+	// and timeout settings apply). A provided auth client is used as is and is
+	// not modified; the caller sets its base HTTP client (oci/credentials.AuthClient
+	// already does). Without either, ORAS uses its default client.
 	switch {
 	case opts.AuthClient != nil:
-		if opts.AuthClient.Client == nil && opts.HTTPClient != nil {
-			opts.AuthClient.Client = opts.HTTPClient
-		}
 		reg.Client = opts.AuthClient
 	case opts.HTTPClient != nil:
 		reg.Client = &auth.Client{Client: opts.HTTPClient, Cache: auth.NewCache()}

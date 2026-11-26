@@ -510,7 +510,7 @@ func resolveSource(
 		// Component names must be discovered before the resolver is built so they can
 		// be registered as high-priority patterns for the source repository.
 		if sourceComponents, err = componentlister.List(ctx, pm, credGraph, sourceRepository); err != nil {
-			return nil, nil, nil, fmt.Errorf("could not list components in source repository: %w", err)
+			return nil, nil, nil, err
 		}
 		if len(sourceComponents) == 0 {
 			return nil, nil, nil, fmt.Errorf("no components found in source repository")

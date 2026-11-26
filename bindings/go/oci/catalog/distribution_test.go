@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/oras-project/oras-go/v3/registry/remote/auth"
 	"github.com/oras-project/oras-go/v3/registry/remote/errcode"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -176,3 +177,24 @@ func TestDistributionCataloger_UsesHTTPClientWhenNoAuthClient(t *testing.T) {
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+func TestDistributionCataloger_DoesNotMutateCallerAuthClient(t *testing.T) {
+	srv := sortedCatalogServer(t, []string{"component-descriptors/componentA"}, 100)
+	defer srv.Close()
+
+	// The caller owns this auth client and leaves Client nil. The cataloger must
+	// use it as is and must not modify the caller's instance.
+	authClient := &auth.Client{}
+	httpClient := &http.Client{}
+
+	cataloger, err := NewDistributionCataloger(CatalogerOptions{
+		Host:       strings.TrimPrefix(srv.URL, "http://"),
+		PlainHTTP:  true,
+		AuthClient: authClient,
+		HTTPClient: httpClient,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, cataloger)
+
+	assert.Nil(t, authClient.Client, "the caller's auth client must not be modified")
+}
