@@ -138,7 +138,8 @@ func WaitForResource(ctx context.Context, condition, timeout string, resource ..
 // PrepareOCMComponent builds and transfers an OCM component for the named example
 // by running the example's Taskfile: `task --taskfile <Taskfile.yml> prepare`.
 // The constructor path, image registry, and OCM binary are forwarded as explicit
-// Task variables so the recipe is fully self-contained.
+// Task variables so the recipe is fully self-contained. Recipes with a fixed
+// constructor (the signed and Kustomize examples) ignore the constructor path.
 func PrepareOCMComponent(ctx context.Context, name, componentConstructorPath, imageRegistry string) error {
 	By("preparing ocm component for " + name)
 

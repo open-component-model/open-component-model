@@ -124,9 +124,9 @@ tasks:
         vars:
           VALUES: '{{.VALUES}}'
           KUBE_CONTEXT: kind-ocm-e2e
-          IMAGE_REPOSITORY: '{{.IMAGE_REPOSITORY}}'
-          IMAGE_TAG: '{{.IMAGE_TAG}}'
-          IMAGE_PULL_POLICY: Never
+          HELM_IMAGE_REPOSITORY: '{{.IMAGE_REPOSITORY}}'
+          HELM_IMAGE_TAG: '{{.IMAGE_TAG}}'
+          HELM_IMAGE_PULL_POLICY: Never
       - kubectl --context kind-ocm-e2e -n ocm-k8s-toolkit-system rollout restart deployment -l app.kubernetes.io/instance=ocm-k8s-toolkit,control-plane=controller-manager
       - kubectl --context kind-ocm-e2e -n ocm-k8s-toolkit-system rollout status deployment -l app.kubernetes.io/instance=ocm-k8s-toolkit,control-plane=controller-manager --timeout=120s
       - PROJECT_DIR='{{.TASKFILE_DIR}}' go run github.com/onsi/ginkgo/v2/ginkgo --procs=4 -v --timeout=30m {{.CLI_ARGS}} '{{.TASKFILE_DIR}}/test/e2e/'
@@ -356,7 +356,9 @@ tasks:
       - helm template ocm-k8s-toolkit chart/ --namespace ocm-k8s-toolkit-system -f chart/test-values.yaml > dist/generated.yaml
 
   helm/install:
-    desc: "Install the chart using chart/values.yaml. VALUES and KUBE_CONTEXT override values/context; IMAGE_REPOSITORY, IMAGE_TAG and IMAGE_PULL_POLICY optionally override the image."
+    desc: "Install the chart using chart/values.yaml. VALUES and KUBE_CONTEXT override values/context; HELM_IMAGE_REPOSITORY, HELM_IMAGE_TAG and HELM_IMAGE_PULL_POLICY optionally override the image."
+    # The image overrides carry a HELM_ prefix because Task also resolves template variables
+    # from the OS environment; generic names such as IMAGE_TAG would silently change the image.
     vars:
       VALUES: '{{.VALUES | default "chart/values.yaml"}}'
       # kubectl and Helm must target the same cluster, or the namespace lands on the current context.
@@ -370,9 +372,9 @@ tasks:
       - |
         helm upgrade --install ocm-k8s-toolkit chart/ \
           {{if .KUBE_CONTEXT}}--kube-context "{{.KUBE_CONTEXT}}" {{end}}-f "{{.VALUES}}" \
-          {{if .IMAGE_REPOSITORY}}--set-string manager.image.repository="{{.IMAGE_REPOSITORY}}" {{end}}\
-          {{if .IMAGE_TAG}}--set-string manager.image.tag="{{.IMAGE_TAG}}" {{end}}\
-          {{if .IMAGE_PULL_POLICY}}--set-string manager.image.pullPolicy="{{.IMAGE_PULL_POLICY}}" {{end}}\
+          {{if .HELM_IMAGE_REPOSITORY}}--set-string manager.image.repository="{{.HELM_IMAGE_REPOSITORY}}" {{end}}\
+          {{if .HELM_IMAGE_TAG}}--set-string manager.image.tag="{{.HELM_IMAGE_TAG}}" {{end}}\
+          {{if .HELM_IMAGE_PULL_POLICY}}--set-string manager.image.pullPolicy="{{.HELM_IMAGE_PULL_POLICY}}" {{end}}\
           --namespace ocm-k8s-toolkit-system \
           --wait \
           --timeout 120s

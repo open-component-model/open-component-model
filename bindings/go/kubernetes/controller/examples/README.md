@@ -21,8 +21,8 @@ export CONTROLLER_IMG=ghcr.io/open-component-model/kubernetes/controller:local-e
 task bindings/go/kubernetes/controller:docker-build LOAD=true PUSH=false
 kind load docker-image "$CONTROLLER_IMG" --name ocm-e2e
 task bindings/go/kubernetes/controller:helm/install KUBE_CONTEXT=kind-ocm-e2e \
-  VALUES=chart/test-values.yaml IMAGE_REPOSITORY="${CONTROLLER_IMG%:*}" \
-  IMAGE_TAG="${CONTROLLER_IMG##*:}" IMAGE_PULL_POLICY=Never
+  VALUES=chart/test-values.yaml HELM_IMAGE_REPOSITORY="${CONTROLLER_IMG%:*}" \
+  HELM_IMAGE_TAG="${CONTROLLER_IMG##*:}" HELM_IMAGE_PULL_POLICY=Never
 kubectl --context=kind-ocm-e2e -n ocm-k8s-toolkit-system rollout restart deployment \
   -l app.kubernetes.io/instance=ocm-k8s-toolkit,control-plane=controller-manager
 kubectl --context=kind-ocm-e2e -n ocm-k8s-toolkit-system rollout status deployment \
@@ -111,15 +111,16 @@ From the example directory, `task prepare` builds, signs where applicable, and t
 `IMAGE_REGISTRY`. Its temporary CTF is removed on exit. The example sections set `EXAMPLE` and show which
 deployment flow follows preparation.
 
-To execute the CLI steps directly instead, use this sequence from the same directory:
+To execute the CLI steps directly instead, use this sequence from the same directory. The last command removes
+the temporary CTF; rerun the sequence from the start if a step fails.
 
 ```bash
 work=$(mktemp -d)
-trap 'rm -r -- "$work"' EXIT
 "$OCM_CLI" add cv --repository "$work/ctf" --constructor ./component-constructor.yaml
 # For signed examples, run their explicit sign commands below before transferring.
 "$OCM_CLI" transfer cv "ctf::$work/ctf//ocm.software/ocm-k8s-toolkit/examples/$EXAMPLE" \
   "$IMAGE_REGISTRY" --config ./transfer.ocmconfig
+rm -rf -- "$work"
 ```
 
 Run either the Task recipe or the direct sequence, not both. For Kustomize localization, use its complete
@@ -473,10 +474,10 @@ For direct CLI publication of v2 instead of the second Task invocation, use a fr
 
 ```bash
 work=$(mktemp -d)
-trap 'rm -r -- "$work"' EXIT
 "$OCM_CLI" add cv --repository "$work/ctf" --constructor ./component-constructor-2.yaml
 "$OCM_CLI" transfer cv "ctf::$work/ctf//ocm.software/ocm-k8s-toolkit/examples/applyset-pruning:2.0.0" \
   "$IMAGE_REGISTRY" --config ./transfer.ocmconfig
+rm -rf -- "$work"
 ```
 
 Only `applyset-pruning-podinfo-2` disappears; the first Deployment remains Available. Remove the example in

@@ -16,25 +16,28 @@ The `kustomize-resource` uses a `dir/v1` input pointing at `./oci-layout` with m
 `application/vnd.ocm.software.oci.layout.v1+tar`. The recipe stages that layout and its companion file inputs
 in a fresh temporary directory, leaving any existing `./oci-layout` untouched. To execute the same sequence
 directly instead of `task prepare`, run from this directory with the absolute `OCM_CLI` and `IMAGE_REGISTRY`
-set by the shared prerequisites:
+set by the shared prerequisites. The outer subshell keeps `set -eu`, `exit` and the cleanup trap out of your
+interactive shell:
 
 ```bash
-set -eu
-command -v oras >/dev/null 2>&1 || { echo "oras is required for kustomize-configuration-localization" >&2; exit 1; }
-work=$(mktemp -d)
-trap 'rm -r -- "$work"' EXIT
-cp ./component-constructor.yaml "$work/component-constructor.yaml"
-cp ./rgd.yaml ./crossplane-composition.yaml "$work/"
-COPYFILE_DISABLE=1 tar -czf "$work/kustomize.tar.gz" -C ./kustomize .
 (
-  cd "$work"
-  oras push --oci-layout ./oci-layout:latest \
-    --artifact-type application/vnd.cncf.flux.config.v1+json \
-    kustomize.tar.gz:application/vnd.cncf.flux.content.v1.tar+gzip
-  "$OCM_CLI" add cv --repository "$work/ctf" --constructor ./component-constructor.yaml
+  set -eu
+  command -v oras >/dev/null 2>&1 || { echo "oras is required for kustomize-configuration-localization" >&2; exit 1; }
+  work=$(mktemp -d)
+  trap 'rm -rf -- "$work"' EXIT
+  cp ./component-constructor.yaml "$work/component-constructor.yaml"
+  cp ./rgd.yaml ./crossplane-composition.yaml "$work/"
+  COPYFILE_DISABLE=1 tar -czf "$work/kustomize.tar.gz" -C ./kustomize .
+  (
+    cd "$work"
+    oras push --oci-layout ./oci-layout:latest \
+      --artifact-type application/vnd.cncf.flux.config.v1+json \
+      kustomize.tar.gz:application/vnd.cncf.flux.content.v1.tar+gzip
+    "$OCM_CLI" add cv --repository "$work/ctf" --constructor ./component-constructor.yaml
+  )
+  "$OCM_CLI" transfer cv "ctf::$work/ctf//ocm.software/ocm-k8s-toolkit/examples/kustomize-configuration-localization" \
+    "$IMAGE_REGISTRY" --config ./transfer.ocmconfig
 )
-"$OCM_CLI" transfer cv "ctf::$work/ctf//ocm.software/ocm-k8s-toolkit/examples/kustomize-configuration-localization" \
-  "$IMAGE_REGISTRY" --config ./transfer.ocmconfig
 ```
 
 The layer's `application/vnd.cncf.flux.content.v1.tar+gzip` media type is what Flux and ArgoCD expect.

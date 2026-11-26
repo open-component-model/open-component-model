@@ -106,8 +106,8 @@ build. `pullPolicy: Never` prevents a registry pull when the selected image is a
 
 E2e defaults to `chart/test-values.yaml`; `VALUES` overrides non-image settings. Image identity and pull policy
 are always overridden to match the loaded artifact. Ordinary `helm/install` defaults to `chart/values.yaml`
-and remains values-driven unless `IMAGE_REPOSITORY`, `IMAGE_TAG`, or `IMAGE_PULL_POLICY` is supplied. No release
-image-pin edits are needed for local e2e.
+and remains values-driven unless `HELM_IMAGE_REPOSITORY`, `HELM_IMAGE_TAG`, or `HELM_IMAGE_PULL_POLICY` is
+supplied. No release image-pin edits are needed for local e2e.
 
 ## Contributing
 
