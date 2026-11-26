@@ -11,7 +11,7 @@
 #   - cosign signs and verifies offline, without a transparency log (and its warning is hidden).
 #
 # Each command is printed and waits for Enter; PAUSE=0 runs straight through.
-# Requires docker, oras, cosign, jq. The podinfo image is cached under $CACHE after the first
+# Requires docker, oras, cosign, yq. The podinfo image is cached under $CACHE after the first
 # run, so a later run needs no internet (the zot image must be pulled already).
 set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -50,7 +50,7 @@ cleanup() { docker rm -f "$SRC_CTR" "$DST_CTR" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 
 # --- setup (not part of the story) --------------------------------------------
-for t in docker jq oras; do command -v "$t" >/dev/null || die "$t is required"; done
+for t in docker yq oras; do command -v "$t" >/dev/null || die "$t is required"; done
 [ -x "$COSIGN" ] || die "cosign is required (or set COSIGN=<path>)"
 [ -x "$OCM" ] || die "ocm not found: run 'task bindings/go/cli:build' or set OCM=<path>"
 cleanup; cd "$WORK"
@@ -97,7 +97,7 @@ note "opt in to the normalized layout"
 run "cat ocmconfig.yaml"
 
 note "publish the component: a local blob and an image in the source registry"
-run "ocm add componentversion --config ocmconfig.yaml --repository oci::$SOURCE --constructor component-constructor.yaml"
+run "ocm add componentversion --config ocmconfig.yaml --repository oci::$SOURCE --constructor component-constructor.yaml -o yaml"
 
 note "the manifest digest of the component version in the source registry"
 run "oras resolve $SOURCE/$CV:1.0.0"
@@ -110,8 +110,8 @@ note "transfer the component, and the image with it"
 run "ocm transfer componentversion --config ocmconfig.yaml oci::$SOURCE//acme.org/demo:1.0.0 oci::$TARGET"
 
 note "the access of the image was rewritten: source, then target"
-run "ocm get componentversion oci::$SOURCE//acme.org/demo:1.0.0 -o json | jq -c '.[].component.resources[1].access'"
-run "ocm get componentversion oci::$TARGET//acme.org/demo:1.0.0 -o json | jq -c '.[].component.resources[1].access'"
+run "ocm get componentversion oci::$SOURCE//acme.org/demo:1.0.0 -o yaml | yq '.[].component.resources[1].access'"
+run "ocm get componentversion oci::$TARGET//acme.org/demo:1.0.0 -o yaml | yq '.[].component.resources[1].access'"
 
 note "the manifest digest in the target registry is still the same"
 run "oras resolve $TARGET/$CV:1.0.0"

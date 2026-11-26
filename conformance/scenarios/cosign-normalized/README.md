@@ -72,6 +72,6 @@ conformance/scenarios/cosign-normalized/demo-short.sh          # Enter-stepped
 PAUSE=0 conformance/scenarios/cosign-normalized/demo-short.sh   # straight through
 ```
 
-Requires Docker, `oras`, `cosign`, `jq` and the CLI built from this checkout. The registries run on
+Requires Docker, `oras`, `cosign`, `yq` and the CLI built from this checkout. The registries run on
 `source.localhost:5001` and `target.localhost:5002`. The `podinfo` image is cached under `$TMPDIR` after
 the first run, so later runs need no internet.
