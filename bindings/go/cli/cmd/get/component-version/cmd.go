@@ -605,10 +605,15 @@ func getIDsForComponentsFromRepository(ctx context.Context,
 	constraint := params.constraint
 	latestOnly := params.latestOnly
 
-	identities := make([]string, 0, len(componentNames))
+	reg := registry
+	if reg == nil {
+		reg = versioning.Default()
+	}
+
 	var (
-		skipped  []string
-		failures []error
+		descriptors []*descruntime.Descriptor
+		skipped     []string
+		failures    []error
 	)
 
 	skip := func(name string, err error) {
@@ -626,7 +631,7 @@ func getIDsForComponentsFromRepository(ctx context.Context,
 			continue
 		}
 
-		descriptors, err := ocm.ListComponentVersions(ctx, repo,
+		descs, err := ocm.ListComponentVersions(ctx, repo,
 			ocm.WithComponentNames([]string{name}),
 			ocm.WithSemverConstraint(constraint),
 			ocm.WithLatestOnly(latestOnly),
@@ -637,12 +642,12 @@ func getIDsForComponentsFromRepository(ctx context.Context,
 			skip(name, err)
 			continue
 		}
-		if len(descriptors) == 0 {
+		if len(descs) == 0 {
 			skip(name, errors.New("no matching versions"))
 			continue
 		}
 
-		for _, desc := range descriptors {
+		for _, desc := range descs {
 			// Defence in depth: a decoder that produced an empty descriptor would
 			// otherwise contribute an empty identity root that later breaks graph
 			// discovery. Skip and count it as a failed component.
@@ -651,12 +656,12 @@ func getIDsForComponentsFromRepository(ctx context.Context,
 				skip(name, errors.New("empty component identity"))
 				continue
 			}
-			identities = append(identities, id.String())
+			descriptors = append(descriptors, desc)
 		}
 	}
 
 	// Every component failed: surface the combined cause instead of an empty result.
-	if len(identities) == 0 {
+	if len(descriptors) == 0 {
 		if len(failures) > 0 {
 			return nil, fmt.Errorf("no components in the repository could be read: %w", errors.Join(failures...))
 		}
@@ -667,7 +672,28 @@ func getIDsForComponentsFromRepository(ctx context.Context,
 		slog.WarnContext(ctx, fmt.Sprintf("skipped %d of %d components that could not be read", len(skipped), len(componentNames)), "skipped", skipped)
 	}
 
-	// Sort so the output order is deterministic regardless of per-component order.
-	slices.Sort(identities)
+	// Order the roots by version, descending, the same global order the previous
+	// single batch listing produced, so the output stays deterministic and
+	// unchanged.
+	var cmpErr error
+	slices.SortFunc(descriptors, func(a, b *descruntime.Descriptor) int {
+		if cmpErr != nil {
+			return 0
+		}
+		c, err := reg.Compare(b.Component.Version, a.Component.Version)
+		if err != nil {
+			cmpErr = err
+			return 0
+		}
+		return c
+	})
+	if cmpErr != nil {
+		return nil, fmt.Errorf("sorting component versions failed: %w", cmpErr)
+	}
+
+	identities := make([]string, 0, len(descriptors))
+	for _, desc := range descriptors {
+		identities = append(identities, desc.Component.ToIdentity().String())
+	}
 	return identities, nil
 }
