@@ -159,7 +159,9 @@ against the digest in the signed document. A location may change. What it leads 
 
 ## Sign, Transfer, Verify
 
-The new layout is experimental and opt-in. We enable it in the OCM configuration file `ocmconfig.yaml`:
+The new layout is experimental and not merged to `main` yet. On the branch of the
+[pull request](https://github.com/open-component-model/open-component-model/pull/3888), we enable it in the OCM
+configuration file `ocmconfig.yaml`:
 
 ```yaml
 type: generic.config.ocm.software/v1
