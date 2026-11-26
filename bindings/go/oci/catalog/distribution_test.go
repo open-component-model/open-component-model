@@ -2,7 +2,6 @@ package catalog
 
 import (
 	"encoding/json/v2"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -119,5 +118,5 @@ func TestDistributionCataloger_NotFoundMapsToUnsupported(t *testing.T) {
 
 	err = cataloger.Repositories(t.Context(), "", func(repos []string) error { return nil })
 	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrCatalogUnsupported), "expected ErrCatalogUnsupported, got: %v", err)
+	assert.ErrorIs(t, err, ErrCatalogUnsupported, "expected ErrCatalogUnsupported, got: %v", err)
 }
