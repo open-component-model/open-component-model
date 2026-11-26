@@ -98,6 +98,10 @@ The --detail level controls how much is fetched for a repository reference:
 When --detail is not set, the cheapest level that satisfies the other flags is used: --latest or
 --constraint select versions; --recursive or -o tree|widetree select full. Listing a CTF archive now
 defaults to names too; pass --detail full for the previous descriptor output.
+
+For a component reference without a version (repo//component), --detail versions lists its versions
+without fetching descriptors, and full (the default) fetches them. A pinned reference
+(repo//component:version or @digest) is always full.
 `,
 			compref.DefaultPrefix,
 			strings.Join([]string{ociv1.Type, ctfv1.Type}, "|"),
@@ -118,6 +122,7 @@ get cvs ghcr.io/open-component-model                         # component names (
 get cvs ghcr.io/open-component-model --detail versions       # every version of every component
 get cvs ghcr.io/open-component-model --detail versions --latest
 get cvs ghcr.io/open-component-model --detail full -o yaml   # descriptors
+get cv ghcr.io/open-component-model//ocm.software/cli --detail versions   # versions of one component
 
 Listing many component versions:
 
@@ -153,10 +158,10 @@ repository is deprecated and fails without it (see https://ocm.software/docs/cha
 	cmd.Flags().Int(FlagRecursive, 0, "depth of recursion for resolving referenced component versions (0=none, -1=unlimited, >0=levels (not implemented yet))")
 	cmd.Flags().Lookup(FlagRecursive).NoOptDefVal = "-1"
 
-	enum.VarP(cmd.Flags(), FlagDetail, "", []string{detailNames, detailVersions, detailFull}, `detail level for a repository reference (ignored for a single component reference):
-  names (default): component names only, from the catalog (cheapest)
+	enum.VarP(cmd.Flags(), FlagDetail, "", []string{detailNames, detailVersions, detailFull}, `detail level when listing (a repository reference, or a component reference without a version):
+  names (default for a repository): component names only, from the catalog (cheapest)
   versions: also list the versions of each component (one request per component)
-  full: fetch descriptors; required for --recursive and the tree outputs
+  full: fetch descriptors; required for --recursive and the tree outputs; the default for a component reference
 When unset, the cheapest level that satisfies the other flags is used.`)
 
 	return cmd
@@ -282,9 +287,41 @@ func processComponentReference(cmd *cobra.Command,
 		return err
 	}
 
+	// A pinned reference (an explicit version or a digest) names exactly one
+	// component version, so only the full level applies. Otherwise honour
+	// --detail: versions lists the tags without fetching descriptors.
+	level, err := effectiveComponentDetailLevel(detailSelection{
+		detailSet: params.detailSet,
+		detail:    params.detail,
+		recursive: params.recursive,
+		output:    params.output,
+		outputSet: params.outputSet,
+	}, pin != nil || ref.Version != "")
+	if err != nil {
+		return err
+	}
+
 	repoProvider, err := ocm.NewComponentVersionRepositoryForComponentProvider(ctx, pluginManager.ComponentVersionRepositoryRegistry, credentialGraph, config, ref)
 	if err != nil {
 		return fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
+	}
+
+	// The versions level lists the component's versions without fetching
+	// descriptors, in the same flat output as the repository versions level.
+	if level == detailVersions {
+		registry, err := versioningspec.RegistryFromConfig(config)
+		if err != nil {
+			return fmt.Errorf("could not build versioning registry: %w", err)
+		}
+		entries, err := collectComponentVersions(ctx, nil, repoProvider, []string{ref.Component}, params, registry)
+		if err != nil {
+			return err
+		}
+		listOutput := output
+		if !params.outputSet {
+			listOutput = render.OutputFormatTable.String()
+		}
+		return renderVersions(cmd.OutOrStdout(), listOutput, entries)
 	}
 
 	repo, err := repoProvider.GetComponentVersionRepositoryForComponent(ctx, ref.Component, ref.Version)

@@ -54,6 +54,38 @@ func TestEffectiveDetailLevel(t *testing.T) {
 	}
 }
 
+func TestEffectiveComponentDetailLevel(t *testing.T) {
+	tests := []struct {
+		name   string
+		sel    detailSelection
+		pinned bool
+		want   string
+		error  bool
+	}{
+		{name: "unset defaults to full", want: detailFull},
+		{name: "explicit versions", sel: detailSelection{detailSet: true, detail: detailVersions}, want: detailVersions},
+		{name: "explicit full", sel: detailSelection{detailSet: true, detail: detailFull}, want: detailFull},
+		{name: "names needs a repository", sel: detailSelection{detailSet: true, detail: detailNames}, error: true},
+		{name: "versions with recursive errors", sel: detailSelection{detailSet: true, detail: detailVersions, recursive: -1}, error: true},
+		{name: "versions with tree errors", sel: detailSelection{detailSet: true, detail: detailVersions, output: "tree", outputSet: true}, error: true},
+		{name: "pinned unset is full", pinned: true, want: detailFull},
+		{name: "pinned full is fine", sel: detailSelection{detailSet: true, detail: detailFull}, pinned: true, want: detailFull},
+		{name: "pinned versions errors", sel: detailSelection{detailSet: true, detail: detailVersions}, pinned: true, error: true},
+		{name: "pinned names errors", sel: detailSelection{detailSet: true, detail: detailNames}, pinned: true, error: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := effectiveComponentDetailLevel(tt.sel, tt.pinned)
+			if tt.error {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestRenderNames(t *testing.T) {
 	names := []string{"ocm.software/a", "ocm.software/b"}
 	for _, format := range []string{"table", "json", "yaml", "ndjson"} {

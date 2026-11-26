@@ -52,6 +52,10 @@ When --detail is not set, the cheapest level that satisfies the other flags is u
 --constraint select versions; --recursive or -o tree|widetree select full. Listing a CTF archive now
 defaults to names too; pass --detail full for the previous descriptor output.
 
+For a component reference without a version (repo//component), --detail versions lists its versions
+without fetching descriptors, and full (the default) fetches them. A pinned reference
+(repo//component:version or @digest) is always full.
+
 
 ```
 ocm get component-version {reference} [flags]
@@ -74,6 +78,7 @@ get cvs ghcr.io/open-component-model                         # component names (
 get cvs ghcr.io/open-component-model --detail versions       # every version of every component
 get cvs ghcr.io/open-component-model --detail versions --latest
 get cvs ghcr.io/open-component-model --detail full -o yaml   # descriptors
+get cv ghcr.io/open-component-model//ocm.software/cli --detail versions   # versions of one component
 
 Listing many component versions:
 
@@ -99,10 +104,10 @@ repository is deprecated and fails without it (see https://ocm.software/docs/cha
 
 ```
       --constraint string     version constraint restricting which versions to output, evaluated by each version's configured scheme; versions with no applicable scheme are retained (default "> 0.0.0-0")
-      --detail enum           detail level for a repository reference (ignored for a single component reference):
-                                names (default): component names only, from the catalog (cheapest)
+      --detail enum           detail level when listing (a repository reference, or a component reference without a version):
+                                names (default for a repository): component names only, from the catalog (cheapest)
                                 versions: also list the versions of each component (one request per component)
-                                full: fetch descriptors; required for --recursive and the tree outputs
+                                full: fetch descriptors; required for --recursive and the tree outputs; the default for a component reference
                               When unset, the cheapest level that satisfies the other flags is used.
                               (must be one of [full names versions]) (default names)
       --display-mode enum     display mode can be used in combination with --recursive

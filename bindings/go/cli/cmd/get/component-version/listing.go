@@ -138,6 +138,36 @@ func effectiveDetailLevel(sel detailSelection) (string, error) {
 	}
 }
 
+// effectiveComponentDetailLevel returns the detail level for a component
+// reference (repo//comp). Unlike a repository reference, its default is full
+// (today's behaviour), names is never valid, and a pinned reference (a version
+// or a digest) can only be shown in full.
+func effectiveComponentDetailLevel(sel detailSelection, pinned bool) (string, error) {
+	if pinned {
+		if sel.detailSet && sel.detail != detailFull {
+			return "", fmt.Errorf("--detail %s cannot be used with a pinned component version: a pinned version has nothing to list; drop --detail or use --detail full", sel.detail)
+		}
+		return detailFull, nil
+	}
+	if !sel.detailSet {
+		return detailFull, nil
+	}
+	switch sel.detail {
+	case detailNames:
+		return "", fmt.Errorf("--detail names needs a repository reference")
+	case detailVersions:
+		if sel.recursive != 0 {
+			return "", fmt.Errorf("--recursive needs --detail full")
+		}
+		if sel.outputSet && (sel.output == render.OutputFormatTree.String() || sel.output == render.OutputFormatWideTree.String()) {
+			return "", fmt.Errorf("--output %s needs --detail full", sel.output)
+		}
+		return detailVersions, nil
+	default:
+		return detailFull, nil
+	}
+}
+
 // componentNameEntry is one row of the names output. It is an object, not a
 // bare string, so fields can be added later without breaking consumers.
 type componentNameEntry struct {
