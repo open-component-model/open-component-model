@@ -39,6 +39,7 @@ const (
 	FlagConcurrencyLimit = "concurrency-limit"
 	FlagRecursive        = "recursive"
 	FlagNoColor          = "no-color"
+	FlagContentDigest    = "content-digest"
 )
 
 // componentLevelLabel marks the group of referrers attached to the component version
@@ -56,12 +57,13 @@ func New() *cobra.Command {
 		Long: `Discover and list the attestations attached to a component version: SBOMs, VEX documents,
 signatures, SLSA provenance, vulnerability reports, SARIF and anything else attached.
 
-By default only the referrers attached to the component version artifact itself are listed.
-Widen or narrow the scope with:
+By default every attestation of the component version is listed: the component's own
+referrers plus one group per resource of the component. Narrow the scope with:
 
-  --identity name=X   only the attestations describing resource X.
-  -o widetree         every resource of the component plus the component's own referrers.
-  --recursive         also follow componentReferences and list their attestations (-1 = unlimited).
+  --identity name=X        only the attestations describing resource X.
+  --content-digest DIGEST  only the attestation whose document bytes have this digest.
+  --type TYPE              only attestations matching a friendly type or raw-type substring.
+  --recursive              also follow componentReferences and list theirs too (-1 = unlimited).
 
 Per resource, attestations are merged from every source:
 
@@ -84,20 +86,20 @@ duplicates are easy to spot.
 
 Use --type to filter: it matches a substring of any raw type signal, plus friendly aliases
 (for example "sbom" matches spdx and cyclonedx, "signature" matches cosign and notation).`,
-		Example: `  # The component's own referrers
+		Example: `  # Every attestation of the component version and its resources
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0
 
-  # The component's own referrers, as a provenance tree
+  # As a provenance tree
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 -o tree
-
-  # Every resource plus the component's own referrers
-  ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 -o widetree
 
   # Only the "image" resource
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --identity name=image
 
+  # One specific document, by its content digest
+  ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --content-digest sha256:abc123...
+
   # Follow componentReferences and list their attestations too
-  ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --recursive -o widetree
+  ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --recursive
 
   # Only SBOMs and VEX, as JSON
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --type sbom --type vex -o json`,
@@ -106,10 +108,11 @@ Use --type to filter: it matches a substring of any raw type signal, plus friend
 	}
 
 	cmd.Flags().String(FlagResourceIdentity, "", "list only the attestations describing this one resource")
-	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum number of resources inspected in parallel when listing the whole component (-o widetree)")
+	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum number of resources inspected in parallel when listing the whole component")
 	cmd.Flags().Int(FlagRecursive, 0, "recursively follow componentReferences and list their attestations too; depth of recursion (-1 for unlimited)")
 	cmd.Flags().Lookup(FlagRecursive).NoOptDefVal = "-1"
 	cmd.Flags().StringSlice(FlagType, nil, "filter to attestations whose type contains any of these substrings or matches a friendly alias (sbom, vex, signature, provenance, spdx, ...); repeatable; empty lists all")
+	cmd.Flags().String(FlagContentDigest, "", "filter to the attestation whose document content digest equals this value (for example sha256:...)")
 	cmd.Flags().Bool(FlagNoColor, false, "disable coloured output (also honoured via the NO_COLOR environment variable)")
 	enum.VarP(cmd.Flags(), FlagOutput, "o",
 		[]string{
@@ -117,9 +120,8 @@ Use --type to filter: it matches a substring of any raw type signal, plus friend
 			render.OutputFormatJSON.String(),
 			render.OutputFormatYAML.String(),
 			render.OutputFormatTree.String(),
-			render.OutputFormatWideTree.String(),
 		},
-		"output format; tree lists the component's own referrers, widetree every resource too")
+		"output format")
 
 	return cmd
 }
@@ -144,6 +146,10 @@ func GetAttestations(cmd *cobra.Command, args []string) error {
 	typeFilters, err := cmd.Flags().GetStringSlice(FlagType)
 	if err != nil {
 		return fmt.Errorf("getting type flag failed: %w", err)
+	}
+	contentDigest, err := cmd.Flags().GetString(FlagContentDigest)
+	if err != nil {
+		return fmt.Errorf("getting content-digest flag failed: %w", err)
 	}
 	format, err := enum.Get(cmd.Flags(), FlagOutput)
 	if err != nil {
@@ -208,7 +214,7 @@ func GetAttestations(cmd *cobra.Command, args []string) error {
 		if cd, ok := repo.(repository.ComponentAttestationDiscoverer); ok {
 			req.DiscoverComponent = cd
 		}
-		groups, err := discoverGroups(ctx, req, desc, identityStr, format, concurrency)
+		groups, err := discoverGroups(ctx, req, desc, identityStr, concurrency)
 		if err != nil {
 			return component{}, err
 		}
@@ -242,16 +248,14 @@ func GetAttestations(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	root, _ = filterTree(root, typeFilters)
+	root, _ = filterTree(root, typeFilters, contentDigest)
 	return renderAttestations(ctx, cmd.OutOrStdout(), format, root, colorEnabled(cmd.OutOrStdout(), noColor))
 }
 
 // discoverGroups resolves the selection to resource-labelled groups: --identity lists one
-// resource; -o widetree lists every resource plus the component artifact; every other output
-// lists only the component artifact's own referrers.
-func discoverGroups(ctx context.Context, baseReq cliattestation.Request, desc *descriptor.Descriptor, identityStr, format string, concurrency int) ([]cliattestation.Group, error) {
-	switch {
-	case identityStr != "":
+// resource; otherwise the component version artifact itself plus every resource.
+func discoverGroups(ctx context.Context, baseReq cliattestation.Request, desc *descriptor.Descriptor, identityStr string, concurrency int) ([]cliattestation.Group, error) {
+	if identityStr != "" {
 		identity, err := runtime.ParseIdentity(identityStr)
 		if err != nil {
 			return nil, fmt.Errorf("parsing resource identity %q failed: %w", identityStr, err)
@@ -267,26 +271,20 @@ func discoverGroups(ctx context.Context, baseReq cliattestation.Request, desc *d
 			return nil, err
 		}
 		return []cliattestation.Group{{Label: identityStr, Attestations: atts}}, nil
-	case format == render.OutputFormatWideTree.String():
-		return cliattestation.DiscoverAll(ctx, baseReq, concurrency)
-	default:
-		atts, err := cliattestation.Discover(ctx, baseReq)
-		if err != nil {
-			return nil, err
-		}
-		return []cliattestation.Group{{Attestations: atts}}, nil
 	}
+	return cliattestation.DiscoverAll(ctx, baseReq, concurrency)
 }
 
-// filterGroups applies the type filter within each group and drops groups left empty.
-func filterGroups(groups []cliattestation.Group, filters []string) []cliattestation.Group {
+// filterGroups applies the type and content-digest filters within each group and drops
+// groups left empty. A failed origin is kept so it stays visible regardless of filters.
+func filterGroups(groups []cliattestation.Group, filters []string, contentDigest string) []cliattestation.Group {
 	out := make([]cliattestation.Group, 0, len(groups))
 	for _, g := range groups {
 		if g.Err != nil {
-			out = append(out, g) // keep a failed origin visible regardless of the type filter
+			out = append(out, g) // keep a failed origin visible regardless of the filters
 			continue
 		}
-		kept := filterByType(g.Attestations, filters)
+		kept := filterByContentDigest(filterByType(g.Attestations, filters), contentDigest)
 		if len(kept) > 0 {
 			out = append(out, cliattestation.Group{Label: g.Label, Attestations: kept})
 		}
@@ -295,7 +293,7 @@ func filterGroups(groups []cliattestation.Group, filters []string) []cliattestat
 }
 
 // component is one node of the discovered tree: a component version, the attestation
-// groups discovered for it (component-level plus, in widetree, one per resource), and its
+// groups discovered for it (the component level plus one per resource), and its
 // referenced components when recursing. Repeated marks a component already shown elsewhere
 // in the tree (a diamond or cycle), rendered as a reference without re-discovery.
 type component struct {
@@ -305,15 +303,15 @@ type component struct {
 	Repeated bool
 }
 
-// filterTree applies the type filter to every component in the tree, dropping components
-// left with no attestations and no surviving descendants. The root is returned regardless
-// so an empty result still renders its header. Repeated markers are kept as navigation
-// aids even though they carry no attestations.
-func filterTree(c component, filters []string) (component, bool) {
-	c.Groups = filterGroups(c.Groups, filters)
+// filterTree applies the type and content-digest filters to every component in the tree,
+// dropping components left with no attestations and no surviving descendants. The root is
+// returned regardless so an empty result still renders. Repeated markers are kept as
+// navigation aids even though they carry no attestations.
+func filterTree(c component, filters []string, contentDigest string) (component, bool) {
+	c.Groups = filterGroups(c.Groups, filters, contentDigest)
 	kept := c.Children[:0]
 	for _, child := range c.Children {
-		if fc, ok := filterTree(child, filters); ok {
+		if fc, ok := filterTree(child, filters, contentDigest); ok {
 			kept = append(kept, fc)
 		}
 	}
@@ -435,6 +433,22 @@ func filterByType(atts []repository.Attestation, filters []string) []repository.
 	return kept
 }
 
+// filterByContentDigest keeps only attestations whose document content digest equals the
+// given value. An empty filter keeps everything. The match is exact, so it selects every
+// copy of one document wherever it is attached.
+func filterByContentDigest(atts []repository.Attestation, digest string) []repository.Attestation {
+	if digest == "" {
+		return atts
+	}
+	kept := make([]repository.Attestation, 0, len(atts))
+	for _, a := range atts {
+		if a.ContentDigest == digest {
+			kept = append(kept, a)
+		}
+	}
+	return kept
+}
+
 func anyFilterMatches(filters []string, haystack string, aliases []string) bool {
 	for _, f := range filters {
 		if strings.Contains(haystack, f) || slices.Contains(aliases, f) {
@@ -464,7 +478,7 @@ func renderAttestations(ctx context.Context, w io.Writer, format string, root co
 	p := painter{on: color}
 	marks := markDuplicates(root)
 	switch format {
-	case render.OutputFormatTree.String(), render.OutputFormatWideTree.String():
+	case render.OutputFormatTree.String():
 		return renderTree(ctx, w, root, p, marks)
 	case render.OutputFormatJSON.String():
 		data, err := json.Marshal(jsonComponent(root), runtime.JSONOptions, jsontext.WithIndent("  "))

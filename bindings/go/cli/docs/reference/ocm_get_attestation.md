@@ -16,12 +16,13 @@ Get the attestations describing a component version, its resources, or one resou
 Discover and list the attestations attached to a component version: SBOMs, VEX documents,
 signatures, SLSA provenance, vulnerability reports, SARIF and anything else attached.
 
-By default only the referrers attached to the component version artifact itself are listed.
-Widen or narrow the scope with:
+By default every attestation of the component version is listed: the component's own
+referrers plus one group per resource of the component. Narrow the scope with:
 
-  --identity name=X   only the attestations describing resource X.
-  -o widetree         every resource of the component plus the component's own referrers.
-  --recursive         also follow componentReferences and list their attestations (-1 = unlimited).
+  --identity name=X        only the attestations describing resource X.
+  --content-digest DIGEST  only the attestation whose document bytes have this digest.
+  --type TYPE              only attestations matching a friendly type or raw-type substring.
+  --recursive              also follow componentReferences and list theirs too (-1 = unlimited).
 
 Per resource, attestations are merged from every source:
 
@@ -52,20 +53,20 @@ ocm get attestation {reference} [flags]
 ### Examples
 
 ```
-  # The component's own referrers
+  # Every attestation of the component version and its resources
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0
 
-  # The component's own referrers, as a provenance tree
+  # As a provenance tree
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 -o tree
-
-  # Every resource plus the component's own referrers
-  ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 -o widetree
 
   # Only the "image" resource
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --identity name=image
 
+  # One specific document, by its content digest
+  ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --content-digest sha256:abc123...
+
   # Follow componentReferences and list their attestations too
-  ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --recursive -o widetree
+  ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --recursive
 
   # Only SBOMs and VEX, as JSON
   ocm get attestations ghcr.io/acme//acme.org/app:1.0.0 --type sbom --type vex -o json
@@ -74,12 +75,13 @@ ocm get attestation {reference} [flags]
 ### Options
 
 ```
-      --concurrency-limit int   maximum number of resources inspected in parallel when listing the whole component (-o widetree) (default 4)
+      --concurrency-limit int   maximum number of resources inspected in parallel when listing the whole component (default 4)
+      --content-digest string   filter to the attestation whose document content digest equals this value (for example sha256:...)
   -h, --help[=true|false]       help for attestation
       --identity string         list only the attestations describing this one resource
       --no-color[=true|false]   disable coloured output (also honoured via the NO_COLOR environment variable)
-  -o, --output enum             output format; tree lists the component's own referrers, widetree every resource too
-                                (must be one of [json table tree widetree yaml]) (default table)
+  -o, --output enum             output format
+                                (must be one of [json table tree yaml]) (default table)
       --recursive int[=-1]      recursively follow componentReferences and list their attestations too; depth of recursion (-1 for unlimited)
       --type strings            filter to attestations whose type contains any of these substrings or matches a friendly alias (sbom, vex, signature, provenance, spdx, ...); repeatable; empty lists all
 ```

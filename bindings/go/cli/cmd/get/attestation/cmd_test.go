@@ -67,7 +67,7 @@ func TestRenderTree_RawStructure(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, renderAttestations(t.Context(), &buf, "widetree", component{Ref: "comp:1.0.0", Groups: groups}, false))
+	require.NoError(t, renderAttestations(t.Context(), &buf, "tree", component{Ref: "comp:1.0.0", Groups: groups}, false))
 	out := buf.String()
 
 	assert.Contains(t, out, "comp:1.0.0", "the component:version is the tree root")
@@ -92,7 +92,7 @@ func TestRenderTree_RawStructure(t *testing.T) {
 // TestRenderTree_EmptyPrintsLine pins that an empty result prints a single explanatory
 // line instead of a bare header (there is no header in the pure tree).
 func TestRenderTree_EmptyPrintsLine(t *testing.T) {
-	for _, format := range []string{"tree", "widetree"} {
+	for _, format := range []string{"tree"} {
 		t.Run(format, func(t *testing.T) {
 			var buf bytes.Buffer
 			require.NoError(t, renderAttestations(t.Context(), &buf, format, component{Ref: "example.com/app:1.0.0"}, false))
@@ -308,7 +308,7 @@ func TestContentDigest_DuplicatesTagged(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	require.NoError(t, renderAttestations(t.Context(), &buf, "widetree", component{Ref: "ref", Groups: groups}, false))
+	require.NoError(t, renderAttestations(t.Context(), &buf, "tree", component{Ref: "ref", Groups: groups}, false))
 	out := buf.String()
 
 	assert.Equal(t, 2, strings.Count(out, "[a] "+dup), "both copies of the duplicate carry the same letter tag")
@@ -327,7 +327,7 @@ func TestRenderAttestations_FailedOriginNamesImage(t *testing.T) {
 	}
 
 	var tree bytes.Buffer
-	require.NoError(t, renderAttestations(t.Context(), &tree, "widetree", component{Ref: "ref", Groups: groups}, false))
+	require.NoError(t, renderAttestations(t.Context(), &tree, "tree", component{Ref: "ref", Groups: groups}, false))
 	assert.Contains(t, tree.String(), "attestation discovery failed for "+ref, "the tree names the failing image reference")
 	assert.Contains(t, tree.String(), "not found", "the concise reason is shown")
 
@@ -343,4 +343,34 @@ func TestRenderAttestations_FailedOriginNamesImage(t *testing.T) {
 	o := findOrigin(t, out.Origins, "name=image")
 	assert.Equal(t, ref, o.Reference, "json carries the failing image reference")
 	assert.Contains(t, o.Error, "not found", "json carries the error")
+}
+
+// TestFilterTree_ContentDigest pins that the content-digest filter keeps every copy of the
+// requested document across origins and drops everything else.
+func TestFilterTree_ContentDigest(t *testing.T) {
+	const want = "sha256:wanted00000000000000000000000000000000000000000000000000000000"
+	mk := func(src repository.AttestationSource, digest, id string) repository.Attestation {
+		return repository.Attestation{Source: src, ArtifactType: mediaTypeOpenVEX, MediaType: mediaTypeOpenVEX, ContentDigest: digest, ID: id}
+	}
+	root := component{
+		Ref: "ref",
+		Groups: []cliattestation.Group{
+			{Label: "", Attestations: []repository.Attestation{
+				mk(repository.AttestationSourceOCIReferrer, want, "c1"),
+				mk(repository.AttestationSourceOCIReferrer, "sha256:other", "c2"),
+			}},
+			{Label: "name=img", Attestations: []repository.Attestation{
+				mk(repository.AttestationSourceOCMLocal, want, "r1"),
+			}},
+		},
+	}
+	filtered, ok := filterTree(root, nil, want)
+	require.True(t, ok)
+	var got []string
+	for _, g := range filtered.Groups {
+		for _, a := range g.Attestations {
+			got = append(got, a.ContentDigest)
+		}
+	}
+	assert.Equal(t, []string{want, want}, got, "both copies of the wanted digest kept, the other dropped")
 }
