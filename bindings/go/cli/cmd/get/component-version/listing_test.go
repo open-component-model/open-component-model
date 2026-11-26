@@ -100,7 +100,7 @@ func TestCollectComponentVersions_SkipsUnreadableAndOrders(t *testing.T) {
 		errs: map[string]error{"no/access": &unauthorizedError{}},
 	}
 
-	entries, err := collectComponentVersions(t.Context(), resolver,
+	entries, err := collectComponentVersions(t.Context(), nil, resolver,
 		[]string{"comp/b", "comp/a", "no/access"}, Params{}, versioning.Default())
 	require.NoError(t, err)
 
@@ -122,7 +122,7 @@ func TestCollectComponentVersions_AllFail(t *testing.T) {
 		"a": &unauthorizedError{},
 		"b": &unauthorizedError{},
 	}}
-	_, err := collectComponentVersions(t.Context(), resolver, []string{"a", "b"}, Params{}, versioning.Default())
+	_, err := collectComponentVersions(t.Context(), nil, resolver, []string{"a", "b"}, Params{}, versioning.Default())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "a:")
 	assert.Contains(t, err.Error(), "b:")

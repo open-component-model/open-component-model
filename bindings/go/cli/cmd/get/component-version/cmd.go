@@ -7,9 +7,11 @@ import (
 	"io"
 	"log/slog"
 	"strings"
+	"sync"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 
 	"ocm.software/open-component-model/bindings/go/cli/internal/componentlister"
 	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
@@ -17,6 +19,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/internal/render"
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/graph/list"
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/graph/tree"
+	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress"
+	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress/bar"
 	"ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	versioningspec "ocm.software/open-component-model/bindings/go/configuration/versioning/v1alpha1/spec"
@@ -642,22 +646,30 @@ func processRepositoryReference(cmd *cobra.Command,
 		return fmt.Errorf("could not initialize ocm repositoryProvider: %w", err)
 	}
 
+	// The versions and full levels do per-component work; show progress on
+	// stderr so stdout stays clean for -o json | jq. The tracker falls back to
+	// slog lines for non-terminal output.
+	tracker := progress.NewTracker(ctx, cmd.ErrOrStderr(), bar.NewVisualizer[string])
+	defer tracker.Stop()
+
 	// The versions level lists the versions of each component without fetching
 	// descriptors.
 	if level == detailVersions {
-		entries, err := collectComponentVersions(ctx, repoProvider, componentNames, params, registry)
+		entries, err := collectComponentVersions(ctx, tracker, repoProvider, componentNames, params, registry)
 		if err != nil {
 			return err
 		}
+		tracker.Stop() // restore slog and clear the bar before writing the result
 		return renderVersions(cmd.OutOrStdout(), listOutput, entries)
 	}
 
 	// The full level fetches descriptors, supports recursion and the tree
 	// outputs, and renders the component graph.
-	roots, err := getIDsForComponentsFromRepository(ctx, repoProvider, componentNames, params, registry)
+	roots, err := getIDsForComponentsFromRepository(ctx, tracker, repoProvider, componentNames, params, registry)
 	if err != nil {
 		return fmt.Errorf("failed to get identities for components %v in repository %v: %w", componentNames, repository, err)
 	}
+	tracker.Stop() // restore slog and clear the bar before rendering
 	slog.DebugContext(ctx, "components versions", "roots", roots)
 
 	if err := renderComponents(cmd, repoProvider, roots, nil, params.output, params.displayMode, params.recursive); err != nil {
@@ -667,82 +679,149 @@ func processRepositoryReference(cmd *cobra.Command,
 	return nil
 }
 
-// getIDsForComponentsFromRepository gets versions for given component names and returns a list of component
-// identities. All components are located in the same repository, resolved through repoProvider, which
-// resolves credentials from the credential graph.
+// getIDsForComponentsFromRepository resolves the component versions of the
+// listed components and returns their identities. All components are resolved
+// through repoProvider, which applies credentials from the credential graph.
+//
+// It runs in two concurrent phases, each bounded to listConcurrency workers
+// (so at most listConcurrency requests are in flight at a time): first it lists
+// the versions (tags) of every component, then it fetches the descriptor of
+// every selected version. When tracker is non-nil, each phase reports progress.
 //
 // Components that cannot be read are reported at ERROR level and skipped: a
-// repository catalog may list components the caller cannot pull, or components
-// in an unsupported descriptor schema. The function returns an error only when
-// no component could be read; otherwise it returns the identities it resolved.
+// catalog may list components the caller cannot pull, or in an unsupported
+// descriptor schema. It returns an error only when no component could be read.
 func getIDsForComponentsFromRepository(ctx context.Context,
+	tracker *progress.Tracker[string],
 	repoProvider resolvers.ComponentVersionRepositoryResolver,
 	componentNames []string,
 	params Params,
 	registry *versioning.Registry,
 ) ([]string, error) {
-	constraint := params.constraint
-	latestOnly := params.latestOnly
+	type componentVersions struct {
+		name     string
+		repo     repository.ComponentVersionRepository
+		versions []string
+	}
 
 	var (
-		descriptors []*descruntime.Descriptor
-		skipped     []string
-		failures    []error
+		mu       sync.Mutex
+		listed   []componentVersions
+		skipped  = map[string]struct{}{}
+		failures []error
 	)
-
 	skip := func(name string, err error) {
+		mu.Lock()
+		defer mu.Unlock()
 		slog.ErrorContext(ctx, "skipping component that could not be read", "component", name, "error", err)
-		skipped = append(skipped, name)
-		failures = append(failures, fmt.Errorf("%s: %w", name, err))
+		if _, ok := skipped[name]; !ok {
+			skipped[name] = struct{}{}
+			failures = append(failures, fmt.Errorf("%s: %w", name, err))
+		}
 	}
 
+	// Phase 1: list the versions of every component.
+	listPhase := startPhase(tracker, "Listing component versions", len(componentNames))
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.SetLimit(listConcurrency)
 	for _, name := range componentNames {
-		// The resolver caches by specification, so one lookup per component is
-		// cheap and is correct even if patterns sent names to different repositories.
-		repo, err := repoProvider.GetComponentVersionRepositoryForComponent(ctx, name, "")
-		if err != nil {
-			skip(name, err)
-			continue
-		}
-
-		descs, err := ocm.ListComponentVersions(ctx, repo,
-			ocm.WithComponentNames([]string{name}),
-			ocm.WithSemverConstraint(constraint),
-			ocm.WithLatestOnly(latestOnly),
-			ocm.WithSort(),
-			ocm.WithVersioningRegistry(registry),
-		)
-		if err != nil {
-			skip(name, err)
-			continue
-		}
-		if len(descs) == 0 {
-			skip(name, errors.New("no matching versions"))
-			continue
-		}
-
-		// Keep the versions that decode to a real identity. A decoder that
-		// produced an empty descriptor would otherwise contribute an empty
-		// identity root that later breaks graph discovery. Each bad version is
-		// logged on its own line, but the component is counted as skipped only
-		// once, below, when none of its versions are readable.
-		valid := 0
-		for _, desc := range descs {
-			id := desc.Component.ToIdentity()
-			if len(id) == 0 || id.String() == "" {
-				slog.ErrorContext(ctx, "skipping component version with an empty identity",
-					"component", name, "version", desc.Component.Version)
-				continue
+		eg.Go(func() error {
+			listPhase.emit(name, progress.Running, nil)
+			repo, err := repoProvider.GetComponentVersionRepositoryForComponent(egCtx, name, "")
+			if err != nil {
+				skip(name, err)
+				listPhase.emit(name, progress.Failed, err)
+				return nil
 			}
-			descriptors = append(descriptors, desc)
-			valid++
-		}
-		if valid == 0 {
-			skip(name, errors.New("no readable versions"))
+			versions, err := ocm.VersionsWithFiltering(egCtx, name, repo, ocm.VersionOptions{
+				SemverConstraint: params.constraint,
+				LatestOnly:       params.latestOnly,
+				Registry:         registry,
+			})
+			if err != nil {
+				skip(name, err)
+				listPhase.emit(name, progress.Failed, err)
+				return nil
+			}
+			if len(versions) == 0 {
+				err := errors.New("no matching versions")
+				skip(name, err)
+				listPhase.emit(name, progress.Failed, err)
+				return nil
+			}
+			mu.Lock()
+			listed = append(listed, componentVersions{name: name, repo: repo, versions: versions})
+			mu.Unlock()
+			listPhase.emit(name, progress.Completed, nil)
+			return nil
+		})
+	}
+	err := eg.Wait()
+	listPhase.finish()
+	if err != nil {
+		return nil, err
+	}
+
+	// Flatten the selected (component, version) pairs.
+	type target struct {
+		name    string
+		version string
+		repo    repository.ComponentVersionRepository
+	}
+	var targets []target
+	for _, cv := range listed {
+		for _, v := range cv.versions {
+			targets = append(targets, target{name: cv.name, version: v, repo: cv.repo})
 		}
 	}
 
-	// Every component failed: surface the combined cause instead of an empty result.
+	// Phase 2: fetch the descriptor of every selected version. This is the slow
+	// part on a large registry.
+	var descriptors []*descruntime.Descriptor
+	success := map[string]int{}
+	fetchPhase := startPhase(tracker, "Fetching component descriptors", len(targets))
+	eg2, eg2Ctx := errgroup.WithContext(ctx)
+	eg2.SetLimit(listConcurrency)
+	for _, tgt := range targets {
+		eg2.Go(func() error {
+			id := tgt.name + ":" + tgt.version
+			fetchPhase.emit(id, progress.Running, nil)
+			desc, err := tgt.repo.GetComponentVersion(eg2Ctx, tgt.name, tgt.version)
+			if err != nil {
+				slog.ErrorContext(ctx, "skipping component version that could not be read",
+					"component", tgt.name, "version", tgt.version, "error", err)
+				fetchPhase.emit(id, progress.Failed, err)
+				return nil
+			}
+			cid := desc.Component.ToIdentity()
+			if len(cid) == 0 || cid.String() == "" {
+				slog.ErrorContext(ctx, "skipping component version with an empty identity",
+					"component", tgt.name, "version", tgt.version)
+				fetchPhase.emit(id, progress.Failed, errors.New("empty component identity"))
+				return nil
+			}
+			mu.Lock()
+			descriptors = append(descriptors, desc)
+			success[tgt.name]++
+			mu.Unlock()
+			fetchPhase.emit(id, progress.Completed, nil)
+			return nil
+		})
+	}
+	err = eg2.Wait()
+	fetchPhase.finish()
+	if err != nil {
+		return nil, err
+	}
+
+	// A component whose versions listed but whose descriptors all failed is
+	// skipped, counted once.
+	for _, cv := range listed {
+		if success[cv.name] == 0 {
+			skip(cv.name, errors.New("no readable versions"))
+		}
+	}
+
 	if len(descriptors) == 0 {
 		if len(failures) > 0 {
 			return nil, fmt.Errorf("no components in the repository could be read: %w", errors.Join(failures...))
@@ -751,12 +830,17 @@ func getIDsForComponentsFromRepository(ctx context.Context,
 	}
 
 	if len(skipped) > 0 {
-		slog.WarnContext(ctx, fmt.Sprintf("skipped %d of %d components that could not be read", len(skipped), len(componentNames)), "skipped", skipped)
+		skippedList := make([]string, 0, len(skipped))
+		for _, n := range componentNames {
+			if _, ok := skipped[n]; ok {
+				skippedList = append(skippedList, n)
+			}
+		}
+		slog.WarnContext(ctx, fmt.Sprintf("skipped %d of %d components that could not be read", len(skipped), len(componentNames)), "skipped", skippedList)
 	}
 
 	// Order the roots by version, descending, with the registry built from the
-	// OCM configuration so custom version schemes apply, the same global order
-	// the previous single batch listing produced.
+	// OCM configuration so custom version schemes apply.
 	if err := ocm.SortDescriptorsDescending(registry, descriptors); err != nil {
 		return nil, err
 	}

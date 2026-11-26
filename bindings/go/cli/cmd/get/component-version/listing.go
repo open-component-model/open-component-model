@@ -17,11 +17,52 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/cli/internal/render"
+	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress"
 	ocm "ocm.software/open-component-model/bindings/go/cli/internal/repository/ocm"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/runtime/versioning"
 )
+
+// listEventBufferSize buffers progress events so component workers do not block
+// on the tracker.
+const listEventBufferSize = 16
+
+// phase reports progress for one concurrent listing phase. A nil phase (no
+// tracker) is a no-op, so the collectors work with or without a UI.
+type phase struct {
+	events chan progress.Event[string]
+	op     progress.Operation
+}
+
+// startPhase begins a tracker operation named name over total items. When
+// tracker is nil it returns a no-op phase.
+func startPhase(tracker *progress.Tracker[string], name string, total int) *phase {
+	if tracker == nil {
+		return &phase{}
+	}
+	events := make(chan progress.Event[string], listEventBufferSize)
+	op := tracker.StartOperation(name,
+		progress.WithEvents(events, func(e progress.Event[string]) progress.Event[string] { return e }, total),
+		progress.WithConcurrency[string](listConcurrency))
+	return &phase{events: events, op: op}
+}
+
+func (p *phase) emit(id string, state progress.State, err error) {
+	if p.events != nil {
+		p.events <- progress.Event[string]{ID: id, Name: id, State: state, Err: err}
+	}
+}
+
+// finish closes the event channel and finishes the operation.
+func (p *phase) finish() {
+	if p.events != nil {
+		close(p.events)
+	}
+	if p.op != nil {
+		p.op.Finish(nil)
+	}
+}
 
 // Detail levels for a repository reference. They trade completeness for cost:
 // names needs only the catalog, versions adds one tag listing per component,
@@ -204,10 +245,13 @@ func writeNDJSONLine(w io.Writer, entry any) error {
 }
 
 // collectComponentVersions lists the versions of each component with bounded
-// concurrency. It skips a component that cannot be read, logging it once, and
-// returns an error only when every component fails. Entries are sorted by
-// component name, then version newest first using the registry.
+// concurrency (at most listConcurrency in flight). It skips a component that
+// cannot be read, logging it once, and returns an error only when every
+// component fails. Entries are sorted by component name, then version newest
+// first using the registry. When tracker is non-nil, it reports one progress
+// event per component.
 func collectComponentVersions(ctx context.Context,
+	tracker *progress.Tracker[string],
 	repoProvider resolvers.ComponentVersionRepositoryResolver,
 	componentNames []string,
 	params Params,
@@ -228,13 +272,17 @@ func collectComponentVersions(ctx context.Context,
 		failures = append(failures, fmt.Errorf("%s: %w", name, err))
 	}
 
+	p := startPhase(tracker, "Listing component versions", len(componentNames))
+
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.SetLimit(listConcurrency)
 	for _, name := range componentNames {
 		eg.Go(func() error {
+			p.emit(name, progress.Running, nil)
 			repo, err := repoProvider.GetComponentVersionRepositoryForComponent(egCtx, name, "")
 			if err != nil {
 				skip(name, err)
+				p.emit(name, progress.Failed, err)
 				return nil
 			}
 			versions, err := ocm.VersionsWithFiltering(egCtx, name, repo, ocm.VersionOptions{
@@ -244,10 +292,13 @@ func collectComponentVersions(ctx context.Context,
 			})
 			if err != nil {
 				skip(name, err)
+				p.emit(name, progress.Failed, err)
 				return nil
 			}
 			if len(versions) == 0 {
-				skip(name, errors.New("no matching versions"))
+				err := errors.New("no matching versions")
+				skip(name, err)
+				p.emit(name, progress.Failed, err)
 				return nil
 			}
 			mu.Lock()
@@ -255,12 +306,15 @@ func collectComponentVersions(ctx context.Context,
 				entries = append(entries, componentVersionEntry{Component: name, Version: v})
 			}
 			mu.Unlock()
+			p.emit(name, progress.Completed, nil)
 			return nil
 		})
 	}
 	// The per-component goroutines never return an error (failures are skipped),
 	// so Wait only surfaces context cancellation.
-	if err := eg.Wait(); err != nil {
+	err := eg.Wait()
+	p.finish()
+	if err != nil {
 		return nil, err
 	}
 

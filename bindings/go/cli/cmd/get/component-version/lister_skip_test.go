@@ -94,7 +94,7 @@ func TestGetIDsForComponentsFromRepository_SkipsUnreadable(t *testing.T) {
 		},
 	}
 
-	roots, err := getIDsForComponentsFromRepository(t.Context(), resolver,
+	roots, err := getIDsForComponentsFromRepository(t.Context(), nil, resolver,
 		[]string{"ok/component", "no/access", "broken/schema", "empty/identity"},
 		Params{latestOnly: true}, versioning.Default())
 	require.NoError(t, err)
@@ -118,7 +118,7 @@ func TestGetIDsForComponentsFromRepository_AllFail(t *testing.T) {
 		},
 	}
 
-	_, err := getIDsForComponentsFromRepository(t.Context(), resolver,
+	_, err := getIDsForComponentsFromRepository(t.Context(), nil, resolver,
 		[]string{"a", "b"}, Params{latestOnly: true}, versioning.Default())
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "a:")
@@ -146,7 +146,7 @@ func TestGetIDsForComponentsFromRepository_UsesCustomVersionScheme(t *testing.T)
 		},
 	}
 
-	roots, err := getIDsForComponentsFromRepository(t.Context(), resolver,
+	roots, err := getIDsForComponentsFromRepository(t.Context(), nil, resolver,
 		[]string{"comp/a"}, Params{}, reg)
 	require.NoError(t, err)
 	require.Len(t, roots, 2)
@@ -169,7 +169,7 @@ func TestGetIDsForComponentsFromRepository_EqualVersionsOrderByNameDeterministic
 	// Same version across components: the tie breaks by component name, the same
 	// on every run.
 	for range 5 {
-		roots, err := getIDsForComponentsFromRepository(t.Context(), resolver,
+		roots, err := getIDsForComponentsFromRepository(t.Context(), nil, resolver,
 			[]string{"comp/b", "comp/a"}, Params{}, versioning.Default())
 		require.NoError(t, err)
 		require.Len(t, roots, 2)
@@ -189,7 +189,7 @@ func TestGetIDsForComponentsFromRepository_SortsNewestFirstAcrossComponents(t *t
 		},
 	}
 
-	roots, err := getIDsForComponentsFromRepository(t.Context(), resolver,
+	roots, err := getIDsForComponentsFromRepository(t.Context(), nil, resolver,
 		[]string{"comp/a", "comp/b"}, Params{}, versioning.Default())
 	require.NoError(t, err)
 	require.Len(t, roots, 3)
