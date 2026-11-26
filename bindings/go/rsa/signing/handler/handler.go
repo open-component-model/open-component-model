@@ -406,8 +406,11 @@ func verifyChainWithOptionalAnchor(
 // identifies the leaf certificate. It accepts the leaf's Subject, which the OCM
 // specification designates as the issuer description and which OCM v1 writes
 // when signing with a certificate, as well as the leaf's X.509 Issuer, the DN of
-// the CA that directly signed the leaf. The check is skipped when the Issuer
-// field is empty.
+// the CA that directly signed the leaf. The Subject match follows OCM v1: the
+// declared issuer must cover the Subject, so extra attributes are accepted, but
+// only when the Subject has a common name; otherwise any issuer would cover it.
+// Extra attributes are not vouched for by the certificate. The check is skipped
+// when the Issuer field is empty.
 func verifyIssuerForLeafCert(signed descruntime.Signature, leaf *x509.Certificate) error {
 	iss := strings.TrimSpace(signed.Signature.Issuer)
 	if iss == "" {
@@ -419,7 +422,14 @@ func verifyIssuerForLeafCert(signed descruntime.Signature, leaf *x509.Certificat
 		return fmt.Errorf("parsing issuer %q failed: %w", iss, err)
 	}
 
-	subjectErr := rfc2253.Equal(want, leaf.Subject)
+	// Covering semantics as in OCM v1 (signutils.MatchDN), as written by other
+	// producers such as cc-utils. The specification validates the issuer against
+	// the common name, so a subject without one needs an exact match.
+	match := rfc2253.Match
+	if leaf.Subject.CommonName == "" {
+		match = rfc2253.Equal
+	}
+	subjectErr := match(want, leaf.Subject)
 	if subjectErr == nil {
 		return nil
 	}

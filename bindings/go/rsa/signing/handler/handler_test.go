@@ -215,6 +215,23 @@ func Test_RSA_Handler(t *testing.T) {
 							},
 						},
 						{
+							// OCM v1 (signutils.MatchDN) accepts an issuer that covers the
+							// subject, i.e. carries additional attributes.
+							name: "pem_signature_issuer_covers_leaf_subject_with_extra_attributes",
+							build: func(t *testing.T) descruntime.Signature {
+								t.Helper()
+								s := signPEM(t, aPriv, aPub)
+								s.Signature.Issuer = "CN=signer,O=Acme,OU=Engineering"
+								return s
+							},
+							creds: func(t *testing.T) runtime.Typed {
+								t.Helper()
+								return &rsacredentialsv1.RSACredentials{
+									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: aPub,
+								}
+							},
+						},
+						{
 							name: "pem_signature_with_matching_credentials_pub_issuer_mismatch",
 							build: func(t *testing.T) descruntime.Signature {
 								t.Helper()
@@ -1320,4 +1337,94 @@ func stripCertBlocks(pemWithChain string) string {
 		}
 	}
 	return strings.Join(out, "\n")
+}
+
+func TestVerifyIssuerCoveringNeedsSubjectCommonName(t *testing.T) {
+	tests := []struct {
+		name    string
+		subject pkix.Name
+		san     []string
+		issuer  string
+		wantErr bool
+	}{
+		{
+			name:    "covering issuer accepted for a subject with a common name",
+			subject: pkix.Name{CommonName: "build-bot", Organization: []string{"Acme"}},
+			issuer:  "CN=build-bot,O=Acme,OU=Engineering",
+		},
+		{
+			name:    "exact issuer accepted for a subject without a common name",
+			subject: pkix.Name{Organization: []string{"Acme"}},
+			issuer:  "O=Acme",
+		},
+		{
+			name:    "covering issuer rejected for a subject without a common name",
+			subject: pkix.Name{Organization: []string{"Acme"}},
+			issuer:  "CN=OCM Release Signing Key,O=Acme",
+			wantErr: true,
+		},
+		{
+			name:    "any issuer rejected for an empty subject",
+			subject: pkix.Name{},
+			san:     []string{"build-bot.example"},
+			issuer:  "CN=OCM Release Signing Key,O=Trusted Release Org",
+			wantErr: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			sig, creds := signWithLeafSubject(t, tc.subject, tc.san)
+			sig.Signature.Issuer = tc.issuer
+			h, err := New(v1alpha1.Scheme, false)
+			r.NoError(err)
+
+			err = h.Verify(t.Context(), sig, nil, creds)
+			if tc.wantErr {
+				r.ErrorContains(err, "issuer mismatch")
+				return
+			}
+			r.NoError(err)
+		})
+	}
+}
+
+// signWithLeafSubject signs as PEM with a leaf of the given subject under a
+// fresh chain and returns the signature and root-only verify credentials.
+func signWithLeafSubject(t *testing.T, subject pkix.Name, san []string) (descruntime.Signature, *rsacredentialsv1.RSACredentials) {
+	t.Helper()
+	r := require.New(t)
+	c := buildChain(t)
+	leafKey := mustKey(t)
+	der, err := x509.CreateCertificate(rand.Reader, &x509.Certificate{
+		SerialNumber: mustRand128(t),
+		Subject:      subject,
+		DNSNames:     san,
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(24 * time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+	}, c.interm, &leafKey.PublicKey, c.intermKey)
+	r.NoError(err)
+	leaf, err := x509.ParseCertificate(der)
+	r.NoError(err)
+
+	h, err := New(v1alpha1.Scheme, false)
+	r.NoError(err)
+	dir := t.TempDir()
+	privPath := filepath.Join(dir, "leaf.key")
+	writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(leafKey))
+	d := digestHex(crypto.SHA256, []byte("hello world"))
+	si, err := h.Sign(t.Context(), d, &v1alpha1.Config{
+		SignatureAlgorithm:      v1alpha1.AlgorithmRSASSAPSS,
+		SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
+	}, &rsacredentialsv1.RSACredentials{
+		Type:              rsacredentialsv1.VersionedType,
+		PrivateKeyPEMFile: privPath,
+		PublicKeyPEMFile:  writeCertsPEM(t, dir, "chain.pem", leaf, c.interm),
+	})
+	r.NoError(err)
+	return descruntime.Signature{Digest: d, Signature: si}, &rsacredentialsv1.RSACredentials{
+		Type:             rsacredentialsv1.VersionedType,
+		PublicKeyPEMFile: writeCertsPEM(t, t.TempDir(), "root.pem", c.root),
+	}
 }
