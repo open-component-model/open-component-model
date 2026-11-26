@@ -41,7 +41,7 @@ func TestBufferFile(t *testing.T) {
 		path, err := filesystem.BufferFile("", "", "buffer")
 		r.NoError(err)
 		t.Cleanup(func() { _ = os.Remove(path) })
-		r.Equal(strings.TrimSuffix(os.TempDir(), "/"), filepath.Dir(path))
+		r.Equal(strings.TrimSuffix(os.TempDir(), string(os.PathSeparator)), filepath.Dir(path))
 		r.FileExists(path)
 	})
 
