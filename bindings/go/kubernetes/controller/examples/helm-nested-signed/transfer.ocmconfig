@@ -1,0 +1,9 @@
+type: generic.config.ocm.software/v1
+configurations:
+  - type: http.config.ocm.software/v1alpha1
+    plainHTTP: true
+    hosts:
+      ghcr.io:
+        plainHTTP: false
+  - type: transfer.config.ocm.software/v1alpha1
+    recursive: -1

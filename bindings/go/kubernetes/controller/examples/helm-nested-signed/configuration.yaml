@@ -1,0 +1,48 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: helm-nested-signed-plain-http
+  namespace: default
+data:
+  .ocmconfig: |
+    type: generic.config.ocm.software/v1
+    configurations:
+      - type: http.config.ocm.software/v1alpha1
+        plainHTTP: true
+        hosts:
+          ghcr.io:
+            plainHTTP: false
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: helm-nested-signed-ocmconfig
+  namespace: default
+type: Opaque
+stringData:
+  .ocmconfig: |
+    type: generic.config.ocm.software/v1
+    configurations:
+      - type: signing.config.ocm.software/v1alpha1
+        signature: ocm.software.helm.nested.signed.rsa
+        verifier:
+          type: RSASigningConfiguration/v1alpha1
+
+      - type: credentials.config.ocm.software
+        consumers:
+          - identity:
+              type: RSA/v1alpha1
+              algorithm: RSASSA-PSS
+              signature: ocm.software.helm.nested.signed.rsa
+            credentials:
+              - type: Credentials/v1
+                properties:
+                  publicKeyPEM: |
+                    -----BEGIN RSA PUBLIC KEY-----
+                    MIIBCgKCAQEA29z+RRhfHTnjhSFwOEAp5KSyHoM5UNCN04nyjL+kZWqFxhwPbVQh
+                    io81RUQ/vjR8UrfuNLH0/MSWASCbZXe1llnZlucRBNOxtaRt4pDv476uEmZTovf1
+                    3wPUKV/t+NCipTOzcnAiz26DIOcm1yUGaD2kEoyZY5WLP8zIZkt3XWw7Fj5ATwXq
+                    Dr85+NfTi8paZemS6T845NK/rOH6gLkNTTw9regq1uPalxSyDnEDcR0hJREL2CdR
+                    5JoCzuJtqnG2pdfZFAkak4ox8nWA+fYA0vgVB+UFJNYwrbQSVu4wHR5Zo9x5UW4+
+                    nKSVBYHJU9blVSIT2X5Xe58k+IsOLT1+QwIDAQAB
+                    -----END RSA PUBLIC KEY-----

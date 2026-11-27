@@ -19,7 +19,10 @@ task test/performance/setup/teardown
 task test/performance/fresh            # teardown, setup and run in one go
 ```
 
-The flow mirrors the e2e tasks (`test/e2e/setup/local`, `test/e2e`, `test/e2e/setup/teardown`, `test/e2e/fresh`).
+The task names follow the e2e tasks (`test/e2e/setup/local`, `test/e2e`, `test/e2e/setup/teardown`,
+`test/e2e/fresh`), but the controller image is built at a different step: `test/performance/setup/local` builds and
+loads it once, while `test/e2e/setup/local` only provisions infrastructure and every `test/e2e` run builds and
+loads the image itself.
 
 `go run ./test/performance --help` lists every flag; see [Options](#options) for what they change.
 

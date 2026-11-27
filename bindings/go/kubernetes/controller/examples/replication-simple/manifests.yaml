@@ -19,9 +19,9 @@ spec:
     type: OCIRegistry
   interval: 10m
   ocmConfig:
-    # Allows plain HTTP to the registry above (created by test/e2e/hacks/setup.sh).
+    # Allows plain HTTP to the registry above (see configuration.yaml).
     - kind: ConfigMap
-      name: ocm-plain-http
+      name: replication-simple-plain-http
 ---
 # Target repository: the password-protected registry the component is replicated into.
 apiVersion: delivery.ocm.software/v1alpha1
@@ -39,7 +39,7 @@ spec:
     - kind: Secret
       name: replication-simple-credentials
     - kind: ConfigMap
-      name: ocm-plain-http
+      name: replication-simple-plain-http
 ---
 apiVersion: delivery.ocm.software/v1alpha1
 kind: Component
@@ -65,4 +65,4 @@ spec:
     - kind: Secret
       name: replication-simple-credentials
     - kind: ConfigMap
-      name: ocm-plain-http
+      name: replication-simple-plain-http

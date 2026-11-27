@@ -36,6 +36,9 @@ var _ = Describe("Replication E2E Tests", func() {
 				imageRegistry,
 			)).To(Succeed())
 
+			By("applying the replication example configuration")
+			Expect(utils.DeployResource(ctx, filepath.Join(exampleDir, Configuration))).To(Succeed())
+
 			By("bootstrapping the replication example")
 			Expect(utils.DeployResource(ctx, filepath.Join(exampleDir, Manifests))).To(Succeed())
 
@@ -67,12 +70,9 @@ var _ = Describe("Replication E2E Tests", func() {
 			targetRegistry := os.Getenv("PROTECTED_REGISTRY_URL")
 			Expect(targetRegistry).NotTo(BeEmpty(), "PROTECTED_REGISTRY_URL must be set for replication tests")
 
-			plainHTTPConfig, err := utils.PlainHTTPConfig(GinkgoT().TempDir())
-			Expect(err).NotTo(HaveOccurred())
-
 			cmd := exec.CommandContext(ctx, utils.OCMBinary(),
 				"--config", filepath.Join(exampleDir, ".ocmconfig"),
-				"--config", plainHTTPConfig,
+				"--config", filepath.Join(exampleDir, "transfer.ocmconfig"),
 				"get", "cv",
 				targetRegistry+"//"+component+":1.0.0",
 			)

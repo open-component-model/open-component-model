@@ -1,4 +1,3 @@
-# Built at e2e test time by utils.PrepareOCMComponent (via `oras push --oci-layout`)
-# from ./kustomize/. Referenced by component-constructor.yaml as a dir/v1 input.
+# Optional manually built artifacts; task prepare builds these in a temporary directory.
 oci-layout/
 kustomize.tar.gz

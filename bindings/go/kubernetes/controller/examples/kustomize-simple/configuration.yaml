@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kustomize-simple-plain-http
+  namespace: default
+data:
+  .ocmconfig: |
+    type: generic.config.ocm.software/v1
+    configurations:
+      - type: http.config.ocm.software/v1alpha1
+        plainHTTP: true
+        hosts:
+          ghcr.io:
+            plainHTTP: false
