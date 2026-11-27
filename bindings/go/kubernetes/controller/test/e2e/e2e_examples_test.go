@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"encoding/json/v2"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -325,9 +326,15 @@ var _ = Describe("controller", func() {
 func assertPublicOnlySecret(ctx SpecContext, secretName string, sigNames []string) error {
 	GinkgoHelper()
 
+	// Decode stdout only: kubectl warnings on stderr would otherwise corrupt the JSON.
 	cmd := exec.CommandContext(ctx, "kubectl", "get", "secret", secretName, "-n", "default", "-o", "json")
-	out, err := utils.Run(cmd)
+	GinkgoLogr.Info("Running: " + strings.Join(cmd.Args, " "))
+	out, err := cmd.Output()
 	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return fmt.Errorf("could not fetch Secret %q: %w: %s", secretName, err, exitErr.Stderr)
+		}
 		return fmt.Errorf("could not fetch Secret %q: %w", secretName, err)
 	}
 

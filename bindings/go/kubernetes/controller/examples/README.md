@@ -459,7 +459,7 @@ done
 Publish v2 with the same recipe and select it on the Component:
 
 ```bash
-task prepare CONSTRUCTOR=component-constructor-2.yaml
+task prepare EXAMPLE_CONSTRUCTOR=component-constructor-2.yaml
 kubectl --context=kind-ocm-e2e -n default patch component.delivery.ocm.software/applyset-pruning-component \
   --type=merge -p '{"spec":{"semver":"2.0.0"}}'
 kubectl --context=kind-ocm-e2e -n default wait component.delivery.ocm.software/applyset-pruning-component \

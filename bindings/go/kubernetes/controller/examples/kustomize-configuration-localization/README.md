@@ -16,18 +16,18 @@ The `kustomize-resource` uses a `dir/v1` input pointing at `./oci-layout` with m
 `application/vnd.ocm.software.oci.layout.v1+tar`. The recipe stages that layout and its companion file inputs
 in a fresh temporary directory, leaving any existing `./oci-layout` untouched. To execute the same sequence
 directly instead of `task prepare`, run from this directory with the absolute `OCM_CLI` and `IMAGE_REGISTRY`
-set by the shared prerequisites. The outer subshell keeps `set -eu`, `exit` and the cleanup trap out of your
+set by the shared prerequisites. The outer subshell keeps `set -euo pipefail`, `exit` and the cleanup trap out of your
 interactive shell:
 
 ```bash
 (
-  set -eu
+  set -euo pipefail
   command -v oras >/dev/null 2>&1 || { echo "oras is required for kustomize-configuration-localization" >&2; exit 1; }
   work=$(mktemp -d)
   trap 'rm -rf -- "$work"' EXIT
   cp ./component-constructor.yaml "$work/component-constructor.yaml"
   cp ./rgd.yaml ./crossplane-composition.yaml "$work/"
-  COPYFILE_DISABLE=1 tar -czf "$work/kustomize.tar.gz" -C ./kustomize .
+  COPYFILE_DISABLE=1 tar -cf - -C ./kustomize . | gzip -n > "$work/kustomize.tar.gz"
   (
     cd "$work"
     oras push --oci-layout ./oci-layout:latest \
