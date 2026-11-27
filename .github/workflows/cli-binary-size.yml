@@ -1,0 +1,102 @@
+name: cli binary size guard
+
+# Guards against unreviewed growth of the `ocm` CLI binary. On every push to
+# main the job builds the CLI at the new tip and at its parent commit inside
+# the same run, compares the two stripped binary sizes, and fails if the new
+# binary grew by more than the threshold. There is no stored baseline: the
+# before and after are both built here, so the comparison is always
+# apples-to-apples on one runner with one toolchain.
+#
+# The default threshold of 10 percent is justified by the one-year weekly
+# measurement in docs/cli-binary-size: 10 percent sits above the 95th
+# percentile of same-toolchain week-over-week growth, so normal feature work
+# passes while a rare large jump is held for a human to judge.
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      threshold_percent:
+        description: "Maximum allowed binary size growth in percent."
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  # Default growth threshold in percent. workflow_dispatch can override it.
+  SIZE_GROWTH_THRESHOLD_PERCENT: ${{ inputs.threshold_percent || '10' }}
+  # Fixed, deterministic build target, identical for both builds.
+  TARGET_GOOS: linux
+  TARGET_GOARCH: amd64
+  CLI_BINARY: bindings/go/cli/tmp/bin/ocm-linux-amd64
+
+jobs:
+  size-guard:
+    name: Compare CLI binary size
+    runs-on: ubuntu-26.04-arm
+    steps:
+      - name: Checkout (tip and parent)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Need the parent commit to build the "before" binary.
+          fetch-depth: 2
+
+      - name: Setup Go
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: bindings/go/go.mod
+          cache-dependency-path: bindings/go/go.sum
+
+      - name: Install Task
+        uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build CLI at the new tip
+        run: |
+          task bindings/go/cli:build/single GOOS="${TARGET_GOOS}" GOARCH="${TARGET_GOARCH}"
+          new_size=$(stat -c%s "${CLI_BINARY}")
+          echo "NEW_SIZE=${new_size}" >> "${GITHUB_ENV}"
+          echo "New tip binary size: ${new_size} bytes"
+
+      - name: Build CLI at the parent commit
+        run: |
+          # Build the parent with the tip's toolchain (GOTOOLCHAIN=local in the
+          # build task) so the delta reflects the code change, not a toolchain
+          # change. The tip binary is already measured, so overwriting the
+          # output here is safe.
+          git checkout --quiet --force HEAD^
+          task bindings/go/cli:build/single GOOS="${TARGET_GOOS}" GOARCH="${TARGET_GOARCH}"
+          old_size=$(stat -c%s "${CLI_BINARY}")
+          echo "OLD_SIZE=${old_size}" >> "${GITHUB_ENV}"
+          echo "Parent binary size: ${old_size} bytes"
+
+      - name: Compare and enforce threshold
+        run: |
+          growth=$(awk -v n="${NEW_SIZE}" -v o="${OLD_SIZE}" \
+            'BEGIN { if (o == 0) { print "100" } else { printf "%.4f", (n - o) / o * 100 } }')
+          echo "Parent size:    ${OLD_SIZE} bytes"
+          echo "New tip size:   ${NEW_SIZE} bytes"
+          echo "Growth:         ${growth}% (threshold ${SIZE_GROWTH_THRESHOLD_PERCENT}%)"
+          {
+            echo "### CLI binary size guard"
+            echo ""
+            echo "| metric | value |"
+            echo "| --- | --- |"
+            echo "| parent size | ${OLD_SIZE} bytes |"
+            echo "| new tip size | ${NEW_SIZE} bytes |"
+            echo "| growth | ${growth}% |"
+            echo "| threshold | ${SIZE_GROWTH_THRESHOLD_PERCENT}% |"
+          } >> "${GITHUB_STEP_SUMMARY}"
+          over=$(awk -v g="${growth}" -v t="${SIZE_GROWTH_THRESHOLD_PERCENT}" \
+            'BEGIN { print (g > t) ? "1" : "0" }')
+          if [ "${over}" = "1" ]; then
+            echo "::error::CLI binary grew ${growth}%, above the ${SIZE_GROWTH_THRESHOLD_PERCENT}% threshold. A maintainer must review this growth."
+            exit 1
+          fi
+          echo "CLI binary growth is within the threshold."
