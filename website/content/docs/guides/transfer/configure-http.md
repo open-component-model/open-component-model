@@ -90,13 +90,13 @@ short so a hung server is detected quickly.
 Verify the settings are applied:
 
 ```bash
-ocm --loglevel debug get componentversion ghcr.io/open-component-model//ocm.software/demos/podinfo:6.8.0
+ocm --loglevel debug get componentversion ghcr.io/open-component-model//ocm.software/cli:{{< site-version "semver" >}}
 ```
 
 Look for a log line like:
 
 ```text
-level=DEBUG msg="http config resolved" timeout=15s tlsHandshakeTimeout=10s hosts=map[]
+level=DEBUG msg="http config resolved" timeout=15s tlsHandshakeTimeout=10s hosts=[]
 ```
 
 ## Tune the retry policy
@@ -147,7 +147,7 @@ environment variables.
 ```bash
 export HTTPS_PROXY=http://proxy.corp:3128
 export NO_PROXY=localhost,127.0.0.1,.corp,.svc.cluster.local
-ocm get cv ghcr.io/open-component-model//ocm.software/demos/podinfo:6.8.0
+ocm get cv ghcr.io/open-component-model//ocm.software/cli:{{< site-version "semver" >}}
 ```
 
 | Variable                      | Purpose                                                        |
@@ -428,18 +428,19 @@ run any command that initialises the CLI with debug logging and inspect the
 resolved config line:
 
 ```bash
-ocm --loglevel debug get cv ghcr.io/open-component-model//ocm.software/demos/podinfo:6.8.0
+ocm --loglevel debug get cv ghcr.io/open-component-model//ocm.software/cli:{{< site-version "semver" >}}
 ```
 
 Early in the output, before any registry request, OCM logs the resolved HTTP
-config. The `hosts` field reflects your per-host map, so a non-empty value proves
-the overrides were picked up:
+config. The `hosts` field lists the keys of your per-host map, so a non-empty
+value proves the overrides were picked up. With the
+[complete example](#complete-example) the line looks like this:
 
 ```text
-level=DEBUG msg="http config resolved" timeout=15s tlsHandshakeTimeout=10s hosts=map[artifactory.corp:5000:{...} ghcr.io:{...}]
+level=DEBUG msg="http config resolved" timeout=15s tlsHandshakeTimeout=10s hosts="[artifactory.corp:5000 mirror.airgap.local registry.kind.local:5001]"
 ```
 
-If `hosts=map[]` while you expected entries, the `hosts` block was not parsed,
+If `hosts=[]` while you expected entries, the `hosts` block was not parsed,
 check the indentation and the host-key format. If the command exits with
 `invalid http configuration: ...`, a field value is out of range, see
 [Troubleshooting](#troubleshooting). A malformed config fails fast at startup
