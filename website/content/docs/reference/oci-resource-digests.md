@@ -54,9 +54,15 @@ blob verification is unchanged.
 
 Helm chart digests follow the same distinction: HTTP chart repositories hash
 chart archive bytes with `genericBlobDigest/v1`, while `oci://` chart references
-and charts converted to OCI layouts identify a manifest with
-`ociArtifactDigest/v1`. Complete historical generic labels on OCI chart
-references are verified against the manifest and preserved.
+and charts that a transfer converts to OCI layouts identify a manifest with
+`ociArtifactDigest/v1`. When a signature or a reference digest covers the
+`genericBlobDigest/v1` digest of a chart, a transfer that copies the chart keeps
+it and stores the chart archive (see
+[Helm charts]({{< relref "docs/guides/transfer/upload-oci-images.md#charts-covered-by-a-signature" >}})).
+Complete historical generic labels on OCI chart references are verified against
+the manifest and preserved. A transfer that must keep such a label when it copies
+the chart fails with a digest mismatch: the copy checks the value against the chart
+archive.
 
 ## Archive Checksums and Digest Pins
 

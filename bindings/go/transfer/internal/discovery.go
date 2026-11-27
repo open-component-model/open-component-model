@@ -30,6 +30,9 @@ type discoveryValue struct {
 	// component version is pinned to it (see [repository.DigestPinnableRepository]), else empty.
 	// Local resources are then read from the same artifact.
 	Pin string
+	// ReferenceDigest reports whether a parent's component reference records a digest of this
+	// component version. Like a signature, that digest covers the resource digests.
+	ReferenceDigest bool
 }
 
 // multiResolver dispatches component version resolution to per-component resolvers.

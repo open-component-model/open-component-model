@@ -49,7 +49,10 @@ preference:
 
 Referenced charts are marked `relation: external`. On transfer, OCM resolves the
 chart and, with the OCI uploader applied, uploads it as a standalone OCI artifact
-in the target registry (see
+in the target registry. For a chart from an HTTP or HTTPS chart repository,
+`ocm add cv` records the digest of the chart archive (`genericBlobDigest/v1`). A
+transfer that copies the chart of a signed component version keeps this digest, so
+the signature stays valid (see
 [Upload OCI Images]({{< relref "docs/guides/transfer/upload-oci-images.md" >}})).
 
 ## Prerequisites

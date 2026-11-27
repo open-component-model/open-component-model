@@ -7,11 +7,13 @@ import (
 var Scheme = runtime.NewScheme()
 
 var (
-	GetHelmChartV1alpha1     = runtime.NewVersionedType(GetHelmChartType, Version)
-	ConvertHelmToOCIV1alpha1 = runtime.NewVersionedType(ConvertHelmToOCIType, Version)
+	GetHelmChartV1alpha1            = runtime.NewVersionedType(GetHelmChartType, Version)
+	ConvertHelmToOCIV1alpha1        = runtime.NewVersionedType(ConvertHelmToOCIType, Version)
+	SetHelmChartLayerAccessV1alpha1 = runtime.NewVersionedType(SetHelmChartLayerAccessType, Version)
 )
 
 func init() {
 	Scheme.MustRegisterWithAlias(&GetHelmChart{}, GetHelmChartV1alpha1)
 	Scheme.MustRegisterWithAlias(&ConvertHelmToOCI{}, ConvertHelmToOCIV1alpha1)
+	Scheme.MustRegisterWithAlias(&SetHelmChartLayerAccess{}, SetHelmChartLayerAccessV1alpha1)
 }

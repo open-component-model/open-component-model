@@ -2,21 +2,28 @@ package integration
 
 import (
 	"context"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
+	"github.com/opencontainers/go-digest"
+	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3/registry/remote"
 	"github.com/stretchr/testify/require"
+	"helm.sh/helm/v4/pkg/registry"
 
 	"ocm.software/open-component-model/bindings/go/cli/cmd"
 	"ocm.software/open-component-model/bindings/go/cli/cmd/configuration"
 	"ocm.software/open-component-model/bindings/go/cli/integration/internal"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	"ocm.software/open-component-model/bindings/go/credentials/spec/config/runtime"
+	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	v2 "ocm.software/open-component-model/bindings/go/descriptor/v2"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ociaccess "ocm.software/open-component-model/bindings/go/oci/spec/access"
@@ -585,4 +592,199 @@ configurations:
 		// No provenance file — pass empty string for originalProvPath
 		downloadAndVerifyResource(t, ctx, targetRef, componentName, componentVersion, cfgPath, chartFile, "")
 	})
+}
+
+// Test_Integration_Transfer_HelmChart_KeepsDigest copies a signed Helm chart from an HTTP chart
+// repository into a plain HTTP registry. The signature covers the genericBlobDigest/v1 digest of
+// the chart archive, so every copy keeps that digest: as a local blob, as the chart layer of a
+// Helm OCI image, and on a later hop out of that image. A signed chart without a recorded digest
+// cannot keep it, so its copy fails before anything is written.
+func Test_Integration_Transfer_HelmChart_KeepsDigest(t *testing.T) {
+	r := require.New(t)
+	t.Parallel()
+
+	chartDir := filepath.Join(getRepoRootBasedOnGit(t), "bindings/go/helm/testdata/provenance")
+	chartBytes, err := os.ReadFile(filepath.Join(chartDir, helmDigestChartFile))
+	r.NoError(err, "test helm chart should exist")
+	srv := newIndexedHelmChartRepoServer(t, chartDir)
+
+	targetRegistry, err := internal.CreateOCIRegistry(t)
+	r.NoError(err, "should be able to start target registry container")
+	cfgPath := writeSigningConfig(t, targetRegistry)
+
+	name, version := "ocm.software/helm-digest-registry", "v1.0.0"
+	srcCTF := createSignedHelmDigestSource(t, cfgPath, srv.URL, name, version)
+	srcRef := fmt.Sprintf("ctf::%s//%s:%s", srcCTF, name, version)
+	src := getCTFComponentVersion(t, srcCTF, name, version)
+	r.Len(src.Component.Resources, 1)
+	r.NotNil(src.Component.Resources[0].Digest, "the source resource should carry a digest")
+	srcDigest := src.Component.Resources[0].Digest
+
+	t.Run("signed copy into a registry keeps the signature", func(t *testing.T) {
+		r := require.New(t)
+		targetRef := fmt.Sprintf("http://%s/helm-digest-local", targetRegistry.RegistryAddress)
+		requireOCM(t, "copying the signed chart into the registry should succeed",
+			"transfer", "component-version", srcRef, targetRef,
+			"--config", cfgPath,
+			"--copy-resources",
+		)
+
+		targetCVRef := fmt.Sprintf("%s//%s:%s", targetRef, name, version)
+		requireOCM(t, "verifying the copied component version should succeed", "verify", "cv", targetCVRef, "--config", cfgPath)
+
+		tgt := getRegistryComponentVersion(t, cfgPath, targetRef, name, version)
+		r.Len(tgt.Component.Resources, 1)
+		r.Equal(srcDigest, tgt.Component.Resources[0].Digest, "the copy should keep the signed digest")
+		requireHelmChartLocalBlob(t, tgt.Component.Resources[0].Access)
+		r.Equal(chartBytes, downloadRawResource(t, targetCVRef, cfgPath), "the copy should store the chart archive unchanged")
+	})
+
+	t.Run("upload as OCI artifact records the chart layer", func(t *testing.T) {
+		r := require.New(t)
+		targetRef := fmt.Sprintf("http://%s/helm-digest-oci", targetRegistry.RegistryAddress)
+		requireOCM(t, "copying the signed chart as an OCI artifact should succeed",
+			"transfer", "component-version", srcRef, targetRef,
+			"--config", cfgPath,
+			"--copy-resources",
+			"--upload-as", "ociArtifact",
+		)
+
+		targetCVRef := fmt.Sprintf("%s//%s:%s", targetRef, name, version)
+		requireOCM(t, "verifying the copied component version should succeed", "verify", "cv", targetCVRef, "--config", cfgPath)
+
+		tgt := getRegistryComponentVersion(t, cfgPath, targetRef, name, version)
+		r.Len(tgt.Component.Resources, 1)
+		r.Equal(srcDigest, tgt.Component.Resources[0].Digest, "the copy should keep the signed digest")
+		r.Equal(src.Component.Resources[0].Type, tgt.Component.Resources[0].Type, "the copy should keep the resource type")
+
+		chartDigest := digest.FromBytes(chartBytes)
+		var layer ociaccessv1.OCIImageLayer
+		r.NoError(ociaccess.Scheme.Convert(tgt.Component.Resources[0].Access, &layer), "the access should point to the chart layer")
+		r.Equal("ociBlob/v1", layer.Type.String())
+		r.Equal(targetRef+"/mychart", layer.Reference, "the layer should live in the chart image, scheme kept")
+		r.Equal(registry.ChartLayerMediaType, layer.MediaType)
+		r.Equal(chartDigest, layer.Digest)
+		r.Equal(int64(len(chartBytes)), layer.Size)
+		r.Contains(layer.ManifestReference, targetRef+"/mychart:0.1.0@sha256:", "the access should name the pushed chart image")
+		r.Equal(chartBytes, downloadRawResource(t, targetCVRef, cfgPath), "the layer should hold the chart archive unchanged")
+
+		manifest := fetchRegistryManifest(t, targetRegistry, "helm-digest-oci/mychart", "0.1.0")
+		r.True(slices.ContainsFunc(manifest.Layers, func(l ociImageSpecV1.Descriptor) bool {
+			return l.Digest == chartDigest
+		}), "the chart image should list the chart layer")
+
+		hop2CTF := filepath.Join(t.TempDir(), "hop2-ctf")
+		requireOCM(t, "copying the component version out of the registry should succeed",
+			"transfer", "component-version", targetCVRef, "ctf::"+hop2CTF,
+			"--config", cfgPath,
+			"--copy-resources",
+		)
+		requireOCM(t, "verifying the second copy should succeed",
+			"verify", "cv", fmt.Sprintf("ctf::%s//%s:%s", hop2CTF, name, version), "--config", cfgPath)
+
+		hop2 := getCTFComponentVersion(t, hop2CTF, name, version)
+		r.Len(hop2.Component.Resources, 1)
+		r.Equal(srcDigest, hop2.Component.Resources[0].Digest, "the second copy should keep the signed digest")
+		localBlob := requireHelmChartLocalBlob(t, hop2.Component.Resources[0].Access)
+		r.Equal("mychart", localBlob.ReferenceName)
+	})
+
+	t.Run("a signed chart without a recorded digest is not copied", func(t *testing.T) {
+		r := require.New(t)
+		noDigestCTF := createSignedHelmDigestSource(t, cfgPath, srv.URL, name, version, "--skip-reference-digest-processing")
+		noDigest := getCTFComponentVersion(t, noDigestCTF, name, version)
+		r.Len(noDigest.Component.Resources, 1)
+		r.Nil(noDigest.Component.Resources[0].Digest, "the source resource should carry no digest")
+
+		targetCTF := filepath.Join(t.TempDir(), "target-ctf")
+		transfer := cmd.New()
+		transfer.SetArgs([]string{
+			"transfer", "component-version", fmt.Sprintf("ctf::%s//%s:%s", noDigestCTF, name, version), "ctf::" + targetCTF,
+			"--config", cfgPath,
+			"--copy-resources",
+		})
+		err := transfer.ExecuteContext(t.Context())
+		r.ErrorContains(err, "cannot copy the Helm chart of signed component version")
+		r.ErrorContains(err, "no recorded digest")
+
+		get := cmd.New()
+		get.SetArgs([]string{"get", "cv", fmt.Sprintf("ctf::%s//%s:%s", targetCTF, name, version), "--config", cfgPath})
+		r.Error(get.ExecuteContext(t.Context()), "the failed transfer should write nothing")
+	})
+}
+
+// createSignedHelmDigestSource builds a CTF with one signed component version that holds the
+// mychart resource of the chart repository at repoURL, and returns the CTF path. extraAddArgs go
+// to "ocm add cv".
+func createSignedHelmDigestSource(t *testing.T, cfgPath, repoURL, name, version string, extraAddArgs ...string) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	constructorPath := filepath.Join(dir, "constructor.yaml")
+	require.NoError(t, os.WriteFile(constructorPath, []byte(fmt.Sprintf(`components:
+- name: %s
+  version: %s
+  provider:
+    name: ocm.software
+  resources:
+%s`, name, version, helmDigestChartResource(repoURL))), 0o600))
+
+	srcCTF := filepath.Join(dir, "source-ctf")
+	requireOCM(t, "creating the source component version should succeed", append([]string{
+		"add", "component-version",
+		"--repository", "ctf::" + srcCTF,
+		"--constructor", constructorPath,
+		"--config", cfgPath,
+	}, extraAddArgs...)...)
+	requireOCM(t, "signing the source component version should succeed",
+		"sign", "cv", fmt.Sprintf("ctf::%s//%s:%s", srcCTF, name, version), "--config", cfgPath)
+	return srcCTF
+}
+
+// getRegistryComponentVersion reads a component version from the registry repository at baseURL
+// with the credentials of cfgPath, so the test sees the stored descriptor.
+func getRegistryComponentVersion(t *testing.T, cfgPath, baseURL, name, version string) *descruntime.Descriptor {
+	t.Helper()
+	r := require.New(t)
+	ctx := t.Context()
+
+	ocmconf, err := configuration.GetConfigFromPath(cfgPath)
+	r.NoError(err)
+	credconf, err := runtime.LookupCredentialConfig(ocmconf)
+	r.NoError(err)
+	credentialResolver, err := credentials.ToGraph(ctx, credconf, credentials.Options{
+		RepositoryPluginProvider: credentials.GetRepositoryPluginFn(func(ctx context.Context, typed ocmruntime.Typed) (credentials.RepositoryPlugin, error) {
+			return nil, fmt.Errorf("no repository plugin configured for type %s", typed.GetType().String())
+		}),
+		CredentialPluginProvider: credentials.GetCredentialPluginFn(func(ctx context.Context, typed ocmruntime.Typed) (credentials.CredentialPlugin, error) {
+			return nil, fmt.Errorf("no credential plugin configured for type %s", typed.GetType().String())
+		}),
+		CredentialRepositoryTypeScheme: ocmruntime.NewScheme(),
+	})
+	r.NoError(err)
+
+	repoProvider := provider.NewComponentVersionRepositoryProvider(provider.WithHTTPConfig(loadHTTPConfig(t, cfgPath)))
+	repo, err := createRepo(ctx, repoProvider, credentialResolver, &ociv1.Repository{BaseUrl: baseURL})
+	r.NoError(err)
+	desc, err := repo.GetComponentVersion(ctx, name, version)
+	r.NoError(err)
+	return desc
+}
+
+// fetchRegistryManifest reads the image manifest at repository:tag straight from the registry.
+func fetchRegistryManifest(t *testing.T, reg *internal.OCIRegistry, repository, tag string) ociImageSpecV1.Manifest {
+	t.Helper()
+	r := require.New(t)
+
+	repo, err := remote.NewRepository(reg.Reference(repository))
+	r.NoError(err)
+	repo.Registry.PlainHTTP = true
+	repo.Registry.Client = internal.CreateAuthClient(reg.RegistryAddress, reg.User, reg.Password)
+
+	_, content, err := repo.FetchReference(t.Context(), tag)
+	r.NoError(err, "the image should exist")
+	defer content.Close()
+	var manifest ociImageSpecV1.Manifest
+	r.NoError(json.UnmarshalRead(content, &manifest))
+	return manifest
 }

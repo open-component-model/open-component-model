@@ -132,6 +132,24 @@ func TestCopyChartToOCILayout_TagMatchesVersion(t *testing.T) {
 		"OCI layout tag should match the chart version")
 }
 
+func TestCopyChartToOCILayout_ReportsChartLayer(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	chart := newReadOnlyChart(t, filepath.Join("../../testdata", "mychart-0.1.0.tgz"))
+
+	result, err := oci.CopyChartToOCILayout(ctx, chart, layoutPath(t))
+	r.NoError(err)
+	r.NotNil(result)
+	r.NotNil(result.ChartLayer)
+
+	_, manifest := readManifest(t, ctx, result)
+	r.NotEmpty(manifest.Layers)
+	r.Equal(registry.ChartLayerMediaType, result.ChartLayer.MediaType)
+	r.Equal(manifest.Layers[0].Digest, result.ChartLayer.Digest)
+	r.Equal(manifest.Layers[0].Size, result.ChartLayer.Size)
+}
+
 func TestCopyChartToOCILayout_ConfigContent(t *testing.T) {
 	ctx := t.Context()
 	testDataDir := "../../testdata"

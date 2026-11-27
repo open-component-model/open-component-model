@@ -55,6 +55,31 @@ func TestNewDefaultBuilder_CanBuildGitHubGraph(t *testing.T) {
 	require.NoError(t, err, "default builder must resolve the GetGitHubCommit transformer")
 }
 
+// TestNewDefaultBuilder_CanBuildHelmDigestGraphs runs the static type check over the chains that
+// keep a chart digest, which proves their expressions fit the schemas of the node types and that
+// every node type has a transformer.
+func TestNewDefaultBuilder_CanBuildHelmDigestGraphs(t *testing.T) {
+	tests := []struct {
+		name      string
+		target    runtime.Typed
+		uploaders []transferv1alpha1.UploaderConfig
+	}{
+		{name: "local blob, registry target", target: testOCIRepo("ghcr.io/target"), uploaders: withLocalBlobUploader()},
+		{name: "local blob, CTF target", target: testCTFRepo("./out"), uploaders: withLocalBlobUploader()},
+		{name: "OCI uploader", target: testOCIRepo("ghcr.io/target"), uploaders: withLocalBlobUploader(ociUploaders()...)},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			tgd, err := helmDigestGraph(t, helmDigestDescriptor(chartDigest(), true, "https://charts.example.com"), tc.uploaders, tc.target)
+			r.NoError(err)
+
+			_, err = NewDefaultBuilder(nil, nil, nil, nil, "").BuildAndCheck(tgd)
+			r.NoError(err)
+		})
+	}
+}
+
 // stubDownloadRepo answers every download with the same content, so that a graph can be
 // processed without a registry.
 type stubDownloadRepo struct {

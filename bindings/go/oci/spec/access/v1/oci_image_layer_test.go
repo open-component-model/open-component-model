@@ -1,10 +1,13 @@
 package v1
 
 import (
+	"encoding/json/v2"
 	"testing"
 
 	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
+
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 func TestOCIImageLayer_Validate(t *testing.T) {
@@ -41,6 +44,20 @@ func TestOCIImageLayer_Validate(t *testing.T) {
 		{
 			name:    "tag with digest",
 			layer:   OCIImageLayer{Reference: "https://example.com/repo:latest@" + validDigest.String(), Digest: validDigest, Size: 100},
+			wantErr: true,
+		},
+		{
+			name:  "manifest reference in the same repository",
+			layer: OCIImageLayer{Reference: "example.com/repo", Digest: validDigest, Size: 100, ManifestReference: "example.com/repo:1.0.0@" + digest.FromString("manifest").String()},
+		},
+		{
+			name:    "manifest reference in another repository",
+			layer:   OCIImageLayer{Reference: "example.com/repo", Digest: validDigest, Size: 100, ManifestReference: "example.com/other:1.0.0"},
+			wantErr: true,
+		},
+		{
+			name:    "invalid manifest reference",
+			layer:   OCIImageLayer{Reference: "example.com/repo", Digest: validDigest, Size: 100, ManifestReference: "example.com/repo@sha256:nope"},
 			wantErr: true,
 		},
 		{
@@ -165,6 +182,46 @@ func TestRelativeOCIReference_Validate(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
+		})
+	}
+}
+
+// The OCM spec reserves imageReference for the repository of an ociBlob access, so the
+// image that lists the layer is written under manifestReference. A layer without it must
+// serialise exactly as before the field existed, or stored descriptors change.
+func TestOCIImageLayer_ManifestReferenceJSON(t *testing.T) {
+	dig := digest.FromString("test")
+	for _, tt := range []struct {
+		name     string
+		manifest string
+		wantJSON string
+	}{
+		{
+			name:     "without manifest reference",
+			wantJSON: `{"type":"ociBlob/v1","ref":"example.com/repo","digest":"` + dig.String() + `","size":100}`,
+		},
+		{
+			name:     "with manifest reference",
+			manifest: "example.com/repo:1.0.0",
+			wantJSON: `{"type":"ociBlob/v1","ref":"example.com/repo","digest":"` + dig.String() + `","size":100,"manifestReference":"example.com/repo:1.0.0"}`,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			layer := OCIImageLayer{
+				Type:              runtime.NewVersionedType(LegacyOCIBlobAccessType, LegacyOCIBlobAccessTypeVersion),
+				Reference:         "example.com/repo",
+				Digest:            dig,
+				Size:              100,
+				ManifestReference: tt.manifest,
+			}
+			data, err := json.Marshal(&layer, runtime.JSONOptions)
+			r.NoError(err)
+			r.JSONEq(tt.wantJSON, string(data))
+
+			var decoded OCIImageLayer
+			r.NoError(json.Unmarshal(data, &decoded, runtime.JSONOptions))
+			r.Equal(layer, decoded)
 		})
 	}
 }

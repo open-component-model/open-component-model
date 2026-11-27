@@ -127,6 +127,79 @@ Pull it with Helm's OCI support:
 helm pull oci://ghcr.io/my-org/charts/my-chart --version 1.0.0
 ```
 
+### Charts covered by a signature
+
+The conversion gives the chart a new digest. That must not happen when something
+covers the recorded digest: a signature of the component version, or the
+reference digest that a parent component version records in a recursive transfer.
+For such a component version the transfer keeps the chart digest and the resource
+type. Without a signature or a reference digest, the transfer still converts the
+chart and records a new `ociArtifactDigest/v1` digest, because the OCM controller
+cannot yet deploy a chart copied with its digest kept.
+
+It can do so for a digest of the chart archive (`genericBlobDigest/v1`, `SHA-256`),
+which `ocm add cv` records for a chart from an HTTP or HTTPS chart repository.
+The transfer then stores the chart archive (`.tgz`) and does not convert it:
+
+- Without the OCI uploader, the chart archive becomes a local blob with the media
+  type `application/vnd.cncf.helm.chart.content.v1.tar+gzip`. The provenance file
+  is not stored.
+- With the OCI uploader, the chart is pushed as a Helm OCI image, and the access
+  points at the chart layer of that image. The provenance file, when there is
+  one, is another layer of that image. Only `access` changes:
+
+```yaml
+resources:
+  - name: podinfo
+    type: helmChart
+    access:
+      type: ociBlob/v1
+      ref: ghcr.io/acme/ocm/podinfo/podinfo
+      mediaType: application/vnd.cncf.helm.chart.content.v1.tar+gzip
+      digest: sha256:d3d67f46...
+      size: 18351
+      manifestReference: ghcr.io/acme/ocm/podinfo/podinfo:6.17.0@sha256:5c1ae3b2...
+    digest:
+      hashAlgorithm: SHA-256
+      normalisationAlgorithm: genericBlobDigest/v1
+      value: d3d67f46...
+```
+
+`digest` is the digest of the chart archive. `manifestReference` names the pushed
+Helm OCI image that holds it, with its tag and manifest digest. Pull the chart
+with that reference:
+
+```bash
+helm pull oci://ghcr.io/acme/ocm/podinfo/podinfo --version 6.17.0
+```
+
+A digest that is excluded from the signature (normalisation algorithm
+`EXCLUDE-FROM-SIGNATURE`) also stays as it is.
+
+Such a component version cannot keep any other chart digest: a chart without a
+recorded digest (added with `--skip-reference-digest-processing`), or with an
+`ociArtifactDigest/v1` digest (from an `oci://` chart repository). The transfer
+then fails while the graph is built, with
+`cannot copy the Helm chart of signed component version ...` or
+`cannot copy the Helm chart of component version referenced by digest ...`.
+A converted chart would break the signature, or the reference digest in the
+parent, which the next recursive transfer rejects. To go on, keep the
+resource by reference with a `reference.uploader.transfer.config.ocm.software/v1alpha1`
+entry whose `match` selects it, placed before the catch-all (see E12 in the
+[selection examples]({{< relref "docs/reference/configuration/transfer-configuration/selection-examples.md" >}})),
+or transfer without copying it.
+
+{{< callout context="note" title="Limits of a chart copied with its digest kept" icon="outline/info-circle" >}}
+The OCM controller cannot yet deploy a chart that a transfer copied with its
+recorded digest kept, as a local blob or as a chart layer.
+
+A later transfer does not push such a chart as a Helm OCI image: the default
+selection of the OCI uploader covers neither the chart archive local blob nor the
+`ociBlob/v1` access, and a later copy stores the chart archive as a local blob.
+The `helm` transformer of `ocm download resource` does not read the chart archive
+either; download it with `--extraction-policy disable`.
+{{< /callout >}}
+
 ## Targeting specific resources
 
 To upload only selected resources, or to control the exact target reference, set

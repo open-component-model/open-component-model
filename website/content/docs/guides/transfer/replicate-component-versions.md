@@ -390,6 +390,20 @@ repository.
 **Fix:** Confirm the source `Component` is ready and that every referenced
 component version actually exists in the source repository.
 
+**Cause:** The message also contains
+`cannot copy the Helm chart of signed component version` or
+`cannot copy the Helm chart of component version referenced by digest`. The
+config copies a Helm chart of a component version that is signed, or that a
+parent references by digest, and the copy would add or replace the chart's
+recorded digest. That breaks the signature or the reference digest in the
+parent. This happens for a chart
+without a recorded digest or with an `ociArtifactDigest/v1` digest (see
+[Helm charts]({{< relref "docs/guides/transfer/upload-oci-images.md#charts-covered-by-a-signature" >}})).
+
+**Fix:** Keep the chart by reference: add a
+`reference.uploader.transfer.config.ocm.software/v1alpha1` entry whose `match`
+selects it, before the catch-all entry. Or remove the uploader entry that copies it.
+
 ### Symptom: authentication or "unauthorized" errors during transfer
 
 **Cause:** The credentials in the transfer `Secret` do not cover one of the hosts

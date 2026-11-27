@@ -15,8 +15,19 @@ supported access type: OCI images are streamed via `TransferOCIArtifactToOCILoca
 converted to OCI via `GetHelmChart` → `ConvertHelmToOCI`, and wget, S3 and
 GitHub resources are downloaded through their access-specific downloaders.
 
+The conversion gives a Helm chart a new digest. When a signature, or the reference
+digest in a parent component version, covers a recorded chart digest
+(`genericBlobDigest/v1`, `SHA-256`), the chart is not converted: `GetHelmChart`
+fetches it and it is stored as the chart archive (`.tgz`), with the media type
+`application/vnd.cncf.helm.chart.content.v1.tar+gzip`. Its digest stays unchanged
+and the provenance file is not stored. See
+[Helm charts]({{< relref "docs/guides/transfer/upload-oci-images.md#charts-covered-by-a-signature" >}})
+for the full rule.
+
 Selecting an access type the local blob uploader cannot handle fails the transfer
-with `local blob uploader cannot copy access type …`.
+with `local blob uploader cannot copy access type …`. Copying a Helm chart whose
+digest would change fails the transfer of a component version that is signed, or
+referenced by digest, with `cannot copy the Helm chart of …`.
 
 ## Schema
 

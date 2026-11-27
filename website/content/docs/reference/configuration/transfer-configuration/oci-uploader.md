@@ -11,6 +11,17 @@ Uploads a selected resource as a separate OCI artifact in the target registry.
 The resource is stored independently from the component version, making it
 directly addressable and pullable with standard OCI tools.
 
+A Helm chart is converted to an OCI artifact and gets a new digest. When a
+signature, or the reference digest in a parent component version, covers a
+recorded chart digest (`genericBlobDigest/v1`, `SHA-256`), the chart is pushed as
+a Helm OCI image instead: the descriptor keeps the digest and records an
+`ociBlob/v1` access to the chart layer of that image, with the image in
+`manifestReference`. A component version that is signed, or referenced by
+digest, and whose chart digest cannot be kept fails the transfer with
+`cannot copy the Helm chart of …`. See
+[Helm charts]({{< relref "docs/guides/transfer/upload-oci-images.md#charts-covered-by-a-signature" >}})
+for the full rule.
+
 ## Schema
 
 {{< schema-renderer url="/schemas/bindings/go/transfer/OCIUploaderConfig.schema.json" >}}
