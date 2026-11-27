@@ -22,8 +22,12 @@ each one and checks its type and fields. OCM v1 creates that version with
 digest generation disabled because its external resources are deliberately
 not contacted. The third version uses local Helm and Git inputs; OCM v2 reads
 their generated local-blob access and digest metadata, and downloads the Git
-archive to check its recorded digest. Generated artifacts and keys are
-temporary; the repository does not commit v1-generated blob trees.
+archive to check its recorded digest. Two more versions are signed with
+`jsonNormalisation/v1`: OCM v2 verifies the one whose digest only matches the
+OCM v1 variant (Helm chart with a source reference, decimal and HTML label
+values) and refuses the one with objects inside a signed label array with a
+re-sign hint. Generated artifacts and keys are temporary; the repository does
+not commit v1-generated blob trees.
 
 This lane checks v1-produced data with v2, not cross-technology transfers.
 The external access cases currently cover descriptor compatibility, not

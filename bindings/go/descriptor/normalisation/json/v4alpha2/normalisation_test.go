@@ -105,3 +105,71 @@ func TestReferenceLabelsUnfilteredWithVersion(t *testing.T) {
 	r.NotEqual(v1out, v2out, "v4alpha1 drops the reference label version, so it diverges")
 	r.NotContains(v1out, `"version":"v5"`, "v4alpha1 must not sign the reference label version")
 }
+
+// nullLabelsInput carries signed labels with null values on the component, at a
+// nested position of a label value, and on a component reference.
+const nullLabelsInput = `---
+meta:
+  schemaVersion: v2
+component:
+  name: example.com/null
+  version: 1.0.0
+  provider: example
+  labels:
+    - name: foo
+      value: null
+      signing: true
+    - name: nested
+      value:
+        a: null
+        b: [null]
+      signing: true
+    - name: unsigned
+      value: null
+  resources: []
+  sources: []
+  componentReferences:
+    - name: ref
+      componentName: example.com/ref
+      version: 1.0.0
+      labels:
+        - name: refl
+          value: null
+          signing: true
+`
+
+// TestNormaliseLegacyV3NullValues: legacy v3 (OCM v1) keeps null-valued
+// entries, so NormaliseLegacyV3 does; the registered v4alpha2 algorithm stays
+// byte-frozen and keeps dropping them, so digests v2 recorded as v4alpha2 do
+// not move.
+func TestNormaliseLegacyV3NullValues(t *testing.T) {
+	r := require.New(t)
+
+	legacy, err := v4alpha2.NormaliseLegacyV3(fromYAML(t, nullLabelsInput))
+	r.NoError(err)
+	r.Equal(`{"component":{"componentReferences":[{"componentName":"example.com/ref","labels":[{"name":"refl","signing":true,"value":null}],"name":"ref","version":"1.0.0"}],`+ //nolint:testifylint // byte-exact comparison
+		`"labels":[{"name":"foo","signing":true,"value":null},{"name":"nested","signing":true,"value":{"a":null,"b":[null]}}],`+
+		`"name":"example.com/null","provider":{"name":"example"},"resources":[],"sources":[],"version":"1.0.0"}}`, string(legacy))
+
+	r.Equal(`{"component":{"componentReferences":[{"componentName":"example.com/ref","labels":[{"name":"refl","signing":true}],"name":"ref","version":"1.0.0"}],`+ //nolint:testifylint // byte-exact comparison
+		`"labels":[{"name":"foo","signing":true},{"name":"nested","signing":true,"value":{"b":[null]}}],`+
+		`"name":"example.com/null","provider":{"name":"example"},"resources":[],"sources":[],"version":"1.0.0"}}`,
+		normalise(t, nullLabelsInput, v4alpha2.Algorithm), "v4alpha2 must stay byte-frozen")
+}
+
+// TestNormaliseLegacyV3MatchesV4alpha2WithoutNulls: without null values the
+// legacy v3 form is the v4alpha2 form, on every v3 oracle fixture.
+func TestNormaliseLegacyV3MatchesV4alpha2WithoutNulls(t *testing.T) {
+	for name, in := range map[string]string{
+		"delta-free":       deltaFreeInput,
+		"version-labels":   versionLabelsInput,
+		"reference-labels": referenceLabelsInput,
+		"ocmcli-0.27.0":    ocmCLI0270Input,
+	} {
+		t.Run(name, func(t *testing.T) {
+			got, err := v4alpha2.NormaliseLegacyV3(fromYAML(t, in))
+			require.NoError(t, err)
+			require.Equal(t, normalise(t, in, v4alpha2.Algorithm), string(got)) //nolint:testifylint // byte-exact comparison
+		})
+	}
+}

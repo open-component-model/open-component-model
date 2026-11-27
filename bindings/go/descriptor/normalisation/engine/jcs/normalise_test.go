@@ -477,3 +477,23 @@ func TestPrepareArray(t *testing.T) {
 		})
 	}
 }
+
+// TestKeepNulls: Type drops null-valued map entries; KeepNulls keeps them as
+// "name":null at every depth, while exclusion rules still apply.
+func TestKeepNulls(t *testing.T) {
+	in := map[string]interface{}{
+		"a":       nil,
+		"b":       map[string]interface{}{"c": nil, "d": 1},
+		"e":       []interface{}{nil, map[string]interface{}{"f": nil}},
+		"dropped": nil,
+	}
+	rules := MapExcludes{"dropped": nil}
+
+	got, err := NormaliseWith(KeepNulls, in, rules)
+	require.NoError(t, err)
+	assert.Equal(t, `{"a":null,"b":{"c":null,"d":1},"e":[null,{"f":null}]}`, string(got)) //nolint:testifylint // byte-exact comparison, JSONEq would mask a dropped null
+
+	got, err = Normalise(in, rules)
+	require.NoError(t, err)
+	assert.Equal(t, `{"b":{"d":1},"e":[null,{}]}`, string(got), "the default normalisation must keep dropping nulls") //nolint:testifylint // byte-exact comparison
+}

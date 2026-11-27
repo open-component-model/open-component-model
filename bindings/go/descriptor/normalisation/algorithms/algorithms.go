@@ -37,17 +37,31 @@ const (
 	//
 	// It maps to v4alpha2, not to Default (v4alpha3). v4alpha2 is the faithful
 	// v3 re-implementation: it keeps label.version and emits reference labels
-	// unfiltered, so it reproduces legacy v3 bytes exactly. Mapping v3 to
-	// v4alpha1 (which drops label.version) breaks verification of v3 signatures
-	// over versioned labels; mapping it to v4alpha3 (which filters reference
-	// labels signing-only) breaks verification of v3 signatures that carry
-	// reference labels.
+	// unfiltered, so it reproduces legacy v3 bytes exactly, except for
+	// null-valued entries (see below). Mapping v3 to v4alpha1 (which drops
+	// label.version) breaks verification of v3 signatures over versioned
+	// labels; mapping it to v4alpha3 (which filters reference labels
+	// signing-only) breaks verification of v3 signatures that carry reference
+	// labels.
+	//
+	// One difference remains: legacy v3 keeps null-valued entries such as a
+	// signed label with value: null, which v4alpha2 drops. v4alpha2 stays
+	// byte-frozen so its recorded digests keep verifying; Verify checks a
+	// digest recorded as LegacyV3 against v4alpha2.NormaliseLegacyV3 instead.
 	LegacyV3 = "jsonNormalisation/v3"
+	// LegacyV2 is the deprecated jsonNormalisation/v2 algorithm of legacy OCM
+	// v1. It is neither computed nor verified: the spec only states that it
+	// differs from v3 by the legacy extra-identity defaulting, which is not
+	// reproduced here. Digest and Verify reject it with ErrUnsupportedNormalisation.
+	LegacyV2 = "jsonNormalisation/v2"
 )
 
 var (
 	// ErrUnsupportedHash is returned for a hash algorithm other than SHA-256 or SHA-512.
 	ErrUnsupportedHash = errors.New("unsupported hash algorithm")
+	// ErrUnsupportedNormalisation is returned for a normalisation algorithm that
+	// is known but no longer supported. It wraps normalisation.ErrUnknownNormalisationAlgorithm.
+	ErrUnsupportedNormalisation = fmt.Errorf("%w: unsupported", normalisation.ErrUnknownNormalisationAlgorithm)
 	// ErrDigestMismatch is returned by Verify when the descriptor does not match the digest.
 	ErrDigestMismatch = errors.New("digest mismatch")
 )
@@ -65,6 +79,16 @@ func Resolve(normalisationAlgorithm string) (string, bool) {
 // digests: no new signature or component reference digest may record it.
 func VerifyOnly(normalisationAlgorithm string) bool {
 	return normalisationAlgorithm == jsonv1.Algorithm //nolint:staticcheck // the deprecated v1 is the verify-only algorithm
+}
+
+// CheckSupported returns ErrUnsupportedNormalisation for an algorithm that is
+// known but can neither be verified nor created (jsonNormalisation/v2).
+func CheckSupported(normalisationAlgorithm string) error {
+	if normalisationAlgorithm == LegacyV2 {
+		return fmt.Errorf("%w: %q is deprecated and can neither be verified nor created; re-sign the component version with %q (see %s)",
+			ErrUnsupportedNormalisation, LegacyV2, Default, MigrationGuide)
+	}
+	return nil
 }
 
 // Hash resolves a hash algorithm name to SHA-256 or SHA-512. Case is ignored
@@ -86,8 +110,11 @@ func Hash(name string) (crypto.Hash, error) {
 // alias is labelled with the algorithm it resolves to) and the canonical hash
 // name.
 func Digest(desc *descruntime.Descriptor, normalisationAlgorithm, hashAlgorithm string) (*descruntime.Digest, error) {
+	if err := CheckSupported(normalisationAlgorithm); err != nil {
+		return nil, err
+	}
 	normalisationAlgorithm, _ = Resolve(normalisationAlgorithm)
-	sum, hash, err := sum(desc, normalisationAlgorithm, hashAlgorithm)
+	sum, hash, err := sum(registered(normalisationAlgorithm), desc, hashAlgorithm)
 	if err != nil {
 		return nil, err
 	}
@@ -102,9 +129,65 @@ func Digest(desc *descruntime.Descriptor, normalisationAlgorithm, hashAlgorithm 
 // algorithms recorded in expected and compares it with expected.Value (hex,
 // case-insensitive). A mismatch, including a value that is not hex, wraps
 // ErrDigestMismatch.
+//
+// A digest recorded as LegacyV3 was minted by legacy OCM v1, which keeps
+// null-valued entries such as a signed label with value: null. It is verified
+// against v4alpha2.NormaliseLegacyV3 only, as OCM v1 is the only producer of
+// such digests. For a descriptor without a null-valued entry these are the
+// v4alpha2 bytes. Digest never records LegacyV3 (it labels such digests
+// v4alpha2), so minting is unaffected.
+//
+// A digest recorded as jsonNormalisation/v1 is verified as cc-utils computes it
+// first and, failing that, as the OCM v1 CLI computes it (see
+// jsonv1.NormaliseOCMv1), so signatures of both tools verify. The OCM v1
+// fallback runs only when every number in the descriptor survives a float64
+// round trip exactly (jsonv1.OCMv1Applicable): OCM v1 maps different numbers
+// such as 2^53 and 2^53+1 to the same bytes, so trying it otherwise would let
+// a changed number pass a cc-utils signature. An OCM v1 signature over such a
+// number therefore fails with a re-sign error. Likewise the fallback is not
+// tried when dropping unsigned provider labels makes the OCM v1 form equal to
+// the cc-utils form of the descriptor without them
+// (jsonv1.ErrAmbiguousProviderLabels): those bytes could be a cc-utils
+// signature, and accepting them would let a provider label be injected. Nor is
+// it tried when a signed value holds an object inside an array
+// (jsonv1.ErrAmbiguousArrayObjects): OCM v1 rewrites such objects into the form
+// cc-utils gives a differently shaped value. In every failure case the error
+// wraps ErrDigestMismatch and points to re-signing.
 func Verify(desc *descruntime.Descriptor, expected descruntime.Digest) error {
-	normalisationAlgorithm, _ := Resolve(expected.NormalisationAlgorithm)
-	fresh, _, err := sum(desc, normalisationAlgorithm, expected.HashAlgorithm)
+	if err := CheckSupported(expected.NormalisationAlgorithm); err != nil {
+		return err
+	}
+	if expected.NormalisationAlgorithm == LegacyV3 {
+		return verify(v4alpha2.NormaliseLegacyV3, desc, expected)
+	}
+	if expected.NormalisationAlgorithm == jsonv1.Algorithm { //nolint:staticcheck // verify-only legacy algorithm
+		err := verify(registered(jsonv1.Algorithm), desc, expected) //nolint:staticcheck // verify-only legacy algorithm
+		if !errors.Is(err, ErrDigestMismatch) {
+			return err
+		}
+		if gate := jsonv1.OCMv1Applicable(desc); gate != nil {
+			if !errors.Is(gate, jsonv1.ErrInexactNumber) && !errors.Is(gate, jsonv1.ErrAmbiguousProviderLabels) &&
+				!errors.Is(gate, jsonv1.ErrAmbiguousArrayObjects) {
+				return fmt.Errorf("%w; checking the OCM v1 variant of %s failed: %w", err, jsonv1.Algorithm, gate) //nolint:staticcheck // see above
+			}
+			return fmt.Errorf("%w; %w, so the OCM v1 variant was not tried; if the signature was created with the OCM v1 CLI, re-sign the component version with %q (see %s)",
+				err, gate, Default, MigrationGuide)
+		}
+		fallback := verify(jsonv1.NormaliseOCMv1, desc, expected)
+		if fallback == nil {
+			return nil
+		}
+		if !errors.Is(fallback, ErrDigestMismatch) {
+			return fmt.Errorf("%w; computing the OCM v1 variant of %s failed: %w", err, jsonv1.Algorithm, fallback) //nolint:staticcheck // see above
+		}
+		return fmt.Errorf("%w; neither the cc-utils nor the OCM v1 variant of %s matches; a signature created with the OCM v1 CLI may use parts of the OCM v1 variant that are not reproduced here: re-sign the component version with %q (see %s)",
+			err, jsonv1.Algorithm, Default, MigrationGuide) //nolint:staticcheck // see above
+	}
+	return verify(registered(expected.NormalisationAlgorithm), desc, expected)
+}
+
+func verify(normalise normaliseFunc, desc *descruntime.Descriptor, expected descruntime.Digest) error {
+	fresh, _, err := sum(normalise, desc, expected.HashAlgorithm)
 	if err != nil {
 		return err
 	}
@@ -114,8 +197,18 @@ func Verify(desc *descruntime.Descriptor, expected descruntime.Digest) error {
 	return nil
 }
 
-func sum(desc *descruntime.Descriptor, normalisationAlgorithm, hashAlgorithm string) ([]byte, crypto.Hash, error) {
-	normalised, err := normalisation.Normalise(desc, normalisationAlgorithm)
+type normaliseFunc func(*descruntime.Descriptor) ([]byte, error)
+
+// registered returns the registered normalisation algorithm, alias resolved.
+func registered(normalisationAlgorithm string) normaliseFunc {
+	normalisationAlgorithm, _ = Resolve(normalisationAlgorithm)
+	return func(desc *descruntime.Descriptor) ([]byte, error) {
+		return normalisation.Normalise(desc, normalisationAlgorithm)
+	}
+}
+
+func sum(normalise normaliseFunc, desc *descruntime.Descriptor, hashAlgorithm string) ([]byte, crypto.Hash, error) {
+	normalised, err := normalise(desc)
 	if err != nil {
 		return nil, 0, fmt.Errorf("normalising component version failed: %w", err)
 	}

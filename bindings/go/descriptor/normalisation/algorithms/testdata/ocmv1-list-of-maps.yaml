@@ -1,0 +1,21 @@
+# Written by the OCM v1 0.52.0 CLI: `ocm add cv` then
+# `ocm sign cv -N jsonNormalisation/v1`, signatures stripped. The recorded
+# digest is 2f7052bd529269e2c40131a3a7149486f88d67f8fbefebbbc482ca0c78d3f758.
+---
+component:
+  componentReferences: []
+  creationTime: "2026-11-26T10:02:24Z"
+  labels:
+  - name: owners
+    signing: true
+    value:
+    - a: 2
+      b: 1
+  name: acme.org/n1/list-of-maps
+  provider: acme.org
+  repositoryContexts: []
+  resources: []
+  sources: []
+  version: 1.0.0
+meta:
+  schemaVersion: v2

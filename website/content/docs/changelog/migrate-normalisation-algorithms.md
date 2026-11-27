@@ -118,6 +118,12 @@ rebuilt.
 
 **Fix:** Upgrade it (see step 1).
 
+### Symptom: `unsupported: "jsonNormalisation/v2" is deprecated`
+
+**Cause:** The signature was created by OCM v1 with `jsonNormalisation/v2`, which OCM v2 neither verifies nor creates.
+
+**Fix:** Re-sign the component version with the default algorithm (see step 4).
+
 ### Symptom: `reference digest uses a verify-only normalisation algorithm`
 
 **Cause:** The constructor pins a component reference digest computed with `jsonNormalisation/v1`, which can only be
