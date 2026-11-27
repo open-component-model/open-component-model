@@ -1,0 +1,10 @@
+{
+  "name": "replay",
+  "hashAlgorithm": "SHA-256",
+  "normalisationAlgorithm": "jsonNormalisation/v2",
+  "digestValue": "3abcc8e4f8ceecef67dc4e4eca3b9945c4987d3eecb8d466fb5d51ab7090ab5f",
+  "algorithm": "Sigstore/v1alpha1",
+  "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+  "oidcIssuer": "https://kubernetes.default.svc.cluster.local",
+  "oidcIdentity": "https://kubernetes.io/namespaces/default/serviceaccounts/default"
+}

@@ -318,8 +318,15 @@ The simplest method. Requires the [GitHub CLI](https://cli.github.com/) with aut
 gh auth login --hostname github.com
 # Set this to the binary you installed (adjust the path if you used a custom name or directory).
 binary="${HOME}/.local/bin/ocm"
-gh attestation verify "$binary" --repo open-component-model/open-component-model
+gh attestation verify "$binary" \
+  --repo open-component-model/open-component-model \
+  --cert-identity-regex \
+    '^https://github\.com/open-component-model/open-component-model/\.github/workflows/cli\.yml@refs/(heads/(main|releases/v[0-9]+\.[0-9]+)|tags/cli/v0\.7\.0)$'
 ```
+
+Any workflow in the repository can create an attestation, including one on an unreviewed branch, so `--repo`
+alone is too weak. `--cert-identity-regex` accepts only attestations signed by the CLI build workflow (`cli.yml`)
+on `main` or a `releases/vX.Y` branch. The tag `cli/v0.7.0` is listed because that release was signed from its tag.
 
 {{< /tab >}}
 {{< tab "Cosign (no GitHub auth)" >}}
@@ -347,11 +354,11 @@ cosign verify-blob-attestation \
   --type slsaprovenance1 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp \
-    '^https://github\.com/open-component-model/open-component-model/\.github/workflows/cli\.yml@refs/(heads/(main|releases/v[0-9]+\.[0-9]+)|tags/cli/v[0-9]+\.[0-9]+\.[0-9]+)' \
+    '^https://github\.com/open-component-model/open-component-model/\.github/workflows/cli\.yml@refs/(heads/(main|releases/v[0-9]+\.[0-9]+)|tags/cli/v0\.7\.0)$' \
   "$binary"
 ```
 
-A successful verification proves the binary was built by the project's GitHub Actions workflow and signed via Sigstore OIDC.
+A successful verification proves the binary was built by the CLI build workflow on `main`, a `releases/vX.Y` branch or the tag `cli/v0.7.0`, and signed via Sigstore OIDC.
 
 {{< /tab >}}
 {{< tab "Manual SHA-256" >}}
@@ -373,10 +380,10 @@ curl -sfL \
   | base64 --decode | jq '.subject[] | "\(.digest.sha256)  \(.name)"'
 ```
 
-If your binary's digest appears in the output, it matches the attested build artifact.
+If your binary's digest appears in the output, an attestation for this exact file exists in the repository.
 
 {{< callout title="Note" icon="outline/info-circle" >}}
-This verifies integrity (the file hasn't been corrupted) but not authenticity (it could theoretically be replaced along with the attestation by an attacker who compromises GitHub infrastructure). For full cryptographic proof, use the cosign method above.
+This check reads the attestation without verifying its signature or the workflow that signed it. Any workflow in the repository can create an attestation, so the result says nothing about where the binary came from. To verify the origin, use the GitHub CLI or cosign method.
 {{< /callout >}}
 
 {{< /tab >}}

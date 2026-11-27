@@ -1,0 +1,139 @@
+name: cli binary size guard
+
+# Guards against unreviewed growth of the `ocm` CLI binary. On every push to
+# main (and on manual dispatch) the job builds the CLI at the last commit where
+# this check passed and at the new tip, compares the two stripped binary sizes
+# on one runner with one toolchain, and fails if the new binary grew by more
+# than the threshold. The baseline is the head commit of the most recent
+# successful run of this workflow on main, so after a failure every later push
+# keeps failing until a maintainer approves the growth with a manual dispatch.
+# If the baseline commit no longer builds (for example a lowered toolchain pin
+# with GOTOOLCHAIN=local), a dispatch with reset_baseline=true accepts the
+# current size as a new baseline.
+#
+# The decisions (baseline, inputs, threshold) live in, and are tested in,
+# .github/scripts/cli-binary-size.js; this workflow only checks out and builds.
+#
+# The default threshold of 10 percent is justified by a one-year weekly
+# measurement (recorded in the pull request that introduced this workflow):
+# 10 percent sits above the 95th percentile of same-toolchain week-over-week
+# growth, so normal feature work passes while a rare large jump is held for a
+# human to judge.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - bindings/go/**
+      - .env # GOFIPS140 lives here and changes the binary
+      - .github/workflows/cli-binary-size.yml
+      - .github/scripts/cli-binary-size.js
+  workflow_dispatch:
+    inputs:
+      threshold_percent:
+        description: "Maximum allowed binary size growth in percent."
+        type: string
+        required: false
+      reset_baseline:
+        description: "Accept the current size as the new baseline without comparing. Use when the last green commit no longer builds."
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read # also reads the commit history to find the first baseline
+  actions: read # listWorkflowRuns reads past runs to find the green baseline
+
+# Keep push runs and dispatch runs in separate groups so a push to main cannot
+# cancel a maintainer's in-flight override or baseline reset. Within a group a
+# newer run covers the commits of an older one, so cancelling it loses nothing.
+concurrency:
+  group: cli-binary-size-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+env:
+  # Fixed, deterministic build target, identical for both builds.
+  TARGET_GOOS: linux
+  TARGET_GOARCH: amd64
+  CLI_BINARY: bindings/go/cli/tmp/bin/ocm-linux-amd64
+
+jobs:
+  size-guard:
+    name: Compare CLI binary size
+    runs-on: ubuntu-26.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The job only builds and compares; it never uses the token, so do
+          # not leave it in .git/config (zizmor artipacked). The baseline
+          # commit is fetched on demand.
+          persist-credentials: false
+
+      - name: Resolve baseline (last green run on main)
+        id: baseline
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          THRESHOLD_INPUT: ${{ inputs.threshold_percent }}
+          RESET_INPUT: ${{ inputs.reset_baseline }}
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/cli-binary-size.js');
+            await script.resolveAction({ github, context, core });
+
+      - name: Setup Go
+        uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          # Read at the tip, so both builds use the tip's toolchain.
+          go-version-file: bindings/go/go.mod
+          cache-dependency-path: bindings/go/go.sum
+
+      - name: Install Task
+        uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # The baseline is built first and the tip last, so the workspace is back
+      # at the tip for the compare step: it must run the tip's script, not the
+      # baseline's (which is older, or missing before this workflow existed).
+      - name: Build CLI at the baseline
+        if: steps.baseline.outputs.skip_baseline_build != 'true'
+        env:
+          BASE_SHA: ${{ steps.baseline.outputs.base_sha }}
+          TIP_SHA: ${{ steps.baseline.outputs.tip_sha }}
+        run: |
+          # The repo is public, so fetching one commit works without a
+          # persisted token.
+          git fetch --quiet --depth=1 origin "${BASE_SHA}"
+          git checkout --quiet --force "${BASE_SHA}"
+          # GOTOOLCHAIN=local in the build task builds the baseline with the
+          # tip's toolchain, so the delta reflects the code change.
+          if ! task bindings/go/cli:build/single GOOS="${TARGET_GOOS}" GOARCH="${TARGET_GOARCH}"; then
+            echo "::error::The baseline ${BASE_SHA} did not build with the installed toolchain (GOTOOLCHAIN=local, so a changed toolchain pin can cause this). Re-run this workflow with workflow_dispatch and reset_baseline=true to accept the current size as a new baseline."
+            exit 1
+          fi
+          old_size=$(stat -c%s "${CLI_BINARY}")
+          echo "OLD_SIZE=${old_size}" >> "${GITHUB_ENV}"
+          echo "Baseline binary size: ${old_size} bytes"
+          git checkout --quiet --force "${TIP_SHA}"
+
+      - name: Build CLI at the new tip
+        run: |
+          task bindings/go/cli:build/single GOOS="${TARGET_GOOS}" GOARCH="${TARGET_GOARCH}"
+          new_size=$(stat -c%s "${CLI_BINARY}")
+          echo "NEW_SIZE=${new_size}" >> "${GITHUB_ENV}"
+          echo "New tip binary size: ${new_size} bytes"
+
+      - name: Compare and enforce threshold
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          BASE_SHA: ${{ steps.baseline.outputs.base_sha }}
+          TIP_SHA: ${{ steps.baseline.outputs.tip_sha }}
+          THRESHOLD: ${{ steps.baseline.outputs.threshold }}
+          RESET: ${{ steps.baseline.outputs.reset }}
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/cli-binary-size.js');
+            await script.compareAction({ context, core });

@@ -3,6 +3,11 @@ package integration_test
 // TODO(ocm-project): Add integration tests for:
 // - Public-good Sigstore infrastructure (requires real Fulcio/Rekor, not scaffolding)
 // - GitHub Actions OIDC flow (requires GH runner with OIDC token endpoint)
+//
+// This suite covers only the live SIGN path, which needs the scaffolding cluster
+// (Fulcio/Rekor/TSA + the OIDC token service). The verification tests, which do
+// not need live infrastructure, run offline against recorded fixtures in the
+// sibling ./replay package.
 
 import (
 	"crypto/sha256"
@@ -21,7 +26,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/handler"
 	"ocm.software/open-component-model/bindings/go/sigstore/signing/v1alpha1"
 	oidcv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/oidcidentitytoken/v1alpha1"
-	trustedrootv1 "ocm.software/open-component-model/bindings/go/sigstore/spec/credentials/trustedroot/v1alpha1"
 )
 
 // sigstoreEnv holds the environment configuration for the sigstore integration
@@ -31,7 +35,6 @@ import (
 type sigstoreEnv struct {
 	OIDCToken         string
 	SigningConfigPath string
-	TrustedRootPath   string
 	OIDCIssuer        string
 	OIDCIdentity      string
 }
@@ -43,7 +46,6 @@ func TestMain(m *testing.M) {
 	stack = &sigstoreEnv{
 		OIDCToken:         requireEnv("SIGSTORE_OIDC_TOKEN"),
 		SigningConfigPath: requireEnv("SIGSTORE_SIGNING_CONFIG"),
-		TrustedRootPath:   requireEnv("SIGSTORE_TRUSTED_ROOT"),
 		OIDCIssuer:        requireEnv("SIGSTORE_OIDC_ISSUER"),
 		OIDCIdentity:      requireEnv("SIGSTORE_OIDC_IDENTITY"),
 	}
@@ -118,17 +120,6 @@ func signDigest(t *testing.T, h *handler.Handler, digest descruntime.Digest) des
 	return sigInfo
 }
 
-func testSignature(t *testing.T, h *handler.Handler, name, label string) descruntime.Signature {
-	t.Helper()
-	digest := uniqueDigest(t, label)
-	sigInfo := signDigest(t, h, digest)
-	return descruntime.Signature{
-		Name:      name,
-		Digest:    digest,
-		Signature: sigInfo,
-	}
-}
-
 func verifyConfig(opts ...func(*v1alpha1.VerifyConfig)) *v1alpha1.VerifyConfig {
 	cfg := &v1alpha1.VerifyConfig{
 		CertificateOIDCIssuer: stack.OIDCIssuer,
@@ -142,152 +133,8 @@ func verifyConfig(opts ...func(*v1alpha1.VerifyConfig)) *v1alpha1.VerifyConfig {
 }
 
 // ---------------------------------------------------------------------------
-// Tests
+// Tests (live sign path)
 // ---------------------------------------------------------------------------
-
-func Test_Integration_Keyless_IdentityVerification(t *testing.T) {
-	h := newHandler(t)
-	signed := testSignature(t, h, "identity-test", "identity-verify")
-
-	t.Run("matching issuer succeeds", func(t *testing.T) {
-		r := require.New(t)
-		cfg := verifyConfig(func(c *v1alpha1.VerifyConfig) {
-			c.CertificateOIDCIssuer = stack.OIDCIssuer
-		})
-		r.NoError(h.Verify(t.Context(), signed, cfg, nil))
-	})
-
-	t.Run("wrong issuer fails", func(t *testing.T) {
-		r := require.New(t)
-		cfg := verifyConfig(func(c *v1alpha1.VerifyConfig) {
-			c.CertificateOIDCIssuer = "https://wrong-issuer.example.com"
-		})
-		err := h.Verify(t.Context(), signed, cfg, nil)
-		r.Error(err)
-		r.ErrorContains(err, "issuer")
-	})
-
-	t.Run("issuer regex succeeds", func(t *testing.T) {
-		r := require.New(t)
-		cfg := verifyConfig(func(c *v1alpha1.VerifyConfig) {
-			c.CertificateOIDCIssuer = ""
-			c.CertificateOIDCIssuerRegexp = ".*"
-		})
-		r.NoError(h.Verify(t.Context(), signed, cfg, nil))
-	})
-
-	t.Run("matching identity succeeds", func(t *testing.T) {
-		r := require.New(t)
-		cfg := verifyConfig(func(c *v1alpha1.VerifyConfig) {
-			c.CertificateOIDCIssuer = ""
-			c.CertificateOIDCIssuerRegexp = ".*"
-			c.CertificateIdentityRegexp = ""
-			c.CertificateIdentity = stack.OIDCIdentity
-		})
-		r.NoError(h.Verify(t.Context(), signed, cfg, nil))
-	})
-
-	t.Run("wrong identity fails", func(t *testing.T) {
-		r := require.New(t)
-		cfg := verifyConfig(func(c *v1alpha1.VerifyConfig) {
-			c.CertificateOIDCIssuer = ""
-			c.CertificateOIDCIssuerRegexp = ".*"
-			c.CertificateIdentityRegexp = ""
-			c.CertificateIdentity = "wrong@example.com"
-		})
-		r.Error(h.Verify(t.Context(), signed, cfg, nil))
-	})
-}
-
-func Test_Integration_TamperedBundle(t *testing.T) {
-	h := newHandler(t)
-	signed := testSignature(t, h, "tamper-baseline", "tamper")
-	verifyCfg := verifyConfig(func(c *v1alpha1.VerifyConfig) {
-		c.CertificateIdentityRegexp = ""
-		c.CertificateIdentity = stack.OIDCIdentity
-	})
-
-	r := require.New(t)
-	r.NoError(h.Verify(t.Context(), signed, verifyCfg, nil), "baseline verification must succeed")
-
-	mutateBundle := func(t *testing.T, f func(m map[string]any)) string {
-		t.Helper()
-		r := require.New(t)
-		raw, err := base64.StdEncoding.DecodeString(signed.Signature.Value)
-		r.NoError(err)
-		var m map[string]any
-		r.NoError(json.Unmarshal(raw, &m))
-		f(m)
-		modified, err := json.Marshal(m, runtime.JSONOptions)
-		r.NoError(err)
-		return base64.StdEncoding.EncodeToString(modified)
-	}
-
-	tamperedSignature := func(name, value string) descruntime.Signature {
-		return descruntime.Signature{
-			Name:   name,
-			Digest: signed.Digest,
-			Signature: descruntime.SignatureInfo{
-				Algorithm: signed.Signature.Algorithm,
-				MediaType: signed.Signature.MediaType,
-				Value:     value,
-			},
-		}
-	}
-
-	t.Run("mutated signature bytes rejected", func(t *testing.T) {
-		r := require.New(t)
-		b := decodeBundle(t, signed.Signature)
-		r.NotNil(b.MessageSignature)
-		sigBytes, err := base64.StdEncoding.DecodeString(b.MessageSignature.Signature)
-		r.NoError(err)
-		r.NotEmpty(sigBytes)
-		sigBytes[len(sigBytes)-1] ^= 0xFF
-
-		tampered := mutateBundle(t, func(m map[string]any) {
-			ms := m["messageSignature"].(map[string]any)
-			ms["signature"] = base64.StdEncoding.EncodeToString(sigBytes)
-		})
-		r.Error(h.Verify(t.Context(), tamperedSignature("tamper-sig-bytes", tampered), verifyCfg, nil))
-	})
-
-	t.Run("stripped certificate rejected", func(t *testing.T) {
-		r := require.New(t)
-		tampered := mutateBundle(t, func(m map[string]any) {
-			vm := m["verificationMaterial"].(map[string]any)
-			delete(vm, "certificate")
-		})
-		r.Error(h.Verify(t.Context(), tamperedSignature("tamper-strip-cert", tampered), verifyCfg, nil))
-	})
-
-	t.Run("stripped tlog entries rejected", func(t *testing.T) {
-		r := require.New(t)
-		tampered := mutateBundle(t, func(m map[string]any) {
-			vm := m["verificationMaterial"].(map[string]any)
-			vm["tlogEntries"] = []any{}
-		})
-		r.Error(h.Verify(t.Context(), tamperedSignature("tamper-strip-tlog", tampered), verifyCfg, nil))
-	})
-
-	t.Run("wrong digest rejected", func(t *testing.T) {
-		r := require.New(t)
-		wrongDigest := uniqueDigest(t, "tamper-wrong-digest-other")
-		s := descruntime.Signature{
-			Name:      "tamper-wrong-digest",
-			Digest:    wrongDigest,
-			Signature: signed.Signature,
-		}
-		err := h.Verify(t.Context(), s, verifyCfg, nil)
-		r.Error(err)
-		r.ErrorContains(err, "verif")
-	})
-
-	t.Run("corrupted bundle rejected", func(t *testing.T) {
-		r := require.New(t)
-		garbage := base64.StdEncoding.EncodeToString([]byte(`{"not":"a valid bundle"}`))
-		r.Error(h.Verify(t.Context(), tamperedSignature("tamper-corrupt-bundle", garbage), verifyCfg, nil))
-	})
-}
 
 func Test_Integration_SignAndVerify(t *testing.T) {
 	h := newHandler(t)
@@ -341,56 +188,6 @@ func Test_Integration_SignAndVerify(t *testing.T) {
 		})
 		r.Error(h.Verify(t.Context(), signed, cfg, nil))
 	})
-}
-
-func Test_Integration_VerifyWithExplicitTrustedRoot(t *testing.T) {
-	h := newHandler(t)
-	signed := testSignature(t, h, "verify-explicit-trusted-root-test", "verify-explicit-trusted-root")
-
-	t.Run("trusted root via credential file path", func(t *testing.T) {
-		r := require.New(t)
-		r.NoError(h.Verify(t.Context(), signed, verifyConfig(), &trustedrootv1.TrustedRoot{
-			TrustedRootJSONFile: stack.TrustedRootPath,
-		}))
-	})
-
-	t.Run("trusted root via inline credential JSON", func(t *testing.T) {
-		r := require.New(t)
-		trustedRootJSON, err := os.ReadFile(stack.TrustedRootPath)
-		r.NoError(err)
-
-		err = h.Verify(t.Context(), signed, verifyConfig(), &trustedrootv1.TrustedRoot{
-			TrustedRootJSON: string(trustedRootJSON),
-		})
-		r.NoError(err)
-	})
-
-	t.Run("wrong issuer fails with explicit trusted root", func(t *testing.T) {
-		r := require.New(t)
-		cfg := verifyConfig(func(c *v1alpha1.VerifyConfig) {
-			c.CertificateOIDCIssuer = "https://wrong-issuer.example.com"
-		})
-		err := h.Verify(t.Context(), signed, cfg, &trustedrootv1.TrustedRoot{
-			TrustedRootJSONFile: stack.TrustedRootPath,
-		})
-		r.Error(err)
-		r.ErrorContains(err, "issuer")
-	})
-}
-
-func Test_Integration_PrivateInfrastructure(t *testing.T) {
-	h := newHandler(t)
-	signed := testSignature(t, h, "private-infrastructure-test", "private-infrastructure")
-
-	cfg := verifyConfig(func(c *v1alpha1.VerifyConfig) {
-		c.PrivateInfrastructure = true
-	})
-
-	r := require.New(t)
-	err := h.Verify(t.Context(), signed, cfg, &trustedrootv1.TrustedRoot{
-		TrustedRootJSONFile: stack.TrustedRootPath,
-	})
-	r.NoError(err)
 }
 
 func Test_Integration_AmbientSIGSTORE_ID_TOKEN(t *testing.T) {

@@ -50,7 +50,7 @@ components can be stored in OCI registries or local CTF archives, but the way yo
 
 The following examples show component versions stored in a local CTF archive and in a remote OCI registry.
 The local CTF uses the component created in the [Getting Started: Create Component Versions]({{< relref "create-component-version.md" >}}) tutorial,
-while the remote OCI registry uses the Podinfo component published to GitHub Container Registry.
+while the remote OCI registry uses the OCM controller component, which the OCM project publishes to GitHub Container Registry with every release.
 
 {{< tabs >}}
 {{< tab "remote OCI registry" >}}
@@ -65,7 +65,7 @@ you can use the [`ocm get cv`]({{< relref "/docs/reference/ocm-cli/ocm_get_compo
 to see the complete component version descriptor, including the `resources` section.
 
 ```shell
-ocm get cv ghcr.io/open-component-model//ocm.software/demos/podinfo:6.8.0 -oyaml
+ocm get cv ghcr.io/open-component-model//ocm.software/kubernetes/controller:0.25.0 -oyaml
 ```
 
 <details>
@@ -73,55 +73,51 @@ ocm get cv ghcr.io/open-component-model//ocm.software/demos/podinfo:6.8.0 -oyaml
 
 The output shows the component version descriptor.
 We're interested in the `chart` resource, which is a Helm chart stored as OCI artifact in an OCI registry.
+The Sigstore signature value is shortened here.
 
 ```yaml
 - component:
-    componentReferences: []
-    creationTime: "2025-03-18T11:23:20Z"
-    name: ocm.software/demos/podinfo
+    componentReferences: null
+    name: ocm.software/kubernetes/controller
     provider: ocm.software
-    repositoryContexts:
-      - baseUrl: ghcr.io
-        componentNameMapping: urlPath
-        subPath: open-component-model
-        type: OCIRegistry
+    repositoryContexts: null
     resources:
-      - access:
-          imageReference: ghcr.io/stefanprodan/podinfo:6.8.0
-          type: OCIImage/v1
-        digest:
-          hashAlgorithm: SHA-256
-          normalisationAlgorithm: ociArtifactDigest/v1
-          value: 6c1975b871efb327528c84d46d38e6dd7906eecee6402bc270eeb7f1b1a506df
-        name: image
-        relation: external
-        type: ociImage
-        version: 6.8.0
-      - access:
-          imageReference: ghcr.io/stefanprodan/charts/podinfo:6.8.0
-          type: OCIImage/v1
-        digest:
-          hashAlgorithm: SHA-256
-          normalisationAlgorithm: ociArtifactDigest/v1
-          value: 2360bdf32ddc50c05f8e128118173343b0a012a338daf145b16e0da9c80081a4
-        name: chart
-        relation: external
-        type: helmChart
-        version: 6.8.0
-    sources: []
-    version: 6.8.0
+    - access:
+        imageReference: ghcr.io/open-component-model/kubernetes/controller:0.25.0@sha256:712ecadea9ce9fd0261793cb56b8371d297c6a75cd953e7984202d64c1e169c3
+        type: ociArtifact
+      digest:
+        hashAlgorithm: SHA-256
+        normalisationAlgorithm: ociArtifactDigest/v1
+        value: 712ecadea9ce9fd0261793cb56b8371d297c6a75cd953e7984202d64c1e169c3
+      name: image
+      relation: local
+      type: ociImage
+      version: 0.25.0
+    - access:
+        imageReference: ghcr.io/open-component-model/kubernetes/controller/chart:0.25.0@sha256:1f015b13775bf4a71f147748527bf0b014b68aac0075ca47db40d09e5e494dc9
+        type: ociArtifact
+      digest:
+        hashAlgorithm: SHA-256
+        normalisationAlgorithm: ociArtifactDigest/v1
+        value: 1f015b13775bf4a71f147748527bf0b014b68aac0075ca47db40d09e5e494dc9
+      name: chart
+      relation: local
+      type: helmChart
+      version: 0.25.0
+    sources: null
+    version: 0.25.0
   meta:
     schemaVersion: v2
   signatures:
-    - digest:
-        hashAlgorithm: SHA-256
-        normalisationAlgorithm: jsonNormalisation/v3
-        value: 76082d5a6398c7f0d62bc614ec7857dc0ceb93e8cf0a36cbdeb963eddad0707f
-      name: my-ocm
-      signature:
-        algorithm: RSASSA-PKCS1-V1_5
-        mediaType: application/vnd.ocm.signature.rsa
-        value: 08554a08acd6373e12cd6cea8fc71d6a734a45827fe5ed22900fbb4e3d689dbe0d5178389b8e4939e3e3a6d600fd8f287ca829ba19ddcb0fb7d8364f526651d677a84f75912c4aace8fe93650bfafdf09525bffc256ea0a5b23b47d21ab8ab2b17336c0f7516d4bd8e9aee89de313026be39b5226c31424a51dcafce7a06d5d17ea532a40caff4046beb2f7798892bdf26929b682ee3f1fd65cba3d9b3d0914d84253a6c91190174272bbdb52410f5f8f135d6303bbde6387691b636417111760306354664cb20cf02ed4ce1e31d4d0f27e0309b0a4041c56b7de2e1abe65b564cffe6f6dfe38dc94197ab8e52523b652ac37b4b841a9242ef30c5b3d31098e4
+  - digest:
+      hashAlgorithm: SHA-256
+      normalisationAlgorithm: jsonNormalisation/v4alpha3
+      value: 73444afd0c3b6ee34c2be51e9efebea17cceed5e02d4072ef49f651a35bfbd67
+    name: default
+    signature:
+      algorithm: Sigstore/v1alpha1
+      mediaType: application/vnd.dev.sigstore.bundle.v0.3+json
+      value: eyJtZWRpYVR5cGUiOiJhcHBsaWNhdGlvbi92bmQuZGV2LnNpZ3N0b3JlLmJ1bmRsZS52MC4zK2pzb24i...
 ```
 
 </details>
@@ -135,7 +131,7 @@ Use the `ocm download resource` command with the `--identity` flag to specify wh
 We download the `chart` resource, which is a Helm chart:
 
 ```shell
- ocm download resource ghcr.io/open-component-model//ocm.software/demos/podinfo:6.8.0 \
+ ocm download resource ghcr.io/open-component-model//ocm.software/kubernetes/controller:0.25.0 \
    --identity name=chart \
     --output helmchart-oci
  ```
@@ -144,8 +140,7 @@ We download the `chart` resource, which is a Helm chart:
 <summary >You should see this output</summary>
 
 ```text
-{"time":"2026-04-10T14:06:57.85304+02:00","level":"INFO","msg":"capabilities sent"}
-time=2026-04-10T14:07:01.593+02:00 level=INFO msg="resource downloaded successfully" output=helmchart-oci
+time=2026-11-24T14:15:41.732+01:00 level=INFO msg="resource downloaded successfully" output=helmchart-oci
 ```
 
 </details>
@@ -164,12 +159,12 @@ ls -la helmchart-oci
 The downloaded Helm chart is in OCI blob format. 
 
 ```shell
-total 8
-drwxr-xr-x  5 D032990 160 März  4 13:38 .
-drwxrwxrwt 23 root    736 März  4 13:42 ..
-drwxr-xr-x  3 D032990  96 März  4 13:38 blobs
--rw-r--r--  1 D032990 282 März  4 13:38 index.json
--rw-r--r--  1 D032990  30 März  4 13:38 oci-layout
+total 16
+drwxr-xr-x  5 user  staff  160 Nov 24 14:15 .
+drwxr-xr-x  5 user  staff  160 Nov 24 14:15 ..
+drwxr-xr-x  3 user  staff   96 Nov 24 14:15 blobs
+-rw-r--r--  1 user  staff  819 Nov 24 14:15 index.json
+-rw-r--r--  1 user  staff   30 Nov 24 14:15 oci-layout
 ```
 
 ```shell
@@ -182,22 +177,23 @@ jq . helmchart-oci/index.json
   "manifests": [
     {
       "mediaType": "application/vnd.oci.image.manifest.v1+json",
-      "digest": "sha256:2360bdf32ddc50c05f8e128118173343b0a012a338daf145b16e0da9c80081a4",
-      "size": 828,
+      "digest": "sha256:1f015b13775bf4a71f147748527bf0b014b68aac0075ca47db40d09e5e494dc9",
+      "size": 816,
       "annotations": {
-        "org.opencontainers.image.ref.name": "ghcr.io/stefanprodan/charts/podinfo:6.8.0",
+        "org.opencontainers.image.ref.name": "ghcr.io/open-component-model/kubernetes/controller/chart:0.25.0@sha256:1f015b13775bf4a71f147748527bf0b014b68aac0075ca47db40d09e5e494dc9",
         "software.ocm.layout.root": "true"
       }
     },
     {
       "mediaType": "application/vnd.oci.image.manifest.v1+json",
-      "digest": "sha256:2f147973805972b3fe12a991574938d1896efe65c1eec1532245691aff452371",
-      "size": 723,
+      "digest": "sha256:d2c013856d90e894c7d1ce6b398de515072e26fed268228164a228bb3a9276ba",
+      "size": 815,
       "annotations": {
-        "io.cncf.notary.x509chain.thumbprint#S256": "[\"4f3ae198d532e262c59edfc3cf6c84023ffb30edfcafd7224600857c357be0ff\"]",
-        "org.opencontainers.image.created": "2025-03-11T09:32:34Z"
+        "dev.sigstore.bundle.content": "dsse-envelope",
+        "dev.sigstore.bundle.predicateType": "https://slsa.dev/provenance/v1",
+        "org.opencontainers.image.created": "2026-11-20T19:35:34.956Z"
       },
-      "artifactType": "application/vnd.cncf.notary.signature"
+      "artifactType": "application/vnd.dev.sigstore.bundle.v0.3+json"
     }
   ]
 }
@@ -327,7 +323,7 @@ which converts the OCI blob back into a standard Helm chart archive.
 The Helm chart is downloaded into a directory specified by `--output`.
 
 ```shell
-ocm download resource ghcr.io/open-component-model//ocm.software/demos/podinfo:6.8.0 \
+ocm download resource ghcr.io/open-component-model//ocm.software/kubernetes/controller:0.25.0 \
   --identity name=chart \
   --output helmchart-tgz \
   --transformer helm
@@ -337,12 +333,9 @@ ocm download resource ghcr.io/open-component-model//ocm.software/demos/podinfo:6
 <summary>You should see this output</summary>
 
 ```text
-time=2026-03-04T13:59:23.279+01:00 level=INFO msg="transforming resource..."
-time=2026-03-04T13:59:24.238+01:00 level=INFO msg=copied descriptor.mediaType=application/vnd.cncf.helm.config.v1+json descriptor.digest=sha256:eb2808c21a03a7007ef9a7b5207af0a3b4115be5ce4bb340e0bf501abaf8d31e descriptor.size=348
-time=2026-03-04T13:59:24.359+01:00 level=INFO msg=copied descriptor.mediaType=application/vnd.cncf.helm.chart.content.v1.tar+gzip descriptor.digest=sha256:ddf24dfc79800f80a8f1e5b8d462b15619c22d77c8ffe454636fef3b9a6d4f60 descriptor.size=14956
-time=2026-03-04T13:59:24.361+01:00 level=INFO msg=copied descriptor.mediaType=application/vnd.oci.image.manifest.v1+json descriptor.digest=sha256:2360bdf32ddc50c05f8e128118173343b0a012a338daf145b16e0da9c80081a4 descriptor.size=828
-time=2026-03-04T13:59:24.363+01:00 level=INFO msg="resource transformed successfully"
-time=2026-03-04T13:59:24.363+01:00 level=INFO msg="resource downloaded successfully" output=helmchart-tgz
+time=2026-11-24T14:15:42.637+01:00 level=INFO msg="transforming resource..."
+time=2026-11-24T14:15:45.716+01:00 level=INFO msg="resource transformed successfully"
+time=2026-11-24T14:15:45.717+01:00 level=INFO msg="resource downloaded successfully" output=helmchart-tgz
 ```
 </details>
 
@@ -350,37 +343,52 @@ time=2026-03-04T13:59:24.363+01:00 level=INFO msg="resource downloaded successfu
 The downloaded archive is now a regular Helm chart archive:
 
 ```shell
-tar tvf helmchart-tgz/podinfo-6.8.0.tgz
+tar tvf helmchart-tgz/chart-0.25.0.tgz
 ```
 
 ```shell
--rw-r--r-- 0/0             313 2025-03-11 10:31 podinfo/Chart.yaml
--rw-r--r-- 0/0            4351 2025-03-11 10:31 podinfo/values.yaml
--rw-r--r-- 0/0            1361 2025-03-11 10:31 podinfo/templates/NOTES.txt
--rw-r--r-- 0/0            1965 2025-03-11 10:31 podinfo/templates/_helpers.tpl
--rw-r--r-- 0/0             455 2025-03-11 10:31 podinfo/templates/certificate.yaml
--rw-r--r-- 0/0            8051 2025-03-11 10:31 podinfo/templates/deployment.yaml
--rw-r--r-- 0/0             995 2025-03-11 10:31 podinfo/templates/hpa.yaml
--rw-r--r-- 0/0            1154 2025-03-11 10:31 podinfo/templates/ingress.yaml
--rw-r--r-- 0/0            2338 2025-03-11 10:31 podinfo/templates/linkerd.yaml
--rw-r--r-- 0/0             437 2025-03-11 10:31 podinfo/templates/pdb.yaml
--rw-r--r-- 0/0             239 2025-03-11 10:31 podinfo/templates/redis/config.yaml
--rw-r--r-- 0/0            1928 2025-03-11 10:31 podinfo/templates/redis/deployment.yaml
--rw-r--r-- 0/0             369 2025-03-11 10:31 podinfo/templates/redis/service.yaml
--rw-r--r-- 0/0             988 2025-03-11 10:31 podinfo/templates/service.yaml
--rw-r--r-- 0/0             325 2025-03-11 10:31 podinfo/templates/serviceaccount.yaml
--rw-r--r-- 0/0             598 2025-03-11 10:31 podinfo/templates/servicemonitor.yaml
--rw-r--r-- 0/0             912 2025-03-11 10:31 podinfo/templates/tests/cache.yaml
--rw-r--r-- 0/0             607 2025-03-11 10:31 podinfo/templates/tests/fail.yaml
--rw-r--r-- 0/0             694 2025-03-11 10:31 podinfo/templates/tests/grpc.yaml
--rw-r--r-- 0/0             884 2025-03-11 10:31 podinfo/templates/tests/jwt.yaml
--rw-r--r-- 0/0             781 2025-03-11 10:31 podinfo/templates/tests/service.yaml
--rw-r--r-- 0/0             632 2025-03-11 10:31 podinfo/templates/tests/timeout.yaml
--rw-r--r-- 0/0             815 2025-03-11 10:31 podinfo/templates/tests/tls.yaml
--rw-r--r-- 0/0             333 2025-03-11 10:31 podinfo/.helmignore
--rw-r--r-- 0/0           11365 2025-03-11 10:31 podinfo/LICENSE
--rw-r--r-- 0/0           13442 2025-03-11 10:31 podinfo/README.md
--rw-r--r-- 0/0            3427 2025-03-11 10:31 podinfo/values-prod.yaml
+-rw-r--r--  0 0      0         447 Nov 20 20:34 chart/Chart.yaml
+-rw-r--r--  0 0      0        8844 Nov 20 20:35 chart/values.yaml
+-rw-r--r--  0 0      0       14993 Nov 20 20:34 chart/values.schema.json
+-rw-r--r--  0 0      0         863 Nov 20 20:34 chart/templates/NOTES.txt
+-rw-r--r--  0 0      0        2514 Nov 20 20:34 chart/templates/_helpers.tpl
+-rw-r--r--  0 0      0       16559 Nov 20 20:34 chart/templates/crd/components.delivery.ocm.software.yaml
+-rw-r--r--  0 0      0       14456 Nov 20 20:34 chart/templates/crd/deployers.delivery.ocm.software.yaml
+-rw-r--r--  0 0      0       20599 Nov 20 20:34 chart/templates/crd/discoveries.delivery.ocm.software.yaml
+-rw-r--r--  0 0      0       16211 Nov 20 20:34 chart/templates/crd/namespaceddeployers.delivery.ocm.software.yaml
+-rw-r--r--  0 0      0       17817 Nov 20 20:34 chart/templates/crd/replications.delivery.ocm.software.yaml
+-rw-r--r--  0 0      0       12451 Nov 20 20:34 chart/templates/crd/repositories.delivery.ocm.software.yaml
+-rw-r--r--  0 0      0       23042 Nov 20 20:34 chart/templates/crd/resources.delivery.ocm.software.yaml
+-rw-r--r--  0 0      0       12865 Nov 20 20:34 chart/templates/manager/manager.yaml
+-rw-r--r--  0 0      0        2048 Nov 20 20:34 chart/templates/manager/networkpolicy.yaml
+-rw-r--r--  0 0      0         754 Nov 20 20:34 chart/templates/manager/ocm-config.yaml
+-rw-r--r--  0 0      0        1038 Nov 20 20:34 chart/templates/monitoring/service.yaml
+-rw-r--r--  0 0      0        1241 Nov 20 20:34 chart/templates/monitoring/servicemonitor.yaml
+-rw-r--r--  0 0      0         977 Nov 20 20:34 chart/templates/rbac/aggregate-to-edit-role.yaml
+-rw-r--r--  0 0      0        1320 Nov 20 20:34 chart/templates/rbac/aggregate-to-view-role.yaml
+-rw-r--r--  0 0      0         844 Nov 20 20:34 chart/templates/rbac/component-editor-role.yaml
+-rw-r--r--  0 0      0         777 Nov 20 20:34 chart/templates/rbac/component-viewer-role.yaml
+-rw-r--r--  0 0      0         470 Nov 20 20:34 chart/templates/rbac/controller-manager.yaml
+-rw-r--r--  0 0      0         841 Nov 20 20:34 chart/templates/rbac/deployer-editor-role.yaml
+-rw-r--r--  0 0      0         774 Nov 20 20:34 chart/templates/rbac/deployer-viewer-role.yaml
+-rw-r--r--  0 0      0         846 Nov 20 20:34 chart/templates/rbac/discovery-editor-role.yaml
+-rw-r--r--  0 0      0         779 Nov 20 20:34 chart/templates/rbac/discovery-viewer-role.yaml
+-rw-r--r--  0 0      0         925 Nov 20 20:34 chart/templates/rbac/leader-election-role.yaml
+-rw-r--r--  0 0      0         857 Nov 20 20:34 chart/templates/rbac/leader-election-rolebinding.yaml
+-rw-r--r--  0 0      0        1580 Nov 20 20:34 chart/templates/rbac/manager-role.yaml
+-rw-r--r--  0 0      0         815 Nov 20 20:34 chart/templates/rbac/manager-rolebinding.yaml
+-rw-r--r--  0 0      0         871 Nov 20 20:34 chart/templates/rbac/namespaceddeployer-editor-role.yaml
+-rw-r--r--  0 0      0        1690 Nov 20 20:34 chart/templates/rbac/namespaceddeployer-impersonation-role.yaml
+-rw-r--r--  0 0      0         804 Nov 20 20:34 chart/templates/rbac/namespaceddeployer-viewer-role.yaml
+-rw-r--r--  0 0      0         850 Nov 20 20:34 chart/templates/rbac/replication-editor-role.yaml
+-rw-r--r--  0 0      0         783 Nov 20 20:34 chart/templates/rbac/replication-viewer-role.yaml
+-rw-r--r--  0 0      0         849 Nov 20 20:34 chart/templates/rbac/repository-editor-role.yaml
+-rw-r--r--  0 0      0         782 Nov 20 20:34 chart/templates/rbac/repository-viewer-role.yaml
+-rw-r--r--  0 0      0         841 Nov 20 20:34 chart/templates/rbac/resource-editor-role.yaml
+-rw-r--r--  0 0      0         774 Nov 20 20:34 chart/templates/rbac/resource-viewer-role.yaml
+-rw-r--r--  0 0      0        1186 Nov 20 20:34 chart/templates/webhook/certificate.yaml
+-rw-r--r--  0 0      0         775 Nov 20 20:34 chart/templates/webhook/service.yaml
+-rw-r--r--  0 0      0       12824 Nov 20 20:34 chart/README.md
 ```
 
 {{< /details >}}

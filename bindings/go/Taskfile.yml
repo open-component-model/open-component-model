@@ -101,7 +101,7 @@ tasks:
       # packages themselves are near-empty).
       - >
         {{.EXEC}} go run gotest.tools/gotestsum@"${GOTESTSUM_VERSION}"
-        --format testname
+        --format pkgname-and-test-fails
         --junitfile={{.JUNITFILE}}
         --rerun-fails=2
         --rerun-fails-max-failures=5
