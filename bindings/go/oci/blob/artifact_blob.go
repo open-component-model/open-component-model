@@ -1,6 +1,7 @@
 package blob
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 
@@ -8,6 +9,7 @@ import (
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
 
 	"ocm.software/open-component-model/bindings/go/blob"
+	"ocm.software/open-component-model/bindings/go/blob/filesystem"
 	"ocm.software/open-component-model/bindings/go/blob/inmemory/cache"
 	"ocm.software/open-component-model/bindings/go/blob/verified"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
@@ -286,6 +288,46 @@ func (r *ArtifactBlob) Buffer() (result *ArtifactBlob, err error) {
 		mediaType:    r.mediaType,
 		ociLayout:    r.ociLayout,
 	}, nil
+}
+
+// Spool copies the blob into a temporary file in dir with [filesystem.Spool] and returns an
+// ArtifactBlob over that file with a known size and digest. Unlike Buffer it holds no
+// content in memory. The content is verified against the byte digest of an ordinary
+// resource and, independently, against the size of the blob if that is known. The caller
+// must call release once the returned blob is no longer read; it frees the disk space.
+func (r *ArtifactBlob) Spool(dir string) (_ *ArtifactBlob, release func() error, err error) {
+	expected, known, err := r.resourceByteDigest()
+	if err != nil {
+		return nil, nil, err
+	}
+	algorithm := digest.Canonical
+	if known {
+		algorithm = digest.Digest(expected).Algorithm()
+	}
+	expectedSize := r.Size()
+
+	spooled, err := filesystem.Spool(r, dir, algorithm)
+	if err != nil {
+		return nil, nil, err
+	}
+	// The spool digest uses the algorithm of the expected digest, so they compare as strings.
+	if known {
+		if actual, _ := spooled.Digest(); actual != expected {
+			return nil, nil, errors.Join(fmt.Errorf("resource blob digest mismatch: expected %s, got %s", expected, actual), spooled.Remove())
+		}
+	}
+	if expectedSize != blob.SizeUnknown {
+		if actual := spooled.Size(); actual != expectedSize {
+			return nil, nil, errors.Join(fmt.Errorf("resource blob size mismatch: expected %d, got %d", expectedSize, actual), spooled.Remove())
+		}
+	}
+
+	return &ArtifactBlob{
+		ReadOnlyBlob: spooled,
+		Artifact:     r.Artifact,
+		mediaType:    r.mediaType,
+		ociLayout:    r.ociLayout,
+	}, spooled.Remove, nil
 }
 
 // Interface implementations

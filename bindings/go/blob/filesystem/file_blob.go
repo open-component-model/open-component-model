@@ -22,6 +22,9 @@ type Blob struct {
 	path string
 	// mediaType is the media type of the blob.
 	mediaType atomic.Pointer[string]
+	// digest is the digest of the content, where it was recorded when the file was
+	// written and the file cannot change afterwards. Empty means it is computed on demand.
+	digest digest.Digest
 }
 
 var (
@@ -90,6 +93,9 @@ func (f *Blob) Size() int64 {
 }
 
 func (f *Blob) Digest() (string, bool) {
+	if f.digest != "" {
+		return f.digest.String(), true
+	}
 	data, err := f.ReadCloser()
 	if err != nil {
 		return "", false
