@@ -25,6 +25,10 @@ type RendererOptions[T cmp.Ordered] struct {
 	Header []string
 	// Roots are the root vertices of the tree to render.
 	Roots []T
+	// RootLabel, when non-empty, prints one synthetic row first (with an empty
+	// NESTING cell and these cells) and draws all roots as its children. It is
+	// used to show the source repository above the component versions.
+	RootLabel []string
 	// TableStyle allows customizing the go-pretty table style used by the renderer.
 	TableStyle table.Style
 }
@@ -43,5 +47,13 @@ func WithRoots[T cmp.Ordered](roots ...T) RendererOption[T] {
 func WithHeader[T cmp.Ordered](header ...string) RendererOption[T] {
 	return func(opts *RendererOptions[T]) {
 		opts.Header = header
+	}
+}
+
+// WithRootLabel sets a synthetic top row (for example the source repository)
+// that all roots are drawn under. When it is not set, the output is unchanged.
+func WithRootLabel[T cmp.Ordered](cells ...string) RendererOption[T] {
+	return func(opts *RendererOptions[T]) {
+		opts.RootLabel = cells
 	}
 }

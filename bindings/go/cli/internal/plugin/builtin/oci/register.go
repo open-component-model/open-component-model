@@ -70,7 +70,7 @@ func Register(
 			ociBlobTransformerPlugin,
 		),
 		compListRegistry.RegisterInternalComponentListerPlugin(
-			&CTFComponentListerPlugin{},
+			NewComponentListerPlugin(httpConfig, logger),
 		),
 	)
 }

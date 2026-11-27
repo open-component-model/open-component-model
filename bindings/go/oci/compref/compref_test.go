@@ -504,6 +504,32 @@ func TestParseRepository(t *testing.T) {
 			},
 		},
 		{
+			// A trailing slash must not leak into SubPath; otherwise the
+			// reference becomes "org//component-descriptors/...".
+			name:         "OCI Registry - trailing slash",
+			repoRef:      "ghcr.io/org/",
+			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
+				repo, ok := result.(*ociv1.Repository)
+				require.True(t, ok, "expected *ociv1.Repository")
+				require.Equal(t, "ghcr.io", repo.BaseUrl)
+				require.Equal(t, "org", repo.SubPath)
+			},
+		},
+		{
+			name:         "OCI Registry - nested with trailing slash",
+			repoRef:      "ghcr.io/org/sub/",
+			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
+				repo, ok := result.(*ociv1.Repository)
+				require.True(t, ok, "expected *ociv1.Repository")
+				require.Equal(t, "ghcr.io", repo.BaseUrl)
+				require.Equal(t, "org/sub", repo.SubPath)
+			},
+		},
+		{
 			name:         "OCI Registry - localhost with port",
 			repoRef:      "localhost:5000/my-repo",
 			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
@@ -831,6 +857,41 @@ func TestParseRepositoryErrorCases(t *testing.T) {
 			r.Error(err, "expected error but got none")
 			r.Nil(result, "expected nil result on error")
 			r.Contains(err.Error(), tt.expectedError, "unexpected error message")
+		})
+	}
+}
+
+func Test_Ref_RepositoryString_And_Location(t *testing.T) {
+	tests := []struct {
+		name               string
+		reference          string
+		expectedRepository string
+		expectedLocation   string
+	}{
+		{
+			// Without an explicit prefix the parser fills in the full versioned
+			// type, so RepositoryString carries it while Location does not.
+			name:               "OCI reference without prefix",
+			reference:          "ghcr.io/open-component-model//ocm.software/cli:1.0.0",
+			expectedRepository: "OCIRepository/v1::ghcr.io/open-component-model",
+			expectedLocation:   "ghcr.io/open-component-model",
+		},
+		{
+			name:               "OCI reference with explicit oci:: prefix",
+			reference:          "oci::ghcr.io/open-component-model//ocm.software/cli:1.0.0",
+			expectedRepository: "oci::ghcr.io/open-component-model",
+			expectedLocation:   "ghcr.io/open-component-model",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			ref, err := Parse(tt.reference)
+			r.NoError(err)
+			r.Equal(tt.expectedRepository, ref.RepositoryString())
+			r.Equal(tt.expectedLocation, ref.Location())
+			r.NotContains(ref.Location(), "::", "Location must not carry the type prefix")
 		})
 	}
 }

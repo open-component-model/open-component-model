@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/oras-project/oras-go/v3/registry/remote/auth"
 	"golang.org/x/sync/singleflight"
 
 	ocmhttp "ocm.software/open-component-model/bindings/go/http"
@@ -233,16 +232,9 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 			}
 		}
 
-		header := http.Header{"User-Agent": {b.creator}}
-		resolver, err := ocirepository.NewResolver(ctx, &auth.Client{
-			Client:         b.httpClient,
-			Cache:          auth.NewCache(),
-			CredentialFunc: credentials.CredentialFunc(identity, ociCredentials),
-			Header:         header,
-			// Keep the distribution spec token flow for basic credentials instead of
-			// attempting OAuth2 first, which not all registries implement.
-			TokenFetcher: auth.NewCompositeTokenFetcher(b.httpClient, header, "", true),
-		}, obj, resolverOpts...)
+		resolver, err := ocirepository.NewResolver(ctx,
+			credentials.AuthClient(b.httpClient, identity, ociCredentials, b.creator),
+			obj, resolverOpts...)
 		if err != nil {
 			return nil, fmt.Errorf("error creating oci repository resolver: %w", err)
 		}

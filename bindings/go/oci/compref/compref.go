@@ -102,20 +102,7 @@ type Ref struct {
 
 func (ref *Ref) String() string {
 	var sb strings.Builder
-	if ref.Type != "" {
-		sb.WriteString(ref.Type + "::")
-	}
-
-	switch repo := ref.Repository.(type) {
-	case *ociv1.Repository:
-		sb.WriteString(repo.BaseUrl)
-		if repo.SubPath != "" {
-			sb.WriteRune('/')
-			sb.WriteString(repo.SubPath)
-		}
-	case *ctfv1.Repository:
-		sb.WriteString(repo.FilePath)
-	}
+	sb.WriteString(ref.RepositoryString())
 
 	sb.WriteRune('/')
 	sb.WriteString(ref.Prefix)
@@ -127,6 +114,37 @@ func (ref *Ref) String() string {
 	}
 	if ref.Digest != "" {
 		sb.WriteString("@" + ref.Digest)
+	}
+	return sb.String()
+}
+
+// RepositoryString returns the repository part of the reference, that is the
+// reference without the prefix, component, version and digest, including the
+// "<type>::" prefix. It is the inverse of the repository portion of String.
+func (ref *Ref) RepositoryString() string {
+	var sb strings.Builder
+	if ref.Type != "" {
+		sb.WriteString(ref.Type + "::")
+	}
+	sb.WriteString(ref.Location())
+	return sb.String()
+}
+
+// Location returns the location of the repository without the "<type>::" prefix,
+// that is the base URL plus the subPath for OCI, or the file path for CTF. It is
+// the human-readable location shown in listings, for example
+// "ghcr.io/open-component-model".
+func (ref *Ref) Location() string {
+	var sb strings.Builder
+	switch repo := ref.Repository.(type) {
+	case *ociv1.Repository:
+		sb.WriteString(repo.BaseUrl)
+		if repo.SubPath != "" {
+			sb.WriteRune('/')
+			sb.WriteString(repo.SubPath)
+		}
+	case *ctfv1.Repository:
+		sb.WriteString(repo.FilePath)
 	}
 	return sb.String()
 }
@@ -330,9 +348,11 @@ func ParseRepository(repoRef string, opts ...Option) (runtime.Typed, error) {
 			t.BaseUrl = uri.Host
 		}
 
-		// Extract SubPath from the path component if present
-		if uri.Path != "" && uri.Path != "/" {
-			t.SubPath = strings.TrimPrefix(uri.Path, "/")
+		// Extract SubPath from the path component if present. Trim slashes so a
+		// trailing slash (ghcr.io/org/) does not leak into SubPath and produce
+		// "org//component-descriptors/...".
+		if sub := strings.Trim(uri.Path, "/"); sub != "" {
+			t.SubPath = sub
 		}
 	case *ctfv1.Repository:
 		t.FilePath = input

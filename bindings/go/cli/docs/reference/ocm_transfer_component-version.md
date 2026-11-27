@@ -24,7 +24,10 @@ and the version may be omitted. With a normalized digest, "@jsonNormalisation.v4
 is specific to the source repository; a normalized digest also matches the transferred copy.
 When the version is omitted (and no OCI digest is given), all versions of the component are discovered and transferred.
 When the source is a repository reference (without a component), every component version
-the repository contains is transferred (component listing is currently CTF-only).
+the repository contains is transferred (component listing works for CTF archives and for
+OCI registries that implement the /v2/_catalog endpoint). If a listed component cannot be
+read, the transfer fails before anything is transferred, so a mirror is never left
+incomplete.
 Use --constraint to restrict which versions are selected, and --latest to transfer
 only the newest matching version. Both apply per component.
 

@@ -54,6 +54,9 @@ type Renderer[T cmp.Ordered] struct {
 	// The roots are optional. If not provided, the Renderer will
 	// dynamically determine the roots from the DirectedAcyclicGraph.
 	roots []T
+	// rootLabel, when non-empty, is printed as a synthetic top row with all
+	// roots drawn as its children.
+	rootLabel []string
 	// The graph from which the tree is rendered.
 	graph *syncdag.SyncedDirectedAcyclicGraph[T]
 }
@@ -84,6 +87,7 @@ func New[T cmp.Ordered](ctx context.Context, graph *syncdag.SyncedDirectedAcycli
 		style:            DefaultTreeStyle,
 		tableStyle:       defaultTableStyle(),
 		roots:            options.Roots,
+		rootLabel:        options.RootLabel,
 		graph:            graph,
 	}
 }
@@ -131,6 +135,19 @@ func (t *Renderer[T]) Render(ctx context.Context, writer io.Writer) error {
 		defer func() {
 			slog.DebugContext(ctx, "unlocking graph after traversal")
 		}()
+
+		// With a root label, print it as the sole top row and draw every root as
+		// its child, so the roots and their subtrees sit one level deeper.
+		if len(t.rootLabel) > 0 {
+			t.tableWriter.AppendRow(nestingRow("", t.rootLabel))
+			for i, root := range roots {
+				isLast := i == len(roots)-1
+				if err := t.traverseGraph(ctx, lockedGraph, root, 1, false, isLast, []bool{false}); err != nil {
+					return fmt.Errorf("failed to traverse graph: %w", err)
+				}
+			}
+			return nil
+		}
 
 		for i, root := range roots {
 			isLast := i == len(roots)-1

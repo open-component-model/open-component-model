@@ -40,6 +40,22 @@ Two forms are accepted, each with sha256 or sha512:
 
 If no type is given, the repository path is interpreted based on introspection and heuristics.
 
+When the reference is a repository (no component), every component in the repository is listed. Components
+that cannot be read (for example missing pull permission or an unsupported descriptor schema) are reported
+and skipped; the command still succeeds unless no component can be read.
+
+The --detail level controls how much is fetched for a repository reference:
+  names (default): component names only, from the catalog (one request, fast);
+  versions: also list the versions of each component (one request per component);
+  full: fetch descriptors, needed for --recursive and the tree outputs.
+When --detail is not set, the cheapest level that satisfies the other flags is used: --latest or
+--constraint select versions; --recursive or -o tree|widetree select full. Listing a CTF archive now
+defaults to names too; pass --detail full for the previous descriptor output.
+
+For a component reference without a version (repo//component), --detail versions lists its versions
+without fetching descriptors, and full (the default) fetches them. A pinned reference
+(repo//component:version or @digest) is always full.
+
 
 ```
 ocm get component-version {reference} [flags]
@@ -55,6 +71,14 @@ get cv ./path/to/ctf//ocm.software/cli:0.12.0
 get cv ./path/to/ctf/component-descriptors/ocm.software/cli:0.12.0
 get cv ghcr.io/open-component-model//ocm.software/cli@sha256:<oci-digest>
 get cv ghcr.io/open-component-model//ocm.software/cli:0.12.0@jsonNormalisation.v4alpha3+sha256:<signed-digest>
+
+Listing components of a repository (no component in the reference):
+
+get cvs ghcr.io/open-component-model                         # component names (fast, default)
+get cvs ghcr.io/open-component-model --detail versions       # every version of every component
+get cvs ghcr.io/open-component-model --detail versions --latest
+get cvs ghcr.io/open-component-model --detail full -o yaml   # descriptors
+get cv ghcr.io/open-component-model//ocm.software/cli --detail versions   # versions of one component
 
 Listing many component versions:
 
@@ -80,6 +104,12 @@ repository is deprecated and fails without it (see https://ocm.software/docs/cha
 
 ```
       --constraint string     version constraint restricting which versions to output, evaluated by each version's configured scheme; versions with no applicable scheme are retained (default "> 0.0.0-0")
+      --detail enum           detail level when listing (a repository reference, or a component reference without a version):
+                                names (default for a repository): component names only, from the catalog (cheapest)
+                                versions: also list the versions of each component (one request per component)
+                                full: fetch descriptors; required for --recursive and the tree outputs; the default for a component reference
+                              When unset, the cheapest level that satisfies the other flags is used.
+                              (must be one of [full names versions]) (default names)
       --display-mode enum     display mode can be used in combination with --recursive
                                 static: print the output once the complete component graph is discovered
                                 live (experimental): continuously updates the output to represent the current discovery state of the component graph

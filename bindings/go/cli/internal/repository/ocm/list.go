@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 
 	"golang.org/x/sync/errgroup"
@@ -149,23 +150,83 @@ func ListComponentVersions(ctx context.Context, repo repository.ComponentVersion
 
 	// Ensure deterministic global ordering across components and versions.
 	if options.sort {
-		reg := options.reg()
-		var cmpErr error
-		slices.SortFunc(result, func(a, b *descriptor.Descriptor) int {
-			if cmpErr != nil {
-				return 0
-			}
-			c, err := reg.Compare(b.Component.Version, a.Component.Version)
-			if err != nil {
-				cmpErr = err
-				return 0
-			}
-			return c
-		})
-		if cmpErr != nil {
-			return nil, fmt.Errorf("sorting component versions failed: %w", cmpErr)
+		if err := SortDescriptorsDescending(options.reg(), result); err != nil {
+			return nil, err
 		}
 	}
 
 	return result, nil
+}
+
+// SortDescriptorsDescending sorts descriptors in place by component version,
+// newest first, using the versioning registry. Text sorting would order
+// "1.10.0" before "1.9.0", so the registry comparison is used instead. Ties
+// (equal versions, for example across components) break by component name so
+// the order is the same on every run. It is shared so repository listing and
+// the CLI produce the same global order.
+//
+// The registry must be the one built from the OCM configuration so custom
+// version schemes apply.
+func SortDescriptorsDescending(reg *versioning.Registry, descs []*descriptor.Descriptor) error {
+	var cmpErr error
+	slices.SortStableFunc(descs, func(a, b *descriptor.Descriptor) int {
+		if cmpErr != nil {
+			return 0
+		}
+		c, err := reg.Compare(b.Component.Version, a.Component.Version)
+		if err != nil {
+			cmpErr = err
+			return 0
+		}
+		if c != 0 {
+			return c
+		}
+		return strings.Compare(a.Component.Name, b.Component.Name)
+	})
+	if cmpErr != nil {
+		return fmt.Errorf("sorting component versions failed: %w", cmpErr)
+	}
+	return nil
+}
+
+// SortByComponentThenVersion sorts items in place by component name ascending,
+// then by version newest first using the versioning registry. key extracts the
+// component name and version from an item. The sort is stable, so equal keys
+// keep their input order on every run. The registry must be the one built from
+// the OCM configuration so custom version schemes apply.
+func SortByComponentThenVersion[T any](reg *versioning.Registry, items []T, key func(T) (name, version string)) error {
+	var cmpErr error
+	slices.SortStableFunc(items, func(a, b T) int {
+		aName, aVersion := key(a)
+		bName, bVersion := key(b)
+		if aName != bName {
+			return strings.Compare(aName, bName)
+		}
+		if cmpErr != nil {
+			return 0
+		}
+		c, err := reg.Compare(bVersion, aVersion)
+		if err != nil {
+			cmpErr = err
+			return 0
+		}
+		return c
+	})
+	if cmpErr != nil {
+		return fmt.Errorf("sorting component versions failed: %w", cmpErr)
+	}
+	return nil
+}
+
+// SortDescriptorsByComponentThenVersion sorts descriptors in place by component
+// name ascending, then by version newest first using the versioning registry.
+// It is used to list the component versions of a repository under its
+// repository row, so the output reads as the contents of that repository.
+//
+// The registry must be the one built from the OCM configuration so custom
+// version schemes apply.
+func SortDescriptorsByComponentThenVersion(reg *versioning.Registry, descs []*descriptor.Descriptor) error {
+	return SortByComponentThenVersion(reg, descs, func(d *descriptor.Descriptor) (string, string) {
+		return d.Component.Name, d.Component.Version
+	})
 }

@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"ocm.software/open-component-model/bindings/go/cli/cmd/configuration"
+	"ocm.software/open-component-model/bindings/go/cli/internal/componentlister"
 	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
 	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
 	"ocm.software/open-component-model/bindings/go/cli/internal/render"
@@ -26,6 +27,7 @@ import (
 	versioningspec "ocm.software/open-component-model/bindings/go/configuration/versioning/v1alpha1/spec"
 	"ocm.software/open-component-model/bindings/go/credentials"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/oci/catalog"
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
@@ -69,7 +71,10 @@ and the version may be omitted. With a normalized digest, "@jsonNormalisation.v4
 is specific to the source repository; a normalized digest also matches the transferred copy.
 When the version is omitted (and no OCI digest is given), all versions of the component are discovered and transferred.
 When the source is a repository reference (without a component), every component version
-the repository contains is transferred (component listing is currently CTF-only).
+the repository contains is transferred (component listing works for CTF archives and for
+OCI registries that implement the /v2/_catalog endpoint). If a listed component cannot be
+read, the transfer fails before anything is transferred, so a mirror is never left
+incomplete.
 Use --constraint to restrict which versions are selected, and --latest to transfer
 only the newest matching version. Both apply per component.
 
@@ -507,10 +512,16 @@ func resolveSource(
 	if sourceRepository != nil {
 		// Component names must be discovered before the resolver is built so they can
 		// be registered as high-priority patterns for the source repository.
-		if sourceComponents, err = listComponentsFromRepository(ctx, pm, sourceRepository); err != nil {
-			return nil, nil, nil, fmt.Errorf("could not list components in source repository: %w", err)
+		if sourceComponents, err = componentlister.List(ctx, pm, credGraph, sourceRepository, source); err != nil {
+			if hint := componentlister.ComponentHint(source); hint != "" && errors.Is(err, catalog.ErrCatalogScanLimit) {
+				return nil, nil, nil, fmt.Errorf("%w; did you mean %q?", err, hint)
+			}
+			return nil, nil, nil, err
 		}
 		if len(sourceComponents) == 0 {
+			if hint := componentlister.ComponentHint(source); hint != "" {
+				return nil, nil, nil, fmt.Errorf("no components found in source repository; did you mean %q?", hint)
+			}
 			return nil, nil, nil, fmt.Errorf("no components found in source repository")
 		}
 		resolverOpts = append(resolverOpts, ocm.WithRepository(sourceRepository), ocm.WithComponentPatterns(sourceComponents))
@@ -588,10 +599,16 @@ func collectComponentIDs(
 	}
 
 	var componentIDs []transfer.ComponentID
+	var unreadable []error
 	for _, component := range components {
 		repo, err := repoProvider.GetComponentVersionRepositoryForComponent(ctx, component, "")
 		if err != nil {
-			return nil, fmt.Errorf("could not access ocm repository: %w", err)
+			if !repositorySource {
+				return nil, fmt.Errorf("could not access ocm repository: %w", err)
+			}
+			slog.ErrorContext(ctx, "component in source repository could not be read", "component", component, "error", err)
+			unreadable = append(unreadable, fmt.Errorf("%s: %w", component, err))
+			continue
 		}
 		versions, err := ocm.VersionsWithFiltering(ctx, component, repo, ocm.VersionOptions{
 			SemverConstraint: constraint,
@@ -599,12 +616,27 @@ func collectComponentIDs(
 			Registry:         registry,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("listing and filtering component versions failed: %w", err)
+			if !repositorySource {
+				return nil, fmt.Errorf("listing and filtering component versions failed: %w", err)
+			}
+			slog.ErrorContext(ctx, "component in source repository could not be read", "component", component, "error", err)
+			unreadable = append(unreadable, fmt.Errorf("%s: %w", component, err))
+			continue
 		}
 		for _, v := range versions {
 			componentIDs = append(componentIDs, transfer.ComponentID{Component: component, Version: v})
 		}
 	}
+
+	// A whole-registry transfer must not silently drop components. If any listed
+	// component could not be read, fail before transferring anything, naming
+	// every unreadable component, so the mirror is never left incomplete with a
+	// zero exit code.
+	if len(unreadable) > 0 {
+		return nil, fmt.Errorf("%d of %d components in the source repository could not be read; no transfer was started: %w",
+			len(unreadable), len(components), errors.Join(unreadable...))
+	}
+
 	if len(componentIDs) == 0 {
 		msg := "no versions found"
 		if !repositorySource {
@@ -620,30 +652,6 @@ func collectComponentIDs(
 	}
 
 	return componentIDs, nil
-}
-
-// listComponentsFromRepository lists the component names contained in a repository.
-// Component listing currently supports CTF repositories only, which covers the common
-// "transfer a whole transport archive" case.
-func listComponentsFromRepository(ctx context.Context, pm *manager.PluginManager, repository runtime.Typed) ([]string, error) {
-	if _, ok := repository.(*ctfv1.Repository); !ok {
-		return nil, fmt.Errorf("component listing in repositories of type %T is not supported; specify a component in the source reference", repository)
-	}
-
-	lister, err := pm.ComponentListerRegistry.GetComponentLister(ctx, repository, nil)
-	if err != nil {
-		return nil, fmt.Errorf("could not get component lister: %w", err)
-	}
-
-	var componentNames []string
-	if err := lister.ListComponents(ctx, "", func(names []string) error {
-		componentNames = append(componentNames, names...)
-		return nil
-	}); err != nil {
-		return nil, fmt.Errorf("could not list components: %w", err)
-	}
-
-	return componentNames, nil
 }
 
 func renderTGD(tgd *transformv1alpha1.TransformationGraphDefinition, format string) (io.ReadCloser, error) {

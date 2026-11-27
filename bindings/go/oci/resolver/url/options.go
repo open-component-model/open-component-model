@@ -1,6 +1,8 @@
 package url
 
 import (
+	"strings"
+
 	"github.com/oras-project/oras-go/v3/registry/remote"
 
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
@@ -67,9 +69,11 @@ func WithHTTPConfig(cfg *httpv1alpha1.Config) Option {
 
 // WithSubPath sets the repository prefix path used for the OCM repository.
 // The OCM based artifacts will use this path as a repository prefix.
+// WithSubPath sets the OCM repository prefix. Surrounding slashes are trimmed
+// so a subPath like "foo/" from a config file resolves to "foo/component-descriptors/<name>".
 func WithSubPath(subPath string) Option {
 	return OptionFunc(func(resolver *CachingResolver) {
-		resolver.subPath = subPath
+		resolver.subPath = strings.Trim(subPath, "/")
 	})
 }
 

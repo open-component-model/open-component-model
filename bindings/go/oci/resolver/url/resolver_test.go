@@ -103,6 +103,16 @@ func TestURLPathResolver_ComponentVersionReferenceWithSubPath(t *testing.T) {
 			version:   "v2.1.0",
 			expected:  "http://example.com/org/team/project/component-descriptors/ocm.software/test-component:v2.1.0",
 		},
+		{
+			// A subPath from a config file may carry surrounding slashes; they
+			// are trimmed so the reference does not get a double slash.
+			name:      "with trailing slash in subPath",
+			baseURL:   "http://example.com",
+			subPath:   "org/",
+			component: "ocm.software/test-component",
+			version:   "v1.0.0",
+			expected:  "http://example.com/org/component-descriptors/ocm.software/test-component:v1.0.0",
+		},
 	}
 
 	for _, tt := range tests {
