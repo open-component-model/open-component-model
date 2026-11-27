@@ -1,11 +1,12 @@
 name: cli binary size guard
 
 # Guards against unreviewed growth of the `ocm` CLI binary. On every push to
-# main the job builds the CLI at the new tip and at its parent commit inside
-# the same run, compares the two stripped binary sizes, and fails if the new
-# binary grew by more than the threshold. There is no stored baseline: the
-# before and after are both built here, so the comparison is always
-# apples-to-apples on one runner with one toolchain.
+# main (and on manual dispatch) the job builds the CLI at the new tip and at
+# the last commit where this check passed, compares the two stripped binary
+# sizes on one runner with one toolchain, and fails if the new binary grew by
+# more than the threshold. The baseline is the head commit of the most recent
+# successful run of this workflow on main, so after a failure every later push
+# keeps failing until a maintainer approves the growth with a manual dispatch.
 #
 # The default threshold of 10 percent is justified by a one-year weekly
 # measurement (recorded in the pull request that introduced this workflow):
@@ -17,6 +18,10 @@ on:
   push:
     branches:
       - main
+    paths:
+      - bindings/go/**
+      - .env # GOFIPS140 lives here and changes the binary
+      - .github/workflows/cli-binary-size.yml
   workflow_dispatch:
     inputs:
       threshold_percent:
@@ -26,6 +31,13 @@ on:
 
 permissions:
   contents: read
+  actions: read # gh run list reads past runs to find the green baseline
+
+# A newer run covers the commits of an older one (it compares against the same
+# green baseline), so cancelling an in-progress run loses nothing.
+concurrency:
+  group: cli-binary-size-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   # Default growth threshold in percent. workflow_dispatch can override it.
@@ -40,14 +52,40 @@ jobs:
     name: Compare CLI binary size
     runs-on: ubuntu-26.04-arm
     steps:
-      - name: Checkout (tip and parent)
+      - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The job only builds and compares; it never uses the token, so do
           # not leave it in .git/config (zizmor artipacked).
           persist-credentials: false
-          # Need the parent commit to build the "before" binary.
-          fetch-depth: 2
+          # Full history so the baseline commit is present to check out.
+          fetch-depth: 0
+
+      - name: Resolve baseline (last green run on main)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          tip="$(git rev-parse HEAD)"
+          echo "TIP_SHA=${tip}" >> "${GITHUB_ENV}"
+
+          # A manual dispatch sets the next green baseline, so it must run on
+          # main. The --branch main filter below already prevents a branch run
+          # from becoming the baseline; this makes the rule explicit.
+          if [ "${EVENT_NAME}" = "workflow_dispatch" ] && [ "${GITHUB_REF}" != "refs/heads/main" ]; then
+            echo "::error::workflow_dispatch must run on main, got ${GITHUB_REF}."
+            exit 1
+          fi
+
+          base="$(gh run list --repo "${GITHUB_REPOSITORY}" \
+            --workflow cli-binary-size.yml --branch main --status success \
+            --limit 1 --json headSha -q '.[0].headSha')"
+          if [ -z "${base}" ]; then
+            base="$(git rev-parse HEAD^)" # first run only: no green run yet
+            echo "::notice::No green run found, using parent ${base} as baseline."
+          fi
+          echo "BASE_SHA=${base}" >> "${GITHUB_ENV}"
+          echo "Baseline: ${base}"
 
       - name: Setup Go
         uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
@@ -65,47 +103,74 @@ jobs:
         run: |
           task bindings/go/cli:build/single GOOS="${TARGET_GOOS}" GOARCH="${TARGET_GOARCH}"
           new_size=$(stat -c%s "${CLI_BINARY}")
-          new_mib=$(awk -v b="${new_size}" 'BEGIN { printf "%.1f", b / 1048576 }')
           echo "NEW_SIZE=${new_size}" >> "${GITHUB_ENV}"
-          echo "New tip binary size: ${new_mib} MiB (${new_size} bytes)"
+          echo "New tip binary size: ${new_size} bytes"
 
-      - name: Build CLI at the parent commit
+      - name: Build CLI at the baseline
         run: |
-          # Build the parent with the tip's toolchain (GOTOOLCHAIN=local in the
-          # build task) so the delta reflects the code change, not a toolchain
-          # change. The tip binary is already measured, so overwriting the
-          # output here is safe.
-          git checkout --quiet --force HEAD^
-          task bindings/go/cli:build/single GOOS="${TARGET_GOOS}" GOARCH="${TARGET_GOARCH}"
+          # A re-run of an already green commit has nothing to compare.
+          if [ "${BASE_SHA}" = "${TIP_SHA}" ]; then
+            echo "Baseline equals tip; reporting zero growth."
+            echo "OLD_SIZE=${NEW_SIZE}" >> "${GITHUB_ENV}"
+            exit 0
+          fi
+          # Build the baseline with the tip's toolchain (GOTOOLCHAIN=local in
+          # the build task) so the delta reflects the code change, not a
+          # toolchain change. Overwriting the tip output is safe; it is
+          # already measured.
+          git checkout --quiet --force "${BASE_SHA}"
+          if ! task bindings/go/cli:build/single GOOS="${TARGET_GOOS}" GOARCH="${TARGET_GOARCH}"; then
+            echo "::error::The baseline ${BASE_SHA} did not build with the installed toolchain (GOTOOLCHAIN=local, so a changed toolchain pin can cause this). Approve the current size with a workflow_dispatch to set a new green baseline."
+            exit 1
+          fi
           old_size=$(stat -c%s "${CLI_BINARY}")
-          old_mib=$(awk -v b="${old_size}" 'BEGIN { printf "%.1f", b / 1048576 }')
           echo "OLD_SIZE=${old_size}" >> "${GITHUB_ENV}"
-          echo "Parent binary size: ${old_mib} MiB (${old_size} bytes)"
+          echo "Baseline binary size: ${old_size} bytes"
 
       - name: Compare and enforce threshold
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
         run: |
+          # workflow_dispatch passes the threshold as free text; reject
+          # anything that is not a number before awk treats it as zero.
+          if ! [[ "${SIZE_GROWTH_THRESHOLD_PERCENT}" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+            echo "::error::threshold_percent must be a number, got '${SIZE_GROWTH_THRESHOLD_PERCENT}'."
+            exit 1
+          fi
+
+          mib() { awk -v b="$1" 'BEGIN { printf "%.1f", b / 1048576 }'; }
+
           growth=$(awk -v n="${NEW_SIZE}" -v o="${OLD_SIZE}" \
             'BEGIN { if (o == 0) { print "100" } else { printf "%.4f", (n - o) / o * 100 } }')
-          old_mib=$(awk -v b="${OLD_SIZE}" 'BEGIN { printf "%.1f", b / 1048576 }')
-          new_mib=$(awk -v b="${NEW_SIZE}" 'BEGIN { printf "%.1f", b / 1048576 }')
-          delta_mib=$(awk -v n="${NEW_SIZE}" -v o="${OLD_SIZE}" 'BEGIN { printf "%+.1f", (n - o) / 1048576 }')
-          echo "Parent size:    ${old_mib} MiB (${OLD_SIZE} bytes)"
-          echo "New tip size:   ${new_mib} MiB (${NEW_SIZE} bytes)"
-          echo "Growth:         ${growth}% (${delta_mib} MiB, threshold ${SIZE_GROWTH_THRESHOLD_PERCENT}%)"
+          delta_mib=$(awk -v n="${NEW_SIZE}" -v o="${OLD_SIZE}" \
+            'BEGIN { printf "%+.1f", (n - o) / 1048576 }')
+          base_mib="$(mib "${OLD_SIZE}")"
+          tip_mib="$(mib "${NEW_SIZE}")"
+
+          echo "Baseline (${BASE_SHA}): ${base_mib} MiB (${OLD_SIZE} bytes)"
+          echo "New tip  (${TIP_SHA}): ${tip_mib} MiB (${NEW_SIZE} bytes)"
+          echo "Growth: ${growth}% (${delta_mib} MiB, threshold ${SIZE_GROWTH_THRESHOLD_PERCENT}%)"
           {
             echo "### CLI binary size guard"
             echo ""
             echo "| metric | value |"
             echo "| --- | --- |"
-            echo "| parent size | ${old_mib} MiB (${OLD_SIZE} bytes) |"
-            echo "| new tip size | ${new_mib} MiB (${NEW_SIZE} bytes) |"
+            echo "| baseline (last green) | \`${BASE_SHA}\` |"
+            echo "| new tip | \`${TIP_SHA}\` |"
+            echo "| baseline size | ${base_mib} MiB (${OLD_SIZE} bytes) |"
+            echo "| new tip size | ${tip_mib} MiB (${NEW_SIZE} bytes) |"
             echo "| growth | ${growth}% (${delta_mib} MiB) |"
             echo "| threshold | ${SIZE_GROWTH_THRESHOLD_PERCENT}% |"
+            if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+              echo "| manual override | by @${ACTOR} |"
+            fi
           } >> "${GITHUB_STEP_SUMMARY}"
+
           over=$(awk -v g="${growth}" -v t="${SIZE_GROWTH_THRESHOLD_PERCENT}" \
-            'BEGIN { print (g > t) ? "1" : "0" }')
+            'BEGIN { print ((g + 0) > (t + 0)) ? "1" : "0" }')
           if [ "${over}" = "1" ]; then
-            echo "::error::CLI binary grew ${growth}% (${delta_mib} MiB), above the ${SIZE_GROWTH_THRESHOLD_PERCENT}% threshold. A maintainer must review this growth."
+            echo "::error::CLI binary grew ${growth}% (${delta_mib} MiB), above the ${SIZE_GROWTH_THRESHOLD_PERCENT}% threshold. Approve with a workflow_dispatch and a higher threshold, or reduce the size."
             exit 1
           fi
           echo "CLI binary growth is within the threshold."
