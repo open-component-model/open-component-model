@@ -62,7 +62,7 @@ identical component descriptors always yield the same digest.
 Digests computed with older algorithms keep verifying: `jsonNormalisation/v4alpha1`, `jsonNormalisation/v4alpha2`,
 the legacy `jsonNormalisation/v3`, and `jsonNormalisation/v1`, which can only be verified, never used for new
 signatures or component reference digests. A `jsonNormalisation/v3` digest is verified the way OCM v1 computed it,
-keeping null values such as a signed label with `value: null`, with a fallback to `jsonNormalisation/v4alpha2`.
+keeping null values such as a signed label with `value: null`.
 New digests requested as `jsonNormalisation/v3` are recorded as `jsonNormalisation/v4alpha2`.
 Older algorithms may sign less of the descriptor than the default, so OCM logs a warning whenever it trusts a digest
 computed with one (a signature, a digest pin or a component reference digest). To move to the default, see

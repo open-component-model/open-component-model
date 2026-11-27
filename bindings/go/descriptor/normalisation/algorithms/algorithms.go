@@ -132,11 +132,10 @@ func Digest(desc *descruntime.Descriptor, normalisationAlgorithm, hashAlgorithm 
 //
 // A digest recorded as LegacyV3 was minted by legacy OCM v1, which keeps
 // null-valued entries such as a signed label with value: null. It is verified
-// against v4alpha2.NormaliseLegacyV3, and, failing that, against the v4alpha2
-// bytes it has always been verified against, so no digest that verified before
-// stops verifying. The two differ only for a descriptor with a null-valued
-// entry. Digest never records LegacyV3 (it labels such digests v4alpha2), so
-// minting is unaffected.
+// against v4alpha2.NormaliseLegacyV3 only, as OCM v1 is the only producer of
+// such digests. For a descriptor without a null-valued entry these are the
+// v4alpha2 bytes. Digest never records LegacyV3 (it labels such digests
+// v4alpha2), so minting is unaffected.
 //
 // A digest recorded as jsonNormalisation/v1 is verified as cc-utils computes it
 // first and, failing that, as the OCM v1 CLI computes it (see
@@ -159,14 +158,7 @@ func Verify(desc *descruntime.Descriptor, expected descruntime.Digest) error {
 		return err
 	}
 	if expected.NormalisationAlgorithm == LegacyV3 {
-		err := verify(v4alpha2.NormaliseLegacyV3, desc, expected)
-		if !errors.Is(err, ErrDigestMismatch) {
-			return err
-		}
-		if fallback := verify(registered(v4alpha2.Algorithm), desc, expected); fallback == nil {
-			return nil
-		}
-		return err
+		return verify(v4alpha2.NormaliseLegacyV3, desc, expected)
 	}
 	if expected.NormalisationAlgorithm == jsonv1.Algorithm { //nolint:staticcheck // verify-only legacy algorithm
 		err := verify(registered(jsonv1.Algorithm), desc, expected) //nolint:staticcheck // verify-only legacy algorithm

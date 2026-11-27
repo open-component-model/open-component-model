@@ -286,7 +286,7 @@ const legacyV3NullBytes = `{"component":{"componentReferences":[{"componentName"
 	`"labels":[{"name":"foo","signing":true,"value":null}],"name":"ocm.software/null","provider":{"name":"ocm.software"},"resources":[],"sources":[],"version":"1.0.0"}}`
 
 // TestVerifyNullLabelValue: a jsonNormalisation/v3 digest is verified over the
-// v1 bytes (null label values kept), while a digest v2 recorded as v4alpha2
+// v1 bytes only (null label values kept), while a digest v2 recorded as v4alpha2
 // over the same descriptor keeps verifying unchanged, and minting with the v3
 // alias still records v4alpha2.
 func TestVerifyNullLabelValue(t *testing.T) {
@@ -311,7 +311,7 @@ func TestVerifyNullLabelValue(t *testing.T) {
 	}{
 		{name: "v1 v3 signature over null label values", digest: v3(sha(legacyV3NullBytes))},
 		{name: "recorded v4alpha2 digest", digest: *recorded},
-		{name: "v3 digest over the v4alpha2 bytes, as verified before", digest: v3(recorded.Value)},
+		{name: "v3 digest over the v4alpha2 bytes", digest: v3(recorded.Value), wantErr: algorithms.ErrDigestMismatch},
 		{name: "v4alpha2 digest over the v3 bytes", digest: descruntime.Digest{HashAlgorithm: crypto.SHA256.String(), NormalisationAlgorithm: v4alpha2, Value: sha(legacyV3NullBytes)}, wantErr: algorithms.ErrDigestMismatch},
 		{name: "v3 mismatch", digest: v3(sha(legacyV3NullBytes + " ")), wantErr: algorithms.ErrDigestMismatch},
 		{name: "v3 unsupported hash", digest: descruntime.Digest{HashAlgorithm: "MD5", NormalisationAlgorithm: algorithms.LegacyV3, Value: sha(legacyV3NullBytes)}, wantErr: algorithms.ErrUnsupportedHash},
