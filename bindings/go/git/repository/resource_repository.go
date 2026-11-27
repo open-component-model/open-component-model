@@ -139,6 +139,9 @@ func (r *ResourceRepository) DownloadResource(ctx context.Context, res *descript
 	if err != nil {
 		return nil, fmt.Errorf("resource %q: %w", res.Name, err)
 	}
+	if isLegacyType(res.Access.GetType()) && res.Digest != nil {
+		return &legacyBlob{base: b, typ: res.Access.GetType()}, nil
+	}
 	return b, nil
 }
 
@@ -164,6 +167,9 @@ func (r *ResourceRepository) ProcessResourceDigest(ctx context.Context, res *des
 		return nil, err
 	}
 	if err := verifyDigest(res.Digest, downloaded.Digest); err != nil {
+		if isLegacyType(res.Access.GetType()) {
+			err = legacyHint(res.Access.GetType(), err)
+		}
 		return nil, err
 	}
 

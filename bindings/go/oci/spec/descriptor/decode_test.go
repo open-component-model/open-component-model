@@ -203,3 +203,14 @@ func TestDescriptorFileFromTar_BrokenTar(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, r)
 }
+
+func TestSingleFileDecodeDescriptor_RejectsV3Alpha1(t *testing.T) {
+	doc := []byte("apiVersion: ocm.software/v3alpha1\nkind: ComponentVersion\nmetadata:\n  name: example.org/c\n  version: 1.0.0\n")
+	for _, mt := range []string{MediaTypeComponentDescriptorYAML, MediaTypeComponentDescriptorJSON} {
+		t.Run(mt, func(t *testing.T) {
+			_, err := SingleFileDecodeDescriptor(bytes.NewReader(doc), mt, DefaultDescriptorUnmarshalFunc)
+			require.ErrorIs(t, err, ErrUnsupportedSchemaV3Alpha1)
+			assert.Contains(t, err.Error(), "ocm.software/v3alpha1")
+		})
+	}
+}

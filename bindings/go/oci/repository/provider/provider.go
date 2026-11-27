@@ -184,6 +184,9 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 	}
 	switch obj := obj.(type) {
 	case *ocirepospecv1.Repository:
+		if err := obj.ValidateComponentNameMapping(); err != nil {
+			return nil, err
+		}
 		return v1.IdentityFromOCIRepository(obj)
 	case *ctfrepospecv1.Repository:
 		return nil, errors.New("cannot resolve consumer identity for ctf: credentials not supported")
@@ -207,6 +210,9 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 
 	switch obj := obj.(type) {
 	case *ocirepospecv1.Repository:
+		if err := obj.ValidateComponentNameMapping(); err != nil {
+			return nil, err
+		}
 		identity, err := v1.OCIRegistryIdentityFromOCIRepository(obj)
 		if err != nil {
 			return nil, err

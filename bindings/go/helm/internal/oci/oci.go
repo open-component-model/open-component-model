@@ -23,6 +23,10 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
+// fixedCreated is the constant org.opencontainers.image.created value (the Unix epoch),
+// keeping the manifest and its digest reproducible.
+const fixedCreated = "1970-01-01T00:00:00Z"
+
 // Result holds both the OCI layout blob and the manifest descriptor produced by CopyChartToOCILayout.
 type Result struct {
 	Blob *filesystem.Blob
@@ -89,6 +93,11 @@ func writeOCILayout(ctx context.Context, chart *internal.ChartData, out io.Write
 	imgDesc, err := oras.PackManifest(ctx, target, oras.PackManifestVersion1_1, "", oras.PackManifestOptions{
 		ConfigDescriptor: configLayer,
 		Layers:           layers,
+		// oras stamps the current time unless the annotation is set, which would
+		// give every conversion of the same chart a different manifest digest.
+		ManifestAnnotations: map[string]string{
+			ociImageSpecV1.AnnotationCreated: fixedCreated,
+		},
 	})
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to create OCI image manifest: %w", err)

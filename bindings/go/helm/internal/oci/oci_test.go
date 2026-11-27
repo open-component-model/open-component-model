@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/opencontainers/go-digest"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
@@ -410,4 +411,18 @@ func newReadOnlyChart(t *testing.T, path string) *internal.ChartData {
 	}
 
 	return result
+}
+
+func TestCopyChartToOCILayout_ReproducibleDigest(t *testing.T) {
+	ctx := t.Context()
+	chart := newReadOnlyChart(t, filepath.Join("../../testdata", "mychart-0.1.0.tgz"))
+
+	first, err := oci.CopyChartToOCILayout(ctx, chart, layoutPath(t))
+	require.NoError(t, err)
+	// Ensure the creation timestamp would differ if it were taken from the clock.
+	time.Sleep(1100 * time.Millisecond)
+	second, err := oci.CopyChartToOCILayout(ctx, chart, layoutPath(t))
+	require.NoError(t, err)
+
+	assert.Equal(t, first.Desc.Digest, second.Desc.Digest)
 }
