@@ -6,6 +6,7 @@
 
 export const DEFAULT_THRESHOLD_PERCENT = 10;
 export const WORKFLOW_FILE = "cli-binary-size.yml";
+export const WORKFLOW_PATH = `.github/workflows/${WORKFLOW_FILE}`;
 export const MAIN_REF = "refs/heads/main";
 
 const MiB = 1024 * 1024;
@@ -28,32 +29,49 @@ export function parseThreshold(input) {
 }
 
 /**
- * The head commit of the most recent successful run of this workflow on main,
- * or the parent of the tip when no run has passed yet (the first run).
+ * The head commit of the most recent successful run of this workflow on main.
+ *
+ * Until a run has passed, the baseline is the parent of the commit that added
+ * this workflow, not the parent of the tip: a failed or cancelled first run
+ * must not move the baseline, or the next push would compare against the
+ * rejected size and pass. It is read from the history of tipSha, which is
+ * immutable, so runs or pushes that happen meanwhile cannot shift it (a
+ * count-based walk over the run list can).
  *
  * @param {any} github - Octokit client from actions/github-script.
  * @param {{ owner: string, repo: string }} repo
  * @param {string} tipSha
- * @returns {Promise<{ sha: string, source: "last-green" | "parent" }>}
+ * @returns {Promise<{ sha: string, source: "last-green" | "initial" }>}
  */
 export async function findBaseline(github, repo, tipSha) {
-  const { data } = await github.rest.actions.listWorkflowRuns({
+  const { data: green } = await github.rest.actions.listWorkflowRuns({
     ...repo,
     workflow_id: WORKFLOW_FILE,
     branch: "main",
     status: "success",
     per_page: 1,
   });
-  const run = data.workflow_runs?.[0];
-  if (run) {
-    return { sha: run.head_sha, source: "last-green" };
+  const lastGreen = green.workflow_runs?.[0];
+  if (lastGreen) {
+    return { sha: lastGreen.head_sha, source: "last-green" };
   }
-  const { data: commit } = await github.rest.repos.getCommit({ ...repo, ref: tipSha });
-  const parent = commit.parents?.[0]?.sha;
+
+  // Newest first; the last entry is the commit that added the workflow.
+  const commits = await github.paginate(github.rest.repos.listCommits, {
+    ...repo,
+    sha: tipSha,
+    path: WORKFLOW_PATH,
+    per_page: 100,
+  });
+  const added = commits.at(-1);
+  if (!added) {
+    throw new Error(`no green run of ${WORKFLOW_FILE} on main and ${WORKFLOW_PATH} is not in the history of ${tipSha}`);
+  }
+  const parent = added.parents?.[0]?.sha;
   if (!parent) {
-    throw new Error(`no green run of ${WORKFLOW_FILE} on main and ${tipSha} has no parent`);
+    throw new Error(`no green run of ${WORKFLOW_FILE} on main and ${added.sha}, which added it, has no parent`);
   }
-  return { sha: parent, source: "parent" };
+  return { sha: parent, source: "initial" };
 }
 
 /**
@@ -169,8 +187,8 @@ export async function resolveAction({ github, context, core }) {
     const reset = env.RESET_INPUT === "true";
     const tipSha = context.sha;
     const baseline = await findBaseline(github, context.repo, tipSha);
-    if (baseline.source === "parent") {
-      core.notice(`No green run found, using parent ${baseline.sha} as baseline.`);
+    if (baseline.source === "initial") {
+      core.notice(`No green run yet, using ${baseline.sha} (before this workflow was added) as baseline.`);
     }
     core.info(`Baseline: ${baseline.sha} (${baseline.source}), tip: ${tipSha}, threshold: ${threshold}%`);
 

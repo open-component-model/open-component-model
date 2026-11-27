@@ -42,7 +42,7 @@ on:
         default: false
 
 permissions:
-  contents: read # also used to read the parent commit on the first run
+  contents: read # also reads the commit history to find the first baseline
   actions: read # listWorkflowRuns reads past runs to find the green baseline
 
 # Keep push runs and dispatch runs in separate groups so a push to main cannot

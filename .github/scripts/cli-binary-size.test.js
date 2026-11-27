@@ -15,29 +15,71 @@ const MiB = 1024 * 1024;
 const repo = { owner: "o", repo: "r" };
 
 /**
- * @param {{ runs?: any[], parents?: any[] }} opts
+ * @typedef {{ head_sha: string, conclusion: string | null }} Run
+ * @typedef {{ sha: string, touchesWorkflow?: boolean }} Commit
  */
-function fakeGithub({ runs = [], parents = [{ sha: "parent" }] } = {}) {
+
+/**
+ * A GitHub client with a run history of this workflow and a linear git history.
+ *
+ * @param {{ runs?: Run[], history?: Commit[], afterEachCall?: (runs: Run[]) => void }} opts
+ *   runs: newest first, like the API; include the current (in-progress) run.
+ *   history: oldest first; each commit's parent is the one before it.
+ *   afterEachCall: mutates runs after every API call, to simulate runs that
+ *   start while findBaseline is between requests.
+ */
+function fakeGithub({ runs = [], history = [], afterEachCall = () => {} } = {}) {
   /** @type {any[]} */
   const calls = [];
+  const listCommits = async (/** @type {any} */ params) => {
+    calls.push(["listCommits", params]);
+    const end = history.findIndex((c) => c.sha === params.sha);
+    const data = history
+      .slice(0, end + 1)
+      .map((c, i) => ({ sha: c.sha, touches: c.touchesWorkflow, parents: i > 0 ? [{ sha: history[i - 1].sha }] : [] }))
+      .filter((c) => params.path === undefined || c.touches)
+      .reverse()
+      .map(({ sha, parents }) => ({ sha, parents }));
+    afterEachCall(runs);
+    return { data };
+  };
   return {
     calls,
+    paginate: async (/** @type {any} */ fn, /** @type {any} */ params) => (await fn(params)).data,
     rest: {
       actions: {
         listWorkflowRuns: async (/** @type {any} */ params) => {
           calls.push(["listWorkflowRuns", params]);
-          return { data: { workflow_runs: runs } };
+          const matching = params.status ? runs.filter((r) => r.conclusion === params.status) : runs;
+          const perPage = params.per_page ?? 30;
+          const page = params.page ?? 1;
+          const data = { total_count: matching.length, workflow_runs: matching.slice((page - 1) * perPage, page * perPage) };
+          afterEachCall(runs);
+          return { data };
         },
       },
-      repos: {
-        getCommit: async (/** @type {any} */ params) => {
-          calls.push(["getCommit", params]);
-          return { data: { parents } };
-        },
-      },
+      repos: { listCommits },
     },
   };
 }
+
+/** The workflow is added in c1 and edited in c3; "before" is main before the guard. */
+const guardHistory = [
+  { sha: "before" },
+  { sha: "c1", touchesWorkflow: true },
+  { sha: "c2" },
+  { sha: "c3", touchesWorkflow: true },
+  { sha: "c4" },
+];
+
+/** @param {string} sha */
+const green = (sha) => ({ head_sha: sha, conclusion: "success" });
+/** @param {string} sha */
+const failed = (sha) => ({ head_sha: sha, conclusion: "failure" });
+/** @param {string} sha */
+const cancelled = (sha) => ({ head_sha: sha, conclusion: "cancelled" });
+/** @param {string} sha */
+const running = (sha) => ({ head_sha: sha, conclusion: null });
 
 function fakeCore() {
   /** @type {Record<string, string>} */
@@ -103,8 +145,8 @@ test("parseThreshold: rejects anything else", () => {
 });
 
 test("findBaseline: uses the head of the last green run on main", async () => {
-  const github = fakeGithub({ runs: [{ head_sha: "green" }] });
-  assert.deepStrictEqual(await findBaseline(github, repo, "tip"), { sha: "green", source: "last-green" });
+  const github = fakeGithub({ runs: [running("tip"), failed("c2"), green("c1")] });
+  assert.deepStrictEqual(await findBaseline(github, repo, "tip"), { sha: "c1", source: "last-green" });
   assert.deepStrictEqual(github.calls, [
     [
       "listWorkflowRuns",
@@ -113,14 +155,67 @@ test("findBaseline: uses the head of the last green run on main", async () => {
   ]);
 });
 
-test("findBaseline: first run falls back to the parent of the tip", async () => {
-  const github = fakeGithub({ runs: [], parents: [{ sha: "parent" }] });
-  assert.deepStrictEqual(await findBaseline(github, repo, "tip"), { sha: "parent", source: "parent" });
-  assert.deepStrictEqual(github.calls[1], ["getCommit", { ...repo, ref: "tip" }]);
+test("findBaseline: the very first run uses the commit before the workflow was added", async () => {
+  const github = fakeGithub({ runs: [running("c1")], history: guardHistory });
+  assert.deepStrictEqual(await findBaseline(github, repo, "c1"), { sha: "before", source: "initial" });
+  assert.deepStrictEqual(github.calls.at(-1), [
+    "listCommits",
+    { ...repo, sha: "c1", path: ".github/workflows/cli-binary-size.yml", per_page: 100 },
+  ]);
 });
 
-test("findBaseline: fails without a green run and without a parent", async () => {
-  await assert.rejects(findBaseline(fakeGithub({ runs: [], parents: [] }), repo, "tip"), /has no parent/);
+test("findBaseline: without a green run the baseline stays before the workflow was added", async () => {
+  // Failed and cancelled runs, and a later edit of the workflow (c3), do not move it.
+  const github = fakeGithub({
+    runs: [running("c4"), cancelled("c3"), failed("c2"), failed("c1")],
+    history: guardHistory,
+  });
+  assert.deepStrictEqual(await findBaseline(github, repo, "c4"), { sha: "before", source: "initial" });
+});
+
+test("findBaseline: runs that start between requests do not move the baseline", async () => {
+  // Review repro: a dispatch (separate concurrency group) starts while the
+  // push run is resolving its baseline. Insert a new run after every call.
+  let n = 0;
+  const github = fakeGithub({
+    runs: [running("c2"), failed("c1")],
+    history: guardHistory,
+    afterEachCall: (runs) => runs.unshift(running(`dispatch-${++n}`)),
+  });
+  assert.deepStrictEqual(await findBaseline(github, repo, "c2"), { sha: "before", source: "initial" });
+});
+
+test("findBaseline: fails if the workflow is not in the history of the tip", async () => {
+  const github = fakeGithub({ runs: [running("x")], history: [{ sha: "before" }, { sha: "x" }] });
+  await assert.rejects(findBaseline(github, repo, "x"), /is not in the history of x/);
+});
+
+test("findBaseline: fails if the commit that added the workflow has no parent", async () => {
+  const github = fakeGithub({ runs: [running("root")], history: [{ sha: "root", touchesWorkflow: true }] });
+  await assert.rejects(findBaseline(github, repo, "root"), /root, which added it, has no parent/);
+});
+
+test("a rejected increase stays rejected on the next push", async () => {
+  // Review repro: the first run fails at +20%; the next push must not pass by
+  // comparing against the rejected size.
+  const sizes = /** @type {Record<string, number>} */ ({ before: 100, c1: 120, c2: 120 });
+  /** @type {Run[]} */
+  const runs = [];
+
+  for (const tip of ["c1", "c2"]) {
+    runs.unshift(running(tip));
+    const { sha } = await findBaseline(fakeGithub({ runs, history: guardHistory }), repo, tip);
+    const result = evaluate({
+      oldSize: sizes[sha],
+      newSize: sizes[tip],
+      threshold: 10,
+      reset: false,
+      sameCommit: sha === tip,
+    });
+    assert.strictEqual(sha, "before", `${tip} compares against the size before the first run`);
+    assert.strictEqual(result.over, true, `${tip} stays rejected`);
+    runs[0] = failed(tip);
+  }
 });
 
 test("evaluate: growth below, at and above the threshold", () => {
@@ -196,7 +291,7 @@ test("resolveAction: push sets all outputs", async () => {
   const core = fakeCore();
   const context = { eventName: "push", ref: "refs/heads/main", sha: "tip", repo };
   await withEnv({ THRESHOLD_INPUT: "", RESET_INPUT: "" }, () =>
-    resolveAction({ github: fakeGithub({ runs: [{ head_sha: "green" }] }), context, core }),
+    resolveAction({ github: fakeGithub({ runs: [running("tip"), green("green")] }), context, core }),
   );
   assert.strictEqual(core.state.failed, undefined);
   assert.deepStrictEqual(core.outputs, {
@@ -212,7 +307,7 @@ test("resolveAction: re-run of a green commit skips the baseline build", async (
   const core = fakeCore();
   const context = { eventName: "push", ref: "refs/heads/main", sha: "tip", repo };
   await withEnv({ THRESHOLD_INPUT: undefined, RESET_INPUT: undefined }, () =>
-    resolveAction({ github: fakeGithub({ runs: [{ head_sha: "tip" }] }), context, core }),
+    resolveAction({ github: fakeGithub({ runs: [green("tip")] }), context, core }),
   );
   assert.strictEqual(core.outputs.skip_baseline_build, "true");
 });
@@ -221,7 +316,7 @@ test("resolveAction: reset skips the baseline build", async () => {
   const core = fakeCore();
   const context = { eventName: "workflow_dispatch", ref: "refs/heads/main", sha: "tip", repo };
   await withEnv({ THRESHOLD_INPUT: "", RESET_INPUT: "true" }, () =>
-    resolveAction({ github: fakeGithub({ runs: [{ head_sha: "green" }] }), context, core }),
+    resolveAction({ github: fakeGithub({ runs: [running("tip"), green("green")] }), context, core }),
   );
   assert.strictEqual(core.outputs.reset, "true");
   assert.strictEqual(core.outputs.skip_baseline_build, "true");
