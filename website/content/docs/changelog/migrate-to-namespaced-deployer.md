@@ -188,5 +188,6 @@ You should see: `No resources found`.
 
 ## Related documentation
 
+- [Key Differences Between OCM v1 and v2]({{< docref "docs/changelog/differences-v1-v2.md#data-compatibility" >}}) - Which OCM v1 data OCM v2 reads, and what fails
 - [Concept: Kubernetes Deployer]({{< relref "docs/concepts/kubernetes-deployer.md" >}})
 - [Guides: Configure Custom RBAC for Deployers]({{< relref "docs/guides/deploy/configure-custom-rbac.md" >}})

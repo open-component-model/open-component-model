@@ -184,6 +184,7 @@ whole path segments: `pathprefix: org/repo` does not match `org/repo.git`.
 
 ## Related Documentation
 
+- [Key Differences Between OCM v1 and v2]({{< docref "docs/changelog/differences-v1-v2.md#data-compatibility" >}}) - Which OCM v1 data OCM v2 reads, and what fails
 - [Concept: Credential System]({{< docref "/docs/concepts/credential-system.md" >}}) - Learn how the credential system
   automatically finds the right credentials for each operation
 - [Reference: Credential Types]({{< docref "/docs/reference/configuration/credential-types.md" >}}) - All built-in typed credential

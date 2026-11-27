@@ -127,5 +127,6 @@ verified, never recorded in a new component version.
 
 ## Related documentation
 
+- [Key Differences Between OCM v1 and v2]({{< docref "docs/changelog/differences-v1-v2.md#data-compatibility" >}}) - Which OCM v1 data OCM v2 reads, and what fails
 - [Concept: Signing and Verification]({{< relref "docs/concepts/signing-and-verification-concept.md" >}})
 - [Reference: ocm sign component-version]({{< relref "docs/reference/ocm-cli/ocm_sign_component-version.md" >}})
