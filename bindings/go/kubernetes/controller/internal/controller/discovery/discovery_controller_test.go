@@ -28,6 +28,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	internaldiscovery "ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/discovery"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/serviceaccount/serviceaccounttest"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/status"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
@@ -61,6 +62,7 @@ func newReconciler(t *testing.T, objs ...client.Object) (*Reconciler, client.Cli
 			EventRecorder:    record.NewFakeRecorder(100),
 			NewPluginManager: test.StaticPluginManager(nil),
 		},
+		authorizer: serviceaccounttest.PermissiveAuthorizer(),
 	}
 	return r, fakeClient
 }
@@ -435,4 +437,28 @@ func TestReconcile_ResolutionFailureIsRetryable(t *testing.T) {
 	r.NoError(c.Get(t.Context(), client.ObjectKeyFromObject(discovery), current))
 	r.Equal(v1alpha1.ResolutionFailedReason, status.FindCondition(current, v1alpha1.ReadyCondition).Reason)
 	r.False(status.IsStalled(current), "a transient resolution failure is not a stall")
+}
+
+func TestReconcile_DeniedConfigurationIsNotReady(t *testing.T) {
+	r := require.New(t)
+
+	component := readyComponent("component", "default")
+	discovery := &v1alpha1.Discovery{
+		ObjectMeta: metav1.ObjectMeta{Name: "discovery", Namespace: "default"},
+		Spec: v1alpha1.DiscoverySpec{
+			ComponentRef: corev1.LocalObjectReference{Name: component.Name},
+			OCMConfig: []v1alpha1.OCMConfiguration{{
+				NamespacedObjectKindReference: v1alpha1.NamespacedObjectKindReference{Kind: "Secret", Name: "creds", Namespace: "other"},
+			}},
+		},
+	}
+	rec, c := newReconciler(t, component, discovery)
+	rec.authorizer = serviceaccounttest.DenyingAuthorizer()
+
+	_, err := rec.Reconcile(t.Context(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(discovery)})
+	r.ErrorContains(err, `secrets "creds" is forbidden`)
+
+	current := &v1alpha1.Discovery{}
+	r.NoError(c.Get(t.Context(), client.ObjectKeyFromObject(discovery), current))
+	r.Equal(v1alpha1.GetConfigurationFailedReason, status.FindCondition(current, v1alpha1.ReadyCondition).Reason)
 }

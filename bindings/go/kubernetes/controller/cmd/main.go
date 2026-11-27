@@ -102,6 +102,7 @@ func main() {
 		namespacedDeployerRateLimitQPS string
 		enableDeployer                 bool
 		enableNamespacedDeployer       bool
+		reviewSameNamespaceConfig      bool
 	)
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metric endpoint binds to. "+
@@ -168,6 +169,10 @@ func main() {
 		"Run the controller for the cluster-scoped Deployer.")
 	flag.BoolVar(&enableNamespacedDeployer, "enable-namespaced-deployer", true,
 		"Run the controller for the NamespacedDeployer.")
+	flag.BoolVar(&reviewSameNamespaceConfig, "review-same-namespace-config", false,
+		"Review OCM configuration in the namespace of an object against its service account as well. "+
+			"By default only configuration in other namespaces is reviewed. "+
+			"The cluster-scoped Deployer has no service account and is never reviewed.")
 
 	opts := zap.Options{
 		Development: true,
@@ -309,11 +314,12 @@ func main() {
 	resolver := resolution.NewResolver(&setupLog)
 	if err = (&repository.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
-			Client:           mgr.GetClient(),
-			Scheme:           mgr.GetScheme(),
-			EventRecorder:    eventsRecorder,
-			NewPluginManager: newPluginManager,
-			RateLimit:        repositoryRateLimit,
+			Client:                    mgr.GetClient(),
+			Scheme:                    mgr.GetScheme(),
+			EventRecorder:             eventsRecorder,
+			NewPluginManager:          newPluginManager,
+			RateLimit:                 repositoryRateLimit,
+			ReviewSameNamespaceConfig: reviewSameNamespaceConfig,
 		},
 		Resolver: resolver,
 	}).SetupWithManager(ctx, mgr, repositoryConcurrency); err != nil {
@@ -322,11 +328,12 @@ func main() {
 	}
 	if err = (&component.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
-			Client:           mgr.GetClient(),
-			Scheme:           mgr.GetScheme(),
-			EventRecorder:    eventsRecorder,
-			NewPluginManager: newPluginManager,
-			RateLimit:        componentRateLimit,
+			Client:                    mgr.GetClient(),
+			Scheme:                    mgr.GetScheme(),
+			EventRecorder:             eventsRecorder,
+			NewPluginManager:          newPluginManager,
+			RateLimit:                 componentRateLimit,
+			ReviewSameNamespaceConfig: reviewSameNamespaceConfig,
 		},
 		Resolver: resolver,
 	}).SetupWithManager(ctx, mgr, componentConcurrency); err != nil {
@@ -336,11 +343,12 @@ func main() {
 
 	if err = (&resource.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
-			Client:           mgr.GetClient(),
-			Scheme:           mgr.GetScheme(),
-			EventRecorder:    eventsRecorder,
-			NewPluginManager: newPluginManager,
-			RateLimit:        resourceRateLimit,
+			Client:                    mgr.GetClient(),
+			Scheme:                    mgr.GetScheme(),
+			EventRecorder:             eventsRecorder,
+			NewPluginManager:          newPluginManager,
+			RateLimit:                 resourceRateLimit,
+			ReviewSameNamespaceConfig: reviewSameNamespaceConfig,
 		},
 		Resolver: resolver,
 	}).SetupWithManager(ctx, mgr, resourceConcurrency); err != nil {
@@ -350,11 +358,12 @@ func main() {
 
 	if err = (&replication.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
-			Client:           mgr.GetClient(),
-			Scheme:           mgr.GetScheme(),
-			EventRecorder:    eventsRecorder,
-			NewPluginManager: newPluginManager,
-			RateLimit:        replicationRateLimit,
+			Client:                    mgr.GetClient(),
+			Scheme:                    mgr.GetScheme(),
+			EventRecorder:             eventsRecorder,
+			NewPluginManager:          newPluginManager,
+			RateLimit:                 replicationRateLimit,
+			ReviewSameNamespaceConfig: reviewSameNamespaceConfig,
 		},
 		Resolver:         resolver,
 		RepositoryScheme: ocirepository.Scheme,
@@ -365,11 +374,12 @@ func main() {
 
 	if err = (&discovery.Reconciler{
 		BaseReconciler: &ocm.BaseReconciler{
-			Client:           mgr.GetClient(),
-			Scheme:           mgr.GetScheme(),
-			EventRecorder:    eventsRecorder,
-			NewPluginManager: newPluginManager,
-			RateLimit:        discoveryRateLimit,
+			Client:                    mgr.GetClient(),
+			Scheme:                    mgr.GetScheme(),
+			EventRecorder:             eventsRecorder,
+			NewPluginManager:          newPluginManager,
+			RateLimit:                 discoveryRateLimit,
+			ReviewSameNamespaceConfig: reviewSameNamespaceConfig,
 		},
 	}).SetupWithManager(ctx, mgr, discoveryConcurrency); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Discovery")
@@ -394,11 +404,12 @@ func main() {
 		}
 		if err = (&deployer.Reconciler{
 			BaseReconciler: &ocm.BaseReconciler{
-				Client:           mgr.GetClient(),
-				Scheme:           mgr.GetScheme(),
-				EventRecorder:    eventsRecorder,
-				NewPluginManager: newPluginManager,
-				RateLimit:        d.rateLimit,
+				Client:                    mgr.GetClient(),
+				Scheme:                    mgr.GetScheme(),
+				EventRecorder:             eventsRecorder,
+				NewPluginManager:          newPluginManager,
+				RateLimit:                 d.rateLimit,
+				ReviewSameNamespaceConfig: reviewSameNamespaceConfig,
 			},
 			Namespaced:           d.namespaced,
 			DownloadCache:        downloadCache,

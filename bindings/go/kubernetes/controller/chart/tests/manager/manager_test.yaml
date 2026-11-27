@@ -475,6 +475,23 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --enable-namespaced-deployer=false
 
+  - it: reviews same-namespace configuration only on request
+    # Simulates helm upgrade --reuse-values from a release that predates the block.
+    set:
+      manager.configAccess: null
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --review-same-namespace-config
+
+  - it: passes the same-namespace review flag
+    set:
+      manager.configAccess.reviewSameNamespace: true
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --review-same-namespace-config
+
   - it: passes logging flags for development mode
     set:
       manager.logging.level: debug

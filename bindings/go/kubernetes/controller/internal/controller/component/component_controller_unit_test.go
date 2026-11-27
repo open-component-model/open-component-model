@@ -19,6 +19,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
+	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/serviceaccount/serviceaccounttest"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/test"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 )
@@ -32,6 +33,7 @@ func newComponentReconciler(fakeClient client.Client, scheme *runtime.Scheme) *R
 			// These tests never actually call manager, so a static one is good enough.
 			NewPluginManager: test.StaticPluginManager(manager.NewPluginManager(context.Background())),
 		},
+		authorizer: serviceaccounttest.PermissiveAuthorizer(),
 	}
 }
 

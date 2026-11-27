@@ -34,7 +34,8 @@ func SanitizeNameForK8s(name string) string {
 	replaced := strings.ToLower(strings.ReplaceAll(name, " ", "-"))
 	maxLength := 63 // RFC 1123 Label Names
 	if len(replaced) > maxLength {
-		return replaced[:maxLength]
+		// A name must not end with a dash, which truncation can leave behind.
+		return strings.TrimRight(replaced[:maxLength], "-")
 	}
 
 	return replaced

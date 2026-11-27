@@ -30,6 +30,9 @@ type BaseReconciler struct {
 	NewPluginManager PluginManagerFunc
 	// RateLimit configures the controller's workqueue rate limiter.
 	RateLimit RateLimit
+	// ReviewSameNamespaceConfig also reviews OCM configuration in the namespace of the reconciled object against its
+	// service account. Without it only configuration in other namespaces is reviewed.
+	ReviewSameNamespaceConfig bool
 }
 
 func (r *BaseReconciler) GetClient() ctrl.Client {

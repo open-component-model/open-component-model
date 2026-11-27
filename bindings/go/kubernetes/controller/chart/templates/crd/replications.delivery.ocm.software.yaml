@@ -146,6 +146,14 @@ spec:
                       == "Repository" || self.kind == "Component" || self.kind ==
                       "Resource"))
                 type: array
+              serviceAccountName:
+                description: |-
+                  ServiceAccountName is the name of the service account in the same namespace that must be allowed to get
+                  every Secret, ConfigMap and OCM object in another namespace the effective OCM configuration references, including the configuration
+                  propagated from the Component and the configuration of the target Repository. Configuration in the same
+                  namespace is only reviewed if the controller is started with --review-same-namespace-config.
+                  If empty, the default service account of the namespace is used.
+                type: string
               suspend:
                 description: |-
                   Suspend tells the controller to suspend the reconciliation of this

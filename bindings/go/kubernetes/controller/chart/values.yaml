@@ -24,6 +24,10 @@ manager:
   namespacedDeployer:
     # -- Run the controller for the NamespacedDeployer and grant the controller permission to impersonate service accounts. A NamespacedDeployer without spec.serviceAccountName impersonates the default service account of its namespace.
     enabled: true
+  ## Access to OCM configuration
+  configAccess:
+    # -- Review OCM configuration in the namespace of an object against its service account as well. By default only configuration in other namespaces is reviewed, and an object reads the Secrets, ConfigMaps and OCM objects of its own namespace without a review of its service account. The cluster-scoped Deployer has no service account and is never reviewed.
+    reviewSameNamespace: false
   ## Controller concurrency settings
   concurrency:
     # -- Number of active repository controller workers
