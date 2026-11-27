@@ -402,7 +402,7 @@ Public Sigstore uses Dex (`oauth2.sigstore.dev`) as a federation gateway, but th
 
 The verifier's `certificateOIDCIssuer` field is **not** the same thing as the OCM signature `issuer` field used by the RSA/PEM signing handlers. They are independent concepts that happen to share a name:
 
-- **OCM signature issuer** — a descriptor-level field on the signature, carrying an [RFC 2253](https://datatracker.ietf.org/doc/html/rfc2253) Distinguished Name (e.g. `CN=Signer,O=Acme,C=US`). It is set on the signing side by the RSA/PEM handlers and inspected by their verifiers. Sigstore signatures don't use it.
+- **OCM signature issuer** — a descriptor-level field on the signature, carrying an [RFC 2253](https://datatracker.ietf.org/doc/html/rfc2253) Distinguished Name (e.g. `CN=Signer,O=Acme,C=US`). The RSA/PEM handler writes the signing certificate's subject there (omitted if the DN cannot be represented faithfully) when signing with `signatureEncodingPolicy: PEM`, and its verifier checks it against the leaf certificate when present. Sigstore signatures don't use it.
 - **Sigstore OIDC issuer** — a URL recorded as an [extension on the Fulcio certificate](https://github.com/sigstore/fulcio/blob/main/docs/oid-info.md) inside the Sigstore bundle, identifying which OIDC provider authenticated the signer. The verifier's `certificateOIDCIssuer` is matched against this extension.
 
 When you configure a verifier for Sigstore, you are configuring the **Sigstore OIDC issuer** check only.

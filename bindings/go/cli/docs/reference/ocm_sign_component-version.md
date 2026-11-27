@@ -189,7 +189,7 @@ sign component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0
 #   - GitHub login   -> https://github.com/login/oauth
 #   - Microsoft login -> https://login.microsoftonline.com
 # Verifiers must use the upstream issuer in certificateOIDCIssuer.
-# OCM also stores this value in signatures[].signature.issuer for convenience.
+# This is unrelated to signatures[].signature.issuer, which OCM does not set for Sigstore signatures.
 
 # Sign with Sigtore using default .ocmconfig file
 #
