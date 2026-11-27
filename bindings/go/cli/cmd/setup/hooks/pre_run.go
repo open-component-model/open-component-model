@@ -10,7 +10,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/cli/cmd/setup"
 	"ocm.software/open-component-model/bindings/go/cli/cmd/version"
 	ocmctx "ocm.software/open-component-model/bindings/go/cli/internal/context"
-	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
 	"ocm.software/open-component-model/bindings/go/cli/internal/flags/log"
 	"ocm.software/open-component-model/bindings/go/cli/internal/render/progress"
 )
@@ -32,12 +31,8 @@ func PreRunEWithConfig(cmd *cobra.Command, cfg Config) error {
 		return fmt.Errorf("get logger: %w", err)
 	}
 	slog.SetDefault(logger)
-	nonText, err := nonTextLogRenderer(cmd)
-	if err != nil {
-		return err
-	}
-	if nonText {
-		cmd.SetContext(progress.WithNonTextLogRenderer(cmd.Context()))
+	if logFormatRequested(cmd) {
+		cmd.SetContext(progress.WithRequestedLogFormat(cmd.Context()))
 	}
 	slog.DebugContext(cmd.Context(), "FIPS 140-3 mode",
 		slog.Bool("enabled", fips140.Enabled()), slog.String("module", fips140.Version()))
@@ -74,17 +69,11 @@ func PreRunEWithConfig(cmd *cobra.Command, cfg Config) error {
 	return nil
 }
 
-// nonTextLogRenderer reports whether the log records are rendered by something
-// other than a plain-text renderer. Whether the output is interactive is not
-// part of this decision: the progress package owns the stream it renders on and
-// detects that itself. The requested format alone decides, not whether the flag
-// was passed, because --logformat text asks for the default renderer and must
-// behave like omitting the flag. Only progress rendering is affected, not the
-// live render mode of get/add, which animates data on stdout.
-func nonTextLogRenderer(cmd *cobra.Command) (bool, error) {
-	format, err := enum.Get(cmd.Flags(), log.FormatFlagName)
-	if err != nil {
-		return false, fmt.Errorf("get log format: %w", err)
-	}
-	return format != log.FormatText, nil
+// logFormatRequested reports whether the user passed --logformat. Any explicit
+// format, text included, asks for the log records themselves, so the progress
+// display steps aside and the records are printed in that format. Only progress
+// rendering is affected, not the live render mode of get/add, which animates
+// data on stdout.
+func logFormatRequested(cmd *cobra.Command) bool {
+	return cmd.Flags().Changed(log.FormatFlagName)
 }

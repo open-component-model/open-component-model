@@ -86,9 +86,9 @@ detects this automatically:
 - slog output is not intercepted — logs flow to their original destination
 
 The same fallback is used on a terminal when the caller passes a context from
-`WithNonTextLogRenderer`, because the terminal visualizer re-renders the records
-it buffers as text and cannot reproduce another renderer's output. The CLI marks
-the context that way for every `--logformat` other than `text`.
+`WithRequestedLogFormat`: a user who asks for a log format wants the log
+records, not the animated display. The CLI marks the context that way whenever
+`--logformat` is passed, `text` included.
 
 ## Visualizer Implementations
 
