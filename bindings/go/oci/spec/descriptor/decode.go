@@ -31,12 +31,12 @@ func SingleFileDecodeDescriptor(raw io.Reader, mediaType string, unmarshal Unmar
 		if err != nil {
 			return nil, fmt.Errorf("unable to read component descriptor stream from tar: %w", err)
 		}
-		if err := rejectV3Alpha1(descriptorYAML); err != nil {
-			return nil, err
-		}
 		var v2desc v2.Descriptor
 		if err := unmarshal(MediaTypeLegacyComponentDescriptorYAML, descriptorYAML, &v2desc); err != nil {
 			return nil, fmt.Errorf("unmarshaling component descriptor: %w", err)
+		}
+		if err := rejectV3Alpha1(&v2desc, descriptorYAML); err != nil {
+			return nil, err
 		}
 		desc, err := descriptor.ConvertFromV2(&v2desc)
 		if err != nil {
@@ -48,12 +48,12 @@ func SingleFileDecodeDescriptor(raw io.Reader, mediaType string, unmarshal Unmar
 		if err != nil {
 			return nil, fmt.Errorf("unable to read component descriptor stream from descriptor with format %q: %w", mediaType, err)
 		}
-		if err := rejectV3Alpha1(descriptorYAML); err != nil {
-			return nil, err
-		}
 		var v2desc v2.Descriptor
 		if err := unmarshal(mediaType, descriptorYAML, &v2desc); err != nil {
 			return nil, fmt.Errorf("unmarshaling component descriptor: %w", err)
+		}
+		if err := rejectV3Alpha1(&v2desc, descriptorYAML); err != nil {
+			return nil, err
 		}
 		desc, err := descriptor.ConvertFromV2(&v2desc)
 		if err != nil {
@@ -70,19 +70,24 @@ var ErrUnsupportedSchemaV3Alpha1 = errors.New("component descriptor uses the dep
 const schemaV3Alpha1 = "ocm.software/v3alpha1"
 
 // rejectV3Alpha1 detects descriptors in the v3alpha1 serialization (apiVersion or
-// schemaVersion set to ocm.software/v3alpha1). Without this they decode into an
-// empty v2 descriptor and fail later with a misleading identity error.
-func rejectV3Alpha1(raw []byte) error {
+// schemaVersion set to ocm.software/v3alpha1). They decode into a v2 descriptor without
+// error but empty, and fail later with a misleading identity error. Every v2 descriptor
+// sets meta.schemaVersion, so raw is only parsed again when that field is missing.
+func rejectV3Alpha1(decoded *v2.Descriptor, raw []byte) error {
+	switch decoded.Meta.Version {
+	case schemaV3Alpha1:
+		return ErrUnsupportedSchemaV3Alpha1
+	case "":
+	default:
+		return nil
+	}
 	var probe struct {
 		APIVersion string `json:"apiVersion"`
-		Meta       struct {
-			SchemaVersion string `json:"schemaVersion"`
-		} `json:"meta"`
 	}
 	if err := yaml.Unmarshal(raw, &probe); err != nil {
 		return nil // not our concern; the regular decoding reports syntax errors
 	}
-	if probe.APIVersion == schemaV3Alpha1 || probe.Meta.SchemaVersion == schemaV3Alpha1 {
+	if probe.APIVersion == schemaV3Alpha1 {
 		return ErrUnsupportedSchemaV3Alpha1
 	}
 	return nil

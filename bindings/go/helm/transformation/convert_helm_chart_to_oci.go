@@ -99,7 +99,7 @@ func (t *ConvertHelmChartToOCI) Transform(ctx context.Context, step runtime.Type
 		Version:   helmAccess.GetVersion(),
 		ChartBlob: chartSpec,
 		ProvBlob:  provSpec,
-	}, outputPath)
+	}, outputPath, oci.WithReproducible()) // a transfer must keep the digest of the same chart
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OCI layout from helm chart: %w", err)
 	}

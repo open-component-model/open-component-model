@@ -1,6 +1,7 @@
 package v1
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -258,6 +259,20 @@ func TestIdentityFromCTFRepository(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, got)
 			assert.Equal(t, Type, got.GetType())
+		})
+	}
+}
+
+func TestIdentityRejectsComponentNameMapping(t *testing.T) {
+	for _, mapping := range []string{oci.ComponentNameMappingSHA256Digest, "bogus"} {
+		t.Run(mapping, func(t *testing.T) {
+			repo := &oci.Repository{BaseUrl: "ghcr.io", ComponentNameMapping: mapping}
+
+			_, err := IdentityFromOCIRepository(repo)
+			require.ErrorIs(t, err, errors.ErrUnsupported)
+
+			_, err = OCIRegistryIdentityFromOCIRepository(repo)
+			require.ErrorIs(t, err, errors.ErrUnsupported)
 		})
 	}
 }

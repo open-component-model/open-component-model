@@ -367,6 +367,9 @@ func verifyOCILayout(t *testing.T, ociPath, expectedName, expectedVersion string
 	manifest := ociImageSpecV1.Manifest{}
 	r.NoError(json.UnmarshalRead(manifestRaw, &manifest))
 
+	// A transfer must produce the same digest for the same chart.
+	assert.Equal(t, "1970-01-01T00:00:00Z", manifest.Annotations[ociImageSpecV1.AnnotationCreated])
+
 	// Verify config layer
 	assert.Equal(t, registry.ConfigMediaType, manifest.Config.MediaType)
 

@@ -417,11 +417,11 @@ func TestCopyChartToOCILayout_ReproducibleDigest(t *testing.T) {
 	ctx := t.Context()
 	chart := newReadOnlyChart(t, filepath.Join("../../testdata", "mychart-0.1.0.tgz"))
 
-	first, err := oci.CopyChartToOCILayout(ctx, chart, layoutPath(t))
+	first, err := oci.CopyChartToOCILayout(ctx, chart, layoutPath(t), oci.WithReproducible())
 	require.NoError(t, err)
 	// Ensure the creation timestamp would differ if it were taken from the clock.
 	time.Sleep(1100 * time.Millisecond)
-	second, err := oci.CopyChartToOCILayout(ctx, chart, layoutPath(t))
+	second, err := oci.CopyChartToOCILayout(ctx, chart, layoutPath(t), oci.WithReproducible())
 	require.NoError(t, err)
 
 	assert.Equal(t, first.Desc.Digest, second.Desc.Digest)
@@ -429,4 +429,19 @@ func TestCopyChartToOCILayout_ReproducibleDigest(t *testing.T) {
 	// Equal digests alone would also pass for any other constant value.
 	_, manifest := readManifest(t, ctx, first)
 	assert.Equal(t, "1970-01-01T00:00:00Z", manifest.Annotations[ociImageSpecV1.AnnotationCreated])
+}
+
+func TestCopyChartToOCILayout_CreatedDefaultsToCurrentTime(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+	chart := newReadOnlyChart(t, filepath.Join("../../testdata", "mychart-0.1.0.tgz"))
+
+	before := time.Now().UTC().Truncate(time.Second)
+	result, err := oci.CopyChartToOCILayout(ctx, chart, layoutPath(t))
+	r.NoError(err)
+
+	_, manifest := readManifest(t, ctx, result)
+	created, err := time.Parse(time.RFC3339, manifest.Annotations[ociImageSpecV1.AnnotationCreated])
+	r.NoError(err)
+	r.False(created.Before(before), "created %s is before the conversion started at %s", created, before)
 }

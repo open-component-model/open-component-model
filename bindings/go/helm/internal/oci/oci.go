@@ -23,9 +23,26 @@ import (
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
-// fixedCreated is the constant org.opencontainers.image.created value (the Unix epoch),
-// keeping the manifest and its digest reproducible.
+// fixedCreated is the org.opencontainers.image.created value of reproducible manifests: the Unix
+// epoch, which reproducible directory tars also use for their file times.
 const fixedCreated = "1970-01-01T00:00:00Z"
+
+// Option is a function that modifies Options.
+type Option func(options *Options)
+
+// Options holds the settings of CopyChartToOCILayout.
+type Options struct {
+	// Reproducible sets the manifest's created annotation to the Unix epoch, see WithReproducible.
+	Reproducible bool
+}
+
+// WithReproducible sets the manifest's org.opencontainers.image.created annotation to the Unix
+// epoch instead of the current time, so converting the same chart always gives the same digest.
+func WithReproducible() Option {
+	return func(options *Options) {
+		options.Reproducible = true
+	}
+}
 
 // Result holds both the OCI layout blob and the manifest descriptor produced by CopyChartToOCILayout.
 type Result struct {
@@ -41,13 +58,18 @@ type Result struct {
 // returned as a blob backed by it. Intermediate data is buffered in the directory of path.
 // The caller owns the file: it removes it when this call fails or the blob is no longer read.
 // See also: https://github.com/helm/community/blob/main/hips/hip-0006.md#2-support-for-provenance-files
-func CopyChartToOCILayout(ctx context.Context, chart *internal.ChartData, path string) (*Result, error) {
+func CopyChartToOCILayout(ctx context.Context, chart *internal.ChartData, path string, opts ...Option) (*Result, error) {
+	var options Options
+	for _, opt := range opts {
+		opt(&options)
+	}
+
 	file, err := os.Create(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file for OCI layout: %w", err)
 	}
 
-	imgDesc, err := writeOCILayout(ctx, chart, file, filepath.Dir(path))
+	imgDesc, err := writeOCILayout(ctx, chart, file, filepath.Dir(path), options)
 	// The file is closed before it is handed out: an open file can be neither
 	// removed nor have its directory removed on windows.
 	if err = errors.Join(err, file.Close()); err != nil {
@@ -65,7 +87,7 @@ func CopyChartToOCILayout(ctx context.Context, chart *internal.ChartData, path s
 
 // writeOCILayout writes the chart as a gzipped OCI layout tagged with the chart version
 // to out, buffering the layout in dir.
-func writeOCILayout(ctx context.Context, chart *internal.ChartData, out io.Writer, dir string) (_ ociImageSpecV1.Descriptor, err error) {
+func writeOCILayout(ctx context.Context, chart *internal.ChartData, out io.Writer, dir string, options Options) (_ ociImageSpecV1.Descriptor, err error) {
 	zippedBuf := gzippool.Get(out)
 	defer gzippool.Put(zippedBuf)
 
@@ -89,15 +111,17 @@ func writeOCILayout(ctx context.Context, chart *internal.ChartData, out io.Write
 		layers = append(layers, *provLayer)
 	}
 
+	// oras stamps the current time unless the created annotation is set.
+	var annotations map[string]string
+	if options.Reproducible {
+		annotations = map[string]string{ociImageSpecV1.AnnotationCreated: fixedCreated}
+	}
+
 	// Create OCI image manifest.
 	imgDesc, err := oras.PackManifest(ctx, target, oras.PackManifestVersion1_1, "", oras.PackManifestOptions{
-		ConfigDescriptor: configLayer,
-		Layers:           layers,
-		// oras stamps the current time unless the annotation is set, which would
-		// give every conversion of the same chart a different manifest digest.
-		ManifestAnnotations: map[string]string{
-			ociImageSpecV1.AnnotationCreated: fixedCreated,
-		},
+		ConfigDescriptor:    configLayer,
+		Layers:              layers,
+		ManifestAnnotations: annotations,
 	})
 	if err != nil {
 		return ociImageSpecV1.Descriptor{}, fmt.Errorf("failed to create OCI image manifest: %w", err)
