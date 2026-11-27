@@ -7,10 +7,11 @@ name: cli binary size guard
 # before and after are both built here, so the comparison is always
 # apples-to-apples on one runner with one toolchain.
 #
-# The default threshold of 10 percent is justified by the one-year weekly
-# measurement in docs/cli-binary-size: 10 percent sits above the 95th
-# percentile of same-toolchain week-over-week growth, so normal feature work
-# passes while a rare large jump is held for a human to judge.
+# The default threshold of 10 percent is justified by a one-year weekly
+# measurement (recorded in the pull request that introduced this workflow):
+# 10 percent sits above the 95th percentile of same-toolchain week-over-week
+# growth, so normal feature work passes while a rare large jump is held for a
+# human to judge.
 
 on:
   push:
