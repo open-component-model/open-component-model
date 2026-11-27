@@ -1,0 +1,79 @@
+{
+  "mediaType": "application/vnd.dev.sigstore.trustedroot+json;version=0.1",
+  "tlogs": [
+    {
+      "baseUrl": "http://rekor.rekor-system.svc",
+      "hashAlgorithm": "SHA2_256",
+      "publicKey": {
+        "rawBytes": "MCowBQYDK2VwAyEAqW90CgYvhHMxtNQx3LQh/yUjTSbW/NCMKrAEpHGGQxo=",
+        "keyDetails": "PKIX_ED25519",
+        "validFor": {
+          "start": "2026-11-12T15:04:12.813105129Z"
+        }
+      },
+      "logId": {
+        "keyId": "we42g3anuCiuM4WjKgM6V+s2C/rxRS07zRXlv7SdIeo="
+      }
+    }
+  ],
+  "certificateAuthorities": [
+    {
+      "subject": {
+        "organization": "test",
+        "commonName": "fulcio.scaffolding.test"
+      },
+      "uri": "http://fulcio.fulcio-system.172.18.255.1.sslip.io:8080",
+      "certChain": {
+        "certificates": [
+          {
+            "rawBytes": "MIIBtzCCAV2gAwIBAgIUBTsR5zoPr49B2RQJwaVZh7StxbUwCgYIKoZIzj0EAwIwMTENMAsGA1UECgwEdGVzdDEgMB4GA1UEAwwXZnVsY2lvLnNjYWZmb2xkaW5nLnRlc3QwHhcNMjYxMTEyMTUwMzQxWhcNMjYxMTIyMTUwMzQxWjAxMQ0wCwYDVQQKDAR0ZXN0MSAwHgYDVQQDDBdmdWxjaW8uc2NhZmZvbGRpbmcudGVzdDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABGTstzH2Q7NSCe6Tju+C6cj9RHNsVy1mbJ1mrID5/2uXOiHjMvcx32rFUMZapGFospL6JlLE3+fQmRtdh7kH6tyjUzBRMB0GA1UdDgQWBBTZ6MPVozbkdNoDLy4FQzsOgRWnMDAfBgNVHSMEGDAWgBTZ6MPVozbkdNoDLy4FQzsOgRWnMDAPBgNVHRMBAf8EBTADAQH/MAoGCCqGSM49BAMCA0gAMEUCIQCpd51gZXtt6cLrG8qfFlka7bRFkHsVw8Fkv4OdKE1jnQIgLYdiDdPloSOvELKgBEHZFZsKPN2g3e8bPAhOnEeAuEI="
+          }
+        ]
+      },
+      "validFor": {
+        "start": "2026-11-12T15:45:58Z"
+      }
+    }
+  ],
+  "ctlogs": [
+    {
+      "baseUrl": "http://ctlog.ctlog-system.172.18.255.1.sslip.io:8080",
+      "hashAlgorithm": "SHA2_256",
+      "publicKey": {
+        "rawBytes": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAECIjcsvquxIPgIv0oM7ugEt47tHkUlC8VEi0v8mhv9IqcQ+XAKjMC3C9AiqWxRvx7k07oNeCFASP3ozx3vcyQww==",
+        "keyDetails": "PKIX_ECDSA_P256_SHA_256",
+        "validFor": {
+          "start": "2026-11-12T15:45:58Z"
+        }
+      },
+      "logId": {
+        "keyId": "7sH1TLamaFCwlXEUfIu3cKXqQOfjQozrUvtzcztksdQ="
+      }
+    }
+  ],
+  "timestampAuthorities": [
+    {
+      "subject": {
+        "organization": "local",
+        "commonName": "Test TSA Root"
+      },
+      "uri": "http://tsa.tsa-system.172.18.255.1.sslip.io:8080/api/v1/timestamp",
+      "certChain": {
+        "certificates": [
+          {
+            "rawBytes": "MIIBrDCCAVOgAwIBAgIUX4F7KUSZ5hcnlIMXAYUTgOnLCrkwCgYIKoZIzj0EAwIwMDEOMAwGA1UEChMFbG9jYWwxHjAcBgNVBAMTFVRlc3QgVFNBIEludGVybWVkaWF0ZTAeFw0yNjExMTIxNTAwNTZaFw0zNTExMTIxNTAzNTZaMDAxDjAMBgNVBAoTBWxvY2FsMR4wHAYDVQQDExVUZXN0IFRTQSBUaW1lc3RhbXBpbmcwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAS+1Nvgk5jgw8oUe5zCBFJr1lVzhKju0ZLV1YXPp1d2HQsR4cX2M6qHB9VwyMWZTQ10AQ6D/EbXM1VtRChp0KvXo0swSTAOBgNVHQ8BAf8EBAMCB4AwHwYDVR0jBBgwFoAU+TQPvYL2w7FA1gHaXfAEwt5kMJowFgYDVR0lAQH/BAwwCgYIKwYBBQUHAwgwCgYIKoZIzj0EAwIDRwAwRAIgT8vjAl1ihfg/QBjVNrR1Rqei8R/mHJG0LMYulcKf+/0CIGdgyhy5dsKHcbY8nfyU2UbTHZOvQ7X5HKsFnCv9fAkF"
+          },
+          {
+            "rawBytes": "MIIB0jCCAXigAwIBAgIUaX9bF3TxJ9cujbOO7JiJ1cqDARUwCgYIKoZIzj0EAwIwKDEOMAwGA1UEChMFbG9jYWwxFjAUBgNVBAMTDVRlc3QgVFNBIFJvb3QwHhcNMjYxMTEyMTQ1ODU2WhcNMzYxMTEyMTUwMzU2WjAwMQ4wDAYDVQQKEwVsb2NhbDEeMBwGA1UEAxMVVGVzdCBUU0EgSW50ZXJtZWRpYXRlMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEusXGYlGtziTCnNOrPl12tFItDHg25EB01W6LSkTQqL4YDvrIFF7Cl7ubHeU8z2LNUOnADgfXN7uj+KoYeK2B4KN4MHYwDgYDVR0PAQH/BAQDAgEGMBMGA1UdJQQMMAoGCCsGAQUFBwMIMA8GA1UdEwEB/wQFMAMBAf8wHQYDVR0OBBYEFPk0D72C9sOxQNYB2l3wBMLeZDCaMB8GA1UdIwQYMBaAFGkcFFYHwmwdiVVPeYgJPB5vfL0BMAoGCCqGSM49BAMCA0gAMEUCIQCTplHo0OKA8LH4XySgogHPRV416f0TuCoggDN6PDjXxQIgLou1csJYJuV49ec9vGg0dG4/EHpl0m+e22L7v+Xa1Fo="
+          },
+          {
+            "rawBytes": "MIIBkzCCATqgAwIBAgIUCn+0gHno5CEVK765nbsyeZ8Vx1cwCgYIKoZIzj0EAwIwKDEOMAwGA1UEChMFbG9jYWwxFjAUBgNVBAMTDVRlc3QgVFNBIFJvb3QwHhcNMjYxMTEyMTQ1ODU2WhcNMzYxMTEyMTUwMzU2WjAoMQ4wDAYDVQQKEwVsb2NhbDEWMBQGA1UEAxMNVGVzdCBUU0EgUm9vdDBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABIWTBwBhkoRSPBsUMJV2YfGKS+V3q+sxCFtrZgKrkHHVwUW19SZ2kuPYuM3wDUhHJHBf65xT77Uqw27iCyMqEEWjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNVHRMBAf8EBTADAQH/MB0GA1UdDgQWBBRpHBRWB8JsHYlVT3mICTweb3y9ATAKBggqhkjOPQQDAgNHADBEAiAXIXZvQ2NRmm6RpaiQnuP0LDZYtwRMFocxTFZxLhSuMAIgaHFtrYzDieCiBRrLpKb3sXBYrlLMZ9KV94+2ttBdRmk="
+          }
+        ]
+      },
+      "validFor": {
+        "start": "2026-11-12T15:45:58Z"
+      }
+    }
+  ]
+}
