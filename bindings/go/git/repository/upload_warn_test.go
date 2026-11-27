@@ -12,7 +12,7 @@ import (
 	"github.com/go-git/go-git/v6/plumbing"
 	"github.com/stretchr/testify/require"
 
-	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
+	testgit "ocm.software/open-component-model/bindings/go/internal/testutils/git"
 )
 
 // warnCapture is a slog.Handler that records Warn records so a test can assert on them.

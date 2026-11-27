@@ -27,11 +27,11 @@ import (
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	gitaccess "ocm.software/open-component-model/bindings/go/git/spec/access"
 	gitv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
+	testgit "ocm.software/open-component-model/bindings/go/internal/testutils/git"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
-	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 	transferv1alpha1 "ocm.software/open-component-model/bindings/go/transfer/v1alpha1/spec"
 )
 

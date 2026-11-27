@@ -24,8 +24,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/blob"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
+	testgit "ocm.software/open-component-model/bindings/go/internal/testutils/git"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
 // trustServerCertificate changes process-global state; callers and their ancestors must not run in parallel.

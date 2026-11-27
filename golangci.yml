@@ -582,7 +582,7 @@ linters:
             - "ocm.software/open-component-model/bindings/go/transfer"
             - "ocm.software/open-component-model/bindings/go/transform"
             - "ocm.software/open-component-model/bindings/go/wget"
-            - "ocm.software/open-component-model/bindings/go/testutils"
+            - "ocm.software/open-component-model/bindings/go/internal/testutils"
           deny:
             - pkg: "ocm.software/open-component-model/bindings/go/"
               desc: "transfer must not import bindings outside its allowed set"
@@ -612,7 +612,7 @@ linters:
             - "ocm.software/open-component-model/bindings/go/http"
             - "ocm.software/open-component-model/bindings/go/repository"
             - "ocm.software/open-component-model/bindings/go/runtime"
-            - "ocm.software/open-component-model/bindings/go/testutils"
+            - "ocm.software/open-component-model/bindings/go/internal/testutils"
           deny:
             - pkg: "ocm.software/open-component-model/bindings/go/"
               desc: "git must not import bindings outside its allowed set"
@@ -667,7 +667,7 @@ linters:
             - "ocm.software/open-component-model/bindings/go/transfer"
             - "ocm.software/open-component-model/bindings/go/transform"
             - "ocm.software/open-component-model/bindings/go/wget"
-            - "ocm.software/open-component-model/bindings/go/testutils"
+            - "ocm.software/open-component-model/bindings/go/internal/testutils"
           deny:
             - pkg: "ocm.software/open-component-model/bindings/go/"
               desc: "cli must not import bindings outside its allowed set"
@@ -702,7 +702,7 @@ linters:
             - "ocm.software/open-component-model/bindings/go/transfer"
             - "ocm.software/open-component-model/bindings/go/transform"
             - "ocm.software/open-component-model/bindings/go/wget"
-            - "ocm.software/open-component-model/bindings/go/testutils"
+            - "ocm.software/open-component-model/bindings/go/internal/testutils"
           deny:
             - pkg: "ocm.software/open-component-model/bindings/go/"
               desc: "kubernetes-controller must not import bindings outside its allowed set"
@@ -746,18 +746,20 @@ linters:
               desc: "MD5 is not FIPS-approved for security purposes; use SHA-256 or SHA-512"
             - pkg: "crypto/sha1"
               desc: "SHA-1 is not FIPS-approved for signatures or HMACs; use SHA-256 or SHA-512"
-        # testutils (bindings/go/testutils) is a test-only helper library. Production
+        # testutils (bindings/go/internal/testutils) is a test-only helper library. Production
         # code must never import it, so its fixtures (git servers, synthetic
         # descriptors, registries) stay out of the dependency graph that downstream
-        # consumers of the library compile. Go already keeps a dependency reached only
-        # through _test.go files out of an importer's production build; this rule makes
-        # that a hard guarantee. It covers every non-test file except testutils' own
-        # tree, so testutils subpackages may still share helpers. Test files import it
-        # freely once the consuming binding's allow list above includes
-        # bindings/go/testutils.
+        # consumers of the library compile. The internal/ placement already blocks
+        # external modules, and a production dependency-closure test
+        # (bindings/go/internal/testutils/production_closure_test.go) blocks in-module
+        # leaks independently of golangci. This depguard rule is the third layer: it
+        # covers every non-test file except testutils' own tree, so testutils
+        # subpackages may still share helpers. Test files import it freely once the
+        # consuming binding's allow list above includes
+        # bindings/go/internal/testutils.
         testutils-test-only:
           list-mode: lax
-          files: ["$all", "!$test", "!**/bindings/go/testutils/**"]
+          files: ["$all", "!$test", "!**/bindings/go/internal/testutils/**"]
           deny:
-            - pkg: "ocm.software/open-component-model/bindings/go/testutils"
+            - pkg: "ocm.software/open-component-model/bindings/go/internal/testutils"
               desc: "testutils is a test-only helper library; import it only from _test.go files"

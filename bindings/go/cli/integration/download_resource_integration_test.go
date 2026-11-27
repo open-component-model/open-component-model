@@ -35,12 +35,12 @@ import (
 	gitrepository "ocm.software/open-component-model/bindings/go/git/repository"
 	gitaccessv1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
 	helmblob "ocm.software/open-component-model/bindings/go/helm/blob"
+	testgit "ocm.software/open-component-model/bindings/go/internal/testutils/git"
 	"ocm.software/open-component-model/bindings/go/oci"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
 // Test_Integration_DownloadUploadedGitResource verifies the full lifecycle of a Git

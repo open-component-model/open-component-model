@@ -27,8 +27,8 @@ import (
 	"ocm.software/open-component-model/bindings/go/git/repository"
 	"ocm.software/open-component-model/bindings/go/git/spec/access"
 	v1 "ocm.software/open-component-model/bindings/go/git/spec/access/v1"
+	testgit "ocm.software/open-component-model/bindings/go/internal/testutils/git"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
 func TestResourceDigestAndDownload(t *testing.T) {
