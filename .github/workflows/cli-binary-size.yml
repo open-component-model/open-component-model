@@ -43,6 +43,9 @@ jobs:
       - name: Checkout (tip and parent)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # The job only builds and compares; it never uses the token, so do
+          # not leave it in .git/config (zizmor artipacked).
+          persist-credentials: false
           # Need the parent commit to build the "before" binary.
           fetch-depth: 2
 
