@@ -132,5 +132,18 @@ func Traverse(ctx context.Context, root ComponentKey, resolver resolvers.Compone
 		return nil, fmt.Errorf("failed to collect discovered graph: %w", err)
 	}
 
+	// Remember which repository each component came from. A localBlob of a
+	// referenced component lives in that component's repository, so the
+	// extraction needs this to build a pullable reference per component.
+	graph.Repositories = make(map[ComponentKey]runtime.Typed, len(graph.Descriptors))
+	for _, desc := range graph.Descriptors {
+		key := ComponentKey{Name: desc.Component.Name, Version: desc.Component.Version}
+		spec, err := resolver.GetRepositorySpecificationForComponent(ctx, key.Name, key.Version)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve repository specification for component %s: %w", key, err)
+		}
+		graph.Repositories[key] = spec
+	}
+
 	return graph, nil
 }

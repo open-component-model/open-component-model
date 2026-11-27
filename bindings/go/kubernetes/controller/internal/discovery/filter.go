@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // ComponentKey identifies a component by name and version.
@@ -22,6 +23,11 @@ func (k ComponentKey) String() string {
 type Graph struct {
 	// Descriptors contains the resolved descriptors, including the root.
 	Descriptors []*descriptor.Descriptor
+	// Repositories holds, per component, the repository specification the
+	// component was resolved from. Extraction needs it to turn a localBlob
+	// access into a pullable OCI reference, because the blob lives in the
+	// component's own repository. May be nil when no OCI helpers are used.
+	Repositories map[ComponentKey]runtime.Typed
 }
 
 // Filtered is the selector-filtered view of a Graph, sorted lexicographically
@@ -40,6 +46,9 @@ type Filtered struct {
 	// EmptyStage names the selector stage that emptied the result, or is
 	// empty for an ordinary result. Its values are the Stage constants.
 	EmptyStage string
+	// Repositories is the input graph's per-component repository map, shared
+	// read-only.
+	Repositories map[ComponentKey]runtime.Typed
 }
 
 // Filter applies the reference, component, and resource selector stages of q
@@ -101,7 +110,7 @@ func (q *Query) Filter(ctx context.Context, graph Graph) (*Filtered, error) {
 	}
 
 	// Lexicographic order by (component.name, component.version).
-	return &Filtered{Descriptors: sortByComponentKey(filtered)}, nil
+	return &Filtered{Descriptors: sortByComponentKey(filtered), Repositories: graph.Repositories}, nil
 }
 
 // filterReferences applies the reference selector stage. Without a selector all

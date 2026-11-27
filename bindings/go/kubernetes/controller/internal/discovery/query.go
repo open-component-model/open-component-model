@@ -2,11 +2,13 @@ package discovery
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
 
 	"cel.dev/cel-go/cel"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/api/v1alpha1"
 	ocmcel "ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/cel"
@@ -40,6 +42,13 @@ type Query struct {
 	components *compiledSelector
 	resources  *compiledSelector
 	extract    *compiledExtract
+
+	// component is the root component info when the OCI helpers are enabled
+	// (see WithComponentInfo); nil otherwise.
+	component *v1alpha1.ComponentInfo
+	// extractSpec keeps the extraction expressions so that they can be
+	// recompiled per component with that component's own repository.
+	extractSpec *v1alpha1.Extract
 }
 
 type compiledSelector struct {
@@ -58,19 +67,56 @@ type compiledExtract struct {
 	mode       extractMode
 	fields     []extractedField // sorted by field name; byResources / byComponents modes
 	expression cel.Program      // expression mode
+
+	// perComponent caches the field programs compiled against a specific
+	// component's repository (OCI helpers enabled). Filled lazily by fieldsFor.
+	perComponent map[ComponentKey][]extractedField
+}
+
+// CompileOption customizes Compile.
+type CompileOption func(*compileOptions)
+
+type compileOptions struct {
+	component *v1alpha1.ComponentInfo
+}
+
+// WithComponentInfo makes the OCI helper functions (toOCI and friends)
+// available to extraction expressions, so by-value (localBlob) resources get
+// a pullable address instead of only a digest.
+//
+// The expressions are validated once at compile time against this root
+// component info. At projection time they are compiled again per component,
+// with that component's own name and the repository it was resolved from
+// (Graph.Repositories), because a localBlob lives in the repository of the
+// component that declares it. A component without an entry in
+// Graph.Repositories falls back to the root's repository specification.
+func WithComponentInfo(component *v1alpha1.ComponentInfo) CompileOption {
+	return func(o *compileOptions) { o.component = component }
 }
 
 // Compile compiles all selector and extraction expressions of spec once.
 // Compilation errors are reported as *SelectorError or *ExtractError with the
 // affected stage or field. An invalid extract mode combination is reported as
 // an *ExtractError.
-func Compile(ctx context.Context, spec *v1alpha1.DiscoverySpec) (*Query, error) {
+func Compile(ctx context.Context, spec *v1alpha1.DiscoverySpec, opts ...CompileOption) (*Query, error) {
 	if spec == nil {
 		return nil, fmt.Errorf("discovery spec must not be nil")
+	}
+	var o compileOptions
+	for _, opt := range opts {
+		opt(&o)
 	}
 	base, err := ocmcel.BaseEnv()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load base CEL environment: %w", err)
+	}
+	// Extraction expressions see the OCI helpers only when a component info
+	// is given; selectors keep the plain base environment.
+	extractBase := base
+	if o.component != nil {
+		if extractBase, err = ocmcel.ComponentInfoEnv(o.component); err != nil {
+			return nil, fmt.Errorf("failed to load component CEL environment: %w", err)
+		}
 	}
 
 	selectorEnv, err := base.Extend(
@@ -85,7 +131,7 @@ func Compile(ctx context.Context, spec *v1alpha1.DiscoverySpec) (*Query, error) 
 		return nil, err
 	}
 
-	q := &Query{}
+	q := &Query{component: o.component, extractSpec: spec.Extract}
 	if q.references, err = compileSelector(ctx, selectorEnv, StageReference, spec.ReferenceSelector); err != nil {
 		return nil, err
 	}
@@ -95,7 +141,7 @@ func Compile(ctx context.Context, spec *v1alpha1.DiscoverySpec) (*Query, error) 
 	if q.resources, err = compileSelector(ctx, selectorEnv, StageResource, spec.ResourceSelector); err != nil {
 		return nil, err
 	}
-	if q.extract, err = compileExtract(ctx, base, spec.Extract); err != nil {
+	if q.extract, err = compileExtract(ctx, extractBase, spec.Extract); err != nil {
 		return nil, err
 	}
 	return q, nil
@@ -168,6 +214,64 @@ func compileExtract(ctx context.Context, base *cel.Env, extract *v1alpha1.Extrac
 		}
 		return &compiledExtract{mode: extractExpression, expression: prog}, nil
 	}
+}
+
+// fieldsFor returns the field programs to evaluate for the component key.
+// Without OCI helpers (no component info) the programs compiled once by
+// Compile are shared by every component. With OCI helpers the programs are
+// compiled per component, bound to that component's name and the repository
+// it was resolved from, and cached for the lifetime of the Query.
+func (q *Query) fieldsFor(ctx context.Context, key ComponentKey, repositories map[ComponentKey]runtime.Typed) ([]extractedField, error) {
+	if q.extract == nil {
+		return nil, nil
+	}
+	if q.component == nil {
+		return q.extract.fields, nil
+	}
+	if fields, ok := q.extract.perComponent[key]; ok {
+		return fields, nil
+	}
+
+	info := &v1alpha1.ComponentInfo{
+		Component:      key.Name,
+		Version:        key.Version,
+		RepositorySpec: q.component.RepositorySpec,
+	}
+	if spec, ok := repositories[key]; ok && spec != nil {
+		raw, err := json.Marshal(spec)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal repository specification of component %s: %w", key, err)
+		}
+		info.RepositorySpec = &apiextensionsv1.JSON{Raw: raw}
+	}
+
+	env, err := ocmcel.ComponentInfoEnv(info)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load component CEL environment for %s: %w", key, err)
+	}
+	var exprs map[string]string
+	switch q.extract.mode {
+	case extractByResources:
+		env, err = env.Extend(cel.Variable("component", cel.DynType), cel.Variable("resource", cel.DynType))
+		exprs = q.extractSpec.ByResources
+	case extractByComponents:
+		env, err = env.Extend(cel.Variable("component", cel.DynType))
+		exprs = q.extractSpec.ByComponents
+	default:
+		return q.extract.fields, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to extend component CEL environment for %s: %w", key, err)
+	}
+	fields, err := compileFields(ctx, env, exprs)
+	if err != nil {
+		return nil, err
+	}
+	if q.extract.perComponent == nil {
+		q.extract.perComponent = map[ComponentKey][]extractedField{}
+	}
+	q.extract.perComponent[key] = fields
+	return fields, nil
 }
 
 // compileFields compiles one CEL expression per map value. Field names are
