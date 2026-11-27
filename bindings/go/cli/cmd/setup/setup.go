@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -91,7 +93,7 @@ func PluginManager(cmd *cobra.Command) error {
 	slog.DebugContext(cmd.Context(), "http config resolved",
 		slog.String("timeout", timeoutString(httpConfig.Timeout)),
 		slog.String("tlsHandshakeTimeout", timeoutString(httpConfig.TLSHandshakeTimeout)),
-		slog.Any("hosts", httpConfig.Hosts),
+		slog.Any("hosts", slices.Sorted(maps.Keys(httpConfig.Hosts))),
 	)
 	checksumHTTPConfig, err := checksumhttpv1alpha1.LookupConfig(ocmContext.Configuration())
 	if err != nil {
