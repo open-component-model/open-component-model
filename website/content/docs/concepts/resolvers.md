@@ -2,7 +2,7 @@
 title: "Resolvers"
 description: "Learn how OCM resolvers map component name patterns to target repositories, enabling recursive resolution across multiple registries."
 icon: "🔍"
-weight: 10
+weight: 11
 toc: true
 ---
 

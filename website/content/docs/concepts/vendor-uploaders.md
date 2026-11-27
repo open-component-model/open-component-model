@@ -2,7 +2,7 @@
 title: "Vendor Repository Uploaders"
 description: "How OCM's JFrog Artifactory and Sonatype Nexus uploaders move matched resources into a vendor repository during transfer and republish them as native access."
 icon: "📤"
-weight: 15
+weight: 16
 toc: true
 aliases:
   - /docs/how-to/vendor-specific-apis/

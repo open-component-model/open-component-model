@@ -2,7 +2,7 @@
 title: "Kubernetes Component Discovery"
 description: "How the Discovery controller resolves a Component's transitive reference graph, filters it with CEL selectors, and projects it into status."
 icon: "🔎"
-weight: 5
+weight: 6
 toc: true
 hasMermaid: true
 ---

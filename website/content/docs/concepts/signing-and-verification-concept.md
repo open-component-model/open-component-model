@@ -1,7 +1,7 @@
 ---
 title: "Signing and Verification"
 description: "How OCM ensures component integrity and authenticity through cryptographic signatures: signing workflows, verification, and trust anchors."
-weight: 12
+weight: 13
 toc: true
 ---
 
