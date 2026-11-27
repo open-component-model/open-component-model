@@ -98,7 +98,7 @@ func TestCache_TTLExpiry(t *testing.T) {
 }
 
 func TestCache_LRUOverflow(t *testing.T) {
-	c := newTestCache(t, Options{MaxEntries: 2})
+	c := newTestCache(t, Options{MaxTotalSize: 2 * MinBlobCharge})
 	ctx := t.Context()
 
 	d1 := digest.FromBytes([]byte("a"))
