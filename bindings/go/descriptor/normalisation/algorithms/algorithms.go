@@ -37,11 +37,12 @@ const (
 	//
 	// It maps to v4alpha2, not to Default (v4alpha3). v4alpha2 is the faithful
 	// v3 re-implementation: it keeps label.version and emits reference labels
-	// unfiltered, so it reproduces legacy v3 bytes exactly. Mapping v3 to
-	// v4alpha1 (which drops label.version) breaks verification of v3 signatures
-	// over versioned labels; mapping it to v4alpha3 (which filters reference
-	// labels signing-only) breaks verification of v3 signatures that carry
-	// reference labels.
+	// unfiltered, so it reproduces legacy v3 bytes exactly, except for
+	// null-valued entries (see below). Mapping v3 to v4alpha1 (which drops
+	// label.version) breaks verification of v3 signatures over versioned
+	// labels; mapping it to v4alpha3 (which filters reference labels
+	// signing-only) breaks verification of v3 signatures that carry reference
+	// labels.
 	//
 	// One difference remains: legacy v3 keeps null-valued entries such as a
 	// signed label with value: null, which v4alpha2 drops. v4alpha2 stays
