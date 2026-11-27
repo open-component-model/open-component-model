@@ -25,6 +25,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/compref"
 	ctfv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ociv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/rsa/signing/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
@@ -37,6 +38,7 @@ const (
 	FlagConcurrencyLimit = "concurrency-limit"
 	FlagSignature        = "signature"
 	FlagVerifierSpec     = "verifier-spec"
+	FlagSkipReferences   = "skip-references"
 
 	FlagInsecureTrustLegacyTimestamps = "insecure-trust-legacy-timestamps"
 )
@@ -67,6 +69,7 @@ func New() *cobra.Command {
 - Fetch component version 
 - Normalise descriptor (algorithm from signature)
 - Recompute hash and compare with signature digest
+- Follow component references recursively: each referenced component version must be resolvable and match the digest stored in the reference (disable with --skip-references)
 - Verify signature (verifier from the OCM configuration, otherwise derived from the signature algorithm)
 
 ## Behavior
@@ -79,6 +82,8 @@ func New() *cobra.Command {
 - The verifier is configured in the OCM configuration (%[4]s), not on the command line
 - An entry with a "signature" field only applies to that signature, one without applies to all
 - The verifier is resolved per signature, so a component carrying several signatures can be verified with a different handler for each
+- Resource digests are not recomputed by this command: the signed descriptor binds each resource digest, and it is checked against the actual content when the resource is downloaded or transferred
+- Referenced component versions are looked up with the repository resolution of the OCM configuration, starting from the repository of the verified component version; only their digests are checked, not their own signatures
 - --verifier-spec is no longer supported and fails with an error
 - In an OCI registry or CTF, the version tag is resolved once and the component version is read from the artifact it resolved to; on success the log field "reference" holds the reference pinned to that artifact's OCI digest. Passing it to a subsequent command (e.g. transfer, download resource) reads exactly the verified content, even if the tag moves in between
 
@@ -280,6 +285,7 @@ verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 -
 	}
 
 	cmd.Flags().Int(FlagConcurrencyLimit, 4, "maximum amount of parallel requests to the repository for resolving component versions")
+	cmd.Flags().Bool(FlagSkipReferences, false, "do not follow component references and check their digests")
 	cmd.Flags().String(FlagSignature, "", "name of the signature to verify. If not set, all signatures are verified.")
 	cmd.Flags().Bool(FlagInsecureTrustLegacyTimestamps, false, "use the time of trusted timestamps created by the OCM v1 CLI to validate expired signing certificates; these timestamps cover only the descriptor digest, so a signature made after the certificate expired can reuse one")
 	cmd.Flags().String(FlagVerifierSpec, "", fmt.Sprintf("DEPRECATED: no longer supported, configure the verifier in the OCM configuration instead (%s, field \"verifier\")", signingConfigType))
@@ -336,6 +342,11 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 	concurrencyLimit, err := cmd.Flags().GetInt(FlagConcurrencyLimit)
 	if err != nil {
 		return fmt.Errorf("getting concurrency limit flag failed: %w", err)
+	}
+
+	skipReferences, err := cmd.Flags().GetBool(FlagSkipReferences)
+	if err != nil {
+		return fmt.Errorf("getting flag %q failed: %w", FlagSkipReferences, err)
 	}
 
 	reference := args[0]
@@ -400,65 +411,25 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 			defer func() {
 				logger.InfoContext(egctx, "signature verification completed", "name", signature.Name, "duration", time.Since(start).String())
 			}()
-
-			if err := signing.VerifyDigestMatchesDescriptor(egctx, desc, signature, logger); err != nil {
-				return err
-			}
-
-			// The verifier is resolved per signature so that a component version
-			// carrying several signatures can be verified with a different handler
-			// for each of them.
-			verifierSpec, err := loadVerifierConfig(config, signature, logger)
-			if err != nil {
-				return err
-			}
-
-			handler, err := pluginManager.SigningRegistry.GetPlugin(egctx, verifierSpec)
-			if err != nil {
-				return fmt.Errorf("getting signature handler plugin failed: %w", err)
-			}
-
-			var creds runtime.Typed
-			if consumerID, err := handler.GetVerifyingCredentialConsumerIdentity(egctx, signature, verifierSpec); err == nil {
-				if creds, err = credentialGraph.Resolve(egctx, consumerID); err != nil {
-					if errors.Is(err, credentials.ErrNotFound) {
-						logger.DebugContext(egctx, "could not resolve credentials for verification", "error", err.Error())
-					} else {
-						return fmt.Errorf("resolving credentials for verification failed: %w", err)
-					}
-				}
-			}
-
-			if creds != nil {
-				logger.DebugContext(egctx, "using discovered credentials for verification", "type", creds.GetType())
-			}
-
-			// Verify an optional RFC 3161 timestamp attached to the signature.
-			verifyCtx := egctx
-			if signature.Timestamp != nil {
-				verifiedTime, trusted, err := verifyTSATimestamp(egctx, logger, credentialGraph, desc, signature, trustLegacyTimestamps)
-				if err != nil {
-					return err
-				}
-				// Only a timestamp validated against trusted TSA roots may relax
-				// certificate validity. A merely structural token proves nothing
-				// about the signing time, so it must never override the handler's
-				// current-time certificate validation.
-				if trusted {
-					verifyCtx = signing.WithTrustedSigningTime(egctx, verifiedTime)
-				}
-			}
-
-			if err := handler.Verify(verifyCtx, signature, verifierSpec, creds); err != nil {
-				return err
-			}
-			algorithms.LogNonDefaultDigest(egctx, logger, slog.LevelWarn, signature.Digest.NormalisationAlgorithm, "name", signature.Name)
-			return nil
+			return verifySignature(egctx, logger, pluginManager, credentialGraph, config, desc, signature, trustLegacyTimestamps)
 		})
 	}
 
 	if err := eg.Wait(); err != nil {
 		return fmt.Errorf("SIGNATURE VERIFICATION FAILED: %w", err)
+	}
+
+	if !skipReferences {
+		resolve := func(ctx context.Context, component, version string) (*descruntime.Descriptor, error) {
+			refRepo, err := repoProvider.GetComponentVersionRepositoryForComponent(ctx, component, version)
+			if err != nil {
+				return nil, err
+			}
+			return refRepo.GetComponentVersion(ctx, component, version)
+		}
+		if err := verifyReferences(ctx, logger, desc, resolve); err != nil {
+			return fmt.Errorf("REFERENCE VERIFICATION FAILED: %w", err)
+		}
 	}
 
 	if pinnedRef == nil {
@@ -467,6 +438,73 @@ func VerifyComponentVersion(cmd *cobra.Command, args []string) error {
 	}
 	// Feeding this reference to a subsequent command reads exactly the verified artifact.
 	logger.InfoContext(ctx, "SIGNATURE VERIFICATION SUCCESSFUL", "reference", pinnedRef.String())
+	return nil
+}
+
+// verifySignature checks the digest of one signature against the descriptor and
+// verifies the signature with the handler configured for it.
+func verifySignature(
+	ctx context.Context,
+	logger *slog.Logger,
+	pluginManager *manager.PluginManager,
+	credentialGraph credentials.Resolver,
+	config *genericv1.Config,
+	desc *descruntime.Descriptor,
+	signature descruntime.Signature,
+	trustLegacyTimestamps bool,
+) error {
+	if err := signing.VerifySignatureDigest(ctx, desc, signature, logger); err != nil {
+		return err
+	}
+
+	// The verifier is resolved per signature so that a component version
+	// carrying several signatures can be verified with a different handler
+	// for each of them.
+	verifierSpec, err := loadVerifierConfig(config, signature, logger)
+	if err != nil {
+		return err
+	}
+
+	handler, err := pluginManager.SigningRegistry.GetPlugin(ctx, verifierSpec)
+	if err != nil {
+		return fmt.Errorf("getting signature handler plugin failed: %w", err)
+	}
+
+	var creds runtime.Typed
+	if consumerID, err := handler.GetVerifyingCredentialConsumerIdentity(ctx, signature, verifierSpec); err == nil {
+		if creds, err = credentialGraph.Resolve(ctx, consumerID); err != nil {
+			if errors.Is(err, credentials.ErrNotFound) {
+				logger.DebugContext(ctx, "could not resolve credentials for verification", "error", err.Error())
+			} else {
+				return fmt.Errorf("resolving credentials for verification failed: %w", err)
+			}
+		}
+	}
+
+	if creds != nil {
+		logger.DebugContext(ctx, "using discovered credentials for verification", "type", creds.GetType())
+	}
+
+	// Verify an optional RFC 3161 timestamp attached to the signature.
+	verifyCtx := ctx
+	if signature.Timestamp != nil {
+		verifiedTime, trusted, err := verifyTSATimestamp(ctx, logger, credentialGraph, desc, signature, trustLegacyTimestamps)
+		if err != nil {
+			return err
+		}
+		// Only a timestamp validated against trusted TSA roots may relax
+		// certificate validity. A merely structural token proves nothing
+		// about the signing time, so it must never override the handler's
+		// current-time certificate validation.
+		if trusted {
+			verifyCtx = signing.WithTrustedSigningTime(ctx, verifiedTime)
+		}
+	}
+
+	if err := handler.Verify(verifyCtx, signature, verifierSpec, creds); err != nil {
+		return err
+	}
+	algorithms.LogNonDefaultDigest(ctx, logger, slog.LevelWarn, signature.Digest.NormalisationAlgorithm, "name", signature.Name)
 	return nil
 }
 

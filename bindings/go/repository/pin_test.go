@@ -7,10 +7,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/opencontainers/go-digest"
 	"github.com/stretchr/testify/require"
 
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/algorithms"
 	jsonv1 "ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v1"
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha1"
+	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/json/v4alpha2"
 	descruntime "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	"ocm.software/open-component-model/bindings/go/signing"
 )
@@ -75,6 +78,48 @@ func TestVerifyNormalizedPin_LegacyV3(t *testing.T) {
 	wrong, err := ParseDigestPin("jsonNormalisation.v3+sha256:" + strings.Repeat("00", 32))
 	r.NoError(err)
 	r.ErrorContains(verifyNormalizedPin(ctx, desc, wrong), "does not match pinned digest")
+}
+
+// TestVerifyNormalizedPin_LegacyV3NullLabel: a jsonNormalisation/v3 pin taken
+// from an OCM v1 signature over a signed label with value: null verifies, as
+// it does for signature verification. OCM v1 keeps "value":null in the
+// normalised bytes, while v4alpha2 drops it.
+func TestVerifyNormalizedPin_LegacyV3NullLabel(t *testing.T) {
+	r := require.New(t)
+	ctx := t.Context()
+
+	desc := &descruntime.Descriptor{
+		Component: descruntime.Component{
+			ComponentMeta: descruntime.ComponentMeta{
+				ObjectMeta: descruntime.ObjectMeta{
+					Name:    "acme.org/test",
+					Version: "1.0.0",
+					Labels:  []descruntime.Label{{Name: "foo", Value: []byte(`null`), Signing: true}},
+				},
+			},
+			Provider: descruntime.Provider{Name: "acme"},
+		},
+	}
+
+	legacy, err := v4alpha2.NormaliseLegacyV3(desc)
+	r.NoError(err)
+	r.Contains(string(legacy), `"value":null`)
+	v3Pin, err := ParseDigestPin("jsonNormalisation.v3+sha256:" + digest.SHA256.FromBytes(legacy).Encoded())
+	r.NoError(err)
+	r.NoError(verifyNormalizedPin(ctx, desc, v3Pin), "a v3 pin over the v1 bytes with a null label value must verify")
+
+	recorded, err := signing.GenerateDigest(ctx, desc, slog.Default(), v4alpha2.Algorithm, crypto.SHA256.String())
+	r.NoError(err)
+	v4Pin, err := ParseDigestPin(FormatDigestPin(recorded))
+	r.NoError(err)
+	r.NoError(verifyNormalizedPin(ctx, desc, v4Pin), "a pin recorded as v4alpha2 must keep verifying")
+
+	wrong, err := ParseDigestPin("jsonNormalisation.v3+sha256:" + strings.Repeat("00", 32))
+	r.NoError(err)
+	err = verifyNormalizedPin(ctx, desc, wrong)
+	r.ErrorContains(err, "does not match pinned digest")
+	r.ErrorContains(err, "resolved digest is")
+	r.ErrorIs(err, algorithms.ErrDigestMismatch)
 }
 
 // TestVerifyNormalizedPin_V1 is a regression for the verify-only guard: a

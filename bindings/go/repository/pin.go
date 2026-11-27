@@ -168,18 +168,22 @@ func GetPinnedComponentVersion(ctx context.Context, repo ComponentVersionReposit
 	return repo, desc, nil
 }
 
-// verifyNormalizedPin verifies desc against the normalized pin. It hashes like signature verification,
-// which reads the legacy jsonNormalisation/v3 as jsonNormalisation/v4alpha2, so a pin taken from a
-// v1 signature or component reference verifies as it does in transfer.
+// verifyNormalizedPin verifies desc against the normalized pin. It verifies like signature
+// verification, through algorithms.Verify: a legacy jsonNormalisation/v3 pin is checked against the
+// bytes OCM v1 computed it over (null-valued entries such as a signed label with value: null kept),
+// and, failing that, against jsonNormalisation/v4alpha2, so a pin taken from a v1 signature or
+// component reference verifies as it does in transfer.
 func verifyNormalizedPin(ctx context.Context, desc *descriptor.Descriptor, pin *descriptor.Digest) error {
 	component, version := desc.Component.Name, desc.Component.Version
-	resolved, err := signing.GenerateDigest(ctx, desc, slog.Default(), pin.NormalisationAlgorithm, pin.HashAlgorithm)
-	if err != nil {
-		return fmt.Errorf("getting component version %s:%s pinned to %s failed: %w", component, version, FormatDigestPin(pin), err)
-	}
-	if !strings.EqualFold(resolved.Value, pin.Value) {
-		return fmt.Errorf("component version %s:%s does not match pinned digest %s: resolved digest is %s",
-			component, version, FormatDigestPin(pin), FormatDigestPin(resolved))
+	if err := algorithms.Verify(desc, *pin); err != nil {
+		if !errors.Is(err, algorithms.ErrDigestMismatch) {
+			return fmt.Errorf("getting component version %s:%s pinned to %s failed: %w", component, version, FormatDigestPin(pin), err)
+		}
+		if resolved, rerr := signing.GenerateDigest(ctx, desc, slog.Default(), pin.NormalisationAlgorithm, pin.HashAlgorithm); rerr == nil {
+			return fmt.Errorf("component version %s:%s does not match pinned digest %s: resolved digest is %s: %w",
+				component, version, FormatDigestPin(pin), FormatDigestPin(resolved), err)
+		}
+		return fmt.Errorf("component version %s:%s does not match pinned digest %s: %w", component, version, FormatDigestPin(pin), err)
 	}
 	algorithms.LogNonDefaultDigest(ctx, slog.Default(), slog.LevelWarn, pin.NormalisationAlgorithm, "component", component, "version", version, "pin", FormatDigestPin(pin))
 	return nil

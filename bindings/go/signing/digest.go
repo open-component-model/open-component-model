@@ -21,8 +21,9 @@ const (
 	// flag default), see algorithms.Default.
 	DefaultNormalisationAlgorithm = algorithms.Default
 	// LegacyNormalisationAlgo identifies the deprecated v3 JSON normalisation
-	// algorithm. Calls using this value are transparently mapped to v4alpha2
-	// with a warning (see ensureNormalisationAlgo and algorithms.LegacyV3).
+	// algorithm. New digests requested with it are computed and recorded as
+	// v4alpha2 (see ensureNormalisationAlgo); digests recorded with it are
+	// verified as OCM v1 computed them (see algorithms.Verify).
 	LegacyNormalisationAlgo = algorithms.LegacyV3
 	// AccessTypeNone is the access type for resources without access.
 	// It is used to prevent meaningless digest claims.
@@ -77,20 +78,98 @@ func DigestHashAlgorithmsEnforced() bool {
 // signature’s claimed digest.
 //
 // Steps:
-//  1. Resolve the normalisation algorithm (legacy → v4alpha2 if required).
-//  2. Normalise the descriptor with that algorithm.
-//  3. Select the hash algorithm from supported list (SHA256, SHA512).
-//  4. Hash the normalised descriptor.
-//  5. Decode the digest value from the signature.
-//  6. Compare the freshly computed digest against the signature digest.
+// The digest is passed to algorithms.Verify with its recorded normalisation
+// algorithm unchanged: a legacy jsonNormalisation/v3 digest is verified the
+// way OCM v1 computed it (it keeps null label values), which v4alpha2 alone
+// does not reproduce. See algorithms.Verify.
 func VerifyDigestMatchesDescriptor(
 	ctx context.Context,
 	desc *descruntime.Descriptor,
 	signature descruntime.Signature,
 	logger *slog.Logger,
 ) error {
-	signature.Digest.NormalisationAlgorithm = ensureNormalisationAlgo(ctx, signature.Digest.NormalisationAlgorithm, logger)
+	if signature.Digest.NormalisationAlgorithm == LegacyNormalisationAlgo {
+		logger.DebugContext(ctx, "legacy normalisation algorithm detected, verifying with the legacy v3 form",
+			"legacy", LegacyNormalisationAlgo)
+	}
 	return algorithms.Verify(desc, signature.Digest)
+}
+
+// VerifySignatureDigest verifies that a descriptor matches the digest of one of
+// its signatures, like VerifyDigestMatchesDescriptor. Use it on signature
+// verification paths only; reference digest checks call
+// VerifyDigestMatchesDescriptor directly.
+//
+// On a digest mismatch it adds a hint for a known OCM v1 interop limit: every
+// OCM v1 signing run rewrites the component reference digests with its own hash
+// and normalisation algorithms, and OCM v1 recomputes them on verification. OCM
+// v2 verifies the stored reference digests, so of several OCM v1 signatures
+// with different algorithms only the one created last can be verified. The hint
+// is only added when the descriptor matches that pattern: another signature
+// uses the algorithms of all stored reference digests, its digest matches the
+// descriptor, and the failing signature uses other algorithms. The mismatch
+// stays an error either way.
+func VerifySignatureDigest(
+	ctx context.Context,
+	desc *descruntime.Descriptor,
+	signature descruntime.Signature,
+	logger *slog.Logger,
+) error {
+	err := VerifyDigestMatchesDescriptor(ctx, desc, signature, logger)
+	if !errors.Is(err, algorithms.ErrDigestMismatch) {
+		return err
+	}
+	if other := rewrittenReferencesSignature(desc, signature); other != nil {
+		return fmt.Errorf("%w (possible cause: if this component version was signed several times with OCM v1 "+
+			"using different hash or normalisation algorithms, OCM v1 rewrote its component reference digests "+
+			"with the algorithms of signature %q (%s/%s) when creating it; OCM v1 recomputes reference digests "+
+			"during verification, OCM v2 verifies the stored ones, so signature %q (%s/%s) cannot be verified "+
+			"by OCM v2)",
+			err, other.Name, other.Digest.NormalisationAlgorithm, other.Digest.HashAlgorithm,
+			signature.Name, signature.Digest.NormalisationAlgorithm, signature.Digest.HashAlgorithm)
+	}
+	return err
+}
+
+// rewrittenReferencesSignature returns another signature of desc whose
+// algorithms match all stored component reference digests and whose digest
+// matches desc, provided the given signature uses other algorithms than those
+// reference digests. It returns nil otherwise.
+func rewrittenReferencesSignature(desc *descruntime.Descriptor, signature descruntime.Signature) *descruntime.Signature {
+	refs := desc.Component.References
+	if len(refs) == 0 {
+		return nil
+	}
+	refsMatch := func(d descruntime.Digest) bool {
+		for _, r := range refs {
+			if !sameDigestAlgorithms(r.Digest, d) {
+				return false
+			}
+		}
+		return true
+	}
+	if refsMatch(signature.Digest) {
+		return nil
+	}
+	for i := range desc.Signatures {
+		other := &desc.Signatures[i]
+		if other.Name == signature.Name || sameDigestAlgorithms(other.Digest, signature.Digest) || !refsMatch(other.Digest) {
+			continue
+		}
+		if algorithms.Verify(desc, other.Digest) == nil {
+			return other
+		}
+	}
+	return nil
+}
+
+// sameDigestAlgorithms reports whether two digests use the same normalisation
+// (aliases resolved) and hash algorithm (SHA-256 and sha256 are equal).
+func sameDigestAlgorithms(a, b descruntime.Digest) bool {
+	na, _ := algorithms.Resolve(a.NormalisationAlgorithm)
+	nb, _ := algorithms.Resolve(b.NormalisationAlgorithm)
+	hash := func(h string) string { return strings.ToUpper(strings.ReplaceAll(h, "-", "")) }
+	return na == nb && hash(a.HashAlgorithm) == hash(b.HashAlgorithm)
 }
 
 // SignableNormalisationAlgorithms returns the normalisation algorithms a
@@ -110,6 +189,9 @@ func SignableNormalisationAlgorithms() []string {
 // this, so verifying existing v1 signatures, pins and reference digests keeps
 // working. Any signing entry point must call it before producing a signature.
 func EnsureSignable(normalisationAlgorithm string) error {
+	if err := algorithms.CheckSupported(normalisationAlgorithm); err != nil {
+		return err
+	}
 	if algorithms.VerifyOnly(normalisationAlgorithm) {
 		return fmt.Errorf("%w: %q", ErrSigningUnsupported, normalisationAlgorithm)
 	}
@@ -251,10 +333,10 @@ func hasUsableAccess(res descruntime.Resource) bool {
 	return res.Access != nil && res.Access.GetType().String() != AccessTypeNone
 }
 
-// ensureNormalisationAlgo resolves the effective normalisation algorithm.
-// If the provided value is the legacy v3 algorithm, it returns v4alpha2.Algorithm
-// instead, which reproduces legacy jsonNormalisation/v3 byte-for-byte, so
-// existing v3 (and old ocm v1 style) signatures keep verifying. The resolution
+// ensureNormalisationAlgo resolves the normalisation algorithm a new digest is
+// computed and recorded with. If the provided value is the legacy v3
+// algorithm, it returns v4alpha2.Algorithm instead. Verification does not use
+// it: see VerifyDigestMatchesDescriptor. The resolution
 // is logged at debug level only: callers that trust a digest already warn about
 // any non-default algorithm (see algorithms.LogNonDefaultDigest).
 func ensureNormalisationAlgo(ctx context.Context, algo string, logger *slog.Logger) string {

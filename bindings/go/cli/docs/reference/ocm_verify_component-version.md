@@ -29,6 +29,7 @@ Verify component version(s) inside an OCM repository based on signatures.
 - Fetch component version 
 - Normalise descriptor (algorithm from signature)
 - Recompute hash and compare with signature digest
+- Follow component references recursively: each referenced component version must be resolvable and match the digest stored in the reference (disable with --skip-references)
 - Verify signature (verifier from the OCM configuration, otherwise derived from the signature algorithm)
 
 ## Behavior
@@ -41,6 +42,8 @@ Verify component version(s) inside an OCM repository based on signatures.
 - The verifier is configured in the OCM configuration (signing.config.ocm.software/v1alpha1), not on the command line
 - An entry with a "signature" field only applies to that signature, one without applies to all
 - The verifier is resolved per signature, so a component carrying several signatures can be verified with a different handler for each
+- Resource digests are not recomputed by this command: the signed descriptor binds each resource digest, and it is checked against the actual content when the resource is downloaded or transferred
+- Referenced component versions are looked up with the repository resolution of the OCM configuration, starting from the repository of the verified component version; only their digests are checked, not their own signatures
 - --verifier-spec is no longer supported and fails with an error
 - In an OCI registry or CTF, the version tag is resolved once and the component version is read from the artifact it resolved to; on success the log field "reference" holds the reference pinned to that artifact's OCI digest. Passing it to a subsequent command (e.g. transfer, download resource) reads exactly the verified content, even if the tag moves in between
 
@@ -246,6 +249,7 @@ verify component-version ghcr.io/open-component-model//ocm.software/cli:0.12.0 -
   -h, --help[=true|false]                               help for component-version
       --insecure-trust-legacy-timestamps[=true|false]   use the time of trusted timestamps created by the OCM v1 CLI to validate expired signing certificates; these timestamps cover only the descriptor digest, so a signature made after the certificate expired can reuse one
       --signature string                                name of the signature to verify. If not set, all signatures are verified.
+      --skip-references[=true|false]                    do not follow component references and check their digests
       --verifier-spec string                            DEPRECATED: no longer supported, configure the verifier in the OCM configuration instead (signing.config.ocm.software/v1alpha1, field "verifier")
 ```
 

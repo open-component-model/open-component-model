@@ -7,6 +7,7 @@ import (
 	// on the raw number token being preserved. v2 marshals a jsonv1.Number
 	// verbatim, so the produced bytes are unchanged.
 	jsonv1 "encoding/json"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
 	"maps"
@@ -28,6 +29,20 @@ func Normalise(v any) ([]byte, error) {
 	return marshal(Transform(v))
 }
 
+// NormaliseGoJSON is Normalise with OCM v1's spelling instead of cc-utils':
+// numbers are float64 as Go's encoding/json writes them (0.00001, big integers
+// rounded), &, <, > and the line terminators U+2028 and U+2029 are escaped as
+// Go's encoding/json (v1) escapes them, and other non-ASCII runes stay raw
+// UTF-8. Callers must decode numbers as float64.
+//
+// Unlike Normalise it also descends into arrays, so objects at any depth are
+// rewritten, including those inside arrays ([{"b":1,"a":2}] becomes
+// [[{"a":2},{"b":1}]]), as OCM v1's signing.Prepare does. Array order, scalars
+// and nulls are kept.
+func NormaliseGoJSON(v any) ([]byte, error) {
+	return json.Marshal(transform(v, true), runtime.JSONOptions, jsontext.EscapeForHTML(true), jsontext.EscapeForJS(true))
+}
+
 // Transform recursively rewrites v into the list-of-single-key-maps form.
 // A map[string]any becomes a []any of single-key map[string]any sorted by key.
 // Values that are objects are recursed into; arrays and scalars (including
@@ -36,12 +51,25 @@ func Normalise(v any) ([]byte, error) {
 // must transform the OCM element lists (resources, componentReferences, labels)
 // themselves before handing the tree to this engine.
 func Transform(v any) any {
+	return transform(v, false)
+}
+
+func transform(v any, arrays bool) any {
 	switch t := v.(type) {
 	case map[string]any:
 		keys := slices.Sorted(maps.Keys(t))
 		out := make([]any, 0, len(keys))
 		for _, k := range keys {
-			out = append(out, map[string]any{k: Transform(t[k])})
+			out = append(out, map[string]any{k: transform(t[k], arrays)})
+		}
+		return out
+	case []any:
+		if !arrays {
+			return v
+		}
+		out := make([]any, len(t))
+		for i, e := range t {
+			out[i] = transform(e, arrays)
 		}
 		return out
 	default:
@@ -77,8 +105,8 @@ func marshal(v any) ([]byte, error) {
 // NOTE: the json.Number spellings here DIVERGE from OCM v1, which decodes every
 // number into float64 and emits Go's encoding/json spelling (big ints lose
 // precision, 1e-05 renders as 0.00001). This engine deliberately matches
-// cc-utils, the primary compatibility target; an OCM-v1-signed descriptor with
-// numeric signing-label values will not verify.
+// cc-utils, the primary compatibility target; OCM v1 signatures are verified
+// through NormaliseGoJSON instead.
 func pythoniseNumbers(v any) any {
 	switch t := v.(type) {
 	case map[string]any:

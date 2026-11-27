@@ -3,6 +3,7 @@ package v1_test
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -96,4 +97,210 @@ func TestUnknownAlgorithmErrors(t *testing.T) {
 	desc := fromYAML(t, input_01_minimal_oci)
 	_, err := normalisation.Normalise(desc, "jsonNormalisation/bogus")
 	r.ErrorIs(err, normalisation.ErrUnknownNormalisationAlgorithm)
+}
+
+func TestOCMv1Applicable(t *testing.T) {
+	const descYAML = `
+meta:
+  schemaVersion: v2
+component:
+  name: acme.org/numbers
+  version: 1.0.0
+  provider: '{"name":"acme","labels":[{"name":"p","value":%s}]}'
+  repositoryContexts: []
+  componentReferences: []
+  sources: []
+  resources:
+  - name: res
+    version: 1.0.0
+    type: blob
+    relation: local
+    extraIdentity:
+      arch: amd64
+    access:
+      type: localBlob/v1
+      localReference: sha256:abc
+      mediaType: application/octet-stream
+    labels:
+    - {name: r, value: {nested: [%s]}, signing: true}
+  labels:
+  - {name: c, value: %s}
+`
+	descriptor := func(t *testing.T, provider, resource, component string) *descruntime.Descriptor {
+		t.Helper()
+		var v2desc v2.Descriptor
+		require.NoError(t, yaml.Unmarshal([]byte(fmt.Sprintf(descYAML, provider, resource, component)), &v2desc))
+		desc, err := descruntime.ConvertFromV2(&v2desc)
+		require.NoError(t, err)
+		return desc
+	}
+	const ok, bad = "9007199254740992", "9007199254740993"
+
+	require.NoError(t, v1.OCMv1Applicable(descriptor(t, ok, "0.00001", "1.5")))
+	for name, d := range map[string][3]string{
+		"provider label":  {bad, ok, ok},
+		"resource label":  {ok, bad, ok},
+		"component label": {ok, ok, bad},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := v1.OCMv1Applicable(descriptor(t, d[0], d[1], d[2]))
+			require.ErrorIs(t, err, v1.ErrInexactNumber)
+			require.ErrorContains(t, err, bad)
+		})
+	}
+}
+
+func TestOCMv1ApplicableObjectsInArrays(t *testing.T) {
+	const descYAML = `
+meta:
+  schemaVersion: v2
+component:
+  name: acme.org/arrays
+  version: 1.0.0
+  provider: '{"name":"acme","labels":[{"name":"p","value":%s,"signing":true}]}'
+  repositoryContexts:
+  - {type: OCIRegistry, baseUrl: example.com}
+  componentReferences:
+  - name: ref
+    componentName: acme.org/ref
+    version: 1.0.0
+    labels:
+    - {name: x, value: 1, signing: true}
+  sources:
+  - name: src
+    version: 1.0.0
+    type: git
+    access: {type: none}
+    labels:
+    - {name: s, value: %s, signing: true}
+  resources:
+  - name: res
+    version: 1.0.0
+    type: blob
+    relation: local
+    access: {type: localBlob/v1, localReference: sha256:abc, mediaType: application/octet-stream, extra: %s}
+    srcRefs:
+    - identitySelector: {name: src}
+    labels:
+    - {name: r, value: %s, signing: true}
+  labels:
+  - {name: c, value: %s, signing: true}
+`
+	const plain = `[1, "x", null, [2]]`
+	const objInArray = "[{b: 1, a: 2}]"
+	for _, tc := range []struct {
+		name                                string
+		provider, source, access, res, comp string
+		ambiguous                           bool
+	}{
+		{name: "element lists and arrays of scalars", provider: plain, source: plain, access: plain, res: plain, comp: plain},
+		{name: "sources are not normalised", provider: plain, source: objInArray, access: plain, res: plain, comp: plain},
+		{name: "component label value", provider: plain, source: plain, access: plain, res: plain, comp: objInArray, ambiguous: true},
+		{name: "resource label value nested", provider: plain, source: plain, access: plain, res: "{x: [[{a: 1}]]}", comp: plain, ambiguous: true},
+		{name: "resource access and srcRefs are not normalised", provider: plain, source: plain, access: objInArray, res: plain, comp: plain},
+		{name: "provider label value", provider: `[{"a":1}]`, source: plain, access: plain, res: plain, comp: plain, ambiguous: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			var v2desc v2.Descriptor
+			r.NoError(yaml.Unmarshal([]byte(fmt.Sprintf(descYAML, tc.provider, tc.source, tc.access, tc.res, tc.comp)), &v2desc))
+			desc, err := descruntime.ConvertFromV2(&v2desc)
+			r.NoError(err)
+			err = v1.OCMv1Applicable(desc)
+			if tc.ambiguous {
+				r.ErrorIs(err, v1.ErrAmbiguousArrayObjects)
+				return
+			}
+			r.NoError(err)
+		})
+	}
+}
+
+// TestNormaliseOCMv1ObjectsInArrays pins NormaliseOCMv1 to OCM v1, whose entry
+// engine also rewrites objects inside arrays. The expected bytes are the output
+// of OCM v1 0.52.0's compdesc.Normalize(cd, "jsonNormalisation/v1").
+func TestNormaliseOCMv1ObjectsInArrays(t *testing.T) {
+	const labelYAML = `
+meta:
+  schemaVersion: v2
+component:
+  name: acme.org/numbers
+  version: 1.0.0
+  provider: acme
+  repositoryContexts: []
+  componentReferences: []
+  sources: []
+  resources: []
+  labels:
+  - {name: num, value: %s, signing: true}
+`
+	const labelNorm = `[{"component":[{"componentReferences":[]},{"labels":[[{"name":"num"},{"signing":true},{"value":%s}]]},{"name":"acme.org/numbers"},{"provider":"acme"},{"resources":[]},{"version":"1.0.0"}]},{"meta":[{"schemaVersion":"v2"}]}]`
+	const elementsYAML = `
+meta:
+  schemaVersion: v2
+component:
+  name: acme.org/elements
+  version: 1.0.0
+  provider: '{"name":"acme","labels":[{"name":"p","value":[{"y":1,"x":2}],"signing":true}]}'
+  repositoryContexts: []
+  sources: []
+  componentReferences:
+  - name: ref
+    componentName: acme.org/child
+    version: 1.0.0
+    labels:
+    - {name: rl, value: [[{b: 1}], {a: [2]}], signing: true}
+  resources:
+  - name: res
+    version: 1.0.0
+    type: plainText
+    relation: local
+    access:
+      type: localBlob/v1
+      localReference: sha256:abc
+      mediaType: text/plain
+    labels:
+    - {name: l, value: [{k: v, j: [{m: 1, l: 0}]}], signing: true}
+`
+	const elementsNorm = `[{"component":[{"componentReferences":[[{"componentName":"acme.org/child"},{"extraIdentity":null},{"labels":[[{"name":"rl"},{"signing":true},{"value":[[[{"b":1}]],[{"a":[2]}]]}]]},{"name":"ref"},{"version":"1.0.0"}]]},{"name":"acme.org/elements"},{"provider":[{"labels":[[{"name":"p"},{"signing":true},{"value":[[{"x":2},{"y":1}]]}]]},{"name":"acme"}]},{"resources":[[{"extraIdentity":null},{"labels":[[{"name":"l"},{"signing":true},{"value":[[{"j":[[{"l":0},{"m":1}]]},{"k":"v"}]]}]]},{"name":"res"},{"relation":"local"},{"type":"plainText"},{"version":"1.0.0"}]]},{"version":"1.0.0"}]},{"meta":[{"schemaVersion":"v2"}]}]`
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "list of maps",
+			input: fmt.Sprintf(labelYAML, `[{b: 1, a: 2}]`),
+			want:  fmt.Sprintf(labelNorm, `[[{"a":2},{"b":1}]]`),
+		},
+		{
+			name:  "arrays of arrays keep order, scalars and nulls",
+			input: fmt.Sprintf(labelYAML, `[[{b: 1, a: 2}], [], 3, null, "s"]`),
+			want:  fmt.Sprintf(labelNorm, `[[[{"a":2},{"b":1}]],[],3,null,"s"]`),
+		},
+		{
+			name:  "maps in arrays in maps",
+			input: fmt.Sprintf(labelYAML, `{x: [{d: {f: 1, e: [{h: 2, g: 3}]}, c: 4}]}`),
+			want:  fmt.Sprintf(labelNorm, `[{"x":[[{"c":4},{"d":[{"e":[[{"g":3},{"h":2}]]},{"f":1}]}]]}]`),
+		},
+		{
+			name:  "empty map and null value in array",
+			input: fmt.Sprintf(labelYAML, `[{}, {a: null}]`),
+			want:  fmt.Sprintf(labelNorm, `[[],[{"a":null}]]`),
+		},
+		{
+			name:  "provider, resource and reference labels",
+			input: elementsYAML,
+			want:  elementsNorm,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			got, err := v1.NormaliseOCMv1(fromYAML(t, tt.input))
+			r.NoError(err)
+			r.Equal(tt.want, string(got))
+		})
+	}
 }

@@ -54,6 +54,8 @@ func TestSigningBoundary_JSONNormalisationV1(t *testing.T) {
 
 	// Minting a new v1 signature is refused at the signing boundary.
 	r.ErrorIs(EnsureSignable(v1.Algorithm), ErrSigningUnsupported)
+	// jsonNormalisation/v2 cannot be minted either.
+	r.ErrorIs(EnsureSignable(algorithms.LegacyV2), algorithms.ErrUnsupportedNormalisation)
 	// The current default algorithm is signable.
 	r.NoError(EnsureSignable(v4alpha3.Algorithm))
 
