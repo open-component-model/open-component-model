@@ -48,7 +48,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/registry v0.45.0
 	github.com/testcontainers/testcontainers-go/modules/toxiproxy v0.45.0
 	github.com/veqryn/slog-context v0.9.0
-	go.yaml.in/yaml/v3 v3.0.6
+	go.yaml.in/yaml/v4 v4.0.0
 	golang.org/x/crypto v0.59.0
 	golang.org/x/net v0.63.0
 	golang.org/x/oauth2 v0.38.0
@@ -201,6 +201,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.28.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.5 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/exp v0.0.0-20261121134650-e1094eeca1b5 // indirect
 	golang.org/x/mod v0.43.0 // indirect
 	golang.org/x/text v0.44.0 // indirect
