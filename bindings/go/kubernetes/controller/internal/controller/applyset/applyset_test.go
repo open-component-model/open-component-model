@@ -2,9 +2,15 @@ package applyset
 
 import (
 	"context"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"regexp"
+	"slices"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/go-logr/logr"
@@ -17,9 +23,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
+
+	ocmruntime "ocm.software/open-component-model/bindings/go/runtime"
 )
 
 // testParent is a minimal implementation of the parent interface for testing.
@@ -115,11 +124,22 @@ func newFakeClient(objs ...client.Object) client.Client {
 	scheme := runtime.NewScheme()
 	_ = corev1.AddToScheme(scheme)
 
-	builder := fake.NewClientBuilder().WithScheme(scheme)
+	builder := withNameIndex(fake.NewClientBuilder().WithScheme(scheme))
 	if len(objs) > 0 {
 		builder = builder.WithObjects(objs...)
 	}
 	return builder.Build()
+}
+
+// withNameIndex lets the fake client serve the metadata.name field selector conflict detection reads with, which
+// the API server supports for every kind.
+func withNameIndex(builder *fake.ClientBuilder) *fake.ClientBuilder {
+	name := func(obj client.Object) []string { return []string{obj.GetName()} }
+	for _, obj := range []client.Object{&corev1.ConfigMap{}, &corev1.Secret{}, &corev1.Namespace{}} {
+		builder = builder.WithIndex(obj, "metadata.name", name)
+	}
+
+	return builder
 }
 
 func TestApply_BasicSSA(t *testing.T) {
@@ -172,6 +192,7 @@ func TestApply_BasicSSA(t *testing.T) {
 
 			applier := New(Config{
 				Client:          fakeClient,
+				Reader:          fakeClient,
 				RESTMapper:      mapper,
 				Log:             logr.Discard(),
 				ParentNamespace: "default",
@@ -203,6 +224,7 @@ func TestApply_MembershipLabels(t *testing.T) {
 
 	applier := New(Config{
 		Client:          fakeClient,
+		Reader:          fakeClient,
 		RESTMapper:      mapper,
 		Log:             logr.Discard(),
 		ParentNamespace: "default",
@@ -265,6 +287,7 @@ func TestApply_ChangeDetection(t *testing.T) {
 
 			applier := New(Config{
 				Client:          fakeClient,
+				Reader:          fakeClient,
 				RESTMapper:      mapper,
 				Log:             logr.Discard(),
 				ParentNamespace: "default",
@@ -354,6 +377,7 @@ func TestPrune(t *testing.T) {
 
 			applier := New(Config{
 				Client:          fakeClient,
+				Reader:          fakeClient,
 				RESTMapper:      mapper,
 				Log:             logr.Discard(),
 				ParentNamespace: "default",
@@ -396,6 +420,7 @@ func TestProject(t *testing.T) {
 
 	applier := New(Config{
 		Client:          fakeClient,
+		Reader:          fakeClient,
 		RESTMapper:      mapper,
 		Log:             logr.Discard(),
 		ParentNamespace: "default",
@@ -510,6 +535,7 @@ func TestPrune_ParentAnnotationsContributeToPruneScope(t *testing.T) {
 
 	applier := New(Config{
 		Client:          fakeClient,
+		Reader:          fakeClient,
 		RESTMapper:      mapper,
 		Log:             logr.Discard(),
 		ParentNamespace: "default",
@@ -566,6 +592,7 @@ func TestProject_ReturnsUnionMetadata(t *testing.T) {
 
 	applier := New(Config{
 		Client:          fakeClient,
+		Reader:          fakeClient,
 		RESTMapper:      mapper,
 		Log:             logr.Discard(),
 		ParentNamespace: "default",
@@ -634,6 +661,7 @@ func TestPrune_ClusterScopedResource(t *testing.T) {
 
 	applier := New(Config{
 		Client:          fakeClient,
+		Reader:          fakeClient,
 		RESTMapper:      mapper,
 		Log:             logr.Discard(),
 		ParentNamespace: "default",
@@ -1042,6 +1070,7 @@ func TestApply_ConflictDetection(t *testing.T) {
 
 			applier := New(Config{
 				Client:          fakeClient,
+				Reader:          fakeClient,
 				RESTMapper:      mapper,
 				Log:             logr.Discard(),
 				ParentNamespace: "default",
@@ -1127,6 +1156,7 @@ func TestApply_ConflictDetection_ListFailure(t *testing.T) {
 
 	applier := New(Config{
 		Client:          fakeClient,
+		Reader:          fakeClient,
 		RESTMapper:      mapper,
 		Log:             logr.Discard(),
 		ParentNamespace: "default",
@@ -1179,6 +1209,7 @@ func TestApply_ConflictDetection_MultiGVK(t *testing.T) {
 
 	applier := New(Config{
 		Client:          fakeClient,
+		Reader:          fakeClient,
 		RESTMapper:      mapper,
 		Log:             logr.Discard(),
 		ParentNamespace: "default",
@@ -1258,6 +1289,7 @@ func TestPrune_PropagationPolicy(t *testing.T) {
 
 			applier := New(Config{
 				Client:          fakeClient,
+				Reader:          fakeClient,
 				RESTMapper:      newTestRESTMapper(),
 				Log:             logr.Discard(),
 				ParentNamespace: "default",
@@ -1298,6 +1330,7 @@ func TestPrune_TerminatingObjectIsPendingWithoutDelete(t *testing.T) {
 
 	applier := New(Config{
 		Client:          fakeClient,
+		Reader:          fakeClient,
 		RESTMapper:      newTestRESTMapper(),
 		Log:             logr.Discard(),
 		ParentNamespace: "default",
@@ -1308,4 +1341,317 @@ func TestPrune_TerminatingObjectIsPendingWithoutDelete(t *testing.T) {
 	r.NoError(err)
 	r.True(result.HasPruned(), "a terminating object keeps the prune pending")
 	r.Zero(deletes)
+}
+
+// TestApply_ConflictDetection_DoesNotTransferObjectContents covers the OOM when many deployers share a namespace
+// (ocm-project#1412): the check reads only the metadata of the applied objects, never the other members.
+func TestApply_ConflictDetection_DoesNotTransferObjectContents(t *testing.T) {
+	r := require.New(t)
+
+	const (
+		members     = 50
+		payloadSize = 64 << 10
+	)
+
+	parent := newTestParent(schema.GroupVersionKind{Group: "delivery.ocm.software", Version: "v1alpha1", Kind: "TestKind"})
+
+	// Objects of another deployer's ApplySet, as every deployer labels what it applies.
+	payload := strings.Repeat("x", payloadSize)
+	stored := make([]corev1.ConfigMap, 0, members)
+	for i := range members {
+		stored = append(stored, corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("other-%d", i),
+				Namespace: "default",
+				Labels:    map[string]string{ApplysetPartOfLabel: "applyset-other-v1"},
+			},
+			Data: map[string]string{"payload": payload},
+		})
+	}
+
+	var (
+		mu             sync.Mutex
+		listAccept     []string
+		fieldSelectors []string
+		listBytes      int
+	)
+
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		var (
+			body []byte
+			err  error
+		)
+		switch request.Method {
+		case http.MethodGet:
+			accept := request.Header.Get("Accept")
+			selector := request.URL.Query().Get("fieldSelector")
+			body, err = configMapListResponse(accept, byFieldSelector(stored, selector))
+			mu.Lock()
+			listAccept = append(listAccept, accept)
+			fieldSelectors = append(fieldSelectors, selector)
+			listBytes += len(body)
+			mu.Unlock()
+		case http.MethodPatch:
+			body, err = json.Marshal(&corev1.ConfigMap{
+				TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"},
+				ObjectMeta: metav1.ObjectMeta{Name: "cm1", Namespace: "default", ResourceVersion: "1"},
+			}, ocmruntime.JSONOptions)
+		default:
+			http.Error(writer, "unexpected request "+request.Method+" "+request.URL.Path, http.StatusNotImplemented)
+
+			return
+		}
+		if err != nil {
+			http.Error(writer, err.Error(), http.StatusInternalServerError)
+
+			return
+		}
+		writer.Header().Set("Content-Type", "application/json")
+		_, _ = writer.Write(body)
+	}))
+	t.Cleanup(server.Close)
+
+	scheme := runtime.NewScheme()
+	r.NoError(corev1.AddToScheme(scheme))
+	apiClient, err := client.New(&rest.Config{Host: server.URL}, client.Options{Scheme: scheme, Mapper: newTestRESTMapper()})
+	r.NoError(err)
+
+	applier := New(Config{
+		Client:          apiClient,
+		Reader:          apiClient,
+		RESTMapper:      newTestRESTMapper(),
+		Log:             logr.Discard(),
+		ParentNamespace: "default",
+	}, parent)
+
+	result, err := applier.Apply(t.Context(), []Resource{{ID: "cm1", Object: newConfigMap("cm1", "default")}}, ApplyMode{})
+	r.NoError(err)
+	r.Len(result.Applied, 1)
+	r.NoError(result.Applied[0].Error)
+
+	t.Logf("conflict detection read %d bytes for %d members of %d bytes each", listBytes, members, payloadSize)
+
+	r.Len(listAccept, 1)
+	r.Contains(listAccept[0], "as=PartialObjectMetadataList", "conflict detection must request metadata only")
+	r.Equal([]string{"metadata.name=cm1"}, fieldSelectors, "conflict detection must read the applied object alone")
+	r.Less(listBytes, payloadSize, "conflict detection must not read the members' contents")
+}
+
+// byFieldSelector filters items by a metadata.name field selector, as the API server does.
+func byFieldSelector(items []corev1.ConfigMap, selector string) []corev1.ConfigMap {
+	name, ok := strings.CutPrefix(selector, "metadata.name=")
+	if !ok {
+		return items
+	}
+
+	return slices.DeleteFunc(slices.Clone(items), func(item corev1.ConfigMap) bool { return item.Name != name })
+}
+
+// configMapListResponse answers a LIST with metadata only when the client asks for it, as the API server does.
+func configMapListResponse(accept string, items []corev1.ConfigMap) ([]byte, error) {
+	if !strings.Contains(accept, "as=PartialObjectMetadataList") {
+		return json.Marshal(&corev1.ConfigMapList{
+			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMapList"},
+			Items:    items,
+		}, ocmruntime.JSONOptions)
+	}
+
+	list := &metav1.PartialObjectMetadataList{
+		TypeMeta: metav1.TypeMeta{APIVersion: "meta.k8s.io/v1", Kind: "PartialObjectMetadataList"},
+		Items:    make([]metav1.PartialObjectMetadata, 0, len(items)),
+	}
+	for _, item := range items {
+		list.Items = append(list.Items, metav1.PartialObjectMetadata{
+			TypeMeta:   metav1.TypeMeta{APIVersion: "meta.k8s.io/v1", Kind: "PartialObjectMetadata"},
+			ObjectMeta: item.ObjectMeta,
+		})
+	}
+
+	return json.Marshal(list, ocmruntime.JSONOptions)
+}
+
+// TestApply_ConflictDetection_UsesReader covers conflict detection reading the members through Config.Reader.
+func TestApply_ConflictDetection_UsesReader(t *testing.T) {
+	r := require.New(t)
+
+	parentGVK := schema.GroupVersionKind{Group: "delivery.ocm.software", Version: "v1alpha1", Kind: "TestKind"}
+	parent := newTestParent(parentGVK)
+	owner := &testParent{
+		ObjectMeta: metav1.ObjectMeta{Name: "other-instance", Namespace: "default", UID: types.UID("other-parent-uid")},
+		gvk:        parentGVK,
+	}
+
+	existing := newConfigMap("cm1", "default")
+	existing.SetLabels(map[string]string{ApplysetPartOfLabel: ID(owner)})
+	existing.SetUID(types.UID("existing-uid"))
+
+	applier := New(Config{
+		Client:          newFakeClient(),
+		Reader:          newFakeClient(existing),
+		RESTMapper:      newTestRESTMapper(),
+		Log:             logr.Discard(),
+		ParentNamespace: "default",
+	}, parent)
+
+	result, err := applier.Apply(t.Context(), []Resource{{ID: "cm1", Object: newConfigMap("cm1", "default")}}, ApplyMode{})
+	r.NoError(err)
+	r.Len(result.Applied, 1)
+
+	var conflictErr *ApplySetConflictError
+	r.ErrorAs(result.Applied[0].Error, &conflictErr)
+	r.Equal(ID(owner), conflictErr.CurrentApplySetID)
+}
+
+// TestApply_RequiresReader covers Apply refusing to fall back to the possibly cached Client for conflict detection.
+func TestApply_RequiresReader(t *testing.T) {
+	r := require.New(t)
+
+	applier := New(Config{
+		Client:          newFakeClient(),
+		RESTMapper:      newTestRESTMapper(),
+		Log:             logr.Discard(),
+		ParentNamespace: "default",
+	}, newTestParent(schema.GroupVersionKind{Group: "delivery.ocm.software", Version: "v1alpha1", Kind: "TestKind"}))
+
+	_, err := applier.Apply(t.Context(), []Resource{{ID: "cm1", Object: newConfigMap("cm1", "default")}}, ApplyMode{})
+	r.ErrorContains(err, "needs a reader")
+}
+
+// TestApply_ConflictDetection_MemberCache covers conflict detection answered from Config.Members: the cache only
+// spares the read of objects it shows as this ApplySet's own, and Reader decides everything else.
+func TestApply_ConflictDetection_MemberCache(t *testing.T) {
+	parentGVK := schema.GroupVersionKind{Group: "delivery.ocm.software", Version: "v1alpha1", Kind: "TestKind"}
+	parent := newTestParent(parentGVK)
+	other := &testParent{
+		ObjectMeta: metav1.ObjectMeta{Name: "other-instance", Namespace: "default", UID: types.UID("other-parent-uid")},
+		gvk:        parentGVK,
+	}
+	member := func(owner string) *unstructured.Unstructured {
+		cm := newConfigMap("cm1", "default")
+		cm.SetLabels(map[string]string{ApplysetPartOfLabel: owner})
+		cm.SetUID(types.UID("existing-uid"))
+		return cm
+	}
+
+	tests := map[string]struct {
+		members     fakeMembers
+		live        []client.Object
+		liveErr     error
+		wantOwner   string
+		wantErr     string
+		wantByNames int
+	}{
+		"reads the applied object by name while the cache has not synced the kind": {
+			live:        []client.Object{member(ID(other))},
+			wantOwner:   ID(other),
+			wantByNames: 1,
+		},
+		"reads the applied object by name when the cache fails": {
+			members:     fakeMembers{synced: true, err: errors.New("cache failed")},
+			live:        []client.Object{member(ID(other))},
+			wantOwner:   ID(other),
+			wantByNames: 1,
+		},
+		"reads nothing for an object the cache shows as its own": {
+			members: fakeMembers{synced: true, objects: []client.Object{member(ID(parent))}},
+			liveErr: errors.New("must not read"),
+		},
+		"confirms a conflict the cache reports": {
+			members:     fakeMembers{synced: true, objects: []client.Object{member(ID(other))}},
+			live:        []client.Object{member(ID(other))},
+			wantOwner:   ID(other),
+			wantByNames: 1,
+		},
+		"drops a cached conflict the object no longer has": {
+			members:     fakeMembers{synced: true, objects: []client.Object{member(ID(other))}},
+			live:        []client.Object{member(ID(parent))},
+			wantByNames: 1,
+		},
+		"drops a cached conflict with a deleted object": {
+			members:     fakeMembers{synced: true, objects: []client.Object{member(ID(other))}},
+			wantByNames: 1,
+		},
+		"finds a member another ApplySet created after the cache last saw the kind": {
+			members:     fakeMembers{synced: true},
+			live:        []client.Object{member(ID(other))},
+			wantOwner:   ID(other),
+			wantByNames: 1,
+		},
+		"fails when Reader cannot read an object the cache does not show as its own": {
+			members: fakeMembers{synced: true, objects: []client.Object{member(ID(other))}},
+			liveErr: errors.New("forbidden"),
+			wantErr: "forbidden",
+		},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			r := require.New(t)
+
+			var mu sync.Mutex
+			lists, byNames := 0, 0
+			scheme := runtime.NewScheme()
+			r.NoError(corev1.AddToScheme(scheme))
+			reader := withNameIndex(fake.NewClientBuilder().WithScheme(scheme)).WithObjects(tt.live...).
+				WithInterceptorFuncs(interceptor.Funcs{
+					List: func(ctx context.Context, c client.WithWatch, list client.ObjectList, opts ...client.ListOption) error {
+						listOpts := &client.ListOptions{}
+						listOpts.ApplyOptions(opts)
+						mu.Lock()
+						if listOpts.FieldSelector != nil {
+							byNames++
+						} else {
+							lists++
+						}
+						mu.Unlock()
+						if tt.liveErr != nil {
+							return tt.liveErr
+						}
+						return c.List(ctx, list, opts...)
+					},
+				}).
+				Build()
+
+			applier := New(Config{
+				Client:          newFakeClient(tt.live...),
+				Reader:          reader,
+				Members:         tt.members,
+				RESTMapper:      newTestRESTMapper(),
+				Log:             logr.Discard(),
+				ParentNamespace: "default",
+			}, parent)
+
+			result, err := applier.Apply(t.Context(), []Resource{{ID: "cm1", Object: newConfigMap("cm1", "default")}}, ApplyMode{})
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.Len(result.Applied, 1)
+			if tt.wantOwner != "" {
+				var conflictErr *ApplySetConflictError
+				r.ErrorAs(result.Applied[0].Error, &conflictErr)
+				r.Equal(tt.wantOwner, conflictErr.CurrentApplySetID)
+			} else {
+				r.NoError(result.Applied[0].Error)
+			}
+			r.Zero(lists, "conflict detection must never list every member of the kind")
+			r.Equal(tt.wantByNames, byNames, "live reads by name")
+		})
+	}
+}
+
+// fakeMembers stands in for a member cache that has or has not synced.
+type fakeMembers struct {
+	synced  bool
+	err     error
+	objects []client.Object
+}
+
+func (f fakeMembers) ListSynced(ctx context.Context, list *metav1.PartialObjectMetadataList, opts ...client.ListOption) (bool, error) {
+	if f.err != nil || !f.synced {
+		return false, f.err
+	}
+
+	return true, newFakeClient(f.objects...).List(ctx, list, opts...)
 }

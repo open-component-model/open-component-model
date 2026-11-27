@@ -25,6 +25,7 @@ import (
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
+	crcache "sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -85,6 +86,9 @@ type Reconciler struct {
 
 	// apiReader reads service accounts uncached to avoid a cluster-wide informer for them.
 	apiReader client.Reader
+	// ApplySetMembers answers ApplySet conflict detection from a member cache. SetupWithManager creates one if it is
+	// nil; share one between the reconcilers so that every applied kind has a single informer.
+	ApplySetMembers applyset.MemberLister
 	// restConfig is the base config impersonated clients are derived from.
 	restConfig *rest.Config
 
@@ -132,6 +136,11 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, con
 
 	r.apiReader = mgr.GetAPIReader()
 	r.restConfig = mgr.GetConfig()
+	if r.ApplySetMembers == nil {
+		if r.ApplySetMembers, err = NewApplySetMemberCache(mgr); err != nil {
+			return err
+		}
+	}
 
 	// Build index for deployers that reference a resource to get notified about resource changes.
 	const fieldName = ".spec.resourceRef"
@@ -279,12 +288,12 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer deliveryv1a
 	logger := log.FromContext(ctx).WithValues("deployer", deployer.GetName(), "namespace", deployer.GetNamespace())
 
 	// The projection only reads the parent's annotations, so it does not depend on the apply client.
-	metadata, err := r.createApplySet(r.GetClient(), deployer, logger).Project(nil)
+	metadata, err := r.createApplySet(r.GetClient(), r.apiReader, deployer, logger).Project(nil)
 	if err != nil {
 		return false, fmt.Errorf("failed to project ApplySet: %w", err)
 	}
 
-	applyClient, err := r.applyClient(ctx, deployer)
+	applyClient, applyReader, err := r.applyClient(ctx, deployer)
 	if err != nil {
 		if r.Namespaced && apierrors.IsNotFound(err) {
 			if blocked, blockErr := r.blocksOrphanWithoutServiceAccount(ctx, deployer, err); blocked {
@@ -309,7 +318,7 @@ func (r *Reconciler) pruneWithApplySet(ctx context.Context, deployer deliveryv1a
 		return true, nil
 	}
 
-	set := r.createApplySet(applyClient, deployer, logger)
+	set := r.createApplySet(applyClient, applyReader, deployer, logger)
 
 	logger.Info("pruning ApplySet", "scope", metadata.PruneScope())
 	result, err := set.Prune(ctx, applyset.PruneOptions{
@@ -870,13 +879,36 @@ func buildResourceCacheKey(
 	return key
 }
 
-func (r *Reconciler) createApplySet(c client.Client, deployer deliveryv1alpha1.DeployerObject, logger logr.Logger) *applyset.ApplySet {
+// NewApplySetMemberCache creates the cache ApplySet conflict detection reads the members from and adds it to mgr.
+func NewApplySetMemberCache(mgr ctrl.Manager) (*applyset.MemberCache, error) {
+	members, err := applyset.NewMemberCache(mgr.GetConfig(), applyset.MemberCacheOptions{
+		Cache: crcache.Options{
+			HTTPClient: mgr.GetHTTPClient(),
+			Scheme:     mgr.GetScheme(),
+			Mapper:     mgr.GetRESTMapper(),
+		},
+		Log: mgr.GetLogger().WithName("applyset-members"),
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err := mgr.Add(members); err != nil {
+		return nil, fmt.Errorf("failed to add the ApplySet member cache to the manager: %w", err)
+	}
+
+	return members, nil
+}
+
+func (r *Reconciler) createApplySet(c client.Client, reader client.Reader, deployer deliveryv1alpha1.DeployerObject, logger logr.Logger) *applyset.ApplySet {
 	cfg := applyset.Config{
 		Client:          c,
+		Reader:          reader,
+		Members:         r.ApplySetMembers,
 		RESTMapper:      r.resourceRESTMapper,
 		Log:             logger,
 		ParentNamespace: deployer.GetNamespace(),
 	}
+
 	return applyset.New(cfg, deployer)
 }
 
@@ -891,14 +923,14 @@ func (r *Reconciler) createApplySet(c client.Client, deployer deliveryv1alpha1.D
 func (r *Reconciler) applyWithApplySet(ctx context.Context, resource *deliveryv1alpha1.Resource, deployer deliveryv1alpha1.DeployerObject, objs []*unstructured.Unstructured) error {
 	logger := log.FromContext(ctx).WithValues("deployer", deployer.GetName(), "namespace", deployer.GetNamespace())
 
-	applyClient, err := r.applyClient(ctx, deployer)
+	applyClient, applyReader, err := r.applyClient(ctx, deployer)
 	if err != nil {
 		return err
 	}
 
 	// Use the deployer as the ApplySet parent
 	// This allows us to track all resources deployed by this deployer
-	set := r.createApplySet(applyClient, deployer, logger)
+	set := r.createApplySet(applyClient, applyReader, deployer, logger)
 
 	logger.Info("adding objects to ApplySet", "count", len(objs))
 
