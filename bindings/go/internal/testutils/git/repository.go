@@ -1,6 +1,6 @@
 // Package git builds throwaway Git repositories for tests.
 //
-// It is a test-only helper (see the ocm.software/open-component-model/bindings/go/testutils
+// It is a test-only helper (see the ocm.software/open-component-model/bindings/go/internal/testutils
 // package doc): production code must not import it.
 package git
 

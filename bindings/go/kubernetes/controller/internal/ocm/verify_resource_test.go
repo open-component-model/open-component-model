@@ -26,11 +26,11 @@ import (
 
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	testgit "ocm.software/open-component-model/bindings/go/internal/testutils/git"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/ocm"
 	"ocm.software/open-component-model/bindings/go/kubernetes/controller/internal/setup"
 	"ocm.software/open-component-model/bindings/go/plugin/manager"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
 // content is what every fake source serves.

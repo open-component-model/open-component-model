@@ -18,8 +18,8 @@ import (
 	identityv1 "ocm.software/open-component-model/bindings/go/git/spec/identity/v1"
 	inputspec "ocm.software/open-component-model/bindings/go/git/spec/input"
 	inputv1 "ocm.software/open-component-model/bindings/go/git/spec/input/v1"
+	testgit "ocm.software/open-component-model/bindings/go/internal/testutils/git"
 	"ocm.software/open-component-model/bindings/go/runtime"
-	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
 )
 
 func TestProcessResourceSnapshots(t *testing.T) {

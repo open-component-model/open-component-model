@@ -8,7 +8,7 @@ import (
 	"github.com/go-git/go-git/v6/plumbing/object"
 	"github.com/stretchr/testify/require"
 
-	testgit "ocm.software/open-component-model/bindings/go/testutils/git"
+	testgit "ocm.software/open-component-model/bindings/go/internal/testutils/git"
 )
 
 func commitCount(t *testing.T, path string) int {

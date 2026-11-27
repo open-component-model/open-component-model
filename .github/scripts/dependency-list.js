@@ -14,7 +14,22 @@ const BINDING_PREFIX = "ocm.software/open-component-model/bindings/go/";
 // so they are excluded from the generated production dependency docs. The
 // "testutils-test-only" depguard rule keeps them out of non-test code; the
 // per-binding allow lists only grant their test files access.
-const TEST_ONLY_BINDINGS = new Set(["testutils"]);
+const TEST_ONLY_BINDINGS = new Set(["internal/testutils"]);
+
+/**
+ * Report whether a binding name is a test-only helper. A name matches when it
+ * equals an entry of TEST_ONLY_BINDINGS or is a subpackage of one, so a scoped
+ * entry such as internal/testutils/git is also treated as test-only.
+ *
+ * @param {string} name
+ * @returns {boolean}
+ */
+export function isTestOnlyBinding(name) {
+    for (const entry of TEST_ONLY_BINDINGS) {
+        if (name === entry || name.startsWith(entry + "/")) return true;
+    }
+    return false;
+}
 export const GENERATED_TABLE_START = "<!-- GENERATED PACKAGES TABLE:START (run 'task tools:dependency-list/generate' to update) -->";
 export const GENERATED_TABLE_END = "<!-- GENERATED PACKAGES TABLE:END -->";
 // Matches the marker lines regardless of their annotation text.
@@ -46,12 +61,12 @@ export function parseDepguardRules(configPath) {
         const binding = match[1];
         // A test-only helper is never a production binding, even if it gains its own
         // depguard rule, so it must not become a key in the dependency graph.
-        if (TEST_ONLY_BINDINGS.has(binding)) continue;
+        if (isTestOnlyBinding(binding)) continue;
         const allows = (rule.allow ?? [])
             .filter((/** @type {string} */ a) => a.startsWith(BINDING_PREFIX))
             .map((/** @type {string} */ a) => a.slice(BINDING_PREFIX.length))
             .filter((/** @type {string} */ a) => a !== binding)
-            .filter((/** @type {string} */ a) => !TEST_ONLY_BINDINGS.has(a));
+            .filter((/** @type {string} */ a) => !isTestOnlyBinding(a));
 
         deps.set(binding, allows.sort());
     }
