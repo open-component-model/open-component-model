@@ -413,8 +413,10 @@ func verifyChainWithOptionalAnchor(
 // specification designates as the issuer description and which OCM v1 writes
 // when signing with a certificate, as well as the leaf's X.509 Issuer, the DN of
 // the CA that directly signed the leaf. The Subject match follows OCM v1: the
-// declared issuer must cover the Subject, so extra attributes are accepted, but
-// only when the Subject has a common name; otherwise any issuer would cover it.
+// declared issuer must cover the Subject, so extra attributes are accepted and
+// Subject attributes without a dedicated pkix.Name field (emailAddress, UID, DC)
+// may be left out, but only when the Subject has a common name; otherwise any
+// issuer would cover it.
 // Extra attributes are not vouched for by the certificate. The check is skipped
 // when the Issuer field is empty.
 func verifyIssuerForLeafCert(signed descruntime.Signature, leaf *x509.Certificate) error {
@@ -448,13 +450,18 @@ func verifyIssuerForLeafCert(signed descruntime.Signature, leaf *x509.Certificat
 }
 
 // issuerForLeafCert renders the leaf's Subject as the signature issuer,
-// mirroring OCM v1. The candidate is run through verifyIssuerForLeafCert itself,
-// and "" is returned when it does not round-trip (e.g. attribute values Go can
-// only render as hex, or escaped trailing spaces the verifier trims), so Sign
-// never records an issuer that this handler's own Verify rejects.
+// mirroring OCM v1. The candidate must parse back to the same DN and pass
+// verifyIssuerForLeafCert itself; otherwise "" is returned (e.g. attribute values
+// Go can only render as hex, or escaped trailing spaces the verifier trims), so
+// Sign never records an issuer that misstates the Subject or that this handler's
+// own Verify rejects.
 func issuerForLeafCert(leaf *x509.Certificate) string {
 	iss := leaf.Subject.String()
 	if strings.TrimSpace(iss) == "" {
+		return ""
+	}
+	parsed, err := rfc2253.Parse(iss)
+	if err != nil || rfc2253.Equal(parsed, leaf.Subject) != nil {
 		return ""
 	}
 	sig := descruntime.Signature{Signature: descruntime.SignatureInfo{Issuer: iss}}

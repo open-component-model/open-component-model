@@ -1437,6 +1437,15 @@ func TestVerifyIssuerCoveringNeedsSubjectCommonName(t *testing.T) {
 			issuer:  "CN=build-bot,O=Acme,OU=Engineering",
 		},
 		{
+			name: "covering issuer may omit subject attributes without a dedicated name field",
+			subject: pkix.Name{CommonName: "build-bot", Organization: []string{"Acme"}, ExtraNames: []pkix.AttributeTypeAndValue{
+				{Type: []int{1, 2, 840, 113549, 1, 9, 1}, Value: "a@b.c"},
+				{Type: []int{0, 9, 2342, 19200300, 100, 1, 1}, Value: "jdoe"},
+				{Type: []int{0, 9, 2342, 19200300, 100, 1, 25}, Value: "example"},
+			}},
+			issuer: "CN=build-bot,O=Acme",
+		},
+		{
 			name:    "exact issuer accepted for a subject without a common name",
 			subject: pkix.Name{Organization: []string{"Acme"}},
 			issuer:  "O=Acme",

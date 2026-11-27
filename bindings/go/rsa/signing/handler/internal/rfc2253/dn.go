@@ -141,13 +141,21 @@ func shortOrOID(s string) (asn1.ObjectIdentifier, bool) {
 
 // Equal reports structural equality of two distinguished names.
 // It calls Match in both directions, meaning that every attribute in a
-// is present in b, and every attribute in b is present in a.
+// is present in b, and every attribute in b is present in a. Unlike Match,
+// it also compares the non-standard attributes of names parsed from a
+// certificate, which only carry them in Names.
 // Equal ignores ordering differences allowed by RFC 2253.
 func Equal(a, b pkix.Name) error {
 	if err := Match(a, b); err != nil {
 		return err
 	}
-	return Match(b, a)
+	if err := Match(b, a); err != nil {
+		return err
+	}
+	if err := containsAttributes(extraAttributes(a), extraAttributes(b)); err != nil {
+		return err
+	}
+	return containsAttributes(extraAttributes(b), extraAttributes(a))
 }
 
 // Match reports whether name n satisfies all constraints in pattern p.
@@ -155,9 +163,10 @@ func Equal(a, b pkix.Name) error {
 // All scalar fields (CommonName, SerialNumber) must match exactly if set
 // in p. All slice fields (Country, Province, Locality, PostalCode,
 // StreetAddress, Organization, OrganizationalUnit) must contain at least
-// the values listed in p. Non-standard attributes of p (its ExtraNames or,
-// for names parsed from a certificate, its Names) must all be present in n
-// with matching OIDs and values.
+// the values listed in p. ExtraNames in p must all be present in n with
+// matching OIDs and values, whether n carries them in ExtraNames or, for a
+// name parsed from a certificate, in Names. Like OCM v1, Match does not
+// require the Names-only attributes of a certificate-parsed p.
 //
 // Match returns nil if n covers p, otherwise a descriptive error.
 // It does not require n and p to be identical; that check is provided by Equal.
@@ -188,9 +197,13 @@ func Match(n, p pkix.Name) error {
 		}
 	}
 
-	have := extraAttributes(n)
+	return containsAttributes(extraAttributes(n), p.ExtraNames)
+}
+
+// containsAttributes reports whether every attribute in want is present in have.
+func containsAttributes(have, want []pkix.AttributeTypeAndValue) error {
 outer:
-	for _, w := range extraAttributes(p) {
+	for _, w := range want {
 		for _, h := range have {
 			if w.Type.Equal(h.Type) && w.Value == h.Value {
 				continue outer

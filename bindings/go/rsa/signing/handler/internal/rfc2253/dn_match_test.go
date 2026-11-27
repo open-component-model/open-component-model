@@ -76,6 +76,10 @@ func TestMatch_ExtraNamesAgainstParsedCertificateNames(t *testing.T) {
 	other, err := dn.Parse("CN=x,1.2.840.113549.1.9.1=other@b.c")
 	require.NoError(t, err)
 	require.ErrorContains(t, dn.Match(cert, other), "missing extra attribute")
+
+	bare, err := dn.Parse("CN=x")
+	require.NoError(t, err)
+	require.NoError(t, dn.Match(bare, cert))
 }
 
 func TestEqual_CertificateExtraAttributesAreSymmetric(t *testing.T) {
