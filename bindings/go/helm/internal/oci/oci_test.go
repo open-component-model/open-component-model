@@ -425,4 +425,8 @@ func TestCopyChartToOCILayout_ReproducibleDigest(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, first.Desc.Digest, second.Desc.Digest)
+
+	// Equal digests alone would also pass for any other constant value.
+	_, manifest := readManifest(t, ctx, first)
+	assert.Equal(t, "1970-01-01T00:00:00Z", manifest.Annotations[ociImageSpecV1.AnnotationCreated])
 }
