@@ -757,12 +757,3 @@ linters:
           deny:
             - pkg: "ocm.software/open-component-model/bindings/go/internal/testutils"
               desc: "testutils is a test-only helper library; import it only from _test.go files"
-        # Limits what the testutils tree itself may import to the standard library and go-git.
-        internal-testutils:
-          list-mode: lax
-          files: ["**/bindings/go/internal/testutils/**"]
-          allow:
-            - "ocm.software/open-component-model/bindings/go/internal/testutils"
-          deny:
-            - pkg: "ocm.software/open-component-model/bindings/go/"
-              desc: "testutils must not import bindings outside its allowed set; add a binding here only when a fixture needs it"
