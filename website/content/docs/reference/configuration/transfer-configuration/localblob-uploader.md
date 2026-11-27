@@ -63,6 +63,10 @@ in a single `FileCleanup` step after all other steps of the transfer have
 finished. Plan free disk space for the **sum** of all resources in the transfer
 that are downloaded to a temporary file, not only for the largest one.
 
+If a step fails or the transfer is cancelled, the `FileCleanup` step does not
+run. The temporary files written up to that point stay in the temporary
+directory and are not reused by the next run; remove them by hand.
+
 Repeating a transfer does not upload a streamed local blob again when the
 target already stores it. A resource that goes through a temporary file is
 downloaded from its source again on every run.

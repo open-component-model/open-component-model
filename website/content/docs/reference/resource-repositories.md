@@ -148,8 +148,10 @@ Handles resources served over plain HTTP or HTTPS.
 | Digest Processing | Yes       |
 
 {{< callout context="note" >}}
-Upload is not supported because a plain HTTP endpoint has no standardized write API. The transfer downloads the content
-and stores it as a [`LocalBlob/v1`]({{< relref "input-and-access-types.md" >}}#localblobv1) in the target repository, regardless of the requested upload type.
+Upload is not supported because a plain HTTP endpoint has no standardized write API. A transfer that copies the
+resource stores it as a [`LocalBlob/v1`]({{< relref "input-and-access-types.md" >}}#localblobv1) in the target
+repository. To re-host the content on an HTTP server instead, keep the resource by reference and use the
+[HTTP uploader]({{< relref "docs/reference/configuration/transfer-configuration/http-uploader.md" >}}).
 {{< /callout >}}
 
 ### Credential Resolution
@@ -174,8 +176,11 @@ See [Credential Consumer Identities: Wget / HTTP]({{< relref "credential-consume
 ### Download Behavior
 
 Performs the request described by the access specification (`verb`, `header`, `body`, `noRedirect`) and returns a blob
-that streams the response body. Only 2xx responses are accepted. Nothing is buffered in memory or on disk, and there is
-no size limit by default. The request is sent when the blob is read, and every read sends it again; for methods other
+that streams the response body. Only 2xx responses are accepted. The download itself buffers nothing in memory or on
+disk, and there is no size limit by default. A transfer that copies the resource into the target as a local blob writes
+it to a temporary file first; see
+[Temporary Disk Usage]({{< relref "docs/reference/configuration/transfer-configuration/localblob-uploader.md#temporary-disk-usage" >}}).
+The request is sent when the blob is read, and every read sends it again; for methods other
 than `GET` and `HEAD` a second read is refused, because repeating the request may have side effects. A reader closed
 before it reads any content sends no request. Size, media type, and advertised checksum are learned once: from a
 `HEAD` request when they are needed before the first read (`GET` and `HEAD` downloads only), otherwise from the first
