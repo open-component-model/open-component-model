@@ -5,10 +5,9 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"os"
 	"time"
 
-	"golang.org/x/term"
+	"ocm.software/open-component-model/bindings/go/cli/internal/render/terminal"
 )
 
 // State represents the lifecycle state of a tracked item.
@@ -153,7 +152,7 @@ func NewTracker[T any](ctx context.Context, out io.Writer, factory ...Visualizer
 	}
 	return &Tracker[T]{
 		out:        out,
-		isTerminal: useTerminalVisualizer(ctx, f != nil, isTerminal(out)),
+		isTerminal: useTerminalVisualizer(ctx, f != nil, terminal.IsTerminal(out)),
 		factory:    f,
 	}
 }
@@ -207,13 +206,6 @@ func (t *Tracker[T]) interceptSlog(vis Visualizer[T]) {
 	t.logBuffer = &SyncBuffer{}
 	slog.SetDefault(slog.New(newBufferedHandler(t.logBuffer, t.previousLogger.Handler())))
 	lba.SetLogBuffer(t.logBuffer)
-}
-
-func isTerminal(out io.Writer) bool {
-	if f, ok := out.(*os.File); ok {
-		return term.IsTerminal(int(f.Fd()))
-	}
-	return false
 }
 
 // Stop restores the original slog logger. Must be called when done.

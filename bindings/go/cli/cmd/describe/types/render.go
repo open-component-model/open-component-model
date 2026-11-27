@@ -18,6 +18,7 @@ import (
 	"golang.org/x/term"
 
 	"ocm.software/open-component-model/bindings/go/cli/internal/flags/enum"
+	"ocm.software/open-component-model/bindings/go/cli/internal/render/terminal"
 	"ocm.software/open-component-model/bindings/go/cli/internal/subsystem"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
@@ -237,7 +238,7 @@ func renderTable(cmd *cobra.Command, w table.Writer) error {
 		return fmt.Errorf("unknown output format: %s", format)
 	}
 
-	if isTerminal(out) {
+	if terminal.IsTerminal(out) {
 		return renderWithPager(cmd, rendered)
 	}
 
@@ -249,20 +250,11 @@ func renderTable(cmd *cobra.Command, w table.Writer) error {
 func renderFieldDetails(cmd *cobra.Command, schema *jsonschema.Schema, info schemaInfo) error {
 	out := cmd.OutOrStdout()
 	content := formatFieldDetails(schema, info)
-	if isTerminal(out) {
+	if terminal.IsTerminal(out) {
 		return renderWithPager(cmd, content)
 	}
 	_, err := io.WriteString(out, content)
 	return err
-}
-
-// isTerminal checks if the writer is connected to a terminal.
-func isTerminal(w io.Writer) bool {
-	f, ok := w.(*os.File)
-	if !ok {
-		return false
-	}
-	return term.IsTerminal(int(f.Fd()))
 }
 
 var pager = sync.OnceValue(func() string {
@@ -273,7 +265,7 @@ var pager = sync.OnceValue(func() string {
 func renderWithPager(cmd *cobra.Command, rendered string) error {
 	out := cmd.OutOrStdout()
 
-	if !isTerminal(out) {
+	if !terminal.IsTerminal(out) {
 		_, err := io.WriteString(out, rendered)
 		return err
 	}

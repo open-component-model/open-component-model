@@ -27,6 +27,9 @@ type RendererOptions[T cmp.Ordered] struct {
 	Roots []T
 	// TableStyle allows customizing the go-pretty table style used by the renderer.
 	TableStyle table.Style
+	// Headerless suppresses the header row entirely (including the NESTING
+	// heading), for a pure label tree with no column titles.
+	Headerless bool
 }
 
 // RendererOption is a function that modifies the RendererOptions.
@@ -43,5 +46,13 @@ func WithRoots[T cmp.Ordered](roots ...T) RendererOption[T] {
 func WithHeader[T cmp.Ordered](header ...string) RendererOption[T] {
 	return func(opts *RendererOptions[T]) {
 		opts.Header = header
+	}
+}
+
+// WithoutHeader suppresses the header row entirely, rendering a pure label tree
+// with no column headings (not even NESTING).
+func WithoutHeader[T cmp.Ordered]() RendererOption[T] {
+	return func(opts *RendererOptions[T]) {
+		opts.Headerless = true
 	}
 }
