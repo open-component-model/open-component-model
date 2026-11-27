@@ -58,6 +58,9 @@ type compiledExtract struct {
 	mode       extractMode
 	fields     []extractedField // sorted by field name; byResources / byComponents modes
 	expression cel.Program      // expression mode
+	// reads holds the variables the field expressions read, so a binding that
+	// no expression reads is never computed.
+	reads map[string]bool
 }
 
 // Compile compiles all selector and extraction expressions of spec once.
@@ -113,7 +116,7 @@ func compileSelector(_ context.Context, env *cel.Env, stage string, sel *v1alpha
 		matchLabels:   sel.MatchLabels,
 	}
 	if sel.Expression != "" {
-		prog, err := compileProgram(env, sel.Expression)
+		prog, _, err := compileProgram(env, sel.Expression)
 		if err != nil {
 			return nil, selectorErrorf(stage, "failed to compile expression: %w", err)
 		}
@@ -121,6 +124,17 @@ func compileSelector(_ context.Context, env *cel.Env, stage string, sel *v1alpha
 	}
 	return cs, nil
 }
+
+// Bindings computed by the controller for the per-element extraction modes.
+const (
+	bindingReferencePath    = "referencePath"
+	bindingResourceIdentity = "resourceIdentity"
+)
+
+var (
+	identityType      = cel.MapType(cel.StringType, cel.StringType)
+	referencePathType = cel.ListType(identityType)
+)
 
 func compileExtract(ctx context.Context, base *cel.Env, extract *v1alpha1.Extract) (*compiledExtract, error) {
 	if extract == nil {
@@ -138,31 +152,39 @@ func compileExtract(ctx context.Context, base *cel.Env, extract *v1alpha1.Extrac
 
 	switch {
 	case extract.ByResources != nil:
-		env, err := base.Extend(cel.Variable("component", cel.DynType), cel.Variable("resource", cel.DynType))
+		env, err := base.Extend(
+			cel.Variable("component", cel.DynType),
+			cel.Variable("resource", cel.DynType),
+			cel.Variable(bindingReferencePath, referencePathType),
+			cel.Variable(bindingResourceIdentity, identityType),
+		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to extend base CEL environment: %w", err)
 		}
-		fields, err := compileFields(ctx, env, extract.ByResources)
+		fields, reads, err := compileFields(ctx, env, extract.ByResources)
 		if err != nil {
 			return nil, err
 		}
-		return &compiledExtract{mode: extractByResources, fields: fields}, nil
+		return &compiledExtract{mode: extractByResources, fields: fields, reads: reads}, nil
 	case extract.ByComponents != nil:
-		env, err := base.Extend(cel.Variable("component", cel.DynType))
+		env, err := base.Extend(
+			cel.Variable("component", cel.DynType),
+			cel.Variable(bindingReferencePath, referencePathType),
+		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to extend base CEL environment: %w", err)
 		}
-		fields, err := compileFields(ctx, env, extract.ByComponents)
+		fields, reads, err := compileFields(ctx, env, extract.ByComponents)
 		if err != nil {
 			return nil, err
 		}
-		return &compiledExtract{mode: extractByComponents, fields: fields}, nil
+		return &compiledExtract{mode: extractByComponents, fields: fields, reads: reads}, nil
 	default:
 		env, err := base.Extend(cel.Variable("components", cel.DynType))
 		if err != nil {
 			return nil, fmt.Errorf("failed to extend base CEL environment: %w", err)
 		}
-		prog, err := compileProgram(env, extract.Expression)
+		prog, _, err := compileProgram(env, extract.Expression)
 		if err != nil {
 			return nil, extractErrorf("", "failed to compile expression: %w", err)
 		}
@@ -170,32 +192,41 @@ func compileExtract(ctx context.Context, base *cel.Env, extract *v1alpha1.Extrac
 	}
 }
 
-// compileFields compiles one CEL expression per map value. Field names are
-// processed in lexicographic order so compilation errors are deterministic.
-func compileFields(_ context.Context, env *cel.Env, exprs map[string]string) ([]extractedField, error) {
+// compileFields compiles one CEL expression per map value and returns the
+// variables they read. Field names are processed in lexicographic order so
+// compilation errors are deterministic.
+func compileFields(_ context.Context, env *cel.Env, exprs map[string]string) ([]extractedField, map[string]bool, error) {
 	fields := make([]extractedField, 0, len(exprs))
+	reads := map[string]bool{}
 	for _, name := range slices.Sorted(maps.Keys(exprs)) {
-		prog, err := compileProgram(env, exprs[name])
+		prog, ast, err := compileProgram(env, exprs[name])
 		if err != nil {
-			return nil, extractErrorf(name, "failed to compile expression: %w", err)
+			return nil, nil, extractErrorf(name, "failed to compile expression: %w", err)
+		}
+		// The checker resolves every identifier to a reference; function
+		// overloads have references too, but no variable name.
+		for _, ref := range ast.NativeRep().ReferenceMap() {
+			if ref.Name != "" {
+				reads[ref.Name] = true
+			}
 		}
 		fields = append(fields, extractedField{name: name, prog: prog})
 	}
-	return fields, nil
+	return fields, reads, nil
 }
 
-func compileProgram(env *cel.Env, expr string) (cel.Program, error) {
+func compileProgram(env *cel.Env, expr string) (cel.Program, *cel.Ast, error) {
 	ast, issues := env.Compile(expr)
 	if issues.Err() != nil {
-		return nil, issues.Err()
+		return nil, nil, issues.Err()
 	}
 	prog, err := env.Program(ast,
 		cel.InterruptCheckFrequency(celInterruptCheckFrequency),
 		cel.CostLimit(celCostLimit))
 	if err != nil {
-		return nil, fmt.Errorf("failed to build CEL program %q: %w", expr, err)
+		return nil, nil, fmt.Errorf("failed to build CEL program %q: %w", expr, err)
 	}
-	return prog, nil
+	return prog, ast, nil
 }
 
 // matches reports whether the element with the given identity and labels

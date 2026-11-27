@@ -133,6 +133,7 @@ func TestTraverse_ResolvesCompleteGraph(t *testing.T) {
 
 	graph, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, resolver)
 	r.NoError(err)
+	r.Equal(ComponentKey{Name: "root", Version: "1.0.0"}, graph.Root, "the traversal root is recorded for reference paths")
 	r.Equal([]ComponentKey{
 		{Name: "a", Version: "1.0.0"},
 		{Name: "b", Version: "1.0.0"},
@@ -278,6 +279,48 @@ func TestTraverse_NilDescriptorIsAFailure(t *testing.T) {
 	graph, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, resolver)
 	r.Nil(graph)
 	r.ErrorContains(err, "resolved descriptor is nil")
+}
+
+func TestTraverse_DescriptorOfAnotherVersionIsAFailure(t *testing.T) {
+	tests := []struct {
+		name    string
+		holder  ComponentKey // the key the repository serves the descriptor under
+		holds   *descriptor.Descriptor
+		parents []*descriptor.Descriptor
+		wantErr string
+	}{
+		{
+			name:    "root",
+			holder:  ComponentKey{Name: "root", Version: "1.0.0"},
+			holds:   newDescriptor("root", "v1.0.0"),
+			wantErr: "failed to resolve component name=root,version=1.0.0: repository returned component version root:v1.0.0",
+		},
+		{
+			name:    "reference target",
+			holder:  ComponentKey{Name: "child", Version: "1.0.0"},
+			holds:   newDescriptor("child", "v1.0.0"),
+			parents: []*descriptor.Descriptor{newDescriptor("root", "1.0.0", withReferences(newReference("child", "child", "1.0.0")))},
+			wantErr: "failed to resolve component name=child,version=1.0.0: repository returned component version child:v1.0.0",
+		},
+		{
+			name:    "reference target of another name",
+			holder:  ComponentKey{Name: "child", Version: "1.0.0"},
+			holds:   newDescriptor("other", "1.0.0"),
+			parents: []*descriptor.Descriptor{newDescriptor("root", "1.0.0", withReferences(newReference("child", "child", "1.0.0")))},
+			wantErr: "repository returned component version other:1.0.0",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			resolver := newFakeResolver(tt.parents...)
+			resolver.descs[tt.holder] = tt.holds
+
+			graph, err := Traverse(t.Context(), ComponentKey{Name: "root", Version: "1.0.0"}, resolver)
+			r.Nil(graph)
+			r.ErrorContains(err, tt.wantErr)
+		})
+	}
 }
 
 func TestGraphDigestsComplete(t *testing.T) {
