@@ -119,5 +119,9 @@
 // # Wire types
 //
 // The access scheme registers Git/v1, Git, git, git/v1alpha1 and Git/v1alpha1.
+// OCM v1 recorded the digest of a files-only archive for git, git/v1alpha1 and Git/v1alpha1.
+// It carries file owners, so v2 cannot reproduce it. A digest mismatch for these types fails
+// with an error that names the legacy access type. v2 also records digests for these types and
+// cannot tell them from v1 ones, so the error notes that the content may simply not match.
 // The input scheme registers Git/v1, Git, git and git/v1, matching the input types OCM v1 accepted.
 package git

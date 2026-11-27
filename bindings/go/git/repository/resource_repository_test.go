@@ -111,6 +111,68 @@ func TestDownloadResourceVerifiesWhileStreaming(t *testing.T) {
 	r.Empty(files)
 }
 
+// OCM v1 records the digest of a files-only archive for the legacy spellings, which v2
+// cannot reproduce, so a mismatch names the legacy type. Git/v1 keeps its plain error.
+func TestLegacyAccessDigestMismatchNamesType(t *testing.T) {
+	fixture := newRepository(t)
+	dir := t.TempDir()
+	repo := repository.NewResourceRepository(&filesystemv1alpha1.Config{TempFolder: &dir})
+	wrong := &descriptor.Digest{HashAlgorithm: "SHA-256", NormalisationAlgorithm: "genericBlobDigest/v1", Value: digest.FromString("other").Encoded()}
+
+	for _, typ := range []runtime.Type{
+		runtime.NewUnversionedType("git"),
+		runtime.NewVersionedType("git", "v1alpha1"),
+		runtime.NewVersionedType("Git", "v1alpha1"),
+	} {
+		t.Run(typ.String(), func(t *testing.T) {
+			r := require.New(t)
+			res := &descriptor.Resource{Access: &v1.Git{Type: typ, Repository: fixture.URL, Commit: fixture.First.String()}, Digest: wrong}
+
+			_, err := readResource(t.Context(), repo, res)
+			r.ErrorContains(err, "digest mismatch")
+			r.ErrorContains(err, "legacy git access type")
+			r.ErrorContains(err, typ.String())
+
+			_, err = repo.ProcessResourceDigest(t.Context(), res, nil)
+			r.ErrorContains(err, "legacy git access type")
+		})
+	}
+
+	// v2 also records digests for the legacy spellings. The code cannot tell such a digest
+	// from a v1 one, so after the commit is repointed the error must not claim a v1 quirk
+	// as fact: it keeps the plain mismatch and says the content may simply not match.
+	t.Run("v2 recorded digest then repointed", func(t *testing.T) {
+		r := require.New(t)
+		res := &descriptor.Resource{Access: &v1.Git{Type: runtime.NewUnversionedType("git"), Repository: fixture.URL, Commit: fixture.First.String()}}
+		pinned, err := repo.ProcessResourceDigest(t.Context(), res, nil)
+		r.NoError(err)
+		_, err = readResource(t.Context(), repo, pinned)
+		r.NoError(err)
+
+		pinned.Access = &v1.Git{Type: runtime.NewUnversionedType("git"), Repository: fixture.URL, Commit: fixture.Second.String()}
+		for _, read := range []func() error{
+			func() error { _, err := readResource(t.Context(), repo, pinned); return err },
+			func() error { _, err := repo.ProcessResourceDigest(t.Context(), pinned, nil); return err },
+		} {
+			err := read()
+			r.ErrorContains(err, "digest mismatch")
+			r.ErrorContains(err, "if OCM v1 recorded its digest")
+			r.ErrorContains(err, "otherwise the content does not match the recorded digest")
+		}
+	})
+
+	for _, typ := range []runtime.Type{runtime.NewVersionedType("Git", "v1"), runtime.NewUnversionedType("Git")} {
+		t.Run(typ.String(), func(t *testing.T) {
+			r := require.New(t)
+			res := &descriptor.Resource{Access: &v1.Git{Type: typ, Repository: fixture.URL, Commit: fixture.First.String()}, Digest: wrong}
+
+			_, err := readResource(t.Context(), repo, res)
+			r.ErrorContains(err, "digest mismatch")
+			r.NotContains(err.Error(), "legacy")
+		})
+	}
+}
+
 // readResource downloads res and reads it to its end, which is when a download fails.
 func readResource(ctx context.Context, repo *repository.ResourceRepository, res *descriptor.Resource) ([]byte, error) {
 	b, err := repo.DownloadResource(ctx, res, nil)

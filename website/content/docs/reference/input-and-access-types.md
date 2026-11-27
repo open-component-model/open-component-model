@@ -518,6 +518,11 @@ Bitbucket and self-hosted servers, over HTTPS or SSH.
 `Git/v1` is the canonical type name. OCM also accepts `Git`, and the OCM v1 names `git`, `git/v1alpha1` and
 `Git/v1alpha1`.
 
+Resources that OCM v1 wrote with these names record the digest of a files-only archive that includes the file owners
+of the machine that built it, so OCM v2 cannot reproduce it. `ocm download resource` and
+`ocm transfer cv --copy-resources` fail for them with a digest mismatch that names the legacy access type. Re-add such
+resources with `Git/v1`. `ocm verify cv` and a transfer by reference still work.
+
 {{< schema-renderer url="/schemas/bindings/go/access/git/v1/Git.schema.json" >}}
 
 At least one of `commit` or `ref` must be set. A resource may have only a `ref`. OCM adds the `commit` during digest

@@ -2,6 +2,7 @@ package v1_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"testing"
@@ -341,8 +342,9 @@ func Test_GetRepositoryForSpecification(t *testing.T) {
 var MockType = runtime.NewUnversionedType("mock-repository")
 
 const (
-	PolicyErrorOnGetRepositoryForSpec     = "fail-get-repository-for-spec"
-	PolicyReturnNilOnGetRepositoryForSpec = "nil-get-repository-for-spec"
+	PolicyErrorOnGetRepositoryForSpec       = "fail-get-repository-for-spec"
+	PolicyReturnNilOnGetRepositoryForSpec   = "nil-get-repository-for-spec"
+	PolicyUnsupportedOnGetRepositoryForSpec = "unsupported-get-repository-for-spec"
 )
 
 type RepositorySpec struct {
@@ -421,6 +423,8 @@ func (m MockProvider) GetComponentVersionRepository(ctx context.Context, reposit
 			return nil, fmt.Errorf("mock error for testing: %s", spec.Policy)
 		case PolicyReturnNilOnGetRepositoryForSpec:
 			return nil, nil
+		case PolicyUnsupportedOnGetRepositoryForSpec:
+			return nil, fmt.Errorf("mock spec %s: %w", spec.Name, errors.ErrUnsupported)
 		}
 		return &MockRepository{
 			RepositorySpec: spec,
@@ -619,6 +623,63 @@ func Test_GetRepositorySpecForComponent(t *testing.T) {
 			spec, ok := repoSpec.(*RepositorySpec)
 			require.True(t, ok, "expected *RepositorySpec, got %T", repoSpec)
 			assert.Equal(t, tc.expectedRepo, spec.Name)
+		})
+	}
+}
+
+func Test_UnsupportedRepositorySpecification(t *testing.T) {
+	const component, version = "ocm.software/test", "v1.0.0"
+	unsupported := NewRepositorySpec("unsupported", map[string][]string{component: {version}}, PolicyUnsupportedOnGetRepositoryForSpec)
+	supported := NewRepositorySpec("supported", map[string][]string{component: {version}})
+
+	cases := []struct {
+		name      string
+		resolvers []*resolverruntime.Resolver
+		wantRepo  string
+	}{
+		{
+			name: "unsupported repository is skipped for lower priority repository",
+			resolvers: []*resolverruntime.Resolver{
+				{Repository: unsupported, Priority: 10},
+				{Repository: supported},
+			},
+			wantRepo: "supported",
+		},
+		{
+			name: "unsupported repository as only match fails with its error",
+			resolvers: []*resolverruntime.Resolver{
+				{Repository: unsupported, Priority: 10},
+				{Repository: supported, Prefix: "other.org"},
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			ctx := t.Context()
+
+			fb, err := fallback.NewFallbackRepository(ctx, MockProvider{}, nil, tc.resolvers)
+			r.NoError(err)
+
+			desc, err := fb.GetComponentVersion(ctx, component, version)
+			spec, specErr := fb.GetRepositorySpecificationForComponent(ctx, component, version)
+			// Writes must not silently go to a lower priority repository.
+			addErr := fb.AddComponentVersion(ctx, &descriptor.Descriptor{Component: descriptor.Component{
+				ComponentMeta: descriptor.ComponentMeta{ObjectMeta: descriptor.ObjectMeta{Name: component, Version: version}},
+			}})
+			r.ErrorIs(addErr, errors.ErrUnsupported)
+
+			if tc.wantRepo == "" {
+				r.ErrorIs(err, errors.ErrUnsupported)
+				r.ErrorContains(err, "mock spec unsupported")
+				r.ErrorIs(specErr, errors.ErrUnsupported)
+				return
+			}
+			r.NoError(err)
+			r.Equal(component, desc.Component.Name)
+			r.NoError(specErr)
+			r.Equal(tc.wantRepo, spec.(*RepositorySpec).Name)
 		})
 	}
 }

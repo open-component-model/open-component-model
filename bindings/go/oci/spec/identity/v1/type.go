@@ -19,6 +19,9 @@ func applySubPath(identity runtime.Identity, subPath string) {
 }
 
 func IdentityFromOCIRepository(repository *oci.Repository) (runtime.Identity, error) {
+	if err := repository.ValidateComponentNameMapping(); err != nil {
+		return nil, err
+	}
 	identity, err := runtime.ParseURLToIdentity(repository.BaseUrl)
 	if err != nil {
 		return nil, fmt.Errorf("could not parse OCI repository URL: %w", err)
@@ -33,6 +36,9 @@ func IdentityFromOCIRepository(repository *oci.Repository) (runtime.Identity, er
 }
 
 func OCIRegistryIdentityFromOCIRepository(repository *oci.Repository) (*OCIRegistryIdentity, error) {
+	if err := repository.ValidateComponentNameMapping(); err != nil {
+		return nil, err
+	}
 	identity, err := runtime.ParseURLToIdentity(repository.BaseUrl)
 	if err != nil {
 		return nil, fmt.Errorf("could not parse OCI repository URL: %w", err)

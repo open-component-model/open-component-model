@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"encoding/json/v2"
 	"io"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -202,4 +204,55 @@ func TestDescriptorFileFromTar_BrokenTar(t *testing.T) {
 	r, err := descriptorFileFromTar(broken)
 	require.Error(t, err)
 	assert.Nil(t, r)
+}
+
+// ocmv1V3Alpha1Descriptor is written by OCM v1 0.43.0 with "add cv --scheme ocm.software/v3alpha1".
+func ocmv1V3Alpha1Descriptor(t *testing.T) []byte {
+	t.Helper()
+	doc, err := os.ReadFile(filepath.Join("testdata", "ocmv1-v3alpha1-component-descriptor.yaml"))
+	require.NoError(t, err)
+	return doc
+}
+
+// A v3alpha1 descriptor does not fail v2 decoding; it decodes into an empty descriptor.
+// So the schema cannot be detected from a decoding error.
+func TestV3Alpha1DecodesWithoutErrorAsEmptyV2(t *testing.T) {
+	doc := ocmv1V3Alpha1Descriptor(t)
+	for _, mt := range []string{MediaTypeComponentDescriptorYAML, MediaTypeLegacyComponentDescriptorYAML} {
+		t.Run(mt, func(t *testing.T) {
+			var desc v2.Descriptor
+			require.NoError(t, DefaultDescriptorUnmarshalFunc(mt, doc, &desc))
+			assert.Empty(t, desc.Meta.Version)
+			assert.Empty(t, desc.Component.Name)
+		})
+	}
+}
+
+func TestSingleFileDecodeDescriptor_RejectsV3Alpha1(t *testing.T) {
+	ocmv1 := ocmv1V3Alpha1Descriptor(t)
+	schemaVersionOnly := []byte("meta:\n  schemaVersion: ocm.software/v3alpha1\n")
+	tests := []struct {
+		name      string
+		reader    io.Reader
+		mediaType string
+	}{
+		{"OCM v1 descriptor in legacy tar", createTarWithFile(LegacyComponentDescriptorTarFileName, ocmv1), MediaTypeLegacyComponentDescriptorTar},
+		{"OCM v1 descriptor as yaml", bytes.NewReader(ocmv1), MediaTypeComponentDescriptorYAML},
+		{"OCM v1 descriptor as json media type", bytes.NewReader(ocmv1), MediaTypeComponentDescriptorJSON},
+		{"meta.schemaVersion in legacy tar", createTarWithFile(LegacyComponentDescriptorTarFileName, schemaVersionOnly), MediaTypeLegacyComponentDescriptorTar},
+		{"meta.schemaVersion as yaml", bytes.NewReader(schemaVersionOnly), MediaTypeComponentDescriptorYAML},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := SingleFileDecodeDescriptor(tt.reader, tt.mediaType, DefaultDescriptorUnmarshalFunc)
+			require.ErrorIs(t, err, ErrUnsupportedSchemaV3Alpha1)
+			assert.Contains(t, err.Error(), "ocm.software/v3alpha1")
+		})
+	}
+}
+
+// A v2 descriptor sets meta.schemaVersion, so the raw document is not parsed again.
+func TestRejectV3Alpha1_SkipsParseForV2(t *testing.T) {
+	decoded := &v2.Descriptor{Meta: v2.Meta{Version: "v2"}}
+	assert.NoError(t, rejectV3Alpha1(decoded, ocmv1V3Alpha1Descriptor(t)))
 }

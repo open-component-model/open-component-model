@@ -116,7 +116,7 @@ func NewFallbackRepository(_ context.Context, repositoryProvider repository.Comp
 // Use the path matcher resolver (ocm.software/open-component-model/bindings/go/repository/component/pathmatcher)
 // with "resolvers.ocm.software/v1alpha1" configuration instead.
 func (f *FallbackRepository) AddComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor) error {
-	repos := f.RepositoriesForComponentIterator(ctx, descriptor.Component.Name)
+	repos := f.repositoriesForComponent(ctx, descriptor.Component.Name, false)
 	for repo, err := range repos {
 		if err != nil {
 			return fmt.Errorf("getting repository for component %s failed: %w", descriptor.Component.Name, err)
@@ -215,7 +215,7 @@ func (f *FallbackRepository) ListComponentVersions(ctx context.Context, componen
 // Use the path matcher resolver (ocm.software/open-component-model/bindings/go/repository/component/pathmatcher)
 // with "resolvers.ocm.software/v1alpha1" configuration instead.
 func (f *FallbackRepository) AddLocalResource(ctx context.Context, component, version string, res *descriptor.Resource, content blob.ReadOnlyBlob) (*descriptor.Resource, error) {
-	repos := f.RepositoriesForComponentIterator(ctx, component)
+	repos := f.repositoriesForComponent(ctx, component, false)
 	for repo, err := range repos {
 		if err != nil {
 			return nil, fmt.Errorf("getting repository for component %s failed: %w", component, err)
@@ -262,7 +262,7 @@ func (f *FallbackRepository) GetLocalResource(ctx context.Context, component, ve
 // Use the path matcher resolver (ocm.software/open-component-model/bindings/go/repository/component/pathmatcher)
 // with "resolvers.ocm.software/v1alpha1" configuration instead.
 func (f *FallbackRepository) AddLocalSource(ctx context.Context, component, version string, source *descriptor.Source, content blob.ReadOnlyBlob) (*descriptor.Source, error) {
-	repos := f.RepositoriesForComponentIterator(ctx, component)
+	repos := f.repositoriesForComponent(ctx, component, false)
 	for repo, err := range repos {
 		if err != nil {
 			return nil, fmt.Errorf("getting repository for component %s failed: %w", component, err)
@@ -304,6 +304,9 @@ func (f *FallbackRepository) GetLocalSource(ctx context.Context, component, vers
 // Compared to RepositoriesForComponent, using the iterator allows for lazy
 // evaluation and can be more efficient when only a few repositories are
 // needed (e.g., when leveraged by the CLI code to do a simple GetComponentVersion).
+// Repositories whose specification is unsupported (the provider returns an error
+// wrapping [errors.ErrUnsupported]) are skipped; their error is only yielded if no
+// other repository matches the component.
 //
 // Deprecated: FallbackRepository is an implementation for the deprecated config
 // type "ocm.config.ocm.software/v1". This concept of fallback resolvers is deprecated
@@ -311,20 +314,37 @@ func (f *FallbackRepository) GetLocalSource(ctx context.Context, component, vers
 // Use the path matcher resolver (ocm.software/open-component-model/bindings/go/repository/component/pathmatcher)
 // with "resolvers.ocm.software/v1alpha1" configuration instead.
 func (f *FallbackRepository) RepositoriesForComponentIterator(ctx context.Context, component string) iter.Seq2[repository.ComponentVersionRepository, error] {
+	return f.repositoriesForComponent(ctx, component, true)
+}
+
+// repositoriesForComponent skips unsupported repositories only for reads; a write must not land in a lower-priority one.
+func (f *FallbackRepository) repositoriesForComponent(ctx context.Context, component string, skipUnsupported bool) iter.Seq2[repository.ComponentVersionRepository, error] {
 	return func(yield func(repository.ComponentVersionRepository, error) bool) {
+		var skipped error
+		yielded := false
 		for _, resolver := range f.resolvers {
 			if resolver.Prefix != "" && resolver.Prefix != component && !strings.HasPrefix(component, strings.TrimSuffix(resolver.Prefix, "/")+"/") {
 				continue
 			}
 			repo, err := f.getRepositoryFromCache(ctx, resolver.Repository)
 			if err != nil {
-				yield(nil, fmt.Errorf("getting repository for resolver %v failed: %w", resolver, err))
+				err = fmt.Errorf("getting repository for resolver %v failed: %w", resolver, err)
+				if skipUnsupported && errors.Is(err, errors.ErrUnsupported) {
+					slog.WarnContext(ctx, "skipping repository with unsupported specification", "realm", Realm, "component", component, "repository", resolver.Repository, "error", err)
+					skipped = errors.Join(skipped, err)
+					continue
+				}
+				yield(nil, err)
 				return
 			}
 			slog.DebugContext(ctx, "yielding repository for component", "realm", Realm, "component", component, "repository", resolver.Repository)
+			yielded = true
 			if !yield(repo, nil) {
 				return
 			}
+		}
+		if !yielded && skipped != nil {
+			yield(nil, skipped)
 		}
 	}
 }
@@ -388,6 +408,8 @@ func (f *FallbackRepository) GetComponentVersionRepositoryForSpecification(ctx c
 // Use the path matcher resolver (ocm.software/open-component-model/bindings/go/repository/component/pathmatcher)
 // with "resolvers.ocm.software/v1alpha1" configuration instead.
 func (f *FallbackRepository) GetRepositorySpecificationForComponent(ctx context.Context, component, version string) (runtime.Typed, error) {
+	var skipped error
+	probed := false
 	for _, resolver := range f.resolvers {
 		if resolver.Prefix != "" && resolver.Prefix != component &&
 			!strings.HasPrefix(component, strings.TrimSuffix(resolver.Prefix, "/")+"/") {
@@ -395,8 +417,15 @@ func (f *FallbackRepository) GetRepositorySpecificationForComponent(ctx context.
 		}
 		repo, err := f.getRepositoryFromCache(ctx, resolver.Repository)
 		if err != nil {
-			return nil, fmt.Errorf("getting repository for resolver %v failed: %w", resolver, err)
+			err = fmt.Errorf("getting repository for resolver %v failed: %w", resolver, err)
+			if errors.Is(err, errors.ErrUnsupported) {
+				slog.WarnContext(ctx, "skipping repository with unsupported specification", "realm", Realm, "component", component, "repository", resolver.Repository, "error", err)
+				skipped = errors.Join(skipped, err)
+				continue
+			}
+			return nil, err
 		}
+		probed = true
 		_, err = repo.GetComponentVersion(ctx, component, version)
 		if errors.Is(err, repository.ErrNotFound) {
 			slog.DebugContext(ctx, "component version not found in repository during spec resolution",
@@ -408,6 +437,9 @@ func (f *FallbackRepository) GetRepositorySpecificationForComponent(ctx context.
 				component, version, resolver.Repository, err)
 		}
 		return resolver.Repository, nil
+	}
+	if !probed && skipped != nil {
+		return nil, skipped
 	}
 	return nil, fmt.Errorf("component version %s/%s not found in any repository", component, version)
 }

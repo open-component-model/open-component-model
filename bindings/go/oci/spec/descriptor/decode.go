@@ -35,6 +35,9 @@ func SingleFileDecodeDescriptor(raw io.Reader, mediaType string, unmarshal Unmar
 		if err := unmarshal(MediaTypeLegacyComponentDescriptorYAML, descriptorYAML, &v2desc); err != nil {
 			return nil, fmt.Errorf("unmarshaling component descriptor: %w", err)
 		}
+		if err := rejectV3Alpha1(&v2desc, descriptorYAML); err != nil {
+			return nil, err
+		}
 		desc, err := descriptor.ConvertFromV2(&v2desc)
 		if err != nil {
 			return nil, fmt.Errorf("converting component descriptor: %w", err)
@@ -49,12 +52,45 @@ func SingleFileDecodeDescriptor(raw io.Reader, mediaType string, unmarshal Unmar
 		if err := unmarshal(mediaType, descriptorYAML, &v2desc); err != nil {
 			return nil, fmt.Errorf("unmarshaling component descriptor: %w", err)
 		}
+		if err := rejectV3Alpha1(&v2desc, descriptorYAML); err != nil {
+			return nil, err
+		}
 		desc, err := descriptor.ConvertFromV2(&v2desc)
 		if err != nil {
 			return nil, fmt.Errorf("converting component descriptor: %w", err)
 		}
 		return desc, nil
 	}
+}
+
+// ErrUnsupportedSchemaV3Alpha1 is returned when a descriptor is serialized in the
+// deprecated ocm.software/v3alpha1 schema, which OCM v2 cannot read.
+var ErrUnsupportedSchemaV3Alpha1 = errors.New("component descriptor uses the deprecated schema \"ocm.software/v3alpha1\", which is not supported; re-create it with the v2 schema (e.g. omit --scheme in OCM v1)")
+
+const schemaV3Alpha1 = "ocm.software/v3alpha1"
+
+// rejectV3Alpha1 detects descriptors in the v3alpha1 serialization (apiVersion or
+// schemaVersion set to ocm.software/v3alpha1). They decode into a v2 descriptor without
+// error but empty, and fail later with a misleading identity error. Every v2 descriptor
+// sets meta.schemaVersion, so raw is only parsed again when that field is missing.
+func rejectV3Alpha1(decoded *v2.Descriptor, raw []byte) error {
+	switch decoded.Meta.Version {
+	case schemaV3Alpha1:
+		return ErrUnsupportedSchemaV3Alpha1
+	case "":
+	default:
+		return nil
+	}
+	var probe struct {
+		APIVersion string `json:"apiVersion"`
+	}
+	if err := yaml.Unmarshal(raw, &probe); err != nil {
+		return nil // not our concern; the regular decoding reports syntax errors
+	}
+	if probe.APIVersion == schemaV3Alpha1 {
+		return ErrUnsupportedSchemaV3Alpha1
+	}
+	return nil
 }
 
 const maxDescriptorSize = 1024 * 1024 * 1024 // 1 GiB

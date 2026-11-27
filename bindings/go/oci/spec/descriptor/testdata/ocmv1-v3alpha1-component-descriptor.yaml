@@ -1,0 +1,23 @@
+apiVersion: ocm.software/v3alpha1
+kind: ComponentVersion
+metadata:
+  creationTime: "2026-11-27T13:48:06Z"
+  name: ocm.software/ocmv1-compat-v3alpha1
+  provider:
+    name: ocm.software
+  version: 1.0.0-RC1
+repositoryContexts: []
+spec:
+  resources:
+  - access:
+      localReference: sha256:5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03
+      mediaType: application/octet-stream
+      type: localBlob
+    digest:
+      hashAlgorithm: SHA-256
+      normalisationAlgorithm: genericBlobDigest/v1
+      value: 5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03
+    name: data
+    relation: local
+    type: plainText
+    version: 1.0.0-RC1
