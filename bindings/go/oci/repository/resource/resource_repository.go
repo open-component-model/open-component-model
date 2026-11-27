@@ -143,16 +143,14 @@ func (p *ResourceRepository) ProcessResourceDigest(ctx context.Context, resource
 }
 
 func (p *ResourceRepository) getIdentity(obj runtime.Typed) (runtime.Identity, error) {
-	baseURL, err := accessToBaseURL(obj)
+	ref, err := accessToReference(obj)
 	if err != nil {
 		return nil, err
 	}
-	identity, err := runtime.ParseURLToIdentity(baseURL)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing URL to identity: %w", err)
-	}
-	identity.SetType(credidentityv1.Type)
-	return identity, nil
+	return credidentityv1.IdentityFromOCIRepository(&ociv1.Repository{
+		BaseUrl: ref.RegistryWithScheme(),
+		SubPath: ref.Repository,
+	})
 }
 
 func (p *ResourceRepository) DownloadResource(ctx context.Context, resource *descriptor.Resource, credentials runtime.Typed) (blob.ReadOnlyBlob, error) {
@@ -208,39 +206,38 @@ func (p *ResourceRepository) getRepository(spec *ociv1.Repository, credentials *
 	return repo, nil
 }
 
-func accessToBaseURL(access runtime.Typed) (string, error) {
+// accessToReference parses the OCI reference of an access and validates that it names a registry.
+func accessToReference(access runtime.Typed) (looseref.LooseReference, error) {
 	switch access := access.(type) {
 	case *v1.OCIImage:
-		return ociImageAccessToBaseURL(access)
+		return ociImageAccessToReference(access)
 	case *v1.OCIImageLayer:
-		return ociImageLayerAccessToBaseURL(access)
+		return ociImageLayerAccessToReference(access)
 	default:
-		return "", fmt.Errorf("unsupported access type %s: expected OCI image or OCI image layer", access.GetType())
+		return looseref.LooseReference{}, fmt.Errorf("unsupported access type %s: expected OCI image or OCI image layer", access.GetType())
 	}
 }
 
-func ociImageAccessToBaseURL(access *v1.OCIImage) (string, error) {
+func ociImageAccessToReference(access *v1.OCIImage) (looseref.LooseReference, error) {
 	ref, err := looseref.ParseReference(access.ImageReference)
 	if err != nil {
-		return "", fmt.Errorf("error parsing loose image reference %q: %w", access.ImageReference, err)
+		return looseref.LooseReference{}, fmt.Errorf("error parsing loose image reference %q: %w", access.ImageReference, err)
 	}
-	// host is the registry with sane defaulting
-	baseURL := ref.RegistryWithScheme()
-	return baseURL, nil
+	return ref, nil
 }
 
-func ociImageLayerAccessToBaseURL(access *v1.OCIImageLayer) (string, error) {
+func ociImageLayerAccessToReference(access *v1.OCIImageLayer) (looseref.LooseReference, error) {
 	if access.Reference == "" {
-		return "", fmt.Errorf("access type %s has an empty reference, set it in field %q", access.GetType(), "ref")
+		return looseref.LooseReference{}, fmt.Errorf("access type %s has an empty reference, set it in field %q", access.GetType(), "ref")
 	}
 	ref, err := looseref.ParseReference(access.Reference)
 	if err != nil {
-		return "", fmt.Errorf("error parsing loose image reference %q: %w", access.Reference, err)
+		return looseref.LooseReference{}, fmt.Errorf("error parsing loose image reference %q: %w", access.Reference, err)
 	}
 	if ref.Registry == "" {
-		return "", fmt.Errorf("reference %q in field %q must include a registry", access.Reference, "ref")
+		return looseref.LooseReference{}, fmt.Errorf("reference %q in field %q must include a registry", access.Reference, "ref")
 	}
-	return ref.RegistryWithScheme(), nil
+	return ref, nil
 }
 
 // rejectReadOnlyAccess rejects access types that can be read but not written to.
@@ -313,7 +310,7 @@ func (p *ResourceRepository) resolveRepository(resource *descriptor.Resource, cr
 	if err := p.GetResourceRepositoryScheme().Convert(resource.Access, obj); err != nil {
 		return nil, nil, fmt.Errorf("error converting access to object of type %s: %w", t, err)
 	}
-	baseURL, err := accessToBaseURL(obj)
+	ref, err := accessToReference(obj)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -325,7 +322,7 @@ func (p *ResourceRepository) resolveRepository(resource *descriptor.Resource, cr
 			return nil, nil, fmt.Errorf("error converting credentials: %w", err)
 		}
 	}
-	repo, err := p.getRepository(&ociv1.Repository{BaseUrl: baseURL}, ociCredentials)
+	repo, err := p.getRepository(&ociv1.Repository{BaseUrl: ref.RegistryWithScheme()}, ociCredentials)
 	if err != nil {
 		return nil, nil, err
 	}

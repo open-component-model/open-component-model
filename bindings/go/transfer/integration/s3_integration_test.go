@@ -20,7 +20,6 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
-	credidentity "ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
 	ctfrepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospec "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -217,26 +216,12 @@ func putS3Object(t *testing.T, ctx context.Context, endpoint, user, pass, bucket
 
 // newS3CredResolver resolves the bucket credentials for the s3 consumer identity in addition to
 // the OCI registry credentials the transfer needs for its target.
-func newS3CredResolver(t *testing.T, endpoint, bucket, key, accessKeyID, secretAccessKey string, registries ...registryCreds) *credentials.StaticCredentialsResolver {
+func newS3CredResolver(t *testing.T, endpoint, bucket, key, accessKeyID, secretAccessKey string, registries ...registryCreds) credentials.Resolver {
 	t.Helper()
-	credMap := make(map[string]map[string]string)
-	for _, reg := range registries {
-		repo := &ocirepospec.Repository{
-			Type:    runtime.Type{Name: ocirepospec.Type, Version: "v1"},
-			BaseUrl: fmt.Sprintf("http://%s", reg.address),
-		}
-		identity, err := credidentity.IdentityFromOCIRepository(repo)
-		require.NoError(t, err)
-		credMap[identity.String()] = map[string]string{
-			"username": reg.username,
-			"password": reg.password,
-		}
-	}
 	s3Identity, err := s3identityv1.IdentityFromObject(bucket, key, endpoint)
 	require.NoError(t, err)
-	credMap[s3Identity.String()] = map[string]string{
+	return newCredGraph(t, append(registryConsumers(t, registries...), directConsumer(s3Identity, map[string]string{
 		"accessKeyId":     accessKeyID,
 		"secretAccessKey": secretAccessKey,
-	}
-	return credentials.NewStaticCredentialsResolver(credMap)
+	}))...)
 }

@@ -281,7 +281,7 @@ func TestNewResourceRepositoryHTTPConfig_InsecureSkipVerify(t *testing.T) {
 	}
 }
 
-func TestAccessToBaseURL(t *testing.T) {
+func TestAccessToReference(t *testing.T) {
 	for _, accessType := range []string{v1.OCIImageType, v1.OCIImageLayerType} {
 		t.Run(accessType, func(t *testing.T) {
 			for _, tt := range []struct {
@@ -309,16 +309,50 @@ func TestAccessToBaseURL(t *testing.T) {
 					} else {
 						access = &v1.OCIImageLayer{Reference: tt.reference}
 					}
-					baseURL, err := accessToBaseURL(access)
+					ref, err := accessToReference(access)
 					if wantErr != "" {
 						r.ErrorContains(err, wantErr)
 						r.ErrorContains(err, `field "ref"`)
 						return
 					}
 					r.NoError(err)
-					r.Equal(tt.wantURL, baseURL)
+					r.Equal(tt.wantURL, ref.RegistryWithScheme())
 				})
 			}
+		})
+	}
+}
+
+// TestGetResourceCredentialConsumerIdentity_Path asserts that an identity
+// created from an ImageReference that contains a path, contains
+// the path.
+func TestGetResourceCredentialConsumerIdentity_Path(t *testing.T) {
+	repo := NewResourceRepository(nil)
+	for _, tt := range []struct {
+		name   string
+		access runtime.Typed
+		want   runtime.Identity
+	}{
+		{
+			name:   "image with tag",
+			access: &v1.OCIImage{Type: runtime.NewVersionedType(v1.OCIImageType, v1.Version), ImageReference: "http://localhost:5000/project1/hello:1.0.0"},
+			want:   runtime.Identity{"type": "OCIRegistry", "scheme": "http", "hostname": "localhost", "port": "5000", "path": "project1/hello"},
+		},
+		{
+			name:   "image with digest",
+			access: &v1.OCIImage{Type: runtime.NewVersionedType(v1.OCIImageType, v1.Version), ImageReference: "ghcr.io/org/app@" + digest.FromString("x").String()},
+			want:   runtime.Identity{"type": "OCIRegistry", "hostname": "ghcr.io", "path": "org/app"},
+		},
+		{
+			name:   "image layer",
+			access: &v1.OCIImageLayer{Type: runtime.NewVersionedType(v1.OCIImageLayerType, v1.Version), Reference: "ghcr.io/org/app@" + digest.FromString("x").String()},
+			want:   runtime.Identity{"type": "OCIRegistry", "hostname": "ghcr.io", "path": "org/app"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			identity, err := repo.GetResourceCredentialConsumerIdentity(t.Context(), &descriptor.Resource{Access: tt.access})
+			require.NoError(t, err)
+			require.Equal(t, tt.want, identity)
 		})
 	}
 }
