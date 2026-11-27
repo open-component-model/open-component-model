@@ -901,3 +901,100 @@ func Test_Ref_String(t *testing.T) {
 		})
 	}
 }
+
+// Test_ComponentName_Grammar pins the component-name grammar against the OCI
+// repository path grammar. This is syntactic alignment subject to OCM-specific
+// restrictions (such as the alphabetic top-level label) and, for storage, the full
+// repository-path length; a grammar match alone does not guarantee storage, and the
+// reserved "component-descriptors" segment is rejected separately. The grammar and the
+// reservation are asserted directly here so the splitter does not swallow the segment.
+func Test_ComponentName_Grammar(t *testing.T) {
+	cases := []struct {
+		name     string
+		grammar  bool // matches ComponentRegex
+		reserved bool // contains the reserved component-descriptors segment
+	}{
+		// digit-led and digit-only segments are accepted (letter-first rule dropped)
+		{"1password.com/cli", true, false},
+		{"acme.org/1", true, false},
+		{"acme.org/1foo", true, false},
+		{"acme.org/v1/2", true, false},
+		{"acme.org/foo", true, false},
+		{"acme.org/webshop/backend", true, false},
+		{"acme.org/a_b", true, false},
+		{"acme.org/a__b", true, false},
+		{"acme.org/a-b", true, false},
+		{"acme.org/a--b", true, false},
+		// OCI-invalid names are rejected (previously passed the schema but failed at the store)
+		{"acme.org/foo-", false, false},
+		{"acme.org/foo_", false, false},
+		{"acme.org/a_-b", false, false},
+		{"acme.org/a___b", false, false},
+		{"acme-.org/x", false, false},
+		{"acme.org/Foo", false, false},
+		{"Acme.org/foo", false, false},
+		{"acme.org/-foo", false, false},
+		// missing alphabetic TLD or missing path
+		{"acme/foo", false, false},
+		{"acme.org", false, false},
+		// the component-descriptors segment is reserved for the storage mapping;
+		// it matches the grammar but is rejected by the reservation check
+		{"acme.org/component-descriptors/x", true, true},
+		{"acme.org/component-descriptors", true, true},
+		{"component-descriptors/x", false, true},
+		{"acme.org/mycomponent-descriptors", true, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.grammar, componentRegex.MatchString(tc.name), "grammar match")
+			assert.Equal(t, tc.reserved, reservedComponentSegmentRegex.MatchString(tc.name), "reserved segment")
+		})
+	}
+}
+
+// Test_ComponentName_DigitLed_EndToEnd checks that a digit-led component name
+// survives a full parse, matching the relaxed grammar end to end.
+func Test_ComponentName_DigitLed_EndToEnd(t *testing.T) {
+	for _, name := range []string{"1password.com/cli", "acme.org/1", "acme.org/1foo"} {
+		t.Run(name, func(t *testing.T) {
+			ref, err := Parse("ctf::/tmp/ctfrepo/component-descriptors/" + name + ":1.0.0")
+			require.NoError(t, err)
+			require.Equal(t, name, ref.Component)
+		})
+	}
+}
+
+// Test_ComponentName_MaxLength enforces the schema maxLength (255) in Parse: a
+// grammatically valid name of exactly 255 characters is accepted, 256 is rejected.
+func Test_ComponentName_MaxLength(t *testing.T) {
+	// "acme.org/" is 9 characters; pad the single path segment to reach the target length.
+	name := func(total int) string {
+		return "acme.org/" + strings.Repeat("a", total-len("acme.org/"))
+	}
+
+	ref, err := Parse("ctf::/tmp/ctfrepo/component-descriptors/" + name(MaxComponentNameLength) + ":1.0.0")
+	require.NoError(t, err)
+	require.Len(t, ref.Component, MaxComponentNameLength)
+
+	_, err = Parse("ctf::/tmp/ctfrepo/component-descriptors/" + name(MaxComponentNameLength+1) + ":1.0.0")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "must not exceed")
+}
+
+// Test_ComponentName_Parse_Rejections exercises the grammar, length, and reserved-segment
+// checks through Parse (not just the raw regexes), so removing any of those branches fails here.
+func Test_ComponentName_Parse_Rejections(t *testing.T) {
+	cases := map[string]string{
+		"reserved segment":        "acme.org/component-descriptors",
+		"numeric top-level label": "acme.12/foo",
+		"malformed separators":    "acme.org/a_-b",
+		"uppercase":               "acme.org/Foo",
+	}
+	for desc, name := range cases {
+		t.Run(desc, func(t *testing.T) {
+			_, err := Parse("ctf::/tmp/ctfrepo/component-descriptors/" + name + ":1.0.0")
+			require.Error(t, err)
+		})
+	}
+}

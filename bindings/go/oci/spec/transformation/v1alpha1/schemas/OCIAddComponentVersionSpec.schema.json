@@ -254,9 +254,12 @@
         },
         "componentName": {
           "type": "string",
-          "description": "Unique name of the component following the Open Component Model naming convention",
+          "description": "Unique name of the component following the Open Component Model naming convention. A DNS-style name with an alphabetic top-level label, followed by one or more OCI repository path segments. Segments may start with or consist only of digits. The 'component-descriptors' segment is reserved for the storage mapping.",
           "maxLength": 255,
-          "pattern": "^[a-z][-a-z0-9]*([.][a-z][-a-z0-9]*)*[.][a-z]{2,}(/[a-z][-a-z0-9_]*([.][a-z][-a-z0-9_]*)*)+$"
+          "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*[.][a-z]{2,}(/[a-z0-9]+(([.]|_|__|-+)[a-z0-9]+)*)+$",
+          "not": {
+            "pattern": "(^|/)component-descriptors(/|$)"
+          }
         },
         "componentReference": {
           "type": "object",

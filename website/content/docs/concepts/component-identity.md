@@ -46,7 +46,20 @@ The DNS domain at the start of the name (e.g., `acme.org` in `acme.org/webshop/b
 | `acme.org/webshop/backend` | Acme Corp |
 | `acme.org/webshop/frontend` | Acme Corp |
 
-The name must match the regex: `^[a-z][-a-z0-9]*([.][a-z][-a-z0-9]*)*[.][a-z]{2,}(/[a-z][-a-z0-9_]*([.][a-z][-a-z0-9_]*)*)+$`
+The name must match the regex: `^[a-z0-9]([-a-z0-9]*[a-z0-9])?([.][a-z0-9]([-a-z0-9]*[a-z0-9])?)*[.][a-z]{2,}(/[a-z0-9]+(([.]|_|__|-+)[a-z0-9]+)*)+$` and must not be longer than 255 characters.
+
+The grammar follows the OCI repository path grammar, so a name maps directly to the OCI repository path `<base>/component-descriptors/<name>`:
+
+- The DNS domain uses DNS-style labels and ends in an alphabetic top-level label (for example `.org`, `.com`). Labels follow the OCI path-component rules and, unlike strict DNS, are not capped at 63 characters.
+- Each path segment follows the OCI path-component grammar. Segments may start with a digit or consist only of digits (for example `1password.com/cli`, `acme.org/1`, `acme.org/v1/2`). Separators (`.`, `_`, `__`, one or more `-`) must sit between two non-empty alphanumeric runs, so names like `acme.org/foo-`, `acme.org/a_-b` or `acme.org/a___b` are invalid.
+- Names are lowercase only.
+- The `component-descriptors` segment is reserved for the storage mapping and must not appear in a name.
+
+This is grammar compatibility only. The 255 character limit applies to the name itself. A component version is stored at the OCI repository path `<subPath>/component-descriptors/<name>`, and OCI distribution registries cap the repository path after the registry host at 255 characters, with no per-segment limit. The `component-descriptors/` prefix (22 characters) and any repository `subPath` reduce the usable name length, so a name that is valid on its own may still be rejected by a registry when the full path is too long. This is enforced at the storage backend, not by the grammar.
+
+{{< callout context="note" >}}
+Digit-led and digit-only segments (for example `acme.org/1`) are readable only by legacy OCM tooling (v1) from the patch release that relaxes the letter-first rule; older binaries reject such names. See the changelog entry for the minimum version.
+{{< /callout >}}
 
 ### Component Version
 
