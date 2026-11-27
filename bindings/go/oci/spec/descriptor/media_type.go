@@ -34,3 +34,16 @@ const (
 	MediaTypeComponentDescriptorYAML       = MediaTypeComponentDescriptorV2 + "+yaml"
 	MediaTypeLegacyComponentDescriptorYAML = "application/vnd.gardener.cloud.cnudie.component-descriptor.v2+yaml"
 )
+
+// Media types and artifact types for the normalized (cosign-signable) layout (layout version v1).
+const (
+	// ArtifactTypeNormalizedDescriptor is the artifactType of the normalized (access-free)
+	// descriptor manifest. This manifest is the stable primary entry point a tag resolves to
+	// in the normalized layout, and is the manifest cosign signs.
+	ArtifactTypeNormalizedDescriptor = MediaTypeComponentDescriptor + ".normalized.v1"
+	// MediaTypeComponentDescriptorNormalizedJSON is the media type of the normalized descriptor layer.
+	MediaTypeComponentDescriptorNormalizedJSON = ArtifactTypeNormalizedDescriptor + "+json"
+	// ArtifactTypeAccessDescriptor is the artifactType of the access-bearing descriptor manifest,
+	// stored as a referrer (subject) of the normalized manifest. Regenerated per registry; unsigned.
+	ArtifactTypeAccessDescriptor = MediaTypeComponentDescriptor + ".access.v1"
+)

@@ -51,10 +51,11 @@ import (
 )
 
 var (
-	_            ComponentVersionRepository          = (*Repository)(nil)
-	_            repository.OwnershipAwareRepository = (*Repository)(nil)
-	_            repository.DigestPinnableRepository = (*Repository)(nil)
-	versionRegex                                     = regexp.MustCompile(compref.VersionRegex)
+	_            ComponentVersionRepository                = (*Repository)(nil)
+	_            repository.OwnershipAwareRepository       = (*Repository)(nil)
+	_            repository.DigestPinnableRepository       = (*Repository)(nil)
+	_            repository.ComponentVersionLayoutDetector = (*Repository)(nil)
+	versionRegex                                           = regexp.MustCompile(compref.VersionRegex)
 )
 
 // Repository implements the ComponentVersionRepository interface using OCI registries.
@@ -104,6 +105,8 @@ type Repository struct {
 	// pin, if set, serves reads of one component from a content-addressed artifact,
 	// see PinComponentVersion.
 	pin *componentVersionPin
+	// layout selects the OCI storage layout used when adding component versions.
+	layout Layout
 }
 
 // SetGlobalAccessPolicy overrides the global access policy for this repository.
@@ -119,6 +122,14 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 	defer func() {
 		done(err)
 	}()
+	return repo.addComponentVersion(ctx, descriptor, nil)
+}
+
+// addComponentVersion adds descriptor to the repository and tags it with its version. Without
+// normalizedGraph every manifest is built from descriptor. With it, the normalized manifest and its
+// signature referrers are copied from that graph (see [Repository.AddComponentVersionFromGraph]).
+func (repo *Repository) addComponentVersion(ctx context.Context, descriptor *descriptor.Descriptor, normalizedGraph ocistream.ResourceStream) error {
+	component, version := descriptor.Component.Name, descriptor.Component.Version
 
 	// Fail fast if the component version does not map to a valid OCI tag, rather
 	// than storing it under a mangled tag or hitting an opaque registry error.
@@ -144,14 +155,20 @@ func (repo *Repository) AddComponentVersion(ctx context.Context, descriptor *des
 		return fmt.Errorf("failed to validate local blobs: %w", err)
 	}
 
-	manifest, err := AddDescriptorToStore(ctx, store, descriptor, AddDescriptorOptions{
+	opts := AddDescriptorOptions{
 		Scheme:                        repo.scheme,
 		Author:                        repo.creatorAnnotation,
 		AdditionalDescriptorManifests: additionalManifests,
 		AdditionalLayers:              additionalLayers,
 		ReferrerTrackingPolicy:        repo.referrerTrackingPolicy,
 		DescriptorEncodingMediaType:   repo.descriptorEncodingMediaType,
-	})
+		Layout:                        repo.layout,
+	}
+	if normalizedGraph != nil {
+		opts.NormalizedGraph = normalizedGraph
+		opts.NormalizedGraphCopyOptions = repo.extendedCopyGraphOptions()
+	}
+	manifest, err := AddDescriptorToStore(ctx, store, descriptor, opts)
 	if err != nil {
 		return fmt.Errorf("failed to add descriptor to store: %w", err)
 	}
@@ -182,6 +199,18 @@ func tagIdempotent(ctx context.Context, store spec.Store, desc ociImageSpecV1.De
 		return nil
 	}
 	return err
+}
+
+// GetComponentVersionLayout reports the storage layout of a stored component version as
+// "default" or "normalized" (see speclayout.ComponentVersionLayout). If the repository is pinned
+// to an artifact of component, it reports the layout of that artifact, as that is what is read.
+func (repo *Repository) GetComponentVersionLayout(ctx context.Context, component, version string) (string, error) {
+	ctx = slogcontext.NewCtx(ctx, repo.logger)
+	root, _, err := repo.storedRoot(ctx, component, version)
+	if err != nil {
+		return "", err
+	}
+	return root.layout.String(), nil
 }
 
 func (repo *Repository) ListComponentVersions(ctx context.Context, component string) (_ []string, err error) {
@@ -215,7 +244,7 @@ func (repo *Repository) ListComponentVersions(ctx context.Context, component str
 			VersionResolver: complister.ReferenceTagVersionResolver(component, store),
 		},
 		ReferrerListerOptions: lister.ReferrerListerOptions{
-			ArtifactType:    descriptor2.MediaTypeComponentDescriptorV2,
+			ArtifactTypes:   []string{descriptor2.MediaTypeComponentDescriptorV2, descriptor2.ArtifactTypeNormalizedDescriptor},
 			Subject:         indexv1.Descriptor,
 			VersionResolver: complister.ReferrerAnnotationVersionResolver(component),
 		},
@@ -1119,54 +1148,49 @@ func (repo *Repository) targetOCIImageAccess(access runtime.Typed) (*accessv1.OC
 	return image, nil
 }
 
-// getDescriptorOCIImageManifest retrieves the manifest for a given reference from the store.
-// It handles both OCI image indexes and OCI image manifests. Every node read is verified
-// against its digest, starting from the one reference resolves to.
-func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, reference string) (manifest ociImageSpecV1.Manifest, index *ociImageSpecV1.Index, err error) {
-	slogcontext.Log(ctx, slog.LevelDebug, "resolving descriptor", slog.String("reference", reference))
-	base, err := store.Resolve(ctx, reference)
-	if err != nil {
-		return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("failed to resolve reference %q: %w", reference, err)
-	}
+// getDescriptorOCIImageManifest fetches the manifest for an already resolved component version
+// descriptor from the store. It handles both OCI image indexes and OCI image manifests. raw is the
+// content of base itself.
+func getDescriptorOCIImageManifest(ctx context.Context, store spec.Store, base ociImageSpecV1.Descriptor) (raw []byte, manifest ociImageSpecV1.Manifest, index *ociImageSpecV1.Index, err error) {
 	slogcontext.Log(ctx, slog.LevelDebug, "fetching descriptor", log.DescriptorLogAttr(base))
-	manifestRaw, err := fetchVerified(ctx, store, ociImageSpecV1.Descriptor{
+	raw, err = fetchVerified(ctx, store, ociImageSpecV1.Descriptor{
 		MediaType: base.MediaType,
 		Digest:    base.Digest,
 		Size:      base.Size,
 	})
 	if err != nil {
-		return ociImageSpecV1.Manifest{}, nil, err
+		return nil, ociImageSpecV1.Manifest{}, nil, err
 	}
 
 	switch base.MediaType {
 	case ociImageSpecV1.MediaTypeImageIndex:
-		if err := json.Unmarshal(manifestRaw, &index); err != nil {
-			return ociImageSpecV1.Manifest{}, nil, err
+		if err := json.Unmarshal(raw, &index); err != nil {
+			return nil, ociImageSpecV1.Manifest{}, nil, err
 		}
 		if len(index.Manifests) == 0 {
-			return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("index has no manifests")
+			return nil, ociImageSpecV1.Manifest{}, nil, fmt.Errorf("index has no manifests")
 		}
 		descriptorManifest := index.Manifests[0]
 		if descriptorManifest.MediaType != ociImageSpecV1.MediaTypeImageManifest {
-			return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("index manifest is not an OCI image manifest")
+			return nil, ociImageSpecV1.Manifest{}, nil, fmt.Errorf("index manifest is not an OCI image manifest")
 		}
 		slogcontext.Log(ctx, slog.LevelDebug, "fetching first manifest from index", log.DescriptorLogAttr(descriptorManifest))
 		indexManifestRaw, err := fetchVerified(ctx, store, descriptorManifest)
 		if err != nil {
-			return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("failed to fetch manifest: %w", err)
+			return nil, ociImageSpecV1.Manifest{}, nil, fmt.Errorf("failed to fetch manifest: %w", err)
 		}
 		if err := json.Unmarshal(indexManifestRaw, &manifest); err != nil {
-			return ociImageSpecV1.Manifest{}, nil, err
+			return nil, ociImageSpecV1.Manifest{}, nil, err
 		}
 	case ociImageSpecV1.MediaTypeImageManifest:
-		if err := json.Unmarshal(manifestRaw, &manifest); err != nil {
-			return ociImageSpecV1.Manifest{}, nil, err
+		if err := json.Unmarshal(raw, &manifest); err != nil {
+			return nil, ociImageSpecV1.Manifest{}, nil, err
 		}
 	default:
-		return ociImageSpecV1.Manifest{}, nil, fmt.Errorf("unsupported media type %q", base.MediaType)
+		return nil, ociImageSpecV1.Manifest{}, nil, fmt.Errorf("unsupported media type %q", base.MediaType)
 	}
 
-	return manifest, index, nil
+	return raw, manifest, index, nil
 }
 
 func collectDescriptors(index *ociImageSpecV1.Index, manifest *ociImageSpecV1.Manifest) []ociImageSpecV1.Descriptor {

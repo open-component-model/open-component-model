@@ -74,7 +74,9 @@ type TransferRoot struct {
 //     every assigned target repository. Each (component, target) pair produces:
 //     - Get transformations for resources (fetching from source)
 //     - Add transformations for resources (uploading to target)
-//     - An AddComponentVersion upload transformation for the descriptor itself
+//     - An upload transformation for the descriptor itself: AddComponentVersion, or the fused
+//     Transfer*ComponentVersionTo* if the source stores the component version in the normalized
+//     layout and source and target are OCI or CTF repositories
 //
 // The returned graph definition can be validated and executed by a builder.Builder.
 func BuildGraphDefinition(
@@ -201,8 +203,13 @@ func verifyReferenceDigests(ctx context.Context, d *dag.DirectedAcyclicGraph[str
 //  1. The descriptor is converted to v2 format and added to the graph environment.
 //  2. For each assigned target, resource transformations are created by the uploader that
 //     selects each resource, or by the baseline (see processResources).
-//  3. A final AddComponentVersion upload transformation is appended, referencing the processed
-//     resources via CEL expressions.
+//  3. A final upload transformation is appended, referencing the processed resources via CEL
+//     expressions. It is AddComponentVersion, which builds the component version from the
+//     descriptor. For a source that stores the component version in the normalized layout it is
+//     the fused Transfer*ComponentVersionTo* instead, which copies the normalized manifest with
+//     its signature referrers from the source. The target is written in the layout of its OCI
+//     storage configuration; if that is not the normalized layout, the signature referrers are
+//     left behind with a warning at execution.
 //
 // When a component has multiple targets, transformation IDs are suffixed (e.g., "T0", "T1")
 // to ensure uniqueness in the DAG. The environment descriptor is shared across targets
@@ -271,7 +278,7 @@ func fillGraphDefinitionWithPrefetchedComponents(
 			}
 			allFileRefs = append(allFileRefs, fileRefs...)
 
-			if err := addUploadTransformation(v2desc, id, baseID, target, tgd, resourceTransformIDs,
+			if err := addUploadTransformation(ctx, v2desc, val, id, baseID, target, tgd, resourceTransformIDs,
 				uploadLabel(&val.Descriptor.Component, target, targetIdx, len(targets))); err != nil {
 				return err
 			}
@@ -582,35 +589,43 @@ func addDescriptorToEnvironment(v2desc *descriptorv2.Descriptor, id string, tgd 
 	return nil
 }
 
-// addUploadTransformation creates the final upload (AddComponentVersion) transformation
-// for a component, reconstructing the descriptor with CEL references to modified resources.
+// addUploadTransformation creates the final upload transformation for a component,
+// reconstructing the descriptor with CEL references to modified resources. That is
+// AddComponentVersion, or the fused Transfer*ComponentVersionTo* if the component version is
+// transferred as the OCI graph it is stored as (see componentVersionGraphSource).
 // envID is the base ID used to reference the descriptor in the environment (without target suffix).
-func addUploadTransformation(v2desc *descriptorv2.Descriptor, id string, envID string, toSpec runtime.Typed, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string, label string) error {
-	descriptorSpec := buildDescriptorSpec(v2desc, envID, resourceTransformIDs)
-
-	addType, err := chooseAddType(toSpec)
-	if err != nil {
-		return fmt.Errorf("choosing add type for target repository: %w", err)
-	}
-
+func addUploadTransformation(ctx context.Context, v2desc *descriptorv2.Descriptor, val *discoveryValue, id string, envID string, toSpec runtime.Typed, tgd *transformv1alpha1.TransformationGraphDefinition, resourceTransformIDs map[int]string, label string) error {
 	toRepo, err := asUnstructured(toSpec)
 	if err != nil {
 		return fmt.Errorf("cannot convert target spec to unstructured: %w", err)
 	}
+	spec := map[string]any{
+		"repository": toRepo.Data,
+		"descriptor": buildDescriptorSpec(v2desc, envID, resourceTransformIDs),
+	}
 
-	upload := transformv1alpha1.GenericTransformation{
+	var uploadType runtime.Type
+	source, fused, err := componentVersionGraphSource(ctx, val, toSpec)
+	if err != nil {
+		return err
+	}
+	if fused {
+		spec["source"] = source
+		if uploadType, err = chooseTransferComponentVersionType(val.SourceRepository, toSpec); err != nil {
+			return fmt.Errorf("choosing transfer component version type: %w", err)
+		}
+	} else if uploadType, err = chooseAddType(toSpec); err != nil {
+		return fmt.Errorf("choosing add type for target repository: %w", err)
+	}
+
+	tgd.Transformations = append(tgd.Transformations, transformv1alpha1.GenericTransformation{
 		TransformationMeta: meta.TransformationMeta{
-			Type:  addType,
+			Type:  uploadType,
 			ID:    id + "Upload",
 			Label: label,
 		},
-		Spec: &runtime.Unstructured{Data: map[string]any{
-			"repository": toRepo.Data,
-			"descriptor": descriptorSpec,
-		}},
-	}
-
-	tgd.Transformations = append(tgd.Transformations, upload)
+		Spec: &runtime.Unstructured{Data: spec},
+	})
 	return nil
 }
 

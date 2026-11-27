@@ -13,6 +13,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/oci/spec/annotations"
 	componentConfig "ocm.software/open-component-model/bindings/go/oci/spec/config/component"
+	ocidescriptor "ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
 	"ocm.software/open-component-model/bindings/go/oci/spec/repository/path"
 )
 
@@ -41,6 +42,7 @@ func ComponentVersionDescriptor(
 ) (string, error) {
 	var (
 		manifestAnnotations    map[string]string
+		artifactType           string
 		data                   io.ReadCloser
 		oldOCMComponentVersion bool
 		err                    error
@@ -56,6 +58,7 @@ func ComponentVersionDescriptor(
 			return "", errors.Join(fmt.Errorf("failed to decode manifest for reference %q: %w", ref, err), data.Close())
 		}
 		manifestAnnotations = manifest.Annotations
+		artifactType = manifest.ArtifactType
 		// Checks for old component versions pre-2024 which didn't have an annotation.
 		// In that case, we check if the manifest has a config of type ocm config and if yes, we can just return
 		// the tag as valid. We only do this for manifest layers and not index layers because pre-2024 component versions
@@ -74,12 +77,18 @@ func ComponentVersionDescriptor(
 			return "", errors.Join(fmt.Errorf("failed to decode index for reference %q: %w", ref, err), data.Close())
 		}
 		manifestAnnotations = index.Annotations
+		artifactType = index.ArtifactType
 
 	default:
 		return "", fmt.Errorf("unsupported media type %q for reference %q: %w", desc.MediaType, ref, ErrInvalidComponentVersion)
 	}
 	if err = data.Close(); err != nil {
 		return "", fmt.Errorf("failed to close descriptor reader for reference %q: %w", ref, err)
+	}
+	// Access referrers of the normalized layout carry a component config but are reachable by
+	// their fallback tag only; they must never be taken for a (legacy) component version.
+	if artifactType == ocidescriptor.ArtifactTypeAccessDescriptor {
+		return "", fmt.Errorf("reference %q is an access referrer of a normalized component version: %w", ref, ErrInvalidComponentVersion)
 	}
 	annotation, ok := manifestAnnotations[annotations.OCMComponentVersion]
 	if !ok {

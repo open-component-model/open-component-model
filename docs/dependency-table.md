@@ -14,7 +14,7 @@
 | 4 | `signing` | `configuration`, `credentials`, `descriptor/normalisation`, `descriptor/runtime`, `runtime` |
 | 5 | `repository` | `blob`, `configuration`, `credentials`, `descriptor/normalisation`, `descriptor/runtime`, `runtime`, `signing` |
 | 5 | `rsa`, `sigstore` | `credentials`, `descriptor/runtime`, `runtime`, `signing` |
-| 6 | `oci` | `blob`, `configuration`, `credentials`, `ctf`, `descriptor/runtime`, `descriptor/v2`, `http`, `repository`, `runtime` |
+| 6 | `oci` | `blob`, `configuration`, `credentials`, `ctf`, `descriptor/normalisation`, `descriptor/runtime`, `descriptor/v2`, `http`, `repository`, `runtime`, `signing` |
 | 7 | `constructor` | `blob`, `credentials`, `ctf`, `dag`, `descriptor/normalisation`, `descriptor/runtime`, `descriptor/v2`, `oci`, `repository`, `runtime` |
 | 8 | `git`, `s3`, `wget` | `blob`, `configuration`, `constructor`, `credentials`, `descriptor/runtime`, `descriptor/v2`, `http`, `repository`, `runtime` |
 | 8 | `input/dir`, `input/file`, `input/utf8` | `blob`, `constructor`, `runtime` |

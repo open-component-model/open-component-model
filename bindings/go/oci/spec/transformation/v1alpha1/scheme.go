@@ -27,6 +27,11 @@ var (
 	TransferCTFLocalBlobToOCIArtifactV1alpha1  = runtime.NewVersionedType(TransferCTFLocalBlobToOCIArtifactType, Version)
 	TransferOCIArtifactToOCILocalBlobV1alpha1  = runtime.NewVersionedType(TransferOCIArtifactToOCILocalBlobType, Version)
 	TransferOCIArtifactToCTFLocalBlobV1alpha1  = runtime.NewVersionedType(TransferOCIArtifactToCTFLocalBlobType, Version)
+
+	TransferOCIComponentVersionToOCIV1alpha1 = runtime.NewVersionedType(TransferOCIComponentVersionToOCIType, Version)
+	TransferOCIComponentVersionToCTFV1alpha1 = runtime.NewVersionedType(TransferOCIComponentVersionToCTFType, Version)
+	TransferCTFComponentVersionToOCIV1alpha1 = runtime.NewVersionedType(TransferCTFComponentVersionToOCIType, Version)
+	TransferCTFComponentVersionToCTFV1alpha1 = runtime.NewVersionedType(TransferCTFComponentVersionToCTFType, Version)
 )
 
 func init() {
@@ -49,4 +54,8 @@ func init() {
 	Scheme.MustRegisterWithAlias(&TransferCTFLocalBlobToOCIArtifact{}, TransferCTFLocalBlobToOCIArtifactV1alpha1)
 	Scheme.MustRegisterWithAlias(&TransferOCIArtifactToOCILocalBlob{}, TransferOCIArtifactToOCILocalBlobV1alpha1)
 	Scheme.MustRegisterWithAlias(&TransferOCIArtifactToCTFLocalBlob{}, TransferOCIArtifactToCTFLocalBlobV1alpha1)
+	Scheme.MustRegisterWithAlias(&TransferOCIComponentVersionToOCI{}, TransferOCIComponentVersionToOCIV1alpha1)
+	Scheme.MustRegisterWithAlias(&TransferOCIComponentVersionToCTF{}, TransferOCIComponentVersionToCTFV1alpha1)
+	Scheme.MustRegisterWithAlias(&TransferCTFComponentVersionToOCI{}, TransferCTFComponentVersionToOCIV1alpha1)
+	Scheme.MustRegisterWithAlias(&TransferCTFComponentVersionToCTF{}, TransferCTFComponentVersionToCTFV1alpha1)
 }

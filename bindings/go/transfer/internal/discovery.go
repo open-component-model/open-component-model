@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base32"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -13,6 +14,7 @@ import (
 
 	"ocm.software/open-component-model/bindings/go/descriptor/normalisation/algorithms"
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
+	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/repository/component/resolvers"
 	"ocm.software/open-component-model/bindings/go/runtime"
@@ -26,10 +28,15 @@ import (
 type discoveryValue struct {
 	Descriptor       *descriptor.Descriptor
 	SourceRepository runtime.Typed
-	// Pin is the OCI digest of the source artifact the descriptor was read from if the
-	// component version is pinned to it (see [repository.DigestPinnableRepository]), else empty.
-	// Local resources are then read from the same artifact.
+	// Pin is the OCI digest of the source artifact the component version is transferred from
+	// (see [repository.DigestPinnableRepository]): the OCI digest pin of a root, else for a
+	// normalized source the digest its version tag resolved to. It is empty for any other
+	// source, and for a normalized source whose repository cannot resolve digests.
+	// Local resources are read from the same artifact.
 	Pin string
+	// SourceLayout is the storage layout of the component version in its source repository.
+	// It is empty when the source repository cannot report it.
+	SourceLayout layout.ComponentVersionLayout
 }
 
 // multiResolver dispatches component version resolution to per-component resolvers.
@@ -58,6 +65,10 @@ type multiResolver struct {
 // digest recorded during recursive discovery of parent component references; if both exist,
 // both must match. An OCI digest root pin (see [repository.ParseDigestPin]) reads the component
 // version from the artifact with that digest instead of resolving the version tag.
+//
+// The storage layout is detected on the artifact the descriptor was read from. A normalized
+// source is always pinned to an artifact (see [discoveryValue.Pin]) if its repository can
+// resolve digests.
 func (r *multiResolver) Resolve(ctx context.Context, key string) (*discoveryValue, error) {
 	parts := strings.SplitN(key, ":", 2)
 	if len(parts) != 2 {
@@ -101,7 +112,9 @@ func (r *multiResolver) Resolve(ctx context.Context, key string) (*discoveryValu
 	}
 
 	pin := r.rootPin(key)
-	_, desc, err := repository.GetPinnedComponentVersion(ctx, repo, component, version, pin)
+	// readRepo is the repository the descriptor was read through: with an OCI digest pin the
+	// view of repo pinned to that artifact, else repo.
+	readRepo, desc, err := repository.GetPinnedComponentVersion(ctx, repo, component, version, pin)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting component version %s:%s: %w", component, version, err)
 	}
@@ -134,7 +147,48 @@ func (r *multiResolver) Resolve(ctx context.Context, key string) (*discoveryValu
 	if pin != nil && pin.NormalisationAlgorithm == "" {
 		value.Pin = repository.FormatDigestPin(pin)
 	}
+	// The source layout decides whether signature referrers of a normalized source are carried.
+	// It is the layout of the artifact the descriptor was read from: the version tag of a
+	// pinned root may be missing or point at an artifact in another layout.
+	if detector, ok := readRepo.(repository.ComponentVersionLayoutDetector); ok {
+		sourceLayout, err := detector.GetComponentVersionLayout(ctx, component, version)
+		if err != nil {
+			return nil, fmt.Errorf("failed detecting storage layout of component version %s:%s: %w", component, version, err)
+		}
+		value.SourceLayout = layout.ComponentVersionLayout(sourceLayout)
+		slog.DebugContext(ctx, "detected source layout",
+			"component", component, "version", version, "layout", sourceLayout)
+	}
+	// A normalized source is transferred as the artifact graph it is stored as, which is read
+	// by digest. Without an OCI digest pin, that is the artifact the version tag resolves to.
+	if value.SourceLayout == layout.ComponentVersionLayoutNormalized && value.Pin == "" {
+		value.Pin, err = resolveArtifactDigest(ctx, repo, component, version)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return value, nil
+}
+
+// resolveArtifactDigest returns the OCI digest of the artifact the version tag of component
+// resolves to in repo, or "" if repo does not store component versions content-addressed
+// (see [repository.DigestPinnableRepository]).
+func resolveArtifactDigest(ctx context.Context, repo repository.ComponentVersionRepository, component, version string) (string, error) {
+	pinnable, ok := repo.(repository.DigestPinnableRepository)
+	if !ok {
+		return "", nil
+	}
+	dgst, err := pinnable.ResolveComponentVersionDigest(ctx, component, version)
+	if errors.Is(err, errors.ErrUnsupported) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("failed resolving version tag of normalized component version %s:%s to its artifact: %w", component, version, err)
+	}
+	slog.DebugContext(ctx, "pinned normalized source to the artifact its version tag resolves to",
+		"component", component, "version", version, "digest", dgst)
+	return dgst, nil
 }
 
 // discoverer implements the dagsync.Discoverer interface for recursive component reference traversal.

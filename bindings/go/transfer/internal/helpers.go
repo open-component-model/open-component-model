@@ -136,6 +136,29 @@ func chooseTransferLocalBlobType(from, to runtime.Typed) (runtime.Type, error) {
 	}
 }
 
+// chooseTransferComponentVersionType returns the fused transformation that adds a component
+// version stored in the normalized layout in the source repository to the target repository.
+func chooseTransferComponentVersionType(source, target runtime.Typed) (runtime.Type, error) {
+	sourceOCI, err := isOCIRepository(source)
+	if err != nil {
+		return runtime.Type{}, fmt.Errorf("source repository: %w", err)
+	}
+	targetOCI, err := isOCIRepository(target)
+	if err != nil {
+		return runtime.Type{}, fmt.Errorf("target repository: %w", err)
+	}
+	switch {
+	case sourceOCI && targetOCI:
+		return ociv1alpha1.TransferOCIComponentVersionToOCIV1alpha1, nil
+	case sourceOCI:
+		return ociv1alpha1.TransferOCIComponentVersionToCTFV1alpha1, nil
+	case targetOCI:
+		return ociv1alpha1.TransferCTFComponentVersionToOCIV1alpha1, nil
+	default:
+		return ociv1alpha1.TransferCTFComponentVersionToCTFV1alpha1, nil
+	}
+}
+
 // chooseTransferLocalBlobToOCIArtifactType returns the transformation that streams a local
 // blob from a component version in the from repository into a separate OCI artifact.
 func chooseTransferLocalBlobToOCIArtifactType(from runtime.Typed) (runtime.Type, error) {
@@ -160,6 +183,25 @@ func chooseTransferOCIArtifactToLocalBlobType(to runtime.Typed) (runtime.Type, e
 		return ociv1alpha1.TransferOCIArtifactToOCILocalBlobV1alpha1, nil
 	}
 	return ociv1alpha1.TransferOCIArtifactToCTFLocalBlobV1alpha1, nil
+}
+
+// sourceComponentVersion returns the fields a transformation reads the component version in val
+// from its source repository by: repository, component, version and, if val is pinned to a source
+// artifact, the digest of that artifact.
+func sourceComponentVersion(val *discoveryValue) (map[string]any, error) {
+	sourceRepo, err := asUnstructured(val.SourceRepository)
+	if err != nil {
+		return nil, fmt.Errorf("cannot convert source repository spec to unstructured: %w", err)
+	}
+	source := map[string]any{
+		"repository": sourceRepo.Data,
+		"component":  val.Descriptor.Component.Name,
+		"version":    val.Descriptor.Component.Version,
+	}
+	if val.Pin != "" {
+		source["digest"] = val.Pin
+	}
+	return source, nil
 }
 
 func getReferenceName(imageReference string) (string, error) {

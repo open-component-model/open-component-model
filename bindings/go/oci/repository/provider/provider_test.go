@@ -18,8 +18,11 @@ import (
 	descriptor "ocm.software/open-component-model/bindings/go/descriptor/runtime"
 	httpv1alpha1 "ocm.software/open-component-model/bindings/go/http/spec/config/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
+	ocistoragev1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/storage/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
+	"ocm.software/open-component-model/bindings/go/repository"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -282,6 +285,49 @@ func TestWithHTTPConfig_PerHostPlainHTTP(t *testing.T) {
 			if tt.wantErr != "" {
 				r.ErrorContains(err, tt.wantErr)
 			}
+		})
+	}
+}
+
+func TestWithOCIStorageConfig_SelectsComponentVersionLayout(t *testing.T) {
+	desc := &descriptor.Descriptor{}
+	desc.Meta.Version = "v2"
+	desc.Component.Name = "ocm.software/layout-test"
+	desc.Component.Version = "1.0.0"
+	desc.Component.Provider.Name = "ocm.software"
+
+	tests := []struct {
+		name    string
+		cfg     *ocistoragev1alpha1.Config
+		want    string
+		wantErr string
+	}{
+		{name: "no config uses default", want: "default"},
+		{name: "empty layout uses default", cfg: &ocistoragev1alpha1.Config{}, want: "default"},
+		{name: "normalized", cfg: &ocistoragev1alpha1.Config{ComponentVersionLayout: layout.ComponentVersionLayoutNormalized}, want: "normalized"},
+		{name: "unknown layout", cfg: &ocistoragev1alpha1.Config{ComponentVersionLayout: "v3"}, wantErr: `unknown component version layout "v3"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			fs, err := filesystem.NewFS(t.TempDir(), os.O_RDWR)
+			r.NoError(err)
+			prov := provider.NewComponentVersionRepositoryProvider(provider.WithOCIStorageConfig(tt.cfg))
+			spec := &ctfrepospecv1.Repository{FilePath: fs.String(), AccessMode: ctfrepospecv1.AccessModeReadWrite}
+
+			repo, err := prov.GetComponentVersionRepository(t.Context(), spec, nil)
+			if tt.wantErr != "" {
+				r.ErrorContains(err, tt.wantErr)
+				return
+			}
+			r.NoError(err)
+			r.NoError(repo.AddComponentVersion(t.Context(), desc))
+
+			detector, ok := repo.(repository.ComponentVersionLayoutDetector)
+			r.True(ok)
+			got, err := detector.GetComponentVersionLayout(t.Context(), desc.Component.Name, desc.Component.Version)
+			r.NoError(err)
+			r.Equal(tt.want, got)
 		})
 	}
 }

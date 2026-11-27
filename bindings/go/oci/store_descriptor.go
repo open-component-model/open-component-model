@@ -13,6 +13,7 @@ import (
 	"github.com/opencontainers/go-digest"
 	"github.com/opencontainers/image-spec/specs-go"
 	ociImageSpecV1 "github.com/opencontainers/image-spec/specs-go/v1"
+	"github.com/oras-project/oras-go/v3"
 	"github.com/oras-project/oras-go/v3/content"
 	slogcontext "github.com/veqryn/slog-context"
 	"golang.org/x/sync/errgroup"
@@ -24,8 +25,46 @@ import (
 	componentConfig "ocm.software/open-component-model/bindings/go/oci/spec/config/component"
 	ocidescriptor "ocm.software/open-component-model/bindings/go/oci/spec/descriptor"
 	indexv1 "ocm.software/open-component-model/bindings/go/oci/spec/index/component/v1"
+	speclayout "ocm.software/open-component-model/bindings/go/oci/spec/layout"
+	ocistream "ocm.software/open-component-model/bindings/go/oci/stream"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
+
+// Layout selects the OCI storage layout for a component version.
+type Layout int
+
+const (
+	// LayoutV2 (the default): the tag resolves to the access-bearing v2 descriptor manifest.
+	LayoutV2 Layout = iota
+	// LayoutNormalized is the cosign-signable layout: the tag resolves to a stable, access-free
+	// normalized descriptor manifest, with the access-bearing descriptor stored as a referrer.
+	LayoutNormalized
+)
+
+// String returns the layout name used in configurations.
+func (l Layout) String() string {
+	switch l {
+	case LayoutV2:
+		return string(speclayout.ComponentVersionLayoutDefault)
+	case LayoutNormalized:
+		return string(speclayout.ComponentVersionLayoutNormalized)
+	default:
+		return fmt.Sprintf("Layout(%d)", int(l))
+	}
+}
+
+// ParseLayout maps a configured layout to a Layout. The empty value maps to LayoutV2; unknown
+// values are rejected.
+func ParseLayout(l speclayout.ComponentVersionLayout) (Layout, error) {
+	switch l {
+	case "", speclayout.ComponentVersionLayoutDefault:
+		return LayoutV2, nil
+	case speclayout.ComponentVersionLayoutNormalized:
+		return LayoutNormalized, nil
+	default:
+		return LayoutV2, l.Validate()
+	}
+}
 
 // AddDescriptorOptions defines the options for adding a component descriptor to a Store.
 type AddDescriptorOptions struct {
@@ -35,6 +74,15 @@ type AddDescriptorOptions struct {
 	AdditionalLayers              []ociImageSpecV1.Descriptor
 	ReferrerTrackingPolicy        ReferrerTrackingPolicy
 	DescriptorEncodingMediaType   string
+	Layout                        Layout
+	// NormalizedGraph, if set, is the OCI graph of the component version in a source repository,
+	// rooted at its normalized manifest (see [Repository.DownloadComponentVersionGraph]). The
+	// normalized manifest and everything the graph reaches from it is then copied instead of
+	// being built from the descriptor, which keeps the referrers that sign that manifest. It
+	// requires LayoutNormalized.
+	NormalizedGraph ocistream.ResourceStream
+	// NormalizedGraphCopyOptions are the options NormalizedGraph is copied with.
+	NormalizedGraphCopyOptions oras.ExtendedCopyGraphOptions
 }
 
 // AddDescriptorToStore uploads a component descriptor to any given Store.
@@ -42,6 +90,13 @@ type AddDescriptorOptions struct {
 // It can be used to retrieve the component descriptor later.
 // To persist the descriptor, the manifest still has to be tagged.
 func AddDescriptorToStore(ctx context.Context, store spec.Store, descriptor *descriptor.Descriptor, opts AddDescriptorOptions) (*ociImageSpecV1.Descriptor, error) {
+	if opts.Layout == LayoutNormalized {
+		return addNormalizedLayout(ctx, store, descriptor, opts)
+	}
+	if opts.NormalizedGraph != nil {
+		return nil, fmt.Errorf("the graph of a normalized component version can only be added in the %s layout, not in the %s layout", LayoutNormalized, opts.Layout)
+	}
+
 	component, version := descriptor.Component.Name, descriptor.Component.Version
 
 	// we can concurrently upload certain parts of the descriptor!
@@ -198,26 +253,67 @@ It is used to store the component descriptor manifest and other related blob man
 	return &idxDescriptor, nil
 }
 
-// getDescriptorFromStore retrieves a component descriptor from a given Store using the provided reference.
-// Every node from the artifact reference resolves to down to the descriptor layer is verified
-// against its digest, so the descriptor is bound to the digest of that artifact.
-func getDescriptorFromStore(ctx context.Context, store spec.Store, reference string, unmarshal ocidescriptor.UnmarshalFunc) (desc *descriptor.Descriptor, manifestRef *ociImageSpecV1.Manifest, index *ociImageSpecV1.Index, err error) {
-	manifest, index, err := getDescriptorOCIImageManifest(ctx, store, reference)
+// layoutOf reports the layout of a tagged component version from its fetched manifest.
+// Registries do not populate the resolved descriptor's artifactType for tags; it is only known
+// from the manifest body.
+func layoutOf(manifest *ociImageSpecV1.Manifest, index *ociImageSpecV1.Index) Layout {
+	if index == nil && manifest.ArtifactType == ocidescriptor.ArtifactTypeNormalizedDescriptor {
+		return LayoutNormalized
+	}
+	return LayoutV2
+}
+
+// storedRoot is the artifact a component version reference resolves to: an image manifest, or the
+// image index of a LayoutV2 component version with OCI-native local blobs.
+type storedRoot struct {
+	descriptor ociImageSpecV1.Descriptor
+	// body is the content of the artifact.
+	body   []byte
+	layout Layout
+}
+
+// getStoredLayout resolves reference and reports the artifact the component version is stored as
+// together with its layout. Absence is detectable via errdef.ErrNotFound.
+func getStoredLayout(ctx context.Context, store spec.Store, reference string) (storedRoot, error) {
+	base, err := store.Resolve(ctx, reference)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to get manifest: %w", err)
+		return storedRoot{}, fmt.Errorf("failed to resolve reference %q: %w", reference, err)
+	}
+	body, manifest, index, err := getDescriptorOCIImageManifest(ctx, store, base)
+	if err != nil {
+		return storedRoot{}, fmt.Errorf("failed to get manifest: %w", err)
+	}
+	return storedRoot{descriptor: base, body: body, layout: layoutOf(&manifest, index)}, nil
+}
+
+// getDescriptorFromStore resolves reference once and retrieves the component descriptor for either
+// storage layout, together with the manifest (and index) its local blobs are listed in.
+func getDescriptorFromStore(ctx context.Context, store spec.Store, reference string, unmarshal ocidescriptor.UnmarshalFunc) (_ *storedComponentVersion, err error) {
+	slogcontext.Log(ctx, slog.LevelDebug, "resolving descriptor", slog.String("reference", reference))
+	base, err := store.Resolve(ctx, reference)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve reference %q: %w", reference, err)
+	}
+	_, manifest, index, err := getDescriptorOCIImageManifest(ctx, store, base)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get manifest: %w", err)
+	}
+
+	if layoutOf(&manifest, index) == LayoutNormalized {
+		return getNormalizedComponentVersion(ctx, store, base, &manifest, unmarshal)
 	}
 
 	slogcontext.Log(ctx, slog.LevelDebug, "fetching descriptor manifest config", log.DescriptorLogAttr(manifest.Config))
 	componentConfigRaw, err := fetchVerified(ctx, store, manifest.Config)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to get component config: %w", err)
+		return nil, fmt.Errorf("failed to get component config: %w", err)
 	}
 	cfg := componentConfig.Config{}
 	if err := json.Unmarshal(componentConfigRaw, &cfg); err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 	if cfg.ComponentDescriptorLayer == nil {
-		return nil, nil, nil, fmt.Errorf("artifact %q is not an OCM component version: its config %s has no componentDescriptorLayer", reference, manifest.Config.Digest)
+		return nil, fmt.Errorf("artifact %q is not an OCM component version: its config %s has no componentDescriptorLayer", reference, manifest.Config.Digest)
 	}
 
 	// Read component descriptor
@@ -225,15 +321,15 @@ func getDescriptorFromStore(ctx context.Context, store spec.Store, reference str
 	slogcontext.Log(ctx, slog.LevelDebug, "fetching component descriptor layer", log.DescriptorLogAttr(descriptorLayer))
 	descriptorRaw, err := fetchVerified(ctx, store, descriptorLayer)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to fetch descriptor layer: %w", err)
+		return nil, fmt.Errorf("failed to fetch descriptor layer: %w", err)
 	}
 
-	desc, err = ocidescriptor.SingleFileDecodeDescriptor(bytes.NewReader(descriptorRaw), descriptorLayer.MediaType, unmarshal)
+	desc, err := ocidescriptor.SingleFileDecodeDescriptor(bytes.NewReader(descriptorRaw), descriptorLayer.MediaType, unmarshal)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to decode descriptor: %w", err)
+		return nil, fmt.Errorf("failed to decode descriptor: %w", err)
 	}
 
-	return desc, &manifest, index, nil
+	return &storedComponentVersion{descriptor: desc, manifest: &manifest, index: index, layout: LayoutV2}, nil
 }
 
 // fetchVerified reads desc from fetcher and checks the content against the digest of desc (and its

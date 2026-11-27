@@ -16,6 +16,8 @@ import (
 	genericv1 "ocm.software/open-component-model/bindings/go/configuration/generic/v1/spec"
 	versioningv1alpha1 "ocm.software/open-component-model/bindings/go/configuration/versioning/v1alpha1/spec"
 	ocicachev1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/cache/v1alpha1"
+	ocistoragev1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/storage/v1alpha1"
+	"ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	"ocm.software/open-component-model/bindings/go/runtime"
 )
 
@@ -117,6 +119,55 @@ func TestGetEffectiveConfig_OCICache(t *testing.T) {
 			var found *ocicachev1alpha1.Config
 			for _, entry := range eff.Configurations {
 				if c, ok := entry.(*ocicachev1alpha1.Config); ok {
+					found = c
+				}
+			}
+			r.Equal(tt.expect, found)
+		})
+	}
+}
+
+func TestGetEffectiveConfig_OCIStorage(t *testing.T) {
+	tests := []struct {
+		name    string
+		entries []string
+		expect  *ocistoragev1alpha1.Config
+	}{
+		{
+			name:   "omitted when not configured",
+			expect: nil,
+		},
+		{
+			name: "included when configured",
+			entries: []string{
+				`{"type":"oci.storage.config.ocm.software","componentVersionLayout":"normalized"}`,
+			},
+			expect: &ocistoragev1alpha1.Config{
+				Type:                   runtime.NewVersionedType(ocistoragev1alpha1.ConfigType, ocistoragev1alpha1.Version),
+				ComponentVersionLayout: layout.ComponentVersionLayoutNormalized,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+
+			cfg := &genericv1.Config{
+				Type:           runtime.NewVersionedType(genericv1.ConfigType, genericv1.ConfigTypeV1),
+				Configurations: []*runtime.Raw{},
+			}
+			for _, entry := range tt.entries {
+				raw := &runtime.Raw{}
+				r.NoError(json.Unmarshal([]byte(entry), raw))
+				cfg.Configurations = append(cfg.Configurations, raw)
+			}
+
+			eff, err := config.GetEffectiveConfig(cfg)
+			r.NoError(err)
+
+			var found *ocistoragev1alpha1.Config
+			for _, entry := range eff.Configurations {
+				if c, ok := entry.(*ocistoragev1alpha1.Config); ok {
 					found = c
 				}
 			}

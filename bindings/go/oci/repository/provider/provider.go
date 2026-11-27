@@ -23,6 +23,7 @@ import (
 	urlresolver "ocm.software/open-component-model/bindings/go/oci/resolver/url"
 	v2 "ocm.software/open-component-model/bindings/go/oci/spec/credentials/v1"
 	"ocm.software/open-component-model/bindings/go/oci/spec/identity/v1"
+	speclayout "ocm.software/open-component-model/bindings/go/oci/spec/layout"
 	repoSpec "ocm.software/open-component-model/bindings/go/oci/spec/repository"
 	ctfrepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/ctf"
 	ocirepospecv1 "ocm.software/open-component-model/bindings/go/oci/spec/repository/v1/oci"
@@ -89,6 +90,10 @@ type CachingComponentVersionRepositoryProvider struct {
 	// layer blobs (see open-component-model#2833 discussion).
 	blobCacheOpts *cache.Options
 
+	// componentVersionLayout is the storage layout of every component version added through the
+	// repositories provided (see [WithOCIStorageConfig]).
+	componentVersionLayout speclayout.ComponentVersionLayout
+
 	// referenceCacheOpts, when non-nil, enables per-scope reference caches.
 	// Tag resolution IS access-controlled (a private registry won't return a
 	// descriptor for a tag you can't read), so each credential scope gets its
@@ -143,6 +148,9 @@ func NewComponentVersionRepositoryProvider(opts ...Option) *CachingComponentVers
 		tempDir:            options.TempDir,
 		blobCacheOpts:      applyCacheConfig(options.BlobCacheOptions, options.CacheConfig),
 		referenceCacheOpts: applyCacheConfig(options.ReferenceCacheOptions, options.CacheConfig),
+	}
+	if options.StorageConfig != nil {
+		prov.componentVersionLayout = options.StorageConfig.ComponentVersionLayout
 	}
 	// Wire the shared blob cache constructor now that prov exists so the
 	// closure can read its final field values. sync.OnceValue guarantees
@@ -200,9 +208,14 @@ func (b *CachingComponentVersionRepositoryProvider) GetComponentVersionRepositor
 		return nil, err
 	}
 
+	layout, err := oci.ParseLayout(b.componentVersionLayout)
+	if err != nil {
+		return nil, fmt.Errorf("invalid oci storage configuration: %w", err)
+	}
 	opts := []oci.RepositoryOption{
 		oci.WithTempDir(b.tempDir),
 		oci.WithCreator(b.creator),
+		oci.WithComponentVersionLayout(layout),
 	}
 
 	switch obj := obj.(type) {

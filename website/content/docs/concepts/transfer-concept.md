@@ -134,7 +134,16 @@ OCM supports several transfer patterns, depending on your infrastructure:
 
 ## Signatures Across Boundaries
 
-Signatures are stored within the component descriptor and travel with it during transfer. This means you can sign a component version in one environment and verify the signature in a different environment, even across an air gap.
+OCM component versions can carry two kinds of signatures, and transfer preserves both:
+
+- **OCM signatures** are created with `ocm sign` and stored inside the component descriptor, in its `signatures` list. They travel with the descriptor through every repository type.
+- **Cosign signatures** (and other OCI referrers such as attestations) are created with standard OCI tooling like `cosign sign` and are stored next to the component version as OCI referrers. They survive transfer only for component versions stored in the *normalized* OCI layout, described below.
+
+Both kinds of signature cover the same content: the normalized component descriptor, which excludes all `access` information (see [Normalization and Digest Calculation]({{< relref "docs/concepts/signing-and-verification-concept.md" >}}#normalization-and-digest-calculation)). An OCM signature signs its digest directly; a cosign signature signs the normalized manifest, whose only layer is that normalized descriptor. This is why a signature made in one environment verifies in another, even across an air gap.
+
+### Signatures in the Component Descriptor
+
+OCM signatures are part of the component descriptor and travel with it during transfer.
 
 A typical sovereign delivery flow:
 
@@ -151,7 +160,26 @@ flowchart LR
 3. The archive is imported into the target registry
 4. Before deployment, the signature is verified using the public key
 
-At no point does the signature leave the component descriptor. The verification in the target environment uses the same public key and produces the same result as if verified against the original source.
+At no point does an OCM signature leave the component descriptor. The verification in the target environment uses the same public key and produces the same result as if verified against the original source.
+
+### Signatures as OCI Referrers (Normalized Layout)
+
+In the default (`v2`) OCI layout, the version tag of a component version points to an OCI manifest that contains the full descriptor, including `access` information and repository-specific annotations. That manifest changes whenever the component version is written to another registry, so a cosign signature over it does not survive transfer.
+
+The **normalized layout** is an opt-in storage layout for OCI registries and CTF archives in which the version tag points to a manifest that contains only the normalized descriptor. Its digest depends only on what the component version contains, not on where it is stored, so it is identical in every registry. You can sign it with `cosign sign` exactly like a container image, and cosign attaches the signature as an OCI referrer. The access information and the local blobs live in a separate, unsigned *access referrer* that OCM regenerates for each registry and checks against the signed manifest before it trusts it.
+
+When a normalized component version is transferred between OCI registries or CTF archives with the normalized layout configured, `ocm transfer` uploads it in a single step that:
+
+1. checks that the descriptor it is about to write still matches the signed manifest of the source, and that source and target track referrers in the same way. If a check fails, the transfer fails before the component version is written;
+2. copies the normalized manifest from the source to the target, together with the OCI referrers attached to it, such as cosign signatures and attestations. The manifest is copied unchanged, so it has the same digest on the target;
+3. writes a new access referrer for the target. Access referrers of the source are never copied;
+4. sets the version tag.
+
+The signature therefore verifies on the target with no re-signing. The version tag is set last, so a component version that is visible on the target already has its signatures. If copying a referrer fails, the transfer fails, so a transfer into the normalized layout never silently drops a signature. The one exception is a referrer that the source still lists but no longer stores, for example after a retention policy removed it: it is skipped with a warning.
+
+The layout is set with the `componentVersionLayout` field of the [OCI storage configuration]({{< relref "docs/reference/configuration/oci-storage.md" >}}) (`default`, which is the `v2` layout, or `normalized`). It applies to every component version OCM writes, also to the transfer target and to `ocm sign`, which rewrites the component version in that layout. Configure `componentVersionLayout: normalized` for every OCM command that writes a normalized component version, otherwise it is rewritten as `v2` and its cosign signatures are no longer reachable from its tag. If the target of a transfer is not written in the normalized layout, the signatures of a normalized source are not copied and a warning is logged.
+
+A normalized component version keeps its cosign signatures only between repositories that track referrers in the same way, because that setting is part of the normalized manifest; otherwise the transfer into the normalized layout fails. Signatures that cosign stores only under its legacy `sha256-<digest>.sig` tag scheme are not copied; use cosign's OCI 1.1 referrer support.
 
 ## Real-World Example
 

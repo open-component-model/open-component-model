@@ -35,6 +35,7 @@ configurations:
 | [Credential Types]({{< relref "credential-types.md" >}}) | Built-in typed credential types and their fields. |
 | [HTTP Checksum Configuration]({{< relref "http-checksum.md" >}}) | Schema, checksum modes, precedence, and the access-side fast path. |
 | [HTTP Client Configuration]({{< relref "http-client.md" >}}) | Timeouts, retries, TLS trust, and per-host merge semantics. |
+| [OCI Storage Configuration]({{< relref "oci-storage.md" >}}) | Storage layout (`v2` or `normalized`) of component versions written to OCI registries and CTF archives. |
 | [Resolver Configuration]({{< relref "resolver.md" >}}) | Repository resolution, component name patterns, and version constraints. |
 | [Transfer Configuration]({{< relref "transfer-configuration/_index.md" >}}) | Transfer settings, uploader configurations, resource matching, and CEL expressions. |
 | [Versioning Configuration]({{< relref "versioning.md" >}}) | Scheme catalog, custom schemes, and OCI tag constraints. |

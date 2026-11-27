@@ -117,8 +117,8 @@ func TestList(t *testing.T) {
 			LookupPolicy: LookupPolicyReferrerWithTagFallback,
 			SortPolicy:   SortPolicyLooseSemverDescending,
 			ReferrerListerOptions: ReferrerListerOptions{
-				Subject:      subject,
-				ArtifactType: "test",
+				Subject:       subject,
+				ArtifactTypes: []string{"test"},
 				VersionResolver: func(ctx context.Context, desc v1.Descriptor) (string, error) {
 					if ver, ok := desc.Annotations["version"]; ok {
 						return ver, nil
@@ -171,8 +171,8 @@ func TestList(t *testing.T) {
 			LookupPolicy: LookupPolicyReferrerWithTagFallback,
 			SortPolicy:   SortPolicyLooseSemverDescending,
 			ReferrerListerOptions: ReferrerListerOptions{
-				Subject:      subject,
-				ArtifactType: "test",
+				Subject:       subject,
+				ArtifactTypes: []string{"test"},
 				VersionResolver: func(ctx context.Context, desc v1.Descriptor) (string, error) {
 					if desc.Digest == "sha256:def" {
 						return "", ErrSkip
@@ -201,8 +201,8 @@ func TestList(t *testing.T) {
 			LookupPolicy: LookupPolicyReferrerWithTagFallback,
 			SortPolicy:   SortPolicyLooseSemverDescending,
 			ReferrerListerOptions: ReferrerListerOptions{
-				Subject:      subject,
-				ArtifactType: "test",
+				Subject:       subject,
+				ArtifactTypes: []string{"test"},
 				VersionResolver: func(ctx context.Context, desc v1.Descriptor) (string, error) {
 					return "", errors.New("version resolver error")
 				},
@@ -244,8 +244,8 @@ func TestList(t *testing.T) {
 			LookupPolicy: LookupPolicyReferrerWithTagFallback,
 			SortPolicy:   SortPolicy(999), // Invalid policy
 			ReferrerListerOptions: ReferrerListerOptions{
-				Subject:      subject,
-				ArtifactType: "test",
+				Subject:       subject,
+				ArtifactTypes: []string{"test"},
 				VersionResolver: func(ctx context.Context, desc v1.Descriptor) (string, error) {
 					return "v1.0.0", nil
 				},

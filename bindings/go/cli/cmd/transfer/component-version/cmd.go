@@ -90,6 +90,16 @@ still work: they are translated into uploader entries appended after the configu
 the "Migrate from --upload-as to Uploader Configurations" guide on ocm.software). --recursive walks the
 component's references and transfers them too.
 
+Component version layout and signatures:
+  Component versions are stored in the v2 layout or in the normalized layout, whose manifest digest
+  is stable across registries and can be signed with cosign; its only layer is the normalized
+  descriptor, whose digest is the component version digest. Every transferred component version is
+  written in the layout of the oci.storage.config.ocm.software/v1alpha1 entry of the OCM configuration
+  (componentVersionLayout: default or normalized). A normalized source is uploaded by a single
+  Transfer{OCI,CTF}ComponentVersionTo{OCI,CTF} node, which copies its normalized manifest together with
+  the signatures attached to it; if the target is not written in the normalized layout, the signatures
+  are not copied and a warning is logged.
+
 Driving defaults from the OCM configuration:
   A transfer.config.ocm.software/v1alpha1 entry inside the central OCM configuration
   (passed via --config) sets defaults for --recursive. Its unmatchedResourcePolicy (Ignore, Warn,
@@ -113,6 +123,7 @@ How the graph is built:
   selected based on the source/target references:
     1. CTFGetComponentVersion -> OCIGetComponentVersion
     2. CTFAddComponentVersion -> OCIAddComponentVersion
+       (Transfer{OCI,CTF}ComponentVersionTo{OCI,CTF} instead, for normalized sources)
     3. GetOCIArtifact -> OCIAddLocalResource, or TransferOCIArtifact (OCI uploader)
     4. GetHelmChart -> ConvertHelmToOCI -> OCIAddLocalResource / AddOCIArtifact (OCI uploader)
     5. GetGitResource -> OCIAddLocalResource, or GetGitResource / OCIGetLocalResource -> AddGitResource (Git uploader)`,

@@ -10,6 +10,7 @@ import (
 	"ocm.software/open-component-model/bindings/go/oci/repository/provider"
 	ocires "ocm.software/open-component-model/bindings/go/oci/repository/resource"
 	ocicachev1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/cache/v1alpha1"
+	ocistoragev1alpha1 "ocm.software/open-component-model/bindings/go/oci/spec/config/storage/v1alpha1"
 	"ocm.software/open-component-model/bindings/go/oci/transformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/blobtransformer"
 	"ocm.software/open-component-model/bindings/go/plugin/manager/registries/componentlister"
@@ -31,6 +32,7 @@ func Register(
 	filesystemConfig *filesystemv1alpha1.Config,
 	httpConfig *httpv1alpha1.Config,
 	cacheConfig *ocicachev1alpha1.Config,
+	storageConfig *ocistoragev1alpha1.Config,
 	logger *slog.Logger,
 ) error {
 	var tempDir string
@@ -44,6 +46,7 @@ func Register(
 		provider.WithBlobCacheOptions(&cache.Options{}),
 		provider.WithReferenceCacheOptions(&cache.Options{}),
 		provider.WithOCICacheConfig(cacheConfig),
+		provider.WithOCIStorageConfig(storageConfig),
 	)
 
 	resourceRepoPlugin := ocires.NewResourceRepository(

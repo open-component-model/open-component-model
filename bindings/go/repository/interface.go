@@ -65,6 +65,14 @@ type ComponentVersionRepository interface {
 	LocalSourceRepository
 }
 
+// ComponentVersionLayoutDetector is an optional capability implemented by repositories that can
+// store component versions in more than one layout. GetComponentVersionLayout reports the layout
+// of a stored component version as "v2" or "normalized", and returns an error wrapping
+// ErrNotFound if the version does not exist.
+type ComponentVersionLayoutDetector interface {
+	GetComponentVersionLayout(ctx context.Context, component, version string) (string, error)
+}
+
 // LocalResourceRepository defines the interface for managing local resources within a component version repository.
 // Local resources are artifacts that are stored directly in the repository rather than referenced externally.
 type LocalResourceRepository interface {

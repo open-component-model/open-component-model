@@ -1,0 +1,17 @@
+# OCM Component Constructor for the cosign/normalized-layout scenario
+components:
+  - name: "${NAME}"
+    version: "${VERSION}"
+    provider:
+      name: acme.org
+    resources:
+      # A local blob: it lives in the access referrer and is verified against
+      # the digest in the signed normalized descriptor on download.
+      - name: notice
+        type: plainText
+        relation: local
+        input:
+          type: file
+          path: ./notice.txt
+          # zot validates layer media types strictly; a detected type may carry parameters.
+          mediaType: text/plain
