@@ -52,7 +52,33 @@ export function prepareReleaseNotes(notesFile, rcTag) {
 }
 
 /**
- * Get an existing release by tag or create a new one (idempotent for reruns).
+ * Find the release for a tag, drafts included. `getReleaseByTag` does not
+ * return drafts, so a draft left by an interrupted run is looked up in the
+ * newest releases, where it sits.
+ *
+ * @param {object} github - Octokit instance.
+ * @param {{owner: string, repo: string}} repo
+ * @param {string} tag
+ * @returns {Promise<object|null>} The release, or null if none exists.
+ */
+export async function findRelease(github, repo, tag) {
+  try {
+    const { data } = await github.rest.repos.getReleaseByTag({ ...repo, tag });
+    return data;
+  } catch (e) {
+    if (e.status !== 404) throw e;
+  }
+  const { data } = await github.rest.repos.listReleases({ ...repo, per_page: 100 });
+  return data.find((r) => r.draft && r.tag_name === tag) ?? null;
+}
+
+/**
+ * Get the draft release for a tag or create one (idempotent for reruns).
+ *
+ * Releases are immutable (organization setting): assets can only be added
+ * before a release is published. The release is therefore created as a draft,
+ * gets its assets, and is published by publishRelease afterwards. A release
+ * that is already published cannot take assets any more, so it is an error.
  *
  * @param {object} github - Octokit instance.
  * @param {object} context - GitHub Actions context.
@@ -61,46 +87,65 @@ export function prepareReleaseNotes(notesFile, rcTag) {
  * @param {string} opts.newReleaseVersion
  * @param {string} opts.componentName
  * @param {string} opts.notes
- * @param {boolean} opts.isLatest
  * @returns {Promise<{id: number, html_url: string}>}
  */
-export async function getOrCreateRelease(github, context, opts) {
-  const { newReleaseTag, newReleaseVersion, componentName, notes, isLatest } = opts;
+export async function getOrCreateDraftRelease(github, context, opts) {
+  const { newReleaseTag, newReleaseVersion, componentName, notes } = opts;
   const repo = { owner: context.repo.owner, repo: context.repo.repo };
-  const makeLatest = isLatest ? "true" : "false";
   const releaseName = `${componentName} ${newReleaseVersion}`;
 
-  try {
-    const existing = await github.rest.repos.getReleaseByTag({
-      ...repo,
-      tag: newReleaseTag,
-    });
+  const existing = await findRelease(github, repo, newReleaseTag);
+  if (existing && !existing.draft) {
+    throw new Error(
+      `Release ${newReleaseTag} is already published. Its assets are immutable, so it cannot be updated; check it by hand.`,
+    );
+  }
+  if (existing) {
     const updated = await github.rest.repos.updateRelease({
       ...repo,
-      release_id: existing.data.id,
+      release_id: existing.id,
       tag_name: newReleaseTag,
       name: releaseName,
       body: notes,
+      draft: true,
       prerelease: false,
-      make_latest: makeLatest,
     });
     return { id: updated.data.id, html_url: updated.data.html_url };
-  } catch (e) {
-    if (e.status !== 404) throw e;
-    const created = await github.rest.repos.createRelease({
-      ...repo,
-      tag_name: newReleaseTag,
-      name: releaseName,
-      body: notes,
-      prerelease: false,
-      make_latest: makeLatest,
-    });
-    return { id: created.data.id, html_url: created.data.html_url };
   }
+  const created = await github.rest.repos.createRelease({
+    ...repo,
+    tag_name: newReleaseTag,
+    name: releaseName,
+    body: notes,
+    draft: true,
+    prerelease: false,
+  });
+  return { id: created.data.id, html_url: created.data.html_url };
+}
+
+/**
+ * Publish a draft release once all its assets are uploaded.
+ *
+ * @param {object} github - Octokit instance.
+ * @param {object} context - GitHub Actions context.
+ * @param {number} releaseId
+ * @param {boolean} isLatest - Whether to mark the release as "Latest".
+ * @returns {Promise<{id: number, html_url: string}>}
+ */
+export async function publishRelease(github, context, releaseId, isLatest) {
+  const repo = { owner: context.repo.owner, repo: context.repo.repo };
+  const published = await github.rest.repos.updateRelease({
+    ...repo,
+    release_id: releaseId,
+    draft: false,
+    make_latest: isLatest ? "true" : "false",
+  });
+  return { id: published.data.id, html_url: published.data.html_url };
 }
 
 /**
  * Upload all files from assets directory as release assets, replacing duplicates.
+ * Only possible while the release is a draft.
  *
  * @param {object} github - Octokit instance.
  * @param {object} context - GitHub Actions context.
@@ -256,14 +301,14 @@ export default async function publishFinalRelease({ github, context, core }) {
 
   const isLatest = setLatest === "true";
   const notes = prepareReleaseNotes(notesFile, rcTag);
-  const release = await getOrCreateRelease(github, context, {
+  const draft = await getOrCreateDraftRelease(github, context, {
     newReleaseTag,
     newReleaseVersion,
     componentName,
     notes,
-    isLatest,
   });
-  const uploadedCount = await uploadAssets(github, context, core, release.id, assetsDir);
+  const uploadedCount = await uploadAssets(github, context, core, draft.id, assetsDir);
+  const release = await publishRelease(github, context, draft.id, isLatest);
   await writeSummary(core, {
     newReleaseTag,
     rcTag,
