@@ -5,3 +5,7 @@ modifiedFilesOnly: true
 replacementPatterns:
   - pattern: "^/"
     replacement: "{{BASEURL}}/"
+ignorePatterns:
+  # sapns2.com currently returns 403 to any non-browser client (edge firewall);
+  # the link itself is the official SAP NS2 site. Re-check periodically.
+  - pattern: "^https://sapns2\\.com"
