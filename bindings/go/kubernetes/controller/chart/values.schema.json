@@ -336,6 +336,32 @@
                         }
                     }
                 },
+                "reconcileTimeout": {
+                    "type": "object",
+                    "properties": {
+                        "component": {
+                            "type": "string"
+                        },
+                        "deployer": {
+                            "type": "string"
+                        },
+                        "discovery": {
+                            "type": "string"
+                        },
+                        "namespacedDeployer": {
+                            "type": "string"
+                        },
+                        "replication": {
+                            "type": "string"
+                        },
+                        "repository": {
+                            "type": "string"
+                        },
+                        "resource": {
+                            "type": "string"
+                        }
+                    }
+                },
                 "replicas": {
                     "type": "integer"
                 },

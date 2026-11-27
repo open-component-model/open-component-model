@@ -130,6 +130,13 @@ tests:
             - --deployer-controller-rate-limit-burst=100
             - --namespaced-deployer-controller-rate-limit-qps=10
             - --namespaced-deployer-controller-rate-limit-burst=100
+            - --repository-controller-reconcile-timeout=0s
+            - --component-controller-reconcile-timeout=0s
+            - --resource-controller-reconcile-timeout=0s
+            - --replication-controller-reconcile-timeout=0s
+            - --discovery-controller-reconcile-timeout=0s
+            - --deployer-controller-reconcile-timeout=0s
+            - --namespaced-deployer-controller-reconcile-timeout=0s
             - --deployer-download-cache-size=1000
             - --deployer-download-max-resource-size=2Mi
             - --enable-deployer=true
@@ -286,6 +293,13 @@ tests:
             - --deployer-controller-rate-limit-burst=100
             - --namespaced-deployer-controller-rate-limit-qps=10
             - --namespaced-deployer-controller-rate-limit-burst=100
+            - --repository-controller-reconcile-timeout=0s
+            - --component-controller-reconcile-timeout=0s
+            - --resource-controller-reconcile-timeout=0s
+            - --replication-controller-reconcile-timeout=0s
+            - --discovery-controller-reconcile-timeout=0s
+            - --deployer-controller-reconcile-timeout=0s
+            - --namespaced-deployer-controller-reconcile-timeout=0s
             - --deployer-download-max-resource-size=2Mi
             - --enable-deployer=true
             - --enable-namespaced-deployer=true
@@ -385,6 +399,34 @@ tests:
           path: spec.template.spec.containers[0].args
           content: --repository-controller-rate-limit-burst=7
 
+  - it: passes a custom reconcile timeout and keeps an explicit zero
+    set:
+      manager.reconcileTimeout.repository: 90s
+      manager.reconcileTimeout.resource: 0s
+    asserts:
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --repository-controller-reconcile-timeout=90s
+      - contains:
+          path: spec.template.spec.containers[0].args
+          content: --resource-controller-reconcile-timeout=0s
+
+  - it: rejects a reconcile timeout that is not a string
+    set:
+      manager.reconcileTimeout.component: 300
+    asserts:
+      - failedTemplate:
+          errorPattern: manager/reconcileTimeout/component
+
+  - it: drops the reconcile timeout flag when its key is absent
+    set:
+      manager.reconcileTimeout.discovery: null
+    asserts:
+      - notContains:
+          path: spec.template.spec.containers[0].args
+          content: --discovery-controller-reconcile-timeout=0s
+          any: true
+
   - it: drops the hasKey flag when its key is absent
     # The other half of "keeps the zero-valued": an absent key means no flag, not an empty value.
     set:
@@ -394,11 +436,12 @@ tests:
           path: spec.template.spec.containers[0].args[*]
           pattern: ^--deployer-download-max-resource-size=
 
-  - it: renders no flags for absent concurrency, rateLimiter, cache and logging blocks
+  - it: renders no flags for absent concurrency, rateLimiter, reconcileTimeout, cache and logging blocks
     # Simulates helm upgrade --reuse-values from a release that predates these sections.
     set:
       manager.concurrency: null
       manager.rateLimiter: null
+      manager.reconcileTimeout: null
       manager.cache: null
       manager.logging: null
     asserts:

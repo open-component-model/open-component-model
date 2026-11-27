@@ -3,6 +3,7 @@ package ocm
 import (
 	"context"
 	"errors"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
@@ -30,6 +31,8 @@ type BaseReconciler struct {
 	NewPluginManager PluginManagerFunc
 	// RateLimit configures the controller's workqueue rate limiter.
 	RateLimit RateLimit
+	// ReconcileTimeout bounds a single Reconcile call; zero disables the bound.
+	ReconcileTimeout time.Duration
 }
 
 func (r *BaseReconciler) GetClient() ctrl.Client {

@@ -1,6 +1,7 @@
 package status
 
 import (
+	"context"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -13,12 +14,16 @@ import (
 // UpdateBeforePatch mutates conditions and observed generation on the object
 // in memory and emits events. It does NOT write to the API server — the
 // caller is responsible for patching the status sub-resource afterwards.
+// It returns the error the reconcile should report, see [MarkTimedOut].
 func UpdateBeforePatch(
+	ctx context.Context,
 	obj IdentifiableClientObject,
 	recorder kuberecorder.EventRecorder,
 	requeue time.Duration,
 	err error,
-) {
+) error {
+	err = MarkTimedOut(ctx, recorder, obj, err)
+
 	// If still reconciling then reconciliation did not succeed, set to ProgressingWithRetry to
 	// indicate that reconciliation will be retried.
 	if IsReconciling(obj) && err != nil {
@@ -42,4 +47,6 @@ func UpdateBeforePatch(
 			event.New(recorder, obj, obj.GetVID(), v1alpha1.EventSeverityInfo, "Reconciliation finished, no further runs scheduled until next change")
 		}
 	}
+
+	return err
 }
