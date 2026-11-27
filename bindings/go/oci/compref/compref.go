@@ -119,16 +119,23 @@ func (ref *Ref) String() string {
 }
 
 // RepositoryString returns the repository part of the reference, that is the
-// reference without the prefix, component, version and digest. It is the string
-// a user would pass to list the components of the repository, for example
-// "ghcr.io/open-component-model" for
-// "ghcr.io/open-component-model//ocm.software/cli:1.0.0".
+// reference without the prefix, component, version and digest, including the
+// "<type>::" prefix. It is the inverse of the repository portion of String.
 func (ref *Ref) RepositoryString() string {
 	var sb strings.Builder
 	if ref.Type != "" {
 		sb.WriteString(ref.Type + "::")
 	}
+	sb.WriteString(ref.Location())
+	return sb.String()
+}
 
+// Location returns the location of the repository without the "<type>::" prefix,
+// that is the base URL plus the subPath for OCI, or the file path for CTF. It is
+// the human-readable location shown in listings, for example
+// "ghcr.io/open-component-model".
+func (ref *Ref) Location() string {
+	var sb strings.Builder
 	switch repo := ref.Repository.(type) {
 	case *ociv1.Repository:
 		sb.WriteString(repo.BaseUrl)

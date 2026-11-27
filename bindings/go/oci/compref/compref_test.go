@@ -861,6 +861,41 @@ func TestParseRepositoryErrorCases(t *testing.T) {
 	}
 }
 
+func Test_Ref_RepositoryString_And_Location(t *testing.T) {
+	tests := []struct {
+		name               string
+		reference          string
+		expectedRepository string
+		expectedLocation   string
+	}{
+		{
+			// Without an explicit prefix the parser fills in the full versioned
+			// type, so RepositoryString carries it while Location does not.
+			name:               "OCI reference without prefix",
+			reference:          "ghcr.io/open-component-model//ocm.software/cli:1.0.0",
+			expectedRepository: "OCIRepository/v1::ghcr.io/open-component-model",
+			expectedLocation:   "ghcr.io/open-component-model",
+		},
+		{
+			name:               "OCI reference with explicit oci:: prefix",
+			reference:          "oci::ghcr.io/open-component-model//ocm.software/cli:1.0.0",
+			expectedRepository: "oci::ghcr.io/open-component-model",
+			expectedLocation:   "ghcr.io/open-component-model",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := require.New(t)
+			ref, err := Parse(tt.reference)
+			r.NoError(err)
+			r.Equal(tt.expectedRepository, ref.RepositoryString())
+			r.Equal(tt.expectedLocation, ref.Location())
+			r.NotContains(ref.Location(), "::", "Location must not carry the type prefix")
+		})
+	}
+}
+
 func Test_Ref_String(t *testing.T) {
 	tests := []struct {
 		name     string

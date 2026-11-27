@@ -363,9 +363,9 @@ func processComponentReference(cmd *cobra.Command,
 	}
 
 	// Show the source repository as the top row of the tree output, the same as
-	// a repository reference, so the component versions are drawn under it
-	// instead of as orphan roots.
-	rootLabel := []string{fmt.Sprintf("%s (%s)", ref.RepositoryString(), ref.Repository.GetType().Name)}
+	// a repository reference (location and type, without the "<type>::" prefix),
+	// so the component versions are drawn under it instead of as orphan roots.
+	rootLabel := []string{fmt.Sprintf("%s (%s)", ref.Location(), ref.Repository.GetType().Name)}
 	if err := renderComponents(cmd, repoProvider, roots, pin, output, displayMode, recursive, rootLabel); err != nil {
 		return fmt.Errorf("failed to render components: %w", err)
 	}

@@ -117,7 +117,10 @@ func assertRenderedOutput(t *testing.T, expected, actual, archivePath string) {
 		kept = append(kept, line)
 	}
 	require.NotEmpty(t, repoRow, "tree output must include a repository row")
-	require.Contains(t, repoRow, "(", "repository row must show the repository type")
+	// The row shows the location and type without the "<type>::" prefix, matching
+	// the row of a repository reference.
+	require.Equal(t, archivePath+" (CommonTransportFormat)", strings.TrimSpace(repoRow), "repository row")
+	require.NotContains(t, repoRow, "::", "repository row must not include the type prefix")
 
 	require.Equal(t, normalizeTreeOutput(expected), normalizeTreeOutput(strings.Join(kept, "\n")), "expected output")
 }
