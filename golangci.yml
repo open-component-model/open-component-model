@@ -746,20 +746,23 @@ linters:
               desc: "MD5 is not FIPS-approved for security purposes; use SHA-256 or SHA-512"
             - pkg: "crypto/sha1"
               desc: "SHA-1 is not FIPS-approved for signatures or HMACs; use SHA-256 or SHA-512"
-        # testutils (bindings/go/internal/testutils) is a test-only helper library. Production
-        # code must never import it, so its fixtures (git servers, synthetic
-        # descriptors, registries) stay out of the dependency graph that downstream
-        # consumers of the library compile. The internal/ placement already blocks
-        # external modules, and a production dependency-closure test
-        # (bindings/go/internal/testutils/production_closure_test.go) blocks in-module
-        # leaks independently of golangci. This depguard rule is the third layer: it
-        # covers every non-test file except testutils' own tree, so testutils
-        # subpackages may still share helpers. Test files import it freely once the
-        # consuming binding's allow list above includes
+        # testutils is a test-only helper library. This rule blocks every non-test
+        # file outside the testutils tree from importing it; a binding's test files
+        # import it only after the binding's allow list above adds
         # bindings/go/internal/testutils.
+        # See bindings/go/internal/testutils/README.md for the full policy.
         testutils-test-only:
           list-mode: lax
           files: ["$all", "!$test", "!**/bindings/go/internal/testutils/**"]
           deny:
             - pkg: "ocm.software/open-component-model/bindings/go/internal/testutils"
               desc: "testutils is a test-only helper library; import it only from _test.go files"
+        # Limits what the testutils tree itself may import to the standard library and go-git.
+        internal-testutils:
+          list-mode: lax
+          files: ["**/bindings/go/internal/testutils/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/internal/testutils"
+          deny:
+            - pkg: "ocm.software/open-component-model/bindings/go/"
+              desc: "testutils must not import bindings outside its allowed set; add a binding here only when a fixture needs it"

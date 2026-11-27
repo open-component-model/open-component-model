@@ -143,6 +143,7 @@ linters:
           allow:
             - "ocm.software/open-component-model/bindings/go/beta"
             - "ocm.software/open-component-model/bindings/go/internal/testutils"
+            - "ocm.software/open-component-model/bindings/go/internal/testutils/git"
         testutils-test-only:
           list-mode: lax
           files: ["$all", "!$test", "!**/bindings/go/internal/testutils/**"]
@@ -155,13 +156,24 @@ linters:
           files: ["**/bindings/go/internal/testutils/**"]
           allow:
             - "ocm.software/open-component-model/bindings/go/internal/testutils"
+        # A scoped rule for a testutils subpackage must also be skipped as a key.
+        testutils-git:
+          list-mode: lax
+          files: ["**/bindings/go/internal/testutils/git/**"]
+          allow:
+            - "ocm.software/open-component-model/bindings/go/internal/testutils/git"
 `
   );
   const deps = parseDepguardRules(config);
   // testutils is a test-only helper: it is granted to beta's tests but must not
   // appear as a production dependency edge, and it is never a binding key even
-  // when a rule scopes its own tree.
+  // when a rule scopes its own tree. A testutils subpackage such as
+  // internal/testutils/git is also test-only: never a key and never an allow.
   assert.deepStrictEqual(deps.get("beta"), []);
   assert.strictEqual(deps.has("internal/testutils"), false);
+  assert.strictEqual(deps.has("internal/testutils/git"), false);
   assert.strictEqual(deps.has("testutils-test-only"), false);
+  for (const allows of deps.values()) {
+    assert.ok(!allows.includes("internal/testutils/git"));
+  }
 });
