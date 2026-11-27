@@ -1,15 +1,18 @@
 name: cli binary size guard
 
 # Guards against unreviewed growth of the `ocm` CLI binary. On every push to
-# main (and on manual dispatch) the job builds the CLI at the new tip and at
-# the last commit where this check passed, compares the two stripped binary
-# sizes on one runner with one toolchain, and fails if the new binary grew by
-# more than the threshold. The baseline is the head commit of the most recent
+# main (and on manual dispatch) the job builds the CLI at the last commit where
+# this check passed and at the new tip, compares the two stripped binary sizes
+# on one runner with one toolchain, and fails if the new binary grew by more
+# than the threshold. The baseline is the head commit of the most recent
 # successful run of this workflow on main, so after a failure every later push
 # keeps failing until a maintainer approves the growth with a manual dispatch.
 # If the baseline commit no longer builds (for example a lowered toolchain pin
 # with GOTOOLCHAIN=local), a dispatch with reset_baseline=true accepts the
 # current size as a new baseline.
+#
+# The decisions (baseline, inputs, threshold) live in, and are tested in,
+# .github/scripts/cli-binary-size.js; this workflow only checks out and builds.
 #
 # The default threshold of 10 percent is justified by a one-year weekly
 # measurement (recorded in the pull request that introduced this workflow):
@@ -25,6 +28,7 @@ on:
       - bindings/go/**
       - .env # GOFIPS140 lives here and changes the binary
       - .github/workflows/cli-binary-size.yml
+      - .github/scripts/cli-binary-size.js
   workflow_dispatch:
     inputs:
       threshold_percent:
@@ -38,8 +42,8 @@ on:
         default: false
 
 permissions:
-  contents: read
-  actions: read # gh run list reads past runs to find the green baseline
+  contents: read # also used to read the parent commit on the first run
+  actions: read # listWorkflowRuns reads past runs to find the green baseline
 
 # Keep push runs and dispatch runs in separate groups so a push to main cannot
 # cancel a maintainer's in-flight override or baseline reset. Within a group a
@@ -49,10 +53,6 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Default growth threshold in percent. workflow_dispatch can override it.
-  SIZE_GROWTH_THRESHOLD_PERCENT: ${{ inputs.threshold_percent || '10' }}
-  # Accept the current size as a new baseline. Empty (false) on a push.
-  RESET_BASELINE: ${{ inputs.reset_baseline || false }}
   # Fixed, deterministic build target, identical for both builds.
   TARGET_GOOS: linux
   TARGET_GOARCH: amd64
@@ -67,41 +67,25 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The job only builds and compares; it never uses the token, so do
-          # not leave it in .git/config (zizmor artipacked).
+          # not leave it in .git/config (zizmor artipacked). The baseline
+          # commit is fetched on demand.
           persist-credentials: false
-          # Only the tip and its parent are needed here; the baseline step
-          # fetches the baseline commit on demand.
-          fetch-depth: 2
 
       - name: Resolve baseline (last green run on main)
+        id: baseline
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          GH_TOKEN: ${{ github.token }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          tip="$(git rev-parse HEAD)"
-          echo "TIP_SHA=${tip}" >> "${GITHUB_ENV}"
-
-          # A manual dispatch sets the next green baseline, so it must run on
-          # main. The --branch main filter below already prevents a branch run
-          # from becoming the baseline; this makes the rule explicit.
-          if [ "${EVENT_NAME}" = "workflow_dispatch" ] && [ "${GITHUB_REF}" != "refs/heads/main" ]; then
-            echo "::error::workflow_dispatch must run on main, got ${GITHUB_REF}."
-            exit 1
-          fi
-
-          base="$(gh run list --repo "${GITHUB_REPOSITORY}" \
-            --workflow cli-binary-size.yml --branch main --status success \
-            --limit 1 --json headSha -q '.[0].headSha')"
-          if [ -z "${base}" ]; then
-            base="$(git rev-parse HEAD^)" # first run only: no green run yet
-            echo "::notice::No green run found, using parent ${base} as baseline."
-          fi
-          echo "BASE_SHA=${base}" >> "${GITHUB_ENV}"
-          echo "Baseline: ${base}"
+          THRESHOLD_INPUT: ${{ inputs.threshold_percent }}
+          RESET_INPUT: ${{ inputs.reset_baseline }}
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/cli-binary-size.js');
+            await script.resolveAction({ github, context, core });
 
       - name: Setup Go
         uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
+          # Read at the tip, so both builds use the tip's toolchain.
           go-version-file: bindings/go/go.mod
           cache-dependency-path: bindings/go/go.sum
 
@@ -111,39 +95,21 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build CLI at the new tip
-        run: |
-          task bindings/go/cli:build/single GOOS="${TARGET_GOOS}" GOARCH="${TARGET_GOARCH}"
-          new_size=$(stat -c%s "${CLI_BINARY}")
-          echo "NEW_SIZE=${new_size}" >> "${GITHUB_ENV}"
-          echo "New tip binary size: ${new_size} bytes"
-
+      # The baseline is built first and the tip last, so the workspace is back
+      # at the tip for the compare step: it must run the tip's script, not the
+      # baseline's (which is older, or missing before this workflow existed).
       - name: Build CLI at the baseline
+        if: steps.baseline.outputs.skip_baseline_build != 'true'
+        env:
+          BASE_SHA: ${{ steps.baseline.outputs.base_sha }}
+          TIP_SHA: ${{ steps.baseline.outputs.tip_sha }}
         run: |
-          # A maintainer can accept the current size as a fresh baseline when
-          # the last green commit no longer builds. Skip the baseline build;
-          # the compare step reports the tip size and passes, so this run
-          # becomes the new green baseline.
-          if [ "${RESET_BASELINE}" = "true" ]; then
-            echo "Baseline reset requested; skipping the baseline build."
-            echo "OLD_SIZE=${NEW_SIZE}" >> "${GITHUB_ENV}"
-            echo "BASELINE_RESET=1" >> "${GITHUB_ENV}"
-            exit 0
-          fi
-          # A re-run of an already green commit has nothing to compare.
-          if [ "${BASE_SHA}" = "${TIP_SHA}" ]; then
-            echo "Baseline equals tip; reporting zero growth."
-            echo "OLD_SIZE=${NEW_SIZE}" >> "${GITHUB_ENV}"
-            exit 0
-          fi
-          # Fetch only the baseline commit. The repo is public, so this works
-          # without a persisted token.
+          # The repo is public, so fetching one commit works without a
+          # persisted token.
           git fetch --quiet --depth=1 origin "${BASE_SHA}"
-          # Build the baseline with the tip's toolchain (GOTOOLCHAIN=local in
-          # the build task) so the delta reflects the code change, not a
-          # toolchain change. Overwriting the tip output is safe; it is
-          # already measured.
           git checkout --quiet --force "${BASE_SHA}"
+          # GOTOOLCHAIN=local in the build task builds the baseline with the
+          # tip's toolchain, so the delta reflects the code change.
           if ! task bindings/go/cli:build/single GOOS="${TARGET_GOOS}" GOARCH="${TARGET_GOARCH}"; then
             echo "::error::The baseline ${BASE_SHA} did not build with the installed toolchain (GOTOOLCHAIN=local, so a changed toolchain pin can cause this). Re-run this workflow with workflow_dispatch and reset_baseline=true to accept the current size as a new baseline."
             exit 1
@@ -151,68 +117,23 @@ jobs:
           old_size=$(stat -c%s "${CLI_BINARY}")
           echo "OLD_SIZE=${old_size}" >> "${GITHUB_ENV}"
           echo "Baseline binary size: ${old_size} bytes"
+          git checkout --quiet --force "${TIP_SHA}"
+
+      - name: Build CLI at the new tip
+        run: |
+          task bindings/go/cli:build/single GOOS="${TARGET_GOOS}" GOARCH="${TARGET_GOARCH}"
+          new_size=$(stat -c%s "${CLI_BINARY}")
+          echo "NEW_SIZE=${new_size}" >> "${GITHUB_ENV}"
+          echo "New tip binary size: ${new_size} bytes"
 
       - name: Compare and enforce threshold
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          ACTOR: ${{ github.actor }}
-        run: |
-          mib() { awk -v b="$1" 'BEGIN { printf "%.1f", b / 1048576 }'; }
-
-          # A baseline reset accepts the current size: nothing to compare and
-          # no threshold to enforce. This run becomes the new green baseline.
-          if [ "${BASELINE_RESET:-0}" = "1" ]; then
-            tip_mib="$(mib "${NEW_SIZE}")"
-            echo "Baseline reset: new baseline ${TIP_SHA} at ${tip_mib} MiB (${NEW_SIZE} bytes)."
-            {
-              echo "### CLI binary size guard"
-              echo ""
-              echo "Baseline reset by @${ACTOR}. This run becomes the new green baseline."
-              echo ""
-              echo "| metric | value |"
-              echo "| --- | --- |"
-              echo "| new baseline | \`${TIP_SHA}\` |"
-              echo "| size | ${tip_mib} MiB (${NEW_SIZE} bytes) |"
-            } >> "${GITHUB_STEP_SUMMARY}"
-            exit 0
-          fi
-
-          # workflow_dispatch passes the threshold as free text; reject
-          # anything that is not a number before awk treats it as zero.
-          if ! [[ "${SIZE_GROWTH_THRESHOLD_PERCENT}" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
-            echo "::error::threshold_percent must be a number, got '${SIZE_GROWTH_THRESHOLD_PERCENT}'."
-            exit 1
-          fi
-
-          growth=$(awk -v n="${NEW_SIZE}" -v o="${OLD_SIZE}" \
-            'BEGIN { if (o == 0) { print "100" } else { printf "%.4f", (n - o) / o * 100 } }')
-          delta_mib=$(awk -v n="${NEW_SIZE}" -v o="${OLD_SIZE}" \
-            'BEGIN { printf "%+.1f", (n - o) / 1048576 }')
-          base_mib="$(mib "${OLD_SIZE}")"
-          tip_mib="$(mib "${NEW_SIZE}")"
-
-          echo "Baseline (${BASE_SHA}): ${base_mib} MiB (${OLD_SIZE} bytes)"
-          echo "New tip  (${TIP_SHA}): ${tip_mib} MiB (${NEW_SIZE} bytes)"
-          echo "Growth: ${growth}% (${delta_mib} MiB, threshold ${SIZE_GROWTH_THRESHOLD_PERCENT}%)"
-          {
-            echo "### CLI binary size guard"
-            echo ""
-            echo "| metric | value |"
-            echo "| --- | --- |"
-            echo "| baseline (last green) | \`${BASE_SHA}\` |"
-            echo "| new tip | \`${TIP_SHA}\` |"
-            echo "| baseline size | ${base_mib} MiB (${OLD_SIZE} bytes) |"
-            echo "| new tip size | ${tip_mib} MiB (${NEW_SIZE} bytes) |"
-            echo "| growth | ${growth}% (${delta_mib} MiB) |"
-            echo "| threshold | ${SIZE_GROWTH_THRESHOLD_PERCENT}% |"
-            if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
-              echo "| manual override | by @${ACTOR} |"
-            fi
-          } >> "${GITHUB_STEP_SUMMARY}"
-
-          over=$(awk -v g="${growth}" -v t="${SIZE_GROWTH_THRESHOLD_PERCENT}" \
-            'BEGIN { print ((g + 0) > (t + 0)) ? "1" : "0" }')
-          if [ "${over}" = "1" ]; then
-            echo "::error::CLI binary grew ${growth}% (${delta_mib} MiB), above the ${SIZE_GROWTH_THRESHOLD_PERCENT}% threshold. Approve with a workflow_dispatch and a higher threshold, or reduce the size."
-            exit 1
-          fi
-          echo "CLI binary growth is within the threshold."
+          BASE_SHA: ${{ steps.baseline.outputs.base_sha }}
+          TIP_SHA: ${{ steps.baseline.outputs.tip_sha }}
+          THRESHOLD: ${{ steps.baseline.outputs.threshold }}
+          RESET: ${{ steps.baseline.outputs.reset }}
+        with:
+          script: |
+            const script = await import('${{ github.workspace }}/.github/scripts/cli-binary-size.js');
+            await script.compareAction({ context, core });
