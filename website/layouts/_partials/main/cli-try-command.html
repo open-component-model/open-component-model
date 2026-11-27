@@ -1,0 +1,32 @@
+{{- /* Returns the "ocm get cv" command that inspects the public component shipping the
+       OCM CLI, using only flags the CLI installed on this docs version supports (see the
+       "env" format of main/site-version.html for what install-cli.sh installs).
+       Context: the page. Returns "" for versions without a v2 CLI (legacy). */ -}}
+{{- $version := .Site.Version.Name -}}
+{{- $flags := "" -}}
+{{- if eq $version "main" -}}
+  {{- /* The unpinned install picks the newest stable release. Without a constraint
+         --latest would also consider prereleases. */ -}}
+  {{- $flags = "--latest --constraint '>0.0.0' -o widetree" -}}
+{{- else if findRE `^\d+\.\d+$` $version -}}
+  {{- /* Pinned docs version: constrain to the series install-cli.sh installs for it. */ -}}
+  {{- $parts := split $version "." -}}
+  {{- $major := int (index $parts 0) -}}
+  {{- $minor := int (index $parts 1) -}}
+  {{- if or (gt $major 0) (ge $minor 18) -}}
+    {{- /* 0.18 renamed --semver-constraint to --constraint; X.Y.0 is not always published. */ -}}
+    {{- $flags = printf "--latest --constraint '~%s' -o widetree" $version -}}
+  {{- else if eq $minor 17 -}}
+    {{- /* 0.16-0.17 expose the same capability as --semver-constraint; widetree arrived in 0.17. */ -}}
+    {{- $flags = printf "--latest --semver-constraint '~%s' -o widetree" $version -}}
+  {{- else if eq $minor 16 -}}
+    {{- /* Oldest series with the v2 CLI: widetree is not available yet, only plain tree. */ -}}
+    {{- $flags = printf "--latest --semver-constraint '~%s' -o tree" $version -}}
+  {{- end -}}
+  {{- /* Below 0.16 there is no v2 `ocm get cv`, so $flags stays empty and $cmd becomes "". */ -}}
+{{- end -}}
+{{- $cmd := "" -}}
+{{- with $flags -}}
+  {{- $cmd = printf "ocm get cv ghcr.io/open-component-model//ocm.software/cli %s" . -}}
+{{- end -}}
+{{- return $cmd -}}
