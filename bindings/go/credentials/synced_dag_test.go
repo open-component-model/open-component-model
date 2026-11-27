@@ -39,6 +39,121 @@ func Test_matchAnyNode_NotFound(t *testing.T) {
 	require.ErrorIs(t, err, ErrNoDirectCredentials)
 }
 
+func Test_matchAnyNode_PrefersMostSpecificEntry(t *testing.T) {
+	// A hostname-only entry and the same host scoped to an explicit port both
+	// match an https path-bearing lookup on port 443 (the well-known port lets
+	// the scheme-less port-scoped entry and the hostname-only entry both match).
+	// The port-scoped entry has more attributes, so it must win deterministically.
+	dag := newSyncedDag()
+	hostnameOnly := runtime.Identity{"type": "OCIRegistry", "hostname": "ghcr.io"}
+	portScoped := runtime.Identity{"type": "OCIRegistry", "hostname": "ghcr.io", "port": "443"}
+	require.NoError(t, dag.addIdentity(hostnameOnly))
+	require.NoError(t, dag.addIdentity(portScoped))
+
+	lookup := runtime.Identity{"type": "OCIRegistry", "hostname": "ghcr.io", "scheme": "https", "port": "443", "path": "org/repo"}
+	// Guard the premise: the lookup must match both entries, otherwise the test
+	// would not exercise selection between overlapping matches.
+	require.True(t, lookup.Match(hostnameOnly), "lookup must match the hostname-only entry")
+	require.True(t, lookup.Match(portScoped), "lookup must match the port-scoped entry")
+
+	// Repeat to make the determinism explicit: map iteration order varies per run.
+	for range 50 {
+		vertex, err := dag.matchAnyNode(lookup)
+		require.NoError(t, err)
+		assert.Equal(t, portScoped.String(), vertex.ID)
+	}
+}
+
+func Test_matchAnyNode_PrefersFewerPathWildcards(t *testing.T) {
+	// Two path globs with the same attribute count both match. The glob with
+	// fewer wildcards ("my-org/*") is more specific and must win over "*/*",
+	// matching the credential-resolution "Example B2" documentation.
+	dag := newSyncedDag()
+	twoLevel := runtime.Identity{"type": "OCIRegistry", "hostname": "ghcr.io", "path": "*/*"}
+	orgLevel := runtime.Identity{"type": "OCIRegistry", "hostname": "ghcr.io", "path": "my-org/*"}
+	require.NoError(t, dag.addIdentity(twoLevel))
+	require.NoError(t, dag.addIdentity(orgLevel))
+
+	lookup := runtime.Identity{"type": "OCIRegistry", "hostname": "ghcr.io", "path": "my-org/repo"}
+
+	for range 50 {
+		vertex, err := dag.matchAnyNode(lookup)
+		require.NoError(t, err)
+		assert.Equal(t, orgLevel.String(), vertex.ID)
+	}
+}
+
+func Test_matchAnyNode_CharacterClassStarIsNotAWildcard(t *testing.T) {
+	// A "*" inside a glob character class matches a literal "*" and is not a
+	// wildcard. "my-org/[*]" therefore has zero wildcard tokens and is more
+	// specific than "my-org/?" (one wildcard), even though its identity string
+	// sorts later. The lexical tie-break must not override the wildcard count.
+	dag := newSyncedDag()
+	literalStar := runtime.Identity{"type": "OCIRegistry", "hostname": "ghcr.io", "path": "my-org/[*]"}
+	singleChar := runtime.Identity{"type": "OCIRegistry", "hostname": "ghcr.io", "path": "my-org/?"}
+	require.NoError(t, dag.addIdentity(literalStar))
+	require.NoError(t, dag.addIdentity(singleChar))
+
+	lookup := runtime.Identity{"type": "OCIRegistry", "hostname": "ghcr.io", "path": "my-org/*"}
+	// Guard the premise: both entries match the literal-star lookup, and the
+	// literal-star identity sorts after the single-char one, so only the
+	// wildcard count can make it win.
+	require.True(t, lookup.Match(literalStar), "lookup must match the literal-star entry")
+	require.True(t, lookup.Match(singleChar), "lookup must match the single-char entry")
+	require.Greater(t, literalStar.String(), singleChar.String(), "test premise: literal-star glob sorts last")
+
+	for range 50 {
+		vertex, err := dag.matchAnyNode(lookup)
+		require.NoError(t, err)
+		assert.Equal(t, literalStar.String(), vertex.ID)
+	}
+}
+
+func Test_pathWildcards(t *testing.T) {
+	for _, tc := range []struct {
+		path string
+		want int
+	}{
+		{"", 0},
+		{"my-org/repo", 0},
+		{"my-org/*", 1},
+		{"*/*", 2},
+		{"my-org/?", 1},
+		{`my-org/\*`, 0},    // escaped star is a literal
+		{`my-org/\?`, 0},    // escaped question mark is a literal
+		{"my-org/[*]", 0},   // star inside a class is a literal
+		{"my-org/[?]", 0},   // question mark inside a class is a literal
+		{"my-org/[a*b]", 0}, // star inside a class is a literal
+		{"my-org/[!*]", 0},  // negated class, star is a literal member
+		{"my-org/*[*]", 1},  // the outer star counts, the class star does not
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			id := runtime.Identity{runtime.IdentityAttributePath: tc.path}
+			assert.Equal(t, tc.want, pathWildcards(id))
+		})
+	}
+}
+
+func Test_matchAnyNode_StableLexicalTieBreak(t *testing.T) {
+	// Two globs with the same attribute count and the same wildcard count both
+	// match. Only the lexical tie-break on the identity string decides, so the
+	// result must be stable: "my-org/*o" sorts before "my-org/r*".
+	dag := newSyncedDag()
+	suffix := runtime.Identity{"type": "OCIRegistry", "hostname": "ghcr.io", "path": "my-org/*o"}
+	prefix := runtime.Identity{"type": "OCIRegistry", "hostname": "ghcr.io", "path": "my-org/r*"}
+	require.NoError(t, dag.addIdentity(suffix))
+	require.NoError(t, dag.addIdentity(prefix))
+
+	lookup := runtime.Identity{"type": "OCIRegistry", "hostname": "ghcr.io", "path": "my-org/repo"}
+	require.Less(t, suffix.String(), prefix.String(), "test premise: suffix glob sorts first")
+
+	for range 50 {
+		vertex, err := dag.matchAnyNode(lookup)
+		require.NoError(t, err)
+		assert.Equal(t, suffix.String(), vertex.ID)
+	}
+}
+
 func Test_addIdentity_StoresAndRetrieves(t *testing.T) {
 	dag := newSyncedDag()
 	id := runtime.Identity{"type": "OCIRegistry", "hostname": "docker.io"}

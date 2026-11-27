@@ -64,7 +64,7 @@ Matching runs three chained matchers **in order** — all three must pass:
 2. **URL matcher** — compares `scheme`, `hostname`, and `port`. Applies default ports: `https` → `443`, `http` → `80`. Schemes match unless both sides set a different one, so an omitted scheme on either side still matches. When neither side sets a scheme, a well-known port **on the request** supplies the one used for port defaulting (`443` → `https`, `80` → `http`), so a scheme-less `host:443` request matches an entry that omits the port, just like `https://host` does. This inference is request-side only, so an entry with `port: "443"` and no scheme does not match a request that omits the port. An inferred scheme is only used for defaulting, never to override an explicit scheme, so `ssh://host:443` still matches an entry with only `port: "443"`.
 3. **Equality matcher** — all remaining attributes (like `type`) must be exactly equal.
 
-If any matcher fails, the entry is skipped. **First match wins** — OCM returns the first matching entry it finds. Avoid giving a hostname-only entry and the same host scoped to `port: "443"` different credentials: a bare `host:443` request resolves to the port entry by exact match, but a sub-path reference such as `host:443/org//...` matches both.
+If any matcher fails, the entry is skipped. OCM first tries an exact match on the full identity string and uses it when present. When no exact match exists and more than one entry matches, OCM returns the **most specific** match, chosen deterministically in this order: first the entry with more scope attributes (for example an explicit `port` or `path`; an empty `path` does not count, it matches any path); then, for an equal attribute count, the path glob with fewer wildcards (for example `my-org/*` over `*/*`); and finally, as a stable tie-break, the lexicographically smaller identity string. The same request always resolves the same entry.
 
 Quick reference:
 
@@ -163,7 +163,7 @@ configurations:
 `*` matches exactly one path segment. It does **not** match across `/` separators. To match two levels like `my-org/team/repo`, use `my-org/*/*`, or `my-org/**` for any depth.
 {{< /callout >}}
 
-**Takeaway:** OCM first tries an exact string match on the full identity. If that fails, it iterates all configured entries and returns the first wildcard match.
+**Takeaway:** OCM first tries an exact string match on the full identity. If that fails, it iterates all configured entries and returns the most specific wildcard match.
 
 ### Example B2: Two-Level Wildcard Matching (`*/*`)
 
@@ -198,7 +198,7 @@ configurations:
 
 | Request | Consumer A (`*/*`) | Consumer B (`my-org/*`) | Result | Why |
 | --- | --- | --- | --- | --- |
-| `ghcr.io/my-org/repo` | ✅ | ✅ | ✅ `my-org-user` | B matches first (more specific) |
+| `ghcr.io/my-org/repo` | ✅ | ✅ | ✅ `my-org-user` | B wins: both match, but `my-org/*` is more specific than `*/*` |
 | `ghcr.io/other-org/project` | ✅ | ❌ | ✅ `org-user` | Only A matches (two-level wildcard) |
 | `ghcr.io/my-org/team/subteam/repo` | ❌ | ❌ | ❌ No credentials | Path has 4 segments, `*/*` only matches 2 |
 | `ghcr.io/singlelevel` | ❌ | ❌ | ❌ No credentials | Path has 1 segment, `*/*` requires exactly 2 |

@@ -120,6 +120,8 @@ Matching runs three chained checks — all must pass:
 2. **URL matcher** — compares `scheme`, `hostname`, and `port` as described in [Scheme and Port Matching](#scheme-and-port).
 3. **Equality matcher** — all remaining attributes (like `type`) must be exactly equal.
 
+When more than one entry matches a request, OCM selects the most specific one deterministically. An exact match on the full identity string always takes precedence. Otherwise OCM ranks the matches: first by more scope attributes (for example an explicit `port` or `path`; an empty `path` does not count), then, for an equal attribute count, by fewer path-glob wildcards, and finally by the lexicographically smaller identity string as a stable tie-break. The same request always resolves the same entry.
+
 For detailed matching examples and edge cases, see [Tutorial: Understand Credential Resolution]({{< relref "docs/concepts/credential-resolution.md" >}}).
 
 ### Examples
