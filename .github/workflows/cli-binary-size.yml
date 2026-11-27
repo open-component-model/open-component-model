@@ -7,6 +7,9 @@ name: cli binary size guard
 # more than the threshold. The baseline is the head commit of the most recent
 # successful run of this workflow on main, so after a failure every later push
 # keeps failing until a maintainer approves the growth with a manual dispatch.
+# If the baseline commit no longer builds (for example a lowered toolchain pin
+# with GOTOOLCHAIN=local), a dispatch with reset_baseline=true accepts the
+# current size as a new baseline.
 #
 # The default threshold of 10 percent is justified by a one-year weekly
 # measurement (recorded in the pull request that introduced this workflow):
@@ -28,20 +31,28 @@ on:
         description: "Maximum allowed binary size growth in percent."
         type: string
         required: false
+      reset_baseline:
+        description: "Accept the current size as the new baseline without comparing. Use when the last green commit no longer builds."
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
   actions: read # gh run list reads past runs to find the green baseline
 
-# A newer run covers the commits of an older one (it compares against the same
-# green baseline), so cancelling an in-progress run loses nothing.
+# Keep push runs and dispatch runs in separate groups so a push to main cannot
+# cancel a maintainer's in-flight override or baseline reset. Within a group a
+# newer run covers the commits of an older one, so cancelling it loses nothing.
 concurrency:
-  group: cli-binary-size-${{ github.ref }}
+  group: cli-binary-size-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 env:
   # Default growth threshold in percent. workflow_dispatch can override it.
   SIZE_GROWTH_THRESHOLD_PERCENT: ${{ inputs.threshold_percent || '10' }}
+  # Accept the current size as a new baseline. Empty (false) on a push.
+  RESET_BASELINE: ${{ inputs.reset_baseline || false }}
   # Fixed, deterministic build target, identical for both builds.
   TARGET_GOOS: linux
   TARGET_GOARCH: amd64
@@ -58,8 +69,9 @@ jobs:
           # The job only builds and compares; it never uses the token, so do
           # not leave it in .git/config (zizmor artipacked).
           persist-credentials: false
-          # Full history so the baseline commit is present to check out.
-          fetch-depth: 0
+          # Only the tip and its parent are needed here; the baseline step
+          # fetches the baseline commit on demand.
+          fetch-depth: 2
 
       - name: Resolve baseline (last green run on main)
         env:
@@ -108,19 +120,32 @@ jobs:
 
       - name: Build CLI at the baseline
         run: |
+          # A maintainer can accept the current size as a fresh baseline when
+          # the last green commit no longer builds. Skip the baseline build;
+          # the compare step reports the tip size and passes, so this run
+          # becomes the new green baseline.
+          if [ "${RESET_BASELINE}" = "true" ]; then
+            echo "Baseline reset requested; skipping the baseline build."
+            echo "OLD_SIZE=${NEW_SIZE}" >> "${GITHUB_ENV}"
+            echo "BASELINE_RESET=1" >> "${GITHUB_ENV}"
+            exit 0
+          fi
           # A re-run of an already green commit has nothing to compare.
           if [ "${BASE_SHA}" = "${TIP_SHA}" ]; then
             echo "Baseline equals tip; reporting zero growth."
             echo "OLD_SIZE=${NEW_SIZE}" >> "${GITHUB_ENV}"
             exit 0
           fi
+          # Fetch only the baseline commit. The repo is public, so this works
+          # without a persisted token.
+          git fetch --quiet --depth=1 origin "${BASE_SHA}"
           # Build the baseline with the tip's toolchain (GOTOOLCHAIN=local in
           # the build task) so the delta reflects the code change, not a
           # toolchain change. Overwriting the tip output is safe; it is
           # already measured.
           git checkout --quiet --force "${BASE_SHA}"
           if ! task bindings/go/cli:build/single GOOS="${TARGET_GOOS}" GOARCH="${TARGET_GOARCH}"; then
-            echo "::error::The baseline ${BASE_SHA} did not build with the installed toolchain (GOTOOLCHAIN=local, so a changed toolchain pin can cause this). Approve the current size with a workflow_dispatch to set a new green baseline."
+            echo "::error::The baseline ${BASE_SHA} did not build with the installed toolchain (GOTOOLCHAIN=local, so a changed toolchain pin can cause this). Re-run this workflow with workflow_dispatch and reset_baseline=true to accept the current size as a new baseline."
             exit 1
           fi
           old_size=$(stat -c%s "${CLI_BINARY}")
@@ -129,17 +154,34 @@ jobs:
 
       - name: Compare and enforce threshold
         env:
-          EVENT_NAME: ${{ github.event_name }}
           ACTOR: ${{ github.actor }}
         run: |
+          mib() { awk -v b="$1" 'BEGIN { printf "%.1f", b / 1048576 }'; }
+
+          # A baseline reset accepts the current size: nothing to compare and
+          # no threshold to enforce. This run becomes the new green baseline.
+          if [ "${BASELINE_RESET:-0}" = "1" ]; then
+            tip_mib="$(mib "${NEW_SIZE}")"
+            echo "Baseline reset: new baseline ${TIP_SHA} at ${tip_mib} MiB (${NEW_SIZE} bytes)."
+            {
+              echo "### CLI binary size guard"
+              echo ""
+              echo "Baseline reset by @${ACTOR}. This run becomes the new green baseline."
+              echo ""
+              echo "| metric | value |"
+              echo "| --- | --- |"
+              echo "| new baseline | \`${TIP_SHA}\` |"
+              echo "| size | ${tip_mib} MiB (${NEW_SIZE} bytes) |"
+            } >> "${GITHUB_STEP_SUMMARY}"
+            exit 0
+          fi
+
           # workflow_dispatch passes the threshold as free text; reject
           # anything that is not a number before awk treats it as zero.
           if ! [[ "${SIZE_GROWTH_THRESHOLD_PERCENT}" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
             echo "::error::threshold_percent must be a number, got '${SIZE_GROWTH_THRESHOLD_PERCENT}'."
             exit 1
           fi
-
-          mib() { awk -v b="$1" 'BEGIN { printf "%.1f", b / 1048576 }'; }
 
           growth=$(awk -v n="${NEW_SIZE}" -v o="${OLD_SIZE}" \
             'BEGIN { if (o == 0) { print "100" } else { printf "%.4f", (n - o) / o * 100 } }')
@@ -162,7 +204,7 @@ jobs:
             echo "| new tip size | ${tip_mib} MiB (${NEW_SIZE} bytes) |"
             echo "| growth | ${growth}% (${delta_mib} MiB) |"
             echo "| threshold | ${SIZE_GROWTH_THRESHOLD_PERCENT}% |"
-            if [ "${EVENT_NAME}" = "workflow_dispatch" ]; then
+            if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
               echo "| manual override | by @${ACTOR} |"
             fi
           } >> "${GITHUB_STEP_SUMMARY}"
