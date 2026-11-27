@@ -1,6 +1,7 @@
 package componentversion
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -150,9 +151,25 @@ func TestCollectComponentVersions_SkipsUnreadableAndOrders(t *testing.T) {
 
 func TestCollectComponentVersions_AllFail(t *testing.T) {
 	captureLogs(t)
+	// Every component fails with the same underlying error, so it is reported
+	// once instead of once per component.
 	resolver := &fakeResolver{errs: map[string]error{
 		"a": &unauthorizedError{},
 		"b": &unauthorizedError{},
+	}}
+	_, err := collectComponentVersions(t.Context(), nil, resolver, []string{"a", "b"}, Params{}, versioning.Default())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "all 2 components failed")
+	assert.Contains(t, err.Error(), "401 unauthorized")
+	assert.NotContains(t, err.Error(), "a:")
+}
+
+func TestCollectComponentVersions_AllFailDifferentErrors(t *testing.T) {
+	captureLogs(t)
+	// Different underlying errors are joined so each component is reported.
+	resolver := &fakeResolver{errs: map[string]error{
+		"a": &unauthorizedError{},
+		"b": errors.New("not found"),
 	}}
 	_, err := collectComponentVersions(t.Context(), nil, resolver, []string{"a", "b"}, Params{}, versioning.Default())
 	require.Error(t, err)

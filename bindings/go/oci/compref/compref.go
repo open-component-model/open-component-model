@@ -102,6 +102,29 @@ type Ref struct {
 
 func (ref *Ref) String() string {
 	var sb strings.Builder
+	sb.WriteString(ref.RepositoryString())
+
+	sb.WriteRune('/')
+	sb.WriteString(ref.Prefix)
+	sb.WriteRune('/')
+	sb.WriteString(ref.Component)
+
+	if ref.Version != "" {
+		sb.WriteString(":" + ref.Version)
+	}
+	if ref.Digest != "" {
+		sb.WriteString("@" + ref.Digest)
+	}
+	return sb.String()
+}
+
+// RepositoryString returns the repository part of the reference, that is the
+// reference without the prefix, component, version and digest. It is the string
+// a user would pass to list the components of the repository, for example
+// "ghcr.io/open-component-model" for
+// "ghcr.io/open-component-model//ocm.software/cli:1.0.0".
+func (ref *Ref) RepositoryString() string {
+	var sb strings.Builder
 	if ref.Type != "" {
 		sb.WriteString(ref.Type + "::")
 	}
@@ -115,18 +138,6 @@ func (ref *Ref) String() string {
 		}
 	case *ctfv1.Repository:
 		sb.WriteString(repo.FilePath)
-	}
-
-	sb.WriteRune('/')
-	sb.WriteString(ref.Prefix)
-	sb.WriteRune('/')
-	sb.WriteString(ref.Component)
-
-	if ref.Version != "" {
-		sb.WriteString(":" + ref.Version)
-	}
-	if ref.Digest != "" {
-		sb.WriteString("@" + ref.Digest)
 	}
 	return sb.String()
 }
@@ -330,9 +341,11 @@ func ParseRepository(repoRef string, opts ...Option) (runtime.Typed, error) {
 			t.BaseUrl = uri.Host
 		}
 
-		// Extract SubPath from the path component if present
-		if uri.Path != "" && uri.Path != "/" {
-			t.SubPath = strings.TrimPrefix(uri.Path, "/")
+		// Extract SubPath from the path component if present. Trim slashes so a
+		// trailing slash (ghcr.io/org/) does not leak into SubPath and produce
+		// "org//component-descriptors/...".
+		if sub := strings.Trim(uri.Path, "/"); sub != "" {
+			t.SubPath = sub
 		}
 	case *ctfv1.Repository:
 		t.FilePath = input

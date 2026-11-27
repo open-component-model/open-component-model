@@ -286,10 +286,11 @@ func collectComponentVersions(ctx context.Context,
 	reg *versioning.Registry,
 ) ([]componentVersionEntry, error) {
 	var (
-		mu       sync.Mutex
-		entries  []componentVersionEntry
-		skipped  []string
-		failures []error
+		mu         sync.Mutex
+		entries    []componentVersionEntry
+		skipped    []string
+		failures   []error
+		underlying []error
 	)
 
 	skip := func(name string, err error) {
@@ -298,6 +299,7 @@ func collectComponentVersions(ctx context.Context,
 		slog.ErrorContext(ctx, "skipping component that could not be read", "component", name, "error", err)
 		skipped = append(skipped, name)
 		failures = append(failures, fmt.Errorf("%s: %w", name, err))
+		underlying = append(underlying, err)
 	}
 
 	p := startPhase(tracker, "Listing component versions", len(componentNames))
@@ -348,7 +350,7 @@ func collectComponentVersions(ctx context.Context,
 
 	if len(entries) == 0 {
 		if len(failures) > 0 {
-			return nil, fmt.Errorf("no components in the repository could be read: %w", errors.Join(failures...))
+			return nil, aggregateComponentFailures(failures, underlying)
 		}
 		return nil, nil
 	}
@@ -366,4 +368,28 @@ func collectComponentVersions(ctx context.Context,
 	}
 
 	return entries, nil
+}
+
+// aggregateComponentFailures turns the per-component failures into a single
+// error for the "nothing could be read" case. failures holds one "<name>: <err>"
+// per component and underlying holds the matching raw errors. When every
+// component failed with the same underlying error, it is reported once as
+// "all N components failed: <error>" instead of N identical copies; otherwise
+// the per-component failures are joined. The caller must pass at least one
+// failure.
+func aggregateComponentFailures(failures, underlying []error) error {
+	if len(underlying) > 1 {
+		same := true
+		first := underlying[0].Error()
+		for _, e := range underlying[1:] {
+			if e.Error() != first {
+				same = false
+				break
+			}
+		}
+		if same {
+			return fmt.Errorf("all %d components failed: %w", len(underlying), underlying[0])
+		}
+	}
+	return fmt.Errorf("no components in the repository could be read: %w", errors.Join(failures...))
 }

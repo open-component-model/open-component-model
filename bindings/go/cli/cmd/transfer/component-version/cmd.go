@@ -512,7 +512,7 @@ func resolveSource(
 	if sourceRepository != nil {
 		// Component names must be discovered before the resolver is built so they can
 		// be registered as high-priority patterns for the source repository.
-		if sourceComponents, err = componentlister.List(ctx, pm, credGraph, sourceRepository); err != nil {
+		if sourceComponents, err = componentlister.List(ctx, pm, credGraph, sourceRepository, source); err != nil {
 			if hint := componentlister.ComponentHint(source); hint != "" && errors.Is(err, catalog.ErrCatalogScanLimit) {
 				return nil, nil, nil, fmt.Errorf("%w; did you mean %q?", err, hint)
 			}

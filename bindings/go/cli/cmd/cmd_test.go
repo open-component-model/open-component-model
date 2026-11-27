@@ -13,6 +13,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -78,18 +79,47 @@ func createTestDescriptor(name, version string) *descriptor.Descriptor {
 
 // trimTreeOutput normalizes a rendered tree for comparison in order to make
 // expected values in tests easier to read as the column alignment fits
-func trimTreeOutput(s string) string {
+var treeSpaceRun = regexp.MustCompile(` +`)
+
+// normalizeTreeOutput collapses runs of spaces to one and trims each line, so a
+// tree assertion does not depend on the column widths (which the repository row
+// label can widen). Only tree output may be passed here, because collapsing
+// spaces would corrupt YAML or boxed table output.
+func normalizeTreeOutput(s string) string {
 	lines := strings.Split(s, "\n")
 	for i, line := range lines {
-		lines[i] = strings.TrimRight(line, " \t\r")
+		lines[i] = strings.TrimSpace(treeSpaceRun.ReplaceAllString(line, " "))
 	}
-	for len(lines) > 0 && lines[0] == "" {
-		lines = lines[1:]
+	return strings.Trim(strings.Join(lines, "\n"), "\n")
+}
+
+// assertRenderedOutput compares rendered get-cv output. Tree and widetree output
+// (recognised by the NESTING header) now heads the component rows with a
+// repository row that names the source and its type, so the versions are drawn
+// under it instead of as orphan roots. The assertion checks that row is present
+// and then drops it, because its label embeds the volatile repository path and
+// widens the columns; the remaining rows are compared with spaces collapsed.
+// Other formats are compared verbatim after trimming surrounding whitespace.
+func assertRenderedOutput(t *testing.T, expected, actual, archivePath string) {
+	t.Helper()
+	if !strings.Contains(actual, "NESTING") {
+		require.Equal(t, strings.TrimSpace(expected), strings.TrimSpace(actual), "expected output")
+		return
 	}
-	for len(lines) > 0 && lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
+
+	var repoRow string
+	kept := make([]string, 0)
+	for _, line := range strings.Split(actual, "\n") {
+		if strings.Contains(line, archivePath) {
+			repoRow = line
+			continue
+		}
+		kept = append(kept, line)
 	}
-	return strings.Join(lines, "\n")
+	require.NotEmpty(t, repoRow, "tree output must include a repository row")
+	require.Contains(t, repoRow, "(", "repository row must show the repository type")
+
+	require.Equal(t, normalizeTreeOutput(expected), normalizeTreeOutput(strings.Join(kept, "\n")), "expected output")
 }
 
 // Test_Get_Component_Version_Formats tests the different output formats for the get cv command
@@ -221,7 +251,7 @@ COMPONENT                   │ VERSION │ PROVIDER
 			r.NoError(err, "failed to list log entries")
 			r.NotEmpty(logEntries, "expected log entries to be present")
 
-			r.Equal(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected output")
+			assertRenderedOutput(t, tt.expectedOutput, result.String(), archivePath)
 		})
 	}
 }
@@ -336,7 +366,7 @@ func Test_Get_Component_Version_WideTree(t *testing.T) {
 			_, err := test.OCM(t, test.WithArgs(tt.args...), test.WithOutput(result), test.WithErrorOutput(logs))
 			r.NoError(err, "failed to run command")
 
-			r.Equal(trimTreeOutput(tt.expectedOutput), trimTreeOutput(result.String()), "expected output")
+			assertRenderedOutput(t, tt.expectedOutput, result.String(), archivePath)
 		})
 	}
 }
@@ -576,7 +606,7 @@ COMPONENT           │ VERSION │ PROVIDER
 			r.NoError(err, "failed to list log entries")
 			r.NotEmpty(logEntries, "expected log entries to be present")
 
-			r.Equal(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected output")
+			assertRenderedOutput(t, tt.expectedOutput, result.String(), archivePath)
 		})
 	}
 }
@@ -674,7 +704,7 @@ COMPONENT                   │ VERSION │ PROVIDER
 			r.NoError(err, "failed to list log entries")
 			r.NotEmpty(logEntries, "expected log entries to be present")
 
-			r.Equal(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected table output")
+			assertRenderedOutput(t, tt.expectedOutput, result.String(), archivePath)
 		})
 	}
 }
@@ -798,7 +828,7 @@ COMPONENT           │ VERSION │ PROVIDER
 			r.NoError(err, "failed to list log entries")
 			r.NotEmpty(logEntries, "expected log entries to be present")
 
-			r.Equal(strings.TrimSpace(tt.expectedOutput), strings.TrimSpace(result.String()), "expected table output")
+			assertRenderedOutput(t, tt.expectedOutput, result.String(), archivePath)
 		})
 	}
 }

@@ -362,8 +362,11 @@ func processComponentReference(cmd *cobra.Command,
 		roots = append(roots, identity)
 	}
 
-	// A pinned reference names exactly one component version, the only root.
-	if err := renderComponents(cmd, repoProvider, roots, pin, output, displayMode, recursive, nil); err != nil {
+	// Show the source repository as the top row of the tree output, the same as
+	// a repository reference, so the component versions are drawn under it
+	// instead of as orphan roots.
+	rootLabel := []string{fmt.Sprintf("%s (%s)", ref.RepositoryString(), ref.Repository.GetType().Name)}
+	if err := renderComponents(cmd, repoProvider, roots, pin, output, displayMode, recursive, rootLabel); err != nil {
 		return fmt.Errorf("failed to render components: %w", err)
 	}
 
@@ -653,14 +656,14 @@ func processRepositoryReference(cmd *cobra.Command,
 		listOutput = render.OutputFormatTable.String()
 	}
 
-	componentNames, err := componentlister.List(ctx, pluginManager, credentialGraph, repository)
+	componentNames, err := componentlister.List(ctx, pluginManager, credentialGraph, repository, reference)
 	if err != nil {
 		return err
 	}
 	slog.DebugContext(ctx, "listed components from repository", "repository", repository, "components", componentNames, "detail", level)
 
 	if len(componentNames) == 0 {
-		return fmt.Errorf("%w in repository %v", errNoComponentsFound, repository)
+		return fmt.Errorf("%w in repository %q", errNoComponentsFound, reference)
 	}
 
 	// The names level is a single catalog request; print the names and stop.
@@ -706,7 +709,7 @@ func processRepositoryReference(cmd *cobra.Command,
 	// outputs, and renders the component graph.
 	roots, err := getIDsForComponentsFromRepository(ctx, tracker, repoProvider, componentNames, params, registry)
 	if err != nil {
-		return fmt.Errorf("failed to get identities for components %v in repository %v: %w", componentNames, repository, err)
+		return fmt.Errorf("failed to get identities for components in repository %q: %w", reference, err)
 	}
 	tracker.Stop() // restore slog and clear the bar before rendering
 	slog.DebugContext(ctx, "components versions", "roots", roots)
@@ -746,10 +749,11 @@ func getIDsForComponentsFromRepository(ctx context.Context,
 	}
 
 	var (
-		mu       sync.Mutex
-		listed   []componentVersions
-		skipped  = map[string]struct{}{}
-		failures []error
+		mu         sync.Mutex
+		listed     []componentVersions
+		skipped    = map[string]struct{}{}
+		failures   []error
+		underlying []error
 	)
 	skip := func(name string, err error) {
 		mu.Lock()
@@ -758,6 +762,7 @@ func getIDsForComponentsFromRepository(ctx context.Context,
 		if _, ok := skipped[name]; !ok {
 			skipped[name] = struct{}{}
 			failures = append(failures, fmt.Errorf("%s: %w", name, err))
+			underlying = append(underlying, err)
 		}
 	}
 
@@ -865,7 +870,7 @@ func getIDsForComponentsFromRepository(ctx context.Context,
 
 	if len(descriptors) == 0 {
 		if len(failures) > 0 {
-			return nil, fmt.Errorf("no components in the repository could be read: %w", errors.Join(failures...))
+			return nil, aggregateComponentFailures(failures, underlying)
 		}
 		return nil, nil
 	}

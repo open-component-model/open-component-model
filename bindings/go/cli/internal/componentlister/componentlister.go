@@ -18,7 +18,7 @@ import (
 // credentials through the credential graph so registries that need login are
 // reachable. The names are lexically sorted, so the output is deterministic
 // and matches the CTF lister regardless of the registry's own catalog order.
-func List(ctx context.Context, pm *manager.PluginManager, credGraph credentials.Resolver, repository runtime.Typed) ([]string, error) {
+func List(ctx context.Context, pm *manager.PluginManager, credGraph credentials.Resolver, repository runtime.Typed, reference string) ([]string, error) {
 	creds, err := ResolveCredentials(ctx, pm, credGraph, repository)
 	if err != nil {
 		return nil, err
@@ -26,7 +26,7 @@ func List(ctx context.Context, pm *manager.PluginManager, credGraph credentials.
 
 	lister, err := pm.ComponentListerRegistry.GetComponentLister(ctx, repository, creds)
 	if err != nil {
-		return nil, fmt.Errorf("could not get component lister for repository %+v: %w", repository, err)
+		return nil, fmt.Errorf("could not get component lister for repository %q: %w", reference, err)
 	}
 
 	var names []string
@@ -34,7 +34,7 @@ func List(ctx context.Context, pm *manager.PluginManager, credGraph credentials.
 		names = append(names, page...)
 		return nil
 	}); err != nil {
-		return nil, fmt.Errorf("could not list components in repository %+v: %w", repository, err)
+		return nil, fmt.Errorf("could not list components in repository %q: %w", reference, err)
 	}
 
 	slices.Sort(names)

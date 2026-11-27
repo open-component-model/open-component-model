@@ -504,6 +504,32 @@ func TestParseRepository(t *testing.T) {
 			},
 		},
 		{
+			// A trailing slash must not leak into SubPath; otherwise the
+			// reference becomes "org//component-descriptors/...".
+			name:         "OCI Registry - trailing slash",
+			repoRef:      "ghcr.io/org/",
+			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
+				repo, ok := result.(*ociv1.Repository)
+				require.True(t, ok, "expected *ociv1.Repository")
+				require.Equal(t, "ghcr.io", repo.BaseUrl)
+				require.Equal(t, "org", repo.SubPath)
+			},
+		},
+		{
+			name:         "OCI Registry - nested with trailing slash",
+			repoRef:      "ghcr.io/org/sub/",
+			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
+			validateResult: func(t *testing.T, result runtime.Typed, repoSpec string) {
+				t.Helper()
+				repo, ok := result.(*ociv1.Repository)
+				require.True(t, ok, "expected *ociv1.Repository")
+				require.Equal(t, "ghcr.io", repo.BaseUrl)
+				require.Equal(t, "org/sub", repo.SubPath)
+			},
+		},
+		{
 			name:         "OCI Registry - localhost with port",
 			repoRef:      "localhost:5000/my-repo",
 			expectedType: runtime.NewVersionedType(ociv1.Type, ociv1.Version),
