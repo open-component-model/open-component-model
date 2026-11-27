@@ -61,8 +61,9 @@ jobs:
         run: |
           task bindings/go/cli:build/single GOOS="${TARGET_GOOS}" GOARCH="${TARGET_GOARCH}"
           new_size=$(stat -c%s "${CLI_BINARY}")
+          new_mib=$(awk -v b="${new_size}" 'BEGIN { printf "%.1f", b / 1048576 }')
           echo "NEW_SIZE=${new_size}" >> "${GITHUB_ENV}"
-          echo "New tip binary size: ${new_size} bytes"
+          echo "New tip binary size: ${new_mib} MiB (${new_size} bytes)"
 
       - name: Build CLI at the parent commit
         run: |
@@ -73,30 +74,34 @@ jobs:
           git checkout --quiet --force HEAD^
           task bindings/go/cli:build/single GOOS="${TARGET_GOOS}" GOARCH="${TARGET_GOARCH}"
           old_size=$(stat -c%s "${CLI_BINARY}")
+          old_mib=$(awk -v b="${old_size}" 'BEGIN { printf "%.1f", b / 1048576 }')
           echo "OLD_SIZE=${old_size}" >> "${GITHUB_ENV}"
-          echo "Parent binary size: ${old_size} bytes"
+          echo "Parent binary size: ${old_mib} MiB (${old_size} bytes)"
 
       - name: Compare and enforce threshold
         run: |
           growth=$(awk -v n="${NEW_SIZE}" -v o="${OLD_SIZE}" \
             'BEGIN { if (o == 0) { print "100" } else { printf "%.4f", (n - o) / o * 100 } }')
-          echo "Parent size:    ${OLD_SIZE} bytes"
-          echo "New tip size:   ${NEW_SIZE} bytes"
-          echo "Growth:         ${growth}% (threshold ${SIZE_GROWTH_THRESHOLD_PERCENT}%)"
+          old_mib=$(awk -v b="${OLD_SIZE}" 'BEGIN { printf "%.1f", b / 1048576 }')
+          new_mib=$(awk -v b="${NEW_SIZE}" 'BEGIN { printf "%.1f", b / 1048576 }')
+          delta_mib=$(awk -v n="${NEW_SIZE}" -v o="${OLD_SIZE}" 'BEGIN { printf "%+.1f", (n - o) / 1048576 }')
+          echo "Parent size:    ${old_mib} MiB (${OLD_SIZE} bytes)"
+          echo "New tip size:   ${new_mib} MiB (${NEW_SIZE} bytes)"
+          echo "Growth:         ${growth}% (${delta_mib} MiB, threshold ${SIZE_GROWTH_THRESHOLD_PERCENT}%)"
           {
             echo "### CLI binary size guard"
             echo ""
             echo "| metric | value |"
             echo "| --- | --- |"
-            echo "| parent size | ${OLD_SIZE} bytes |"
-            echo "| new tip size | ${NEW_SIZE} bytes |"
-            echo "| growth | ${growth}% |"
+            echo "| parent size | ${old_mib} MiB (${OLD_SIZE} bytes) |"
+            echo "| new tip size | ${new_mib} MiB (${NEW_SIZE} bytes) |"
+            echo "| growth | ${growth}% (${delta_mib} MiB) |"
             echo "| threshold | ${SIZE_GROWTH_THRESHOLD_PERCENT}% |"
           } >> "${GITHUB_STEP_SUMMARY}"
           over=$(awk -v g="${growth}" -v t="${SIZE_GROWTH_THRESHOLD_PERCENT}" \
             'BEGIN { print (g > t) ? "1" : "0" }')
           if [ "${over}" = "1" ]; then
-            echo "::error::CLI binary grew ${growth}%, above the ${SIZE_GROWTH_THRESHOLD_PERCENT}% threshold. A maintainer must review this growth."
+            echo "::error::CLI binary grew ${growth}% (${delta_mib} MiB), above the ${SIZE_GROWTH_THRESHOLD_PERCENT}% threshold. A maintainer must review this growth."
             exit 1
           fi
           echo "CLI binary growth is within the threshold."
