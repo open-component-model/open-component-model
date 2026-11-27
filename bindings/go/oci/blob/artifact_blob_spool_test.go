@@ -25,6 +25,14 @@ func (b unknownSizeBlob) ReadCloser() (io.ReadCloser, error) {
 	return io.NopCloser(strings.NewReader(b.content)), nil
 }
 
+// sizedBlob declares a size but no digest, like a download with a Content-Length.
+type sizedBlob struct {
+	unknownSizeBlob
+	size int64
+}
+
+func (b sizedBlob) Size() int64 { return b.size }
+
 func TestArtifactBlob_Spool(t *testing.T) {
 	const content = "streamed content of unknown size"
 	const mediaType = "application/octet-stream"
@@ -94,5 +102,20 @@ func TestArtifactBlob_Spool(t *testing.T) {
 		r.True(ok)
 		r.Equal("sha512:"+hex.EncodeToString(sum[:]), dig)
 		r.NoError(release())
+	})
+
+	t.Run("rejects content that does not match a known size when the digest is unknown", func(t *testing.T) {
+		r := require.New(t)
+		dir := t.TempDir()
+		ab, err := ociblob.NewArtifactBlobWithMediaType(resource("", ""), sizedBlob{unknownSizeBlob{content}, int64(len(content)) + 1}, mediaType)
+		r.NoError(err)
+		_, ok := ab.Digest()
+		r.False(ok)
+
+		_, _, err = ab.Spool(dir)
+		r.ErrorContains(err, "size mismatch")
+		entries, err := os.ReadDir(dir)
+		r.NoError(err)
+		r.Empty(entries, "a rejected spool file must not be left behind")
 	})
 }

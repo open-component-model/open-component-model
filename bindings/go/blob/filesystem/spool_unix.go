@@ -16,7 +16,11 @@ func createSpoolFile(dir string) (*os.File, error) {
 		return nil, err
 	}
 	if err := os.Remove(file.Name()); err != nil {
-		return nil, errors.Join(err, file.Close())
+		err = errors.Join(err, file.Close())
+		// Some mounts refuse to unlink a file only while it is open: try once more after
+		// closing so no empty file is left behind. The first error already says why.
+		_ = os.Remove(file.Name())
+		return nil, err
 	}
 	return file, nil
 }
