@@ -57,13 +57,14 @@ func Test_RSA_Handler(t *testing.T) {
 				d := digestHex(hashCfg, testData)
 
 				t.Run(string(alg), func(t *testing.T) {
-					// used for a dynamic root
-					var rootPEM string
-
 					type tc struct {
-						name    string
+						name string
+						// build/creds are for cases with independent signature and credentials;
+						// setup is for cases whose credentials depend on state created while
+						// building the signature, which must stay local to the case.
 						build   func(t *testing.T) descruntime.Signature
 						creds   func(t *testing.T) runtime.Typed
+						setup   func(t *testing.T) (descruntime.Signature, runtime.Typed)
 						wantErr string
 					}
 
@@ -215,6 +216,23 @@ func Test_RSA_Handler(t *testing.T) {
 							},
 						},
 						{
+							// OCM v1 (signutils.MatchDN) accepts an issuer that covers the
+							// subject, i.e. carries additional attributes.
+							name: "pem_signature_issuer_covers_leaf_subject_with_extra_attributes",
+							build: func(t *testing.T) descruntime.Signature {
+								t.Helper()
+								s := signPEM(t, aPriv, aPub)
+								s.Signature.Issuer = "CN=signer,O=Acme,OU=Engineering"
+								return s
+							},
+							creds: func(t *testing.T) runtime.Typed {
+								t.Helper()
+								return &rsacredentialsv1.RSACredentials{
+									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: aPub,
+								}
+							},
+						},
+						{
 							name: "pem_signature_with_matching_credentials_pub_issuer_mismatch",
 							build: func(t *testing.T) descruntime.Signature {
 								t.Helper()
@@ -246,7 +264,7 @@ func Test_RSA_Handler(t *testing.T) {
 						},
 						{
 							name: "pem_signature_full_chain_in_signature_root_in_credentials_ok",
-							build: func(t *testing.T) descruntime.Signature {
+							setup: func(t *testing.T) (descruntime.Signature, runtime.Typed) {
 								t.Helper()
 								c := buildChain(t)
 
@@ -268,11 +286,11 @@ func Test_RSA_Handler(t *testing.T) {
 								require.NoError(t, err)
 
 								rootDir := t.TempDir()
-								rootPEM = writeCertsPEM(t, rootDir, "root.pem", c.root)
+								rootPEM := writeCertsPEM(t, rootDir, "root.pem", c.root)
 
 								// Issuer must match the leaf's X.509 Issuer field, which is the
 								// intermediate's Subject (the cert that directly signed the leaf).
-								return descruntime.Signature{
+								sig := descruntime.Signature{
 									Digest: d,
 									Signature: descruntime.SignatureInfo{
 										Algorithm: si.Algorithm,
@@ -281,10 +299,8 @@ func Test_RSA_Handler(t *testing.T) {
 										Issuer:    c.interm.Subject.String(),
 									},
 								}
-							},
-							creds: func(t *testing.T) runtime.Typed {
-								t.Helper()
-								return &rsacredentialsv1.RSACredentials{
+
+								return sig, &rsacredentialsv1.RSACredentials{
 									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: rootPEM,
 								}
 							},
@@ -328,7 +344,7 @@ func Test_RSA_Handler(t *testing.T) {
 							// leaf certificate, which is the Subject of the CA that directly signed
 							// it (the intermediate). Setting it correctly must succeed.
 							name: "pem_signature_issuer_matches_leaf_issuer_field",
-							build: func(t *testing.T) descruntime.Signature {
+							setup: func(t *testing.T) (descruntime.Signature, runtime.Typed) {
 								t.Helper()
 								c := buildChain(t)
 
@@ -349,10 +365,10 @@ func Test_RSA_Handler(t *testing.T) {
 								})
 								require.NoError(t, err)
 
-								rootPEM = writeCertsPEM(t, t.TempDir(), "root.pem", c.root)
+								rootPEM := writeCertsPEM(t, t.TempDir(), "root.pem", c.root)
 
 								// leaf.Issuer == interm.Subject: set Issuer to that, should succeed.
-								return descruntime.Signature{
+								sig := descruntime.Signature{
 									Digest: d,
 									Signature: descruntime.SignatureInfo{
 										Algorithm: si.Algorithm,
@@ -361,10 +377,8 @@ func Test_RSA_Handler(t *testing.T) {
 										Issuer:    c.interm.Subject.String(),
 									},
 								}
-							},
-							creds: func(t *testing.T) runtime.Typed {
-								t.Helper()
-								return &rsacredentialsv1.RSACredentials{
+
+								return sig, &rsacredentialsv1.RSACredentials{
 									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: rootPEM,
 								}
 							},
@@ -374,7 +388,7 @@ func Test_RSA_Handler(t *testing.T) {
 							// signature Issuer field, so a v1 certificate-chain signature must
 							// verify even though the Subject differs from the leaf's X.509 Issuer.
 							name: "pem_signature_issuer_matches_leaf_subject_field",
-							build: func(t *testing.T) descruntime.Signature {
+							setup: func(t *testing.T) (descruntime.Signature, runtime.Typed) {
 								t.Helper()
 								c := buildChain(t)
 
@@ -395,10 +409,10 @@ func Test_RSA_Handler(t *testing.T) {
 								})
 								require.NoError(t, err)
 
-								rootPEM = writeCertsPEM(t, t.TempDir(), "root.pem", c.root)
+								rootPEM := writeCertsPEM(t, t.TempDir(), "root.pem", c.root)
 
 								require.NotEqual(t, c.leaf.Subject.String(), c.leaf.Issuer.String())
-								return descruntime.Signature{
+								sig := descruntime.Signature{
 									Digest: d,
 									Signature: descruntime.SignatureInfo{
 										Algorithm: si.Algorithm,
@@ -407,10 +421,8 @@ func Test_RSA_Handler(t *testing.T) {
 										Issuer:    c.leaf.Subject.String(),
 									},
 								}
-							},
-							creds: func(t *testing.T) runtime.Typed {
-								t.Helper()
-								return &rsacredentialsv1.RSACredentials{
+
+								return sig, &rsacredentialsv1.RSACredentials{
 									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: rootPEM,
 								}
 							},
@@ -420,7 +432,7 @@ func Test_RSA_Handler(t *testing.T) {
 							// leaf's X.509 Issuer (e.g. the root's Subject instead of the
 							// intermediate's Subject) must be rejected.
 							name: "pem_signature_issuer_mismatch_with_leaf_issuer_field",
-							build: func(t *testing.T) descruntime.Signature {
+							setup: func(t *testing.T) (descruntime.Signature, runtime.Typed) {
 								t.Helper()
 								c := buildChain(t)
 
@@ -441,10 +453,10 @@ func Test_RSA_Handler(t *testing.T) {
 								})
 								require.NoError(t, err)
 
-								rootPEM = writeCertsPEM(t, t.TempDir(), "root.pem", c.root)
+								rootPEM := writeCertsPEM(t, t.TempDir(), "root.pem", c.root)
 
 								// Set Issuer to root's subject, but leaf was signed by intermediate — mismatch.
-								return descruntime.Signature{
+								sig := descruntime.Signature{
 									Digest: d,
 									Signature: descruntime.SignatureInfo{
 										Algorithm: si.Algorithm,
@@ -453,10 +465,8 @@ func Test_RSA_Handler(t *testing.T) {
 										Issuer:    c.root.Subject.String(),
 									},
 								}
-							},
-							creds: func(t *testing.T) runtime.Typed {
-								t.Helper()
-								return &rsacredentialsv1.RSACredentials{
+
+								return sig, &rsacredentialsv1.RSACredentials{
 									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: rootPEM,
 								}
 							},
@@ -490,7 +500,7 @@ func Test_RSA_Handler(t *testing.T) {
 							// Subject), NOT the anchor's Subject. Setting Issuer to the root's
 							// Subject must now be rejected.
 							name: "pem_signature_issuer_set_to_anchor_subject_fails",
-							build: func(t *testing.T) descruntime.Signature {
+							setup: func(t *testing.T) (descruntime.Signature, runtime.Typed) {
 								t.Helper()
 								c := buildChain(t)
 
@@ -511,11 +521,11 @@ func Test_RSA_Handler(t *testing.T) {
 								require.NoError(t, err)
 
 								rootDir := t.TempDir()
-								rootPEM = writeCertsPEM(t, rootDir, "root.pem", c.root)
+								rootPEM := writeCertsPEM(t, rootDir, "root.pem", c.root)
 
 								// It must now fail because leaf.Issuer is
 								// interm.Subject, not root.Subject.
-								return descruntime.Signature{
+								sig := descruntime.Signature{
 									Digest: d,
 									Signature: descruntime.SignatureInfo{
 										Algorithm: si.Algorithm,
@@ -524,10 +534,8 @@ func Test_RSA_Handler(t *testing.T) {
 										Issuer:    c.root.Subject.String(),
 									},
 								}
-							},
-							creds: func(t *testing.T) runtime.Typed {
-								t.Helper()
-								return &rsacredentialsv1.RSACredentials{
+
+								return sig, &rsacredentialsv1.RSACredentials{
 									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: rootPEM,
 								}
 							},
@@ -565,11 +573,8 @@ func Test_RSA_Handler(t *testing.T) {
 							// intermediates pool and the self-signed root to the roots pool, so
 							// the full path leaf→interm→root can be verified successfully.
 							name: "pem_signature_leaf_only_cred_chain_interm_and_root_ok",
-							build: func(t *testing.T) descruntime.Signature {
+							setup: func(t *testing.T) (descruntime.Signature, runtime.Typed) {
 								t.Helper()
-								// Share the chain with the creds closure via a captured variable.
-								// Both closures run before verification, so we build once here and
-								// write the credential path to a shared local var that creds reads.
 								c := buildChain(t)
 								dir := t.TempDir()
 								privPath := filepath.Join(dir, "leaf.key")
@@ -587,18 +592,16 @@ func Test_RSA_Handler(t *testing.T) {
 								})
 								require.NoError(t, err)
 
-								rootPEM = writeCertsPEM(t, t.TempDir(), "chain.pem", c.interm, c.root)
+								rootPEM := writeCertsPEM(t, t.TempDir(), "chain.pem", c.interm, c.root)
 
-								return descruntime.Signature{Digest: d, Signature: si}
-							},
-							// Credentials provide [interm, root] from the same chain as the
-							// signature.
-							creds: func(t *testing.T) runtime.Typed {
-								t.Helper()
-								return &rsacredentialsv1.RSACredentials{
+								sig := descruntime.Signature{Digest: d, Signature: si}
+
+								return sig, &rsacredentialsv1.RSACredentials{
 									Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: rootPEM,
 								}
 							},
+							// Credentials provide [interm, root] from the same chain as the
+							// signature.
 						},
 						{
 							// Credentials contain only a non-self-signed intermediate (no root).
@@ -655,8 +658,16 @@ func Test_RSA_Handler(t *testing.T) {
 					for _, tt := range tests {
 						t.Run(tt.name, func(t *testing.T) {
 							t.Parallel()
-							sig := tt.build(t)
-							err := h.Verify(t.Context(), sig, nil, tt.creds(t))
+							var (
+								sig   descruntime.Signature
+								creds runtime.Typed
+							)
+							if tt.setup != nil {
+								sig, creds = tt.setup(t)
+							} else {
+								sig, creds = tt.build(t), tt.creds(t)
+							}
+							err := h.Verify(t.Context(), sig, nil, creds)
 							if tt.wantErr == "" {
 								require.NoError(t, err)
 								return
@@ -1320,4 +1331,193 @@ func stripCertBlocks(pemWithChain string) string {
 		}
 	}
 	return strings.Join(out, "\n")
+}
+
+func Test_RSA_Sign_PEM_Records_Issuer(t *testing.T) {
+	h, err := New(v1alpha1.Scheme, false)
+	require.NoError(t, err)
+	d := digestHex(crypto.SHA256, []byte("hello world"))
+	c := buildChain(t)
+	rootPath := writeCertsPEM(t, t.TempDir(), "root.pem", c.root)
+
+	oidEmail := []int{1, 2, 840, 113549, 1, 9, 1}
+	oidUID := []int{0, 9, 2342, 19200300, 100, 1, 1}
+
+	// wantFull: the full subject must be recorded. wantOmitted: the issuer must
+	// be omitted. Neither: either outcome is acceptable as long as Verify passes.
+	tests := []struct {
+		name        string
+		subject     pkix.Name
+		wantFull    bool
+		wantOmitted bool
+	}{
+		{name: "plain", subject: pkix.Name{CommonName: "leaf"}, wantFull: true},
+		{name: "specials", subject: pkix.Name{CommonName: `a,b+c="d"\e<f>;#g `, Organization: []string{"Acme, Inc."}}, wantFull: true},
+		{name: "unicode", subject: pkix.Name{CommonName: "Jürgen 署名"}, wantFull: true},
+		{name: "serial and multi OU", subject: pkix.Name{CommonName: "x", SerialNumber: "42", OrganizationalUnit: []string{"a", "b"}}},
+		{name: "street and postal", subject: pkix.Name{CommonName: "x", StreetAddress: []string{"Main St 1"}, PostalCode: []string{"12345"}, Country: []string{"DE"}}},
+		{name: "emailAddress", subject: pkix.Name{CommonName: "x", ExtraNames: []pkix.AttributeTypeAndValue{{Type: oidEmail, Value: "a@b.c"}}}, wantFull: true},
+		{name: "uid", subject: pkix.Name{CommonName: "x", ExtraNames: []pkix.AttributeTypeAndValue{{Type: oidUID, Value: "jdoe"}}}, wantFull: true},
+		{name: "trailing space CN", subject: pkix.Name{CommonName: "signer "}},
+		{name: "trailing space last RDN", subject: pkix.Name{CommonName: "signer", Country: []string{"DE "}}},
+		{name: "non-string attribute", subject: pkix.Name{CommonName: "x", ExtraNames: []pkix.AttributeTypeAndValue{{Type: []int{1, 2, 3, 4}, Value: 42}}}, wantOmitted: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			leafKey := mustKey(t)
+			tmpl := &x509.Certificate{
+				SerialNumber: mustRand128(t),
+				Subject:      tc.subject,
+				NotBefore:    time.Now().Add(-time.Hour),
+				NotAfter:     time.Now().Add(24 * time.Hour),
+				KeyUsage:     x509.KeyUsageDigitalSignature,
+			}
+			der, err := x509.CreateCertificate(rand.Reader, tmpl, c.interm, &leafKey.PublicKey, c.intermKey)
+			require.NoError(t, err)
+			leaf, err := x509.ParseCertificate(der)
+			require.NoError(t, err)
+
+			dir := t.TempDir()
+			privPath := filepath.Join(dir, "leaf.key")
+			writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(leafKey))
+			creds := &rsacredentialsv1.RSACredentials{
+				Type:              rsacredentialsv1.VersionedType,
+				PrivateKeyPEMFile: privPath,
+				PublicKeyPEMFile:  writeCertsPEM(t, dir, "chain.pem", leaf, c.interm),
+			}
+
+			si, err := h.Sign(t.Context(), d, &v1alpha1.Config{
+				SignatureAlgorithm:      v1alpha1.AlgorithmRSASSAPSS,
+				SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
+			}, creds)
+			require.NoError(t, err)
+			switch {
+			case tc.wantFull:
+				require.Equal(t, leaf.Subject.String(), si.Issuer)
+				require.NotEqual(t, leaf.Issuer.String(), si.Issuer)
+			case tc.wantOmitted:
+				require.Empty(t, si.Issuer)
+			default:
+				require.Contains(t, []string{leaf.Subject.String(), ""}, si.Issuer)
+			}
+
+			require.NoError(t, h.Verify(t.Context(), descruntime.Signature{Digest: d, Signature: si}, nil,
+				&rsacredentialsv1.RSACredentials{Type: rsacredentialsv1.VersionedType, PublicKeyPEMFile: rootPath}))
+		})
+	}
+
+	t.Run("plain leaves issuer empty", func(t *testing.T) {
+		dir := t.TempDir()
+		privPath := filepath.Join(dir, "leaf.key")
+		writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(c.leafKey))
+		si, err := h.Sign(t.Context(), d, &v1alpha1.Config{
+			SignatureAlgorithm:      v1alpha1.AlgorithmRSASSAPSS,
+			SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPlain,
+		}, &rsacredentialsv1.RSACredentials{
+			Type:              rsacredentialsv1.VersionedType,
+			PrivateKeyPEMFile: privPath,
+			PublicKeyPEMFile:  writeCertsPEM(t, dir, "chain.pem", c.leaf, c.interm),
+		})
+		require.NoError(t, err)
+		require.Empty(t, si.Issuer)
+	})
+}
+
+func TestVerifyIssuerCoveringNeedsSubjectCommonName(t *testing.T) {
+	tests := []struct {
+		name    string
+		subject pkix.Name
+		san     []string
+		issuer  string
+		wantErr bool
+	}{
+		{
+			name:    "covering issuer accepted for a subject with a common name",
+			subject: pkix.Name{CommonName: "build-bot", Organization: []string{"Acme"}},
+			issuer:  "CN=build-bot,O=Acme,OU=Engineering",
+		},
+		{
+			name: "covering issuer may omit subject attributes without a dedicated name field",
+			subject: pkix.Name{CommonName: "build-bot", Organization: []string{"Acme"}, ExtraNames: []pkix.AttributeTypeAndValue{
+				{Type: []int{1, 2, 840, 113549, 1, 9, 1}, Value: "a@b.c"},
+				{Type: []int{0, 9, 2342, 19200300, 100, 1, 1}, Value: "jdoe"},
+				{Type: []int{0, 9, 2342, 19200300, 100, 1, 25}, Value: "example"},
+			}},
+			issuer: "CN=build-bot,O=Acme",
+		},
+		{
+			name:    "exact issuer accepted for a subject without a common name",
+			subject: pkix.Name{Organization: []string{"Acme"}},
+			issuer:  "O=Acme",
+		},
+		{
+			name:    "covering issuer rejected for a subject without a common name",
+			subject: pkix.Name{Organization: []string{"Acme"}},
+			issuer:  "CN=OCM Release Signing Key,O=Acme",
+			wantErr: true,
+		},
+		{
+			name:    "any issuer rejected for an empty subject",
+			subject: pkix.Name{},
+			san:     []string{"build-bot.example"},
+			issuer:  "CN=OCM Release Signing Key,O=Trusted Release Org",
+			wantErr: true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			sig, creds := signWithLeafSubject(t, tc.subject, tc.san)
+			sig.Signature.Issuer = tc.issuer
+			h, err := New(v1alpha1.Scheme, false)
+			r.NoError(err)
+
+			err = h.Verify(t.Context(), sig, nil, creds)
+			if tc.wantErr {
+				r.ErrorContains(err, "issuer mismatch")
+				return
+			}
+			r.NoError(err)
+		})
+	}
+}
+
+// signWithLeafSubject signs as PEM with a leaf of the given subject under a
+// fresh chain and returns the signature and root-only verify credentials.
+func signWithLeafSubject(t *testing.T, subject pkix.Name, san []string) (descruntime.Signature, *rsacredentialsv1.RSACredentials) {
+	t.Helper()
+	r := require.New(t)
+	c := buildChain(t)
+	leafKey := mustKey(t)
+	der, err := x509.CreateCertificate(rand.Reader, &x509.Certificate{
+		SerialNumber: mustRand128(t),
+		Subject:      subject,
+		DNSNames:     san,
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(24 * time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature,
+	}, c.interm, &leafKey.PublicKey, c.intermKey)
+	r.NoError(err)
+	leaf, err := x509.ParseCertificate(der)
+	r.NoError(err)
+
+	h, err := New(v1alpha1.Scheme, false)
+	r.NoError(err)
+	dir := t.TempDir()
+	privPath := filepath.Join(dir, "leaf.key")
+	writePEMFile(t, privPath, "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(leafKey))
+	d := digestHex(crypto.SHA256, []byte("hello world"))
+	si, err := h.Sign(t.Context(), d, &v1alpha1.Config{
+		SignatureAlgorithm:      v1alpha1.AlgorithmRSASSAPSS,
+		SignatureEncodingPolicy: v1alpha1.SignatureEncodingPolicyPEM,
+	}, &rsacredentialsv1.RSACredentials{
+		Type:              rsacredentialsv1.VersionedType,
+		PrivateKeyPEMFile: privPath,
+		PublicKeyPEMFile:  writeCertsPEM(t, dir, "chain.pem", leaf, c.interm),
+	})
+	r.NoError(err)
+	return descruntime.Signature{Digest: d, Signature: si}, &rsacredentialsv1.RSACredentials{
+		Type:             rsacredentialsv1.VersionedType,
+		PublicKeyPEMFile: writeCertsPEM(t, t.TempDir(), "root.pem", c.root),
+	}
 }

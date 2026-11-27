@@ -141,13 +141,21 @@ func shortOrOID(s string) (asn1.ObjectIdentifier, bool) {
 
 // Equal reports structural equality of two distinguished names.
 // It calls Match in both directions, meaning that every attribute in a
-// is present in b, and every attribute in b is present in a.
+// is present in b, and every attribute in b is present in a. Unlike Match,
+// it also compares the non-standard attributes of names parsed from a
+// certificate, which only carry them in Names.
 // Equal ignores ordering differences allowed by RFC 2253.
 func Equal(a, b pkix.Name) error {
 	if err := Match(a, b); err != nil {
 		return err
 	}
-	return Match(b, a)
+	if err := Match(b, a); err != nil {
+		return err
+	}
+	if err := containsAttributes(extraAttributes(a), extraAttributes(b)); err != nil {
+		return err
+	}
+	return containsAttributes(extraAttributes(b), extraAttributes(a))
 }
 
 // Match reports whether name n satisfies all constraints in pattern p.
@@ -156,7 +164,9 @@ func Equal(a, b pkix.Name) error {
 // in p. All slice fields (Country, Province, Locality, PostalCode,
 // StreetAddress, Organization, OrganizationalUnit) must contain at least
 // the values listed in p. ExtraNames in p must all be present in n with
-// matching OIDs and values.
+// matching OIDs and values, whether n carries them in ExtraNames or, for a
+// name parsed from a certificate, in Names. Like OCM v1, Match does not
+// require the Names-only attributes of a certificate-parsed p.
 //
 // Match returns nil if n covers p, otherwise a descriptive error.
 // It does not require n and p to be identical; that check is provided by Equal.
@@ -187,9 +197,14 @@ func Match(n, p pkix.Name) error {
 		}
 	}
 
+	return containsAttributes(extraAttributes(n), p.ExtraNames)
+}
+
+// containsAttributes reports whether every attribute in want is present in have.
+func containsAttributes(have, want []pkix.AttributeTypeAndValue) error {
 outer:
-	for _, w := range p.ExtraNames {
-		for _, h := range n.ExtraNames {
+	for _, w := range want {
+		for _, h := range have {
 			if w.Type.Equal(h.Type) && w.Value == h.Value {
 				continue outer
 			}
@@ -197,6 +212,38 @@ outer:
 		return fmt.Errorf("missing extra attribute %v=%v", w.Type, w.Value)
 	}
 	return nil
+}
+
+// standardNameOIDs are the attributes crypto/x509/pkix maps onto dedicated
+// pkix.Name fields; every other attribute only appears in Names/ExtraNames.
+var standardNameOIDs = []asn1.ObjectIdentifier{
+	{2, 5, 4, 3},  // CN
+	{2, 5, 4, 5},  // serialNumber
+	{2, 5, 4, 6},  // C
+	{2, 5, 4, 7},  // L
+	{2, 5, 4, 8},  // ST
+	{2, 5, 4, 9},  // street
+	{2, 5, 4, 10}, // O
+	{2, 5, 4, 11}, // OU
+	{2, 5, 4, 17}, // postalCode
+}
+
+// extraAttributes returns the attributes of n that have no dedicated pkix.Name
+// field. A name parsed from a certificate carries them in Names (ExtraNames is
+// only populated for names built for marshaling), whereas a name produced by
+// Parse carries them in ExtraNames, so both must be consulted.
+func extraAttributes(n pkix.Name) []pkix.AttributeTypeAndValue {
+	out := append([]pkix.AttributeTypeAndValue(nil), n.ExtraNames...)
+names:
+	for _, a := range n.Names {
+		for _, std := range standardNameOIDs {
+			if a.Type.Equal(std) {
+				continue names
+			}
+		}
+		out = append(out, a)
+	}
+	return out
 }
 
 // stringToOID parses dotted decimal into asn1.ObjectIdentifier.
